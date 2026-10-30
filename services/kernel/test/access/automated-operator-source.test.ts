@@ -1,0 +1,133 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { AUTH_MANAGEMENT_CLIENT_ID } from '@rezics/auth-contract';
+import { createPool } from '../../src/database/pool.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+await import('reylo/register');
+const { cookies, nativeFixture, password, issuer } = await import('./native-account-bindings-fixture.ts');
+const { readAutomatedCreationOperator } = await import('../../src/access/automated-operator-source.ts');
+const { createManagementRead } = await import('../../src/access/account-management.ts');
+
+const pool = createPool(process.env.DATABASE_URL!);
+let f: Awaited<ReturnType<typeof nativeFixture>>;
+beforeAll(async () => {
+  f = await nativeFixture(pool);
+}, 60000);
+afterAll(async () => {
+  try {
+    await f?.close();
+  } finally {
+    await pool.end();
+  }
+});
+const key = () => Bun.randomUUIDv7();
+async function person(name: string) {
+  const registered = await f.person(name);
+  const signed = await f.request('/signin', {
+    email: `${name}@ordinary.test`,
+    password,
+    client_id: AUTH_MANAGEMENT_CLIENT_ID,
+    scope: ['account:manage'],
+  });
+  expect(signed.status).toBe(200);
+  const headers = cookies(signed);
+  const issued = await f.request('/token', {}, headers);
+  expect(issued.status).toBe(200);
+  const { access_token } = (await issued.json()) as { access_token: string };
+  return { ...registered, headers, bearer: access_token };
+}
+async function context(human: Awaited<ReturnType<typeof person>>) {
+  const deadline = Date.now() + 10000;
+  return { actor: await f.access.authenticate(human.bearer, { pool, deadline }), deadline };
+}
+function point(human: Awaited<ReturnType<typeof person>>, operatorAccountId: string, extra = {}) {
+  return f.host.handler(
+    new Request(`${issuer}/account-management/automated/operator`, {
+      method: 'POST',
+      headers: { origin: issuer, cookie: human.headers.get('cookie')!, 'content-type': 'application/json' },
+      body: JSON.stringify({ operatorAccountId, ...extra }),
+    }),
+  );
+}
+
+test('Existing credentialless automated creation loads minimal current operator command metadata under exact native account manage authority without broad private account-read scopes or actor impersonation', async () => {
+  const owner = await person('metadata_owner');
+  const outsider = await person('metadata_outsider');
+  const own = await point(owner, owner.accountId);
+  expect(own.status).toBe(200);
+  expect(own.headers.get('cache-control')).toBe('private, no-store');
+  expect(await own.json()).toEqual({ id: owner.accountId, kind: 'actor', handle: 'metadata_owner', displayName: null });
+  const org = newId(0x9422);
+  const hold = await f.bindings.internalLifecycle.reserveCoordination({
+    accountId: owner.accountId,
+    relatedAccountId: org,
+    purpose: 'membership',
+    key: key(),
+  });
+  await f.bindings.internalLifecycle.createOrganization({
+    organizationId: org,
+    ownerAccountId: owner.accountId,
+    ownerReservationId: hold.value.reservationId,
+    key: key(),
+  });
+  await f.bindings.operators.provisionManagementDefaults({ operatorAccountId: org, key: key() });
+  const organization = await point(owner, org);
+  expect(organization.status).toBe(200);
+  expect(await organization.json()).toEqual({ id: org, kind: 'organization', handle: null, displayName: null });
+  expect((await point(outsider, org)).status).toBe(403);
+  expect((await point(owner, outsider.accountId)).status).toBe(403);
+  expect((await point(owner, owner.accountId, { accountId: outsider.accountId })).status).toBe(400);
+  const missing = await point(owner, newId(0x9422));
+  expect(missing.status).toBe(200);
+  expect(await missing.json()).toBeNull();
+  const ctx = await context(owner);
+  await expect(
+    createManagementRead(
+      { pool, access: () => f.access, tokens: f.referenceKeys, clock: () => new Date() },
+      ctx.actor,
+      ctx.deadline,
+    ),
+  ).rejects.toThrow();
+  // Metadata is not an approval: native creation still requires its own reference.
+  await expect(
+    f.host.workflows.createAutomated({
+      key: key(),
+      authorization: 'not-an-approval',
+      operatorAccountId: org,
+      handle: 'not_created',
+    }),
+  ).rejects.toThrow();
+  await expect(
+    readAutomatedCreationOperator(
+      { pool, access: f.access },
+      ctx.actor,
+      { operatorAccountId: owner.accountId },
+      { deadline: Date.now() - 1 },
+    ),
+  ).rejects.toMatchObject({ reason: 'deadline' });
+  // Equality with the selected account never substitutes for its current grant.
+  await f.bindings.grants.revoke(
+    { ...(await context(owner)), pool },
+    {
+      resource: { route: routeOf(owner.accountId)!, id: owner.accountId },
+      subjectId: owner.accountId,
+      subjectRole: '',
+      actions: ['account:manage'],
+      valid: '(,)',
+      key: key(),
+    },
+  );
+  expect((await point(owner, owner.accountId)).status).toBe(403);
+  // A real current floor change invalidates the genuine previously authenticated actor.
+  await pool.query(
+    'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+1 WHERE route=$1 AND account_id=$2',
+    [routeOf(owner.accountId), owner.accountId],
+  );
+  await expect(
+    readAutomatedCreationOperator(
+      { pool, access: f.access },
+      ctx.actor,
+      { operatorAccountId: org },
+      { deadline: Date.now() + 10000 },
+    ),
+  ).rejects.toMatchObject({ status: 403 });
+}, 60000);

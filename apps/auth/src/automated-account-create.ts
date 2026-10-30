@@ -1,4 +1,3 @@
-import { createServerFn } from '@tanstack/react-start';
 import { managementOperationProfile, type AccountOperation, type ManagementSession } from '@rezics/auth-contract';
 import { authPost, type AuthPostResult } from './api';
 import { loadManagementSession } from './management-operations';
@@ -55,8 +54,8 @@ function identity(value: unknown): value is OperatorIdentity {
   );
 }
 
-/** Only the authenticated native management projection supplies the label.
- * Identity is presentation, never an inferred grant or a public-profile fallback. */
+/** Compatibility parser for the existing generic management projection only.
+ * The automated creation loader consumes parseAutomatedCreationOperator below. */
 export function parseAutomatedOperator(body: unknown, operatorAccountId: string): OperatorRead {
   if (
     !record(body) ||
@@ -72,89 +71,35 @@ export function parseAutomatedOperator(body: unknown, operatorAccountId: string)
   return { kind: 'ready', operator: Object.freeze({ ...body.account }) };
 }
 
-const readOperator = createServerFn({ method: 'POST' })
-  .validator((value: unknown): { accountId: string; operatorAccountId: string } => {
-    if (
-      !record(value) ||
-      !fields(value, ['accountId', 'operatorAccountId']) ||
-      !automatedId(value.accountId) ||
-      !automatedId(value.operatorAccountId)
-    )
-      throw new Error('Invalid operator');
-    return { accountId: value.accountId, operatorAccountId: value.operatorAccountId };
-  })
-  .handler(async ({ data }): Promise<OperatorRead> => {
-    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
-    setResponseHeader('Cache-Control', 'private, no-store');
-    try {
-      const request = getRequest();
-      const origin = new URL(request.url).origin;
-      const issuer = import.meta.env.DEV && __AUTH_ORIGIN__ ? new URL(__AUTH_ORIGIN__).origin : origin;
-      if (
-        request.headers.get('sec-fetch-site') === 'cross-site' ||
-        (request.headers.get('origin') !== origin && request.headers.get('origin') !== issuer)
-      )
-        return { kind: 'unavailable' };
-      const headers = {
-        Accept: 'application/json',
-        Origin: request.headers.get('origin')!,
-        Cookie: request.headers.get('cookie') ?? '',
-      };
-      const sessionResponse = await fetch(new URL('/session', issuer), {
-        headers,
-        redirect: 'error',
-        cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
-      });
-      if (sessionResponse.status !== 200) return { kind: 'unavailable' };
-      const session: unknown = await sessionResponse.json();
-      if (!record(session) || session.account_id !== data.accountId) return { kind: 'unavailable' };
-      const tokenResponse = await fetch(new URL('/token', issuer), {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: '{}',
-        redirect: 'error',
-        cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
-      });
-      if (tokenResponse.status !== 200) return { kind: 'unavailable' };
-      const token: unknown = await tokenResponse.json();
-      if (!record(token) || !text(token.access_token) || token.token_type !== 'Bearer') return { kind: 'unavailable' };
-      const { env } = await import('cloudflare:workers');
-      const kernelOrigin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-      if (!kernelOrigin) return { kind: 'unavailable' };
-      const kernel = new URL(kernelOrigin);
-      if (
-        kernel.username ||
-        kernel.password ||
-        kernel.search ||
-        kernel.hash ||
-        kernel.pathname !== '/' ||
-        !(
-          kernel.protocol === 'https:' ||
-          (import.meta.env.DEV &&
-            kernel.protocol === 'http:' &&
-            ['localhost', '127.0.0.1', '[::1]'].includes(kernel.hostname))
-        )
-      )
-        return { kind: 'unavailable' };
-      const response = await fetch(new URL(`/v1/accounts/${data.operatorAccountId}/management`, kernel), {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${token.access_token}` },
-        redirect: 'error',
-        cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
-      });
-      return response.status === 200
-        ? parseAutomatedOperator(await response.json(), data.operatorAccountId)
-        : { kind: 'unavailable' };
-    } catch {
-      return { kind: 'unavailable' };
-    }
-  });
+/** Closed response from the selected native command metadata transport. */
+export function parseAutomatedCreationOperator(body: unknown, operatorAccountId: string): OperatorRead {
+  return identity(body) && body.id === operatorAccountId
+    ? { kind: 'ready', operator: Object.freeze({ ...body }) }
+    : { kind: 'unavailable' };
+}
+
+async function readOperator(accountId: string, operatorAccountId: string): Promise<OperatorRead> {
+  const session = await loadManagementSession();
+  if (session.kind !== 'ready' || !automatedSessionMatches(session, accountId)) return { kind: 'unavailable' };
+  const result = await authPost('/account-management/automated/operator', { operatorAccountId });
+  if (!result.ok) return { kind: 'unavailable' };
+  // Session substitution while the selected label was loading cannot change the
+  // immutable initiating human. Auth independently verifies the genuine session.
+  const current = await loadManagementSession();
+  if (
+    current.kind !== 'ready' ||
+    !automatedSessionMatches(current, accountId) ||
+    current.authnEpoch !== session.authnEpoch ||
+    current.authTime !== session.authTime ||
+    JSON.stringify(current.amr) !== JSON.stringify(session.amr)
+  )
+    return { kind: 'unavailable' };
+  return parseAutomatedCreationOperator(result.body, operatorAccountId);
+}
 export async function loadAutomatedOperator(accountId: string, operatorAccountId: string): Promise<OperatorRead> {
   if (!automatedId(accountId) || !automatedId(operatorAccountId)) return { kind: 'unavailable' };
   try {
-    return await readOperator({ data: { accountId, operatorAccountId } });
+    return await readOperator(accountId, operatorAccountId);
   } catch {
     return { kind: 'unavailable' };
   }

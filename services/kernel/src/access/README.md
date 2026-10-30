@@ -3172,3 +3172,23 @@ locator and reissues Semantic authority after restart. It adds no DBOS purge que
 aggregate coverage certificate or second cleanup algorithm. No record completion is issued while original/receiving
 inventory, source cut, late-copy exclusion or native consumer closure remains unsealed. These delivered local
 capabilities retain all preference-history and Cost qualifications above; full native acceptance remains required.
+
+## Selected automated creation operator
+
+`automated-operator-source.ts` declares
+`readAutomatedCreationOperator({ pool, access, clock? }, actor, { operatorAccountId }, { deadline })`.
+It returns exactly `{ id, kind: 'actor' | 'organization', handle, displayName }` or
+null for a missing/inactive/unsupported native operator. It reads only the selected
+command label and native eligibility anchors, under current `account:manage` on
+that exact account. Two live native-time passes retain the same genuine actor,
+client, principal, assignment, scopes, floors and denials formula. Human floor and
+source/partition changes are rechecked; unavailable sources, moves and deadlines
+are typed unavailable rather than missing or managed.
+
+Native responsibility eligibility requires an active unfenced account with no
+operator. A label, kind, equality or role is no grant. There is no private profile,
+holder enumeration, public fallback or `account:read` scope. The local
+`createAutomatedOperatorAccess` adapter binds Auth's live proof through its actual
+`accessTokenForProof` and native authentication; default account bindings expose
+it on `trustedAccess`. This read neither approves nor creates an account: the
+existing approval, workflow and native responsibility commands retain all checks.

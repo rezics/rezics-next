@@ -1,3 +1,4 @@
+import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
 import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
 import { createAuthHistoryProofBindings } from './shared-history-auth.ts';
 import { accessClock, installAccessClock } from './access-clock.ts';
@@ -247,7 +248,13 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
         config.auth().internal.verifyCredentialEffect(reference, expected),
     }));
   const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
-  const trustedAccess: TrustedAccessPorts & ManagementMembershipAccess = {
+  const trustedAccess: TrustedAccessPorts & ManagementMembershipAccess & AutomatedOperatorAccess = {
+    ...createAutomatedOperatorAccess({
+      pool,
+      access,
+      clock: accessClock(access),
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
     ...createManagementMembershipAccess({
       pool,
       access,

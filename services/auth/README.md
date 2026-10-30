@@ -2096,3 +2096,16 @@ immutable descriptor and operation key. Reauthentication requires another submit
 retries retain the descriptor/key, and native acknowledgement remains separate
 from fresh selected-member readback. Existing native ownership, last-holder,
 reservation and command CAS checks remain final authority.
+
+## Selected automated creation operator
+
+`POST /account-management/automated/operator` accepts exactly `{ operatorAccountId }`
+and returns exactly `{ id, kind: 'actor' | 'organization', handle, displayName }`
+or null. This same-origin JSON, private no-store command-precondition read uses
+`withFreshHuman` and the exact management `account:manage` profile (the existing
+local transfer-profile alias). Its local `AutomatedOperatorAccess` port is
+`readAutomatedCreationOperator({ human, operatorAccountId, deadline })`; the
+native binding authenticates the actual Auth-signed live proof. Missing native
+composition answers 503. Selection and returned labels are never approval or
+creation authority. The existing credentialless native creation writer, fresh
+approval/execute checks and shared opening profile remain unchanged.
