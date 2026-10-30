@@ -28,7 +28,7 @@ function summary(subject: CoverSubject, aspect: 'portrait' | 'landscape' | 'squa
 }
 
 function imageSource(media: string) {
-  const shape = media.includes('music')
+  const shape: [number, number] = media.includes('music')
     ? [1000, 1000]
     : media.includes('movie') || media.includes('anime') || media.includes('recipe')
       ? [1600, 900]
@@ -40,6 +40,7 @@ function imageSource(media: string) {
 const meta = {
   title: 'Components/List Presentation',
   component: MemberListRow,
+  args: { href: '/book', subject: book, cover: null, src: imageSource, title: book.title },
   decorators: [withSurface],
   parameters: { layout: 'padded' },
 } satisfies Meta<typeof MemberListRow>;

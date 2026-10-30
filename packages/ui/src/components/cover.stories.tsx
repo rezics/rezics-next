@@ -439,7 +439,7 @@ export const CreditViewer: Story = {
           name: `Open cover: ${book.title}`,
         }),
       );
-      return within(document.body).findByRole('dialog', { name: book.title });
+      return within(await within(document.body).findByRole('dialog', { name: book.title }));
     };
     const linked = await open('linked');
     await expect(linked.getByText(/© Shinchosha/)).toBeVisible();
@@ -487,4 +487,3 @@ export const PriorityAndDecorative: Story = {
     expect(image('other').alt).toBe('The Wind-Up Bird Chronicle');
   },
 };
-
