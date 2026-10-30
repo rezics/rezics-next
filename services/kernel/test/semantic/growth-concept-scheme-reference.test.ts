@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { statementSlotId } from '../../src/semantic/item.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { sourceTuple } from '../../src/semantic/fences.ts';
 import { capture, checkGrowth, costOf, seed } from '../support/growth.ts';
 import { realmBoardWorld } from '../content/realm-board-create-support.ts';
@@ -147,6 +148,34 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
                       type: 'skos:Concept',
                       current_release: bundledDigest,
                       recorded_transaction_id: transaction,
+                    },
+                  ];
+                  // Grow the native slot and adoption indexes too. These other
+                  // subjects have expanded, unselected slots; none supplies
+                  // truth for the Concept measured by the caller.
+                  rows['semantic.fact'] = [
+                    {
+                      route,
+                      subject_id: subject,
+                      slot_id: statementSlotId(subject, 'skos:inScheme'),
+                      log_seq: 1,
+                      operation: 'expand',
+                      kind: 'statement',
+                      property: 'skos:inScheme',
+                      body: {},
+                      recorded_transaction_id: transaction,
+                    },
+                  ];
+                  rows['semantic.adoption'] = [
+                    {
+                      route,
+                      subject_id: subject,
+                      slot_id: statementSlotId(subject, 'skos:inScheme'),
+                      context_id: GLOBAL_CONTEXT,
+                      head: 1,
+                      mode: 'replace',
+                      selection: [],
+                      revision,
                     },
                   ];
                   rows['access.resource_grant'] = [
