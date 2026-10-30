@@ -163,7 +163,7 @@ export function zoneRoutes(
       {
         params,
         response: { 200: zoneSchema(ZoneConfigurationResponseSchema), ...failures },
-        detail: detail('get_configuration', 'zone:configure'),
+        detail: { ...detail('get_configuration', 'zone:configure'), 'x-resource-types': ['semantic.zone'] },
       },
       async ({ params, actor, admission, job, set }) => {
         requireZoneAccount(actor);
@@ -214,7 +214,7 @@ export function zoneRoutes(
         headers: conditionalHeaders,
         body: zoneSchema(ZoneConfigureInputSchema),
         response: { 200: zoneSchema(ZoneResponseSchema), ...failures },
-        detail: detail('configure', 'zone:configure', false, true),
+        detail: { ...detail('configure', 'zone:configure', false, true), 'x-resource-types': ['semantic.zone'] },
       },
       async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireZoneAccount(actor);
@@ -235,7 +235,7 @@ export function zoneRoutes(
         headers: conditionalHeaders,
         body: zoneSchema(ZonePublishInputSchema),
         response: { 200: zoneSchema(ZoneResponseSchema), ...failures },
-        detail: detail('publish', 'zone:publish', false, true),
+        detail: { ...detail('publish', 'zone:publish', false, true), 'x-resource-types': ['semantic.zone'] },
       },
       async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireZoneAccount(actor);

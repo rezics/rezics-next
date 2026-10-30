@@ -252,6 +252,51 @@ owner's rows are mutated. Error paths leave no new revision, receipt or event.
 
 ## Shared page response and no-leak reads
 
+### Web configuration interface
+
+The signed-in configuration page is `/my/zones/{id}/edit`, with the existing Web locale prefix.
+It reads the actual configuration and current resource actions independently of the My Zones list.
+Available controls follow current `zone:configure` and `zone:publish` actions; owner metadata never supplies
+authority. Missing, denied, session, unavailable and retry states retain the native outcome.
+Unavailable action metadata disables writes and displays the API's status and problem code; a successful
+configuration read alone never substitutes for current configure or publish authorization.
+
+The kernel registers `semantic.zone` with the existing `viewerActions` protocol. Configuration reads,
+configuration saves and publication declare their resource binding on the mounted routes, so the native
+catalogue supplies `zone.get_configuration`, `zone.configure` and `zone.publish` from current Access grants.
+The adapter reads only the requested current Zone keys and their native account fences in the request's
+read snapshot. Active private heads retain a false public floor for explicit read grants; deleted, purged,
+root-withheld, missing and inactive-owner heads are absent. Owner identity never grants an action, and no
+source reads or source permissions are inferred from this metadata.
+
+The page edits all eight localized names, up to 16 sorted relative routes including the required empty
+home route, and each document through the common registry-derived Puck composition editor. Page appearance
+uses the common root tokens. Navigation follows the sorted configured routes; there is no independent navigation
+layout or ordering store. The first route segment `subjects` remains reserved. Saved filters come from the actual
+active definitions release and mounted Collection choices come from the current viewer's common Collection API,
+including pagination. Existing unavailable selections remain identifiable and removable. No filter expression,
+query, source member data, or executable page configuration is authored by this interface. Saving selects the
+server's active compatible release; the UI does not submit a fabricated release pin.
+
+Edits live only in the mounted page. Save sends the full configuration and mount IDs with the opaque decimal
+revision quoted in `If-Match` and a quoted idempotency key. It replaces the current head immediately, including
+on public and unlisted Zones. The generic editor's publication callback has no Zone visibility semantics; the
+resource form supplies Save. Visibility changes use the separate publish operation on that same saved head,
+with a new CAS basis and key. Unsaved edits disable saved preview and visibility changes.
+
+Errors preserve local edits. The editor re-reads the server before offering a mutation retry; a changed head or
+412 requires an explicit reload/discard or reapply choice. Reapply keeps local edits against the newly read
+revision and requires a separate Save. Exact unchanged retries retain their request key; changed bodies or
+revision bases get new keys. Navigation away from dirty edits asks before discarding; closing or reloading the
+document uses the browser's unsaved-changes prompt.
+
+Saved preview posts only a route and reader languages to `zones/{id}:readPage` using the current viewer, and
+passes the response to the existing Zone shell and common renderer. It never submits the local document or uses
+configure authority as fallback read authority. Missing, denied, preparing and source-runtime readiness responses
+remain real states with retry controls. Open/copy links address the actual `/zones/{id}/{relativeRoute}` reader.
+An unlisted link may be readable without signing in; visibility never grants mounted-source authority. Source
+execution remains subject to the existing exposure boundary above.
+
 `readPage` wraps the existing presentation result at the top level with `zone`, preserving `profile`,
 `template`, `document`, `reads`, optional `subject` and `views`. It adds no page-specific data API. Configured
 pages select `{scope:'route',key:relativeRoute}`; `profile` is the active common presentation digest captured

@@ -2,6 +2,7 @@ import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { assertReceiptKeyRing, configureReceiptKeys, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
 import { zoneRoutes } from '../zones/http.ts';
+import { zoneViewerActionResource } from '../zones/viewer-actions.ts';
 import type { Elysia } from 'elysia';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -486,6 +487,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ['library.collection', collectionViewerActionResource],
     ['community.realm', realmViewerActionResource],
     ['community.space', spaceViewerActionResource],
+    ['semantic.zone', zoneViewerActionResource],
   ]);
   for (const [type, resource] of dependencies.viewerActionResources ?? []) {
     if (viewerResources.has(type)) throw new Error(`${type}: duplicate viewer actions registration`);
