@@ -56,14 +56,12 @@ function NavigationPattern({
   );
 }
 
-export const StaticPublicLeaf: Story = {
-  render: () => <NavigationPattern />,
-  play: async ({ canvasElement }) => {
-    const link = within(canvasElement).getByRole('link', { name: m.realms_heading() });
-    await expect(link).toHaveAttribute('href', `/${getLocale()}/realms`);
-    await expect(link).toHaveAttribute('aria-current', 'page');
-  },
-};
+async function publicLeaf({ canvasElement }: { canvasElement: HTMLElement }) {
+  const link = within(canvasElement).getByRole('link', { name: m.realms_heading() });
+  await expect(link).toHaveAttribute('href', `/${getLocale()}/realms`);
+  await expect(link).toHaveAttribute('aria-current', 'page');
+}
+export const StaticPublicLeaf: Story = { render: () => <NavigationPattern />, play: publicLeaf };
 export const PrivatePending: Story = {
   render: () => <NavigationPattern pathname="/library/collections" />,
   play: async ({ canvasElement }) => {
@@ -87,5 +85,5 @@ export const CreationGated: Story = {
 export const LocaleAndPath: Story = {
   globals: { locale: 'ja' },
   render: () => <NavigationPattern pathname="/ja/realms/example" />,
-  play: StaticPublicLeaf.play,
+  play: publicLeaf,
 };

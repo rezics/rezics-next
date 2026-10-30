@@ -14,7 +14,7 @@ import {
   SidebarProvider,
   useSidebar,
 } from '@rezics/ui/shadcn/sidebar';
-import { Link, useLocation, useRouter } from '@tanstack/react-router';
+import { Link, useLocation, useRouter, type AnyRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -141,7 +141,7 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                       className="h-10"
                       isActive={item.current}
                       tooltip={item.label}
-                      render={<Link to={item.path} />}
+                      render={/[?#]/.test(item.path) ? <a href={item.href} /> : <Link<AnyRouter> to={item.path} />}
                     >
                       {Icon && <Icon aria-hidden="true" className="text-sidebar-primary" />}
                       <span>{item.label}</span>
@@ -189,14 +189,14 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
               const Icon = item.icon;
               return (
                 <li key={item.id}>
-                  <Link
-                    to={item.path}
+                  <a
+                    href={item.href}
                     aria-current={item.current ? 'page' : undefined}
                     className="flex min-h-9 items-center gap-2 rounded-xl px-3 text-sm aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
                   >
                     {Icon && <Icon aria-hidden="true" className="size-4 text-sidebar-primary" />}
                     {item.label}
-                  </Link>
+                  </a>
                 </li>
               );
             }}
