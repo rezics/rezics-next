@@ -470,8 +470,9 @@ test('actually executed native terms aggregation must supply complete unique int
 async function checkpointAt(home: number, consumer: string) {
   await admin.query(
     `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
-     SELECT partition_no, $2, epoch, position FROM core.partition WHERE partition_no = $1
-     ON CONFLICT (partition_no, consumer) DO UPDATE SET position = EXCLUDED.position`,
+     SELECT partition_no, $2, CASE WHEN position = 0 THEN NULL ELSE epoch END, position
+     FROM core.partition WHERE partition_no = $1
+     ON CONFLICT (partition_no, consumer) DO UPDATE SET epoch = EXCLUDED.epoch, position = EXCLUDED.position`,
     [home, consumer],
   );
 }
