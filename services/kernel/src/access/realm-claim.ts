@@ -54,10 +54,12 @@ export async function approveRealmClaim(
       resource: PLATFORM_RESOURCE,
       async validate(client) {
         return (
-          (await globalContext.run(client, {
-            route: PLATFORM_RESOURCE.route,
-            resource_id: PLATFORM_RESOURCE.id,
-          }))?.global === true
+          (
+            await globalContext.run(client, {
+              route: PLATFORM_RESOURCE.route,
+              resource_id: PLATFORM_RESOURCE.id,
+            })
+          )?.global === true
         );
       },
     },

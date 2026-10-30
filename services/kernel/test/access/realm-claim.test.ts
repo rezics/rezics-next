@@ -101,7 +101,13 @@ async function snapshot(realmId: string) {
     'SELECT id::text,type,data FROM core.outbox WHERE partition_no=$1 AND subject=$2 ORDER BY id',
     [partitionOf(route), realmId],
   );
-  return { realm: realm.rows, requests: requests.rows, roles: roles.rows, receipts: receipts.rows, events: events.rows };
+  return {
+    realm: realm.rows,
+    requests: requests.rows,
+    roles: roles.rows,
+    receipts: receipts.rows,
+    events: events.rows,
+  };
 }
 
 async function owners(realmId: string) {
@@ -182,7 +188,9 @@ test('only current exact platform approval at command T atomically grants the se
     clientId: system.auth.ordinaryClient.id,
     scopes: ['realm:read'],
   });
-  await expect(approveRealmClaim(deps(), restricted.actor, input, context(key))).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(approveRealmClaim(deps(), restricted.actor, input, context(key))).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
   expect(await snapshot(input.realmId)).toEqual(after);
   await system.database.pool.query(
     `DELETE FROM access.resource_role_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2
