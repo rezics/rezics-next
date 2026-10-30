@@ -8,6 +8,7 @@ import {
 } from './record-source-set.ts';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
+import { beginAgentIdentitySerialization } from './agent-identity-source.ts';
 
 /** Original immutable source identity, before any deletion generation exists. */
 export type RecordHistorySourceReference =
@@ -91,6 +92,7 @@ export function releaseCommandRecordSources(tx: CommandTransaction): void {
 /** Called before any producer serializes a durable request or command history payload. */
 export function beginRecordHistorySerialization(tx: CommandTransaction): void {
   currentCommand(tx);
+  beginAgentIdentitySerialization(tx);
   serializing.add(tx);
 }
 

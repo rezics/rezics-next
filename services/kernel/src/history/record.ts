@@ -1,4 +1,5 @@
 import { hasCommandRecordSourceSet } from './record-source-set.ts';
+import { commandAgentIdentitySource, recordAgentIdentityCopy, releaseAgentIdentitySource } from './agent-identity-source.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { currentCommand } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS, classifyEvent } from './contracts.ts';
@@ -16,6 +17,10 @@ import {
 export const COMMAND_HISTORY_KINDS = Object.freeze({
   'access.account.preferences': 1,
   'library.entry.retention.purge': 2,
+  'access.agent-verification.pending': 3,
+  'access.agent-verification.released': 4,
+  'access.agent-verification.revoked': 5,
+  'access.agent-verification.deleted': 6,
 });
 export type CommandHistoryKind = string;
 const commandKinds = new Map<string, number>(Object.entries(COMMAND_HISTORY_KINDS));
@@ -55,6 +60,11 @@ const declarations = new WeakMap<CommandTransaction, Declaration>();
  * This server module is never an HTTP JSON input or an alternate permission evaluator. */
 export function bindCommandHistoryEvidence(tx: CommandTransaction, accounts: readonly AccountReference[]): void {
   identities.set(tx, structuredClone(accounts));
+}
+
+/** The already verified evidence for this attempt, used only to enroll native data roles. */
+export function commandHistoryIdentityAccounts(tx: CommandTransaction): readonly AccountReference[] {
+  return structuredClone(identities.get(tx) ?? []);
 }
 
 export function unionHistoryScope(
@@ -105,6 +115,16 @@ export function validateCommandHistoryScope(
   events: readonly { type: string }[],
 ): void {
   beginRecordHistorySerialization(tx);
+  const identitySource = commandAgentIdentitySource(tx);
+  if (identitySource) {
+    if (declarations.has(tx) || identitySource.kind !== kind)
+      throw new TypeError('Conflicting original identity command history declaration');
+    declarations.set(tx, {
+      kind: identitySource.kind, partition: currentCommand(tx).partition,
+      response: { artifactType: 'command-receipt/v1', accounts: identitySource.accounts },
+      events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: identitySource.accounts })),
+    });
+  }
   const declaration = declarations.get(tx);
   if (!declaration && (commandRecordSources(tx).length || hasCommandRecordSourceSet(tx)))
     throw new TypeError('Record sources require native command history serialization');
@@ -167,7 +187,11 @@ export async function recordCommandHistory(
       accounts: scope.accounts,
     });
     const { decodeLocator } = await import('./locator.ts');
-    await recordRecordHistoryCopy(tx, decodeLocator(scope.artifactType, locator), input.position);
+    const nativeLocator = decodeLocator(scope.artifactType, locator);
+    await recordRecordHistoryCopy(tx, nativeLocator, input.position);
+    await recordAgentIdentityCopy(tx, {
+      partition: declaration.partition, locator: nativeLocator, accounts: scope.accounts,
+    }, input.position);
   };
   await write(declaration.response, receipt);
   for (let eventSeq = 0; eventSeq < declaration.events.length; eventSeq++)
@@ -183,6 +207,7 @@ export async function recordCommandHistory(
 }
 
 export function releaseCommandHistory(tx: CommandTransaction): void {
+  releaseAgentIdentitySource(tx);
   releaseCommandRecordSources(tx);
   identities.delete(tx);
   declarations.delete(tx);

@@ -3,13 +3,14 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { encodeReceiptKey, receiptKeysFor } from '../command/receipt-key.ts';
+import { declareAgentIdentitySource, type AgentIdentitySourceKey } from '../history/agent-identity-source.ts';
 import {
   authoritativeTimeValue,
   currentCommand,
   noEffect,
   runCommand,
   currentCommandResources,
+  currentCommandReceipt,
   type CommandTransaction,
 } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -65,6 +66,32 @@ const digestOf = (input: IdentityAdmissionInput) =>
   createHash('sha256')
     .update(normalized([input.intent, input.receipt]))
     .digest('hex');
+type OriginalIdentity = Readonly<{
+  key: AgentIdentitySourceKey;
+  digest: string;
+  partition: number;
+  epoch: number;
+  position: bigint;
+  transactionId: string;
+  accounts: readonly import('../history/locator.ts').AccountReference[];
+}>;
+const originalIdentities = new WeakMap<CommandTransaction, OriginalIdentity>();
+
+/** History's data-only declaration verifier. Only this original writer issues the binding;
+ * a historical source read, source UUID or a copied query method cannot issue it. */
+export function originalAccountIdentitySource(
+  tx: CommandTransaction,
+  key: AgentIdentitySourceKey,
+  digest: string,
+): OriginalIdentity {
+  const command = currentCommand(tx);
+  const original = originalIdentities.get(tx);
+  if (!original || original.transactionId !== command.transactionId || original.digest !== digest ||
+    original.key.route !== key.route || original.key.accountId !== key.accountId ||
+    original.key.direction !== key.direction || original.key.receiptId !== key.receiptId)
+    throw new TypeError('Identity association requires its actual original source writer');
+  return original;
+}
 export function accountIdentityUnavailable(detail: string): IdentityEpochStoreError {
   return new IdentityEpochStoreError('identity_epoch_unavailable', `Accounts source: ${detail}`);
 }
@@ -137,12 +164,11 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
       ? { kind: 'access.agent-verification.pending', key: `${source.requestId}:pending` }
       : source.commandReceipt;
   if (!commandReceipt) throw new TypeError('Reversal source requires its original native command key');
-  const nativeReceiptKey = encodeReceiptKey(
-    receiptKeysFor(tx),
-    commandReceipt.kind,
-    { kind: 'account', id: source.requestedBy },
-    commandReceipt.key,
-  );
+  const actualReceipt = currentCommandReceipt(tx);
+  if (actualReceipt.kind !== commandReceipt.kind || actualReceipt.key !== commandReceipt.key ||
+    actualReceipt.principal.kind !== 'account' || actualReceipt.principal.id !== source.requestedBy)
+    throw new TypeError('Accounts source requires its actual original native command receipt');
+  const nativeReceiptKey = actualReceipt.storageKey;
   const inserted = await tx.query(insert.sql, [
     route,
     source.account,
@@ -179,6 +205,33 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
   // A duplicate is possible only through the original native command receipt replay, which skips this body.
   // It must never rebind an existing historical source from a new command.
   if (inserted.rowCount !== 1) throw accountIdentityUnavailable(`conflicting original source ${keyOf(source.receipt)}`);
+  const row = inserted.rows[0];
+  const { ACCOUNT_ROLE_BITS: roles } = await import('../history/contracts.ts');
+  const { unionHistoryScope } = await import('../history/record.ts');
+  const ref = (accountId: string, mask: number) => ({ accountRoute: routeOf(accountId)!, accountId, roles: mask });
+  const undoRoles = source.undo?.source.roles.map(({ account_id, role }) => {
+    // This is the genuine released undo's closed Accounts vocabulary, not caller role text.
+    const mask = role === 'subject' ? roles.subject : role === 'actor' ? roles.actor | roles.principal :
+      role === 'editor' ? roles.reviewer : null;
+    if (mask === null) throw new TypeError('Unknown original Accounts undo role');
+    return ref(account_id, mask);
+  }) ?? [];
+  const key: AgentIdentitySourceKey = Object.freeze({
+    route, accountId: source.account, direction: source.receipt.kind, receiptId: source.receipt.receipt,
+  });
+  const accounts = unionHistoryScope('command-receipt/v1', [
+    ref(source.account, roles.subject),
+    ref(source.requestedBy, roles.actor | roles.principal),
+    ...(source.decidedBy ? [ref(source.decidedBy, roles.reviewer)] : []),
+    ...(command.basis?.requestedBy ? [ref(command.basis.requestedBy, roles['acting-human'])] : []),
+    ...undoRoles,
+  ]).accounts;
+  originalIdentities.set(tx, Object.freeze({
+    key, digest: row.intent_digest, partition: row.source_partition, epoch: row.source_epoch,
+    position: BigInt(row.source_position), transactionId: row.source_transaction_id,
+    accounts: Object.freeze(accounts.map((account) => Object.freeze(account))),
+  }));
+  await declareAgentIdentitySource(tx, key, digestOf(input));
 }
 
 /** Current native T and account terminal fence precede the immutable receipt lookup and any disclosure. */

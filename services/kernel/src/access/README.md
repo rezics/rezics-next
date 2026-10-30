@@ -3173,6 +3173,52 @@ aggregate coverage certificate or second cleanup algorithm. No record completion
 inventory, source cut, late-copy exclusion or native consumer closure remains unsealed. These delivered local
 capabilities retain all preference-history and Cost qualifications above; full native acceptance remains required.
 
+### Original Agent identity serialization associations
+
+`history/agent-identity-source.ts` publishes the data-only declaration
+`declareAgentIdentitySource(tx, key: AgentIdentitySourceKey, digest: string): Promise<void>` and
+`readAgentIdentityCopies(pool, keys, context, after?)` / `readAgentIdentityCopyReceiving(deps, barrier, keys, context, after?)`.
+The exact key is `{route, accountId, direction, receiptId}`; direction retains the original
+`account-agent.verify` or `account-agent.unverify` value. It is separate from ordinary record purge references,
+SourceSet membership, deletion authority and Semantic consumer discharge.
+
+The original Accounts source writer issues a private transaction-bound declaration only after its native insert.
+History rejects foreign keys, changed digests, a historical read, a different current command, repeated declarations
+and declarations after the first nested history serialization. The original immutable component comes from the
+insert's returned partition, epoch, position and transaction; its digest is the source's canonical intent digest.
+The writer consumes `currentCommandReceipt(tx)`, which reuses the executor's already generated current-key token
+from its replay candidates. Source and receipt serialization do not derive another HMAC.
+
+At the existing receipt/outbox serializer, permanent command kind IDs 3–6 cover pending, released, revoked and
+deleted verification. The actual receipt codec and final persisted fence position/event sequence create the
+locators. The serializer writes `core.agent_identity_history_copy` in the SAME native transaction, checking each
+physical receipt/outbox slot. Rollback removes the copy and association together. These hooks preserve native
+Source callbacks, SourceSet finalization, authorization, deadlines and the existing connection lifetime.
+
+The full native role union includes the subject, original requester as actor/principal, original decider as reviewer,
+any original acting human, the genuine prior undo source roles and all already verified command evidence. Each copy enrolls every role in
+`core.history_locator`; technical source-to-copy rows reference that inventory and hold the same open seals and
+native routing/restore generation. Exact source-leading and artifact-leading indexes bound both directions.
+The existing physical minimizers and receiving API report `agent-identity-source-retention-custody-pending` while
+the independent native retention consumer is unavailable. Technical linkage receives no metadata exemption or
+ordinary-record purge permission. This declaration does not introduce a second identity minimizer or erasure engine.
+
+Lookup accepts at most eight exact source keys in one home, examines one indexed candidate per key and returns at
+most one actual `HistoryArtifact` with the complete native role union. It releases the lookup home before using
+`readHistoryReceivingReceipt`. Every page, including an empty one, remains
+`agent-identity-original-inventory-unsealed`: new-writer conversion cannot prove historical absence, an original
+source inventory seal, receiving closure or Source consumer discharge. Old unassociated copies remain pending.
+
+`history/durable.ts` exports `AGENT_IDENTITY_DURABLE_ASSOCIATION` with the exact unresolved SDK branch. The existing
+approval/reversal effect calls to `context.client.enqueue` and original `DBOS.registerStep` recordings in
+`access/agent-verification-work.ts` expose no History codec recording callback. SDK ownership is
+`DBOSClient.enqueue` / `SystemDatabase.initWorkflowStatus` / `recordWorkflowOutput`; the existing native durable
+locator accepts UUID/hex work identities, whereas these original workflow names are textual. Their returned handles
+and deterministic names do not establish an actual native recording locator or durable receiving handoff. Only
+this SDK branch remains pending; no workflow IDs, SDK rows, foreign SDK SQL or additional WorkClient are invented.
+The original DBOS steps and default WorkClient lifetime remain intact. Neither native association conversion nor
+this explicitly pending SDK branch claims family, native acceptance or Goal completion.
+
 ## Selected automated creation operator
 
 `automated-operator-source.ts` declares

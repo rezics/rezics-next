@@ -2,6 +2,7 @@ import { lockRecordHistoryCopy, type RecordHistoryLocalJob } from './record-sour
 import type { CommandTransaction } from '../command/command.ts';
 import { classifyEvent } from './contracts.ts';
 import { decodeLocator } from './locator.ts';
+import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
 
 /** One envelope slot, never the whole envelope. The owner's proof covers projections and all
@@ -18,6 +19,8 @@ export async function minimizeHistoryOutbox(
   const key = decodeLocator('outbox-event/v1', locator);
   if (key.artifactType !== 'outbox-event/v1' || key.partitionNo !== job.partition_no)
     throw new TypeError('Outbox locator home mismatch');
+  const identityGap = await agentIdentityCopyRetentionGap(tx, job.partition_no, 'outbox-event/v1', locator);
+  if (identityGap) return identityGap;
   const associations = await tx.query(
     `SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
      WHERE partition_no=$1 AND artifact_type='outbox-event/v1' AND locator=$2

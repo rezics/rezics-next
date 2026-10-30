@@ -18,4 +18,4 @@ AND (input.direction='account-agent.verify' OR EXISTS (
     AND v.source_epoch=p.epoch AND v.intent_digest=$31
 ))
 ON CONFLICT (route,account_id,direction,receipt_id) DO NOTHING
-RETURNING receipt_id;
+RETURNING receipt_id,source_partition,source_epoch,source_position,source_transaction_id,intent_digest;

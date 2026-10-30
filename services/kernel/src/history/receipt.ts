@@ -6,6 +6,7 @@ import { decodeLocator } from './locator.ts';
 import { sealHistoryAccount } from './gates.ts';
 import minimize from './receipt.sql';
 import { commandHistoryKind } from './record.ts';
+import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
 
 /** Actual owner disposition: this response has no downstream workflow consumers. No other
@@ -42,6 +43,8 @@ export async function minimizeHistoryReceipt(
     throw new TypeError('Receipt owner disposition unavailable');
   const kind = commandHistoryKind(key.commandKindId);
   if (!kind) return 'receipt-owner-unregistered';
+  const identityGap = await agentIdentityCopyRetentionGap(tx, job.partition_no, 'command-receipt/v1', locator);
+  if (identityGap) return identityGap;
   const storageKey = `rk1.${key.keyVersion}.${Buffer.from(key.keyToken, 'hex').toString('base64url')}`;
   // Artifact-leading inverse bounds every association without enumerating account prefixes.
   const associations = await tx.query(

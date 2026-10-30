@@ -16,7 +16,7 @@ import { readPartition } from '../partition/partition.ts';
 import { commandPhase, countContentionRetry, measureCommandPhase } from './timing.ts';
 import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { bindReceiptKeys, encodeReceiptKey, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
+import { bindReceiptKeys, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   recordCommandHistory,
@@ -204,6 +204,18 @@ const attempts = new WeakMap<CommandTransaction, CommandAttempt>();
 const attemptDeadlines = new WeakMap<CommandAttempt, number>();
 const commands = new WeakMap<CommandTransaction, CurrentCommand>();
 const commandResources = new WeakMap<CommandTransaction, Readonly<{ pool: Pool; deadline: number }>>();
+const nativeReceipts = new WeakMap<CommandTransaction, Readonly<{
+  principal: CommandPrincipal; kind: string; key: string; storageKey: string;
+}>>();
+
+/** Original source writers consume the executor's actual codec result, never a second HMAC.
+ * Available only after authorization and replay lookup, on the original transaction. */
+export function currentCommandReceipt(tx: CommandTransaction) {
+  currentCommand(tx);
+  const receipt = nativeReceipts.get(tx);
+  if (!receipt) throw new TypeError('No original live command receipt');
+  return receipt;
+}
 // Exact executor object only: copying a query or callback capability conveys no receipt authority.
 const receiptOwners = new WeakMap<
   CommandTransaction,
@@ -616,6 +628,12 @@ async function executeCommand<T>(
             }
           }
           if (mode === 'receipt-only') throw authorization!.denied();
+          if (receiptInput) nativeReceipts.set(tx, Object.freeze({
+            principal: Object.freeze({ ...receiptInput.principal }),
+            kind: receiptInput.kind,
+            key: receiptInput.key,
+            storageKey: receiptCandidates.find((key) => key.startsWith(`rk1.${receiptKeys!.current}.`))!,
+          }));
           const response = await body(tx, { transactionId, time });
           const noEffect = response.events.length === 0 && noEffectResults.has(response);
           if (response.events.length === 0 && !noEffect) throw new TypeError('A command must emit at least one event');
@@ -653,7 +671,7 @@ async function executeCommand<T>(
             const serialized = JSON.stringify({
               principal: options.receipt.principal,
               kind: options.receipt.kind,
-              key: encodeReceiptKey(receiptKeys!, options.receipt.kind, options.receipt.principal, options.receipt.key),
+              key: currentCommandReceipt(tx).storageKey,
               digest: receiptDigest.toString('base64'),
               response: response.value,
             });
@@ -736,6 +754,7 @@ async function executeCommand<T>(
           throw error;
         } finally {
           releaseCommandHistory(tx);
+          nativeReceipts.delete(tx);
           receiptOwners.delete(tx);
           callbackState.active = false;
           callbackState.callbacks.length = 0;

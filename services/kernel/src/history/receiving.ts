@@ -4,6 +4,7 @@ import { currentCommand, CommandUnavailableError, type CommandTransaction } from
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { commandHistoryKind } from './record.ts';
+import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
 import { encodeLocator, validateLocator, validateScope } from './locator.ts';
 import { lockNativeFamilyCoverage, type NativeFamilyCoverage } from './family-coverage-state.ts';
 import {
@@ -159,6 +160,8 @@ async function receivingGap(
   partition: number,
   locator: HistoryArtifact['locator'],
 ): Promise<string | null> {
+  const identityGap = await agentIdentityCopyRetentionGap(tx, partition, locator.artifactType, Buffer.from(encodeLocator(locator)));
+  if (identityGap) return identityGap;
   if (locator.artifactType !== 'outbox-event/v1') return null;
   const consumers = await tx.query(
     `SELECT consumer FROM core.history_event_consumer

@@ -6,6 +6,18 @@ import type { WorkClient } from '../work/client.ts';
 import { decodeLocator } from './locator.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
 
+/** Exact unresolved original-copy branch. These SDK-owned recording calls expose no native
+ * History recording callback in the supported integration. A deterministic workflow name or
+ * a successful enqueue/step return is not a generated HistoryArtifact or receiving custody. */
+export const AGENT_IDENTITY_DURABLE_ASSOCIATION = Object.freeze({
+  state: 'pending',
+  gap: 'agent-identity-sdk-recording-port-unavailable',
+  enqueue: 'access/agent-verification-work.ts: context.client.enqueue (approval and reversal effects)',
+  recordingOwner: '@dbos-inc/dbos-sdk: DBOSClient.enqueue / SystemDatabase.initWorkflowStatus / recordWorkflowOutput',
+  steps: 'access/agent-verification-work.ts: DBOS.registerStep (original recorded step inputs/results)',
+  locatorOwner: 'history/locator.ts: durable-work/v1 accepts native UUID/hex work identities only',
+} as const);
+
 export const HISTORY_WORK_BOUNDS = Object.freeze({
   operations: 64,
   eventKeys: 8,
