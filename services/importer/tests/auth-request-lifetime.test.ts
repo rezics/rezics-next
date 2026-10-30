@@ -63,10 +63,11 @@ for (const path of ['/signin/key', '/token']) {
         }) as typeof fetch,
       });
       const pending = token();
-      const rejected = expect(pending).rejects.toBeInstanceOf(CredentialServiceError);
+      // Observe rejection passively; assert the original promise only after cancellation.
+      void pending.catch(() => {});
       await reading.promise;
       controller.abort();
-      await rejected;
+      await expect(pending).rejects.toBeInstanceOf(CredentialServiceError);
       expect(held!.signal.aborted).toBe(true);
       expect(cancellations).toBe(1);
       expect(body.locked).toBe(false);
@@ -104,11 +105,16 @@ test('coalesced cancelled renewal disposes a late fetch body and leaves another 
         return new Response(null, { status: 401 });
       }) as typeof fetch,
     });
-    const first = expect(token()).rejects.toBeInstanceOf(CredentialServiceError);
-    const second = expect(token()).rejects.toBeInstanceOf(CredentialServiceError);
+    const first = token();
+    void first.catch(() => {});
+    const second = token();
+    void second.catch(() => {});
     const held = await started.promise;
     controller.abort();
-    await Promise.all([first, second]);
+    await Promise.all([
+      expect(first).rejects.toBeInstanceOf(CredentialServiceError),
+      expect(second).rejects.toBeInstanceOf(CredentialServiceError),
+    ]);
     expect(held.signal.aborted).toBe(true);
     expect(requests).toBe(1);
     late.resolve(
