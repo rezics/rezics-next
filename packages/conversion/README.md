@@ -136,7 +136,10 @@ Local protocol-double tests in
 real exports, immutable input, ignored/unsupported input and rejection before
 binding. The separate frozen native journey uses real Auth account-key issuance,
 ordinary public bulk HTTP requests and actual returned IDs, native receipts and
-source/candidate rows, editor selection and public reads. Its execution evidence
+source/candidate rows, editor selection and public reads. The unchanged native
+scenario passed at `a23f3991f07b9d1ed3f970c6d1e914067c789ad2`: one case,
+386 assertions. This is metadata-only native evidence; integration, discovery
+and media/statistics outcomes remain separate. Its raw log, receipt anchors
 and limits are recorded in the
 [community caller report](../../docs/research/imports-audit/community-converter-caller.md).
 Run that native scenario through the repository check wrapper:

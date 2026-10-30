@@ -171,8 +171,12 @@ public reads for all four sources. Revoking the real bulk grant tests denial of
 the original bearer replay. Metadata-only input supplies no media intent or
 nonzero statistic; this is neither discovery closure nor a new growth series.
 The prior missing-caller red remains qualified as a missing binding, not a reached
-native product failure. Implementation/registration alone does not close the
-journey. Exact command, source evidence and execution stage are retained in the
+native product failure. The unchanged frozen scenario passed at
+`a23f3991f07b9d1ed3f970c6d1e914067c789ad2`: one case, 386 assertions,
+with actual all-source receipts, cited public selections, immutable replay and
+revoked replay returning 403. This closes the bounded native caller scenario;
+integration and promotion remain separate. Exact command, source evidence,
+raw log and receipt anchors are retained in the
 [community caller report](../research/imports-audit/community-converter-caller.md);
 other rights, deferred cells and promotion evidence remain as recorded here.
 
