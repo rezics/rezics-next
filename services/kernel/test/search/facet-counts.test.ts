@@ -4,6 +4,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { ProblemError } from '../../src/http/problem.ts';
+import type { FacetDiscovery200Response } from '../../src/search/facet-discovery-contract.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
@@ -111,10 +112,21 @@ async function refusal(promise: Promise<unknown>) {
   return [(error as ProblemError).code, (error as ProblemError).errors] as unknown[];
 }
 
-test('facet values retain top k order and labels without public counts', async () => {
+test('facet values retain native key order and labels without public counts', async () => {
   const answer = await service.facets('anonymous', { filter: booksOnly, facets: authors(1) });
   expect(answer).not.toHaveProperty('total');
-  expect(answer.facets).toEqual([{ property: 'schema:author', values: [{ value: a, labels: { en: 'Author A' } }] }]);
+  expect(answer.facets).toEqual([
+    { property: 'schema:author', next: expect.any(String), values: [{ value: a, labels: { en: 'Author A' } }] },
+  ]);
+  const cursor = answer.facets[0]!.next;
+  if (!cursor) throw new Error('The remaining eligible author requires a continuation');
+  const final = await service.facets('anonymous', {
+    filter: booksOnly,
+    facets: [{ property: 'schema:author', size: 1, cursor }],
+  });
+  expect(final.facets).toEqual([
+    { property: 'schema:author', next: null, values: [{ value: b, labels: { en: 'Author B' } }] },
+  ]);
   expect(answer.facets[0]).not.toHaveProperty('relation');
   for (const value of answer.facets[0]!.values) expect(value).not.toHaveProperty('count');
   expect(answer.as_of).toEqual(expect.any(String));
@@ -233,7 +245,7 @@ test('facet requests are admitted like filters', async () => {
   expect((await refusal(unready.facets('anonymous', { facets: authors() })))[0]).toBe('semantic_not_ready');
 });
 
-test('sampled facets return bounded values without public counts', async () => {
+test('legacy sample tuning cannot truncate exhausted facet enumeration', async () => {
   const sampled = createSearchService({ ...options, facetSample: 2 });
   const answer = await sampled.facets('anonymous', { filter: booksOnly, facets: authors(10) });
   expect(answer).not.toHaveProperty('total');
@@ -244,7 +256,11 @@ test('sampled facets return bounded values without public counts', async () => {
     expect(entry).not.toHaveProperty('count');
   }
   expect(new Set(values.map(({ value }) => value)).size).toBe(values.length);
-  expect(values.length).toBeLessThanOrEqual(2);
+  expect(values).toEqual([
+    { value: a, labels: { en: 'Author A' } },
+    { value: b, labels: { en: 'Author B' } },
+  ]);
+  expect(answer.facets[0]!.next).toBeNull();
 });
 
 test('the facets route serves anonymous readers and is documented', async () => {
@@ -269,16 +285,28 @@ test('the facets route serves anonymous readers and is documented', async () => 
     }),
   );
   expect(response.status).toBe(200);
-  const body = (await response.json()) as { facets: unknown[] };
+  const body: FacetDiscovery200Response = await response.json();
   expect(body).not.toHaveProperty('total');
   expect(body.facets[0]).not.toHaveProperty('relation');
   expect(body.facets[0]).not.toHaveProperty('values.0.count');
-  expect(body.facets).toEqual([{ property: 'schema:author', values: [{ value: a, labels: { en: 'Author A' } }] }]);
+  expect(body.facets).toEqual([
+    { property: 'schema:author', next: expect.any(String), values: [{ value: a, labels: { en: 'Author A' } }] },
+  ]);
+  const cursor = body.facets[0]!.next;
+  if (!cursor) throw new Error('The remaining eligible author requires a continuation');
+  expect(
+    (
+      await service.facets('anonymous', {
+        filter: booksOnly,
+        facets: [{ property: 'schema:author', size: 1, cursor }],
+      })
+    ).facets,
+  ).toEqual([{ property: 'schema:author', next: null, values: [{ value: b, labels: { en: 'Author B' } }] }]);
   const operation = openApiDocument(kernel).paths['/v1/subjects:facets']!.post!;
   expect(operation).toMatchObject({
     operationId: 'subject.facets',
     'x-action': 'subject:read',
     security: [{ bearerAuth: [] }, {}],
   });
-  expect(Object.keys(operation.responses!).sort()).toEqual(['200', '400', '401', '403', '422', '503']);
+  expect(Object.keys(operation.responses!).sort()).toEqual(['200', '400', '401', '403', '409', '422', '503']);
 });

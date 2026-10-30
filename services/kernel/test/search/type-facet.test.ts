@@ -150,7 +150,8 @@ test('a type facet returns ordered types with release labels and no public count
   expect(answer.facets).toEqual([
     {
       property: 'type',
-      values: [expected('schema:Book'), expected('schema:Person'), expected('schema:Movie')],
+      values: [expected('schema:Book'), expected('schema:Movie'), expected('schema:Person')],
+      next: null,
     },
   ]);
   expect(answer.facets[0]).not.toHaveProperty('relation');
@@ -159,7 +160,8 @@ test('a type facet returns ordered types with release labels and no public count
   expect(reads).toBe(before);
   const limited = await service.facets('anonymous', { facets: types(1) });
   expect(limited.facets[0]!.values).toEqual([expected('schema:Book')]);
-  // Unknown types are dropped before cutting the result to size; ties use the type CURIE.
+  expect(limited.facets[0]).toHaveProperty('next', expect.any(String));
+  // Unknown types are excluded; eligible values follow ascending native type keys.
   const tied = await service.facets('anonymous', { text: 'one', facets: types(2) });
   expect(tied.facets[0]!.values).toEqual([expected('schema:Book'), expected('schema:Movie')]);
   const sampled = createSearchService({ ...options, facetSample: 2 });
@@ -167,7 +169,8 @@ test('a type facet returns ordered types with release labels and no public count
   expect(lower).not.toHaveProperty('total');
   expect(lower.facets[0]).not.toHaveProperty('relation');
   const sampledValues = lower.facets[0]!.values;
-  expect(sampledValues.length).toBeLessThanOrEqual(2);
+  expect(sampledValues).toEqual([expected('schema:Book'), expected('schema:Movie'), expected('schema:Person')]);
+  expect(lower.facets[0]).toHaveProperty('next', null);
   expect(new Set(sampledValues.map(({ value }) => value)).size).toBe(sampledValues.length);
   for (const value of sampledValues) {
     expect(['schema:Book', 'schema:Person', 'schema:Movie']).toContain(value.value);
@@ -185,19 +188,19 @@ test("type facet labels follow the reader's language chain", async () => {
   });
   expect(chinese.facets[0]!.values.map(({ value, labels }) => ({ value, labels }))).toEqual([
     { value: 'schema:Book', labels: { 'zh-Hans': '书籍' } },
-    { value: 'schema:Person', labels: { 'zh-Hans': '人物' } },
     { value: 'schema:Movie', labels: { 'zh-Hans': '电影' } },
+    { value: 'schema:Person', labels: { 'zh-Hans': '人物' } },
   ]);
 
   const english = await service.facets('anonymous', { facets: types(), languages: ['en'] });
   expect(english.facets[0]!.values.map(({ value, labels }) => ({ value, labels }))).toEqual([
     { value: 'schema:Book', labels: { en: 'Book' } },
-    { value: 'schema:Person', labels: { en: 'Person' } },
     { value: 'schema:Movie', labels: { en: 'Movie' } },
+    { value: 'schema:Person', labels: { en: 'Person' } },
   ]);
 
   const all = await service.facets('anonymous', { facets: types() });
-  expect(all.facets[0]!.values).toEqual([expected('schema:Book'), expected('schema:Person'), expected('schema:Movie')]);
+  expect(all.facets[0]!.values).toEqual([expected('schema:Book'), expected('schema:Movie'), expected('schema:Person')]);
 });
 
 test('a type facet returns values within the text and filter, including a type filter', async () => {
@@ -218,6 +221,7 @@ test('a type facet returns values within the text and filter, including a type f
     facets: types(),
   });
   expect(empty.facets[0]!.values).toEqual([]);
+  expect(empty.facets[0]).toHaveProperty('next', null);
 });
 
 test('a type facet is requested at most once and keeps the facet size bounds', async () => {
@@ -236,13 +240,14 @@ test('a type facet is requested at most once and keeps the facet size bounds', a
   });
   expect(mixed.status).toBe(200);
   expect((await mixed.json()).facets).toEqual([
-    { property: 'type', values: [expected('schema:Book')] },
+    { property: 'type', values: [expected('schema:Book')], next: null },
     {
       property: 'schema:author',
       values: [
         { value: a, labels: { en: 'Author A' } },
         { value: b, labels: { en: 'Author B' } },
       ],
+      next: null,
     },
   ]);
 });

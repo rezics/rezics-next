@@ -701,6 +701,7 @@ describe('native discovery generation custody', () => {
                 facets: [
                   {
                     property,
+                    next: null,
                     values: empty
                       ? []
                       : [

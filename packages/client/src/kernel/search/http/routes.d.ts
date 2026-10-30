@@ -423,6 +423,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
                         facets: {
                             property: string;
                             size?: number;
+                            cursor?: string;
                         }[];
                     };
                     params: {};
@@ -432,6 +433,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
                         200: {
                             facets: {
                                 property: string;
+                                next: string | null;
                                 values: {
                                     value: string;
                                     labels: Record<string, string>;
@@ -468,6 +470,20 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
                             }[];
                         };
                         403: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        409: {
                             type: unknown;
                             title: unknown;
                             status: number;

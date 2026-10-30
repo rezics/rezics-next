@@ -1,16 +1,11 @@
 import { type FilterDocument, type FilterRelease } from '@rezics/filter';
+import type { FacetDiscoveryRequest } from './facet-discovery-contract.ts';
 import { type IndexedSubject, type SubjectSource } from './source.ts';
-export type FacetRequest = {
-    text?: string;
-    filter?: unknown;
-    facets: {
-        property: string;
-        size?: number;
-    }[];
-};
+export type FacetRequest = FacetDiscoveryRequest;
 export type Facet = {
     property: string;
     size: number;
+    cursor?: string;
 };
 export type FacetValue = {
     value: string;

@@ -1,15 +1,13 @@
 import { admitFilter, FilterError, walkFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
+import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
+import type { FacetDiscoveryRequest } from './facet-discovery-contract.ts';
 import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from './source.ts';
 
-export type FacetRequest = {
-  text?: string;
-  filter?: unknown;
-  facets: { property: string; size?: number }[];
-};
+export type FacetRequest = FacetDiscoveryRequest;
 
-export type Facet = { property: string; size: number };
+export type Facet = { property: string; size: number; cursor?: string };
 export type FacetValue = { value: string; count: number; labels: Record<string, string> };
 
 function ownField(input: object, key: string): unknown {
@@ -64,7 +62,7 @@ export function validateFacets(request: FacetRequest): Facet[] {
   const properties = new Set<string>();
   return Array.from(body.facets, (entry: unknown, index) => {
     const pointer = `/facets/${index}`;
-    const facet = closed(entry, ['property', 'size'], pointer);
+    const facet = closed(entry, ['property', 'size', 'cursor'], pointer);
     if (facet.property === undefined) invalid(`${pointer}/property`, 'required');
     if (typeof facet.property !== 'string') invalid(`${pointer}/property`, 'invalid_type');
     if (properties.has(facet.property)) invalid(`${pointer}/property`, 'invalid_format');
@@ -72,7 +70,12 @@ export function validateFacets(request: FacetRequest): Facet[] {
     const size = facet.size === undefined ? 10 : facet.size;
     if (typeof size !== 'number' || !Number.isInteger(size) || size < 1 || size > 20)
       invalid(`${pointer}/size`, 'out_of_range');
-    return { property: facet.property, size };
+    if (facet.cursor !== undefined) {
+      if (typeof facet.cursor !== 'string') invalid(`${pointer}/cursor`, 'invalid_type');
+      if (!facet.cursor.length || facet.cursor.length > LIST_CURSOR_BOUNDS.search.maxTokenLength)
+        invalid(`${pointer}/cursor`, 'invalid_format');
+    }
+    return { property: facet.property, size, ...(facet.cursor === undefined ? {} : { cursor: facet.cursor }) };
   });
 }
 

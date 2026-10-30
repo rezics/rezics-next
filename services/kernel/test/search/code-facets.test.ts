@@ -125,9 +125,10 @@ test('code facets return ordered values without subjects or public counts', asyn
   expect(answer.facets).toEqual([
     {
       property: 'schema:inLanguage',
+      next: null,
       values: [
-        { value: 'ja', labels: {} },
         { value: 'en', labels: {} },
+        { value: 'ja', labels: {} },
         { value: 'zh-Hant', labels: {} },
       ],
     },

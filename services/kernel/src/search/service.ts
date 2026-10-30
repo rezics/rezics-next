@@ -23,22 +23,14 @@ import {
 } from './cursor.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
-import {
-  admitFacets,
-  codeFacet,
-  discloseFacetValues,
-  validateFacets,
-  typeFacetLabels,
-  type FacetRequest,
-  type FacetValue,
-} from './facets.ts';
+import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
 import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
-import { countFacets, installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
+import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
 import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
@@ -54,6 +46,15 @@ import type {
 import type { SearchHit as NativeSearchHit } from './query.ts';
 import type { PublicSearchHit } from './public-figures.ts';
 import type { KindValue } from './query.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import {
+  admitFacetPage,
+  authenticateFacetCursors,
+  readFacetDiscovery,
+  validateFacetCursorRelease,
+} from './facet-discovery-runtime.ts';
+import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
+import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
 
 export type SearchRequest = {
   text?: string;
@@ -212,6 +213,7 @@ export function createSearchService({
   cursors,
   clock = systemClock,
   facetSample = 10_000,
+  facetProvider,
   publicFilters,
   preparePublic,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
@@ -225,10 +227,13 @@ export function createSearchService({
   cursors: KeyRing;
   clock?: KernelClock;
   release?: () => Promise<FilterRelease | null>;
+  /** Legacy preview helper tuning; never used by the public continuation path. */
   facetSample?: number;
   /** Trusted native provider; omitted only by historical isolated service fixtures. */
   publicFilters?: () => DefaultPublicFilterRuntime;
   preparePublic?: (job: PublicFilterConsumerJob) => Promise<void>;
+  /** Trusted native owner composition. Missing native ports fail closed. */
+  facetProvider?: () => Promise<FacetDiscoveryProvider | undefined>;
 }) {
   const release =
     releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
@@ -700,75 +705,51 @@ export function createSearchService({
 
     async facets(
       principal: 'anonymous' | `account:${string}`,
-      request: FacetRequest & { languages?: string[] },
+      request: FacetRequest,
       now = clock().getTime(),
-    ) {
-      // The hit consumer supplies no native aggregate proof for this separate surface.
-      if (publicFilters) throw indexNotReady();
+      context = { deadline: deadlineFor(30_000) },
+    ): Promise<FacetDiscovery200Response> {
       const { languages: languageChain, ...facetRequest } = request;
       const { languages } = validateHitOptions({ languages: languageChain });
       const facets = validateFacets(facetRequest);
+      admitFacetPage(facets);
       const { text, filter } = validate({
         ...(request.text === undefined ? {} : { text: request.text }),
         filter: request.filter,
       });
+      const positions = await authenticateFacetCursors(cursors, {
+        principal,
+        text,
+        originalFilter: filter,
+        facets,
+        languages,
+        now,
+      });
       const current = await release();
       if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+      validateFacetCursorRelease(positions, current);
       const admitted = await admitQuery(text, filter, current);
-      admitFacets(facets, filter, current);
-      const compiledFilter = admitted ? compileFilter(admitted, { prefix: 'f', relationOverflow: true }) : undefined;
-      const overflowProperties = [
-        ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
-      ];
-      const generation = await discoveryGeneration();
-      const counted = await indexRequest(() =>
-        countFacets(client, prefix, {
-          generation,
-          ...(text ? { query: compileText(text, { field: 'search_text', prefix: 't' }).query } : {}),
-          ...(compiledFilter ? { filter: compiledFilter.query } : {}),
-          ...(overflowProperties.length ? { overflowProperties } : {}),
+      admitFacets(facets, admitted, current);
+      // The native factory must resolve the actual registered catalogue/meaning/identity context.
+      // Neither preview buckets nor a guessed Global/type configuration can replace this boundary.
+      const provider = await facetProvider?.();
+      if (!provider) throw indexNotReady();
+      return readFacetDiscovery(
+        cursors,
+        provider,
+        {
+          principal,
+          text,
+          filter: admitted,
+          originalFilter: filter,
+          release: current,
           facets,
-          sample: facetSample,
-        }),
+          languages,
+          now,
+          context,
+        },
+        positions,
       );
-      const coded = new Set(
-        facets.filter((facet) => codeFacet(current, facet.property)).map((facet) => facet.property),
-      );
-      const subjects = await sourceRequest(() =>
-        discloseFacetValues(
-          source,
-          counted.facets.flatMap((facet) =>
-            facet.property === 'type' || coded.has(facet.property) ? [] : facet.values.map(({ value }) => value),
-          ),
-        ),
-      );
-      const response = {
-        facets: counted.facets.map((facet, index) => ({
-          property: facet.property,
-          values: facet.values
-            .flatMap(({ value }): Omit<FacetValue, 'count'>[] => {
-              if (facet.property === 'type') {
-                const available = typeFacetLabels(current, value);
-                const labels =
-                  available && languages
-                    ? chooseTexts(
-                        Object.entries(available).map(([language, text]) => ({ language, value: text })),
-                        languages,
-                        undefined,
-                      )
-                    : available;
-                return labels ? [{ value, labels }] : [];
-              }
-              if (coded.has(facet.property)) return [{ value, labels: {} }];
-              const subject = subjects.get(value);
-              return subject ? [{ value, labels: project(subject, languages).labels }] : [];
-            })
-            .slice(0, facets[index]!.size),
-        })),
-        as_of: await asOf(generation),
-      };
-      if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
-      return response;
     },
 
     async suggest(

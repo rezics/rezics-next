@@ -95,6 +95,7 @@ const service: SearchService = {
       facets: [
         {
           property: 'schema:author',
+          next: null,
           values: [{ value: result.id, labels: result.labels }],
         },
       ],
@@ -301,7 +302,9 @@ test('facets forward principals and reject denied credentials and unknown fields
     const result = await call(kernel, 'POST', '/v1/subjects:facets', { ...(token ? { token } : {}), body });
     expect(result.response.status).toBe(200);
     expect(result.body).toEqual({
-      facets: [{ property: 'schema:author', values: [{ value: serviceResult.id, labels: serviceResult.labels }] }],
+      facets: [
+        { property: 'schema:author', next: null, values: [{ value: serviceResult.id, labels: serviceResult.labels }] },
+      ],
       as_of: asOf,
     });
     for (const value of [result.body, result.body.facets[0], result.body.facets[0].values[0]])

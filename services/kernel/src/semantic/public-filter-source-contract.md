@@ -91,6 +91,23 @@ examined originals and native projection inputs; one-key steps can retain an ori
 on its projection. Missing native implementations remain unavailable. This bridge exports no engine writer registration,
 drain, ACK, participant completion, publication or account-erasure operation. The few native outcomes in
 `test/semantic/identity-source-support-outcomes.test.ts` remain later integration proof, without a stub pass.
+The adopted Source-owned binding is `public-filter-source-binding.ts:PublicFilterSourceBinding` with synchronous
+`createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access)`. Routing is the existing routeKey.
+`resolve({source,meaning,capture},context)` returns the native source identity/configuration, immutable read definition,
+complete meaning/capture/dependency keys and counted cost, or closed unready/unavailable failure. `join({queried,
+execution?},context)` independently validates that same native definition, canonical queried observation, covered cut
+and optional retained execution with original/terminal own rows. It imports Search's canonical queried type; it is
+not a fourth PublicFilterSource reader. The current module is explicitly a provisional unavailable adapter for the
+agreed declarations, awaiting replacement by the sole Semantic runtime producer. It cannot infer registration from
+three reader shapes or authorize Search publication. The selected additive shared consumer factory input is `binding: PublicFilterSourceBinding`;
+its canonical factory declaration and lifecycle implementation remain Search's shared consumer owner's work.
+
+`facet-population-contract.ts` owns the adopted `FacetPopulationRequest` and `FacetPopulationPage` declarations.
+The sole `createFacetPopulationSource(config)` factory uses exactly the PublicFilterSourceFactory configuration.
+`readFacetPopulationPage({population,frontier,inputLimit,capture})` retains native finite creation/change coverage,
+immutable definition/meaning/consumer linkage and final validation; opaque observation/frontier locators are never
+caller coverage. Limits remain 1..1000 under every lower native cap. Its retained native traversal is implemented;
+missing binding/key-page producers still return typed unavailability, never empty completion.
 
 Actual consumer call sites inspected are `search/service.ts:createSearchService` (its local `admitQuery` calls
 `admitFilter`/`compileFilter` and current hit disclosure) and `search/indexer.ts:createSubjectIndexer`. They do not

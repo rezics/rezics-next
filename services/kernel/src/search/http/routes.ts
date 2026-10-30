@@ -123,6 +123,7 @@ const facetResponse = t.Object(
       t.Object(
         {
           property: t.String(),
+          next: t.Union([t.String(), t.Null()]),
           values: t.Array(
             t.Object(
               {
@@ -381,6 +382,7 @@ export function searchRoutes<App>(
                 {
                   property: t.String(),
                   size: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
+                  cursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
                 },
                 object,
               ),
@@ -394,6 +396,7 @@ export function searchRoutes<App>(
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden'),
+          409: problemSchema('search_restart_required'),
           422: problemSchema('unsupported_query'),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
@@ -418,6 +421,7 @@ export function searchRoutes<App>(
             actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
             body,
             clock().getTime(),
+            { deadline: job.deadline },
           );
         });
       },

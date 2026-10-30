@@ -13,10 +13,44 @@ label choice rule for hit labels, requested descriptions and item fact labels, r
 Omitting `languages` keeps every language.
 
 The approved [public facet discovery contract](../../../../docs/search-facets.md) is the single owner of the
-count-free continuation wire, with additive types in `facet-discovery-contract.ts`. The current facets query is a
-sampled, count-ordered preview with unsafe count metadata. Count removal is separate work; complete count-free
-continuation, admission, Source/privacy integration and preparation remain **UNIMPLEMENTED**. This specification
-adoption supplies no runtime or native acceptance evidence.
+count-free continuation wire, with types in `facet-discovery-contract.ts`. The public service consumes
+`facet-discovery-runtime.ts`: it admits the entire request, authenticates per-property confidential cursors,
+resolves immutable native captures and requests one atomic native sibling page. It never calls the sampled
+`countFacets` helper. Required `next` represents eligible native lookahead or proved exhaustion; current labels
+and native ascending keys are preserved. Captured observation/build/generation locators stay encrypted.
+
+Trusted composition supplies `createSearchService({ facetProvider })`. The provider supplies the actual registered
+Source definition, complete pinned meaning, Search generation and `FacetNativeOperations` from
+`facet-discovery-native.ts`. `captureFacet({plan}, context)` returns existing `PublicFilterConsumerCapture`;
+`pageFacets({reads}, context)` owns shared START/FINAL, complete retained preparation, current original/terminal/
+contributor/target checks and eligible lookahead across all reads. Its `ready` branch is native evidence, never a
+callback that the HTTP caller can provide. Capture must deduplicate persisted jobs and resume the finite native
+frontier. The continuation runtime deliberately admits prepared snapshots only; direct execution stays closed.
+Missing native composition returns `503 index_not_ready` with `Retry-After: 1`, never preview values.
+
+`createFacetDiscoveryStorage` in `facet-discovery-storage.ts` implements Search's derived value preparation/storage.
+Its `prepareFacetStep(plan,queried,context,meter,textObservation?)` consumes the actual Source binding and finite
+population, exhausts complete projections, folds the shared three-valued predicate, canonicalizes item targets,
+stages and indexes distinct native keys, and commits effects/frontier by version CAS. Text preparation requires
+the shared lifecycle's actual immutable PIT, checked through the same Source definition and native version;
+there is no local string matcher. One building/current generation, deadline leases, 24-hour idle expiration and
+bounded retired-row cleanup survive process loss. No caller can turn these derived rows into Source coverage.
+
+`readFacetCandidates(read,context)` returns private ordered candidates and their original/terminal support rows;
+it returns no public ready verdict or continuation. The native `pageFacets` executor must retain ALL siblings in
+its actual execution, share one START/FINAL and validate current contributor/target/foreign dependencies before
+turning those rows into `FacetNativePageResult`. `expireFacetStep(context)` reclaims at most 999 derived rows per
+step after marking the generation unavailable. These storage operations introduce no capture/bootstrap, Source
+mirror, scheduler or ACK writer. Shared native consumer capture/repair remains the sole lifecycle owner.
+
+Composition still requires the actual shared consumer/native facet executor and Semantic producers. The selected
+resolver is Source's `PublicFilterSourceBinding.resolve/join`, never another reader. Its exact constructor and
+closed declarations are adopted in the Semantic owner document; the current clearly provisional binding adapter
+returns typed unavailability. The sole Semantic finite population factory is now delivered:
+`createFacetPopulationSource(config: Parameters<PublicFilterSourceFactory>[0])`, with
+`readFacetPopulationPage({population,frontier,inputLimit,capture})` and types in `facet-population-contract.ts`.
+Its native traversal remains unavailable until the binding/key-page producers are delivered. Default composition
+fails closed until native handoff and activation; it cannot claim a native product pass or eventual readiness.
 
 ## Trending searches
 
