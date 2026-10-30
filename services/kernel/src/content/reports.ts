@@ -25,6 +25,8 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { KeyRing } from '../tokens/seal.ts';
 import insert from './insert-report.sql';
 import page from './page-target-reports.sql';
+import boardPage from './board-report-page.sql';
+import { reportBoardPlacement } from './board-report-candidates.ts';
 import read from './read-report.sql';
 import readReportBoard from './read-report-board.sql';
 import readReportPost from './read-report-post.sql';
@@ -553,15 +555,23 @@ export async function listTargetReports(
   const candidates = await snapshot(dependencies, target.id, context.deadline, async (client) => {
     const parameters = {
       route: route(target.id),
+      board_id: target.id,
       target_kind: target.kind,
       target_id: target.id,
       created_at: after?.at ?? 'infinity',
       report_id: after?.id ?? '00000000-0000-0000-0000-000000000000',
       limit: limit + 1,
     };
-    const { rows } = await client.query<{ report_route: number; report_id: string; created_at: string }>(
-      page.sql,
-      page.params.map((name) => parameters[name as keyof typeof parameters]),
+    const statement = target.kind === 'board' ? boardPage : page;
+    const { rows } = await client.query<{
+      report_route: number;
+      report_id: string;
+      created_at: string;
+      target_kind: ReportTarget['kind'];
+      target_id: string;
+    }>(
+      statement.sql,
+      statement.params.map((name) => parameters[name as keyof typeof parameters]),
     );
     return rows;
   });
@@ -569,8 +579,36 @@ export async function listTargetReports(
   const entries: ReportView[] = [];
   for (const candidate of selected) {
     if (route(candidate.report_id) !== candidate.report_route) throw new ReportUnavailableError();
+    const candidateTarget: ReportTarget = { kind: candidate.target_kind, id: candidate.target_id };
+    // Explicit inspection is required even when the viewer also owns the report.
+    if (!(await inspect(dependencies, candidateTarget, context)).value) continue;
+    if (
+      target.kind === 'board' &&
+      (
+        await snapshot(dependencies, candidateTarget.id, context.deadline, (client) =>
+          reportBoardPlacement(client, candidateTarget),
+        )
+      ).value !== target.id
+    )
+      continue;
     const record = await readReport(dependencies, candidate.report_id, context);
-    if (record.value?.target.id === target.id && record.value.target.kind === target.kind) entries.push(record.value);
+    if (
+      !record.value ||
+      record.value.target.id !== candidateTarget.id ||
+      record.value.target.kind !== candidateTarget.kind
+    )
+      continue;
+    if (!(await inspect(dependencies, candidateTarget, context)).value) continue;
+    if (
+      target.kind === 'board' &&
+      (
+        await snapshot(dependencies, candidateTarget.id, context.deadline, (client) =>
+          reportBoardPlacement(client, candidateTarget),
+        )
+      ).value !== target.id
+    )
+      continue;
+    entries.push(record.value);
   }
   // No evidence or identifiers leave the adapter after revocation during hydration.
   const final = await inspect(dependencies, target, context);

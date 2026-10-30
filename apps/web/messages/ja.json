@@ -1436,5 +1436,8 @@
   "search_suggestions_unavailable": "現在、検索候補を利用できません。",
   "search_suggestions_restart": "検索候補が変更されました。再試行して最新の結果を取得してください。",
   "search_suggestions_invalid": "検索候補は64文字まで対応しています。送信すると全文で検索できます。",
-  "search_suggestions_credentials": "ログイン状態を確認できませんでした。再度ログインして検索候補を読み込んでください。"
+  "search_suggestions_credentials": "ログイン状態を確認できませんでした。再度ログインして検索候補を読み込んでください。",
+  "moderation_current_target_label": "Current target",
+  "moderation_reported_revision_label": "Reported revision",
+  "moderation_submitted_evidence_label": "Submitted evidence"
 }

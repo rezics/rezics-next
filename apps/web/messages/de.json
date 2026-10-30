@@ -1436,5 +1436,8 @@
   "search_suggestions_unavailable": "Suchvorschläge sind derzeit nicht verfügbar.",
   "search_suggestions_restart": "Die Suchvorschläge haben sich geändert. Erneut versuchen, um aktuelle Ergebnisse zu laden.",
   "search_suggestions_invalid": "Suchvorschläge unterstützen bis zu 64 Zeichen. Absenden, um die vollständige Eingabe zu suchen.",
-  "search_suggestions_credentials": "Deine Anmeldung konnte nicht bestätigt werden. Melde dich erneut an, um Suchvorschläge zu laden."
+  "search_suggestions_credentials": "Deine Anmeldung konnte nicht bestätigt werden. Melde dich erneut an, um Suchvorschläge zu laden.",
+  "moderation_current_target_label": "Current target",
+  "moderation_reported_revision_label": "Reported revision",
+  "moderation_submitted_evidence_label": "Submitted evidence"
 }

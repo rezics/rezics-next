@@ -13,7 +13,7 @@ type TakeDownInput = {
   targetKind: 'board' | 'thread' | 'post';
   targetId: string;
   reason: string;
-  statement: string;
+  statement?: string;
 };
 type DismissInput = { reportId: string };
 type ResolveAppealInput = { id: string; outcome: 'uphold' | 'reverse'; statement: string };
@@ -22,16 +22,19 @@ export type AppealResolutionResult =
   | { state: 'forbidden' }
   | { state: 'conflict' };
 
-function decisionReason(reason: string, statement: string): string {
-  const cleanReason = reason.trim();
-  const cleanStatement = statement.trim();
-  if (!cleanReason || !cleanStatement) throw new Error('A reason and statement are required');
-  return `${cleanReason}\n\n${cleanStatement}`;
+export function reportDecisionReason(reason: string, statement?: string): string {
+  // Retain existing helper callers while the product form supplies one complete reason.
+  const value = statement === undefined ? reason.trim() : `${reason.trim()}\n\n${statement.trim()}`;
+  if (!reason.trim() || (statement !== undefined && !statement.trim()) || Array.from(value).length > 1024)
+    throw new Error('A reason of 1 to 1024 characters is required');
+  return value;
 }
 
 export async function takeDownReport(command: ModerationCommand, input: TakeDownInput): Promise<unknown> {
   const path = input.targetKind === 'board' ? 'boards' : `${input.targetKind}s`;
-  return command(`/v1/${path}/${input.targetId}:takeDown`, { reason: decisionReason(input.reason, input.statement) });
+  return command(`/v1/${path}/${input.targetId}:takeDown`, {
+    reason: reportDecisionReason(input.reason, input.statement),
+  });
 }
 
 export async function dismissReport(command: ModerationCommand, input: DismissInput): Promise<unknown> {
@@ -73,7 +76,7 @@ export type ReportActionInput = { reportId: string; idempotencyKey: string } & (
       targetKind: 'board' | 'thread' | 'post';
       targetId: string;
       reason: string;
-      statement: string;
+      statement?: string;
     }
 );
 
@@ -91,7 +94,7 @@ export async function sendModerationReportAction(
   const command =
     data.targetKind === 'board' ? client.boards : data.targetKind === 'thread' ? client.threads : client.posts;
   const result = await command({ id: data.targetId }).$takeDown.post(
-    { reason: decisionReason(data.reason, data.statement) },
+    { reason: reportDecisionReason(data.reason, data.statement) },
     { headers },
   );
   if (result.error) throw new Error('Board takedown failed');
@@ -127,15 +130,18 @@ export const actionOnReport = createServerFn({ method: 'POST' })
         value.targetId.length > 128)
     )
       throw new Error('Invalid moderation target');
-    if (value.action === 'take-down' && (typeof value.reason !== 'string' || typeof value.statement !== 'string'))
-      throw new Error('A reason and statement are required');
+    if (
+      value.action === 'take-down' &&
+      (typeof value.reason !== 'string' || (value.statement !== undefined && typeof value.statement !== 'string'))
+    )
+      throw new Error('A reason is required');
     const idempotencyKey = validateModerationKey(value.idempotencyKey);
     if (value.action === 'dismiss') return { action: 'dismiss', reportId: value.reportId, idempotencyKey };
     if (
       (value.targetKind !== 'board' && value.targetKind !== 'thread' && value.targetKind !== 'post') ||
       typeof value.targetId !== 'string' ||
       typeof value.reason !== 'string' ||
-      typeof value.statement !== 'string'
+      (value.statement !== undefined && typeof value.statement !== 'string')
     )
       throw new Error('Invalid moderation action');
     return {
@@ -144,8 +150,7 @@ export const actionOnReport = createServerFn({ method: 'POST' })
       idempotencyKey,
       targetKind: value.targetKind,
       targetId: value.targetId,
-      reason: value.reason,
-      statement: value.statement,
+      reason: reportDecisionReason(value.reason, value.statement),
     };
   })
   .handler(async ({ data }): Promise<{ ok: true }> => {

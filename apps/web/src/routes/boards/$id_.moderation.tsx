@@ -63,6 +63,7 @@ function ModerationReportsRoute() {
   ) : (
     <ModerationReportsView
       reports={reportPage.reports}
+      revisions={reportPage.revisions}
       targets={reportPage.targets}
       next={reportPage.next}
       tab="reports"

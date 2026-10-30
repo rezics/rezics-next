@@ -1437,5 +1437,8 @@
   "search_suggestions_unavailable": "暂时无法提供搜索建议。",
   "search_suggestions_restart": "搜索建议已更改，请重试以获取最新结果。",
   "search_suggestions_invalid": "搜索建议最多支持 64 个字符。提交可搜索完整内容。",
-  "search_suggestions_credentials": "无法验证你的登录状态。请重新登录以加载搜索建议。"
+  "search_suggestions_credentials": "无法验证你的登录状态。请重新登录以加载搜索建议。",
+  "moderation_current_target_label": "当前内容",
+  "moderation_reported_revision_label": "被举报的修订版本",
+  "moderation_submitted_evidence_label": "提交的证据"
 }

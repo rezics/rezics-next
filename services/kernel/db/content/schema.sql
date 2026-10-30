@@ -718,6 +718,26 @@ CREATE TABLE content.board (
 
 
 --
+-- Name: board_report_candidate; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.board_report_candidate (
+    route integer NOT NULL,
+    board_id uuid NOT NULL,
+    target_kind text NOT NULL,
+    target_id uuid NOT NULL,
+    report_route integer NOT NULL,
+    report_id uuid NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT board_report_candidate_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT board_report_candidate_check1 CHECK ((report_route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
+    CONSTRAINT board_report_candidate_report_route_check CHECK (((report_route >= 0) AND (report_route <= 65535))),
+    CONSTRAINT board_report_candidate_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT board_report_candidate_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
+);
+
+
+--
 -- Name: board_thread; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1480,6 +1500,14 @@ ALTER TABLE ONLY content.board
 
 
 --
+-- Name: board_report_candidate board_report_candidate_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_report_candidate
+    ADD CONSTRAINT board_report_candidate_pkey PRIMARY KEY (route, board_id, report_id);
+
+
+--
 -- Name: board_thread board_thread_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -1785,6 +1813,13 @@ CREATE UNIQUE INDEX board_one_realm_reviews_idx ON content.board USING btree (ro
 --
 
 CREATE INDEX board_realm_page ON content.board USING btree (route, realm_id, board_id DESC) WHERE (realm_id IS NOT NULL);
+
+
+--
+-- Name: board_report_candidate_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_report_candidate_page_idx ON content.board_report_candidate USING btree (route, board_id, created_at DESC, report_id DESC) INCLUDE (report_route, target_kind, target_id);
 
 
 --
@@ -2149,5 +2184,4 @@ ALTER TABLE ONLY content.thread
 --
 -- PostgreSQL database dump complete
 --
-
 

@@ -1437,5 +1437,8 @@
   "search_suggestions_unavailable": "Suggestions are unavailable right now.",
   "search_suggestions_restart": "Suggestions changed. Try again to read current results.",
   "search_suggestions_invalid": "Suggestions support up to 64 characters. Submit to search the full query.",
-  "search_suggestions_credentials": "Your sign-in could not be verified. Sign in again to load suggestions."
+  "search_suggestions_credentials": "Your sign-in could not be verified. Sign in again to load suggestions.",
+  "moderation_current_target_label": "Current target",
+  "moderation_reported_revision_label": "Reported revision",
+  "moderation_submitted_evidence_label": "Submitted evidence"
 }

@@ -1436,5 +1436,8 @@
   "search_suggestions_unavailable": "暫時無法提供搜尋建議。",
   "search_suggestions_restart": "搜尋建議已變更，請重試以取得最新結果。",
   "search_suggestions_invalid": "搜尋建議最多支援 64 個字元。提交可搜尋完整內容。",
-  "search_suggestions_credentials": "無法驗證你的登入狀態。請重新登入以載入搜尋建議。"
+  "search_suggestions_credentials": "無法驗證你的登入狀態。請重新登入以載入搜尋建議。",
+  "moderation_current_target_label": "Current target",
+  "moderation_reported_revision_label": "Reported revision",
+  "moderation_submitted_evidence_label": "Submitted evidence"
 }

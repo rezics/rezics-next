@@ -58,6 +58,27 @@ after the original decision did. Each notice stores only its identity, kind, tim
 and target ids: thread and post, or decision and report as applicable. It stores no text. The inbox links to the
 author-readable decision or reporter-readable report for statements, deadlines and outcomes.
 
+Board report queues include reports on the board and its descendant threads and posts. The registered
+`content_report_target` effect consumes `report.created` references, releases the report source snapshot,
+reads native post → thread → board keys, releases that snapshot, and writes the board's partition.
+`content.board_report_candidate` stores only report and target references and creation time. Exact thread/post
+lists continue to use `content.report_target`; the candidate projection is never report or disclosure authority.
+No descendant, report-history, grant or account scan discovers a page. No report body copy is retained.
+
+A board page admits at most `limit + 1` candidates from its board-leading keyset index. It hydrates at most `limit`,
+checking each candidate's current target `moderation:read_reports` and exact native board placement independently,
+including when the viewer is also the reporter. Report references must match the candidate. Denied or stale rows
+contribute no identifiers, evidence, text or count to the response. The sealed cursor advances over the examined
+candidates even when none can be returned. The board's current inspection check fences the whole response.
+Each page costs O(limit) bounded current-authority and native ancestry checks, each O(log R); the fixed existing
+post ancestry bound remains 33. Replays repair an interrupted board projection without duplicating candidates.
+
+The moderator interface labels submitted evidence, the reported revision and the readable current target separately.
+It reads a reported revision only through the ordinary exact revision GET with an actually known post identity;
+thread-only revision references and refused reads remain neutrally unavailable. Exact revision reads deduplicate
+post/revision pairs within the bounded page. The decision form submits one reason of at most 1,024 characters,
+with one command key for an unchanged action intent across retries. Editing the reason starts a new intent.
+
 An authenticated report's exact reporter can read that report and its outcome through native `account:read` on
 their own account. This owner read does not disclose target document bytes. Moderators retain the existing
 `moderation:read_reports` path and target checks; anonymous reports have no owner reader, and unrelated or

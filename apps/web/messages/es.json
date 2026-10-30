@@ -1436,5 +1436,8 @@
   "search_suggestions_unavailable": "Las sugerencias no están disponibles en este momento.",
   "search_suggestions_restart": "Las sugerencias han cambiado. Vuelve a intentarlo para cargar los resultados actuales.",
   "search_suggestions_invalid": "Las sugerencias admiten hasta 64 caracteres. Envía la búsqueda para usar el texto completo.",
-  "search_suggestions_credentials": "No se pudo verificar tu sesión. Inicia sesión de nuevo para cargar sugerencias."
+  "search_suggestions_credentials": "No se pudo verificar tu sesión. Inicia sesión de nuevo para cargar sugerencias.",
+  "moderation_current_target_label": "Current target",
+  "moderation_reported_revision_label": "Reported revision",
+  "moderation_submitted_evidence_label": "Submitted evidence"
 }

@@ -1436,5 +1436,8 @@
   "search_suggestions_unavailable": "Les suggestions sont indisponibles pour le moment.",
   "search_suggestions_restart": "Les suggestions ont changé. Réessayez pour charger les résultats actuels.",
   "search_suggestions_invalid": "Les suggestions acceptent jusqu’à 64 caractères. Lancez la recherche pour utiliser la saisie complète.",
-  "search_suggestions_credentials": "Votre connexion n’a pas pu être vérifiée. Reconnectez-vous pour charger les suggestions."
+  "search_suggestions_credentials": "Votre connexion n’a pas pu être vérifiée. Reconnectez-vous pour charger les suggestions.",
+  "moderation_current_target_label": "Current target",
+  "moderation_reported_revision_label": "Reported revision",
+  "moderation_submitted_evidence_label": "Submitted evidence"
 }

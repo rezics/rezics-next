@@ -1,4 +1,4 @@
-SELECT report_route, report_id,
+SELECT report_route, report_id, target_kind, target_id,
        to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
 FROM content.report_target
 WHERE route = :route::integer AND target_kind = :target_kind::text AND target_id = :target_id::uuid

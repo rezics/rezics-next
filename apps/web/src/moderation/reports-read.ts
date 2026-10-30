@@ -1,3 +1,4 @@
+import type { DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { notFound } from '@tanstack/react-router';
@@ -33,8 +34,9 @@ export type ReportTargetValue =
   | string
   | number
   | boolean
-  | ReportTargetValue[]
-  | { [key: string]: ReportTargetValue };
+  | DocumentSnapshot
+  | readonly ReportTargetValue[]
+  | { readonly [key: string]: ReportTargetValue | undefined };
 export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']; value: ReportTargetValue | null };
 
 /** Keeps report records private and resolves repeated target identities with one existing read each. */
@@ -77,6 +79,28 @@ export async function resolveReportTargets(
   );
 }
 
+export type ReportedRevision = { reportId: string; value: ReportTargetValue | null };
+
+/** Exact revision reads are deduplicated, never inferred from a revision's route or ID. */
+export async function resolveReportedRevisions(
+  reports: Report[],
+  read: (postId: string, revisionId: string) => Promise<ReportTargetValue | null>,
+): Promise<ReportedRevision[]> {
+  const reads = new Map<string, Promise<ReportTargetValue | null>>();
+  return Promise.all(
+    reports.map(async (report) => {
+      if (!report.revisionId || report.target.kind !== 'post') return { reportId: report.id, value: null };
+      const key = `${report.target.id}:${report.revisionId}`;
+      let result = reads.get(key);
+      if (!result) {
+        result = read(report.target.id, report.revisionId).catch(() => null);
+        reads.set(key, result);
+      }
+      return { reportId: report.id, value: await result };
+    }),
+  );
+}
+
 type Client = {
   boards: (params: { id: string }) => {
     reports: { get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
@@ -110,53 +134,62 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
       ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
     };
   })
-  .handler(async ({ data }): Promise<{ reports: Report[]; next: string | null; targets: ResolvedReportTarget[] }> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
-    const authorization = viewerCredential(request);
-    if (!authorization) throw notFound();
-    const client = kernelClient() as unknown as Client;
-    const headers = auth(authorization);
-    const page = await readModerationReports(
-      {
-        boardReports: async (id, cursor) => {
-          const result = await client
-            .boards({ id })
-            .reports.get({ ...headers, query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) } });
-          if (result.error || !result.data) throw notFound();
-          return result.data as ReportPage;
+  .handler(
+    async ({ data }): Promise<ReportPage & { targets: ResolvedReportTarget[]; revisions: ReportedRevision[] }> => {
+      setResponseHeader('cache-control', 'private, no-store');
+      const request = getRequest();
+      await prepareSession(request, env as Partial<SessionEnv>);
+      const authorization = viewerCredential(request);
+      if (!authorization) throw notFound();
+      const client = kernelClient() as unknown as Client;
+      const headers = auth(authorization);
+      const page = await readModerationReports(
+        {
+          boardReports: async (id, cursor) => {
+            const result = await client.boards({ id }).reports.get({
+              ...headers,
+              query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+            });
+            if (result.error || !result.data) throw notFound();
+            return result.data as ReportPage;
+          },
+          threadReports: async (id, cursor) => {
+            const result = await client.threads({ id }).reports.get({
+              ...headers,
+              query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+            });
+            if (result.error || !result.data) throw notFound();
+            return result.data as ReportPage;
+          },
+          postReports: async (id, cursor) => {
+            const result = await client.posts({ id }).reports.get({
+              ...headers,
+              query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+            });
+            if (result.error || !result.data) throw notFound();
+            return result.data as ReportPage;
+          },
         },
-        threadReports: async (id, cursor) => {
-          const result = await client
-            .threads({ id })
-            .reports.get({ ...headers, query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) } });
-          if (result.error || !result.data) throw notFound();
-          return result.data as ReportPage;
+        data,
+      );
+      const targets = await resolveReportTargets(page.reports, {
+        post: async (id) => {
+          const result = await client.posts({ id }).get(headers);
+          return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
         },
-        postReports: async (id, cursor) => {
-          const result = await client
-            .posts({ id })
-            .reports.get({ ...headers, query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) } });
-          if (result.error || !result.data) throw notFound();
-          return result.data as ReportPage;
+        thread: async (id) => {
+          const result = await client.threads({ id }).get(headers);
+          return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
         },
-      },
-      data,
-    );
-    const targets = await resolveReportTargets(page.reports, {
-      post: async (id) => {
-        const result = await client.posts({ id }).get(headers);
-        return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
-      },
-      thread: async (id) => {
-        const result = await client.threads({ id }).get(headers);
-        return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
-      },
-      board: async (id) => {
-        const result = await client.boards({ id }).get(headers);
-        return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
-      },
-    });
-    return { ...page, targets };
-  });
+        board: async (id) => {
+          const result = await client.boards({ id }).get(headers);
+          return result.error ? null : ((result.data as ReportTargetValue | null | undefined) ?? null);
+        },
+      });
+      const revisions = await resolveReportedRevisions(page.reports, async (postId, revisionId) => {
+        const result = await kernelClient().posts({ id: postId }).revisions({ revisionId }).get(headers);
+        return result.error ? null : (result.data ?? null);
+      });
+      return { ...page, targets, revisions };
+    },
+  );

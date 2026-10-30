@@ -1,0 +1,20 @@
+import { Meta, Canvas } from '@storybook/addon-docs/blocks';
+import * as Queue from './board-report-queue.stories';
+
+<Meta of={Queue} />
+
+# Board report queue
+
+The board moderation page reuses this region. Submitted evidence, an ordinarily readable reported revision and
+current content stay distinct. An unavailable exact revision is neutral; report inspection grants no body access.
+The form has one 1,024-character reason. An unchanged intent retains its command key after a failed request;
+editing the reason creates a new intent. Pending actions disable both controls.
+
+Use the same states with the phone390 and desktop1280 viewport globals, locale and theme controls.
+These component fixtures exercise presentation and interactions; native API cases own authority proof.
+
+<Canvas of={Queue.EditedTarget} />
+<Canvas of={Queue.UnavailableRevision} />
+<Canvas of={Queue.AuthorityLost} />
+<Canvas of={Queue.RetryAction} />
+<Canvas of={Queue.PendingAction} />

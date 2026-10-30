@@ -1,51 +1,17 @@
-import { documentText } from '@rezics/document';
-import { ListRow, ListRowControl } from '@rezics/ui/list-row';
-import { Tombstone } from '@rezics/ui/tombstone';
-import { Withheld } from '@rezics/ui/withheld';
-import { useState, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { actionOnReport } from './actions';
-import { createModerationIntent } from './command-intent';
-import type { Report, ResolvedReportTarget } from './reports-read';
+import { BoardReportQueue } from '../stories/patterns/board-report-queue/board-report-queue';
+import type { Report, ReportedRevision, ResolvedReportTarget } from './reports-read';
 import { PageHeading } from '../shell/page-heading';
 
+export { moderationTargetContent } from '../stories/patterns/board-report-queue/target-content';
 export type ModerationTarget = ResolvedReportTarget;
-export function moderationTargetContent(target: ModerationTarget | undefined): ReactNode {
-  if (!target?.value || typeof target.value !== 'object') return m.moderation_target_unavailable();
-  const data = target.value as Record<string, any>;
-  const resource = data.post ?? data.thread ?? data.board ?? data;
-  if (!resource || typeof resource !== 'object') return m.moderation_target_unavailable();
-  if (resource.availability === 'withheld')
-    return <Withheld shape="passage" labels={{ withheld: m.moderation_target_withheld() }} />;
-  if (resource.availability === 'erased' || resource.availability === 'deleted' || resource.removed)
-    return (
-      <Tombstone
-        shape={target.kind === 'post' ? 'post' : 'row'}
-        reason="deleted"
-        labels={{ deleted: m.moderation_target_deleted() }}
-      />
-    );
-  if (resource.availability === 'unavailable') return m.moderation_target_unavailable();
-  const revision = resource.revision && typeof resource.revision === 'object' ? resource.revision : resource;
-  if (target.kind === 'post') {
-    const body = revision.body ?? resource.body;
-    try {
-      return typeof body === 'string'
-        ? body
-        : body && typeof body === 'object'
-          ? documentText(body as never)
-          : m.moderation_target_unavailable();
-    } catch {
-      return m.moderation_target_unavailable();
-    }
-  }
-  return typeof resource.title === 'string' && resource.title ? resource.title : m.threads_untitled();
-}
 
 export function ModerationReportsView({
   reports,
   targets,
+  revisions = [],
   next,
   tab = 'reports',
   threadId,
@@ -54,6 +20,7 @@ export function ModerationReportsView({
 }: {
   reports: Report[];
   targets: ModerationTarget[];
+  revisions?: ReportedRevision[];
   next: string | null;
   tab?: 'reports' | 'appeals';
   threadId?: string;
@@ -91,130 +58,20 @@ export function ModerationReportsView({
         )}
       </nav>
       {threadId ? <p className="text-sm text-muted-foreground">{m.moderation_thread_filter()}</p> : null}
-      {reports.length ? (
-        <ol className="space-y-4">
-          {reports.map((report) => {
-            const target = targets.find((item) => item.key === `${report.target.kind}:${report.target.id}`);
-            return (
-              <ListRow key={report.id} className="space-y-3 py-4">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">{report.target.kind}</p>
-                  <blockquote className="border-l-2 pl-3">{moderationTargetContent(target)}</blockquote>
-                </div>
-                <p>
-                  <span className="font-medium">{m.moderation_reason_label()}:</span> {report.reason}
-                </p>
-                {report.evidence ? (
-                  <p className="whitespace-pre-wrap">
-                    <span className="font-medium">{m.moderation_evidence_label()}:</span> {report.evidence}
-                  </p>
-                ) : null}
-                <time className="block text-sm text-muted-foreground" dateTime={report.createdAt}>
-                  {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-                    new Date(report.createdAt),
-                  )}
-                </time>
-                {report.outcome ? (
-                  <p role="status" className="font-medium">
-                    {report.outcome === 'actioned' ? m.moderation_actioned() : m.moderation_dismissed()}
-                  </p>
-                ) : (
-                  <ListRowControl>
-                    <ReportActions reportId={report.id} target={report.target} />
-                  </ListRowControl>
-                )}
-              </ListRow>
-            );
-          })}
-        </ol>
-      ) : (
-        <p className="text-muted-foreground">{m.moderation_reports_empty()}</p>
-      )}
+      <BoardReportQueue
+        reports={reports}
+        targets={targets}
+        revisions={revisions}
+        onAction={async (data) => {
+          await actionOnReport({ data, headers: csrfHeaders() });
+          location.reload();
+        }}
+      />
       {next ? (
         <button type="button" className="rounded-md border px-4 py-2" onClick={() => onNext?.(next)}>
           {m.threads_next_page()}
         </button>
       ) : null}
     </article>
-  );
-}
-
-function ReportActions({ reportId, target }: { reportId: string; target: Report['target'] }) {
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState('');
-  const [commandIntent] = useState(createModerationIntent);
-  async function dismiss() {
-    if (pending) return;
-    setPending(true);
-    try {
-      const intent = { action: 'dismiss' as const, reportId };
-      await actionOnReport({
-        data: { ...intent, idempotencyKey: commandIntent.keyFor(intent) },
-        headers: csrfHeaders(),
-      });
-      location.reload();
-    } catch {
-      setMessage(m.moderation_action_failed());
-    } finally {
-      setPending(false);
-    }
-  }
-  async function takeDown(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (pending) return;
-    const data = new FormData(event.currentTarget);
-    const intent = {
-      action: 'take-down' as const,
-      reportId,
-      targetKind: target.kind,
-      targetId: target.id,
-      reason: String(data.get('reason') ?? ''),
-      statement: String(data.get('statement') ?? ''),
-    };
-    setPending(true);
-    try {
-      await actionOnReport({
-        data: { ...intent, idempotencyKey: commandIntent.keyFor(intent) },
-        headers: csrfHeaders(),
-      });
-      location.reload();
-    } catch {
-      setMessage(m.moderation_action_failed());
-    } finally {
-      setPending(false);
-    }
-  }
-  return (
-    <div className="space-y-3">
-      <form className="space-y-3" onSubmit={takeDown} onChange={() => commandIntent.changed()}>
-        <label className="block space-y-1">
-          <span>{m.moderation_reason_label()}</span>
-          <textarea
-            name="reason"
-            required
-            maxLength={2048}
-            className="min-h-20 w-full rounded-md border bg-background p-2"
-          />
-        </label>
-        <label className="block space-y-1">
-          <span>{m.moderation_statement_label()}</span>
-          <textarea
-            name="statement"
-            required
-            maxLength={2048}
-            className="min-h-20 w-full rounded-md border bg-background p-2"
-          />
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <button disabled={pending} className="rounded-md bg-primary px-4 py-2 text-primary-foreground">
-            {m.moderation_take_down()}
-          </button>
-          <button type="button" disabled={pending} className="rounded-md border px-4 py-2" onClick={dismiss}>
-            {m.moderation_dismiss()}
-          </button>
-        </div>
-      </form>
-      {message ? <p role="alert">{message}</p> : null}
-    </div>
   );
 }
