@@ -92,27 +92,45 @@ the original native guard before pausing work; adapters never fetch a replacemen
 requires missing/foreign guard denial, concurrent CAS, stale-incarnation denial after recreation, and exact PUT/DELETE
 receipt replay with the originally submitted guard. These are source changes awaiting native proof.
 
-A separate frozen source conflict remains. The Library suite's `copy` helper sends fresh `POST /v1/copies` requests
-with `subjectId`, `status` and personal fields but no `kind`, and requires `201`, including in “two copies of one
-edition remain independent through revision updates and deletion”. The profile suite's “fresh copy creation requires
-a declared kind and never defaults to legacy-unspecified” requires `400 invalid_request` for that omission. The
-[profile consumer contract](../library-profile-consumers.md#legacy-command-compatibility-and-retirement) and
-[native create command](../../services/kernel/src/library/copies.ts) require a declared kind on every fresh create;
-kindless replay is only for an already existing receipt. The Library helper uses a fresh key, so that exception
-cannot apply. No profile selection makes a fresh kindless create valid. Adding a kind inside an adapter would
-rewrite the scenario's request and violate raw native binding. The limited frozen-source amendment covers entry
-lifecycle/incarnation changes only; reconciling copy-create input requires an additional acceptance-owner amendment.
+The authorized Copy reconciliation is represented in the original Library requests: fresh positive and suspended
+create attempts explicitly send `kind: 'physical'` and `status: 'owned'`. Positive deletion carries the revision
+captured after the successful update, and suspended deletion carries its captured Copy revision. The profile suite's
+missing-kind rejection remains unchanged. Neither transport adds a kind or refreshes a guard on a caller's behalf.
+Historical kindless receipt compatibility remains owned by the
+[profile consumer contract](../library-profile-consumers.md#legacy-command-compatibility-and-retirement).
+
+The Library [fixture compiler](../../services/kernel/test/library/support/profile-entry-fixture.ts) starts with bundled
+source data and explicitly declares the original progress modes/units and physical holding statuses on Book and
+edition profiles. The existing driver publishes and activates that actual compiler output through Definitions HTTP
+before creating Semantic subjects, and checks the subject's returned release and type. Fixture accounts now use
+native handle reservation, pending registration, Auth provisioning evidence, handle claim and activation, with the
+production Auth/Access binding. Positive accounts and active definitions are no longer installed by fixture SQL.
 
 The [released profile cases](../../services/kernel/test/library/released-profile-user-cases.test.ts) remain bundled
 first-public coverage, not proof of the broader custom-profile or migration suite. [Public scope](../scope.md)
 closes custom catalogue publication behind platform grants; it does not exclude historic fact clearing or authorize
 skipping these frozen cases. No suite is skipped here. The four additional entry points still reference absent native
-driver modules; complete adapters have not been delivered. Provider and fixture implementations, native acceptance,
-regression evidence and promotion remain outstanding.
+driver modules; complete adapters have not been delivered. Current production dependencies prevent a complete binding:
 
-`bun run --cwd services/kernel typecheck` passed after fixing the captured profile-entry revision assertion's type.
-The workspace command used its own compiler database and check-host placement, as permitted by minimal verification.
-No native acceptance, browser or regression checks were run. Typing does not establish native outcome evidence;
+- Shelf routes require `ShelfReads`, but [kernel composition](../../services/kernel/src/http/kernel.ts) does not supply
+  it, and [createShelfReads](../../services/kernel/src/library/shelf-contract.ts) still throws for all three reads.
+- The [Collection source factory](../../services/kernel/src/library/collection-source.ts) still returns
+  `dependency_unavailable` for every operation. Logical built-in discovery and dynamic members are not supplied by
+  the current curated [routes](../../services/kernel/src/library/collection-routes.ts).
+- [Personal label commands](../../services/kernel/src/library/label-commands.ts) provide the label catalogue, but
+  kernel composition mounts no label action/HTTP boundary or complete assignment command/page provider. The label
+  suite also requires the same unavailable logical built-ins.
+- [Legacy pin pages](../../services/kernel/src/library/profile-migration-page.ts) are a maintenance primitive, not
+  the owner migration command/executor required by the original profile suite. The
+  [Library work module](../../services/kernel/src/library/work-module.ts) registers no profile migration workflow,
+  checkpoint/ready transition or recovery boundary.
+
+These are production prerequisites for their existing outcomes. Supplying successful test providers, wrapping
+maintenance pages in a test-side migration engine, or skipping the broader suites would violate native binding.
+Runtime owner integration, complete adapters, native acceptance, regression evidence and promotion remain outstanding.
+
+Current verification is limited to foreground local kernel typing with remote placement disabled. No acceptance,
+native, browser or regression checks are run in this attempt. Typing does not establish native outcome evidence;
 whole-suite acceptance remains required after integration.
 
 ## External conditions

@@ -1,13 +1,14 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg, { type Pool } from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
   fixture,
   libraryLabels,
   libraryProfile,
+  legacyProfile,
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
 import { bootstrapGovernance } from '../../../src/access/bootstrap-governance.ts';
@@ -44,6 +45,35 @@ const entryScopes = [
   'follow:create',
   'follow:delete',
 ];
+
+/** Data-only compatibility vocabulary for the original Library outcome journeys.
+ * Book and edition still enter through Semantic, with real compiled accepting profiles.
+ */
+export async function compileLibraryOutcomeRelease(): Promise<Release> {
+  const input = bundledSources();
+  const book = Bun.YAML.parse(input.schemas['book.yaml']!) as {
+    classes: Record<'Work' | 'Edition', { annotations: { library: ProfileData } }>;
+  };
+  const profiles = [book.classes.Work.annotations.library, book.classes.Edition.annotations.library];
+  for (const profile of profiles) {
+    // The old outcomes exercise every original mode/unit, plus independent lending.
+    // Declare those choices in compiler input rather than defaulting arbitrary requests.
+    profile.progress = legacyProfile().progress;
+    profile.copies.kinds = [
+      { id: 'physical', statuses: ['ordered', 'owned', 'lent', 'disposed'].map((id) => ({ id })) },
+      { id: 'digital', statuses: [{ id: 'owned' }] },
+    ];
+  }
+  input.schemas['book.yaml'] = Bun.YAML.stringify(book);
+  for (const [path, source] of Object.entries(input.presentation)) {
+    if (!path.startsWith('book/')) continue;
+    const labels = Bun.YAML.parse(source) as { libraryProfiles: Record<string, ProfileData> };
+    const locale = path.slice('book/'.length) as Parameters<typeof libraryLabels>[1];
+    for (const profile of profiles) labels.libraryProfiles[profile.id] = libraryLabels(profile, locale);
+    input.presentation[path] = Bun.YAML.stringify(labels);
+  }
+  return compileCatalogue(input);
+}
 
 /** Real compiler output, including a child whose structural bases are not primary types. */
 export async function compileEntryRelease(version: 'original' | 'replacement'): Promise<Release> {

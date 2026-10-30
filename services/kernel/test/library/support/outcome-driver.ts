@@ -1,6 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { createAuthService } from '@rezics/auth';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { createAuthService, createProvisioningEvidenceVerifier } from '@rezics/auth';
+import { releaseDigest } from '@rezics/definitions';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { mkdir } from 'node:fs/promises';
@@ -8,14 +8,14 @@ import { resolve } from 'node:path';
 import type { Anchor, LibraryDriver, LibraryInspection, Persona } from '../../../../../specs/library-driver.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
-import { readAccount } from '../../../src/access/account-data.ts';
+import { createAuthBindings, type AuthProvisioningReceipt } from '../../../src/access/auth-bindings.ts';
+import { createLifecycleInternals } from '../../../src/access/lifecycle.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { insertMember } from '../../../src/library/collection-store.ts';
 import { keyBetween, respacedKeys } from '../../../src/library/ordinal.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
-import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
 import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
@@ -29,8 +29,8 @@ import {
   type GrowthDatabase,
 } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
-import { trustedAccessPorts } from '../../support/trusted-access.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
+import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
 // missing outbox rows are never a gap, and real commands never reach these positions.
@@ -283,7 +283,15 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     authPool.on('error', () => {});
     authPool.on('connect', (client) => client.on('error', () => {}));
 
-    const approvals = new Set<string>();
+    const approvals = new Map<string, AuthProvisioningReceipt>();
+    const routeKey = new Uint8Array(32).fill(17);
+    const provisioning = createProvisioningEvidenceVerifier({ database: authPool });
+    const lifecycle = createLifecycleInternals({
+      pool: db.admin,
+      routeKey,
+      provisioningEvidence: (reference) => provisioning.resolve(reference),
+      recoveryEvidence: async () => null,
+    });
     const tokens = new Map<string, string>();
     const ownerAccount = { id: newId(0x3300), route: 0x3300, partition: partitionOf(0x3300) };
     const otherAccount = { id: newId(0x3301), route: 0x3301, partition: partitionOf(0x3301) };
@@ -305,7 +313,6 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       seedOtherPartition,
       ...seedParallelPeople,
     ];
-    for (const person of knownPeople) approvals.add(person.id);
 
     const signingKey = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -328,24 +335,9 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       audience,
       secret: 'library-fixture-secret-with-at-least-32-bytes',
       signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      trustedAccess: trustedAccessPorts({
-        async readAccount(id) {
-          if (!db) throw new Error('The isolated kernel database is closed');
-          const row = await readAccount(db.admin, routeOf(id)!, id);
-          return (
-            row && {
-              accountId: row.accountId,
-              kind: row.kind,
-              state: row.state,
-              authnEpoch: Number(row.minimumAuthnEpoch),
-              automated: row.operatorAccountId !== null,
-            }
-          );
-        },
-        async authorizeProvisioning(reference) {
-          if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
-          return { accountId: reference };
-        },
+      trustedAccess: createAuthBindings({
+        pool: db.admin,
+        verifyProvisioningReceipt: async (reference) => approvals.get(reference) ?? null,
       }),
     });
 
@@ -363,7 +355,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
           service: { write: { maximum: 1_000_000, seconds: 60 } },
         }),
       }),
-      routeKey: new Uint8Array(32).fill(17),
+      routeKey,
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) },
       access: (config) =>
         createAccess({
@@ -382,15 +374,27 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
 
     async function provisionAccount(person: Anchor): Promise<AccountAnchor> {
       const email = `${person.id}@example.test`;
-      await db!.admin.query(
-        "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)",
-        [person.route, person.id],
-      );
-      await auth.internal.provisionPassword({ authorization: person.id, email, password });
-      await db!.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-        person.route,
-        person.id,
-      ]);
+      const key = Bun.randomUUIDv7();
+      const handle = `library_${key.replaceAll('-', '')}`;
+      const reservation = await lifecycle.reserveHandle({ accountId: person.id, handle, key });
+      const input = { accountId: person.id, handle, reservationId: reservation.value.reservationId, key };
+      const pending = await lifecycle.createPending(input);
+      approvals.set(key, pending.value);
+      const provisioned = await auth.internal.provisionPassword({
+        authorization: key,
+        email,
+        password,
+        idempotencyKey: key,
+        sourceRegistrationId: pending.value.registrationId,
+      });
+      if (!provisioned.provisioningEvidence) throw new Error('Auth did not return native provisioning evidence');
+      await lifecycle.claimHandle({ ...input, key: Bun.randomUUIDv7(), evidence: provisioned.provisioningEvidence });
+      await lifecycle.activate({
+        accountId: person.id,
+        key: Bun.randomUUIDv7(),
+        evidence: provisioned.provisioningEvidence,
+      });
+      approvals.delete(key);
       const signedIn = await auth.handler(
         new Request(`${issuer}/signin`, {
           method: 'POST',
@@ -456,10 +460,52 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       );
       await expectJson(`Granting subject creation to seed account ${person.id}`, response, 201);
     };
-    // Account rows and Auth credentials are established through the fixture provisioning handshake.
-    await bootstrapRelease(db.pool, bundledRelease);
     // db.admin is outside statement capture; the measured pool stays out of fixture setup.
     await bootstrapGovernance(db.admin, governor.id);
+
+    const definitionGrant = await byRoute(
+      tokenFor(governor),
+      'POST',
+      '/v1/grants',
+      {
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: governor.id },
+        actions: ['definitions:publish', 'definitions:activate'],
+        valid: '(,)',
+      },
+      { 'Idempotency-Key': key() },
+    );
+    await expectJson('Granting fixture definition publication', definitionGrant, 201);
+    const release = await compileLibraryOutcomeRelease();
+    const digest = releaseDigest(release);
+    const published = await byRoute(
+      tokenFor(governor),
+      'POST',
+      '/v1/definitions/releases',
+      { release },
+      { 'Idempotency-Key': key() },
+    );
+    const publishedBody = await expectJson<{ digest: string }>('Publishing Library outcome definitions', published, 201);
+    if (publishedBody.digest !== digest) throw new Error('Definitions returned a different compiled release digest');
+    const currentHead = await byRoute(null, 'GET', '/v1/definitions/active');
+    const expectedHead =
+      currentHead.status === 404
+        ? null
+        : (await expectJson<{ head: number }>('Reading fixture definitions head', currentHead, 200)).head;
+    const activated = await byRoute(
+      tokenFor(governor),
+      'POST',
+      `/v1/definitions/releases/${digest}:activate`,
+      { expected_head: expectedHead },
+      { 'Idempotency-Key': key() },
+    );
+    await expectJson('Activating Library outcome definitions', activated, 200);
+    const active = await expectJson<{ digest: string }>(
+      'Reading activated Library outcome definitions',
+      await byRoute(null, 'GET', '/v1/definitions/active'),
+      200,
+    );
+    if (active.digest !== digest) throw new Error('Definitions did not activate the compiled fixture release');
 
     for (const group of ['collections', 'personal_library', 'reading_progress']) {
       const response = await byRoute(tokenFor(governor), 'POST', `/v1/platform/exposure/${group}:open`, undefined, {
@@ -818,7 +864,13 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
               },
             };
       const response = await byRoute(tokenFor(author), 'POST', '/v1/subjects', body, { 'Idempotency-Key': key() });
-      const result = await expectJson<{ subject: { id: string } }>('Creating semantic subject', response, 201);
+      const result = await expectJson<{ subject: { id: string; type: string; release: string } }>(
+        'Creating semantic subject',
+        response,
+        201,
+      );
+      if (result.subject.type !== body.type || result.subject.release !== digest)
+        throw new Error('Semantic did not accept the subject against the activated Library outcome definitions');
       const subjectRoute = routeOf(result.subject.id);
       if (subjectRoute === null) throw new Error('Production semantic create returned an unroutable subject');
       initialSubjectIds.add(result.subject.id);

@@ -245,6 +245,7 @@ async function copy(subjectId: string) {
     await body<{ copy: CopyView }>(
       await write('POST', '/v1/copies', {
         subjectId,
+        kind: 'physical',
         status: 'owned',
         location: 'Study',
         source: 'Bookshop',
@@ -800,7 +801,7 @@ test('two copies of one edition remain independent through revision updates and 
   expect((await all<CopyView>('/v1/copies', 'copies', 'owner', 1)).map((item) => item.id).sort()).toEqual(
     [first.id, second.id].sort(),
   );
-  await ok(await write('DELETE', `/v1/copies/${first.id}`));
+  await ok(await write('DELETE', `/v1/copies/${first.id}?revision=${changed.revision}`));
   await hidden(`/v1/copies/${first.id}`, `/v1/copies/${driver.unknown.copyId}`, 'owner');
   expect(await body(await get(`/v1/copies/${second.id}`))).toEqual({ copy: second });
   expect(await all('/v1/copies', 'copies')).toEqual([second]);
@@ -1014,9 +1015,9 @@ test('suspended credentials refuse every library write and private read without 
       path: `/v1/progressSessions/${ownedSession.id}:abandon`,
       body: { revision: ownedSession.revision },
     },
-    { method: 'POST', path: '/v1/copies', body: { subjectId: subject.id, status: 'ordered' } },
+    { method: 'POST', path: '/v1/copies', body: { subjectId: subject.id, kind: 'physical', status: 'owned' } },
     { method: 'PATCH', path: `/v1/copies/${ownedCopy.id}`, body: { revision: ownedCopy.revision, status: 'disposed' } },
-    { method: 'DELETE', path: `/v1/copies/${ownedCopy.id}` },
+    { method: 'DELETE', path: `/v1/copies/${ownedCopy.id}?revision=${ownedCopy.revision}` },
     { method: 'PUT', path: `/v1/follows/${shelf.id}` },
     { method: 'DELETE', path: `/v1/follows/${shelf.id}` },
     { method: 'POST', path: '/v1/publishedLogs', body: { sessionId: ownedSession.id } },
