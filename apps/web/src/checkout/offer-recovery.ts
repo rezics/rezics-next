@@ -23,8 +23,7 @@ export function decodeAcquisitionProblem(status: number, body: unknown): Acquisi
   if (!parsed.success) return;
   const problem = parsed.output;
   if (problem.type !== `https://rezics.com/problems/${problem.code}`) return;
-  if (problem.code === 'acquisition_pending' ? !problem.orderId : !problem.entitlementId && !problem.orderId)
-    return;
+  if (problem.code === 'acquisition_pending' ? !problem.orderId : !problem.entitlementId && !problem.orderId) return;
   return problem;
 }
 

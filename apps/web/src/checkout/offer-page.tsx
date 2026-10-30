@@ -38,12 +38,13 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
     submittedOffer.current ??= offer;
     submission.current ??= createOfferRequest(
       { offerId: offer.id, expectedOfferRevision: offer.revision, idempotencyKey: offer.idempotencyKey },
-      (intent) => fetch('/checkout', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken.current ?? '' },
-        body: JSON.stringify(intent),
-      }),
+      (intent) =>
+        fetch('/checkout', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken.current ?? '' },
+          body: JSON.stringify(intent),
+        }),
     );
     setPhase('submitting');
     const result = await submission.current();
@@ -62,14 +63,14 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
         ? m.offer_already_owned()
         : m.offer_acquisition_pending()
       : phase === 'terms-changed'
-      ? m.offer_terms_changed()
-      : phase === 'unavailable'
-        ? m.offer_unavailable()
-        : phase === 'retry'
-          ? m.offer_retry_note()
-          : phase === 'closed'
-            ? m.offer_start_closed()
-            : null;
+        ? m.offer_terms_changed()
+        : phase === 'unavailable'
+          ? m.offer_unavailable()
+          : phase === 'retry'
+            ? m.offer_retry_note()
+            : phase === 'closed'
+              ? m.offer_start_closed()
+              : null;
   const buyDisabled = !admitted || !termsKnown || phase !== 'ready' || session === 'unknown';
 
   return (
@@ -111,11 +112,13 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
             className="w-full sm:w-auto"
             nativeButton={false}
             render={
-              <a href={localizeHref(
-                existing.code === 'benefit_already_owned' && existing.entitlementId
-                  ? `/entitlements/${encodeURIComponent(existing.entitlementId)}`
-                  : `/orders/${encodeURIComponent(existing.orderId!)}`,
-              )} />
+              <a
+                href={localizeHref(
+                  existing.code === 'benefit_already_owned' && existing.entitlementId
+                    ? `/entitlements/${encodeURIComponent(existing.entitlementId)}`
+                    : `/orders/${encodeURIComponent(existing.orderId!)}`,
+                )}
+              />
             }
           >
             {existing.code === 'benefit_already_owned' && existing.entitlementId

@@ -144,7 +144,9 @@ function recoveryStory(problem: (typeof acquisitionProblems)[keyof typeof acquis
         });
         await expect(link).toHaveAttribute(
           'href',
-          localizeHref(owned ? `/entitlements/${acquisitionProblems.owned.entitlementId}` : `/orders/${problem.orderId}`),
+          localizeHref(
+            owned ? `/entitlements/${acquisitionProblems.owned.entitlementId}` : `/orders/${problem.orderId}`,
+          ),
         );
         await expect(view.queryByRole('button', { name: m.offer_buy() })).toBeNull();
         await expect(view.queryByRole('button', { name: m.offer_retry() })).toBeNull();
