@@ -16,7 +16,7 @@ export const EMPTY_ACCESS_WORK: AccessWork = Object.freeze({
 
 /** Implemented by the caller's EXISTING ledger. This port owns no allowance. */
 export type AccessWorkSink = Readonly<{
-  reserve(operation: string, bound: AccessWork): Readonly<{ settle(actual: AccessWork): void }> | null;
+  reserve(operation: string, bound: AccessWork, kind: 'native' | 'owner'): Readonly<{ settle(actual: AccessWork): void }> | null;
 }>;
 
 /** Trusted resource owner: pure finite declaration, then its actual receipt.
@@ -82,6 +82,7 @@ export class AccessWorkAccounting {
     footprint: AccessWork | undefined,
     dispatch: () => Promise<T>,
     actual?: (result: T) => AccessWork | undefined,
+    kind: 'native' | 'owner' = 'native',
   ): Promise<T> {
     if (this.failure) throw this.failure;
     requireAccessDeadline(this.deadline);
@@ -89,7 +90,7 @@ export class AccessWorkAccounting {
     const bound = copy(footprint);
     // Validate the cumulative arithmetic before asking the parent to hold work.
     const next = copy(Object.fromEntries(ACCESS_WORK_AXES.map((axis) => [axis, this.used[axis] + bound[axis]])) as AccessWork);
-    const reservation = this.sink.reserve(operation, bound);
+    const reservation = this.sink.reserve(operation, bound, kind);
     if (!reservation) this.unavailable(operation);
     // Synchronous admission cannot interleave sibling dispatches.
     this.used = next;
@@ -113,7 +114,7 @@ export class AccessWorkAccounting {
         const receipt = actual(result);
         if (!receipt) this.unavailable(`${operation}: actual receipt`);
         charged = copy(receipt);
-        if (ACCESS_WORK_AXES.some((axis) => charged[axis] > bound[axis]) || charged.rows !== bound.rows)
+        if (ACCESS_WORK_AXES.some((axis) => charged[axis] > bound[axis]) || (kind === 'native' && charged.rows !== bound.rows))
           throw new TypeError('Access work exceeds declaration or refunds dispatched native rows');
       }
       requireAccessDeadline(this.deadline);
@@ -137,7 +138,11 @@ export async function accessOwnerWork<C, R>(
 ): Promise<R> {
   if (!work) return dispatch();
   if (!producer) return work.unavailable(operation);
-  return work.run(operation, producer.bound(context), dispatch, (result) => producer.actual(context, result));
+  // This envelope holds a finite maximum BEFORE entering foreign code. Its
+  // successful receipt sums only the owner's actually dispatched native plans;
+  // branches never dispatched are not native-row refunds. Unknown failure burns
+  // the envelope in full, exactly like a failed composition in the caller ledger.
+  return work.run(operation, producer.bound(context), dispatch, (result) => producer.actual(context, result), 'owner');
 }
 
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value) ?? 'null');

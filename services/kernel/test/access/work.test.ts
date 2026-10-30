@@ -31,7 +31,7 @@ const footprint: AccessWork = { keys: 1, points: 2, witnesses: 0, rows: 3, bytes
 test('Access reserves before dispatch and reports exact charged work for positive and negative owner results', async () => {
   for (const value of [true, false]) {
     const { work, admitted, settled } = accounting();
-    const actual = { ...footprint, bytes: 7, emptySeeks: 0 };
+    const actual = { ...footprint, rows: value ? footprint.rows : 0, bytes: 7, emptySeeks: 0 };
     const result = await work.capture(() => accessOwnerWork(work, 'owner', {
       bound: () => footprint, actual: () => actual,
     }, {}, async () => {

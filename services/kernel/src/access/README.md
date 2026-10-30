@@ -5,8 +5,10 @@
 
 `access/work.ts` owns the additive accounting port. It has no dependency on the Source interpreter and no
 numeric allowance. Its exact structural dimensions are `{keys, points, witnesses, rows, bytes, emptySeeks}`.
-The caller supplies its existing ledger through `AccessWorkSink.reserve(operation, bound)`, which either refuses
-with `null` or returns a one-shot `settle(actual)` reservation. A thrown admission error also prevents dispatch.
+The caller supplies its existing ledger through `AccessWorkSink.reserve(operation, bound, kind)`, which either refuses
+with `null` or returns a one-shot `settle(actual)` reservation. `kind` is exactly `'native' | 'owner'`:
+the former dispatches an Access-owned native operation; the latter holds an envelope for the resource owner's
+actual dispatched operations. A thrown admission error also prevents dispatch.
 Instantiate `new AccessWorkAccounting(sink, fixedRequestDeadline)` and supply it as `AccessContext.work`.
 The accumulator never grants authority; existing native identity, opaque eligibility, principal, scope and formula
 checks remain mandatory. The ordinary signatures and behavior without `work` are unchanged.
@@ -50,7 +52,9 @@ Access does not inspect their SQL or substitute result rows for work.
 actual(context: C, result: R): AccessWork | undefined}`. Both functions are synchronous, pure accounting metadata;
 the owner binds the actual receipt to this exact invocation, including zero-IO results. Access reserves `bound`
 before invoking the ORIGINAL callback, then settles the actual receipt. Missing/invalid receipts retain the
-full bound and fail the attempt. There is no blanket callback estimate. The native owner integration points are:
+full bound and fail the attempt. A completed owner envelope can release work for branches that never dispatched;
+its receipt must retain every nested native statement's charged plan rows. This differs from refunding dispatched
+native rows using a result row count. There is no blanket callback estimate. The native owner integration points are:
 
 - `ResourceEligibilityOptions.work.{prepare,verify}` for the SAME Content/resource eligibility callbacks.
 - `ReadDecisionEligibility.work`, with context `{client,ids,at}`, for native batch resource eligibility.
