@@ -480,3 +480,22 @@ or statistics, or the deferred cross-surface discovery matrix.
 - Touches: supplied native bytes, exact current-run tuple/journal and existing ordinary Auth/public commands.
 - Bound: existing source byte/field/page and command budgets; input consumed once after the actual acquisition rules. No catalogue/history scan or predicted native effects. The caller captures exact consumed bytes, actual seal accounting and independent committed rows/receipts under the existing fixture bounds.
 - Growth check: reuse the existing importer/native capture bounds and units. The new three-provider caller acceptance proves connected behaviour and retains raw observations; it claims no new growth measurement.
+
+## Exact CLI acknowledgement interruption
+
+The [native account-key journey](../kernel/test/imports/cli-ack-recovery.test.ts) runs Bangumi and Open Library in
+one ordinary Auth/Access/public API world. It captures a committed bulk response and its native receipts, aborts
+before local acknowledgement, closes the CLI and reopens the same private SQLite/key paths. The new invocation
+drains the sealed generation with its original bytes and keys before a later invocation admits the supplied
+successor input. An independent community selection, immutable bootstrap/proposal/media journals and original
+native media objects survive. Revoking the Global grant denies replay with the exact old bearer without revealing
+stored success. See the [evidence and limits](../../docs/research/imports-audit/cli-ack-recovery.md).
+
+Run this focused native outcome through the managed check queue:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts
+```
+
+This connected outcome adds no PG growth series; missing growth evidence is recorded as missing. Existing
+source, journal, media and transport limits and counted growth evidence retain their original scope.
