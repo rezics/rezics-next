@@ -56,6 +56,31 @@ export type NativeAuthStack = {
 const authRoot = resolve(import.meta.dir, '../../../auth');
 const password = 'semantic outcome registration password with enough entropy';
 
+/** Private supervisor messages to the existing Auth host, never browser credentials. */
+export async function nativeAuthFixtureRequest(
+  stack: NativeWebStack,
+  key: string,
+  body: Record<string, unknown>,
+  credentials?: { authorization: string; cookie: string },
+): Promise<Response> {
+  const response = await fetch(`${stack.authIssuer}/__native/auth-fixture`, {
+    method: 'POST',
+    headers: {
+      origin: stack.issuerOrigin,
+      'content-type': 'application/json',
+      'x-native-auth-fixture-key': key,
+      ...credentials,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!response.ok)
+    throw new Error(
+      `Native Auth fixture ${String(body.command)} returned ${response.status}: ${await response.text()}`,
+    );
+  return response;
+}
+
 async function freePort(): Promise<number> {
   const server = Bun.serve({
     hostname: '127.0.0.1',
@@ -102,7 +127,10 @@ async function hydrate(page: Page): Promise<void> {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 
-export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthStack> {
+export async function startAuthStack(
+  stack: NativeWebStack,
+  options: { nativeFixtureKey?: string } = {},
+): Promise<NativeAuthStack> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Native Auth stack startup requires an active native test lifecycle');
   lifecycle.assertOpen('start native Auth stack');
@@ -117,6 +145,26 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       ? new URL('/__native-turnstile.js', nativeIssuer).href
       : undefined;
   let origin: string | undefined;
+  const routePages = async (attach = false): Promise<string> => {
+    if (options.nativeFixtureKey !== undefined) {
+      const response = await nativeAuthFixtureRequest(stack, options.nativeFixtureKey, {
+        command: 'pages',
+        origin: attach ? appOrigin : null,
+      });
+      const mounted = (await response.json()) as { issuer: string };
+      if (mounted.issuer !== stack.issuerOrigin) throw new Error('Native Auth page bridge changed its issuer');
+      return mounted.issuer;
+    }
+    return stack.routeAuthPages(
+      attach
+        ? (request) => {
+            const source = new URL(request.url);
+            const target = new URL(source.pathname + source.search, appOrigin);
+            return fetch(new Request(target, request), { redirect: 'manual' });
+          }
+        : undefined,
+    );
+  };
   const turnstile = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -184,11 +232,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     )
       throw new Error(`Native Auth app reported an invalid Worker persistence path: ${effectivePersistence}`);
     lifecycle.assertOpen('route Auth pages');
-    origin = await stack.routeAuthPages((request) => {
-      const source = new URL(request.url);
-      const target = new URL(source.pathname + source.search, appOrigin);
-      return fetch(new Request(target, request), { redirect: 'manual' });
-    });
+    origin = await routePages(true);
     privateBrowser = await launchPrivateBrowser([stack.web, origin, turnstile.url.origin]);
     lifecycle.assertOpen('finish private Auth browser startup');
     browser = privateBrowser.browser;
@@ -495,7 +539,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
           }
           const operations: Promise<unknown>[] = [];
           if (privateBrowser) operations.push(privateBrowser.close());
-          operations.push(stack.routeAuthPages());
+          operations.push(routePages());
           operations.push(
             stopChild(childOwner).then(() => {
               if (persistenceDirectory && existsSync(persistenceDirectory))
@@ -546,7 +590,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     const cleanupErrors: unknown[] = [];
     if (origin)
       await settledWithin(
-        stack.routeAuthPages().then(() => true),
+        routePages().then(() => true),
         2_000,
       ).catch((cleanup) => cleanupErrors.push(cleanup));
     await privateBrowser?.force().catch((cleanup) => cleanupErrors.push(cleanup));

@@ -175,7 +175,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/pages/$read">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ body, request, authorize, admission, job, actor, session: requestSession }: {
+}, {}, "/v1/pages/$read">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ body, request, authorize, admission, job, actor, session: requestSession, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {

@@ -1,5 +1,5 @@
 import type { Page, Response as PlaywrightResponse } from 'playwright';
-import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
+import { nativeAuthFixtureRequest, startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 export type NativeAgentIdentityFixture = {
@@ -50,10 +50,22 @@ async function requireStatus(response: Response, status: number, operation: stri
 }
 
 export async function createNativeAgentIdentityFixture(): Promise<NativeAgentIdentityFixture> {
-  const stack = await startNativeWebStack();
+  const nativeFixtureKey = crypto.randomUUID();
+  const previousKey = process.env.NATIVE_AUTH_FIXTURE_KEY;
+  let starting: Promise<NativeWebStack>;
+  // startNativeWebStack snapshots the child's environment before its first
+  // await. Keep this opt-in confined to the one supervisor we own.
+  try {
+    process.env.NATIVE_AUTH_FIXTURE_KEY = nativeFixtureKey;
+    starting = startNativeWebStack();
+  } finally {
+    if (previousKey === undefined) delete process.env.NATIVE_AUTH_FIXTURE_KEY;
+    else process.env.NATIVE_AUTH_FIXTURE_KEY = previousKey;
+  }
+  const stack = await starting;
   let auth: NativeAuthStack | undefined;
   try {
-    auth = await startAuthStack(stack);
+    auth = await startAuthStack(stack, { nativeFixtureKey });
     await auth.signIn('alice');
     await auth.signIn('bob');
     await auth.signIn('governor');
@@ -96,10 +108,19 @@ export async function createNativeAgentIdentityFixture(): Promise<NativeAgentIde
       governor: await pageFor(auth, 'governor'),
       anonymous,
       async createAutomatedActor(operator, handle) {
+        const identity = await stack.authPersona(operator);
         const cookies = await (await auth!.context(operator)).cookies(stack.issuerOrigin);
         const cookie = cookies.map(({ name, value }) => `${name}=${value}`).join('; ');
         if (!cookie) throw new Error(`Native ${operator} has no served Auth session cookie`);
-        return stack.createAutomatedActor(operator, handle, cookie);
+        const response = await nativeAuthFixtureRequest(
+          stack,
+          nativeFixtureKey,
+          { command: 'automated', key: crypto.randomUUID(), operatorAccountId: identity.accountId, handle },
+          { authorization: identity.authorization, cookie },
+        );
+        const created = (await response.json()) as { accountId?: unknown };
+        if (typeof created.accountId !== 'string') throw new Error('Native automated workflow returned no account ID');
+        return { accountId: created.accountId };
       },
       async close() {
         await auth!.stop();

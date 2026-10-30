@@ -3,11 +3,16 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
+import { readJsonObject, TransportDenied } from '../../../auth/src/account-operations-transport.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 type HostOptions = Parameters<typeof createAuthHost>[0];
-export type KernelPorts = { trustedAccess: HostOptions['trustedAccess']; access: HostOptions['access'] };
+export type KernelPorts = {
+  trustedAccess: HostOptions['trustedAccess'];
+  access: HostOptions['access'];
+  accountOperations?: HostOptions['accountOperations'];
+};
 export type OwnedSemanticResource = { kind: 'kernel_database' | 'auth_database'; name: string };
 export type OwnedResourceObserver = (resource: OwnedSemanticResource) => void | Promise<void>;
 export type SharedAuth = {
@@ -55,7 +60,7 @@ function delegating<T extends object>(name: string) {
   });
   return {
     port,
-    bind(next: T) {
+    bind(next: T | undefined) {
       target = next;
       return () => {
         if (target === next) target = undefined;
@@ -214,6 +219,11 @@ async function build(
 
     const trusted = delegating<KernelPorts['trustedAccess']>('trusted Access');
     const access = delegating<KernelPorts['access']>('registration');
+    const operations = delegating<NonNullable<KernelPorts['accountOperations']>>('account operations');
+    // Only the native account fixture opts into this supervisor transport. Its
+    // key controls page mounting, never Kernel authority or a browser session.
+    const fixtureKey = process.env.NATIVE_WEB_STACK_HOST === '1' ? process.env.NATIVE_AUTH_FIXTURE_KEY : undefined;
+    let nativePageOrigin: string | undefined;
     const authHost = await createAuthHost({
       database: authDatabase,
       systemDatabasePool: authDatabase,
@@ -224,12 +234,141 @@ async function build(
       signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
       trustedAccess: trusted.port,
       access: access.port,
+      accountOperations: operations.port,
+      ...(fixtureKey
+        ? {
+            turnstile: {
+              secret: '1x0000000000000000000000000000000AA',
+              fetch: (async (_url, init) => {
+                const form = new URLSearchParams(String(init?.body));
+                return Response.json({
+                  success: form.get('response') === 'native-test-token',
+                  action: 'signup',
+                  hostname: new URL(issuer).hostname,
+                });
+              }) as typeof fetch,
+            },
+          }
+        : {}),
       stagingKey: randomBytes(32),
       maintenanceSchedule: '0 0 1 1 *',
       executorId: `semantic-${name}`,
     });
     host = authHost;
-    service = authHost.service;
+    // Supervisors wrap this public transport to observe issuance and serve
+    // pages. Keep the host's own service object intact: its workflow fallback
+    // calls service.handler, so replacing that handler would recurse back into
+    // host.handler. Internal capabilities and verifier configuration stay exact.
+    service = { ...authHost.service };
+    if (fixtureKey) {
+      // Keep the original host/workflow executor. The general native stack's
+      // legacy page bridge replaces it with registration-only ports; this
+      // opt-in bridge mounts Vite on the existing host instead.
+      const transport = authHost.handler;
+      const pages = new Set([
+        '/login',
+        '/signup',
+        '/consent',
+        '/recovery',
+        '/security',
+        '/step-up',
+        '/account/delete',
+        '/organizations/new',
+      ]);
+      authHost.handler = async (request) => {
+        const url = new URL(request.url);
+        if (url.pathname === '/__native/auth-fixture') {
+          const respond = (value: unknown, status = 200) =>
+            Response.json(value, { status, headers: { 'cache-control': 'no-store' } });
+          if (request.headers.get('x-native-auth-fixture-key') !== fixtureKey)
+            return new Response(null, { status: 404 });
+          try {
+            if (
+              request.method !== 'POST' ||
+              url.search ||
+              request.headers.get('origin') !== new URL(issuer).origin ||
+              request.headers.get('content-type') !== 'application/json'
+            )
+              throw new TransportDenied(400);
+            const body = await readJsonObject(request);
+            if (body.command === 'pages' && Object.keys(body).sort().join(',') === 'command,origin') {
+              if (body.origin === null) nativePageOrigin = undefined;
+              else {
+                if (typeof body.origin !== 'string') throw new TransportDenied(400);
+                const origin = new URL(body.origin);
+                if (
+                  origin.protocol !== 'http:' ||
+                  origin.hostname !== '127.0.0.1' ||
+                  !origin.port ||
+                  origin.origin !== body.origin
+                )
+                  throw new TransportDenied(400);
+                if (nativePageOrigin && nativePageOrigin !== origin.origin) throw new TransportDenied(409);
+                nativePageOrigin = origin.origin;
+              }
+              return respond({ issuer });
+            }
+            if (
+              body.command !== 'automated' ||
+              Object.keys(body).sort().join(',') !== 'command,handle,key,operatorAccountId' ||
+              typeof body.key !== 'string' ||
+              !body.key ||
+              body.key.length > 128 ||
+              typeof body.handle !== 'string' ||
+              typeof body.operatorAccountId !== 'string'
+            )
+              throw new TransportDenied(400);
+            const { key, handle, operatorAccountId } = body;
+            const token = /^Bearer (\S+)$/.exec(request.headers.get('authorization') ?? '')?.[1];
+            if (!token) throw new TransportDenied(401);
+            const result = await service.internal.withFreshHuman(
+              { headers: request.headers, fresh: false },
+              async (human) => {
+                if (human.account_id !== operatorAccountId) throw new TransportDenied(403);
+                const context = operations.port.context();
+                const operation = {
+                  kind: 'automated' as const,
+                  registrationId: '',
+                  operatorAccountId,
+                  handle,
+                  operationKey: key,
+                  authorization: 'approval-request',
+                };
+                const approval = await operations.port.approve(token, { operationKey: key, operation }, context);
+                const resolved = await operations.port.resolveForCaller(
+                  token,
+                  approval.reference,
+                  { ...operation, authorization: approval.reference },
+                  context,
+                );
+                if (access.port.actorAccountId?.(resolved) !== human.account_id) throw new TransportDenied(403);
+                return authHost.workflows.createAutomated({
+                  key,
+                  handle,
+                  operatorAccountId,
+                  authorization: approval.reference,
+                });
+              },
+            );
+            return respond(result);
+          } catch (error) {
+            if (error && typeof error === 'object' && 'status' in error && typeof error.status === 'number')
+              return respond({ error: 'native_auth_fixture_denied' }, error.status);
+            throw error;
+          }
+        }
+        const asset =
+          ['/auth-assets/', '/@vite/', '/@id/', '/@fs/', '/src/', '/node_modules/', '/_serverFn/'].some((prefix) =>
+            url.pathname.startsWith(prefix),
+          ) || url.pathname === '/@react-refresh';
+        if (nativePageOrigin && ((['GET', 'HEAD'].includes(request.method) && pages.has(url.pathname)) || asset)) {
+          const forwarded = new Request(new URL(url.pathname + url.search, nativePageOrigin), request);
+          forwarded.headers.set('x-native-auth-url', request.url);
+          return fetch(forwarded, { redirect: 'manual' });
+        }
+        return transport(request);
+      };
+    }
     await authHost.start();
 
     let client: Promise<void> | undefined;
@@ -242,9 +381,12 @@ async function build(
       bind(ports) {
         const releaseTrusted = trusted.bind(ports.trustedAccess);
         const releaseAccess = access.bind(ports.access);
+        const releaseOperations = operations.bind(ports.accountOperations);
         return () => {
+          nativePageOrigin = undefined;
           releaseTrusted();
           releaseAccess();
+          releaseOperations();
         };
       },
       registerClient(clientId, scopes) {

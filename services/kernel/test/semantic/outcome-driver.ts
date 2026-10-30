@@ -1,4 +1,9 @@
 import { releaseDigest } from '@rezics/definitions';
+import {
+  createBarrierProofVerifier,
+  createNativeWorkflowProofPorts,
+  createProvisioningEvidenceVerifier,
+} from '@rezics/auth';
 import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -7,10 +12,10 @@ import { loadavg } from 'node:os';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
-import { createAuthBindings } from '../../src/access/auth-bindings.ts';
-import { createAccess } from '../../src/access/index.ts';
-import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
-import { createRegistrationPorts } from '../support/registration-ports.ts';
+import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
+import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
+import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
+import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -259,21 +264,67 @@ async function startDriver(
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
     const governanceScopes = [...scopes, 'gate:any'];
     const knownScopes = new Set(governanceScopes);
+    // Kernel Access is lazy. Resolve it through an ordinary public read after
+    // composition, retaining exactly the instance returned by access(config).
+    // The empty migrated template may have no active release yet.
+    await (await app.handle(new Request('http://kernel.test/v1/definitions/active'))).arrayBuffer();
+    required(access, 'Kernel did not construct its native Access');
     if ('bind' in auth) {
-      const registration = createRegistrationProofBindings({ pool, referenceKeys: sessionKeys });
-      const { ports: registrationPorts } = createRegistrationPorts({
-        pool,
-        authPool: auth.database,
+      const bindingPool = runtimePool;
+      const actions = accessActionCatalogue(actionCatalogue(app));
+      const proofs = createNativeWorkflowProofPorts({ database: auth.database });
+      const bindings = createNativeAccountBindings({
+        pool: bindingPool,
+        access,
+        actions,
         routeKey,
         referenceKeys: sessionKeys,
+        auth: () => auth.service,
+        proofs: {
+          workflow: proofs,
+          provisioning: createProvisioningEvidenceVerifier({ database: auth.database }),
+          barriers: createBarrierProofVerifier({ database: auth.database }),
+        },
       });
+      const approvals = createWorkflowApprovals({
+        pool: bindingPool,
+        access,
+        actions,
+        referenceKeys: sessionKeys,
+        creationBinding: proofs.creationBinding,
+      });
+      const kernelContext = (context: { pool: unknown; deadline: number }) => {
+        if (context.pool !== bindingPool) throw new Error('Account operation context belongs to another Kernel');
+        return { pool: bindingPool, deadline: context.deadline };
+      };
       release = auth.bind({
-        trustedAccess: createAuthBindings({
-          pool,
-          ...registration,
-          verifyPendingIdentity: registration.verifyNativePendingIdentity,
-        }),
-        access: registrationPorts,
+        trustedAccess: bindings.trustedAccess,
+        access: bindings.workflowPorts,
+        accountOperations: {
+          context: () => ({ pool: bindingPool, deadline: Date.now() + 10_000 }),
+          approve: (token, input, context) => approvals.approve(token, input, kernelContext(context)),
+          resolveForCaller: (token, reference, operation, context) =>
+            approvals.resolveForCaller(token, reference, operation, kernelContext(context)),
+          async admitGroup(token, group, context) {
+            const bounded = kernelContext(context);
+            const actor = await access.authenticate(token, bounded);
+            try {
+              await admitGroup({
+                pool: bindingPool,
+                access: () => access,
+                actor,
+                group,
+                clientAction: 'organization:create',
+                deadline: context.deadline,
+                clock: accessClock(access),
+              });
+              return true;
+            } catch (error) {
+              if (error instanceof PlatformClosedError) return false;
+              throw error;
+            }
+          },
+        },
       });
     }
     await auth.registerClient(clientId, governanceScopes);

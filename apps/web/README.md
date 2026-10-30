@@ -223,6 +223,31 @@ The subject overview reads the public Global rating aggregate and imported sourc
 page. Signed-in readers also request their own vote. The overview does not read Realm memberships, so it shows Global
 alone; imported figures retain their source's scale.
 
+### Native account-operation fixture
+
+`tests/native/native-agent-identity-fixture.ts` uses the semantic driver's existing Auth host and database.
+The driver retains the actual Kernel `access(config)` result after final route composition, and binds
+`createNativeAccountBindings` plus `createWorkflowApprovals` with that Access, pool, routing key and reference keys.
+The Auth database supplies the native provisioning, barrier and staged `creationBinding` proof readers. Closing
+the driver releases registration, trusted Access and account-operation ports before closing the Kernel pool.
+When a caller supplies a runtime pool, native bindings use that same pool as the captured Access. Isolated Auth
+callers retain their existing registration-only child process; an omitted account-operation port stays unbound.
+
+The identity fixture opts into a private supervisor transport with `NATIVE_AUTH_FIXTURE_KEY`, scoped to the child
+environment captured by `startNativeWebStack`. `startAuthStack` mounts the served Auth app on that host's listener
+and unmounts it on cleanup, keeping the original workflow executor and native bindings. Other callers retain the
+existing page bridge. The supervisor wraps a public transport facade retaining the actual Auth internal capabilities
+and verifier; the host's own service fallback remains intact, preventing recursive host dispatch. No second Auth
+host or database is created for account operations.
+
+Organization creation and erasure use the ordinary served confirmation and step-up forms, their exact pending
+body/key and the dedicated `rezics-auth-account-operations` client. Its only registered actions remain
+`organization:create` and `account:delete`; the server's action catalogue adds no client scopes. Automation setup
+uses the selected operator's actual native API bearer and served human session, checks that both identify the same
+account, obtains an exact native automated-creation approval and calls the existing Auth workflow. The generated
+registration must resolve through the Auth-owned staged creation binding. The supervisor key itself grants no
+account authority, and no bearer is injected into a browser.
+
 ### Storybook and page recordings
 
 Add new fake routes, recordings and fixtures as new files under `src/kernel/fake/`, `src/kernel/recorded/` and
