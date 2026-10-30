@@ -250,12 +250,22 @@ export class RankingWorld {
     visibility: 'published' | 'protected' = 'published',
   ) {
     await this.time(at);
+    // Grant revocations write at the target resource. Keep those events out of the actor partition whose
+    // exact reaction source position is asserted across a concealed receipt replay.
+    const actorPartitions = new Set(
+      [this.base.author, this.base.other].map(({ accountId }) => partitionOf(routeOf(accountId)!)),
+    );
+    if (sourcePartition !== undefined && actorPartitions.has(sourcePartition))
+      throw new Error("Ranking targets must not share their reaction actors' source partitions");
     let key: string;
     let target: ReturnType<typeof threadTarget>;
     do {
       key = randomUUID();
       target = threadTarget(this.base.system.routeKey, this.base.author.accountId, key);
-    } while (sourcePartition !== undefined && partitionOf(target.route) !== sourcePartition);
+    } while (
+      actorPartitions.has(partitionOf(target.route)) ||
+      (sourcePartition !== undefined && partitionOf(target.route) !== sourcePartition)
+    );
     const committed = await this.capture(partitionOf(target.route), () =>
       this.command(
         'POST',
