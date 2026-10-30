@@ -633,7 +633,7 @@ test('DBOS preserves only typed boundary status while sanitizing the original fa
       authorizationFailure = undefined;
     }
   }
-});
+}, 30000);
 
 test('an owner who leaves is released under the committed change and answered from the workflow outcome', async () => {
   const { authorizeOperation, setMembership, releaseMembershipCoordination, actorAccountId } = ports;

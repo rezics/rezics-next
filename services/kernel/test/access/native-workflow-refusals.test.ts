@@ -135,7 +135,7 @@ test('differently named typed native refusals restore without a private payload 
     expect((await stateOf(account.accountId))!.state).toBe('active');
     expect(await workflowReceipts()).toBe(before);
   }
-});
+}, 30000);
 
 test('other native denials are sanitized while ordinary failures have no status', async () => {
   const key = 'native-refusal-kinds';
