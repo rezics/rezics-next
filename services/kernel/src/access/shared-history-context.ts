@@ -25,20 +25,11 @@ export async function readContextRoleProvenance(
   return result.rows;
 }
 
-/** Repairs one exact pending delivery after its receiving Context becomes available. The owning
- * sink retains its native invalidation/delivery/late-item protocol; no foreign SQL writer or ACK. */
+/** The Semantic native record_erasure_locator sink is not present in this checkout. Keep the
+ * exact provenance row pending until that owner supplies its real receiving port; do not call a
+ * guessed function or mark a former holder delivered from a Context lookup alone. */
 export async function deliverContextRoleProvenance(tx: CommandTransaction, input: { route: number; occurrence: string }): Promise<boolean> {
-  const result = await tx.query(
-    `SELECT p.*,c.erasure_key FROM access.resource_role_provenance p
-     JOIN semantic.context c ON c.route=p.route AND c.context_id=p.resource_id
-     WHERE p.route=$1 AND p.occurrence=$2 AND p.resource_type='semantic.context'
-       AND p.grant_role='semantic.context.owner' AND p.delivery='pending' FOR UPDATE OF p`,
-    [input.route,input.occurrence]);
-  const row = result.rows[0];
-  if (!row) return false;
-  await tx.query("SELECT semantic.record_erasure_locator($1,$2,'owner','context',$3,$4,NULL)",
-    [input.route >>> 4,row.account_id,row.erasure_key,row.source_transaction]);
-  await tx.query("UPDATE access.resource_role_provenance SET delivery='delivered',context_key=$3 WHERE route=$1 AND occurrence=$2",
-    [input.route,input.occurrence,row.erasure_key]);
-  return true;
+  void tx;
+  void input;
+  return false;
 }

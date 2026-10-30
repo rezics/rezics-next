@@ -121,9 +121,10 @@ Commerce's mandatory unused-account `none` result.
 
 Ordinary record purge is a distinct owner exchange: Semantic's selected `record-purge-authority.ts` owns native
 ordinary deletion/generation/hold/restore validation; Content locks that same opaque authority for its own bytes;
-Accounts' selected `history/record-purge.ts` owns copied history and receiving consumers. The source module and
-record inventory/receiving implementation are absent here. The agreed interfaces still need their source implementations;
-account-role custody or account erasure cannot authorize or certify ordinary record purge.
+Accounts' selected `history/record-purge.ts` owns copied history and receiving consumers. Accounts publishes the
+selected signatures, but Semantic's source methods, Content's minimizer and the producer-recorded record-to-copy
+inventory/receiving implementation are unavailable here. Account-role custody or account erasure cannot authorize
+or certify ordinary record purge.
 
 ### Access and Auth participants
 

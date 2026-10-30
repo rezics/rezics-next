@@ -11,6 +11,7 @@ import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
  * receipt kind acquires readiness from age, DBOS state or this registration. */
 export const RECEIPT_OWNER_DISPOSITIONS = Object.freeze({
   'access.account.preferences': Object.freeze({ commandKindId: 1, minimizerVersion: 1, barrierCompletesResult: true }),
+  'library.entry.retention.purge': Object.freeze({ commandKindId: 2, minimizerVersion: 1, barrierCompletesResult: true }),
 });
 export type PreferenceHistoryCode = 'more' | 'covered-pending';
 type Job = {

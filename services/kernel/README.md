@@ -148,10 +148,11 @@ probes count serialized bytes and include orphan-prone SDK input/output/operatio
 streams prevent a bounded certificate. These cleanup checks do not certify unconverted producers' future outputs.
 The ordinary bounded-job limits below continue to govern their existing surfaces.
 
-Current owner registrations permit preference receipt minimization and exact Library purge outbox minimization
-after real consumers settle. Missing owner conversions, Search projection inventory, native execution budget/scope
-admission, historical coverage and aggregate routing invalidation keep complete coverage pending. Exact receiving
-receipt capabilities are available; owner aggregate coverage and final ACK remain unavailable. See
+Current owner registrations permit preference and mechanical Library entry-purge receipt minimization, plus exact
+Library purge outbox minimization after real consumers settle. Missing owner conversions, Search projection inventory,
+native execution budget/scope admission, historical coverage and aggregate routing invalidation keep complete
+coverage pending. Exact receiving receipt capabilities are available; owner aggregate coverage and final ACK remain
+unavailable. See
 [Access readiness](src/access/README.md#delivered-preference-history-coverage). No native acceptance result or full
 participant readiness is implied by registration or typing.
 

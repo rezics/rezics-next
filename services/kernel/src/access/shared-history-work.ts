@@ -10,6 +10,10 @@ export const sharedHistoryWorkModule: WorkModule = {
     const history = context.history;
     if (!history || !context.addNativeEffects) throw new Error('Shared history requires native work composition');
     history.registerOwner({
+      name: 'library.entry.retention.purge', artifactType: 'command-receipt/v1', version: 1,
+      async readiness() { return { ready: true }; },
+    });
+    history.registerOwner({
       name: 'access.account.preferences', artifactType: 'command-receipt/v1', version: 1,
       async readiness() { return { ready: true }; },
     });

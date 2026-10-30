@@ -23,7 +23,7 @@ export function commandHistoryKind(id: number): string | undefined {
   return [...commandKinds].find(([, value]) => value === id)?.[0];
 }
 export const COMMAND_HISTORY_COVERAGE = Object.freeze({
-  delivered: Object.freeze(['access.account.preferences']),
+  delivered: Object.freeze(['access.account.preferences', 'library.entry.retention.purge']),
   missing: Object.freeze([
     'other command producer and consumer conversion',
     'complete outbox producer and consumer coverage',

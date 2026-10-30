@@ -281,4 +281,5 @@ The default shared-history worker now seeks all fixed homes and invokes exact re
 `HistoryRegistry.registerOwner` supplies actual native consumer readiness; unregistered receipt kinds retain a
 concrete gap. This extends preference cleanup without declaring other producers converted. Ordinary record purge
 needs the selected Semantic source authority and original record-to-copy inventory; account receipt custody alone
-cannot identify an ordinary record's copies. Those receiving exports are not implemented in this checkout.
+cannot identify an ordinary record's copies. The Accounts receiving signatures exist but fail closed until those
+native source and inventory ports are delivered.

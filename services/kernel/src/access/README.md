@@ -2378,9 +2378,9 @@ as required by the participant contract, while subject/account-resource grants a
   [schema guard](../../db/access/schema.sql) preserve immutable outcomes and bounded retention/resolution evidence;
   the primitive does not establish that Access's own residue phases have run.
 - `core.receipt`, subject/actor/delegate/granter/operator/reviewer/member: [the core schema](../../db/schema.sql) retains
-  the native keyed replay token, digest, principal and transaction/time. The default preference history worker
-  replaces this producer's response JSON with a marked tombstone after its committed erasure barrier; all other
-  receipt kinds retain their response JSON pending their owners' native result dispositions and minimizers.
+  the native keyed replay token, digest, principal and transaction/time. The default shared-history worker replaces
+  preference and mechanical Library entry-retention purge response JSON with marked tombstones after their
+  committed erasure barriers; other receipt kinds await their owners' native result dispositions and minimizers.
 - `core.outbox`, subject/actor/delegate/granter/operator/reviewer/member: [the core schema](../../db/schema.sql) retains
   event payload and transaction/time, including non-actor event subjects, without account-erasure minimization.
 - `editorial.write_basis`, actor/delegated principal/granter/operator/member: [the core schema](../../db/schema.sql)
@@ -2511,8 +2511,9 @@ redrive the affected pending job; changed registry generations redrive one job p
 
 `HistoryRegistry.registerOwner` binds versioned native readiness for each closed artifact type.
 `registerCoverage` declares a producer family's conversion; it never certifies absence. No family currently declares
-complete conversion. Preference receipts have no downstream response consumer. The Library entry-purged event has
-no projection subscriber; its exact effects dispositions are checked independently. Account-updated events await
+complete conversion. Preference and mechanical Library entry-retention purge receipts have no downstream response
+consumer and both are registered for the existing receipt minimizer. The Library entry-purged event has no
+projection subscriber; its exact effects dispositions are checked independently. Account-updated events await
 Search's actual generation-specific consumer inventory. Other command owners must bind their actual consumer proof.
 
 `stageHistoryWork` and `receiveHistoryWork` in `work/history-enqueue.ts` retain exact opaque request/digest and scope
@@ -2534,14 +2535,16 @@ rather than issuing a stale aggregate certificate. Final shared-history ACK rema
 
 Access captures current/new/former direct native grant occurrences before destructive mutation, with original creator
 and resource type retained separately. Initialization reads its committed-in-transaction rows after the sibling CTEs
-to capture the actual first holder. Context-owner occurrences deliver through Semantic's actual
-`record_erasure_locator` sink; pending exact deliveries can be retried through `deliverContextRoleProvenance`.
-This is historical provenance, never current permission or certification of former-owner absence. Existing historical
-rows have no backfill, and Access's own provenance retention/cleanup remains its separate obligation.
+to capture the actual first holder. The Semantic `record_erasure_locator` sink is absent from this checkout, so exact
+Context-owner occurrences remain `pending`; `deliverContextRoleProvenance` does not call a guessed SQL interface or
+mark delivery complete. This is historical provenance, never current permission or certification of former-owner
+absence. Existing historical rows have no backfill, and Access's own provenance retention/cleanup remains its
+separate obligation.
 
 Ordinary record purge uses the agreed Semantic `record-purge-authority.ts` opaque source owner and Content's
-`purgeAuthoredFieldForDeletedRecord`, independently of account erasure. Those source exports are absent from this
-checkout. Accounts' selected `history/record-purge.ts` preparation/minimization port and producer-recorded record-to-copy
-inventory are still undelivered. No account-role locator, caller list or released source read substitutes for them.
-Cross-home source serialization with hold/restore/generation changes also remains unavailable. These are code and
-custody dependencies, not a pending approval of the selected contract. No record or global completion is claimed.
+`purgeAuthoredFieldForDeletedRecord`, independently of account erasure. The Semantic module currently exposes only
+unavailable source methods, and Content's owner minimizer is absent. Accounts publishes the selected
+`history/record-purge.ts` signatures, but they fail closed because the source-bound record-to-copy inventory and
+receiving custody are not delivered. No account-role locator, caller list or released source read substitutes for
+them. Cross-home source serialization with hold/restore/generation changes also remains unavailable. These are code
+and custody dependencies, not a pending approval of the selected contract. No record or global completion is claimed.

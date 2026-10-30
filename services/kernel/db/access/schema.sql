@@ -2847,20 +2847,12 @@ BEGIN
  RETURN r;
 END; $$;
 CREATE FUNCTION access.deliver_resource_role_provenance() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE k bigint;
 BEGIN
- -- The actual Semantic sink, including its normal home invalidation/delivery/late-item protocol.
- -- A role string alone never establishes the resource's type.
- IF NEW.resource_type='semantic.context' AND NEW.grant_role='semantic.context.owner' THEN
-   SELECT erasure_key INTO k FROM semantic.context WHERE route=NEW.route AND context_id=NEW.resource_id;
-   IF k IS NOT NULL THEN
-     PERFORM semantic.record_erasure_locator(NEW.route/16,NEW.account_id,'owner','context',k,NEW.source_transaction,NULL);
-     UPDATE access.resource_role_provenance SET context_key=k,delivery='delivered'
-       WHERE route=NEW.route AND occurrence=NEW.occurrence;
-   END IF;
- ELSE
-   UPDATE access.resource_role_provenance SET delivery='not-applicable' WHERE route=NEW.route AND occurrence=NEW.occurrence;
- END IF;
+ -- Semantic's native record_erasure_locator sink is not available in this checkout. Keep exact
+ -- Context-owner occurrences pending; never make their custody depend on a guessed SQL ABI.
+ IF NEW.resource_type='semantic.context' AND NEW.grant_role='semantic.context.owner' THEN RETURN NEW; END IF;
+ UPDATE access.resource_role_provenance SET delivery='not-applicable'
+   WHERE route=NEW.route AND occurrence=NEW.occurrence;
  RETURN NEW;
 END; $$;
 -- Capture OLD before its destructive removal, and NEW after its authoritative insert.
