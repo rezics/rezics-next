@@ -233,13 +233,14 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
       if (held.rowCount) return { after, keys, blocked: 'native-release' };
     }
     if (store.table === 'auth_effect_receipt') {
-      // A different, surviving subject can still need this immutable staged or
-      // committed witness to finish its native opening/floor release. No actual
-      // terminal-consumer proof port exists for that association yet.
+      // A committed effect can still be needed by its native opening/floor
+      // consumer, including after the subject is deleted. A surviving subject's
+      // staged operation also lacks a terminal-refusal proof. Neither a missing
+      // user nor an erasure obligation substitutes for the consumer's proof.
       const held = await connection.query(
         `SELECT 1 FROM auth_effect_receipt r WHERE receipt_id=$1
-         AND (stage_version IS NOT NULL OR committed_at IS NOT NULL)
-         AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)`,
+         AND (committed_at IS NOT NULL OR (stage_version IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)))`,
         [key],
       );
       if (held.rowCount) return { after, keys, blocked: 'native-release' };
