@@ -715,7 +715,7 @@ Its closed declarations are `NativePublicSource`, `PublicFilterSourceDefinition`
 `PublicFilterNativeSource` and `JoinedPopulationRequest` remain exported. The capture is the canonical
 Search Subject/mixed/prefix union; queried observations are imported from Search.
 
-Migration `20261031000000_public_filter_binding.sql` owns Source tables in `semantic`:
+Migration `20261030222921_public_filter_binding.sql` owns Source tables in `semantic`:
 `public_filter_source` has `(partition_no,source_id)` identity and an independently stored configuration,
 route fingerprint and owner epoch; `public_filter_read_definition` has
 `(partition_no,read_definition)` and immutable configuration/release/type/root/compiler keys.
