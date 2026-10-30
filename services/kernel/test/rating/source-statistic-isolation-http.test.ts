@@ -281,7 +281,6 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   expect(JSON.stringify(hiddenProblem)).not.toContain('private-attribution-sentinel-record');
   expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel licence');
   expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel attribution.');
-
 });
 
 test('A large imported count does not seed a native mean, prior, or score.', async () => {
