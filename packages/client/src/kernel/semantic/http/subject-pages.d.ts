@@ -2931,6 +2931,15 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
         200: import("typebox").TObject<{
             subjectPages: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
+                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    family: import("typebox").TLiteral<"subject">;
+                    subjectId: import("typebox").TString;
+                }>, import("typebox").TObject<{
+                    family: import("typebox").TLiteral<"account">;
+                    accountId: import("typebox").TString;
+                    canonicalPath: import("typebox").TString;
+                }>]>>;
+                views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
                 originalLanguage: import("typebox").TOptional<import("typebox").TString>;
                 lastModified: import("typebox").TOptional<import("typebox").TString>;
                 labels: import("typebox").TArray<import("typebox").TObject<{
@@ -3020,6 +3029,15 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
         200: {
             subjectPages: {
                 id: string;
+                target?: {
+                    family: "subject";
+                    subjectId: string;
+                } | {
+                    family: "account";
+                    accountId: string;
+                    canonicalPath: string;
+                };
+                views?: string[];
                 originalLanguage?: string;
                 lastModified?: string;
                 labels: {
@@ -3078,6 +3096,15 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
         200: {
             subjectPages: {
                 id: string;
+                target?: {
+                    family: "subject";
+                    subjectId: string;
+                } | {
+                    family: "account";
+                    accountId: string;
+                    canonicalPath: string;
+                };
+                views?: string[];
                 originalLanguage?: string;
                 lastModified?: string;
                 labels: {
@@ -3141,6 +3168,15 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
             200: import("typebox").TObject<{
                 subjectPages: import("typebox").TArray<import("typebox").TObject<{
                     id: import("typebox").TString;
+                    target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                        family: import("typebox").TLiteral<"subject">;
+                        subjectId: import("typebox").TString;
+                    }>, import("typebox").TObject<{
+                        family: import("typebox").TLiteral<"account">;
+                        accountId: import("typebox").TString;
+                        canonicalPath: import("typebox").TString;
+                    }>]>>;
+                    views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
                     originalLanguage: import("typebox").TOptional<import("typebox").TString>;
                     lastModified: import("typebox").TOptional<import("typebox").TString>;
                     labels: import("typebox").TArray<import("typebox").TObject<{
@@ -3263,7 +3299,10 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
     readonly authorize: (resource: import("../../request/access.ts").Resource) => Promise<import("../../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../../request/access.ts").Resource, denied: () => Error) => Promise<import("../../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    subjectPages: import("../subject-page-publication-store.ts").PublicationEntry[];
+    subjectPages: (import("../subject-page-publication-store.ts").PublicationEntry & {
+        target: import("../subject-page-navigation.ts").PublicSubjectPageCandidate['target'];
+        views: string[];
+    })[];
     next: string | null;
 }>, {
     query: import("typebox").TObject<{
@@ -3274,6 +3313,15 @@ export declare function subjectPageRoutes(app: ReturnType<typeof subjectRoutes>,
         200: import("typebox").TObject<{
             subjectPages: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
+                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                    family: import("typebox").TLiteral<"subject">;
+                    subjectId: import("typebox").TString;
+                }>, import("typebox").TObject<{
+                    family: import("typebox").TLiteral<"account">;
+                    accountId: import("typebox").TString;
+                    canonicalPath: import("typebox").TString;
+                }>]>>;
+                views: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
                 originalLanguage: import("typebox").TOptional<import("typebox").TString>;
                 lastModified: import("typebox").TOptional<import("typebox").TString>;
                 labels: import("typebox").TArray<import("typebox").TObject<{

@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { type PublicSubjectPageCandidate } from './subject-page-navigation.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -17,7 +18,10 @@ export declare function createSubjectPageFeed(config: {
         limit?: number;
         cursor?: string;
     }): Promise<{
-        subjectPages: PublicationEntry[];
+        subjectPages: (PublicationEntry & {
+            target: PublicSubjectPageCandidate['target'];
+            views: string[];
+        })[];
         next: string | null;
     }>;
 };
