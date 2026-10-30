@@ -5699,10 +5699,19 @@ assert sys.argv[1:] == ['install', '--frozen-lockfile'], sys.argv
 root = pathlib.Path.cwd()
 version = json.loads((root / 'package.json').read_text())['nativeVersion']
 package = root / 'node_modules/native-installer'
-package.mkdir(parents=True)
+package.mkdir(parents=True, exist_ok=True)
 (package / 'package.json').write_text(json.dumps({'name': 'workerd' if os.environ.get('PREPARATION_MODE') in ['native', 'invalid-native'] else '@fixture/native-installer', 'version': version}))
 with open(os.environ['PREPARATION_EVENTS'], 'a') as events:
     events.write('install:' + version + '\\n')
+if os.environ.get('PREPARATION_MODE') == 'native' and (package / 'bin/workerd').exists():
+    subprocess.run([str(package / 'bin/workerd'), '--version'], check=True, stdout=subprocess.DEVNULL)
+    (root / 'generated').mkdir(exist_ok=True)
+    (root / 'generated/lifecycle.txt').write_text(version)
+    (root / 'generated/source.txt').write_text((root / 'source.txt').read_text())
+    (root / 'node_modules/.bin').mkdir(exist_ok=True)
+    if not (root / 'node_modules/.bin/native').exists():
+        (root / 'node_modules/.bin/native').symlink_to('../native-installer/bin/native')
+    sys.exit(0)
 child = subprocess.Popen([sys.executable, '-c', r"""
 import json, os, pathlib, signal, subprocess, sys, time
 package = pathlib.Path.cwd()
@@ -5749,6 +5758,7 @@ if mode == 'native':
 root = package.parent.parent
 (root / 'generated').mkdir()
 (root / 'generated/lifecycle.txt').write_text(version)
+(root / 'generated/source.txt').write_text((root / 'source.txt').read_text())
 (root / 'node_modules/.bin').mkdir()
 (root / 'node_modules/.bin/native').symlink_to('../native-installer/bin/native')
 """], cwd=package)
@@ -5756,12 +5766,13 @@ sys.exit(child.wait())
 `);
   chmodSync(bun, 0o755);
   let count = 0;
-  const create = (settings: { mode?: string; bound?: number; lifetime?: number; version?: string; lock?: string; delay?: string; program?: string; revision?: string; command?: string[] } = {}) => {
+  const create = (settings: { mode?: string; source?: string; bound?: number; lifetime?: number; version?: string; lock?: string; delay?: string; program?: string; revision?: string; command?: string[] } = {}) => {
     const id = `preparation-${count++}`;
     const run = join(directory, 'runs', id);
     mkdirSync(run, { recursive: true });
     writeFileSync(join(run, 'package.json'), JSON.stringify({ name: 'fixture', nativeVersion: settings.version ?? '1.2.3' }));
     writeFileSync(join(run, 'bun.lock'), settings.lock ?? 'frozen-native-1');
+    writeFileSync(join(run, 'source.txt'), settings.source ?? 'original source');
     const pids = join(directory, id + '-pids');
     const ready = join(directory, id + '-ready');
     const command = settings.command ?? ['sh', '-c', 'test "$(node_modules/.bin/native)" = "$(cat generated/lifecycle.txt)" && touch command-invoked'];
@@ -6001,6 +6012,20 @@ test('native preparation certifies both workerd versions and pinned Bun revision
   }
   expect(fixture.events().filter((event) => event.startsWith('download:bun@'))).toHaveLength(2);
   console.info('native version cache evidence', JSON.stringify({ runs: 4, workerdDownloads: 2, bunDownloads: 2, verifiedPackages: evidence }));
+});
+
+test('fresh source edits reuse verified native packages while source-dependent lifecycle outputs regenerate', () => {
+  const fixture = preparationFixture();
+  const cold = fixture.create({ mode: 'native', version: '1.20261023.1', source: 'first source' });
+  expect(cold.execute().status).toBe(0);
+  const edited = fixture.create({ mode: 'native', version: '1.20261023.1', source: 'unrelated prose edit' });
+  const result = edited.execute();
+  expect(result.status, result.stderr).toBe(0);
+  expect(edited.artifacts()).toMatchObject({ cache: 'miss', nativeCache: 'hit' });
+  expect(readFileSync(join(edited.run, 'generated/source.txt'), 'utf8')).toBe('unrelated prose edit');
+  expect(fixture.events().filter((event) => event.startsWith('install:'))).toHaveLength(2);
+  expect(fixture.events().filter((event) => event === 'download:1.20261023.1')).toHaveLength(1);
+  expect(fixture.events().filter((event) => event.startsWith('download:bun@'))).toHaveLength(1);
 });
 
 test('physical run lifetime uses safe estimate arithmetic, a finite fallback and an unraisable two-hour cap', () => {
