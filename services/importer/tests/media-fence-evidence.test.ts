@@ -14,7 +14,7 @@ for (const reply of [
     const transport = createImportTransport({
       origin: 'https://api.rezics.test',
       tokenProvider: async () => 'fixture',
-      fetch: (async () => {
+      fetch: (async (_input: RequestInfo | URL) => {
         requests++;
         return Response.json(reply);
       }) as typeof fetch,
