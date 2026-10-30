@@ -565,7 +565,7 @@ async function presentationHead(dimension?: string) {
     labels.libraryProfiles[profile.id].units.scalar_amount.page = 'new sheet';
     input.presentation[key] = JSON.stringify(labels);
   }
-  return native.publish(compileCatalogue(input));
+  return native.publish(await compileCatalogue(input));
 }
 
 test('Owner session detail exposes exact resolved historic display and advisory current recording rules without private pins current-label fallback or progress conversion', async () => {
@@ -680,5 +680,27 @@ test('native opt-in missing immutable release and transient current source remai
     const p = await unavailable.readPresentedSession(owner.actor, s.id, async (_, presentation) => presentation);
     expect(p).toMatchObject({ meaning: 'known', unitLabel: 'episode', recording: { state: 'unavailable' } });
     expect((await contents(s.id)).units.map((row) => row.unitId)).toEqual(['1', '3', '7']);
+  });
+});
+
+
+test('native current pair removal and hidden version summary preserve the original session meaning independently', async () => {
+  const subject = await native.createSubject('game');
+  const version = await native.createSubject('game');
+  const s = await start(subject, 'scalar_amount', 'seed-tray.v2', { total: '5', versionSubjectId: version });
+  await native.activate(replacement);
+  await json(await native.send('steward', 'POST', `/v1/subjects/${version}:hide`, {
+    reason: 'Independent version disclosure',
+  }), 200);
+  await noSessionEffects(s.id)(async () => {
+    const detail = (await json(await send('GET', `${path(s.id)}?presentation=FULL&view=FULL`), 200)).progressSession;
+    expect(detail.subject).not.toBeNull();
+    expect(detail.versionSubject).toBeNull();
+    expect(detail.versionSubjectId).toBe(version);
+    expect(detail.total).toBe('5');
+    expect(detail.amount).toBeNull();
+    expect(detail.presentation).toMatchObject({
+      meaning: 'known', unitLabel: 'seed-tray.v2', structure: 'unverified', recording: { state: 'unsupported' },
+    });
   });
 });
