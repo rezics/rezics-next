@@ -2,6 +2,7 @@ import { createFileRoute, useRouter, useRouterState } from '@tanstack/react-rout
 import { m } from '../../paraglide/messages.js';
 import { readExactRevision } from '../../threads/exact-revision-read';
 import { ExactRevisionView } from '../../threads/exact-revision-view';
+import { EditionCreateEntry } from '../../content-editions/edition-create-entry';
 
 export const Route = createFileRoute('/posts/$id/revisions/$revisionId')({
   staticData: { sessionReread: true },
@@ -32,12 +33,17 @@ function ExactRevisionPage() {
   const router = useRouter();
   const loading = useRouterState({ select: (state) => state.isLoading });
   return (
-    <ExactRevisionView
-      identity={{ postId: params.id, revisionId: params.revisionId }}
-      page={loading ? { state: 'loading' } : page}
-      onRetry={() => {
-        void router.invalidate();
-      }}
-    />
+    <>
+      <ExactRevisionView
+        identity={{ postId: params.id, revisionId: params.revisionId }}
+        page={loading ? { state: 'loading' } : page}
+        onRetry={() => {
+          void router.invalidate();
+        }}
+      />
+      {!loading && page.state === 'ready' ? (
+        <EditionCreateEntry identity={{ postId: params.id, revisionId: params.revisionId }} />
+      ) : null}
+    </>
   );
 }

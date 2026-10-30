@@ -2081,3 +2081,86 @@ Cost: Realm image upload and download
   Known references survive uncertainty without another reserve; new selection claims occur only in native PATCH.
 - Growth check: later reuse `test/content/growth-media.test.ts`, `test/content/growth-media-realm-download.test.ts` and
   `test/content/growth-media-native-collection.test.ts`; existing uploader and download evidence remains required.
+
+### Authored revision to fixed edition publication
+
+`/editions/new` is the creator handoff. The existing exact-revision route adds a distinct publication region after
+its unchanged document/provenance region. The action passes only the exact native post and revision IDs to the creator
+route. A creator can also select a same-site exact-revision link; the browser never turns a pointer into document bytes.
+A current native exact read, the real session subject and current `post:revise` viewer action admit the preview. The
+native command independently verifies both the post author and immutable revision write basis. No caller ownership,
+rights assertion, new post, cover selection or source mutation is sent.
+
+`content-editions/edition-create-native.ts` consumes the actual producer's `edition-routes.ts`, `schemas.ts`,
+`edition-commands.ts` and `edition-store.ts` contracts. Creation sends only `{postId, revisionId, targetSubjectId}` to
+`POST /v1/contentEditions`; `content_edition.create` returns the flat `{editionId, editionRevision}` command schema.
+Publishing sends `{}` to `POST /v1/contentEditions/{id}:publish`, with structured-string `Idempotency-Key` and the
+actual quoted numeric `If-Match` edition revision. `content_edition.publish` requires current edition sell and source
+revise admission; native execution captures the seller initiator and receipt. The browser never uses mechanical sale
+authority. A matching current metadata read must confirm the source revision, SHA-256, licence, creator, chosen original
+subject, edition ID, state and command version before the UI reports a draft or publication.
+
+The selector retains the original immutable revision's bounded subject IDs and displays those identifiers without
+per-row enrichment. Exactly one selected subject receives a current native point read, with redirects refused, before
+each command. Today's post head never supplies extra subjects. Native source reads retain live Context and ancestor
+authority; the UI constructs no fallback Context or permission formula. DocumentBody renders the canonical snapshot;
+images without producer derivative summaries remain explicitly unavailable. No borrowed cover or original media URL
+is attached to an edition.
+
+Creation and publication have separate stable intent keys. Uncertain responses retain the original request, source
+preview and selection; explicit retry replays the same operation, payload, key and CAS. A draft has no published reader
+link and is not sellable. A definite conflict requires a fresh current source/edition read and explicit review before a
+new intent can use a new edition version. Refresh conceals previous source bytes immediately; an older pending command
+cannot replace the fresh read. Source denial retains the pointer, subject and unresolved intent, while concealing the
+preview. An unknown create result cannot be discarded by a refresh. Once a real command supplies an edition ID, an
+explicit bound current read can resolve its state. Publication supplies the actual edition ID and `/editions/{id}` link;
+the existing Commerce offer editor consumes that ID. No additional offer, order or checkout flow is introduced.
+
+The isolated typed wire binding uses configured `KERNEL_ORIGIN`, the existing session/Origin/CSRF boundary and private,
+no-store native transport with read-after-write session headers. It never uses the development fake. Without the native
+origin it returns typed `native-pending`. The generated client in this checkout has no edition routes, and Content post
+and edition resources are absent from the installed viewer-action registry; these are remaining producer integration
+edges. Missing native action resources return typed `admission-pending`, never invented permissions. The configured wire
+binding already calls real native operations when those resources are present; generated composition should replace the
+isolated transport when delivered. Native refusal or missing original authorship remains a refusal. These interface
+fixtures do not prove native availability, disclosure, physical growth, publisher receipts or buyer delivery.
+
+The reusable EditionPublication Pattern and actual creator-route Pages expose these exact review IDs:
+
+- `patterns-content-editionpublication--selection`
+- `patterns-content-editionpublication--draft`
+- `patterns-content-editionpublication--published`
+- `patterns-content-editionpublication--refused`
+- `patterns-content-editionpublication--conflict`
+- `patterns-content-editionpublication--uncertain`
+- `pages-content-editionpublication--selection`
+- `pages-content-editionpublication--draft`
+- `pages-content-editionpublication--published`
+- `pages-content-editionpublication--refused`
+- `pages-content-editionpublication--conflict`
+- `pages-content-editionpublication--uncertain`
+
+Selection and Uncertain are the two focused interaction cases. They exercise the real controller and wire adapter with
+constructed closed producer responses. Pages mount `EditionCreateRoute` in the existing AppShell with one main. Use
+existing phone390/desktop1280, light/dark and locale globals; Web owns visual review. English messages use the configured
+base-locale fallback pending localization review. `tests/edition-publication.test.ts` records the assigned boundary
+journey and privacy/late-response case for integration; acceptance, native, browser and visual execution are deferred by
+the current minimal verification policy. No external reference-project source was needed for this document surface.
+Local `bun run --cwd apps/web typecheck` passes, including generation of the creator route in the ignored route tree.
+
+Cost: entry and source selection
+
+- Touches: one exact native post/revision, one current native action batch of one post, one final exact revision.
+- Bound: three native requests per entry/read, one document of at most the native 2 MiB limit and at most 128 original
+  subject IDs. No history walk, head substitution, refill, per-subject HTTP or additional document renderer.
+- Growth check: native Content's existing source/ancestor bounds remain producer-owned; interface typing is no proof.
+
+Cost: create, publish, review and uncertain retry
+
+- Touches: the same fixed source read, one chosen current subject, one native command and one current metadata read;
+  publication adds one native action batch of one edition. Review reads the source and at most one known edition.
+- Bound: at most six requests per create/retry, seven per publish/retry, four per explicit review. One user action sends
+  at most one command. Original keys/CAS remain fixed on uncertain retry. No automatic retry, new authority store,
+  Commerce reads, history scan or source mutation. Native commands own admission before receipts and final disclosure.
+- Growth check: later native edition outcomes and physical checks remain required; these fixture tests claim no growth
+  or promoted-source result.
