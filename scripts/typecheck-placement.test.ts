@@ -487,6 +487,6 @@ assert.deepEqual(commands.slice(2), [['rm', '-f', '-v', 'owned-container']]);
 `,
   );
   const result = spawnSync(process.execPath, [fixture], { cwd: repository, encoding: 'utf8', timeout: 10_000 });
-  expect(result.status).toBe(0);
   expect(result.stderr).toBe('');
+  expect(result.status).toBe(0);
 });
