@@ -29,7 +29,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
   if (result.kind !== 'ready')
     return (
       <article className="space-y-4" aria-busy={busy || result.kind === 'loading'}>
-        <ViewHeading label={m.subject_sources({}, o)} />
+        <ViewHeading label={m.subject_sources({}, o)} headingClassName="font-sans" />
         <p role={result.kind === 'loading' ? 'status' : 'alert'}>
           {result.kind === 'loading'
             ? m.sources_loading({}, o)
@@ -97,7 +97,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false }: Pr
         }
       />
       <div className="space-y-2">
-        <ViewHeading label={m.subject_sources({}, o)} />
+        <ViewHeading label={m.subject_sources({}, o)} headingClassName="font-sans" />
         <p className="text-sm text-muted-foreground">{m.sources_intro({}, o)}</p>
       </div>
       <section aria-labelledby="selected-facts-title" className="min-w-0 space-y-5">

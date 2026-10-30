@@ -174,6 +174,12 @@ export const Conflict: Story = {
       'A quiet story about friendship.',
     );
     await expect(canvas.getByRole('button', { name: m.correction_submit() })).toBeEnabled();
+    // Finish on the actual rejection so the conflict capture includes the retained, frozen draft.
+    await userEvent.click(canvas.getByRole('button', { name: m.correction_submit() }));
+    await canvas.findByText(m.correction_stale());
+    await expect(canvas.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent(
+      'A quiet story about friendship.',
+    );
   },
 };
 export const Unavailable: Story = {

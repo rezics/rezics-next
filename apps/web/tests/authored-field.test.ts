@@ -9,6 +9,10 @@ import {
   type AuthoredCommand,
 } from '../src/features/catalogue/authored-field';
 import { candidateIsPublic } from '../src/subject/candidates';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { AuthoredField } from '../src/features/catalogue/authored-field-view';
+import { readAuthoredField, type AuthoredRead } from '../src/features/catalogue/authored-field';
 
 test('Write licensed original catalogue text and review its actual candidate through the declared native contract with truthful authority and failure states', async () => {
   const fixture = authoredFixture();
@@ -141,5 +145,107 @@ test('authored envelope validation and failed submissions preserve the exact req
     const failed = authoredFixture(scenario);
     expect(await failed.transport.propose({ ...command, id: failed.id })).toEqual({ ok: false, reason });
     expect(candidateIsPublic(failed.publicRead, authoredProperty, failed.candidate.id)).toBe(false);
+  }
+});
+
+test('authorized authored ready and conflict states show the real form while selected shows actual readback and denied or unbound production remains truthful', async () => {
+  for (const scenario of ['ready', 'stale'] as const) {
+    const fixture = authoredFixture(scenario);
+    const initial = await fixture.transport.read();
+    if (!initial.ok) throw new Error('Expected an admitted document field');
+    expect(initial.property).toBe(authoredProperty);
+    const html = renderToStaticMarkup(
+      createElement(AuthoredField, { initial, locale: 'en', transport: fixture.transport, confirm: fixture.confirm }),
+    );
+    expect(html).toContain('<form');
+    expect(html).toContain('id="authored-language"');
+    expect(html).toContain('id="authored-licence"');
+    expect(html).toContain('An aviator meets a young traveller in the desert.');
+    const statement = authoredStatement(
+      authoredProperty,
+      fromPlainText('An original replacement with a meaningful typed draft.'),
+      'en',
+      'CC-BY-4.0',
+      'https://example.org/original-notes',
+    );
+    const command: AuthoredCommand = { id: fixture.id, key: crypto.randomUUID(), statement };
+    const result = await fixture.transport.propose(command);
+    if (scenario === 'stale') {
+      expect(result).toEqual({ ok: false, reason: 'stale' });
+      expect(fixture.calls.find((call) => call.method === 'POST')?.body).toEqual({ statement });
+    } else {
+      expect(result.ok && result.kind).toBe('proposed-awaiting-review');
+    }
+    const selected = await fixture.transport.read();
+    expect(selected.ok && selected.selected?.id).toBe(fixture.old.id);
+    expect(selected.ok && selected.body?.ok && documentText(selected.body.document.body!)).toContain('aviator');
+  }
+});
+
+test('a denied new proposal does not suppress or reconstruct the independently authorized selected document', async () => {
+  const fixture = authoredFixture('denied');
+  const initial = await fixture.transport.read();
+  if (!initial.ok || !initial.body?.ok) throw new Error('Expected a public selected document');
+  // Readback must follow current native disclosure and body, not a previous response or the rejected draft.
+  fixture.documents.set(initial.body.document.id, {
+    ...initial.body.document,
+    availability: 'available',
+    body: fromPlainText('The currently authorized selected text.'),
+  });
+  fixture.publicRead.subject.sourceRecords = [];
+  expect(
+    await fixture.transport.propose({
+      id: fixture.id,
+      key: crypto.randomUUID(),
+      statement: authoredStatement(
+        authoredProperty,
+        fromPlainText('A rejected private draft.'),
+        'en',
+        'CC0-1.0',
+        'https://example.org/notes',
+      ),
+    }),
+  ).toEqual({ ok: false, reason: 'denied' });
+  const selected = await fixture.transport.read();
+  if (!selected.ok || !selected.body?.ok) throw new Error('Expected independent public readback');
+  expect(selected.public.subject.sourceRecords).toEqual([]);
+  expect(selected.body.document).toMatchObject({ candidateId: fixture.old.id, licence: 'CC-BY-4.0' });
+  const html = renderToStaticMarkup(
+    createElement(AuthoredField, {
+      initial: selected,
+      locale: 'en',
+      transport: fixture.transport,
+      confirm: fixture.confirm,
+    }),
+  );
+  expect(html).toContain('The currently authorized selected text.');
+  expect(html).not.toContain('A rejected private draft.');
+  expect(html).not.toContain('An aviator meets a young traveller in the desert.');
+  expect(fixture.calls.filter((call) => call.path.startsWith('/v1/documents/')).at(-1)?.authorization).toBeNull();
+});
+
+test('unsupported metadata, denied reads and an unbound production transport never supply an authored form or body', async () => {
+  const fixture = authoredFixture('empty');
+  const unsupported = await fixture.transport.read();
+  expect(unsupported.ok && unsupported.property).toBe('');
+  const deniedClient = createKernelClient('https://denied.test', {
+    fetch: (async () => new Response('{}', { status: 403 })) as typeof fetch,
+  });
+  const unboundClient = createKernelClient('https://unbound.test', {
+    fetch: (async () => {
+      throw new Error('KERNEL_ORIGIN is unavailable');
+    }) as typeof fetch,
+  });
+  const denied = await readAuthoredField(deniedClient, { id: fixture.id }, 'en');
+  const unbound = await readAuthoredField(unboundClient, { id: fixture.id }, 'en');
+  expect(denied).toEqual({ ok: false, reason: 'denied' });
+  expect(unbound).toEqual({ ok: false, reason: 'unavailable' });
+  for (const initial of [unsupported, denied, unbound] satisfies AuthoredRead[]) {
+    const html = renderToStaticMarkup(
+      createElement(AuthoredField, { initial, locale: 'en', transport: fixture.transport, confirm: fixture.confirm }),
+    );
+    expect(html).not.toContain('<form');
+    expect(html).not.toContain('id="authored-language"');
+    expect(html).not.toContain('An aviator meets a young traveller in the desert.');
   }
 });

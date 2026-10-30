@@ -17,7 +17,7 @@ import {
   type CandidateRead,
 } from '../../subject/candidates';
 import { originalLanguage } from '../../subject/language';
-import { bestRank } from '../pages/shared';
+import { bestRank, isRecord } from '../pages/shared';
 import type { ProposalResult, StatementInput } from './statement-editor';
 
 // The native proposal schema accepts a generic statement; reuse the shared definition input for its parts.
@@ -100,12 +100,10 @@ export async function readAuthoredBody(
 ): Promise<AuthoredBody> {
   const content: unknown = statement.value.type === 'value' ? statement.value.content : null;
   if (
-    !content ||
-    typeof content !== 'object' ||
-    !('document' in content) ||
+    !isRecord(content) ||
     typeof content.document !== 'string' ||
-    !('digest' in content) ||
-    !('language' in content)
+    typeof content.digest !== 'string' ||
+    typeof content.language !== 'string'
   )
     return candidateFailure(503);
   try {
@@ -162,14 +160,17 @@ export async function readAuthoredField(
     const language = pickLanguage(
       selected.flatMap((statement) => {
         const content = statement.value.type === 'value' ? statement.value.content : null;
-        return content && typeof content.language === 'string' ? [content.language] : [];
+        return isRecord(content) && typeof content.language === 'string' ? [content.language] : [];
       }),
       locale,
       originalLanguage(current.data.subject),
     );
     const statement =
       selected.find(
-        (statement) => statement.value.type === 'value' && statement.value.content?.language === language,
+        (statement) =>
+          statement.value.type === 'value' &&
+          isRecord(statement.value.content) &&
+          statement.value.content.language === language,
       ) ?? null;
     const session = new Headers(current.headers).get('rezics-session-token') ?? address.session;
     const body = statement ? await readAuthoredBody(client, address.id, statement, undefined, session) : null;
