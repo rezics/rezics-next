@@ -341,7 +341,7 @@ test('cookie and Authorization requests bypass a warm public entry without publi
     buildId: 'build-a',
     dehydratedData: () => ({}),
     freshNonce: () => 'fresh',
-    render: async () => html('public'),
+    render: async () => html('public', 200, { vary: 'Cookie, Accept-Language' }),
   };
   const publicResponse = await cachePublicPage(new Request(url), options);
   const etag = publicResponse.headers.get('etag')!;

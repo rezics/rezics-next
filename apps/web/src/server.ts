@@ -238,14 +238,9 @@ const fetchHandler = createStartHandler((options) => {
   if (isPublicCacheRender(options.request)) {
     const matches = options.router.stores.matches.get();
     if (matches.some((match) => isPlatformClosedError(match.error))) recordPublicPageFailure(options.request, 403);
-    else if (matches.some((match) => match.status === 'error'))
-      recordPublicPageFailure(
-        options.request,
-        options.router.state.statusCode >= 400 ? options.router.state.statusCode : 500,
-      );
+    else if (matches.some((match) => match.status === 'error')) recordPublicPageFailure(options.request, 500);
     else if (matches.some((match) => match.status === 'pending')) recordPublicPageFailure(options.request, 503);
-    else if (matches.some((match) => match.status === 'notFound' || match.globalNotFound))
-      recordPublicPageFailure(options.request, 404);
+    else if (matches.some((match) => match.status === 'notFound')) recordPublicPageFailure(options.request, 404);
     recordDehydratedPageData(options.request, dehydratedPageDataFromRouter(options.router));
   }
   return defaultStreamHandler(options);

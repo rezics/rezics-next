@@ -206,7 +206,7 @@ shift content when they hydrate.
 Only genuinely anonymous, publicly disclosed HTML from an opted-in public route can receive
 `Cache-Control: public, max-age=0, s-maxage=60` and the public weak ETag. Route opt-in and an HTML 200 or 404 are
 necessary mechanics, not a grant to override the native result. Native `private`, `no-store` or revalidation
-directives, `Set-Cookie`, session-dependent variation and router failures exclude promotion. A private or unknown
+directives, `Set-Cookie`, `Vary: *` and router failures exclude promotion. A private or unknown
 Collection's concealed 404 remains private/no-store. Public negative caching must not bypass the owner's current
 disclosure or restoration rules.
 
@@ -215,6 +215,9 @@ private/no-store headers. Public SSR still uses anonymous data; credentials do n
 HTML, query dehydration, head or ETag. Session, cookie, credential and CSRF reads are forbidden during public
 rendering, including when a route catches the read error. Personal data stays in browser queries after hydration
 or in private routes and server functions.
+Locale middleware may emit `Vary: Cookie, Accept-Language` even for a locale URL. The anonymous cache key has no
+credentials and is reused only for requests with neither Cookie nor Authorization; those Vary fields do not
+alone make that anonymous representation personal.
 
 Preparing, unavailable, error and closed fallbacks retain their native status, private/no-store and noindex;
 they must not become cacheable successful HTML. A router error or pending fallback that would otherwise be 200

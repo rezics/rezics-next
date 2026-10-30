@@ -208,7 +208,7 @@ export function isPublicCacheableResponse(response: Response): boolean {
     response.headers.get('content-type')?.toLowerCase().includes('text/html') === true &&
     !response.headers.has('set-cookie') &&
     !directives.some((directive) => /^(?:private|no-store|no-cache)(?:\s*=|$)/u.test(directive)) &&
-    !vary.some((field) => field === '*' || field === 'cookie' || field === 'authorization')
+    !vary.includes('*')
   );
 }
 
@@ -223,7 +223,7 @@ function privateNoStore(response: Response, status = response.status): Response 
   if (headers.get('content-type')?.toLowerCase().includes('text/html')) headers.set('x-robots-tag', 'noindex');
   return new Response(response.body, {
     status,
-    statusText: status === response.status ? response.statusText : undefined,
+    ...(status === response.status ? { statusText: response.statusText } : {}),
     headers,
   });
 }
