@@ -1,5 +1,4 @@
 import { expect } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -556,8 +555,15 @@ export async function runCliAckRecoveryJourney() {
 
     await runtime.identity.setBulkPermission(false);
     const revoked = [];
-    for (const request of lostRequests) {
-      const response = await runtime.replay(request);
+    for (const [index, request] of lostRequests.entries()) {
+      // A new network attempt carries the exact old bearer and body, with a fresh connection signal.
+      const replay = new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: await request.text(),
+      });
+      expect(await replay.clone().text()).toBe(committedBeforeLoss[index]!.exchange.bytes);
+      const response = await runtime.replay(replay);
       const body = (await response.json()) as Record<string, unknown>;
       expect(response.status).toBe(403);
       expect(body.results ?? null).toBeNull();
@@ -565,7 +571,7 @@ export async function runCliAckRecoveryJourney() {
     }
     expect(await receipts(originalReceiptRowsBefore.map((row) => row.key))).toEqual(originalReceiptRowsBefore);
     const evidence = {
-      codeRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      callerSha256: sha256(new Uint8Array(await Bun.file(import.meta.filename).arrayBuffer())),
       bundleRevision: bundledDigest,
       children: children.map((child, index) => ({
         source: child.feed.source,
@@ -605,11 +611,13 @@ export async function runCliAckRecoveryJourney() {
     const evidencePath = join(import.meta.dir, '../../../../.temp/goal/cli-ack-recovery', `${randomUUID()}.json`);
     await mkdir(join(evidencePath, '..'), { recursive: true });
     await writeFile(evidencePath, JSON.stringify(evidence, null, 2));
+    // Check-host snapshots omit Git metadata and scratch-file return paths. Preserve the raw witness in stdout too.
+    console.log(`cli-ack-recovery-evidence ${JSON.stringify(evidence)}`);
     console.log(
       JSON.stringify({
         outcome: 'Ordinary operator exact ACK interruption and restart recovery',
         evidencePath,
-        codeRevision: evidence.codeRevision,
+        callerSha256: evidence.callerSha256,
         children: evidence.children.map((child) => ({
           source: child.source,
           converterRevision: child.converterRevision,

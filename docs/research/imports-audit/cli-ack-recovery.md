@@ -12,7 +12,7 @@ SQLite path in tmpfs on every invocation. Diagnostics and evidence exclude crede
 source registration or kernel API extension is introduced.
 
 Both providers first establish a real baseline. A separate observer accepts and adopts a retrieved title in a
-community Context. Bangumi's cover traverses the existing `mediaBoundary` source server, native media API and
+community Context, then creates, accepts and adopts an independent title there. Bangumi's cover traverses the existing `mediaBoundary` source server, native media API and
 registered worker. Refresh then captures the real successful bulk response and exact native receipts before an
 actual AbortController interrupts delivery to the CLI. After every handle closes, independently reopened SQLite
 shows the original unresolved envelope. Fresh CLI calls replay it through ordinary Auth/public transport;
@@ -32,8 +32,9 @@ The fixture also checks each provider separately, rather than relying on aggrega
 previous proposal and media journal bytes/keys/receipts and the original native media bytes remain immutable;
 independent accepted/adopted selections survive. Current fences are read by the unmodified production importer.
 Source/converter revisions and source digests come from the actual registrations and persisted baselines.
-The definition bundle digest and tested Git revision are recorded with raw evidence in
-`.temp/goal/cli-ack-recovery/`; the native log prints that exact file anchor.
+The definition bundle digest and observed caller-byte SHA-256 are recorded with raw evidence in
+`.temp/goal/cli-ack-recovery/`; the native log retains the raw witness and exact file anchor. The managed check
+ledger owns the tested Git revision; the check-host source snapshot has no Git metadata.
 
 ## Bounds and limits
 
