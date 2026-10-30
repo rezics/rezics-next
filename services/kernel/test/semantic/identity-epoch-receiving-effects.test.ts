@@ -46,3 +46,42 @@ test('a real admitted job and a platform command alone do not admit an unregiste
   })).rejects.toMatchObject({ code: 'identity_effect_stale' });
   expect(await input.members()).toEqual(before);
 });
+
+
+test('an authentic native transaction cannot become receiving proof through the original-home structural branch', async () => {
+  const input = await admittedReceivingJob(f);
+  const before = await input.members();
+  // A real command locator is deliberately NOT a receiving record. No fixture proof is inserted.
+  const native = await runCommand(f.pool, { partition: home(input.original) }, async () => noEffect(null));
+  const receiving = {
+    kind: 'receiving' as const,
+    original: input.original,
+    job: input.job,
+    effectKey: 'library-owner-rekey',
+    receipt: {
+      partition: native.partition,
+      epoch: native.epoch,
+      position: native.position,
+      transactionId: native.transactionId,
+    },
+  };
+  for (const partition of [home(input.original), home(input.library.collection.id)]) {
+    for (const effect of [
+      receiving,
+      { ...receiving, job: { ...input.job, jobId: newId(0x8b20) } },
+      { ...receiving, job: { ...input.job, epoch: input.job.epoch + 1n } },
+      { ...receiving, effectKey: 'another-owner-rekey' },
+      { ...receiving, receipt: { ...receiving.receipt, transactionId: randomUUID() } },
+    ]) {
+      await expect(runCommand(f.pool, { partition }, async tx => {
+        // Exercise the adopted wire shape even before the receiving producer is delivered.
+        await store.admitHomeEffect(tx, effect as unknown as Parameters<typeof store.admitHomeEffect>[1]);
+        return noEffect(null);
+      })).rejects.toMatchObject({ code: 'identity_effect_stale' });
+    }
+  }
+  expect(await input.members()).toEqual(before);
+  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+  await expect(runCommand(f.pool, { partition: home(input.job.jobId) }, tx => store.publish(tx, input.job)))
+    .rejects.toMatchObject({ code: 'identity_participants_incomplete' });
+});
