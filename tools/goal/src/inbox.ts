@@ -34,11 +34,12 @@ export class SqliteManagerInbox implements ManagerInbox {
     const write = () => {
       const fields = sharedInboxFields(event);
       const replyToId = fields.replyToId;
-      let parent: { id: number; reply_to_id: number | null; thread_root_id: number | null; task_id: string | null; goal_id: string | null } | null = null;
+      type ParentRow = { id: number; reply_to_id: number | null; thread_root_id: number | null; task_id: string | null; goal_id: string | null };
+      let parent: ParentRow | null = null;
       let rootId: number | null = null;
       if (replyToId !== null) {
         parent = this.db.query('SELECT id, reply_to_id, thread_root_id, task_id, goal_id FROM manager_inbox WHERE id = ?')
-          .get(replyToId) as typeof parent;
+          .get(replyToId) as ParentRow | null;
         if (!parent) throw new Error(`inbox reply target does not exist: ${replyToId}`);
         if (parent.task_id && fields.taskId && parent.task_id !== fields.taskId)
           throw new Error(`inbox reply task does not match its parent message ${replyToId}`);

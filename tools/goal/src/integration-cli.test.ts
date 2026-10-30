@@ -110,7 +110,7 @@ test('authenticated managers read cross-recipient filtered pages and threads wit
     const [code, stdout, stderr] = await Promise.all([
       child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
     ]);
-    return { code, stdout };
+    return { code, stdout, stderr };
   };
   try {
     const log = await invoke(env, 'inbox', 'log', '--from', 'manager-a', '--to', 'recipient-a', '--goal', 'goal-a',

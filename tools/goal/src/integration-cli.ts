@@ -712,7 +712,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         const repeatable = option === '--document';
         if (!['--task', '--evidence', '--reply', '--document', '--escalation'].includes(option ?? '') || !value || (!repeatable && values.has(option!)))
           throw new Error(`invalid inbox send option: ${option ?? '(missing value)'}`);
-        values.set(option, [...(values.get(option!) ?? []), value]);
+        values.set(option!, [...(values.get(option!) ?? []), value]);
       }
       const allowed = [
         'question', 'decision', 'blocker', 'handoff', 'info',
@@ -811,12 +811,19 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         throw new Error('shared inbox reads require an authenticated manager session');
       if (subcommand === 'log') printInboxResult(sharedInbox.log(options), options.json);
       else if (subcommand === 'thread') {
-        if (!options.reference) throw new Error('usage: inbox thread <id|task> [--limit <n>] [--cursor <id>] [--json]');
-        printInboxResult(sharedInbox.thread(options.reference, { limit: options.limit, cursor: options.cursor }), options.json);
+        const reference = options.reference;
+        if (!reference) throw new Error('usage: inbox thread <id|task> [--limit <n>] [--cursor <id>] [--json]');
+        printInboxResult(sharedInbox.thread(reference, {
+          ...(options.limit !== undefined ? { limit: options.limit } : {}),
+          ...(options.cursor !== undefined ? { cursor: options.cursor } : {}),
+        }), options.json);
       } else {
         if (options.since === undefined)
           throw new Error('usage: inbox digest --since <time> [--limit <n>] [--cursor <id>] [--json]');
-        printInboxResult(sharedInbox.digest(options.since, { limit: options.limit, cursor: options.cursor }), options.json);
+        printInboxResult(sharedInbox.digest(options.since, {
+          ...(options.limit !== undefined ? { limit: options.limit } : {}),
+          ...(options.cursor !== undefined ? { cursor: options.cursor } : {}),
+        }), options.json);
       }
     } else {
       if (!id) throw new Error(`usage: inbox ${subcommand} <manager>`);
