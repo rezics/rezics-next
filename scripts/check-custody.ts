@@ -315,6 +315,19 @@ export function validControllerProofRegistration(value: unknown, binding: Contro
             JSON.stringify(validateRunnerIdentity(item.runnerIdentity))))
     )
       return false;
+    if (
+      head.physicalRunId === item.physicalRunId &&
+      head.status === 'running' &&
+      item.runnerHost === hostname() &&
+      !runnerCommandMatches(
+        physical.runnerIdentity,
+        join(import.meta.dir, 'worker-check.ts'),
+        expected.checkId,
+        item.physicalRunId,
+      )
+    ) {
+      return false;
+    }
     const registry = validatedRegistryDirectory(state.registry);
     if (!registry) return false;
     const stats = lstatSync(registry, { bigint: true });

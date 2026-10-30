@@ -448,21 +448,28 @@ function proofFile<T>(file: string): T {
   return value;
 }
 
-function syncProofFile(file: string): void {
-  for (const path of [file, resolve(file, '..')]) {
+function syncProofFile(file: string, anchor: string): void {
+  let path = file;
+  while (true) {
     const descriptor = openSync(path, 'r');
     try {
       fsyncSync(descriptor);
     } finally {
       closeSync(descriptor);
     }
+    if (path === anchor) return;
+    const parent = resolve(path, '..');
+    if (parent === path || (parent !== anchor && !parent.startsWith(`${anchor}/`))) {
+      throw new Error('worker-check: proof durability path escapes its anchor');
+    }
+    path = parent;
   }
 }
 
 function saveProofState(state: ControllerProofState): void {
   const file = controllerProofStatePath(state.binding.cwd, state.binding.checkId);
   writeAtomicJson(file, state);
-  syncProofFile(file);
+  syncProofFile(file, state.binding.cwd);
 }
 
 function proofClaimPath(registry: string, token: string): string {
@@ -662,9 +669,9 @@ export async function startControllerWorkerCheck(value: ControllerProofBindingV1
             flag: 'wx',
             mode: 0o600,
           });
-          syncProofFile(checkClaimPath);
+          syncProofFile(checkClaimPath, registry);
           writeFileSync(claimPath, `${JSON.stringify(reserved)}\n`, { flag: 'wx', mode: 0o600 });
-          syncProofFile(claimPath);
+          syncProofFile(claimPath, registry);
           saveProofState({
             version: 1,
             binding: reserved,

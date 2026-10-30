@@ -2986,6 +2986,9 @@ test('controller proof post-intent input changes and missing registration, resul
     ]) {
       expect(await startControllerWorkerCheck(changed)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
     }
+    writeFileSync(join(root, 'source.txt'), 'changed after native intent\n');
+    expect(await startControllerWorkerCheck(binding)).toMatchObject({ outcome: 'unavailable', custody: 'unknown' });
+    git(root, 'restore', 'source.txt');
     const reservation = controllerProofReservationPath(process.env.GOAL_CHECK_REGISTRY!, binding.token);
     const reused = { ...binding, checkId: randomUUID() };
     await withCheckFence(root, binding.checkId, () =>
