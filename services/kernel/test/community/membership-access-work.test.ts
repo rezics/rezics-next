@@ -21,8 +21,8 @@ const client = {} as AccessClient;
 const at = '2030-01-01T00:00:00.000Z';
 const input = () => ({ realmId: newId(42), accountId: newId(43), at });
 const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
-const negative = { role: 'owner', member: false, valid: `["${at}",)` };
-function rows(member: boolean, until?: string) {
+const negative = { role: 'owner' as const, member: false, valid: `["${at}",)` };
+function rows(member: boolean, until?: string): { role: 'owner' | 'member'; member: boolean; valid: string }[] {
   return [
     { role: 'member', member, valid: member ? '(,)' : `["${at}",${until ? `"${until}"` : ''})` },
     negative,

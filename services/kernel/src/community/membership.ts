@@ -426,7 +426,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
   type RoleResult = Awaited<ReturnType<RealmRoleReader>>;
   type BatchInput = Parameters<NonNullable<RealmRoleReader['batch']>>[1];
   type BatchResult = Awaited<ReturnType<NonNullable<RealmRoleReader['batch']>>>;
-  type Receipt<R> = { result?: R; work?: AccessWork };
+  type Receipt<R> = { result?: R; work?: AccessWork | undefined };
   // Invocation-local observations only: no permission, account state or client
   // is retained. actual consumes the exact context/result identity once.
   const roleReceipts = new WeakMap<RoleInput, Receipt<RoleResult>>();
