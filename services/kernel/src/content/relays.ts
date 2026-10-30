@@ -203,7 +203,7 @@ export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
   ];
 }
 
-/** The production registration shares one worker Access instance across content notices. */
+/** Default registration supplies the same fully mounted worker Access as Content work. */
 export function contentNoticeEffects(pool: Pool, access: Access): Effect[] {
   return [createMentionNoticeEffect(pool, access), createReplyNoticeEffect(pool, access)];
 }

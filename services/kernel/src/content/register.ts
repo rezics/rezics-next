@@ -19,9 +19,8 @@ import { R2Storage } from './r2-storage.ts';
 import { createContentWork } from './work.ts';
 import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts';
 
-/** Resolve the shared role catalogue in full; a partial action catalogue would
- * disable owner roles containing actions in addition to post:erase. This private
- * worker Access instance restores native initiators, never HTTP credentials.
+/** Standalone fixture/caller Access with the shared role catalogue. Default
+ * production registration uses WorkContext's fully mounted authorization instead.
  * Reads outside a command bind this kernel clock. */
 export function createContentWorkAccess(clock: KernelClock, pool?: Pool) {
   let access: ReturnType<typeof createAccess> | undefined;
@@ -130,11 +129,11 @@ export const registerContent: WorkModule = {
     for (const group of dependencies.absentGroups) {
       console.info(`content ${group.name} group is absent: ${group.variables.join(', ')}`);
     }
-    const access = createContentWorkAccess(context.clock, context.pool);
+    const { access, readConsent } = context.getAuthorization();
     await createContentWork({
       storage: dependencies.storage,
       access,
-      readConsent: dependencies.readConsent,
+      readConsent,
       routeKey: readMembershipRouteKey(context.env),
       fetchConfig: dependencies.fetchConfig,
       ...(collectionPartitions === undefined ? {} : { collectionPartitions }),

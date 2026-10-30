@@ -2,6 +2,27 @@
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+## Worker authorization composition
+
+Default `registerContent` consumes `WorkContext.getAuthorization()` from the shared worker registry. That port
+memoizes the actual fully mounted kernel Access and canonical Auth current-consent reader for the context.
+The same Access object goes to `createContentWork` and `contentNoticeEffects`; the same consent function goes to
+author-erasure restoration and is mounted in Content's pool registry by the kernel. Mounted action metadata,
+resource roles, grant constructors and current authorization facts remain owned by that kernel.
+Missing or invalid configuration and unavailable current consent retain the shared port's typed failures.
+
+Author erasure keeps its native full-domain checks before and at the final step, current source, ancestry,
+roles and consent, evidence no older than 1,000 ms, and known-nonce/current-operation proof. Explicit
+`createContentWork({ access, readConsent, ... })` callers retain their injected ports; exported
+`createContentWorkAccess(clock, pool?)` remains available for standalone fixtures and callers.
+Image processing, URL imports, collection and purge retain their committed source, state, ownership and hold
+checks and existing queues, retention and page bounds. These mechanical jobs do not restore a person initiator.
+
+Cost per operation: authorization composition adds one memoized context-port lookup and passes existing object
+references. It adds no source SQL, pool checkout, permission allowance or per-step work; the existing Access,
+consent and native operation bounds continue to apply. `test/content/worker-authorization.test.ts` covers this
+composition and its dependency failures.
+
 A `BoardView` includes `realmId`, which is the containing Realm id or `null` for a board without a Realm. The field is
 output-only and comes from the board row used for disclosure.
 
