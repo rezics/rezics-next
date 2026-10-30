@@ -38,6 +38,9 @@ type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
 type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
 export type CollectionView = CollectionPresentation & {
+  // Older internal callers may construct the curated presentation without wire-only fields.
+  membershipKind?: 'curated';
+  orderEpoch?: number;
   id: string;
   curatorAccountId: string | null;
   title: string;
@@ -60,8 +63,7 @@ export type CollectionResourceView = CuratedCollectionView | SavedDynamicCollect
 export function collectionReadView(value: CollectionView | SavedDynamicCollectionView | BuiltinCollectionView): CollectionResourceView {
   if ('membershipKind' in value && value.membershipKind === 'dynamic') return value;
   if (
-    !('membershipKind' in value) || value.membershipKind !== 'curated' ||
-    !('orderEpoch' in value) || typeof value.orderEpoch !== 'number' ||
+    value.membershipKind !== 'curated' || typeof value.orderEpoch !== 'number' ||
     !Number.isSafeInteger(value.orderEpoch) || value.orderEpoch < 0
   ) throw new ProblemError('dependency_unavailable');
   return { ...value, membershipKind: 'curated', orderEpoch: value.orderEpoch };
