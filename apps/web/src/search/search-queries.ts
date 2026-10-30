@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { publicRead } from '../kernel/query';
-import { readSearch } from './search.tsx';
+import { readSearch, type SearchPageData } from './search.tsx';
 import type { SearchLoaderDeps } from './search-params';
 import { searchUnavailablePage } from './search-recovery';
 
@@ -14,7 +14,7 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps) {
     refetchOnReconnect: false,
     retry: false,
     queryKey: ['search', 'discovery-v1', 'anonymous', 'public-global', locale, params],
-    queryFn: async ({ signal }) => {
+    queryFn: async ({ signal, client, queryKey }) => {
       try {
         return await readSearch({
           locale,
@@ -34,7 +34,8 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps) {
         });
       } catch (error) {
         if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
-        return searchUnavailablePage(params);
+        const previous = client.getQueryData<SearchPageData>(queryKey);
+        return searchUnavailablePage(params, previous?.conditionMetadata);
       }
     },
   });

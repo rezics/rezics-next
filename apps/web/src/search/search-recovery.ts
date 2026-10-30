@@ -111,9 +111,13 @@ export async function readSearchOutcome(
 }
 
 /** A failed BFF transport retains the URL draft even when no metadata response reached the browser. */
-export function searchUnavailablePage(state: SearchLoaderDeps): SearchPageData {
+export function searchUnavailablePage(
+  state: SearchLoaderDeps,
+  metadata?: SearchPageData['conditionMetadata'],
+): SearchPageData {
   return {
     queryState: state,
+    ...(metadata ? { conditionMetadata: metadata } : {}),
     ...(state.condition ? { condition: state.condition } : {}),
     ...(state.ranges ? { ranges: state.ranges } : {}),
     ...(state.type ? { type: state.type } : {}),

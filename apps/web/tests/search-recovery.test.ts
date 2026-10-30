@@ -158,6 +158,9 @@ test('current authority and restart invalidation remove hits and independently r
   expect(searchUnavailablePage(state).queryState).toBe(state);
   expect(searchUnavailablePage(state).condition).toBe(tree);
   expect(searchUnavailablePage(state).recovery?.status).toBe('unavailable');
+  const metadata = { types: {}, properties: {} };
+  expect(searchUnavailablePage(state, metadata).conditionMetadata).toBe(metadata);
+  expect(searchUnavailablePage(state, metadata).refinement).toBeUndefined();
   expect(facetSearchInvalidation({ status: 'unavailable', httpStatus: 503, code: 'index_not_ready' })).toBeUndefined();
   expect(
     facetSearchInvalidation({ status: 'unavailable', httpStatus: 401, problem: { code: 'invalid_credentials' } })
