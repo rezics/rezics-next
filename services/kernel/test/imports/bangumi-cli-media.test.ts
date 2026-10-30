@@ -12,7 +12,11 @@ test('Bangumi licensed summary and cover CLI lifecycle', async () => {
     expect(r.cover.row.state).toBe('available');
     expect(r.cover.row.purpose).toBe('cover');
     expect(r.cover.row.credit.rightsHolder).toContain('rights holder');
-    expect(r.cover.original).not.toEqual(r.sourceBytes);
+    expect(r.cover.original).toEqual(r.sourceBytes);
+    for (const variant of r.cover.variants) {
+      expect(['avif', 'webp']).toContain(variant.format);
+      expect(variant.bytes).not.toEqual(r.sourceBytes);
+    }
     expect(r.cover.variants.length).toBeGreaterThan(0);
     expect(r.refreshedCover.row.id).not.toBe(r.cover.row.id);
     expect(r.refreshedCover.original).not.toEqual(r.cover.original);
