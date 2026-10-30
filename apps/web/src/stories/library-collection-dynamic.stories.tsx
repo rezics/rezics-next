@@ -3,7 +3,7 @@ import { PageStory } from './page';
 import { pageReady } from './page';
 
 const meta = {
-  title: 'Pages/Library/Collection',
+  title: 'Pages/Library/Dynamic Collection',
   parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;
