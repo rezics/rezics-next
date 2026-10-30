@@ -1,7 +1,7 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
-import { keepSearch } from '../../features/pages/subject-queries';
+import { canonicalRedirect, keepSearch } from '../../features/pages/subject-queries';
 import { getLocale } from '../../paraglide/runtime.js';
 
 const redirectSubject = createServerFn({ method: 'GET', strict: false })
@@ -29,10 +29,12 @@ const redirectSubject = createServerFn({ method: 'GET', strict: false })
     ]);
     const result = await loadSubject(kernelClient(data.locale), data.id, data.locale as never);
     if (result.kind === 'missing') throw notFound();
-    throw redirect({ href: keepSearch(result.value.href, data.search), statusCode: 301 });
+    throw redirect(canonicalRedirect(result.value.href, data.search));
   });
 
 export const Route = createFileRoute('/subjects/$id')({
   loader: ({ params, location }) =>
-    redirectSubject({ data: { id: params.id, locale: getLocale(), search: location.searchStr } }),
+    redirectSubject({
+      data: { id: params.id, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
+    }),
 });

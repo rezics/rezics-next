@@ -10,11 +10,11 @@ import type { SessionEnv } from '../../session/client';
 import { relationLabels } from '../../subject/definitions';
 import { loadReader } from '../../subject/load-reader';
 import type { Reader } from '../../subject/reader';
-import { agentPath, continueAgentList, loadAgentPage, agentTitle } from './agent';
-import { accountOf } from './account-read';
+import { agentPath, continueAgentList, loadAgentPage, agentTitle, formerHandleRedirect } from './agent';
+import { accountOf, viewIsPublic } from './account-read';
 import { pageContext, pageRelationProperties } from './subject';
-import { isRecord } from './shared';
 import { subjectTabs } from './views';
+import { keepSearch } from '../../subject/subject-href';
 
 /** The page read of one agent, with the tab bar the overview's previews decide. */
 export const readAgentPage = createServerFn({ method: 'GET', strict: false })
@@ -35,6 +35,7 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
     const client = kernelClient(data.locale);
     const view = data.view && data.view !== 'overview' ? data.view : undefined;
     const [result, overview] = await Promise.all([
@@ -43,19 +44,37 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
     ]);
     // The same not-found page for every handle the kernel does not answer, whatever the reason.
     if (result.kind === 'missing' || overview?.kind === 'missing') {
-      const lookup = await client.accounts.get({ query: { handle: data.handle } });
-      const account = lookup.status === 200 ? lookup.data?.accounts?.[0] : undefined;
-      const accountRecord = isRecord(account) ? (account as Record<string, unknown>) : undefined;
-      const movedTo = typeof accountRecord?.movedTo === 'string' ? accountRecord.movedTo : undefined;
-      if (typeof movedTo === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(movedTo)) {
-        const query = data.search ? (data.search.startsWith('?') ? data.search : `?${data.search}`) : '';
-        setResponseHeader('cache-control', 'public, max-age=300');
-        return { kind: 'redirect' as const, redirectTo: `${agentPath(data.locale, movedTo, view)}${query}` };
-      }
+      const moved = await formerHandleRedirect(client, data.handle, data.locale, view, data.search);
+      if (moved) return { kind: 'redirect' as const, redirectTo: moved.href };
+      if (view && overview?.kind === 'page')
+        return {
+          kind: 'redirect' as const,
+          redirectTo: keepSearch(agentPath(data.locale, overview.page.account.handle), data.search),
+        };
       setResponseHeader('cache-control', 'private, no-store');
       throw notFound();
     }
     const shown = overview ?? result;
+    // The native page may already resolve a former claim. Its embedded account read retains movedTo.
+    const moved = Object.entries(
+      planReads(platformRegistry, shown.page.document as CompositionDocument, pageContext(shown.page)).reads,
+    )
+      .flatMap(([key, read]) => {
+        const response = shown.page.reads[key];
+        return read.kind === 'account' && response?.status === 200 ? [accountOf(response.body)?.movedTo] : [];
+      })
+      .find((handle) => handle !== undefined);
+    if (moved) {
+      return { kind: 'redirect' as const, redirectTo: keepSearch(agentPath(data.locale, moved, view), data.search) };
+    }
+    const profiles = Object.entries(
+      planReads(platformRegistry, shown.page.document as CompositionDocument, pageContext(shown.page)).reads,
+    ).flatMap(([key, read]) => (read.kind === 'account' ? [accountOf(shown.page.reads[key]?.body)] : []));
+    if (view && ((shown.page.views && !shown.page.views.includes(view)) || !viewIsPublic(profiles[0], view)))
+      return {
+        kind: 'redirect' as const,
+        redirectTo: keepSearch(agentPath(data.locale, shown.page.account.handle), data.search),
+      };
     const operatorId = Object.entries(
       planReads(platformRegistry, shown.page.document as CompositionDocument, pageContext(shown.page)).reads,
     ).flatMap(([key, planned]) => {

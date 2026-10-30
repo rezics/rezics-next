@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
 import { requestLanguages } from '../../kernel/languages.ts';
+import { accountHref, canonicalRedirect } from '../../subject/subject-href';
 import { accountOf } from './account-read';
 import { pageContext, type SubjectPageData } from './subject';
 import { isRecord } from './shared';
@@ -25,8 +26,22 @@ function problemError(value: unknown): Error {
 
 /** The address of an agent's page, or of one of its views. */
 export function agentPath(locale: string, handle: string, view?: View): string {
-  const base = `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`;
-  return view && view !== 'overview' ? `${base}/${view}` : base;
+  return accountHref(locale, handle, view);
+}
+
+/** The owner lookup decides former-claim expiry and current account eligibility. */
+export async function formerHandleRedirect(
+  client: KernelClient,
+  handle: string,
+  locale: string,
+  view?: View,
+  search = '',
+) {
+  const result = await client.accounts.get({ query: { handle } });
+  if (result.status === 400 || result.status === 404) return undefined;
+  if (result.status !== 200 || result.error) throw problemError(result.error?.value);
+  const movedTo = accountOf(result.data)?.movedTo;
+  return movedTo ? canonicalRedirect(agentPath(locale, movedTo, view), search, '', 302) : undefined;
 }
 
 /**
@@ -61,11 +76,12 @@ export async function loadAgentPage(
       const canonical = profile.handle;
       return canonical ? [canonical] : [];
     })[0];
+    if (!canonicalHandle) throw new Error('Account page has no current handle');
     return {
       kind: 'page',
       page: {
         ...page,
-        account: { id: account, handle: canonicalHandle ?? handle },
+        account: { id: account, handle: canonicalHandle },
       },
     };
   }

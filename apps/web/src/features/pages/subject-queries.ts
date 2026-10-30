@@ -7,10 +7,7 @@ import { personalRead, publicRead } from '../../kernel/query';
 import { loadSubjectLibrarySlot, type SubjectLabelUndo } from '../../library/subject-slot';
 import type { SessionEnv } from '../../session/client';
 import { loadReader } from '../../subject/load-reader';
-import type { LoadedSubject } from '../../subject/load-subject';
 import type { typeFrame as TypeFrame } from '../../subject/definitions';
-import { locales } from '../../paraglide/runtime.js';
-import type { PagePaths } from '../../shell/head';
 import { validatePageRealm, validatePageNode, validateViewCursor } from './view-cursor';
 import { loadSubjectPage } from './subject';
 import { readRatings, readOwnRating } from './subject-ratings';
@@ -95,6 +92,7 @@ const readSubjectCanonical = createServerFn({ method: 'GET', strict: false })
     return { id: value.id, locale: value.locale };
   })
   .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
     const [{ kernelClient }, { loadSubject }] = await Promise.all([
       import('../../kernel/client'),
       import('../../subject/load-subject'),
@@ -315,19 +313,13 @@ const readSubjectOwnRating = createServerFn({ method: 'GET', strict: false })
 const key = (kind: string, id: string, locale: string, view?: string) =>
   [kind, id, locale, ...(view ? [view] : [])] as const;
 
-export function subjectUrlForView(subject: LoadedSubject, view?: string): string {
-  return view && !subject.href.includes('/@') ? `${subject.href}/${encodeURIComponent(view)}` : subject.href;
-}
-
-export function keepSearch(href: string, search: string): string {
-  return `${encodeURI(href)}${search ? (search.startsWith('?') ? search : `?${search}`) : ''}`;
-}
-
-export function subjectViewPaths(paths: PagePaths, view: string): PagePaths {
-  return Object.fromEntries(
-    locales.map((locale) => [locale, `${paths[locale]}/${encodeURIComponent(view)}`]),
-  ) as PagePaths;
-}
+export {
+  keepSearch,
+  subjectUrlForView,
+  canonicalRedirect,
+  accountHref,
+  subjectViewPaths,
+} from '../../subject/subject-href';
 
 export const subjectPageQuery = (id: string, locale: string, view: View | 'overview' = 'overview', realm?: string) =>
   queryOptions({
@@ -358,6 +350,8 @@ export const subjectViewPagesQuery = (
 export const subjectCanonicalQuery = (id: string, locale: string) =>
   queryOptions({
     ...publicRead,
+    staleTime: 0,
+    retry: false,
     queryKey: ['subject-canonical', id, locale] as const,
     queryFn: () => readSubjectCanonical({ data: { id, locale } }),
   });

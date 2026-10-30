@@ -14,7 +14,10 @@ import { SubjectFrame, subjectFrame, SubjectViewPage } from '../../features/page
 import { subjectTabs } from '../../features/pages/views';
 import {
   subjectCanonicalQuery,
+  subjectPageQuery,
   subjectFrameQuery,
+  canonicalRedirect,
+  accountHref,
   keepSearch,
   subjectReaderQuery,
   subjectUrlForView,
@@ -82,7 +85,7 @@ const readView = createServerFn({ method: 'GET', strict: false })
     const canonical = await loadSubject(client, data.id, data.locale as never);
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
-      throw redirect({ href: keepSearch(subjectUrlForView(canonical.value, data.view), data.search), statusCode: 301 });
+      throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, data.view), data.search));
 
     return { href: canonical.value.href, paths: subjectViewPaths(canonical.value.paths, data.view) };
   });
@@ -106,37 +109,43 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
         slug: params.slug,
         view: params.view,
         locale: getLocale(),
-        search: location.searchStr,
+        search: keepSearch('', location.searchStr, location.hash),
         cursor,
       },
     });
     const loaded = await context.queryClient.ensureQueryData(
       subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node),
     );
-    if (loaded.kind === 'missing') throw notFound();
+    if (loaded.kind === 'missing') {
+      const overview = await context.queryClient.ensureQueryData(subjectPageQuery(params.id, getLocale()));
+      if (overview.kind !== 'page') throw notFound();
+      throw redirect(canonicalRedirect(canonical.href, location.searchStr, location.hash, 302));
+    }
     if (loaded.kind === 'redirect') {
       if (loaded.target === 'account')
         throw redirect({
-          href: keepSearch(
-            `/${encodeURIComponent(getLocale())}/@${encodeURIComponent(loaded.id)}/${params.view}`,
-            location.searchStr,
-          ),
-          statusCode: 308,
+          href: keepSearch(accountHref(getLocale(), loaded.id, params.view), location.searchStr, location.hash),
+          statusCode: 301,
+          headers: { 'Cache-Control': 'private, no-store' },
         });
       const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(loaded.id, getLocale()));
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({
-        href: keepSearch(subjectUrlForView(survivor.value, params.view), location.searchStr),
+        href: keepSearch(subjectUrlForView(survivor.value, params.view), location.searchStr, location.hash),
         statusCode: 301,
+        headers: { 'Cache-Control': 'private, no-store' },
       });
     }
     const frame = subjectFrame(loaded.overview, getLocale());
     if (!frame) throw notFound();
     const tabs = subjectTabs(loaded.overview);
-    if ((params.view === 'reviews' || params.view === 'discussion') && !tabs.some((tab) => tab.view === params.view)) {
+    if (
+      (loaded.overview.views !== undefined && !loaded.overview.views.includes(params.view)) ||
+      ((params.view === 'reviews' || params.view === 'discussion') && !tabs.some((tab) => tab.view === params.view))
+    ) {
       const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(params.id, getLocale()));
       if (survivor.kind === 'missing') throw notFound();
-      throw redirect({ href: keepSearch(subjectUrlForView(survivor.value), location.searchStr), statusCode: 302 });
+      throw redirect(canonicalRedirect(subjectUrlForView(survivor.value), location.searchStr, location.hash, 302));
     }
     const type = subjectPageType(loaded.overview);
     const typeData = type ? await context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : {};

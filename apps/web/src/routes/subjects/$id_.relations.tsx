@@ -1,7 +1,7 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
-import { keepSearch, subjectUrlForView } from '../../features/pages/subject-queries';
+import { canonicalRedirect, keepSearch, subjectUrlForView } from '../../features/pages/subject-queries';
 import { getLocale } from '../../paraglide/runtime.js';
 
 const redirectRelations = createServerFn({ method: 'GET', strict: false })
@@ -32,10 +32,13 @@ const redirectRelations = createServerFn({ method: 'GET', strict: false })
     throw redirect({
       href: keepSearch(subjectUrlForView(result.value, 'relations'), data.search),
       statusCode: 301,
+      headers: { 'Cache-Control': 'private, no-store' },
     });
   });
 
 export const Route = createFileRoute('/subjects/$id_/relations')({
   loader: ({ params, location }) =>
-    redirectRelations({ data: { id: params.id, locale: getLocale(), search: location.searchStr } }),
+    redirectRelations({
+      data: { id: params.id, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
+    }),
 });

@@ -34,6 +34,7 @@ import {
   type Stmt,
 } from './shared';
 import { DocumentValue, LanguageTag, readableDocument, SpoilerGate, type ValueLabels } from './values';
+import { SubjectReadingState } from '../../subject/reading-state';
 import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
 export type { Count } from '../count';
 
@@ -257,7 +258,7 @@ export function Failed({ slot, id, title, locale }: { slot: string; id: string; 
       <p role="status" className="text-sm text-muted-foreground">
         {m.subject_section_failed({}, options)}
       </p>
-      <a data-slot="retry" href="?" className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}>
+      <a data-slot="retry" href="" className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}>
         {m.subject_section_retry({}, options)}
       </a>
     </section>
@@ -744,7 +745,7 @@ export function chosenSummary(subject: Subject, locale: string) {
   const documents = bestRank((held ?? []) as unknown as Stmt[]).flatMap((statement) => {
     const content = statement.value.type === 'value' ? statement.value.content : undefined;
     const document = isRecord(content) ? readableDocument(content.document) : undefined;
-    return isRecord(content) && document && typeof content.language === 'string'
+    return isRecord(content) && typeof content.language === 'string'
       ? [{ statement, document, language: content.language }]
       : [];
   });
@@ -754,7 +755,8 @@ export function chosenSummary(subject: Subject, locale: string) {
     locale,
     originalLanguage(subject),
   );
-  return documents.find((entry) => entry.language === language) ?? documents[0]!;
+  const selected = documents.find((entry) => entry.language === language) ?? documents[0]!;
+  return selected.document ? { ...selected, document: selected.document } : undefined;
 }
 
 /**
@@ -771,11 +773,16 @@ export function Summary(props: Record<string, unknown>) {
   const read = subjectRead(section);
   if (!read) return <Failed slot="subject-summary" id={id} title={title} locale={value.locale} />;
   const chosen = chosenSummary(read.subject, value.locale);
+  const unavailable =
+    !chosen &&
+    (read.subject.statements[SUMMARY_PROPERTY] ?? []).some(
+      (statement) => statement.rank !== 'deprecated' && statement.value.type === 'value',
+    );
   const description = chosen
     ? undefined
     : pageText(read.subject.descriptions, value.locale, originalLanguage(read.subject));
   const { facts = null, tags = null } = value.about ?? {};
-  if (!chosen && !description?.text && !facts && !tags) return null;
+  if (!chosen && !unavailable && !description?.text && !facts && !tags) return null;
   const body = chosen && (
     <div className="space-y-1">
       <DocumentValue
@@ -791,6 +798,7 @@ export function Summary(props: Record<string, unknown>) {
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
+      {unavailable && <SubjectReadingState locale={value.locale} />}
       {chosen &&
         (spoilerLevel(chosen.statement) > value.reader.spoilerLevel ? (
           <SpoilerGate label={value.spoilerShow}>{body}</SpoilerGate>

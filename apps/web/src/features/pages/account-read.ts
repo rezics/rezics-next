@@ -6,6 +6,7 @@ export type AccountProfile = {
   id: string;
   kind: string;
   handle: string | null;
+  movedTo?: string;
   displayName: string | null;
   bio: string | null;
   links: { label: string; url: string }[];
@@ -26,6 +27,7 @@ export function accountOf(body: unknown): AccountProfile | undefined {
     id: account.id,
     kind: typeof account.kind === 'string' ? account.kind : 'actor',
     handle: typeof account.handle === 'string' ? account.handle : null,
+    ...(typeof account.movedTo === 'string' ? { movedTo: account.movedTo } : {}),
     displayName: typeof account.displayName === 'string' && account.displayName ? account.displayName : null,
     bio: typeof account.bio === 'string' && account.bio ? account.bio : null,
     links: (Array.isArray(account.links) ? account.links : []).flatMap((link) =>

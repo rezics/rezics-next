@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import type { SubjectRead, KernelClient } from '@rezics/client';
 import {
   planReads,
   platformRegistry,
@@ -15,7 +15,7 @@ import { accountOf } from './account-read';
 import type { Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
-import { subjectHref } from '../../subject/subject-href';
+import { accountHref, canonicalRedirect, subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { dataComponents, PageData, pageText, SubjectSources, type PageMessages } from './data';
 import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld';
@@ -52,12 +52,9 @@ export type SubjectActionsInput = { id: string; type: string; locale: string };
 
 /** The canonical document redirect for a verified agent's subject address. */
 export function subjectAccountRedirect(locale: string, handle: string, view?: View, search = '') {
-  const base = `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`;
-  const href = view && view !== 'overview' ? `${base}/${encodeURIComponent(view)}` : base;
-  return {
-    statusCode: 308 as const,
-    href: `${encodeURI(href)}${search ? (search.startsWith('?') ? search : `?${search}`) : ''}`,
-  };
+  // Retain the native redirect adapter's exported shape; website routes use canonicalRedirect's 301.
+  const { href, statusCode } = canonicalRedirect(accountHref(locale, handle, view), search, '', 308);
+  return { href, statusCode };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -93,7 +90,7 @@ export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 
 /** The subject read planned for this page, when that read succeeded. */
 export function subjectBody(
   page: SubjectPageData,
-): { subject: Subject; related: Related; summary?: Summary | null } | undefined {
+): { subject: Subject; account?: SubjectRead['account']; related: Related; summary?: Summary | null } | undefined {
   const planned = Object.entries(
     planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads,
   ).find(([, read]) => read.kind === 'subject' && read.id === page.subject);
@@ -108,6 +105,7 @@ export function subjectBody(
   return {
     subject: result.body.subject as Subject,
     related: result.body.related as Related,
+    ...(Object.hasOwn(result.body, 'account') ? { account: result.body.account as SubjectRead['account'] } : {}),
     ...(Object.hasOwn(result.body, 'summary')
       ? { summary: (result.body.summary as Summary | null | undefined) ?? null }
       : {}),
@@ -133,13 +131,15 @@ export async function loadSubjectPage(
       ...(options.continuation ? { continuation: options.continuation } : {}),
       languages: requestLanguages(locale),
     },
-    options.authorization ? { headers: { authorization: options.authorization } } : {},
+    {
+      fetch: { redirect: 'manual' },
+      ...(options.authorization ? { headers: { authorization: options.authorization } } : {}),
+    },
   );
   if (result.status === 404) return { kind: 'missing' };
   if (result.status === 308) {
-    const response = result as unknown as { data?: unknown; error?: { value?: unknown } | null };
-    const body = response.data ?? response.error?.value;
-    if (isRecord(body) && isRecord(body.redirect) && typeof body.redirect.to === 'string')
+    const body = result.data ?? result.error?.value;
+    if (isRecord(body) && 'redirect' in body && isRecord(body.redirect) && typeof body.redirect.to === 'string')
       return { kind: 'redirect', id: body.redirect.to, target: 'account' };
   }
   if (result.status === 200 && result.data) {
@@ -147,17 +147,21 @@ export async function loadSubjectPage(
       const raw = {
         ...result.data,
         account: { id: result.data.account, handle: '' },
-      } as unknown as SubjectPageData;
+      } as SubjectPageData;
       const reads = planReads(platformRegistry, raw.document as CompositionDocument, pageContext(raw)).reads;
       for (const [key, read] of Object.entries(reads)) {
         if (read.kind !== 'account' || raw.reads[key]?.status !== 200) continue;
         const handle = accountOf(raw.reads[key]?.body)?.handle;
         if (handle) return { kind: 'redirect', id: handle, target: 'account' };
       }
+      // A handleless account supplies no public @ address. Retain the valid catalogue identity.
+      const { account: _account, ...catalogue } = result.data;
+      if (catalogue.subject === id) return { kind: 'page', page: { ...catalogue, subject: id } };
     }
     const survivor = result.data.subject;
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
-    return { kind: 'page', page: result.data as unknown as SubjectPageData };
+    const { account: _account, ...page } = result.data;
+    return { kind: 'page', page: { ...page, subject: page.subject ?? null } };
   }
   throw problemError(result.error?.value);
 }

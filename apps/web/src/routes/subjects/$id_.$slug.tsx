@@ -17,6 +17,8 @@ import {
   subjectOwnRatingQuery,
   subjectOwnReactionQuery,
   subjectCanonicalQuery,
+  canonicalRedirect,
+  accountHref,
   keepSearch,
   subjectPageQuery,
   subjectRatingQuery,
@@ -77,8 +79,9 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
     const client = kernelClient(data.locale);
     const canonical = await loadSubject(client, data.id, data.locale as never);
     if (canonical.kind === 'missing') throw notFound();
+    const requestedView = canonical.value.slug === data.slug ? undefined : data.view;
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
-      throw redirect({ href: keepSearch(subjectUrlForView(canonical.value, data.view), data.search), statusCode: 301 });
+      throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, requestedView), data.search));
 
     const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
     const verification = {
@@ -204,21 +207,24 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
         id: params.id,
         slug: params.slug,
         locale: getLocale(),
-        search: location.searchStr,
+        search: keepSearch('', location.searchStr, location.hash),
         loadCollections: deps.slot === 'collections',
         slotResult: deps.slotResult,
         view: isView(params.slug) && params.slug !== 'overview' ? params.slug : undefined,
       },
     });
-    const view = isView(params.slug) && params.slug !== 'overview' ? params.slug : 'overview';
+    const view = 'overview' as const;
     const pageQuery = subjectPageQuery(params.id, getLocale(), view, deps.realm);
     const page = await context.queryClient.ensureQueryData(pageQuery);
     if (page.kind === 'redirect') {
+      if (page.target === 'account')
+        throw redirect(canonicalRedirect(accountHref(getLocale(), page.id, view), location.searchStr, location.hash));
       const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(page.id, getLocale()));
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({
-        href: keepSearch(subjectUrlForView(survivor.value, view), location.searchStr),
+        href: keepSearch(subjectUrlForView(survivor.value, view), location.searchStr, location.hash),
         statusCode: 301,
+        headers: { 'Cache-Control': 'private, no-store' },
       });
     }
     if (page.kind !== 'page') throw notFound();
@@ -252,8 +258,8 @@ function SubjectRoute() {
   const { state: session } = useSession();
   const queryClient = useQueryClient();
   const locale = getLocale();
-  const { id: routeId, slug } = Route.useParams();
-  const view = isView(slug) && slug !== 'overview' ? slug : 'overview';
+  const { id: routeId } = Route.useParams();
+  const view = 'overview' as const;
   const { data: loaded } = useSuspenseQuery(subjectPageQuery(routeId, locale, view, realm));
   const page = loaded.kind === 'page' ? loaded.page : undefined;
   if (!page) throw notFound();

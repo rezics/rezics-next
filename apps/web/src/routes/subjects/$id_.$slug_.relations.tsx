@@ -12,6 +12,8 @@ import {
   subjectCanonicalQuery,
   subjectFrameQuery,
   subjectLinksQuery,
+  canonicalRedirect,
+  accountHref,
   keepSearch,
   subjectPageQuery,
   subjectReaderQuery,
@@ -69,6 +71,7 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
       throw redirect({
         href: keepSearch(subjectUrlForView(canonical.value, 'relations'), data.search),
         statusCode: 301,
+        headers: { 'Cache-Control': 'private, no-store' },
       });
 
     return { paths: subjectViewPaths(canonical.value.paths, 'relations') };
@@ -93,7 +96,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         locale: getLocale(),
         property: deps.property,
         cursor,
-        search: location.searchStr,
+        search: keepSearch('', location.searchStr, location.hash),
       },
     });
     const [overview, links] = await Promise.all([
@@ -102,11 +105,16 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
     ]);
     if (links.status === 400) throw notFound();
     if (overview.kind === 'redirect') {
+      if (overview.target === 'account')
+        throw redirect(
+          canonicalRedirect(accountHref(getLocale(), overview.id, 'relations'), location.searchStr, location.hash),
+        );
       const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(overview.id, getLocale()));
       if (survivor.kind === 'missing') throw notFound();
       throw redirect({
-        href: keepSearch(subjectUrlForView(survivor.value, 'relations'), location.searchStr),
+        href: keepSearch(subjectUrlForView(survivor.value, 'relations'), location.searchStr, location.hash),
         statusCode: 301,
+        headers: { 'Cache-Control': 'private, no-store' },
       });
     }
     if (overview.kind !== 'page') throw notFound();

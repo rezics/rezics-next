@@ -1,18 +1,19 @@
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { PagePaths } from '../shell/head';
 import { m } from '../paraglide/messages.js';
 import { locales, type Locale } from '../paraglide/runtime.js';
-import { readRelease } from './definitions';
 import { originalLanguage } from './language';
 import type { Subject } from './types';
-import { subjectHref } from './subject-href';
+import { accountHref, subjectHref } from './subject-href';
+export { keepSearch, subjectUrlForView, subjectViewPaths } from './subject-href';
 
 const agentRoots = new Set(['schema:Person', 'schema:Organization']);
 
 export type LoadedSubject = {
   id: string;
   subject: Subject;
+  read: SubjectRead;
   label: string;
   slug: string;
   href: string;
@@ -20,14 +21,6 @@ export type LoadedSubject = {
 };
 
 export type SubjectLoad = { kind: 'missing' } | { kind: 'subject'; value: LoadedSubject };
-
-export function subjectUrlForView(subject: LoadedSubject, view?: string): string {
-  return view && !subject.href.includes('/@') ? `${subject.href}/${encodeURIComponent(view)}` : subject.href;
-}
-
-export function keepSearch(href: string, search: string): string {
-  return `${encodeURI(href)}${search ? (search.startsWith('?') ? search : `?${search}`) : ''}`;
-}
 
 function subjectLabel(subject: Subject, locale: Locale): string {
   return pickText(subject.labels, locale, originalLanguage(subject)).text || m.subject_value_unlabelled({}, { locale });
@@ -45,6 +38,7 @@ function pathsFor(subject: Subject): PagePaths {
 async function isAgentType(type: string): Promise<boolean> {
   if (agentRoots.has(type)) return true;
   try {
+    const { readRelease } = await import('./definitions');
     const release = await readRelease();
     const visited = new Set<string>();
     const visit = (current: string): boolean => {
@@ -59,8 +53,9 @@ async function isAgentType(type: string): Promise<boolean> {
   }
 }
 
-async function verifiedHandle(client: KernelClient, subject: Subject): Promise<string | undefined> {
-  if (!(await isAgentType(subject.type))) return undefined;
+async function verifiedHandle(client: KernelClient, read: SubjectRead): Promise<string | undefined> {
+  const subject = read.subject;
+  if (!read.account && !(await isAgentType(subject.type))) return undefined;
   try {
     const result = await client.accounts.get({ query: { agent: subject.id } });
     const accounts = result.data?.accounts;
@@ -79,40 +74,41 @@ async function verifiedHandle(client: KernelClient, subject: Subject): Promise<s
 export async function loadSubject(client: KernelClient, id: string, locale: Locale): Promise<SubjectLoad> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) return { kind: 'missing' };
 
-  let result = await client.subjects({ id }).get();
+  let result = await client.subjects({ id }).get({ fetch: { redirect: 'manual' } });
   if (result.status === 308) {
     // Eden reports a 308 body through `error.value`, since it is not a successful response.
-    const response = result as unknown as { data?: unknown; error?: { value?: unknown } | null };
-    const body = response.data ?? response.error?.value;
-    const redirect = (body as { redirect?: { from?: unknown; to?: unknown } } | undefined)?.redirect;
-    if (redirect?.from !== id || typeof redirect.to !== 'string') throw new Error('Subject redirect was invalid');
-    result = await client.subjects({ id: redirect.to }).get();
+    const body = result.data ?? result.error?.value;
+    const redirect = body && 'redirect' in body ? body.redirect : undefined;
+    if (
+      redirect?.from !== id ||
+      typeof redirect.to !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(redirect.to) ||
+      redirect.to === id
+    )
+      throw new Error('Subject redirect was invalid');
+    result = await client.subjects({ id: redirect.to }).get({ fetch: { redirect: 'manual' } });
   }
   if (result.status === 404) return { kind: 'missing' };
   if (result.status !== 200 || result.error || !result.data?.subject) throw new Error('Subject read failed');
 
   const subject = result.data.subject as Subject;
   const label = subjectLabel(subject, locale);
-  const handle = await verifiedHandle(client, subject);
-  const href = handle
-    ? `/${encodeURIComponent(locale)}/@${handle}`
-    : subjectHref({ id: subject.id, label }, locale).href;
+  const handle = await verifiedHandle(client, result.data);
+  const href = handle ? accountHref(locale, handle) : subjectHref({ id: subject.id, label }, locale).href;
   return {
     kind: 'subject',
     value: {
       id: subject.id,
       subject,
+      read: result.data,
       label,
       slug: subjectHref({ id: subject.id, label }, locale).params.slug,
       href,
-      paths: pathsFor(subject),
+      paths: handle
+        ? (Object.fromEntries(
+            locales.map((language) => [language, accountHref(language, handle).slice(`/${language}`.length)]),
+          ) as PagePaths)
+        : pathsFor(subject),
     },
   };
-}
-
-/** Add a view to each locale path for the root head's canonical and hreflang tags. */
-export function subjectViewPaths(paths: PagePaths, view: string): PagePaths {
-  return Object.fromEntries(
-    locales.map((locale) => [locale, `${paths[locale]}/${encodeURIComponent(view)}`]),
-  ) as PagePaths;
 }

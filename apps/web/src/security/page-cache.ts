@@ -131,6 +131,7 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
       }
       if (
         cached &&
+        !isSubjectFailure(request, cached) &&
         isPublicCacheableResponse(cached) &&
         cached.headers.get('cache-control') === publicPageCacheControl
       ) {
@@ -144,7 +145,8 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
       if (failureStatus !== undefined)
         return privateNoStore(response, failureStatus === 403 || response.status === 200 ? failureStatus : undefined);
       if (!eligible) return privateNoStore(response);
-      if (isCollectionNotFound(request, response)) return privateNoStore(response);
+      if (isCollectionNotFound(request, response) || isSubjectFailure(request, response))
+        return privateNoStore(response);
       if (!isPublicCacheableResponse(response)) return privateNoStore(response);
 
       const etag = await createPageEtag(request.url, options.buildId, options.dehydratedData());
@@ -230,6 +232,10 @@ function privateNoStore(response: Response, status = response.status): Response 
 
 function isCollectionNotFound(request: Request, response: Response): boolean {
   return response.status === 404 && /(?:^|\/)collections\/[^/]+\/?$/u.test(new URL(request.url).pathname);
+}
+
+function isSubjectFailure(request: Request, response: Response): boolean {
+  return response.status !== 200 && /\/(?:subjects\/|@)/u.test(new URL(request.url).pathname);
 }
 
 function withHeaders(response: Response, update: (headers: Headers) => void): Response {

@@ -1,8 +1,9 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useLocation } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths } from '../features/pages/agent-page';
+import { canonicalRedirect, keepSearch } from '../subject/subject-href';
 import { agentPath } from '../features/pages/agent';
 import { agentPageQuery, agentReaderQuery } from '../features/pages/agent-queries';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
@@ -33,20 +34,15 @@ export const Route = createFileRoute('/@{$handle}')({
     });
     if (page.kind === 'redirect') {
       throw redirect({
-        href: page.redirectTo,
+        href: keepSearch(page.redirectTo, '', location.hash),
         statusCode: 302,
-        headers: { 'Cache-Control': 'public, max-age=300' },
+        headers: { 'Cache-Control': 'private, no-store' },
       });
     }
     const canonicalHandle = page.page.account?.handle;
     if (!canonicalHandle) throw notFound();
     if (canonicalHandle !== params.handle) {
-      const search = location.searchStr
-        ? location.searchStr.startsWith('?')
-          ? location.searchStr
-          : `?${location.searchStr}`
-        : '';
-      throw redirect({ href: `${agentPath(locale, canonicalHandle)}${search}`, statusCode: 308 });
+      throw redirect(canonicalRedirect(agentPath(locale, canonicalHandle), location.searchStr, location.hash, 308));
     }
     return { ...page, paths: agentPagePaths(canonicalHandle) };
   },
@@ -60,14 +56,15 @@ export const Route = createFileRoute('/@{$handle}')({
 function AgentRoute() {
   const { handle } = Route.useParams();
   const locale = getLocale();
-  const { data } = useSuspenseQuery(agentPageQuery(handle, locale));
+  const { searchStr } = useLocation();
+  const { data } = useSuspenseQuery(agentPageQuery(handle, locale, searchStr));
   const { state: session } = useSession();
   const { data: reader } = useQuery({
     ...agentReaderQuery(handle, locale),
     enabled: data.kind === 'page' && personalRead.enabled && session === 'signed-in',
   });
   if (data.kind === 'redirect') {
-    throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'public, max-age=300' } });
+    throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
   }
   return (
     <SubjectPage

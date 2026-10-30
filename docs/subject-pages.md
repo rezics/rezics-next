@@ -11,6 +11,77 @@ views are organised. Mechanisms live with their owners: covers in [Cover](../pac
 This page spans those modules because a reader experiences one page; splitting its rules across owners would let
 each owner ship a correct part and the page still fail.
 
+## Canonical public reading
+
+Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):
+discovery or a collection → current canonical identity → public facts and text → traversable relations, editions
+and credits → original evidence and current rights. Work, edition and agent identities remain separate until their
+native identity authority says otherwise. Presentation follows released definitions rather than a vertical-specific
+store. The research's Wikibase statement model, Open Library work/edition/author navigation, Schema.org role
+annotation and Omeka resource templates support these choices; they do not supply a REZICS API or permission.
+Research observations describe their inspected revision, so delivered native fixes take precedence.
+
+### Identity and navigation
+
+The [native subject reader](../services/kernel/src/semantic/http/subjects.ts) owns merges, disclosure and the
+applicable release; [Accounts](accounts.md#handles) owns case normalization, verified-agent eligibility and former
+claim lifetime. The localized subject slug is a label, never an identity. The shared
+[URL helpers](../apps/web/src/subject/subject-href.ts) append a supported view to either a subject or an account
+address, preserving query bytes and fragments without double encoding. An id-only, stale-slug or merged subject
+address redirects 301 to its current canonical address. A native subject read may follow at most one merge 308;
+a further merge response is unavailable, not a successful stale subject. The native page endpoint's account 308
+is translated to the same website 301, including verification that changes between canonical and page reads.
+The existing exported native redirect adapter retains its 308 shape for compatibility.
+
+A verified account with a current handle has one page at `/@handle`, with every supported view retained. A
+handleless account supplies no invented `@` address: keep its readable subject identity. Account case correction
+uses 308; a current native `movedTo` uses 302 to the current handle, without alias walks. Web does not reproduce
+the forwarding clock, active-state rule or claim syntax. All former-handle, redirect, missing and private outcomes
+are `private, no-store`; mutable aliases must never receive five-minute caching. Successful public subject HTML
+retains the existing [bounded public cache](../apps/web/README.md#routing).
+
+A closed view redirects temporarily to the overview. A list whose preview contains everything can omit its tab
+while retaining its direct view URL. A slug that equals a view name still identifies the canonical overview when
+it matches the current localized slug; otherwise that id/view shorthand redirects to the full view address.
+Current tabs, frame and list traversal remain with their existing readers, and
+[public metadata](../apps/web/src/features/pages/subject-head.ts) continues to own head and JSON-LD.
+
+### Public data and failure states
+
+Public SSR uses anonymous typed `POST /v1/pages:read` subject targets, including the requested language chain and
+view. Preserve the actual subject response `{subject, account, summary, related}`, including its release,
+resolution, selected statements, qualifiers and support references. Use current bounded related summaries rather
+than extra per-card reads. Neither a presentation profile nor a cached label grants current access.
+
+Titles, short descriptions and admitted facts render without JavaScript. Genuine embedded, validated Content
+documents use the existing document renderer; a document locator alone is not prose. Select the reader's summary
+language before deciding whether its body is available. If the selected body is unavailable, About retains a real
+short description when present and explicitly offers a document retry. No summary is different from an unreadable
+summary, and a failed dependency is different from an empty successful section. Retry keeps the current query and
+view. Raw document IDs and fixture bodies never establish successful native summary delivery.
+
+Library state, reader preferences, own reactions, own ratings and imported suggestions begin only after viewer
+preparation and hydration; their requests use the existing private BFF and `no-store`. Anonymous HTML and its
+dehydrated data carry no private values. Public failure never initiates a privileged fallback.
+
+### Open owner joins
+
+These joins complete the adopted journey; naming one here does not claim it is implemented:
+
+| Join                                   | Current authority and required binding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Summary body                           | [Semantic authored installation](../services/kernel/src/semantic/authored.ts) emits `{language, document: id, digest}`. [Content document reads](../services/kernel/src/content/document-routes.ts) supply `{document: {availability, body, subjectId, candidateId, …}}` under current disclosure and rights. [Composition reads](../packages/composition/README.md#reads) currently admit no document descriptor. Content/Composition must provide a bounded, typed selected-summary binding inside the public page aggregate, retaining selected support and current erasure behavior. Web does not guess a descriptor, append per-statement reads or authorize from the locator. |
+| Relations, editions, credits and Works | Semantic owns native incoming/outgoing/count cursors; Composition and the sibling traversal region own full outgoing and independent group continuations, labels, qualifiers and truthful counts. Preserve their current inputs and newer integrated fixes.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Original source evidence               | The [source-record attribution contract](../services/kernel/src/semantic/source-record-attribution-contract.md) owns exact original tuples, selected support, metadata and fences. Its deferred producer/import registration and source-readiness bindings remain with those owners; reflective or fixture metadata is not delivery. The imported-suggestions region below retains its independent source review.                                                                                                                                                                                                                                                                   |
+| Realm and neighboring sections         | The native freeze below remains authoritative. Production Realm selection/revalidation and each rating, review, discussion and list population require their actual admitted bindings. A Global result never becomes Realm output through labeling.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+Focused [canonical journey cases](../apps/web/tests/subject-canonical-journey.test.ts) cover the generated-client
+boundary, navigation, request bounds and public rendering using native recorded DTOs and explicit failure responses.
+They do not establish live native eligibility, document-body delivery or visual conformance. Full served-page,
+current-withdrawal and screenshot review remain integration proof across no-JS, keyboard, phone/desktop, locales and
+themes. The reusable [public reading pattern](../apps/web/src/subject/reading-state/index.tsx) has one story identity
+across those globals and is the same component used by About.
+
 ## Imported suggestions
 
 The canonical subject overview and Details offer signed-in readers an **Imported suggestions** region after the
