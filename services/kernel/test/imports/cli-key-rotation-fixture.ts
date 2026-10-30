@@ -190,7 +190,13 @@ export async function runCliKeyRotationJourney() {
           const result = body as BatchWriteResult;
           expect(result.results).toHaveLength(batch.commands.length);
           for (const ack of result.results) expect('value' in ack).toBe(true);
-          loss.committed = { request: replay, bytes, result };
+          // Replay is a later request with the same captured bytes and bearer, not
+          // the aborted invocation's transport signal or cancellable body stream.
+          loss.committed = {
+            request: new Request(replay, { body: bytes, signal: new AbortController().signal }),
+            bytes,
+            result,
+          };
           controller.abort(new DOMException('Committed response lost', 'AbortError'));
           throw controller.signal.reason;
         }
@@ -345,7 +351,10 @@ export async function runCliKeyRotationJourney() {
 
     await native.renewManagement();
     await identity.setBulkPermission(false);
+    expect(lost.request.signal.aborted).toBe(false);
+    expect(await lost.request.clone().text()).toBe(lost.bytes);
     const denial = await runtime.replay(lost.request.clone());
+    expect(denial.status).toBe(403);
     const denialBody = await denial.json();
     // Select success content from the actual denied response; absent content stays null.
     const revokedReplay = { status: denial.status, storedSuccess: denialBody.results ?? null };
