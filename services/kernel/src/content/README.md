@@ -7,6 +7,24 @@ output-only and comes from the board row used for disclosure.
 
 ## Global boards
 
+`GET /v1/boards` is the public Global board directory. Its closed query accepts optional
+`purpose: discussion | reviews`, `cursor` and integer `limit` (1–100, default 20); its closed response is
+`{ boards: BoardView[], next: string | null }`. It returns actual current BoardViews, including native
+`realmId: null`, route, title, purpose, visibility, security revision, availability and creation time.
+It lists empty boards too and neither probes threads nor adds counts or ranking scores.
+
+One native partial-index range selects at most `4 × limit` currently published Global candidates in
+`(route, board_id)` order. The purpose filter has an exact purpose-leading index. Boards have no independent
+availability column: current availability comes from ordinary board disclosure. Index membership grants nothing;
+each selected board passes the current anonymous `board:read`, source visibility and native placement checks,
+then repeats source and Access disclosure at FINAL. A changed security revision is omitted without refill.
+Staff and private grants cannot widen this directory; bearer authentication and suspension middleware still run.
+The sealed list cursor binds the endpoint, normalized purpose and limit, definition epoch and last examined
+source key. A sparse or empty page can have `next`, including a conservative continuation after a full candidate
+range; consumers continue until null. Costs are O(limit × log R), with one range and bounded point disclosures,
+no partition, Concept, grant, history or thread enumeration. Native infrastructure and deadline failures propagate.
+Realm discovery remains `GET /v1/realms/{realmId}/boards`; a caller cannot supply a Realm to this collection.
+
 `POST /v1/boards` creates a board in Global Context. It requires `Idempotency-Key` and the strict body
 `{ conceptId, title, purpose, visibility }`, with purpose `discussion | reviews` and visibility
 `published | protected`. It returns 201 `{ board }` using the Realm board DTO, with `realmId: null`, and the

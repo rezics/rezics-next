@@ -340,6 +340,18 @@ export const ThreadResponseSchema = t.Object(
 );
 export const PostResponseSchema = t.Object({ post: PostEntrySchema }, closed);
 export const BoardResponseSchema = t.Object({ board: BoardViewSchema }, closed);
+export const GlobalBoardDirectoryQuerySchema = t.Object(
+  {
+    purpose: t.Optional(t.Union([t.Literal('discussion'), t.Literal('reviews')])),
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+  },
+  closed,
+);
+export const GlobalBoardDirectoryResponseSchema = t.Object(
+  { boards: t.Array(BoardViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  closed,
+);
 export const PostPageResponseSchema = t.Object(
   {
     posts: t.Array(PostEntrySchema, { maxItems: 100 }),

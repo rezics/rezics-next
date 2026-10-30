@@ -1,5 +1,6 @@
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
+import { InvalidGlobalBoardDirectoryCursorError, listGlobalBoards } from './global-board-directory.ts';
 import { listSubjectThreads } from './subject-threads.ts';
 import { InvalidSitemapCursorError, listSitemapBoards, listSitemapThreads } from './sitemap.ts';
 import { withHeaders } from '@elysia/openapi';
@@ -68,6 +69,8 @@ import {
 } from './reads.ts';
 import {
   BoardResponseSchema,
+  GlobalBoardDirectoryQuerySchema,
+  GlobalBoardDirectoryResponseSchema,
   BoardViewSchema,
   BoardThreadsQuerySchema,
   BoardThreadsResponseSchema,
@@ -154,6 +157,8 @@ const revisionInput = strictContentSchema(RevisionInputSchema);
 const threadResponse = strictContentSchema(ThreadResponseSchema);
 const postResponse = strictContentSchema(PostResponseSchema);
 const boardResponse = strictContentSchema(BoardResponseSchema);
+const globalBoardDirectoryQuery = strictContentSchema(GlobalBoardDirectoryQuerySchema);
+const globalBoardDirectoryResponse = strictContentSchema(GlobalBoardDirectoryResponseSchema);
 const realmBoardsQuery = t.Object(
   {
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
@@ -252,6 +257,7 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
     if (error instanceof ContentForbiddenError || error instanceof GrantDeniedError)
       throw new ProblemError('forbidden');
     if (error instanceof InvalidSitemapCursorError) throw new ProblemError('invalid_cursor');
+    if (error instanceof InvalidGlobalBoardDirectoryCursorError) throw new ProblemError('invalid_cursor');
     if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
     if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
     if (error instanceof ReviewConflictError) throw new ProblemError('conflict');
@@ -371,6 +377,35 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     ),
     dependencies,
   )
+    .get(
+      '/v1/boards',
+      {
+        query: globalBoardDirectoryQuery,
+        response: {
+          200: withHeaders(globalBoardDirectoryResponse, sessionHeader),
+          ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'board.list_global',
+          'x-exposure': 'public',
+          'x-action': 'board:read',
+          security: readSecurity,
+          description:
+            'Currently public Global boards, independently checked as anonymous for every caller. ' +
+            'Examines at most 4 × limit native candidates in (route, board id) order; default limit 20, maximum 100. ' +
+            'Sparse or empty pages can have next; follow it until null. Realm boards use the Realm collection.',
+        },
+      },
+      async ({ query, admission, job, session }) =>
+        contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const page = await listGlobalBoards(dependencies, { deadline: job.deadline }, query);
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            return { boards: page.boards, next: page.next };
+          }),
+        ),
+    )
     .post(
       '/v1/boards',
       {

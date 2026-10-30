@@ -1802,6 +1802,20 @@ CREATE INDEX author_item_post_page_idx ON content.author_item USING btree (route
 
 
 --
+-- Name: board_global_directory_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_global_directory_page ON content.board USING btree (route, board_id) WHERE ((realm_id IS NULL) AND (visibility = 'published'::text));
+
+
+--
+-- Name: board_global_directory_purpose_page; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_global_directory_purpose_page ON content.board USING btree (purpose, route, board_id) WHERE ((realm_id IS NULL) AND (visibility = 'published'::text));
+
+
+--
 -- Name: board_one_realm_reviews_idx; Type: INDEX; Schema: content; Owner: -
 --
 
