@@ -8,6 +8,7 @@ import type {
   WorkflowContext,
   WorkflowFence,
 } from '@rezics/auth-contract';
+import { captureWorkflowRequest, requestPartyScope, type RequestParties } from './workflow-request-parties.ts';
 import { installNativeRoleProducer } from './erasure-coverage.ts';
 export type {
   AccountWorkflowPorts,
@@ -255,62 +256,11 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       version: actors === undefined || (context === undefined && !selfRegistration) ? 0 : 1,
     };
   }
-  async function requestScope(id: string, input: AccountOperation, context?: Context): Promise<CopyRole[]> {
-    const row = (
-      await database.query<Record<string, string | null>>(
-        'SELECT erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_member_id,erasure_previous_operator_id,erasure_client_id,erasure_initiator_id,erasure_delegate_id,erasure_client_owner_id FROM auth_workflow_request WHERE workflow_id=$1',
-        [id],
-      )
-    ).rows[0];
-    const roles: CopyRole[] = [];
-    const add = (accountId: string | null | undefined, role: CopyRole['role']) => {
-      if (accountId && !roles.some((r) => r.accountId === accountId && r.role === role))
-        roles.push({ accountId, role });
-    };
-    for (const [key, role] of [
-      ['erasure_subject_id', 'subject'],
-      ['erasure_human_id', 'human'],
-      ['erasure_operator_id', 'operator'],
-      ['erasure_member_id', 'member'],
-      ['erasure_previous_operator_id', 'previous-operator'],
-      ['erasure_initiator_id', 'initiator'],
-      ['erasure_delegate_id', 'delegate'],
-      ['erasure_client_owner_id', 'client-owner'],
-    ] as const)
-      add(row?.[key], role);
-    if (context && access.copyActors)
-      for (const role of await access.copyActors(context)) add(role.accountId, role.role);
-    if (row?.erasure_subject_id) add((await access.readAccount(row.erasure_subject_id))?.operatorAccountId, 'operator');
-    if (input.kind === 'automated') {
-      const stage = await database.query<{
-        account_id: string;
-        erasure_creator_id: string | null;
-        erasure_operator_id: string | null;
-        erasure_initiator_id: string | null;
-        erasure_delegate_id: string | null;
-      }>(
-        'SELECT account_id,erasure_creator_id,erasure_operator_id,erasure_initiator_id,erasure_delegate_id FROM auth_registration_stage WHERE registration_id=$1',
-        [input.registrationId],
-      );
-      add(stage.rows[0]?.account_id, 'subject');
-      add(stage.rows[0]?.erasure_creator_id, 'initiator');
-      add(stage.rows[0]?.erasure_operator_id, 'operator');
-      add(stage.rows[0]?.erasure_initiator_id, 'initiator');
-      add(stage.rows[0]?.erasure_delegate_id, 'delegate');
-    }
-    if (input.kind === 'organization' && context)
-      add(access.registrationTarget(required(access.stableCommandKey)(context, 'organization-id')), 'subject');
-    if (row?.erasure_client_id)
-      add(
-        (
-          await database.query<{ owner: string | null }>(
-            'SELECT "userId" AS owner FROM auth_client WHERE client_id=$1',
-            [row.erasure_client_id],
-          )
-        ).rows[0]?.owner,
-        'client-owner',
-      );
-    return roles;
+  async function requestScope(id: string, _input: AccountOperation, _context?: Context): Promise<CopyRole[]> {
+    const row = (await database.query<RequestParties>('SELECT * FROM auth_workflow_request WHERE workflow_id=$1', [id]))
+      .rows[0];
+    if (!row) denied();
+    return requestPartyScope(row);
   }
   let started = false;
   let starting: Promise<void> | undefined;
@@ -1371,50 +1321,21 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     // approval's binding names the actor and the logical operation, and the
     // approval itself carries the principal assignment, so another caller's
     // approval of the same operation under the same key is a different request.
-    const digest = hash([
-      businessOperation(input),
-      context ? (access.approvalBinding?.(context)?.commandKeyPrefix ?? null) : null,
-    ]);
-    const row = (
-      await database.query<{ digest: Buffer }>(
-        'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id,erasure_initiator_id,erasure_delegate_id,erasure_actor_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
-        [
-          id,
-          digest,
-          input,
-          'accountId' in input
-            ? input.accountId
-            : 'subjectAccountId' in input
-              ? input.subjectAccountId
-              : 'previous' in input
-                ? input.previous.subjectAccountId
-                : 'organizationId' in input
-                  ? input.organizationId
-                  : null,
-          context ? (access.actorAccountId?.(context) ?? null) : null,
-          'operatorAccountId' in input ? input.operatorAccountId : null,
-          'clientId' in input ? input.clientId : null,
-          input.kind === 'membership' ? input.memberAccountId : null,
-          'previous' in input
-            ? input.previous.operatorAccountId
-            : input.kind === 'delete'
-              ? (input.responsibility?.operatorAccountId ?? null)
-              : null,
-          input.kind === 'automated' ? input.registrationId : null,
-          actors.initiator,
-          actors.delegate,
-          actors.version,
-        ],
-      )
-    ).rows[0]!;
-    if (!row.digest.equals(digest)) denied();
     const result = await answerOperation(input, async () =>
       (
-        await writer().enqueue<Awaited<ReturnType<typeof operation>>>(
-          'accounts.operation',
-          id,
-          input,
-          await requestScope(id, input, context),
+        await writer().enqueue<Awaited<ReturnType<typeof operation>>>('accounts.operation', id, input, (connection) =>
+          captureWorkflowRequest(connection, {
+            workflowId: id,
+            input,
+            context,
+            access,
+            actors,
+            digest: () =>
+              hash([
+                businessOperation(input),
+                context ? (access.approvalBinding?.(context)?.commandKeyPrefix ?? null) : null,
+              ]),
+          }),
         )
       ).getResult(),
     );
@@ -1829,33 +1750,15 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const context = await approved(operation);
       const actors = await nativeActors(context);
       const id = workflowId(`client-reduction:${key}`);
-      const digest = hash(operation);
-      const row = (
-        await database.query<{ digest: Buffer }>(
-          'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id,erasure_initiator_id,erasure_delegate_id,erasure_actor_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
-          [
-            id,
-            digest,
-            operation,
-            null,
-            access.actorAccountId?.(context) ?? null,
-            null,
-            input.clientId,
-            null,
-            null,
-            null,
-            actors.initiator,
-            actors.delegate,
-            actors.version,
-          ],
-        )
-      ).rows[0]!;
-      if (!row.digest.equals(digest)) denied();
-      await writer().enqueue(
-        'accounts.client-reduction',
-        id,
-        { ...operation, cursorVersion: 2 },
-        await requestScope(id, operation, context),
+      await writer().enqueue('accounts.client-reduction', id, { ...operation, cursorVersion: 2 }, (connection) =>
+        captureWorkflowRequest(connection, {
+          workflowId: id,
+          input: operation,
+          context,
+          access,
+          actors,
+          digest: () => hash(operation),
+        }),
       );
       const result = await waitClientReduction(id);
       await database.query(

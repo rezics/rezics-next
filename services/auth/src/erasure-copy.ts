@@ -65,11 +65,10 @@ export function createCopyWriter(database: Pool, sdk: DBOSClient) {
       name: Name,
       id: string,
       input: unknown,
-      roles: readonly CopyRole[],
+      roles: readonly CopyRole[] | ((connection: PoolClient) => Promise<readonly CopyRole[]>),
       parent?: string,
     ): Promise<WorkflowHandle<R>> {
-      if (!names.includes(name) || roles.length > 16 || !roles.length || Buffer.byteLength(id) > 256)
-        throw new Error('Auth copy scope refused');
+      if (!names.includes(name) || Buffer.byteLength(id) > 256) throw new Error('Auth copy scope refused');
       const sourceKey =
         name === 'accounts.registration'
           ? (input as { registrationId?: unknown })?.registrationId
@@ -78,10 +77,12 @@ export function createCopyWriter(database: Pool, sdk: DBOSClient) {
             : id;
       if (typeof sourceKey !== 'string' || !sourceKey || Buffer.byteLength(sourceKey) > 256)
         throw new Error('Auth native source identity refused');
-      const digest = createHash('sha256')
-        .update(JSON.stringify([name, input, roles]))
-        .digest();
       return copyTransaction(database, async (client) => {
+        const scope = typeof roles === 'function' ? await roles(client) : roles;
+        if (scope.length > 16 || !scope.length) throw new Error('Auth copy scope refused');
+        const digest = createHash('sha256')
+          .update(JSON.stringify([name, input, scope]))
+          .digest();
         if (parent) {
           const current = (
             await client.query<{ retired: boolean }>(
@@ -91,7 +92,7 @@ export function createCopyWriter(database: Pool, sdk: DBOSClient) {
           ).rows[0];
           if (!current || current.retired) throw new Error('Auth copy parent retired');
         }
-        for (const role of [...roles].sort((a, b) => a.accountId.localeCompare(b.accountId))) {
+        for (const role of [...scope].sort((a, b) => a.accountId.localeCompare(b.accountId))) {
           if (parent && name === 'accounts.client-reduction') {
             const accepted = await client.query(
               'SELECT 1 FROM auth_client_reduction_progress WHERE operation_id=$1 AND NOT completed',
@@ -109,11 +110,11 @@ export function createCopyWriter(database: Pool, sdk: DBOSClient) {
           await client.query<{ digest: Buffer; retired: boolean }>(
             `INSERT INTO auth_copy_work(workflow_id,name,digest,parent_workflow_id,scope_count,source_key) VALUES($1,$2,$3,$4,$5,$6)
            ON CONFLICT(workflow_id) DO UPDATE SET workflow_id=EXCLUDED.workflow_id RETURNING digest,retired`,
-            [id, name, digest, parent ?? null, new Set(roles.map((r) => `${r.accountId}:${r.role}`)).size, sourceKey],
+            [id, name, digest, parent ?? null, new Set(scope.map((r) => `${r.accountId}:${r.role}`)).size, sourceKey],
           )
         ).rows[0]!;
         if (existing.retired || !existing.digest.equals(digest)) throw new Error('Auth copy identity refused');
-        for (const role of roles)
+        for (const role of scope)
           await client.query(
             'INSERT INTO auth_copy_role(account_id,workflow_id,role) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',
             [role.accountId, id, role.role],

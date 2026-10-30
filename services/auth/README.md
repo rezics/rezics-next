@@ -917,6 +917,51 @@ The result supplies current readback only: destination acceptance and source
 approval/execute keep their original immutable descriptor, operation key and
 explicit confirmation requirements.
 
+Native workflow requests capture their complete original parties on the copy writer's
+transaction before request JSON or SDK input serialization. The private
+`workflow-request-parties.ts` adapter consumes only
+`readNativeCreationContext(context)` from the resolved native approval. Its pinned
+version-one literal carries `actorAccountId`, `actingHumanId`, `operatorAccountId`,
+`principalAccountId`, authenticated `clientId` and original `commandKey`; explicit
+nulls mean the source proved that role inapplicable. Actor and human are independent.
+The shared producer port is optional during integration: missing, malformed or
+unsupported context refuses with the existing generic unavailable response, before
+an attributed request or SDK copy commits. An actor-only callback cannot replace it.
+No public operation accepts this context. Current native `copyActors` supplies the
+existing initiator/delegate roles and actor version unchanged; the request projection
+does not rename those roles to principal. The SDK's installed role vocabulary must
+already contain each projected actor/principal through its genuine native roles,
+or copy creation stays closed. This is a consumer boundary, not producer completion.
+
+The closed business-variant projection records subject, both transfer operators,
+membership target, original target client and stage separately. Organization IDs use
+the operation's existing preselected native key; automated subjects come from the
+locked original stage. It captures target/source client owners under the existing
+client locks. All original accounts and both clients pass the actual current erasure
+guards before serialization, on the transaction that creates the request and SDK
+handoff together. Any source, fence or SDK failure rolls both back. Workflow IDs,
+business digests, operation keys and enqueue input shapes keep their original ABI.
+
+`request_party_version` and `request_context_version` pin this projection. Indexed
+actor, principal and source-client columns add the missing provenance without changing
+the erasure phase inventory. Every original role and version is immutable on replay,
+even in the creation transaction; current relations never refill a request. Existing
+rows retain version zero and unknown pending provenance. Request scope reads only
+original typed columns. A request locator does not establish SDK copy coverage.
+The SDK deletion trigger minimizes a private request only through the exact native
+registration consumer closure also used by `nativeRequestTerminal`; terminal SDK
+status or `terminal_at` alone cannot retire it. Other requests remain pending until
+their owning native consumer provides its closure.
+
+The two request producers are `workflows.ts`'s `runOperation` and
+`reduceClientScopes`; the atomic source callback is in `erasure-copy.ts`. The Access
+producer belongs to `services/kernel/src/access/native-account-bindings.ts`; this
+slice leaves that producer and stage/provisioning composition to their owners.
+`test/workflow-request-parties.test.ts` includes the deferred real-native producer
+scenario and focused closed-projection cases. It supplies no fabricated context to
+the native positive path and makes no final participant or native-suite completion
+claim.
+
 The native DBOS system schema is `auth_dbos` in the **same Auth database**.
 `systemDatabaseUrl` defaults to the product pool URL; an override or injected
 system pool must name that same database. The SDK creates and migrates its schema;
