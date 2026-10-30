@@ -81,7 +81,7 @@ export function createApp({
   let socketPeer: (request: Request) => string | undefined = () => undefined;
   const originalRequests = new WeakMap<Request, Request>();
   const requestIds = new WeakMap<Request, string>();
-  const jsonBodyChecks = new Map<string, () => ReturnType<typeof Compile>>();
+  const jsonBodyChecks = new Map<string, { optional: boolean; compile: () => ReturnType<typeof Compile> }>();
   const invalidJsonBodies = new WeakMap<Request, ValidationError>();
   const boundedBodyErrors = new WeakMap<Request, unknown>();
   // Undefined means "try the next parser" to Elysia. Preserve an absent wire
@@ -238,7 +238,9 @@ export function createApp({
       const mounted = mountedFor(request, route);
       const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
       if (bodyModeOf(detail) === 'raw') return;
-      const check = mounted && jsonBodyChecks.get(`${mounted.method} ${mounted.path}`)?.();
+      const validation = mounted && jsonBodyChecks.get(`${mounted.method} ${mounted.path}`);
+      if (body === undefined && validation?.optional) return;
+      const check = validation?.compile();
       if (check && !check.Check(body))
         invalidJsonBodies.set(request, new ValidationError('body', body, check.Errors(body), check.Type()));
     })
@@ -380,10 +382,10 @@ export function createApp({
       }
       if (schemas.length) {
         let check: ReturnType<typeof Compile> | undefined;
-        jsonBodyChecks.set(
-          `${method} ${path}`,
-          () => (check ??= Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas))),
-        );
+        jsonBodyChecks.set(`${method} ${path}`, {
+          optional: schemas.every((schema) => schema['~optional'] === true),
+          compile: () => (check ??= Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas))),
+        });
       }
     }
     catalogue = mountedRouteCatalogue(mountedApp, routes);

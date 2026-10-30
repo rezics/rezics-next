@@ -10,7 +10,7 @@ const pool = createPool('postgres://kernel.invalid/bodyless-json');
 afterAll(() => pool.end());
 const detail = {
   operationId: 'probe.bodyless',
-  'x-action': 'probe:write',
+  'x-action': 'probe:read',
   'x-exposure': 'public',
   security: [{ bearerAuth: [] }, {}],
 };
@@ -96,7 +96,7 @@ test('trusted own-account declarations retain credential refusals before domain-
   for (const [credential, allowedScopes, status, code] of [
     [null, [], 401, 'authentication_required'],
     ['Bearer verified', [], 403, 'forbidden'],
-    ['Bearer verified', ['probe:write'], 409, 'conflict'],
+    ['Bearer verified', ['probe:read'], 409, 'conflict'],
   ] as const) {
     scopes = [...allowedScopes];
     const response = await app.handle(
