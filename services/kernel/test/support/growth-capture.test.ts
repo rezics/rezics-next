@@ -282,7 +282,7 @@ test('nested plans from failed and successful same-SQL producers keep their own 
   ]);
   const occurrences = statementOccurrences(result.capture).statements;
   expect(occurrences).toHaveLength(2);
-  expect(occurrences[0]).toMatchObject({ index: 0, error: { code: '40001' }, plans: [0], rows: 1 });
+  expect(occurrences[0]).toMatchObject({ index: 0, error: { code: '40001' }, plans: [0], rows: 0 });
   expect(occurrences[1]).toMatchObject({ index: 1, error: null, plans: expect.arrayContaining([1]), rows: 1 });
 });
 

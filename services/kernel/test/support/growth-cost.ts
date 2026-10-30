@@ -423,23 +423,8 @@ export function costOf(capture: Capture): Cost {
     const document = capture.plans[index];
     const backend = capture.planBackends?.[index];
     for (const { queryText, plan } of documentEntries(document)) {
-      const owner = capture.planStatements?.[index];
-      if (capture.planStatements !== undefined) {
-        if (
-          owner !== undefined &&
-          owner >= 0 &&
-          owner < capture.statements.length &&
-          isCatalogQuery(catalog, capture.statements[owner]!, capture.statementBackends?.[owner])
-        )
-          continue;
-      } else {
-        if (
-          backendAware &&
-          !hasMatchingStatement(matchingStatements, true, queryText, backend)
-        )
-          continue;
-        if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
-      }
+      if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) continue;
+      if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
       plans++;
       const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
       const totals = costNode(plan, true, relations, ctes);
