@@ -1320,6 +1320,10 @@ test('stack-free placement: the actual Web compiler invocation runs locally with
   const hosts = writeHosts(fixture);
   const web = join(fixture.root, 'apps/web');
   const priorLedger = process.env.REZICS_CHECK_LEDGER_DIR;
+  const compilerCommand = resolveRepositoryBun(
+    ['bun', 'check', '--no-script', '-p', 'tsconfig.json'],
+    repository,
+  );
   mkdirSync(web, { recursive: true });
   writeFileSync(join(web, 'package.json'), JSON.stringify({ name: '@fixture/web', private: true, type: 'module' }));
   writeFileSync(
@@ -1330,13 +1334,9 @@ test('stack-free placement: the actual Web compiler invocation runs locally with
   try {
     workerEnv(fixture, hosts);
     process.env.REZICS_CHECK_LEDGER_DIR = join(fixture.root, '.temp/check-ledger');
-    const status = await runWorkerCheck(
-      [process.execPath, 'check', '--no-script', '-p', 'tsconfig.json'],
-      web,
-      false,
-      join(fixture.root, 'web-compiler.log'),
-    );
-    expect(status).toBe(0);
+    const log = join(fixture.root, 'web-compiler.log');
+    const status = await runWorkerCheck(compilerCommand, web, false, log);
+    if (status !== 0) throw new Error(`Web compiler exited ${status}:\n${readFileSync(log, 'utf8')}`);
     expect(existsSync(fixture.remoteEvents)).toBe(false);
     expect(latestLedgerEntries(fixture.root)).toMatchObject([
       { host: hostname(), terminalStatus: 'passed', exitStatus: 0 },
