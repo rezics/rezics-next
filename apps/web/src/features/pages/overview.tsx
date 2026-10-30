@@ -34,6 +34,7 @@ import {
   type Sources,
   type Stmt,
 } from './shared';
+import { statementDocument } from './documents';
 import { DocumentValue, LanguageTag, readableDocument, SpoilerGate, type ValueLabels } from './values';
 import { SubjectReadingState } from '../../subject/reading-state';
 import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
@@ -95,7 +96,7 @@ export type RowValue = Pick<
   'locale' | 'link' | 'reader' | 'labels' | 'unlabelled' | 'spoilerShow' | 'ratio'
 >;
 
-type SubjectRead = { subject: Subject; related: Related; summary?: SubjectCover | null };
+type SubjectRead = { subject: Subject; related: Related; documents?: unknown; summary?: SubjectCover | null };
 export type Item = {
   id: string;
   label: ReturnType<typeof pageText>;
@@ -743,11 +744,11 @@ export function Cover(props: Record<string, unknown>) {
 }
 
 /** The summary the reader's language chain reaches first, with the statement that holds it. */
-export function chosenSummary(subject: Subject, locale: string) {
+export function chosenSummary(subject: Subject, locale: string, filled?: unknown) {
   const held = Object.hasOwn(subject.statements, SUMMARY_PROPERTY) ? subject.statements[SUMMARY_PROPERTY] : undefined;
   const documents = bestRank((held ?? []) as unknown as Stmt[]).flatMap((statement) => {
     const content = statement.value.type === 'value' ? statement.value.content : undefined;
-    const document = isRecord(content) ? readableDocument(content.document) : undefined;
+    const document = statementDocument(subject.id, statement, filled);
     return isRecord(content) && typeof content.language === 'string'
       ? [{ statement, document, language: content.language }]
       : [];
@@ -775,7 +776,7 @@ export function Summary(props: Record<string, unknown>) {
   const title = m.subject_about({}, { locale: value.locale as never });
   const read = subjectRead(section);
   if (!read) return <Failed slot="subject-summary" id={id} title={title} locale={value.locale} />;
-  const chosen = chosenSummary(read.subject, value.locale);
+  const chosen = chosenSummary(read.subject, value.locale, read.documents);
   const unavailable =
     !chosen &&
     (read.subject.statements[SUMMARY_PROPERTY] ?? []).some(

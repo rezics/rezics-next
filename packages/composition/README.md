@@ -529,7 +529,9 @@ release defines, in this order: `schema:author`, `schema:illustrator`, `schema:t
 `schema:isPartOf`. The series template has the same sections with contents instead of editions: `SubjectList`s for
 works in the series (`wdt:P179`) and parts (`schema:isPartOf`).
 
-`types` has four templates. Each list is a `SubjectList` after the header, with its title in the eight UI locales, and
+`types` has five templates. The Recipe overview uses the generic overview order and a configured
+`Statements` node for its author, publication date, cooking time, yield, ingredients, instructions and diet.
+The other four templates follow below. Each list is a `SubjectList` after the header, with its title in the eight UI locales, and
 the type's view for those lists is Works (Appearances for a character, Characters for the voice roles of a person).
 `schema:Person` lists
 `schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy` and `wdt:P725`,
@@ -558,7 +560,7 @@ bundled type uses `generic`.
 
 `documentRead(document, subject, availableProperties, context?)` is the closed internal descriptor
 `{ kind: 'documents', id, context?, properties }`. `Statements` selects its named properties;
-`MoreStatements` adds the other properties in the already disclosed subject observation.
+`Summary` selects `schema:abstract`; `MoreStatements` adds the other properties in the already disclosed subject observation.
 The optional Context stays bound to the same selected subject observation; it never falls back to Global.
 The descriptor is orchestration, with the ordinary subject read as a shared dependency.
 It is neither another public endpoint nor another document producer.

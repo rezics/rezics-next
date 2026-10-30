@@ -113,6 +113,8 @@ export function documentRead(
 ): PageDocumentRead | null {
   if (subject === null) return null;
   const selected = new Set(shownProperties(document));
+  if ([...walkNodes(platformRegistry, document)].some((node) => node.type === 'Summary'))
+    selected.add('schema:abstract');
   if ([...walkNodes(platformRegistry, document)].some((node) => node.type === 'MoreStatements')) {
     for (const property of available) selected.add(property);
   }
