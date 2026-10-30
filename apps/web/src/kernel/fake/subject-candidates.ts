@@ -1,4 +1,5 @@
 import { createKernelClient, type SubjectRead } from '@rezics/client';
+import { DATA_TYPES } from '@rezics/definitions';
 import {
   candidateContext,
   readCandidates,
@@ -37,6 +38,8 @@ export function candidateFixture(
   const multiple = scenario === 'multiple' || scenario === 'stale-selection';
   const property = multiple ? 'schema:inLanguage' : field;
   const definition = definitions.release.properties[property];
+  const datatype = DATA_TYPES.find((type) => type === definition.datatype);
+  if (!datatype) throw new Error('Invalid candidate fixture datatype');
   const candidate: Candidate = {
     id: `${id.slice(0, -3)}888`,
     release: publicRead.subject.release,
@@ -57,7 +60,7 @@ export function candidateFixture(
     statement: {
       id: `${id.slice(0, -3)}888`,
       rank: 'normal',
-      property: { id: property, data_type: definition.datatype },
+      property: { id: property, data_type: datatype },
       value: {
         type: 'value',
         content: { time: '+1946-04-06T00:00:00Z', precision: 11, calendar: 'http://www.wikidata.org/entity/Q1985727' },
