@@ -147,7 +147,7 @@ export const changeRealmMembership = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<MembershipResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     try {
-      return requestRealmMembership(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+      return await requestRealmMembership(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     } catch {
       return { outcome: 'refused' };
     }

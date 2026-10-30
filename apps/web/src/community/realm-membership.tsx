@@ -9,6 +9,8 @@ import type { RealmHome } from './space';
 import { RealmParticipationView, type MembershipProblem, type MembershipRefreshState } from './realm-participation';
 import { changeRealmMembership } from './space-actions';
 import { realmMembershipQuery, refreshRealmMembership } from './realm-membership-queries';
+import { classifyRealmLeaveFailure, realmLeaveReadResolves, type RealmLeaveRecoveryState } from './realm-leave-recovery';
+import { RealmLeaveRecovery, type RealmLeaveCheck } from './realm-leave-recovery.tsx';
 
 /** Membership changes affect participation; following always addresses the carrying Space separately. */
 export function RealmMembership({
@@ -89,13 +91,15 @@ function PersonalMembership({
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<MembershipProblem>(null);
   const [refresh, setRefresh] = useState<MembershipRefreshState>(null);
+  const [leaveRecovery, setLeaveRecovery] = useState<RealmLeaveRecoveryState | null>(null);
+  const [leaveCheck, setLeaveCheck] = useState<RealmLeaveCheck>(null);
   const inFlight = useRef(false);
   const attempt = useRef<{ action: 'join' | 'leave'; idempotencyKey: string } | null>(null);
   const viewer = query.data;
 
   useEffect(() => {
-    if (viewer?.state === 'pending') setPending((previous) => previous ?? { cycle: 0 });
-  }, [viewer?.state]);
+    if (viewer?.state === 'pending' && !leaveRecovery) setPending((previous) => previous ?? { cycle: 0 });
+  }, [viewer?.state, leaveRecovery]);
 
   useEffect(() => {
     if (!pending) return;
@@ -124,7 +128,34 @@ function PersonalMembership({
     return () => controller.abort();
   }, [pending, client, realm.id, router, spaceId]);
 
-  async function change(action: 'join' | 'leave') {
+  async function checkLeave() {
+    if (!leaveRecovery || inFlight.current || pending) return;
+    inFlight.current = true;
+    setBusy(true);
+    setLeaveCheck('checking');
+    try {
+      // This query reads both current membership and native participation admission.
+      const current = await query.refetch();
+      if (current.isError || !current.data) setLeaveCheck('unavailable');
+      else if (realmLeaveReadResolves(leaveRecovery, current.data.state)) {
+        await Promise.all([
+          client.invalidateQueries({ queryKey: ['my-realms'] }),
+          ...(spaceId ? [client.invalidateQueries({ queryKey: ['follow-state', spaceId] })] : []),
+          router.invalidate(),
+        ]);
+        attempt.current = null;
+        setLeaveRecovery(null);
+        setLeaveCheck(null);
+      } else setLeaveCheck('unchanged');
+    } catch {
+      setLeaveCheck('unavailable');
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function change(action: 'join' | 'leave', retryLeave = false) {
     if (
       !viewer ||
       !csrfToken ||
@@ -133,6 +164,7 @@ function PersonalMembership({
       query.isFetching ||
       query.isError ||
       query.isPending ||
+      (leaveRecovery && !(retryLeave && action === 'leave' && leaveRecovery.kind === 'uncertain')) ||
       (action === 'join' && realm.visibility === 'protected') ||
       (admittedAction !== undefined && admittedAction !== action)
     )
@@ -140,6 +172,7 @@ function PersonalMembership({
     inFlight.current = true;
     setBusy(true);
     setProblem(null);
+    setLeaveCheck(null);
     const input =
       attempt.current?.action === action ? attempt.current : { action, idempotencyKey: viewer.idempotencyKey };
     attempt.current = input;
@@ -149,11 +182,14 @@ function PersonalMembership({
         headers: { 'X-CSRF-Token': csrfToken },
       });
       if (result.outcome === 'accepted') {
+        setLeaveRecovery(null);
         setRefresh('checking');
         setPending({ target: action === 'join' ? 'member' : 'none', cycle: 0 });
-      } else setProblem(result);
+      } else if (action === 'leave') setLeaveRecovery(classifyRealmLeaveFailure(result));
+      else setProblem(result);
     } catch {
-      setProblem({ outcome: 'refused' });
+      if (action === 'leave') setLeaveRecovery(classifyRealmLeaveFailure({ outcome: 'refused' }));
+      else setProblem({ outcome: 'refused' });
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -161,12 +197,15 @@ function PersonalMembership({
   }
 
   return (
+    <>
     <RealmParticipationView
       memberLabel={memberLabel}
       admittedAction={admittedAction}
       state={
         pending
           ? 'pending'
+          : leaveRecovery && viewer
+            ? viewer.state
           : query.isPending || query.isFetching
             ? 'loading'
             : query.isError || !viewer
@@ -175,11 +214,24 @@ function PersonalMembership({
       }
       visibility={realm.visibility}
       busy={busy}
-      ready={!!csrfToken}
+      ready={!!csrfToken && !leaveRecovery}
       refresh={refresh}
       problem={problem}
       onChange={(action) => void change(action)}
-      onRetry={() => (pending ? setPending({ ...pending, cycle: pending.cycle + 1 }) : void query.refetch())}
+      onRetry={() => (leaveRecovery ? void checkLeave() : pending ? setPending({ ...pending, cycle: pending.cycle + 1 }) : void query.refetch())}
     />
+    {leaveRecovery ? (
+      <RealmLeaveRecovery
+        key={leaveRecovery.kind}
+        realmId={realm.id}
+        recovery={leaveRecovery}
+        check={leaveCheck}
+        busy={busy}
+        ready={!!csrfToken && !query.isError && !query.isFetching}
+        onCheck={() => void checkLeave()}
+        onRetry={() => void change('leave', true)}
+      />
+    ) : null}
+    </>
   );
 }
