@@ -186,6 +186,11 @@ async function footprint() {
     attempts: (
       await pool.query('SELECT to_jsonb(a) AS row FROM commerce.checkout_creation_attempt a ORDER BY route,order_id')
     ).rows,
+    acquisitions: (
+      await pool.query(
+        'SELECT to_jsonb(a) AS row FROM commerce.benefit_acquisition a ORDER BY route,buyer_account_id,slot_id',
+      )
+    ).rows,
     entitlements: (
       await pool.query('SELECT to_jsonb(e) AS row FROM commerce.entitlement e ORDER BY route,entitlement_id')
     ).rows,
@@ -219,7 +224,13 @@ test('A retained pre-revision order receipt can replay only its exact captured o
     commands.createOrder(buyer().actor, offer.id, undefined as never, historical.key),
   ).rejects.toBeInstanceOf(TypeError);
   expect(await footprint()).toEqual(before);
-  const fresh = await commands.createOrder(buyer().actor, offer.id, revised.value.revision, randomUUID());
+  // This real buyer has no unresolved acquisition of the historical buyer's exact benefit.
+  const fresh = await commands.createOrder(
+    system.actors.moderator.actor,
+    offer.id,
+    revised.value.revision,
+    randomUUID(),
+  );
   expect(fresh.value).toMatchObject({ offerRevision: revised.value.revision, unitAmountMinor: 2400 });
   expect(fresh.value.contentEdition).toEqual(offer.contentEdition);
   expect(historical.replay.value.contentEdition).toEqual(offer.contentEdition);
@@ -227,15 +238,16 @@ test('A retained pre-revision order receipt can replay only its exact captured o
 
 test('modern receipt conflicts stay conflicts and foreign principal or key cannot disclose historical native responses', async () => {
   const key = randomUUID();
-  const modern = await commands.createOrder(buyer().actor, second.id, second.revision, key);
+  const modernBuyer = seller().actor;
+  const modern = await commands.createOrder(modernBuyer, second.id, second.revision, key);
   const historical = await retainPreRevisionOrder(system.database.pool, buyer().actor, second);
   // A second real principal may buy the same offer but cannot see this buyer's receipt.
   const before = await footprint();
-  expect(await commands.createOrder(buyer().actor, second.id, second.revision, key)).toEqual({
+  expect(await commands.createOrder(modernBuyer, second.id, second.revision, key)).toEqual({
     ...modern,
     replayed: true,
   });
-  await expect(commands.createOrder(buyer().actor, second.id, second.revision + 1, key)).rejects.toBeInstanceOf(
+  await expect(commands.createOrder(modernBuyer, second.id, second.revision + 1, key)).rejects.toBeInstanceOf(
     IdempotencyConflictError,
   );
   await expect(
