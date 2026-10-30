@@ -62,7 +62,7 @@ Creator minimums are an offer/benefit editor and owned-offer list, a bounded pri
 views. Existing HTTP mutations are `POST /v1/offers`, `PATCH /v1/offers/:offerId` (price), and
 `POST /v1/offers/:offerId:delist`, under `offer:create`/`offer:manage` and `gate:selling`.
 Owned-offer listing is `GET /v1/offers`, described below. The offer/benefit editor,
-benefit publication/versioning and creator-sales projections remain incomplete. Creator-home sales projections use stable buyer-order effects,
+benefit publication/versioning and the native creator-sales producer remain incomplete. Creator-home sales projections use stable buyer-order effects,
 show lag/unknowns and only necessary accounting/order locators, not buyer email, Library activity or use telemetry.
 They cannot authorize use or establish complete provider settlement. Existing statement APIs are
 `GET /v1/payoutStatements`, `GET /v1/payoutStatements/:statementId`,
@@ -138,7 +138,43 @@ must replace that adapter with the actual generated binding. Stories `pages-comm
 `--second-page`, `--empty`, `--denied`, `--unavailable`, `--error`, `--stale`, `--preparing`, `--long-title`,
 `--mobile390` and `--desktop1280` describe contract-shaped source states, not recorded native evidence.
 390/1280 browser visual review, native acceptance and promoted-main proof remain controller work under minimal
-verification. The offer editor, private sales, target use and native sale/use proof remain open.
+verification. The native private-sales producer, target use and native sale/use proof remain open.
+
+### Private creator sales history
+
+The selected read interface is `GET /v1/commerceSales`, operation `commerce_sale.list`, exact action/scope
+`commerce_sale:list`, with own-account authority. Default page size is 20, maximum 100, with native signed cursor
+pagination. No seller/account selector is accepted. Current native creator, acting account, independent principal,
+assignment, scope, denial, terminal and source-currentness checks remain server responsibilities through existing
+Access. The website registers and requests this exact scope from the mounted catalogue and obtains new consent;
+first-party status, old offer scopes and an existing refresh token do not supply it.
+
+The closed response is `{sales,next,projectionState:'ready'|'preparing'}`. Each sale contains only
+`{orderId,offerId,title,targetSubjectId,currency,unitAmountMinor,moneyUnit,taxBehavior,settlement,createdAt}`.
+Settlement is the source-backed historical `paid|pending|failed|unknown` purchase fact, not a current entitlement,
+creator payment, cash/payability or refund/dispute finality claim. The native producer supplies only necessary
+accounting locators and captured terms, never buyer identities, Library data or use telemetry. It owns bounded
+creator-home projections and their lifecycle; clients add no count, offset, history scan or per-row fanout.
+
+The served `/creator/sales` page uses the existing signed-in BFF, private no-store responses, zero route retention
+and fresh request credentials. It renders one 20-row page with signed continuation, retry/restart, loading,
+denied/unavailable, genuine empty and incomplete preparation states in all eight locales. A preparing response
+can show known rows but never claims completed zero sales. No totals span pages or currencies. Exact recorded-unit
+amounts remain separate from royalties and current pricing; absent historic units/tax facts remain unknown.
+Captured titles survive delisting or missing target mapping. This DTO has no current offer-availability fact, so
+rows have no guessed offer or buyer-order links. Existing `/creator/offers` and `/creator/statements` remain the
+management and royalty destinations, with no new payout control. Immutable root NavigationContributions add sales
+and statements through shared operation visibility; the pending sales operation stays closed unless explicitly
+advertised.
+
+`checkout/creator-sales.ts` owns the typed caller and sanitized boundary. This checkout has neither the selected
+native module nor a generated `commerceSales` binding; its actual BFF uses the explicit unavailable adapter and
+never fabricates ready/empty results. Controller delivery must replace that port with the real generated GET,
+no-store/manual-redirect transport, confirm native operation exposure, and include `commerce_sale:list` in the
+real website registration and matching `WEBSITE_SCOPES`. Auth correctly rejects unmounted scopes, so source-only
+delivery does not insert an unsupported scope or widen old consent. Constructed fixtures and focused test source
+describe the interface only. Native, privacy, protected-use, whole-journey, visual and promoted-main proof remain
+pending.
 
 ### Adopted native Content edition and delivery state
 

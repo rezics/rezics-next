@@ -27,7 +27,7 @@ import { prepareExposure } from '../kernel/exposure';
 import { isSignedInPath } from '../session/guard';
 import { createNavigation } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
-import { Tags } from 'lucide-react';
+import { Tags, ChartNoAxesCombined, FileText } from 'lucide-react';
 import { subjectPurchaseRegions } from '../checkout/subject-purchase';
 
 export const commerceNavigation = createNavigation([
@@ -42,6 +42,30 @@ export const commerceNavigation = createNavigation([
     signedIn: true,
     operation: 'offer.list',
     icon: Tags,
+  },
+  {
+    id: 'commerce.creator-sales',
+    kind: 'navigation',
+    group: 'personal',
+    order: 16,
+    label: ({ locale }) => m.creator_sales_heading({}, { locale }),
+    href: '/creator/sales',
+    match: 'prefix',
+    signedIn: true,
+    operation: 'commerce_sale.list',
+    icon: ChartNoAxesCombined,
+  },
+  {
+    id: 'commerce.creator-statements',
+    kind: 'navigation',
+    group: 'personal',
+    order: 17,
+    label: ({ locale }) => m.statements_heading({}, { locale }),
+    href: '/creator/statements',
+    match: 'prefix',
+    signedIn: true,
+    operation: 'payout_statement.list',
+    icon: FileText,
   },
 ]);
 

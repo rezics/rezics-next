@@ -3,6 +3,7 @@ import { dependencyUnavailable, problem, problemResponse } from '../media/kernel
 import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
 import { authClient, configured, unreachable, type SessionEnv } from './client.ts';
 import { newCsrfToken } from './csrf.ts';
+import { websiteRequestedScopes } from './website-scopes.ts';
 import {
   clearCookie,
   cookie,
@@ -56,7 +57,7 @@ async function signIn(request: Request, env: SessionEnv): Promise<Response> {
     response_type: 'code',
     redirect_uri: `${url.origin}/auth/callback`,
     resource: env.API_RESOURCE,
-    scope: [...new Set(['openid', 'offline_access', ...env.WEBSITE_SCOPES.split(/\s+/).filter(Boolean)])].join(' '),
+    scope: websiteRequestedScopes(env.WEBSITE_SCOPES),
     state,
     nonce,
     code_challenge: await oidc.calculatePKCECodeChallenge(verifier),

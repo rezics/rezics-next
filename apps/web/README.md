@@ -313,6 +313,8 @@ Configure these variables in the environment of `bun run dev`:
 - `API_RESOURCE`: the API's RFC 8707 resource identifier and access token audience, exactly `https://api.rezics.com`
   in production, with no trailing slash. Tests use `https://api.rezics.test`.
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
+  Private creator sales need the exact `commerce_sale:list` scope once that native action is mounted. Register it
+  and request renewed consent before switching the sales caller; an old consent or refresh token never widens.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
   `presentation:activate`; checkout start needs `order:create` and order pages and purchase history need `order:read`; the explicit known-order status check separately needs `order:reconcile`; the settings page needs
@@ -353,20 +355,18 @@ The trusted Auth bootstrap entry is `createAuthService(options)` followed by
 Use the mounted protected action catalogue supplied to Auth as `siteActions`:
 
 ```ts
+import { websiteRegistrationScopes } from './src/session/website-scopes.ts';
+
 const registration = {
   publicJwks: { keys: [websitePublicJwk] },
   redirectUris: ['https://rezics.com/auth/callback'],
   postLogoutRedirectUris: ['https://rezics.com/'],
-  scopes: [
-    ...new Set([
-      'openid',
-      'offline_access',
-      ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
-      'organization:create',
-      'account:manage',
-      'account:delete',
-    ]),
-  ],
+  scopes: websiteRegistrationScopes([
+    ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
+    'organization:create',
+    'account:manage',
+    'account:delete',
+  ]),
 };
 await auth.internal.registerWebsiteClient(registration);
 // Deploy this exact string as the Worker's WEBSITE_SCOPES text variable.
@@ -380,6 +380,11 @@ Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
 Rating writes also require the documented website client scope `rating:vote`.
+The shared registration helper retains only real mounted scopes, including `commerce_sale:list` when delivered.
+The existing native Web bootstrap uses that helper and deploys its exact joined list as `WEBSITE_SCOPES`;
+sign-in uses `websiteRequestedScopes` on that configured list. Auth refuses unknown scopes, so the current
+unavailable sales adapter cannot authorize a fabricated action. Controller integration must mount the producer,
+register/request the new scope and obtain renewed consent before enabling the real caller.
 
 Generate the website's own P-256 key from `apps/web`, keeping intermediate files under `.temp/`:
 

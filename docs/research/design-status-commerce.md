@@ -135,6 +135,36 @@ and exact-money presentation are source-complete for this interface slice. Local
 `bun run --cwd apps/web typecheck` passes with no type errors in 1,082 files; no other checks ran in this retry.
 Native combined-journey proof and promoted-main completion remain separate obligations.
 
+**Creator sales source and ordinary Web handoff.** The served `/creator/sales` route, signed-in BFF, minimal
+accounting decoder, exact recorded-unit rows and statement/offer navigation are implemented against the
+[selected private sales interface](../../services/kernel/src/commerce/README.md#private-creator-sales-history).
+The native `commerceSales` producer/generated caller is absent in this checkout; the real route deliberately
+returns unavailable through a typed port. No successful native response, complete zero, buyer information,
+permission decision, payout or current offer availability is invented. Preparing pages retain their incomplete
+meaning even with zero rows. No page/currency totals or buyer-order links are constructed. Captured old titles
+remain visible without current offer mapping.
+
+Web review IDs are `pages-commerce-creator-sales--{history,second-page,empty,denied,unavailable,error,stale,loading,
+preparing,incomplete,unknown-unit,long-title,other-creator-same-route,other-creator-denied,mobile390,desktop1280,
+actual-route}`. Review at 390 and 1280 in all eight locales, including long titles and the existing shell navigation.
+These are explicitly constructed presentation inputs, not native recordings. `actual-route` preserves the actual
+unavailable adapter rather than substituting a fake positive backend. Focused acceptance source is
+`apps/web/tests/creator-sales.test.ts`; no native/browser/build campaign was run for this slice.
+
+Controller/API/config handoff: deliver the selected native GET/default-20/max-100/signed-cursor envelope,
+replace `unavailableCreatorSalesCaller` with the real generated no-store/manual-redirect GET, and confirm its actual
+operation exposure. The root contribution uses exact `commerce_sale.list` admission while the binding is pending;
+the existing `payout_statement.list` contribution uses its native selling group. The existing Web registration
+bootstrap now shares the source scope helper with the deployment example; its exact mounted action set supplies
+`commerce_sale:list` to registration and the matching authorization request when delivered. Auth rejects an
+unmounted scope, and old consent/refresh is never widened. Deployment configuration and renewed consent are part
+of that real-module switch, not facts implied by these stories.
+
+Read-only reference source consulted: Ghost's indexed `content-gating.js` and `payments-service.js` under
+`commerce-ownership/ghost/ghost/core/server/services/members/`, plus the retained reference index and adopted
+Commerce research. No external source was copied or executed. Source delivery and local typing do not establish
+native, privacy, protected-use, whole-journey, current visual or promoted-main acceptance; all remain pending.
+
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,
 Commerce journey pages with Web shell/patterns/review, Semantic profiles/identity and Accounts Access. [Abstraction research](library-abstraction.md) is delivered,
