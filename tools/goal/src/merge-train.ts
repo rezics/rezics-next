@@ -228,7 +228,7 @@ function candidateIntegrityEvidence(
 }
 
 /** A candidate must still be the checked commit and have no tracked working-tree changes after each check. */
-function assertCandidateIntegrity(
+export function assertCandidateIntegrity(
   cwd: string,
   expected: string,
   phase: string,
@@ -544,7 +544,7 @@ function taskIntegrationTarget(
 const CONTROL_PLANE_PATH = 'tools/goal/';
 // A train worktree lies outside the main checkout with nothing installed: the first control-plane landing on main
 // failed its typecheck with exit 127. The root tests' preloads need the root packages, tsc needs tools/goal's own.
-const CONTROL_PLANE_CHECKS: readonly (readonly string[])[] = [
+export const CONTROL_PLANE_CHECKS: readonly (readonly string[])[] = [
   ['bun', 'install', '--frozen-lockfile'],
   ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
   ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
