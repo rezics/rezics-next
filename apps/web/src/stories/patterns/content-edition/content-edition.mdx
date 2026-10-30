@@ -1,0 +1,24 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as Stories from './content-edition.stories';
+
+<Meta of={Stories} />
+
+# Content edition reader
+
+The buyer opens the actual edition linked from Commerce, reads its fixed document and can inspect the source licence,
+document revision and SHA-256 after the text. A currently readable, exactly bound subject supplies the heading and
+backlink. A visible creator identity supplies a plain name. Missing identity points leave a neutral Edition heading
+and omit the creator; they never authorize the document.
+
+The served route and Pages use the same `ContentEditionPage` region inside the existing AppShell, which owns the main.
+Patterns omit the shell. Use phone390/desktop1280 and the existing light/dark and locale globals.
+
+Published and Longtext show constructed responses to the exact two assigned protected edition reads. They do not
+demonstrate native availability or real buyer delivery. Loading conceals the body. Unavailable retries both source
+reads; its keyboard play reaches the newly returned fixed document. Refused and Withdrawn show no body or remembered
+attribution. Versionmismatch rejects a different revision, including otherwise valid document bytes.
+
+Production uses the explicitly unavailable adapter until the generated native producer and current Access integration
+arrive. The wire contains no derivative summary, so document images remain explicitly unavailable. The reader never
+constructs an original, paid image, file or origin URL. See the [Web owner contract](../../../../README.md) for the
+assigned wire, route, cost and pending integration boundary. These stories await Web visual review.

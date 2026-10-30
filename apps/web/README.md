@@ -97,6 +97,84 @@ Cloudflare's Turnstile script. Rights-holder notices will use a separate, later 
 Every launch locale, including English, has a URL prefix.
 Locale selection uses URL, `rezics_locale` cookie, `Accept-Language`, then English; language tags match exact locale, Chinese script or region, then base language.
 
+### Fixed Content edition reader
+
+Commerce's owned `content.edition` benefit opens `/<locale>/editions/<benefit.resource.id>` (served route
+`/editions/$id`). Use the actual edition ID, never a subject, post, image, file or origin URL. The buyer's current
+server-resolved credential is the delivery actor on SSR, navigation and manual retry. The existing AppShell supplies
+the sole page main and locale routing. The route retains no loader cache, hides prior bytes while re-reading, and
+marks responses private/no-store and noindex. Anonymous readers see refusal and a sign-in return link.
+
+The assigned, closed native wire is:
+
+```ts
+// GET /v1/contentEditions/{id}
+{
+  editionId: string;
+  editionRevision: string;
+  state: 'draft' | 'published' | 'withdrawn';
+  targetSubjectId: string;
+  creatorAccountId: string;
+  revisionId: string;
+  sha256: string;
+  licence: string;
+}
+// GET /v1/contentEditions/{id}/revision
+{
+  editionId: string;
+  revisionId: string;
+  sha256: string;
+  licence: string;
+  body: DocumentSnapshot;
+}
+```
+
+`DocumentSnapshot` is the existing `@rezics/document` contract. Unknown fields, invalid documents and different
+edition/revision/digest/licence bindings prevent rendering. SHA-256 is also checked against the canonical document
+serialization used by native Content. Only published metadata can proceed to the revision read. Withdrawal, current
+refusal, missing source and dependency failure discard document bytes and attribution; retry starts with metadata
+again. There is no alternate revision, current-post, cached-body or seller-preview fallback.
+
+**Native delivery pending:** `content-editions/edition-api.ts` explicitly returns `native-pending`; the generated
+client has neither assigned endpoint in this checkout. Replace that adapter with the generated protected producer
+when delivered. There is no successful production stub or fabricated request against a cast client. Native Content
+and Access own entitlement, stored seller restoration, current source/ancestry/subject/version and final disclosure.
+Web never turns Commerce capture, an ownership badge or an opaque benefit into permission or a licence grant.
+This interface alone proves no real buyer use, native integration or reviewed visual result.
+
+The bounded current subject point supplies the heading/backlink only for the exact target ID, without redirect
+following. The existing single-account identity batch supplies a visible creator name; deleted or missing identities
+are omitted. Optional identity failure leaves a neutral Edition heading and the successfully read document intact.
+No profile, avatar, history or unrelated edition read enriches the page. Licence and fixed revision attribution follow
+the canonical shared DocumentBody. The wire has no native derivative summaries, so images explicitly remain unavailable
+through the shared renderer's image hook; no original, hotlink or guessed paid media URL is emitted. Native derivative
+summary/transport integration remains pending with the source adapter. Other document references keep the shared
+renderer behavior; unresolved mentions reveal no inferred identity.
+
+Cost per visit or manual retry: at most two exact protected edition reads, followed by at most one exact subject point
+and one creator identity point. Draft/withdrawn metadata stops after the first read; pending production issues no
+native edition requests. Identity calls cannot authorize bytes. Native bounds remain owned by the source producer;
+there are no lists, page walks or per-reference fanouts. Local validation/rendering is linear in the one document.
+
+The reusable `stories/patterns/content-edition` folder and Page stories use the same served reading component and
+explicit constructed exact API responses inside AppShell for Pages. Web scheduled review and Commerce handoff IDs are:
+
+- `patterns-commerce-contenteditionreader--published`
+- `patterns-commerce-contenteditionreader--longtext`
+- `patterns-commerce-contenteditionreader--loading`
+- `patterns-commerce-contenteditionreader--unavailable`
+- `patterns-commerce-contenteditionreader--refused`
+- `patterns-commerce-contenteditionreader--withdrawn`
+- `patterns-commerce-contenteditionreader--versionmismatch`
+- The same suffixes with prefix `pages-commerce-contenteditionreader--`.
+
+Use existing phone390/desktop1280, locale and light/dark globals. Published checks fixed attribution and keyboard
+navigation; Unavailable retries fresh exact responses by keyboard. Refused/Withdrawn/Versionmismatch conceal bytes.
+Fixtures are not native recordings or buyer proof. `tests/content-edition.test.ts` records the two focused reader
+outcomes for later integration; this delivery runs workspace typing only, with acceptance and visual review pending.
+The implementation reuses the repository's exact-revision reader, shell, subject point and public identity boundary.
+The UI README's external shelf references do not apply to this document surface; no external reference project was used.
+
 Media bytes use the `MEDIA` R2 binding for the `rezics-media` bucket. Development simulates this bucket locally.
 `POST /media` reserves a website upload; `GET /media/<id>` reads its state; `PUT /media/<id>` transports the bytes; `GET` and `HEAD /media/<id>/<variant>` ask content for permission on every request.
 To upload, reserve with `POST /media`, sending an `application/json` object of at most 4 KiB with exactly

@@ -1,5 +1,6 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
 import type { DocumentSnapshot } from '@rezics/document';
+import type { ReactNode } from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
@@ -21,10 +22,12 @@ type Props = {
   labels?: Partial<DocumentBodyLabels>;
   mentions?: DocumentMentions;
   locale?: string;
+  /** A reader without current native derivative summaries must render explicit unavailability, never guess a URL. */
+  renderImage?: (image: { mediaId: string; alt: string }) => ReactNode;
 };
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
-export function DocumentBody({ document, className, labels, mentions, locale = 'en' }: Props) {
+export function DocumentBody({ document, className, labels, mentions, locale = 'en', renderImage }: Props) {
   const resolved = { ...documentBodyLabels, ...labels };
   const content = renderToReactElement({
     extensions: documentExtensions,
@@ -44,6 +47,7 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
         horizontalRule: () => <hr />,
         image: ({ node }: any) => {
           const id = typeof node.attrs?.src === 'string' ? node.attrs.src : '';
+          if (renderImage) return renderImage({ mediaId: id, alt: node.attrs?.alt ?? '' });
           const variant = typeof node.attrs?.variant === 'string' ? node.attrs.variant : 'original';
           return (
             <img
