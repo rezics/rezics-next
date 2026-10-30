@@ -255,23 +255,23 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 
 ## apps/web/src/routes/library/following.tsx
 
-| Route                                     | State                   | Viewer           | Desktop | Phone   |
-| ----------------------------------------- | ----------------------- | ---------------- | ------- | ------- |
+| Route                                     | State                   | Viewer           | Desktop                                                     | Phone                                                       |
+| ----------------------------------------- | ----------------------- | ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
 | apps/web/src/routes/library/following.tsx | populated               | member           | apps/web/src/stories/library-following.stories.tsx#SignedIn | apps/web/src/stories/library-following.stories.tsx#SignedIn |
-| apps/web/src/routes/library/following.tsx | populated               | owner or curator | missing | missing |
-| apps/web/src/routes/library/following.tsx | populated               | suspended        | missing | missing |
-| apps/web/src/routes/library/following.tsx | empty                   | member           | missing | missing |
-| apps/web/src/routes/library/following.tsx | empty                   | owner or curator | missing | missing |
-| apps/web/src/routes/library/following.tsx | empty                   | suspended        | missing | missing |
-| apps/web/src/routes/library/following.tsx | long content            | member           | missing | missing |
-| apps/web/src/routes/library/following.tsx | long content            | owner or curator | missing | missing |
-| apps/web/src/routes/library/following.tsx | long content            | suspended        | missing | missing |
-| apps/web/src/routes/library/following.tsx | preparing / unavailable | member           | missing | missing |
-| apps/web/src/routes/library/following.tsx | preparing / unavailable | owner or curator | missing | missing |
-| apps/web/src/routes/library/following.tsx | preparing / unavailable | suspended        | missing | missing |
-| apps/web/src/routes/library/following.tsx | error                   | member           | missing | missing |
-| apps/web/src/routes/library/following.tsx | error                   | owner or curator | missing | missing |
-| apps/web/src/routes/library/following.tsx | error                   | suspended        | missing | missing |
+| apps/web/src/routes/library/following.tsx | populated               | owner or curator | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | populated               | suspended        | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | empty                   | member           | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | empty                   | owner or curator | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | empty                   | suspended        | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | long content            | member           | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | long content            | owner or curator | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | long content            | suspended        | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | preparing / unavailable | member           | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | preparing / unavailable | owner or curator | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | preparing / unavailable | suspended        | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | error                   | member           | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | error                   | owner or curator | missing                                                     | missing                                                     |
+| apps/web/src/routes/library/following.tsx | error                   | suspended        | missing                                                     | missing                                                     |
 
 ## apps/web/src/routes/library/index.tsx
 

@@ -47,11 +47,8 @@ export type NativeFollowingFixture = {
  * this fixture without touching another process or account.
  */
 export async function createNativeFollowingFixture(stack: NativeWebStack): Promise<NativeFollowingFixture> {
-  const [{ accountId: aliceAccountId }, { accountId: bobAccountId }, { accountId: editorAccountId }] = await Promise.all([
-    stack.authPersona('alice'),
-    stack.authPersona('bob'),
-    stack.authPersona('editor'),
-  ]);
+  const [{ accountId: aliceAccountId }, { accountId: bobAccountId }, { accountId: editorAccountId }] =
+    await Promise.all([stack.authPersona('alice'), stack.authPersona('bob'), stack.authPersona('editor')]);
 
   const active = await nativeJson<{ digest: string }>(stack, 'anonymous', '/v1/definitions/active');
   if (active.digest !== bundledDigest)

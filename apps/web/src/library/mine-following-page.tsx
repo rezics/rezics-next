@@ -86,7 +86,11 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
                         key={`${type}:${follow.targetId}`}
                         className="flex min-h-16 items-center gap-4 rounded-xl px-4 py-3"
                       >
-                        {href ? <ListRowLink href={href} lang={title.lang}>{title.text}</ListRowLink> : null}
+                        {href ? (
+                          <ListRowLink href={href} lang={title.lang}>
+                            {title.text}
+                          </ListRowLink>
+                        ) : null}
                         <div className="min-w-0 flex-1">
                           <p
                             aria-hidden={href ? 'true' : undefined}
@@ -97,7 +101,7 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {type === 'subject'
-                              ? follow.target?.typeLabel ?? label
+                              ? (follow.target?.typeLabel ?? label)
                               : type === 'collection'
                                 ? m.library_following_kind_collection()
                                 : m.library_following_kind_space()}
