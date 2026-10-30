@@ -116,6 +116,13 @@ export async function createViewerActionsSurfacesDriver(): Promise<NativeSurface
       },
     }) as TestKernel;
     Object.defineProperty(kernel, 'testAccess', { get: () => access });
+    // Resolve the kernel's lazy native Access before the persona helper reads its catalogue.
+    const ready = await request(null, '/v1/viewerActions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ resources: [{ type: 'schema:Book', id: newId(0x540) }] }),
+    });
+    if (!ready.ok) throw new Error(`Native viewer action initialization: ${ready.status} ${await ready.text()}`);
     const driver: NativeSurfacesDriver = {
       database,
       request,
