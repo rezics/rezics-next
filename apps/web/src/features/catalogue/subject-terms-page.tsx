@@ -242,7 +242,7 @@ export function SubjectTermsPage({
               <p className="font-medium">{m.catalogue_terms_saved({}, options)}</p>
               {saved.reader.state === 'ready' ? (
                 <>
-                  {values(saved.reader.snapshot, Object.keys(saved.reader.snapshot.subject.labels))}
+                  {values(saved.reader.snapshot, termLanguages(saved.reader.snapshot))}
                   <a className={buttonVariants()} href={saved.reader.snapshot.href}>
                     {m.catalogue_create_open({}, options)}
                   </a>
@@ -443,4 +443,8 @@ export function SubjectTermsPage({
 function termValue(snapshot: TermsSnapshot, field: TermField, language: string): string {
   const value = snapshot.subject[field][language];
   return Array.isArray(value) ? value.join('\n') : (value ?? '');
+}
+
+function termLanguages(snapshot: TermsSnapshot): string[] {
+  return [...new Set(termFields.flatMap((field) => Object.keys(snapshot.subject[field])))];
 }
