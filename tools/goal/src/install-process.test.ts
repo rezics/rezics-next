@@ -265,7 +265,7 @@ test(
       expect(result.output).toContain('goal-check-started');
       expect(result.output).toContain('step="bun run check"');
       expect(result.output).toContain('workspace="@fixture/goal"');
-      expect(result.output).not.toContain('package=');
+      expect(result.output).toContain('package="unknown"');
       await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
     } finally {
       fixture.close();
