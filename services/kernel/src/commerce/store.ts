@@ -1,3 +1,5 @@
+import { routeOf } from '../route/route.ts';
+import { decodeCapturedContentEdition, encodeCapturedContentEdition } from './benefit.ts';
 import type { PoolClient } from 'pg';
 import type {
   CheckoutDecision,
@@ -54,11 +56,12 @@ function iso(value: string): string {
   return new Date(value).toISOString();
 }
 function asOffer(row: OfferRow): Offer {
-  return { ...row, unitAmountMinor: Number(row.unitAmountMinor) };
+  return { ...row, contentEdition: decodeCapturedContentEdition(row.contentEdition), unitAmountMinor: Number(row.unitAmountMinor) };
 }
 function asOrder(row: OrderRow): Order {
   return {
     ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
     unitAmountMinor: Number(row.unitAmountMinor),
     amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
     createdAt: iso(row.createdAt),
@@ -67,7 +70,7 @@ function asOrder(row: OrderRow): Order {
   };
 }
 function asEntitlement(row: EntitlementRow): Entitlement {
-  return { ...row, grantedAt: iso(row.grantedAt), revokedAt: row.revokedAt === null ? null : iso(row.revokedAt) };
+  return { ...row, contentEdition: decodeCapturedContentEdition(row.contentEdition), grantedAt: iso(row.grantedAt), revokedAt: row.revokedAt === null ? null : iso(row.revokedAt) };
 }
 function write(context: WriteContext) {
   return { transaction_id: context.transactionId, time: context.time };
@@ -86,6 +89,7 @@ export async function insertOffer(
         id: offer.id,
         creator_account_id: offer.creatorAccountId,
         target_subject_id: offer.targetSubjectId,
+        content_edition: encodeCapturedContentEdition(offer.contentEdition) ?? '',
         title: offer.title,
         currency: offer.currency,
         unit_amount_minor: offer.unitAmountMinor,
@@ -141,6 +145,7 @@ export async function insertOrder(
         offer_id: offer.id,
         offer_revision: offer.revision,
         target_subject_id: offer.targetSubjectId,
+        content_edition: encodeCapturedContentEdition(offer.contentEdition) ?? '',
         creator_account_id: offer.creatorAccountId,
         title: offer.title,
         currency: offer.currency,
@@ -170,6 +175,7 @@ export async function listBuyerOrders(
   });
   return rows.map((row) => ({
     ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
     unitAmountMinor: Number(row.unitAmountMinor),
     amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
     createdAt: iso(row.createdAt),
@@ -406,6 +412,7 @@ export async function applyCheckoutDecision(
           order_id: order.id,
           offer_id: order.offerId,
           target_subject_id: order.targetSubjectId,
+          content_edition: encodeCapturedContentEdition(order.contentEdition) ?? '',
           ...write(context),
         }),
       ),
@@ -427,4 +434,20 @@ export async function applyCheckoutDecision(
     );
   }
   return { changed: true, order, entitlement, entitlementAction: action, newTransactions: decision.newTransactions };
+}
+
+/** Native owner-scoped eligibility data for Accounts. This is not an opaque Access fact
+ * and must never be accepted as one by a caller. No foreign home or provider is held.
+ * Accounts still prepares/checks permission; Content still performs its final native checks.
+ */
+export async function readContentEditionEntitlement(
+  client: Client,
+  buyerAccountId: string,
+  entitlementId: string,
+): Promise<Entitlement | null> {
+  const route = routeOf(buyerAccountId);
+  if (route === null || routeOf(entitlementId) !== route) return null;
+  const entitlement = await readEntitlement(client, route, entitlementId);
+  return entitlement?.accountId === buyerAccountId && entitlement.contentEdition !== null &&
+    entitlement.contentEdition !== undefined && entitlement.revokedAt === null ? entitlement : null;
 }

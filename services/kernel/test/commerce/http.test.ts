@@ -687,3 +687,12 @@ test('commerce request statement counts stay constant as total and buyer history
     expect(new Set(report.samples.map((s) => s.cost.statements)).size).toBe(1);
   }
 });
+
+test('native edition selector cannot create access or provider calls without the actual Content producer', async () => {
+  const { targetSubjectId: _historicSubject, ...terms } = input();
+  const before = fake.requests.length;
+  const response = await request('/v1/offers', seller, { ...terms, contentEditionId: newId(0x5500) });
+  expect(response.status).toBe(503);
+  expect((await response.json()).code).toBe('dependency_unavailable');
+  expect(fake.requests.length).toBe(before);
+});

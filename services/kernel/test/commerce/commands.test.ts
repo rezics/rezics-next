@@ -486,3 +486,55 @@ test('command statement counts do not grow with unrelated rows', async () => {
   expect(counts[2]).toEqual(counts[0]);
   expect(buffers[2]!).toBeLessThanOrEqual(buffers[1]! + 24);
 });
+
+test('fresh native edition offer remains unavailable without Content authority and has no effects', async () => {
+  const { ContentEditionUnavailableError } = await import('../../src/commerce/benefit.ts');
+  const before = await footprint();
+  const { targetSubjectId: _historicalSubject, ...terms } = input();
+  await expect(commands.createOffer(await actor(seller), { ...terms, contentEditionId: newId(0x5500) }, key()))
+    .rejects.toBeInstanceOf(ContentEditionUnavailableError);
+  expect(await footprint()).toEqual(before);
+});
+
+test('historical subject-only paid truth survives unavailable target without minting or restoring access', async () => {
+  // Explicit pre-edition historical rows, not a synthetic Content publication or sale authority.
+  const context = { time: new Date().toISOString(), transactionId: key() };
+  const historicalOffer = await store.insertOffer(pool, routeOf(seller)!, {
+    ...input(), id: newId(routeOf(seller)!), creatorAccountId: seller, royaltyBasisPoints: 9000,
+  }, context);
+  const historicalOrder = await store.insertOrder(pool, routeOf(buyer)!, {
+    id: newId(routeOf(buyer)!), buyerAccountId: buyer, offer: historicalOffer,
+  }, context);
+  expect(historicalOffer.contentEdition).toBeNull();
+  expect(historicalOrder.contentEdition).toBeNull();
+  await commands.recordCheckout(historicalOrder.id, {
+    session: { id: 'cs_test_paid', url: 'https://checkout.example.test', expiresAt: '2026-01-02T00:00:00.000Z' },
+  });
+  const paid = snapshot(historicalOrder);
+  await commands.applyCheckoutSnapshot(paid, key());
+  expect(await commands.readOrderForAccount(buyer, historicalOrder.id)).toMatchObject({ settlement: 'paid', contentEdition: null });
+  expect(await store.readOrderEntitlement(pool, routeOf(buyer)!, historicalOrder.id)).toBeNull();
+  const entitlementId = newId(routeOf(buyer)!);
+  // Retain an independently existing last-verified legacy entitlement across availability failure.
+  await pool.query(`INSERT INTO commerce.entitlement
+    (route,entitlement_id,account_id,order_id,offer_id,target_subject_id,granted_at,revision,transaction_id)
+    VALUES ($1,$2,$3,$4,$5,$6,now(),1,$2)`,
+    [routeOf(buyer), entitlementId, buyer, historicalOrder.id, historicalOffer.id, historicalOffer.targetSubjectId]);
+  await commands.applyCheckoutSnapshot({ ...paid, observedAt: '2026-01-01T02:00:00.000Z' }, key());
+  expect(await store.readEntitlement(pool, routeOf(buyer)!, entitlementId)).toMatchObject({ revokedAt: null, contentEdition: null });
+  const refund = {
+    ...paid, observedAt: '2026-01-01T03:00:00.000Z',
+    refunds: [{ id: 're_refund', status: 'succeeded', amountMinor: 1320 }],
+    transactions: [...paid.transactions, { ...transaction('txn_refund', 'refund'), amountMinor: -1320, netMinor: -1320 }],
+  };
+  await commands.applyCheckoutSnapshot(refund, key());
+  const revoked = await store.readEntitlement(pool, routeOf(buyer)!, entitlementId);
+  expect(revoked).toMatchObject({ revokeReason: 'refund', contentEdition: null });
+  await commands.applyCheckoutSnapshot({
+    ...refund, observedAt: '2026-01-01T04:00:00.000Z',
+    refunds: [{ id: 're_refund', status: 'failed', amountMinor: 1320 }],
+    transactions: [...refund.transactions, transaction('txn_restore', 'refund_reversal')],
+  }, key());
+  expect(await store.readEntitlement(pool, routeOf(buyer)!, entitlementId)).toEqual(revoked);
+  expect(await commands.readOrderForAccount(buyer, historicalOrder.id)).toMatchObject({ settlement: 'paid', contentEdition: null });
+});

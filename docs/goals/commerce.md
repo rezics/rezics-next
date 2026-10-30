@@ -9,8 +9,9 @@ attributed earnings and external royalty payment evidence without a second proce
 ## Done when
 
 - Subject entry, offer, hosted Checkout, private purchase/owned-benefit navigation and final protected use form one
-  journey through ordinary APIs, native storage and reviewed pages. The shared first target/action/version,
-  selling-authority, current-use Access and discovery choice must be bound before implementing those shared bodies.
+  journey through ordinary APIs, native storage and reviewed pages. The first target is an exact authored native Content edition (`content.edition`, `edition:read`, revision ID and
+  SHA256). Real Content sale authority, Accounts opaque benefit facts and final Content reads must be delivered
+  before protected-use completion; bounded subject discovery remains a shared delivery.
 - The one-time account-bound, one-fixed-version-benefit/quantity-one contract captures immutable accepted terms;
   historic subject-only orders remain unknown until explicitly authorized mapping. Repricing/delisting cannot edit
   a captured sale; current availability and rights remain separate.
@@ -53,9 +54,10 @@ No permission, rights, disclosure, deletion or account mechanism is duplicated h
 
 Requires semantic references/redirects and disclosed subject entry; target-owner version/action and sale authority;
 existing Access/resource grants and current eligibility integration; shared command receipts, durable work and
-retention/custody. The exact indispensable pending shared choice and recommendation live only in the
-[owner contract](../../services/kernel/src/commerce/README.md#indispensable-shared-choice-still-pending).
-Payment corrections proceed independently; the shared choice does not waive the full journey.
+retention/custody. The adopted native edition and precise pending producer/use bindings live only in the
+[owner contract](../../services/kernel/src/commerce/README.md#adopted-native-content-edition-and-delivery-state).
+Commerce capture storage/HTTP and fail-closed unavailable admission are source deliveries, not native sale/use proof.
+The sole offer-consent delivery owns expectedOfferRevision and its request digest. None waives the full journey.
 
 ## Acceptance
 

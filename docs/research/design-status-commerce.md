@@ -31,12 +31,14 @@ Financial erasure/custody and actual native/DBOS growth gaps remain open.
 **Entitlements and actual use.** The owner contract adopts one-time account-bound acquisition of one immutable
 fixed-version benefit/quantity one, separate from subject/payment/Library/future item identities. Historic subject-only
 orders retain UNKNOWN benefit mapping until explicit authorized mapping. Partial-refund compatibility and terminal
-no-restoration remain. Root/Content/Accounts, with Semantic discovery participation, still must bind the first exact
-target/action/version, creator sale authority, current-use Access integration and bounded subject-discovery port.
-Content's image endpoint has no delivered paid-version/sale-authority port and is not a paid file origin.
-The complete subject entry → offer → Checkout → owned benefit → protected use journey remains required, not proved.
-Benefit capture, discovery, owned navigation, actual use enforcement and minimal creator offer/sales views remain
-product deliveries. Shared signatures are pending; independent payment fixes proceed without inventing them.
+no-restoration remain. The exact first target is adopted: native authored `content.edition`, `edition:read`, fixed revision ID/SHA256.
+Commerce now has bounded immutable capture storage, HTTP DTOs and owner-scoped native entitlement data reads.
+Fresh offer/order/Checkout admission fails closed because Content's real `edition-sale.ts` declaration/producer
+is absent in this base; no synthetic authority or native success is claimed. Paid evidence and revocation persist,
+last-verified active entitlements survive transient unavailability, and absent/revoked entitlements cannot be minted
+or restored. The sole offer-consent writer owns observed expectedOfferRevision and its digest; its implementation
+is not present in this base. Accounts opaque fact integration and Content final source/ancestry reads, subject
+discovery, owned navigation, native sale/use proof, reviewed UI and promoted-main journey remain pending.
 Tax/unit, reserves/carry/payability, richer external attestation and authenticated recovery require the explicit
 owner/Root commercial/shared adoption recorded in the purchase contract before runtime bodies.
 
@@ -96,7 +98,7 @@ Accounts owns management evaluation, account-agent resolution/state and effects 
 Semantic identity/kernel health are prerequisites. Proposed `/v1/followCounts/:targetType/:targetId`, aggregate/readiness, lifecycle and native driver remain pending.
 **Handoff:** where should eligible managers see private ready/unready counts with current grants and suspension/erasure updates, without another person's outgoing list or a public total?
 
-**Shared handoff.** Bind the purchase contract's exact pending first-benefit/discovery choice through existing
+**Shared handoff.** Deliver the adopted exact Content-edition producer and pending discovery through existing
 Access; do not introduce a second permission engine or label research sketches as delivered signatures. Library
 journeys continue under their existing sole behavior authorities and the separate owner brief. These ownership
 changes preserve the commerce manager scope and every original native/interface/main obligation.

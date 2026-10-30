@@ -1,3 +1,4 @@
+import { captureCurrentContentEdition, requireCurrentContentEdition, withoutUnverifiedBenefit } from './benefit.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -58,7 +59,12 @@ export type CheckoutOutcome =
   | { session: CheckoutSession }
   | { kind: 'unknown' }
   | { kind: 'failed'; creationAttemptId?: string };
-export type OfferInput = Pick<Offer, 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'taxCode'>;
+export type OfferInput = Pick<Offer, 'title' | 'currency' | 'unitAmountMinor' | 'taxCode'> & {
+  /** Optional only for old trusted callers/receipt replays. A fresh create must select an edition. */
+  contentEditionId?: string;
+  /** Old receipt identity only; fresh requests cannot select or relabel a subject. */
+  targetSubjectId?: string;
+};
 
 /** Trusted native port input, never a client operation or buyer permission. */
 export type CheckoutRefreshInput = Readonly<{ orderId: string; sessionId: string; workflowId: string }>;
@@ -142,14 +148,16 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       resource = { route: r, id };
     // Copy only seller-controlled fields; the royalty comes exclusively from service configuration.
     const input: OfferInput = {
-      targetSubjectId: body.targetSubjectId,
+      ...(body.contentEditionId === undefined ? {} : { contentEditionId: body.contentEditionId }),
+      ...(body.targetSubjectId === undefined ? {} : { targetSubjectId: body.targetSubjectId }),
       title: body.title,
       currency: body.currency,
       unitAmountMinor: body.unitAmountMinor,
       taxCode: body.taxCode,
     };
     if (
-      routeOf(input.targetSubjectId) === null ||
+      (input.contentEditionId !== undefined && routeOf(input.contentEditionId) === null) ||
+      (input.targetSubjectId !== undefined && routeOf(input.targetSubjectId) === null) ||
       !input.title.trim() ||
       !/^[a-z]{3}$/.test(input.currency) ||
       !Number.isSafeInteger(input.unitAmountMinor) ||
@@ -188,10 +196,16 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         authorization: accountAuthorization(actor, authorization),
       },
       async (tx, command) => {
+        // Replay is already resolved. Legacy subject-only creates may replay, never mint a benefit.
+        const contentEdition = await captureCurrentContentEdition(input.contentEditionId ?? '');
+        if (contentEdition.creatorAccountId !== seller.accountId ||
+            contentEdition.benefit.resource.id !== input.contentEditionId ||
+            (input.targetSubjectId !== undefined && input.targetSubjectId !== contentEdition.targetSubjectId))
+          throw new GrantDeniedError();
         const offer = await store.insertOffer(
           tx,
           r,
-          { ...input, id, creatorAccountId: seller.accountId, royaltyBasisPoints },
+          { ...input, targetSubjectId: contentEdition.targetSubjectId, contentEdition, id, creatorAccountId: seller.accountId, royaltyBasisPoints },
           { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
         );
         insertedTransactionId = command.transactionId;
@@ -290,6 +304,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       async (tx, command) => {
         const offer = parent.at(command.time);
         if (offer.state !== 'active') throw new OfferUnavailableError();
+        await requireCurrentContentEdition(offer.contentEdition);
         const order = await store.insertOrder(
           tx,
           r,
@@ -349,6 +364,8 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         const stored = await creationRead.run(tx, { route: r, id });
         // Pre-migration uncertainty has no trustworthy request/first-call evidence. Never guess it.
         if (!stored && current.settlement === 'unknown') return done({ kind: 'unknown' });
+        // Released current native target authority is indispensable before any fresh provider call.
+        await requireCurrentContentEdition(current.contentEdition);
         const request: CheckoutRequest = {
           orderId: id,
           buyerAccountId: current.buyerAccountId,
@@ -648,6 +665,12 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
                 ? { changed: false }
                 : { ...decision, entitlement: { kind: 'none' } };
           }
+          // No Content producer is installed. Financial truth/revocation remain independent;
+          // neither a historical subject nor a stored approval may mint/restore access.
+          decision = withoutUnverifiedBenefit(decision);
+          if (decision.changed && decision.entitlement.kind === 'none' &&
+              decision.settlement === state.order.settlement && decision.newTransactions.length === 0)
+            decision = { changed: false };
           if (!decision.changed) throw new Unchanged();
           const applied = await store.applyCheckoutDecision(tx, r, state, decision, {
             transactionId: command.transactionId,
