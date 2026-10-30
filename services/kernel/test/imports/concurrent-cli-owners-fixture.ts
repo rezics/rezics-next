@@ -101,6 +101,8 @@ export async function runConcurrentCliOwnersJourney() {
   let controller = new AbortController();
   const pending = new Set<Promise<ImportCliResult>>();
   const invocations: Invocation[] = [];
+  // Kept outside diagnostic observations: reuse actual CLI authority for fence reads.
+  const cliAuthorization = new Map<string, string>();
   const publicReads: { path: string; status: number; body: unknown }[] = [];
   const databases: Database[] = [];
   let closed = false;
@@ -212,6 +214,9 @@ export async function runConcurrentCliOwnersJourney() {
             expect(target.origin).toBe(api);
             expect(feed.observation.eof).toBe(true);
             expect(request.headers.has('cookie')).toBe(false);
+            const authorization = request.headers.get('authorization');
+            if (!authorization) throw new Error('Missing ordinary CLI authorization');
+            cliAuthorization.set(source, authorization);
             const bytes = await request.clone().text();
             if (target.pathname === '/v1/subjects:batchWrite') {
               for (const command of (JSON.parse(bytes) as BatchWriteRequest).commands) {
@@ -492,9 +497,16 @@ export async function runConcurrentCliOwnersJourney() {
     const sourceA = inspect(a).source!.source;
     const sourceB = inspect(b).source!.source;
     for (const source of [sourceA, sourceB]) {
-      const checked = await read(
-        `/v1/sourceFences:check?${new URLSearchParams({ source, externalId: work.key, fieldGroup: 'facts' })}`,
+      const authorization = cliAuthorization.get(source);
+      if (!authorization) throw new Error('Missing original CLI credential for fence read');
+      const path = `/v1/sourceFences:check?${new URLSearchParams({ source, externalId: work.key, fieldGroup: 'facts' })}`;
+      // Governance can take down tuples; the ordinary importer holds source_fence:read.
+      const response = await runtime.replay(
+        new Request(`${api}${path}`, { headers: { authorization } }),
       );
+      const checked = await response.json();
+      publicReads.push({ path, status: response.status, body: checked });
+      expect(response.status, JSON.stringify(checked)).toBe(200);
       expect(checked).toEqual({
         fenced: source === sourceA,
         securityRevision: source === sourceA ? fence.securityRevision : null,

@@ -34,8 +34,14 @@ counter, and the actual remaining owner count after all invocations.
 
 The local importer test is a separate pre-effect proof: two ordinary CLI acquisitions, same-alias refusal,
 independent ownership, cancellation and reopening with zero HTTP calls. It cannot prove native publication.
-Native acceptance remains unverified until the managed command finishes; the previous missing-caller red
-was a binding gap, not evidence of a production ownership defect.
+The first managed native run tested revision `fc70ca1fd2d59ccff1cbe6e254be48654017fd41` and reached
+the final tuple fence reads after 789 assertions. Its governance observer correctly received HTTP 403:
+that observer has takedown authority, while ordinary CLI credentials hold `source_fence:read`. The caller
+now reuses each source's captured CLI Authorization header for those independent native reads, keeping
+headers out of diagnostics. The first failure is recorded in
+`.temp/goal/checks/worker-check-2026-10-30T05-45-16.655Z-e3a661a0.log` (one case, zero passes, one failure).
+Native acceptance remains unverified until the repaired managed command finishes; the previous missing-caller
+red was a binding gap, not evidence of a production ownership defect.
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/concurrent-cli-owners.test.ts
