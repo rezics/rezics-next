@@ -464,10 +464,11 @@ test('password aliases issue each fixed operation profile with live proof and pr
     }
     expect((await signIn(['account:delete'], 'rezics-website')).status).toBeGreaterThanOrEqual(400);
     expect(await count()).toEqual(before);
-    await f.pool.query(
-      'INSERT INTO auth_consent(account_id,client_id,scopes,pending_scopes,pending_reference) VALUES ($1,$2,$3,$4,$5)',
-      [f.account.accountId, operationClient.clientId, operationClient.scopes, [], 'pending-native-reduction'],
+    const pending = await f.pool.query(
+      'UPDATE auth_consent SET pending_scopes=$3,pending_reference=$4 WHERE account_id=$1 AND client_id=$2',
+      [f.account.accountId, operationClient.clientId, [], 'pending-native-reduction'],
     );
+    expect(pending.rowCount).toBe(1);
     expect((await signIn(['account:delete'])).status).toBeGreaterThanOrEqual(400);
     expect(await count()).toEqual(before);
   } finally {
