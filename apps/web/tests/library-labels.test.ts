@@ -377,3 +377,98 @@ test('the unprofiled label story loads the same complete subject and localized t
     expect(subjectPageTitle(loaded.page, locale)).toBe(title);
   }
 });
+
+test('the unprofiled subject stays on its catalogue route rather than inheriting the recorded Mira account', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { unprofiledSubjectId, routes } = await import('../src/kernel/fake/library-unprofiled-subject');
+  const { loadSubject } = await import('../src/subject/load-subject');
+  const { loadSubjectPage } = await import('../src/features/pages/subject');
+  const client = createKernelClient('https://kernel.example.test', { fetch: createStoryRecordedKernelFetch() });
+  const canonical = await loadSubject(client, unprofiledSubjectId, 'en');
+  expect(canonical.kind).toBe('subject');
+  if (canonical.kind !== 'subject') throw new Error('Unprofiled subject is missing');
+  expect(canonical.value.href).toBe(`/en/subjects/${unprofiledSubjectId}/person`);
+  expect(canonical.value.read.account).toBeNull();
+  expect((await client.accounts.get({ query: { agent: unprofiledSubjectId } })).data?.accounts).toEqual([]);
+  expect((await client.accounts.get({ query: { handle: 'mira' } })).data?.accounts[0]?.handle).toBe('mira');
+  const accountRoute = routes.find((route) => route.path === '/v1/accounts')!;
+  expect(
+    await accountRoute.story?.({
+      request: new Request('https://kernel.example.test/v1/accounts?agent=another-subject'),
+      recordings: {},
+      match: null,
+    }),
+  ).toBeUndefined();
+
+  const loaded = await loadSubjectPage(client, unprofiledSubjectId);
+  expect(loaded.kind).toBe('page');
+  if (loaded.kind !== 'page') throw new Error('Unprofiled page is missing');
+  expect(loaded.page.subject).toBe(unprofiledSubjectId);
+  expect(loaded.page.account).toBeUndefined();
+  expect(JSON.stringify(loaded.page.document)).toContain('"name":"actions"');
+  const route = await source('src/routes/subjects/$id_.$slug.tsx');
+  expect(route).toContain('subjectLibraryQuery(id, locale');
+  expect(route).toContain('actions={(subject) => (');
+  expect(route).toContain('<SubjectLibrarySlot');
+});
+
+test('the unprofiled story creates a generic label on its actual subject and keeps assignments subject-local', async () => {
+  const { createStoryRecordedKernelFetch, setFakeAdmitted } = await import('../src/kernel/fake');
+  const { unprofiledSubjectId } = await import('../src/kernel/fake/library-unprofiled-subject');
+  const { resetLabelAssignmentStory, setLibraryLabelStorySizes } =
+    await import('../src/kernel/fake/library-label-assignments');
+  const { setLabelCatalogueStory } = await import('../src/kernel/fake/library-labels');
+  const { applySubjectLabelMutation, readSubjectLabelAssignments } = await import('../src/library/subject-labels');
+  const { loadSubjectLibrarySlot } = await import('../src/library/subject-slot');
+  setLabelCatalogueStory(false);
+  resetLabelAssignmentStory();
+  setLibraryLabelStorySizes({ subject: 0 });
+  setFakeAdmitted([
+    'library_label.assignment_list',
+    'library_label.list',
+    'library_label.create',
+    'library_label.assign',
+  ]);
+  const client = createKernelClient('https://kernel.example.test', { fetch: createStoryRecordedKernelFetch() });
+  try {
+    const before = await loadSubjectLibrarySlot(client, request(), env, unprofiledSubjectId);
+    expect(before.session).toBe('signed-in');
+    expect(before.labels).toEqual([]);
+    const created = await applySubjectLabelMutation(
+      request('POST'),
+      env,
+      {
+        intent: 'create-and-assign',
+        subjectId: unprofiledSubjectId,
+        name: 'For later',
+        createKey: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+      },
+      client,
+    );
+    expect(created.ok).toBe(true);
+    const after = await loadSubjectLibrarySlot(client, request(), env, unprofiledSubjectId);
+    expect(after.labels).toEqual([
+      expect.objectContaining({ name: 'For later', id: expect.any(String), revision: 1 }),
+    ]);
+    expect(after.entry).toBeNull();
+    expect(after.stateOptions).toEqual([]);
+    const full = await client.libraryLabelAssignments.get({
+      query: { subjectId: unprofiledSubjectId, view: 'FULL', limit: 32 },
+    });
+    expect(full.data?.assignments[0]?.subjectId).toBe(unprofiledSubjectId);
+    expect(
+      await readSubjectLabelAssignments(client, '0192f3a0-6c1e-7b2a-9d4e-000000000805', 'Bearer owner-token'),
+    ).toEqual([]);
+    setLibraryLabelStorySizes({ subject: 3 });
+    const populated = await client.libraryLabelAssignments.get({
+      query: { subjectId: unprofiledSubjectId, view: 'FULL', limit: 32 },
+    });
+    expect(populated.data?.assignments).toHaveLength(3);
+    expect(populated.data?.assignments.every((row) => row.subjectId === unprofiledSubjectId)).toBe(true);
+  } finally {
+    resetLabelAssignmentStory();
+    setLibraryLabelStorySizes({ subject: 3 });
+    setFakeAdmitted([]);
+  }
+});

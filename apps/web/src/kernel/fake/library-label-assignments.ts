@@ -9,7 +9,6 @@ const labelIds = Array.from(
   { length: 32 },
   (_, index) => `0192f3a0-6c1e-7b2a-9d4e-${String(801 + index).padStart(12, '0')}`,
 );
-const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000805';
 const storyNames = ['Reading list', 'Favorites', 'Read later'];
 let subjectCount = 3;
 let shelfCount = 3;
@@ -57,18 +56,19 @@ async function body(request: Request): Promise<Record<string, unknown>> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function subjectAssignments(): KernelRecording {
+function subjectAssignments(targetSubjectId: string): KernelRecording {
   const initial = Array.from({ length: subjectCount }, (_, index) => {
     const label = labels()[index % labelIds.length]!;
     return {
       id: `0192f3a0-6c1e-7b2a-9d4e-${String(1000 + index).padStart(12, '0')}`,
       labelId: label.id,
-      subjectId,
+      subjectId: targetSubjectId,
       revision: 1,
       label: { name: label.name },
     };
   });
   const values = [...initial, ...addedAssignments.values()]
+    .filter((row) => row.subjectId === targetSubjectId)
     .filter((row) => !removedAssignments.has(row.id))
     .map((row) => ({ ...row, label: { name: labels().find((label) => label.id === row.labelId)?.name ?? '' } }))
     .sort((left, right) => left.labelId.localeCompare(right.labelId));
@@ -164,14 +164,17 @@ async function answer({ request }: { request: Request }): Promise<KernelRecordin
   if (request.method === 'GET' && url.pathname === '/v1/libraryLabelAssignments') {
     const labelIdValue = url.searchParams.get('labelId');
     if (labelIdValue) return labelShelf(labelIdValue, request);
-    return subjectAssignments();
+    const targetSubjectId = url.searchParams.get('subjectId');
+    return targetSubjectId ? subjectAssignments(targetSubjectId) : undefined;
   }
   const action = /^\/v1\/libraryLabels\/([^/]+):(assign|unassign|restoreAssignment)$/.exec(url.pathname);
   if (request.method === 'POST' && action?.[1]) {
     const id = decodeURIComponent(action[1]);
     const input = await body(request);
+    if (typeof input.subjectId !== 'string' || !input.subjectId) return;
     const assignmentId = String(input.assignmentId ?? '0192f3a0-6c1e-7b2a-9d4e-000000000999');
-    const current = subjectAssignments().assignments as {
+    const targetSubjectId = input.subjectId;
+    const current = subjectAssignments(targetSubjectId).assignments as {
       id: string;
       labelId: string;
       subjectId: string;
@@ -191,11 +194,11 @@ async function answer({ request }: { request: Request }): Promise<KernelRecordin
       return { status: 409, code: 'library_label_capacity' };
     const assignment =
       action[2] === 'restoreAssignment'
-        ? { id: assignmentId, labelId: id, subjectId: String(input.subjectId ?? subjectId), revision: 3 }
+        ? { id: assignmentId, labelId: id, subjectId: targetSubjectId, revision: 3 }
         : (existing ?? {
             id: `0192f3a0-6c1e-7b2a-9d4e-${String(1500 + addedAssignments.size).padStart(12, '0')}`,
             labelId: id,
-            subjectId: String(input.subjectId ?? subjectId),
+            subjectId: targetSubjectId,
             revision: 1,
           });
     if (!current.some((row) => row.id === assignment.id)) addedAssignments.set(assignment.id, assignment);
