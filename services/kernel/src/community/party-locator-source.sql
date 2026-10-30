@@ -1,5 +1,6 @@
 WITH input AS NOT MATERIALIZED (
-  SELECT :kind::text AS kind, :route::integer AS route, :id::uuid AS id, :target::nullable(uuid) AS target, :at::nullable(timestamptz) AS at
+  SELECT :kind::text AS kind, :route::integer AS route, :id::uuid AS id, :realm::uuid AS realm,
+         :target::nullable(uuid) AS target, :at::nullable(timestamptz) AS at
 )
 -- Each branch uses a complete source key; no cross-partition join.
 SELECT b.account_id::text AS account_id, 'ban_target' AS kind, lower(b.valid)::text AS due_at,
@@ -24,4 +25,8 @@ WHERE i.kind = 'membership_operation' AND o.route = i.route AND o.operation_id =
 UNION ALL
 SELECT p.actor::text, 'verdict', p.created_at::text, p.route, p.publication_id::text, p.publication_id::text
 FROM community.publication p CROSS JOIN input i
-WHERE i.kind = 'verdict' AND p.route = i.route AND p.publication_id = i.id AND p.actor IS NOT NULL;
+WHERE i.kind = 'verdict' AND p.route = i.route AND p.publication_id = i.id AND p.actor IS NOT NULL
+UNION ALL
+SELECT q.account_id::text, 'claim_request', q.requested_at::text, q.route, q.realm_id::text, q.request_id::text
+FROM community.realm_claim_request q CROSS JOIN input i
+WHERE i.kind = 'claim_request' AND q.route = i.route AND q.realm_id = i.realm AND q.request_id = i.id;

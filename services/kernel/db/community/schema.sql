@@ -284,7 +284,7 @@ CREATE TABLE community.party_locator (
     CONSTRAINT party_locator_check1 CHECK ((owner_route = ((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)))),
     CONSTRAINT party_locator_due_at_check CHECK (isfinite(due_at)),
     CONSTRAINT party_locator_key_check CHECK (((char_length(key) >= 1) AND (char_length(key) <= 100))),
-    CONSTRAINT party_locator_kind_check CHECK ((kind = ANY (ARRAY['ban_target'::text, 'ban_actor'::text, 'membership_operation'::text, 'verdict'::text]))),
+    CONSTRAINT party_locator_kind_check CHECK ((kind = ANY (ARRAY['ban_target'::text, 'ban_actor'::text, 'membership_operation'::text, 'verdict'::text, 'claim_request'::text]))),
     CONSTRAINT party_locator_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
     CONSTRAINT party_locator_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );

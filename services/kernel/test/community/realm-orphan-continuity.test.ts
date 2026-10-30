@@ -9,6 +9,9 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from '../content/support/native-system.ts';
 import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from '../content/support/disclosure-fixtures.ts';
+import { createPartyLocatorEffect } from '../../src/community/party-locator.ts';
+import { eraseAccountCommunityRecordsPage } from '../../src/community/account-erasure-records.ts';
+import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 
 let system: NativeContentSystem;
 let at: string;
@@ -133,4 +136,46 @@ test('a native decision committed after preparation is rechecked before receipt 
   expect(executed).toBe(false);
   await expect(updateRealm(deps(), owner().actor, { realmId: realm.realmId, expectedHead: realm.headRevisionId, title: 'Still refused' }, context()))
     .rejects.toBeInstanceOf(RealmReadOnlyError);
+});
+
+test('pending requester custody uses the existing erasure obligation and event replay cannot restore it', async () => {
+  const realm = await createRealm();
+  await orphan(realm.realmId);
+  const runtime = accountDeletionRuntime(system);
+  const person = await runtime.person();
+  const requester = await system.auth.issue({ accountId: person.accountId,
+    clientId: system.auth.ordinaryClient.id, scopes: ['realm:read', 'realm:participate'] });
+  const requestedAt = new Date().toISOString();
+  await system.clock.setCommandTime(requestedAt);
+  const outcome = await requestRealmClaim({ ...deps(), clock: () => new Date(requestedAt) }, requester.actor, realm.realmId, context());
+  const eventRow = (await system.database.pool.query<{ id: string; data: unknown; recorded_at: Date }>(
+    `SELECT id::text,data,recorded_at FROM core.outbox
+     WHERE partition_no=$1 AND position=$2 AND type='com.rezics.community.realm.claim-requested.v1'`,
+    [outcome.partition, outcome.position.toString()])).rows[0];
+  if (!eventRow) throw new Error('Native claim command did not emit its custody source event');
+  const event = {
+    specversion: '1.0' as const, id: eventRow.id,
+    source: `urn:rezics:log:${outcome.partition}.${outcome.epoch}`,
+    type: 'com.rezics.community.realm.claim-requested.v1', subject: realm.realmId,
+    time: eventRow.recorded_at.toISOString(), datacontenttype: 'application/json' as const,
+    sequence: outcome.position.toString().padStart(19, '0'), data: eventRow.data,
+  };
+  const effect = createPartyLocatorEffect(system.database.pool);
+  await effect.run(event);
+  await effect.run(event);
+  const locator = await system.database.pool.query(
+    `SELECT kind,owner_id::text,key FROM community.party_locator
+     WHERE route=$1 AND account_id=$2 AND kind='claim_request'`, [routeOf(person.accountId), person.accountId]);
+  expect(locator.rows).toEqual([{ kind: 'claim_request', owner_id: realm.realmId, key: outcome.value.requestId }]);
+
+  const erased = await deletePersona({ pool: system.database.pool, auth: runtime.auth }, person);
+  const disposition = await eraseAccountCommunityRecordsPage({ pool: system.database.pool }, person.accountId, { erasedAt: erased.at });
+  expect(disposition.pending).toBe(0);
+  await effect.run(event);
+  expect((await system.database.pool.query(
+    'SELECT request_id FROM community.realm_claim_request WHERE route=$1 AND realm_id=$2 AND request_id=$3',
+    [routeOf(realm.realmId), realm.realmId, outcome.value.requestId])).rows).toEqual([]);
+  expect((await system.database.pool.query(
+    `SELECT key FROM community.party_locator WHERE route=$1 AND account_id=$2 AND kind='claim_request'`,
+    [routeOf(person.accountId), person.accountId])).rows).toEqual([]);
 });

@@ -14,10 +14,11 @@ import eraseBan from './account-erasure-records-ban.sql';
 import eraseTarget from './account-erasure-records-target.sql';
 import eraseVerdict from './account-erasure-records-verdict.sql';
 import eraseOperation from './account-erasure-records-operation.sql';
+import eraseClaim from './realm-continuity-request-erase.sql';
 import readOperation from './account-erasure-records-operation-read.sql';
 import readWorkflow from './account-erasure-records-workflow.sql';
 
-const kinds = ['ban_actor', 'ban_target', 'membership_operation', 'verdict'] as const;
+const kinds = ['ban_actor', 'ban_target', 'claim_request', 'membership_operation', 'verdict'] as const;
 type Kind = (typeof kinds)[number];
 export type CommunityRecordsCursor = { kind: Kind; dueAt: string; ownerRoute: number; ownerId: string; key: string };
 type Dependencies = { pool: Pool; clock?: () => Date };
@@ -152,7 +153,8 @@ export async function eraseAccountCommunityRecordItem(
         kept = changed.rows[0]?.kept_until ?? null;
       } else {
         const statement =
-          row.kind === 'ban_target' ? eraseTarget : row.kind === 'verdict' ? eraseVerdict : eraseOperation;
+          row.kind === 'ban_target' ? eraseTarget : row.kind === 'verdict' ? eraseVerdict :
+            row.kind === 'claim_request' ? eraseClaim : eraseOperation;
         const changed = await tx.query(
           statement.sql,
           statement.params.map((name) => params[name as keyof typeof params]),

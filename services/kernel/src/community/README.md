@@ -163,9 +163,12 @@ ownership. Approval requires a genuine platform decision establishing a native A
 approval operation without that authority.
 
 Claim requests are held in the Realm home. A request point touches one native identity/head, one full requester
-key and a bounded receipt/event bundle, without enumerating members, requests or grants. Requester custody must
-be removed by the existing Community account-erasure participant using its anchored source obligations before
-that participant acknowledges completion; no new erasure ACK is introduced here.
+key and a bounded receipt/event bundle, without enumerating members, requests or grants. The claim-requested
+event extends the existing party locator: it point-reads the full Realm/request key, releases that connection,
+then registers requester custody in the account home under the existing erasure fence. The existing Community
+records eraser deletes the exact request under the committed account-erasure obligation. A late event uses the
+same eraser and resolves its existing late-item obligation; replay reads current attribution and cannot recreate
+a deleted request or locator. The account-erasure participant remains the sole ACK writer.
 
 ## Realm transition publication proof
 
