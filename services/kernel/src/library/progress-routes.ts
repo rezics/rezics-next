@@ -26,7 +26,7 @@ const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 const mode = t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]);
 const unitInput = libraryVocabularyIdSchema;
 const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]);
-const sessionSchema = t.Object(
+export const sessionSchema = t.Object(
   {
     id,
     subjectId: id,

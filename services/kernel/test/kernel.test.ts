@@ -239,6 +239,7 @@ const typed = [
   'DELETE /v1/recentSearches/:id',
   'POST /v1/recentSearches/$clear',
   'GET /v1/libraryEntries',
+  'GET /v1/libraryContinue',
   'GET /v1/libraryShelfSummary',
   'GET /v1/libraryShelfTypes',
   'GET /v1/libraryEntries/:subjectId',

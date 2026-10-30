@@ -1,15 +1,17 @@
+import { readLikedOriginalPage, readLikedOriginalVersion } from './liked-source.ts';
+import { readOwnerMembers } from './owner-index-members.ts';
+import type { KernelClock } from '../clock.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import { nextOwnerPin } from './owner-index-metadata.ts';
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { Actor, AccountActor } from '../request/access.ts';
+import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
-import type { ResumeIdentityEpochJob, WaitIdentityEpochPublished } from '../semantic/identity-epoch-contract.ts';
-import type { PublicFilterSourceFactory } from '../semantic/public-filter-source-contract.ts';
 import { builtinCollectionId, type BuiltinCollectionKey } from './builtin-identity.ts';
 import { readBuiltinStateReference } from './builtin-reference-store.ts';
 import { readOwnerIndexFrontier, readOwnerOriginalPrefix, readOwnerOriginalTruth } from './owner-index.ts';
@@ -19,7 +21,7 @@ export type BuiltinCollectionView = {
   id: string;
   curatorAccountId: string;
   membershipKind: 'dynamic';
-  builtinKind: 'everything' | 'state';
+  builtinKind: 'everything' | 'state' | 'liked';
   builtin: BuiltinCollectionKey;
   builtinLabels?: Readonly<Record<string, string>>;
   visibility: 'private';
@@ -33,23 +35,11 @@ export type BuiltinCollectionView = {
 };
 export type DynamicMemberView = { kind: 'dynamic'; subjectId: string };
 
-/** Exact already-published producer types. No guessed callback, publication result, epoch or privacy certificate. */
-type DeferredBindings = Readonly<{
-  resumeIdentityEpochJob: ResumeIdentityEpochJob | null;
-  waitIdentityEpochPublished: WaitIdentityEpochPublished | null;
-  publicFilterSource: PublicFilterSourceFactory | null;
-}>;
-const deferred: DeferredBindings = {
-  resumeIdentityEpochJob: null,
-  waitIdentityEpochPublished: null,
-  publicFilterSource: null,
-};
-function requireCurrentQueryRuntime(): never {
-  // The fixed ALL-Library participant must also adopt the structural directory before these bindings can go live.
-  // Registration/types and a mapped point do not establish whole-source publication or excluded/order safety.
-  if (!deferred.resumeIdentityEpochJob || !deferred.waitIdentityEpochPublished || !deferred.publicFilterSource)
-    throw new ProblemError('dependency_unavailable');
-  throw new ProblemError('dependency_unavailable');
+/** Missing shared canonical execution must remain unavailable, including for nonempty native input. */
+export function requireBuiltinQueryRuntime(): never {
+  throw new ProblemError('dependency_unavailable', {
+    detail: 'The shared canonical owner source, scoped identity observation and useful-page execution are unavailable.',
+  });
 }
 function descriptor(accountId: string, key: BuiltinCollectionKey): BuiltinCollectionView {
   return {
@@ -104,7 +94,7 @@ async function nativePresence(client: Client, actor: AccountActor) {
 }
 
 /** Logical owner reads share the native account/scopes boundary. They create no header, grant, receipt or work. */
-export function createBuiltinRuntime(config: { pool: Pool }) {
+export function createBuiltinRuntime(config: { pool: Pool; access?: Access; tokens?: KeyRing; clock?: KernelClock }) {
   async function snapshot<T>(operation: (client: Client) => Promise<T>, deadline = deadlineFor(WORK_STEP_DEADLINE_MS)) {
     return withConnection(config.pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
@@ -123,6 +113,7 @@ export function createBuiltinRuntime(config: { pool: Pool }) {
     actor: Actor,
     id: string,
     scope: ReadScope = 'collection:read',
+    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
   ): Promise<BuiltinCollectionView | null> {
     if (routeOf(id) === null) return null;
     return snapshot(async (client) => {
@@ -131,6 +122,7 @@ export function createBuiltinRuntime(config: { pool: Pool }) {
       const ownEverything = builtinCollectionId(owner.accountId, { kind: 'everything' });
       let key: BuiltinCollectionKey;
       if (id === ownEverything) key = { kind: 'everything' };
+      else if (id === builtinCollectionId(owner.accountId, { kind: 'liked' })) key = { kind: 'liked' };
       else {
         // Exactly the delivered native reference point, with no tuple hint or historical-release walk.
         const reference = await readBuiltinStateReference(client, { route: routeOf(id)!, collectionId: id });
@@ -146,62 +138,133 @@ export function createBuiltinRuntime(config: { pool: Pool }) {
         if (!supported.rows.length) return null;
         key = reference.key;
       }
-      const { rows } = await client.query<{ kind: string | null; owner: string | null; membership: string }>(
-        `SELECT builtin_kind AS kind,curator_account_id AS owner,membership_kind AS membership
-         FROM library.collection WHERE route=$1 AND collection_id=$2`,
-        [routeOf(id), id],
-      );
-      const stored = rows[0];
-      if (stored) {
-        if (stored.owner !== owner.accountId || stored.kind !== key.kind || stored.membership !== 'dynamic')
-          throw new ProblemError('dependency_unavailable');
-        // Materialized accepted meaning/title must be consumed by the eventual shared current reader.
-        return requireCurrentQueryRuntime();
-      }
-      if (key.kind === 'state') return requireCurrentQueryRuntime();
-      return descriptor(owner.accountId, key);
-    });
+      return present(client, owner.accountId, key);
+    }, deadline);
   }
-  async function discover(actor: Actor, after: string | null = null): Promise<BuiltinCollectionView[]> {
+  async function present(client: Client, accountId: string, key: BuiltinCollectionKey): Promise<BuiltinCollectionView> {
+    const value = descriptor(accountId, key);
+    let labels: Readonly<Record<string, string>> | undefined;
+    if (key.kind === 'state') {
+      // The index chooses presentation only, never state membership or disclosure.
+      const meaning = await client.query<{ labels: Record<string, string> }>(
+        `SELECT labels FROM library.owner_index_state WHERE route=$1 AND account_id=$2 AND collection_id=$3
+         ORDER BY pin->>'releaseDigest',pin LIMIT 1`,
+        [routeOf(accountId), accountId, value.id],
+      );
+      if (!meaning.rows[0]) throw new ProblemError('semantic_not_ready');
+      labels = meaning.rows[0].labels;
+    }
+    const stored = (await client.query<{
+      kind: string | null; owner: string | null; membership: string; state: string; visibility: string;
+      title: string; description: string | null; revision: number;
+      presentationKind: string | null; coverMediaId: string | null;
+    }>(
+      `SELECT builtin_kind AS kind,curator_account_id AS owner,membership_kind AS membership,state,visibility,
+        title,description,revision,presentation_kind AS "presentationKind",cover_media_id AS "coverMediaId"
+       FROM library.collection WHERE route=$1 AND collection_id=$2`,
+      [routeOf(value.id), value.id],
+    )).rows[0];
+    if (stored) {
+      if (stored.owner !== accountId || stored.kind !== key.kind || stored.membership !== 'dynamic')
+        throw new ProblemError('dependency_unavailable');
+      if (stored.state !== 'active') throw new ProblemError('not_found');
+      // Published output and configured covers use their owning current readers, never a private fallback.
+      if (stored.visibility !== 'private' || stored.presentationKind !== null || stored.coverMediaId !== null)
+        return requireBuiltinQueryRuntime();
+      return { ...value, title: stored.title, description: stored.description, revision: stored.revision,
+        ...(labels === undefined ? {} : { builtinLabels: labels }) };
+    }
+    return { ...value, ...(labels === undefined ? {} : { builtinLabels: labels }) };
+  }
+  async function discover(actor: Actor, after: string | null = null, limit = 100): Promise<BuiltinCollectionView[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 101) throw new RangeError('Builtin descriptor limit must be 1..101');
     return snapshot(async (client) => {
       const owner = await admitted(client, actor);
       if (!owner) return [];
       const presence = await nativePresence(client, owner);
-      // Labels introduce no profile lookup or sibling identities. Unknown pinned meanings never become ready zero.
-      if (presence.entry || presence.session || presence.copy) return requireCurrentQueryRuntime();
-      const value = descriptor(owner.accountId, { kind: 'everything' });
-      const stored = await client.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2', [
-        routeOf(value.id),
-        value.id,
-      ]);
-      if (stored.rows.length) return requireCurrentQueryRuntime();
-      return after === null || value.id > after ? [value] : [];
+      if (presence.entry || presence.session || presence.copy) {
+        const coverage = await readOwnerIndexFrontier(client, owner.accountId);
+        if (coverage?.phase !== 'ready' || (await nextOwnerPin(client, owner.accountId)) !== undefined)
+          throw new ProblemError('semantic_not_ready');
+      }
+      // Always logical, even when no profile or native personal fact exists.
+      const keys: BuiltinCollectionKey[] = [{ kind: 'everything' }, { kind: 'liked' }];
+      // One indexed successor per descriptor skips all same-identity pins, including old release fanout.
+      const states = await client.query<{
+        profileId: string; stateSetId: string; stateId: string;
+      }>(
+        `WITH RECURSIVE keys(collection_id,n) AS (
+          (SELECT collection_id,1 FROM library.owner_index_state
+            WHERE route=$1 AND account_id=$2 AND ($3::uuid IS NULL OR collection_id>$3)
+            ORDER BY collection_id LIMIT 1)
+          UNION ALL
+          SELECT next.collection_id,k.n+1 FROM keys k CROSS JOIN LATERAL (
+            SELECT collection_id FROM library.owner_index_state
+            WHERE route=$1 AND account_id=$2 AND collection_id>k.collection_id
+            ORDER BY collection_id LIMIT 1
+          ) next WHERE k.n<$4
+        )
+        SELECT r.profile_id AS "profileId",r.state_set_id AS "stateSetId",r.state_id AS "stateId"
+        FROM keys k JOIN library.builtin_collection_reference r
+          ON r.route=$1 AND r.collection_id=k.collection_id AND r.account_id=$2
+        ORDER BY k.collection_id`,
+        [routeOf(owner.accountId), owner.accountId, after, limit],
+      );
+      keys.push(...states.rows.map((state) => ({ kind: 'state' as const, ...state })));
+      const selected = keys.map((key) => ({ key, id: builtinCollectionId(owner.accountId, key) }))
+        .filter((value) => after === null || value.id > after)
+        .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+        .slice(0, limit);
+      const values: BuiltinCollectionView[] = [];
+      for (const value of selected) values.push(await present(client, owner.accountId, value.key));
+      return values;
     });
   }
   async function members(
     actor: Actor,
     id: string,
-    options: { limit?: number; cursor?: string | null } = {},
+    options: { limit?: number; cursor?: string | null; deadline?: number } = {},
   ): Promise<{ members: DynamicMemberView[]; next: string | null }> {
     if (!Number.isInteger(options.limit ?? 20) || (options.limit ?? 20) < 1 || (options.limit ?? 20) > 100)
       throw new ProblemError('invalid_request');
-    const source = await read(actor, id);
+    const deadline = options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+    const source = await read(actor, id, 'collection:read', deadline);
     if (!source) throw new ProblemError('not_found');
-    // A structural directory miss is never an empty proof. Only independent complete native EXISTS can prove empty.
-    return snapshot(async (client) => {
+    // A directory miss is not an empty proof. The actual native data statement always runs.
+    const empty = await snapshot(async (client) => {
       const owner = await admitted(client, actor);
       if (!owner) throw new ProblemError('not_found');
+      if (source.builtinKind === 'liked') {
+        const page = await readLikedOriginalPage(client, { actorAccountId: owner.accountId, limit: 1 });
+        return page.subjects.length === 0 && page.next === null;
+      }
+      if (source.builtinKind !== 'everything') return false;
       const presence = await nativePresence(client, owner);
-      if (source.builtinKind !== 'everything' || Object.values(presence).some(Boolean))
-        return requireCurrentQueryRuntime();
-      // There is no published source/identity cursor basis to validate yet; never accept a foreign/forged cursor.
-      if (options.cursor != null) throw new ProblemError('invalid_cursor');
-      const stored = await client.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2', [
-        routeOf(id),
-        id,
-      ]);
-      if (stored.rows.length) return requireCurrentQueryRuntime();
-      return { members: [], next: null };
+      return !Object.values(presence).some(Boolean);
+    }, deadline);
+    if (empty && options.cursor == null) return { members: [], next: null };
+    if (actor.kind !== 'account') throw new ProblemError('not_found');
+    const { access, tokens } = config;
+    if (!access || !tokens) return requireBuiltinQueryRuntime();
+    return readOwnerMembers({ pool: config.pool, access, tokens,
+      ...(config.clock === undefined ? {} : { clock: config.clock }) }, {
+      actor, collectionId: id, limit: options.limit ?? 20,
+      ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
+      deadline,
+      async revalidateOwner() {
+        if (!(await read(actor, id, 'collection:read', deadline))) throw new ProblemError('not_found');
+      },
+      readSourceVersion: () => snapshot(async (client) => {
+        const owner = await admitted(client, actor);
+        if (!owner) throw new ProblemError('not_found');
+        if (source.builtinKind === 'liked') return readLikedOriginalVersion(client, owner.accountId);
+        const head = (await client.query<{ generation: string }>(
+          'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2',
+          [routeOf(owner.accountId), owner.accountId],
+        )).rows[0];
+        if (!head) throw new ProblemError('semantic_not_ready');
+        return head.generation;
+      }, deadline),
     });
   }
   return { read, discover, members };

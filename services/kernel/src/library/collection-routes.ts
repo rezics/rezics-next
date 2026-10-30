@@ -69,10 +69,11 @@ const dynamicCollectionSchema = t.Object(
     id,
     curatorAccountId: id,
     membershipKind: t.Literal('dynamic'),
-    builtinKind: t.Union([t.Literal('everything'), t.Literal('state')]),
+    builtinKind: t.Union([t.Literal('everything'), t.Literal('state'), t.Literal('liked')]),
     builtin: t.Union([
       t.Object({ kind: t.Literal('everything') }, closed),
-      t.Object({ kind: t.Literal('state'), profileId: id, stateSetId: id, stateId: id }, closed),
+      t.Object({ kind: t.Literal('liked') }, closed),
+      t.Object({ kind: t.Literal('state'), profileId: t.String(), stateSetId: t.String(), stateId: t.String() }, closed),
     ]),
     builtinLabels: t.Optional(t.Record(t.String(), t.String())),
     title: nullableString,
@@ -401,6 +402,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           ...failures,
         },
         detail: detail('collection.list', 'collection:read', true),
+          transform: ({ set }) => { set.headers['cache-control'] = 'private, no-store'; },
       },
       async ({ query, actor, admission, job }) =>
         admission.run('normal', job, async () => {
@@ -448,6 +450,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         params: collectionParams,
         response: { 200: t.Object({ collection: embeddedCollectionSchema }, closed), ...failures },
         detail: detail('collection.get', 'collection:read', true),
+          transform: ({ set }) => { set.headers['cache-control'] = 'private, no-store'; },
       },
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, async () =>

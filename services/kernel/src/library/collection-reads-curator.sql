@@ -19,6 +19,7 @@ candidates AS (
     WHERE collection.route = args.route
       AND collection.curator_account_id = args.curator_account_id
       AND collection.state = 'active'
+      AND collection.builtin_kind IS NULL
       AND collection.updated_at < CASE WHEN args.has_cursor THEN args.after_updated_at ELSE 'infinity'::timestamptz END
     ORDER BY collection.updated_at DESC, collection.collection_id DESC
     LIMIT (SELECT page_limit FROM args)
@@ -36,6 +37,7 @@ candidates AS (
     WHERE collection.route = args.route
       AND collection.curator_account_id = args.curator_account_id
       AND collection.state = 'active'
+      AND collection.builtin_kind IS NULL
       AND args.has_cursor
       AND collection.updated_at = args.after_updated_at
       AND collection.collection_id < args.after_id

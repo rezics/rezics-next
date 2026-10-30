@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { stepOwnerChronology } from './owner-index-continue.ts';
 import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
@@ -84,7 +85,10 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
       );
     return current;
   }
-  if (current.phase === 'ready') return current;
+  if (current.phase === 'ready') {
+    await stepOwnerChronology(tx, accountId);
+    return current;
+  }
   const [table, id, pin] = sources[current.phase];
   // Only fixed native table/column literals above are interpolated; inputs remain parameters.
   const { rows } = await tx.query<Scope>(

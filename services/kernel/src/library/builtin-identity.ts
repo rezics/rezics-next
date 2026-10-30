@@ -2,6 +2,7 @@ import { derivedId, routeOf } from '../route/route.ts';
 
 export type BuiltinCollectionKey =
   | Readonly<{ kind: 'everything' }>
+  | Readonly<{ kind: 'liked' }>
   | Readonly<{ kind: 'state'; profileId: string; stateSetId: string; stateId: string }>;
 
 function assertMetadataId(value: unknown): asserts value is string {
@@ -18,6 +19,8 @@ export function builtinCollectionId(ownerAccountId: string, key: BuiltinCollecti
   switch (key.kind) {
     case 'everything':
       return derivedId(ownerAccountId, JSON.stringify(['library.collection.builtin', 1, 'everything']), route);
+    case 'liked':
+      return derivedId(ownerAccountId, JSON.stringify(['library.collection.builtin', 1, 'liked']), route);
     case 'state': {
       const { profileId, stateSetId, stateId } = key;
       assertMetadataId(profileId);

@@ -251,7 +251,8 @@ export async function fullMembers(
   deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
 ) {
   const builtins = createBuiltinRuntime(deps);
-  if (await builtins.read(actor, collectionId)) return builtins.members(actor, collectionId, options);
+  if (await builtins.read(actor, collectionId, 'collection:read', deadline))
+    return builtins.members(actor, collectionId, { ...options, deadline });
   const parsedRoute = routeOf(collectionId);
   if (parsedRoute === null) throw new ProblemError('not_found');
   const route = parsedRoute;

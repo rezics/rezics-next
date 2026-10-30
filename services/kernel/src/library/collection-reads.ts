@@ -262,7 +262,7 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
   const retainPreview = createCollectionPreviewPreparation(dependencies);
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
-  const builtins = createBuiltinRuntime({ pool });
+  const builtins = createBuiltinRuntime(dependencies);
 
   return { readCollection, listCollections, listAccountCollections, listMembers, readMembers, listSubjectCollections };
 
@@ -422,7 +422,7 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
     if (!visible && !curator) return { collections: [], next: null };
     const logical =
       fullView && (cursor === null || builtinCursor)
-        ? await builtins.discover(viewer, builtinCursor ? String(cursor.after[1]) : null)
+        ? await builtins.discover(viewer, builtinCursor ? String(cursor.after[1]) : null, page.limit + 1)
         : [];
     const shownLogical = logical.slice(0, page.limit);
     const remaining = page.limit - shownLogical.length;
@@ -493,7 +493,7 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
   ) {
     pageRequest(options, ['cursor', 'limit', 'filter', 'sort', 'view']);
-    const logical = await builtins.read(viewer, collectionId);
+    const logical = await builtins.read(viewer, collectionId, 'collection:read', deadline);
     if (options.filter !== undefined || options.sort !== undefined) {
       if (!logical && !(await loadCollection(viewer, collectionId, deadline))) throw notFound();
       return readOwnerFilterPage(dependencies, viewer, collectionId, options, deadline);
@@ -502,7 +502,9 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
       ...(options.limit === undefined ? {} : { limit: options.limit }),
     };
-    return logical ? builtins.members(viewer, collectionId, page) : listMembers(viewer, collectionId, page, deadline);
+    return logical
+      ? builtins.members(viewer, collectionId, { ...page, deadline })
+      : listMembers(viewer, collectionId, page, deadline);
   }
 
   async function listMembers(
