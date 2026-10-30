@@ -16,6 +16,41 @@ sampled, count-ordered preview with unsafe count metadata. Count removal is sepa
 continuation, admission, Source/privacy integration and preparation remain **UNIMPLEMENTED**. This specification
 adoption supplies no runtime or native acceptance evidence.
 
+## Mixed-kind foundation
+
+[discovery.ts](discovery.ts) is the shared type home for `AccountDiscoverySource`, `AccountSnapshot`,
+`IndexedAccount`, the owner-discriminated registry/document/summary unions, `KindCountEvidence`, and the opt-in
+`DiscoveryRequest`/`DiscoveryPage` (`representation: 'discovery-v1'`). It reuses native Subject, avatar, reader
+deadline/authorization and token types. The [Accounts source contract](../access/account-discovery-contract.md)
+continues to own eligibility, current-T exact claims and the native census. Source reads/pages are bounded to
+100 Account keys; `count` is generation census only and cannot supply query kind-count evidence.
+
+`createDiscoveryRegistry` in [discovery-registry.ts](discovery-registry.ts) registers the pinned release's actual
+catalogue type IDs and the reserved `account` kind. Each entry carries its owner source, current summary hydrator,
+localized labels/icon, summary discriminator and supported domains. Account supports text/kind; Subject domains
+retain their meanings. `evaluateDiscoveryCondition` consumes an expanded, admitted planner tree with domain-tagged
+leaves and preserves `not_applicable`/`not_proven` through NOT. It is predicate evaluation, never permission:
+resource authorization and current whole-query/native eligibility remain mandatory outside this pure boundary.
+
+[discovery-documents.ts](discovery-documents.ts) constructs bounded actions from an already authorized source
+snapshot, without additional source enumeration or profile reads. Account projection copies only native ID,
+account kind, current claim-approved handle, displayName and revision plus internal identity/position fields.
+A null handle retains displayName. Revisions and snapshot positions remain exact bigint internally and canonical
+decimal strings in documents. `discoveryBulkBody` serializes the exact native signed-bigint external version as
+raw NDJSON; do not send that string through the legacy `OpenSearch.bulk` JSON-value serializer.
+
+The inert [discovery.json](../../db/search/indices/discovery.json) defines one strict native family with the existing
+`cjk_bigram_v2` analyzer. Mapping `_meta.discovery_document_format = 1` pairs with `_source.document_format = 1`
+and native `_id = discovery-v1:<encodeURIComponent(kind)>:<canonical UUID>`. `discoveryDocumentId`,
+`parseDiscoveryDocumentId` and `parseDiscoveryHitIdentity` share that identity contract; the mixed parser rejects
+owner/kind/route/document disagreement and legacy raw UUID receipts. Global mixed ties can use `kind, id`.
+`validateDiscoveryDocument` enforces per-owner field allowlists that the union mapping alone cannot enforce.
+
+This foundation performs no index creation, mixed generation activation, population integration or HTTP route
+activation. Existing SubjectSource, IndexedSubject, document actions and UUID receipts retain their meaning.
+Native source/disclosure, comparable mixed ordering, query/count assembly and current summary hydration remain
+consumer integration work; these exports make no native availability claim.
+
 ## Deletion lifecycle
 
 [Deletion](../../../../docs/deletion.md) governs user-owned data; [first public scope](../../../../docs/scope.md)
