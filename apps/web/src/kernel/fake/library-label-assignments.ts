@@ -23,7 +23,6 @@ export function resetLabelAssignmentStory(): void {
   createdLabels.clear();
 }
 
-
 /** Story pages opt into exact populations without changing the fixture or the current fake site behavior. */
 export function setLibraryLabelStorySizes(input: { subject?: number; shelf?: number }): void {
   if (input.subject !== undefined) {
@@ -127,14 +126,20 @@ function labelShelf(labelIdValue: string, request: Request): KernelRecording | u
 async function answer({ request }: { request: Request }): Promise<KernelRecording | undefined> {
   const url = new URL(request.url);
   if (isLabelCatalogueStory() && /^\/v1\/libraryLabels(?:\/[^/:]+(?::restore)?)?$/.test(url.pathname)) return undefined;
-  if (request.method === 'GET' && (url.pathname === '/v1/libraryLabelAssignments' || url.pathname === '/v1/libraryLabels')) {
+  if (
+    request.method === 'GET' &&
+    (url.pathname === '/v1/libraryLabelAssignments' || url.pathname === '/v1/libraryLabels')
+  ) {
     const failure = labelReadStoryFailure();
     if (failure) return failure;
   }
   if (request.method === 'GET' && url.pathname === '/v1/libraryLabels') {
     const query = url.searchParams.get('q') ?? '';
     const prefix = normalizeLibraryLabelName(query);
-    if (prefix !== query) { url.searchParams.set('q', prefix); return answer({ request: new Request(url, request) }); }
+    if (prefix !== query) {
+      url.searchParams.set('q', prefix);
+      return answer({ request: new Request(url, request) });
+    }
     const matches = labels()
       .filter((label) => label.name.startsWith(query))
       .slice(0, 20);

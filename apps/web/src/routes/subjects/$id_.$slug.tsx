@@ -196,8 +196,10 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     ...(typeof search.labelResult === 'string' ? { labelResult: search.labelResult } : {}),
     ...(typeof search.undoLabelId === 'string' ? { undoLabelId: search.undoLabelId } : {}),
     ...(typeof search.undoAssignmentId === 'string' ? { undoAssignmentId: search.undoAssignmentId } : {}),
-    ...(typeof search.undoKey === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.undoKey)
-      ? { undoKey: search.undoKey } : {}),
+    ...(typeof search.undoKey === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.undoKey)
+      ? { undoKey: search.undoKey }
+      : {}),
     ...(typeof search.undoRevision === 'number' ||
     (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
       ? { undoRevision: Number(search.undoRevision) }

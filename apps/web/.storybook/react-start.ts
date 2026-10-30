@@ -48,8 +48,11 @@ export function createServerFn() {
         return Promise.resolve(result).then((value) => {
           const context = (globalThis as StoryGlobals).__rezicsStoryContext;
           // Label read envelopes carry CSRF too; preserve their page-state discriminant.
-          if (value && typeof value === 'object' &&
-            (('labels' in value && 'operations' in value) || ('label' in value && 'entries' in value)))
+          if (
+            value &&
+            typeof value === 'object' &&
+            (('labels' in value && 'operations' in value) || ('label' in value && 'entries' in value))
+          )
             return value;
           if (context && value && typeof value === 'object' && 'state' in value && 'csrfToken' in value) {
             return {

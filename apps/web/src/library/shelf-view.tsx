@@ -457,10 +457,19 @@ export function LabelShelfEntries({
               cover={shelfCover(entry.subject)}
               {...(progress ? { progress } : {})}
               {...(entry.state ? { status: { label: entry.stateLabel ?? m.library_other() } } : {})}
-              {...(removeAdmitted ? {
-                menu: <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />,
-                menuLabel: m.library_entry_actions({ title: title(entry) }),
-              } : {})}
+              {...(removeAdmitted
+                ? {
+                    menu: (
+                      <LabelAssignmentRemoveForm
+                        entry={entry}
+                        labelName={label.name}
+                        locale={locale}
+                        csrfToken={csrfToken}
+                      />
+                    ),
+                    menuLabel: m.library_entry_actions({ title: title(entry) }),
+                  }
+                : {})}
             />
           );
         })}
@@ -488,9 +497,18 @@ export function LabelShelfEntries({
               {...(entry.state ? { status: entry.stateLabel ?? m.library_other() } : {})}
               {...(progress ? { progress } : {})}
               labels={{ select: title(entry), menu: m.library_menu_open() }}
-              {...(removeAdmitted ? {
-                menu: <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />,
-              } : {})}
+              {...(removeAdmitted
+                ? {
+                    menu: (
+                      <LabelAssignmentRemoveForm
+                        entry={entry}
+                        labelName={label.name}
+                        locale={locale}
+                        csrfToken={csrfToken}
+                      />
+                    ),
+                  }
+                : {})}
             />
           );
         })}

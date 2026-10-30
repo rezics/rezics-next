@@ -142,9 +142,10 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     const episode = labelEpisode(assignmentId, revision);
     let key = labelUndoKeys.current.get(episode);
     if (!key) {
-      key = data.labelUndo?.assignmentId === assignmentId && data.labelUndo.revision === revision
-        ? data.labelUndoKey ?? crypto.randomUUID()
-        : crypto.randomUUID();
+      key =
+        data.labelUndo?.assignmentId === assignmentId && data.labelUndo.revision === revision
+          ? (data.labelUndoKey ?? crypto.randomUUID())
+          : crypto.randomUUID();
       labelUndoKeys.current.set(episode, key);
     }
     return key;
@@ -163,7 +164,11 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   useEffect(() => setLabels(data.labels ?? []), [data.labels]);
   useEffect(() => {
     setLabelNotice(data.labelResult);
-    if (data.labelUndo && restoredLabelEpisodes.current.has(labelEpisode(data.labelUndo.assignmentId, data.labelUndo.revision))) return;
+    if (
+      data.labelUndo &&
+      restoredLabelEpisodes.current.has(labelEpisode(data.labelUndo.assignmentId, data.labelUndo.revision))
+    )
+      return;
     if (!data.labelUndo && labelUndo) return;
     setLabelUndo(data.labelUndo);
   }, [data.labelResult, data.labelUndo]);
@@ -435,7 +440,8 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                   revision: input.revision ?? 0,
                   idempotencyKey: crypto.randomUUID(),
                   ...(input.assignment && input.revision !== undefined
-                    ? { idempotencyKey: labelUndoKeyFor(input.assignment.id, input.revision) } : {}),
+                    ? { idempotencyKey: labelUndoKeyFor(input.assignment.id, input.revision) }
+                    : {}),
                 },
                 headers,
               });
@@ -710,7 +716,9 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         ) : null}
         {data.session === 'signed-in' && data.labels === null ? (
           <Exposure operation="library_label.assignment_list">
-            <p role="alert" className="basis-full text-sm text-muted-foreground">{m.library_subject_label_unavailable()}</p>
+            <p role="alert" className="basis-full text-sm text-muted-foreground">
+              {m.library_subject_label_unavailable()}
+            </p>
           </Exposure>
         ) : null}
         {data.session === 'signed-in' && data.labels !== null ? (
@@ -815,9 +823,15 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                         {m.library_collection_cancel()}
                       </button>
                     </div>
-                    <SubjectLabelMore query={labelQuery} next={labelNext} onPage={(page) => {
-                      setLabelNext(page.next ?? null); setLabelChoices(page.labels); setLabelSearchState(page.state);
-                    }} />
+                    <SubjectLabelMore
+                      query={labelQuery}
+                      next={labelNext}
+                      onPage={(page) => {
+                        setLabelNext(page.next ?? null);
+                        setLabelChoices(page.labels);
+                        setLabelSearchState(page.state);
+                      }}
+                    />
                     <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
                     {labelSearchState === 'loaded' ? (
                       <ul aria-label={m.library_subject_label_input()} className="space-y-1">
@@ -877,7 +891,11 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                   <input type="hidden" name="subjectId" value={subject.id} />
                   <input type="hidden" name="labelId" value={labelUndo.labelId} />
                   <input type="hidden" name="assignmentId" value={labelUndo.assignmentId} />
-                  <input type="hidden" name="idempotencyKey" value={labelUndoKeyFor(labelUndo.assignmentId, labelUndo.revision)} />
+                  <input
+                    type="hidden"
+                    name="idempotencyKey"
+                    value={labelUndoKeyFor(labelUndo.assignmentId, labelUndo.revision)}
+                  />
                   <input type="hidden" name="revision" value={labelUndo.revision} />
                   <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
                   <span>{m.library_subject_label_removed_status()}</span>

@@ -70,11 +70,14 @@ export function createLibraryLabelsFake(
         const failure = labelReadStoryFailure();
         if (failure) return failure;
       }
-      if (request.method === 'GET' && url.searchParams.has('cursor'))
-        return { status: 200, labels: [], next: null };
+      if (request.method === 'GET' && url.searchParams.has('cursor')) return { status: 200, labels: [], next: null };
       if (request.method === 'GET' && url.searchParams.has('q')) {
         const q = normalizeLibraryLabelName(url.searchParams.get('q')!);
-        return { status: 200, labels: structuredClone(fake.labels.filter((label) => label.name.startsWith(q))), next: fake.next };
+        return {
+          status: 200,
+          labels: structuredClone(fake.labels.filter((label) => label.name.startsWith(q))),
+          next: fake.next,
+        };
       }
       if (request.method === 'GET') return { status: 200, labels: structuredClone(fake.labels), next: fake.next };
       if (!key) return { status: 400, code: 'invalid_request' };
@@ -142,9 +145,15 @@ export function createLibraryLabelsFake(
 }
 
 let catalogueStoryActive = false;
-export function setLabelCatalogueStory(active: boolean) { catalogueStoryActive = active; }
-export function activeLabelStoryLabels() { return catalogueStoryActive ? story.labels : []; }
-export function isLabelCatalogueStory() { return catalogueStoryActive; }
+export function setLabelCatalogueStory(active: boolean) {
+  catalogueStoryActive = active;
+}
+export function activeLabelStoryLabels() {
+  return catalogueStoryActive ? story.labels : [];
+}
+export function isLabelCatalogueStory() {
+  return catalogueStoryActive;
+}
 let story = createLibraryLabelsFake();
 export function selectLabelStory(state: 'catalogue' | 'empty' | 'next' | 'conflict' | 'undo') {
   catalogueStoryActive = true;

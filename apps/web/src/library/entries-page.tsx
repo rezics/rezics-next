@@ -262,14 +262,19 @@ export function LabelShelfPage({
   display: Display;
 }) {
   if (page.state === 'unavailable' || page.state === 'denied' || page.state === 'preparing')
-    return <div className="max-w-6xl space-y-6 text-foreground">
-      <PageHeading>{m.library_labels_heading()}</PageHeading>
-      <p role={page.state === 'unavailable' ? 'alert' : 'status'}>
-        {page.state === 'preparing' ? m.library_labels_preparing() : page.state === 'denied'
-          ? m.library_labels_denied() : m.library_subject_label_unavailable()}
-      </p>
-      <a href={`/${encodeURIComponent(locale)}/library/labels`}>{m.library_labels_heading()}</a>
-    </div>;
+    return (
+      <div className="max-w-6xl space-y-6 text-foreground">
+        <PageHeading>{m.library_labels_heading()}</PageHeading>
+        <p role={page.state === 'unavailable' ? 'alert' : 'status'}>
+          {page.state === 'preparing'
+            ? m.library_labels_preparing()
+            : page.state === 'denied'
+              ? m.library_labels_denied()
+              : m.library_subject_label_unavailable()}
+        </p>
+        <a href={`/${encodeURIComponent(locale)}/library/labels`}>{m.library_labels_heading()}</a>
+      </div>
+    );
   if (page.state === 'closed')
     return (
       <div className="max-w-6xl space-y-6 text-foreground">
@@ -314,22 +319,22 @@ export function LabelShelfPage({
       ) : null}
       {page.undo ? (
         <Exposure operation="library_label.unassign">
-        <form
-          data-label-undo
-          method="post"
-          action={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(page.label.id)}`}
-        >
-          <input type="hidden" name="intent" value="restore" />
-          <input type="hidden" name="subjectId" value={page.undo.subjectId} />
-          <input type="hidden" name="labelId" value={page.undo.labelId} />
-          <input type="hidden" name="assignmentId" value={page.undo.assignmentId} />
-          <input type="hidden" name="idempotencyKey" value={page.undoKey} />
-          <input type="hidden" name="revision" value={page.undo.revision} />
-          <input type="hidden" name="csrf_token" value={page.csrfToken ?? ''} />
-          <button type="submit" className={buttonVariants({ variant: 'outline' })}>
-            {m.library_subject_label_undo()}
-          </button>
-        </form>
+          <form
+            data-label-undo
+            method="post"
+            action={`/${encodeURIComponent(locale)}/library?label=${encodeURIComponent(page.label.id)}`}
+          >
+            <input type="hidden" name="intent" value="restore" />
+            <input type="hidden" name="subjectId" value={page.undo.subjectId} />
+            <input type="hidden" name="labelId" value={page.undo.labelId} />
+            <input type="hidden" name="assignmentId" value={page.undo.assignmentId} />
+            <input type="hidden" name="idempotencyKey" value={page.undoKey} />
+            <input type="hidden" name="revision" value={page.undo.revision} />
+            <input type="hidden" name="csrf_token" value={page.csrfToken ?? ''} />
+            <button type="submit" className={buttonVariants({ variant: 'outline' })}>
+              {m.library_subject_label_undo()}
+            </button>
+          </form>
         </Exposure>
       ) : null}
     </div>

@@ -21,14 +21,18 @@ export const routes: FakeRoute[] = [
     method: 'POST',
     path: '/v1/pages:read',
     story: async ({ request }) => {
-      const input = await request.clone().json() as { target?: { subject?: string } };
+      const input = (await request.clone().json()) as { target?: { subject?: string } };
       if (input.target?.subject !== unprofiledSubjectId) return;
       const { pageRead } = await import('../fake');
-      const response = await pageRead({
-        ...demoFixtures,
-        subjects: [{ ...demoFixtures.subjects[0], id: unprofiledSubjectId, type: unprofiledType,
-          labels, statements: {} }],
-      } as unknown as Fixtures, request);
+      const response = await pageRead(
+        {
+          ...demoFixtures,
+          subjects: [
+            { ...demoFixtures.subjects[0], id: unprofiledSubjectId, type: unprofiledType, labels, statements: {} },
+          ],
+        } as unknown as Fixtures,
+        request,
+      );
       const value: Record<string, unknown> = await response.json();
       return { status: response.status, ...value };
     },

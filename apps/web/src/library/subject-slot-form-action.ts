@@ -28,13 +28,24 @@ export const submitSubjectLabelForm = createServerOnlyFn(async (request: Request
       const key = one('idempotencyKey');
       const intent = one('intent');
       if (!key) return { ok: false as const, reason: 'unavailable' as const };
-      const input = validateSubjectLabelMutation(intent === 'assign-by-name' ? {
-        intent: 'create-and-assign', subjectId: one('subjectId'), name: one('name'),
-        createKey: one('createKey'), idempotencyKey: key,
-      } : {
-        intent, subjectId: one('subjectId'), labelId: one('labelId'), assignmentId: one('assignmentId'),
-        revision: Number(one('revision')), idempotencyKey: key,
-      });
+      const input = validateSubjectLabelMutation(
+        intent === 'assign-by-name'
+          ? {
+              intent: 'create-and-assign',
+              subjectId: one('subjectId'),
+              name: one('name'),
+              createKey: one('createKey'),
+              idempotencyKey: key,
+            }
+          : {
+              intent,
+              subjectId: one('subjectId'),
+              labelId: one('labelId'),
+              assignmentId: one('assignmentId'),
+              revision: Number(one('revision')),
+              idempotencyKey: key,
+            },
+      );
       return applySubjectLabelMutation(request, env as Partial<SessionEnv>, input, kernelClient());
     }
     const intents = form.getAll('intent');
