@@ -141,7 +141,7 @@ export class RankingWorld {
     body: unknown,
     person = this.base.author,
     status = 201,
-    key = randomUUID(),
+    key: string = randomUUID(),
   ) {
     const result = await this.call(method, path, { bearer: person.bearer, key, body });
     requireStatus(result, status);
@@ -555,27 +555,28 @@ async function worker(): Promise<void> {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 10 });
   let runtime: RankingRuntime | undefined;
   try {
-    runtime = await composeRankingRuntime(
+    const activeRuntime = await composeRankingRuntime(
       pool,
       process.env.DATABASE_URL!,
       Buffer.from(process.env.RANKING_ROUTE_KEY!, 'base64url'),
       process.env.RANKING_PARTITIONS!.split(',').map(Number),
     );
+    runtime = activeRuntime;
     console.log('ranking-ready');
     for await (const line of console) {
       const { id, command, payload } = JSON.parse(line);
       try {
         if (command === 'consume')
-          await runtime.consume(
+          await activeRuntime.consume(
             payload.map((envelope: Omit<Envelope, 'position'> & { position: string }) => ({
               ...envelope,
               position: BigInt(envelope.position),
             })),
           );
-        else if (command === 'replay') await runtime.replay(payload);
-        else if (command === 'refresh') await runtime.refresh(payload);
+        else if (command === 'replay') await activeRuntime.replay(payload);
+        else if (command === 'refresh') await activeRuntime.refresh(payload);
         else if (command === 'stop') {
-          await runtime.stop();
+          await activeRuntime.stop();
           runtime = undefined;
           console.log(`ranking:${id}:ok`);
           break;

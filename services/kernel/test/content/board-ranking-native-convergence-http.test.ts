@@ -11,9 +11,11 @@ import {
   requireStatus,
   sorts,
   startRankingWorker,
+  type BoardPage,
   type RankedThread,
   type RankingRuntime,
   type RankingWorld,
+  type Sort,
 } from './board-ranking-native-convergence-fixture.ts';
 
 async function problem(world: RankingWorld, path: string, status: number, code: string, bearer?: string) {
@@ -175,7 +177,7 @@ test.serial(
         }
 
       // Start all three persona/sort walks before insertion. Materialized ranks remain fixed during this walk.
-      const starts = [];
+      const starts: { sort: Sort; bearer: string | undefined; first: BoardPage }[] = [];
       for (const sort of sorts)
         for (const bearer of readers) {
           const first = await world.page(boardId, sort, bearer);
