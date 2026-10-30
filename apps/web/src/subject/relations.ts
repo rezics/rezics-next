@@ -5,7 +5,7 @@ export const RELATION_GROUPS = ['order', 'derivation', 'world', 'membership', 'a
 export type RelationGroup = (typeof RELATION_GROUPS)[number];
 
 /** How one relation property reads from the page subject's side of the inverse read. */
-export type RelationDefinition = { label: string; group: RelationGroup; symmetric: boolean };
+export type RelationDefinition = { label: string; forwardLabel?: string; group: RelationGroup; symmetric: boolean };
 
 type ReleaseProperty = {
   labels?: Record<string, string>;
@@ -42,6 +42,7 @@ export function relationDefinitions(
     const label = names ? pickText(names, locale).text : '';
     definitions[property] = {
       label: label || (definition.labels ? pickText(definition.labels, locale).text : ''),
+      forwardLabel: definition.labels ? pickText(definition.labels, locale).text : '',
       group: isGroup(relation?.group) ? relation.group : 'other',
       symmetric,
     };

@@ -2471,6 +2471,93 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                                     subject: string;
                                     property: string;
                                     statement: string;
+                                    assertion?: {
+                                        id: string;
+                                        rank: "deprecated" | "normal" | "preferred";
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                        qualifiers: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        references: {
+                                            parts: {
+                                                property: {
+                                                    id: string;
+                                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: any;
+                                                } | {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            }[];
+                                            hash: string;
+                                        }[];
+                                        rezics: {
+                                            release: string;
+                                            revision: number;
+                                        };
+                                    };
+                                    related?: Record<string, {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    }>;
                                     type: string;
                                     label: string;
                                     summary: {
@@ -2675,6 +2762,42 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                                             revision: number;
                                         };
                                     };
+                                    related?: Record<string, {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    }>;
                                     target: string | null;
                                     external: string | null;
                                     type?: string;
@@ -2716,7 +2839,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                                         } | null;
                                     } | null;
                                 }[];
-                                count: {
+                                count?: {
                                     value: number;
                                     exact: boolean;
                                 };

@@ -347,7 +347,7 @@ const readLinks: ComponentRead = (props, page) =>
         property: props.property as string,
         ...(props.filter === undefined ? {} : { filter: props.filter as string }),
         ...(props.type === undefined ? {} : { type: props.type as string }),
-        limit: props.limit as number,
+        limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
       };
 
 const readDirected: ComponentRead = (props, page) => {
@@ -415,13 +415,21 @@ export const platformRegistry = defineRegistry({
               id: page.subject,
               ...(page.context ? { context: page.context.id } : {}),
               property: props.property as string,
-              limit: props.limit as number,
+              limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
             },
     },
     {
       type: 'RelationGroups',
       props: Type.Object({ title: Type.Optional(localizedText({ maxLength: 120 })), ...linkProps }, closed),
       read: readLinks,
+    },
+    {
+      type: 'OutgoingRelations',
+      props: Type.Object({ title: Type.Optional(localizedText({ maxLength: 120 })), ...linkProps }, closed),
+      read: (props, page) => {
+        const read = readLinks(props, page);
+        return read?.kind === 'links' ? { ...read, kind: 'relations' } : read;
+      },
     },
     {
       type: 'Cover',
@@ -510,7 +518,7 @@ export const platformRegistry = defineRegistry({
               kind: 'accountThreads',
               id: page.account.id,
               threadKind: props.threadKind as 'discussion' | 'review',
-              limit: props.limit as number,
+              limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
             },
     },
     {
@@ -563,7 +571,7 @@ export const platformRegistry = defineRegistry({
         body: {
           filter: { type: { in: props.types as string[] } },
           sort: props.sort as 'name' | 'collections',
-          limit: props.limit as number,
+          limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
         },
       }),
     },

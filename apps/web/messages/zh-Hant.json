@@ -1872,5 +1872,15 @@
   "space_setup_paused": "設定已暫停",
   "space_setup_paused_hint": "本頁會保留輸入。已儲存的步驟已經生效。",
   "space_setup_resume": "繼續設定",
-  "space_setup_created_hint": "第一個看板已建立。開啟看板開始討論，或返回 Space 主頁。"
+  "space_setup_created_hint": "第一個看板已建立。開啟看板開始討論，或返回 Space 主頁。",
+  "subject_credit_named": "署名",
+  "subject_credit_order": "順序",
+  "subject_credit_role": "職務",
+  "subject_credit_character": "角色",
+  "subject_relation_empty_page": "此頁沒有可顯示的項目。",
+  "subject_relation_restart": "重新開始",
+  "subject_relation_changed": "清單已變更。請重新開始讀取目前的項目。",
+  "subject_relation_unavailable": "無法讀取此關係。",
+  "subject_relation_invalid": "請檢查清單網址後再試一次。",
+  "subject_relation_loading": "正在載入更多…"
 }

@@ -1873,5 +1873,15 @@
   "space_setup_paused": "设置已暂停",
   "space_setup_paused_hint": "本页会保留输入。已保存的步骤已经生效。",
   "space_setup_resume": "继续设置",
-  "space_setup_created_hint": "首个版块已创建。打开版块开始讨论，或返回 Space 主页。"
+  "space_setup_created_hint": "首个版块已创建。打开版块开始讨论，或返回 Space 主页。",
+  "subject_credit_named": "署名",
+  "subject_credit_order": "顺序",
+  "subject_credit_role": "职务",
+  "subject_credit_character": "角色",
+  "subject_relation_empty_page": "此页没有可显示的项目。",
+  "subject_relation_restart": "重新开始",
+  "subject_relation_changed": "列表已变更。请重新开始读取当前的项目。",
+  "subject_relation_unavailable": "无法读取此关系。",
+  "subject_relation_invalid": "请检查列表网址后重试。",
+  "subject_relation_loading": "正在加载更多…"
 }

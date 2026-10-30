@@ -5,7 +5,7 @@ import {
   sharedRatio,
   type ListPresentation,
 } from '@rezics/ui/cover';
-import { MetaLine, metaText } from '@rezics/ui/meta-line';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { CoverCard, CoverGrid, CoverRow } from '@rezics/ui/cover-card';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
@@ -37,6 +37,17 @@ function ItemCard({
     [],
     value.locale,
   );
+  const qualified = (item.qualified ?? []).map((note, index) =>
+    note.subject ? (
+      <value.link key={index} href={subjectHref(note.subject, value.locale).href}>
+        {note.text}
+      </value.link>
+    ) : (
+      <span key={index} lang={note.language}>
+        {note.text}
+      </span>
+    ),
+  );
   const card = (
     <CoverCard
       link={value.link}
@@ -62,12 +73,13 @@ function ItemCard({
                     </span>
                   )),
                   ...item.notes,
+                  ...qualified,
                 ]}
               />
             ),
           }
-        : item.notes.length > 0
-          ? { secondary: metaText(item.notes) }
+        : item.notes.length > 0 || qualified.length > 0
+          ? { secondary: <MetaLine items={[...item.notes, ...qualified]} /> }
           : {})}
     />
   );

@@ -132,6 +132,9 @@
           "$ref": "#/$defs/RelationGroups"
         },
         {
+          "$ref": "#/$defs/OutgoingRelations"
+        },
+        {
           "$ref": "#/$defs/Cover"
         },
         {
@@ -612,6 +615,79 @@
         "type": {
           "type": "string",
           "const": "RelationGroups"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "property", "limit"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9_-]{1,64}(?![\\s\\S])"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120,
+                  "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+                },
+                {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "pattern": "^(?:(?!<[A-Za-z/!?])[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F])*(?![\\s\\S])"
+                  },
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*(?![\\s\\S])"
+                  },
+                  "minProperties": 1,
+                  "maxProperties": 16
+                }
+              ]
+            },
+            "property": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+            },
+            "filter": {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36,
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])"
+            },
+            "type": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24
+            },
+            "paged": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "OutgoingRelations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "props"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "OutgoingRelations"
         },
         "props": {
           "type": "object",

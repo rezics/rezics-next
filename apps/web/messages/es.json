@@ -1872,5 +1872,15 @@
   "space_setup_paused": "Configuración en pausa",
   "space_setup_paused_hint": "Lo escrito se conserva en esta página. Los pasos guardados ya se aplicaron.",
   "space_setup_resume": "Reanudar configuración",
-  "space_setup_created_hint": "Se creó el primer tablón. Ábrelo para iniciar un debate o vuelve al Space."
+  "space_setup_created_hint": "Se creó el primer tablón. Ábrelo para iniciar un debate o vuelve al Space.",
+  "subject_credit_named": "Acreditado como",
+  "subject_credit_order": "Orden",
+  "subject_credit_role": "Función",
+  "subject_credit_character": "Personaje",
+  "subject_relation_empty_page": "No hay entradas visibles en esta página.",
+  "subject_relation_restart": "Volver al inicio",
+  "subject_relation_changed": "La lista ha cambiado. Vuelve al inicio para leer las entradas actuales.",
+  "subject_relation_unavailable": "Esta relación no está disponible.",
+  "subject_relation_invalid": "Comprueba la dirección de la lista e inténtalo de nuevo.",
+  "subject_relation_loading": "Cargando más…"
 }

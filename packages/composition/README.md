@@ -556,6 +556,11 @@ concept or fictional character uses its type template, a series uses
 `schema:CreativeWorkSeries`, another bundled work uses `schema:CreativeWork`, and every other
 bundled type uses `generic`.
 
+`OutgoingRelations` is an inert component descriptor for one native `/relations` read. It accepts the same
+property, optional filter/type, limit and paged selectors as relation groups. Paged relation descriptors request
+at most 12 rows; continuation binds the native cursor to one current node and its selected Context. The existing
+16-read and 128-slot admission limits apply to the complete document before dispatch.
+
 ## Dependent document bodies
 
 `documentRead(document, subject, availableProperties, context?)` is the closed internal descriptor

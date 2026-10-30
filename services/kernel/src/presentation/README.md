@@ -206,3 +206,8 @@ links and forward relations use separate native property streams. Thread cursors
 native 4096-character bound; Semantic routes retain their native cursor admission. All leaves
 share the existing 16-read/128-slot budget and four dispatch workers. Authority controls are
 fixed anchored native reads under the original admission and deadline, with no new retry.
+
+A subject page continuation resolves its current template and Context before planning. It dispatches the selected
+node's native links/relations read and retains ordinary subject/control reads. Other links/relations descriptors
+return 204 with an empty body; they are unrequested, not empty lists. Clients retain independent group state or
+offer a fresh-start link when opening a continued document directly. Full-document planning bounds still apply.

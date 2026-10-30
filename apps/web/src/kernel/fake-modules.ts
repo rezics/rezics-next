@@ -1,5 +1,6 @@
 import type { Fixtures, KernelRecording } from './fake.ts';
 import * as libraryContinue from './fake/library-continue.ts';
+import * as qualifiedRelations from './fake/qualified-relations.ts';
 import * as reviewConflicts from './fake/review-conflicts.ts';
 import * as threadMediaReuse from './fake/thread-media-reuse.ts';
 import * as libraryLabelAssignments from './fake/library-label-assignments.ts';
@@ -68,11 +69,13 @@ function discover(): Discovered {
   discovered = {
     routes: [
       ...threadMediaReuse.routes,
+      ...qualifiedRelations.routes,
       ...ordered({
         ...Object.fromEntries(
           Object.entries(modules).filter(
             ([file]) =>
               !file.endsWith('/library-continue.ts') &&
+              !file.endsWith('/qualified-relations.ts') &&
               !file.endsWith('/thread-media-reuse.ts') &&
               !file.endsWith('/library-label-assignments.ts'),
           ),

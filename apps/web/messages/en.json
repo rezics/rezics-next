@@ -1873,5 +1873,15 @@
   "space_setup_paused": "Setup paused",
   "space_setup_paused_hint": "Your entries are kept on this page. Saved steps already belong to your community.",
   "space_setup_resume": "Resume setup",
-  "space_setup_created_hint": "The first board was created. Open it to start a discussion, or return to your Space home."
+  "space_setup_created_hint": "The first board was created. Open it to start a discussion, or return to your Space home.",
+  "subject_credit_named": "Credited as",
+  "subject_credit_order": "Order",
+  "subject_credit_role": "Role",
+  "subject_credit_character": "Character",
+  "subject_relation_empty_page": "No visible entries on this page.",
+  "subject_relation_restart": "Start again",
+  "subject_relation_changed": "The list changed. Start again to read its current entries.",
+  "subject_relation_unavailable": "This relation is unavailable.",
+  "subject_relation_invalid": "Check the list address and try again.",
+  "subject_relation_loading": "Loading more…"
 }

@@ -1872,5 +1872,15 @@
   "space_setup_paused": "설정 일시 중지됨",
   "space_setup_paused_hint": "입력은 이 페이지에 유지됩니다. 저장된 단계는 이미 적용되었습니다.",
   "space_setup_resume": "설정 재개",
-  "space_setup_created_hint": "첫 게시판이 만들어졌습니다. 게시판을 열어 토론을 시작하거나 Space 홈으로 돌아가세요."
+  "space_setup_created_hint": "첫 게시판이 만들어졌습니다. 게시판을 열어 토론을 시작하거나 Space 홈으로 돌아가세요.",
+  "subject_credit_named": "크레딧 표기",
+  "subject_credit_order": "순서",
+  "subject_credit_role": "담당",
+  "subject_credit_character": "등장인물",
+  "subject_relation_empty_page": "이 페이지에 표시할 항목이 없습니다.",
+  "subject_relation_restart": "처음부터 보기",
+  "subject_relation_changed": "목록이 변경되었습니다. 처음부터 다시 읽어 주세요.",
+  "subject_relation_unavailable": "이 관계를 표시할 수 없습니다.",
+  "subject_relation_invalid": "목록 주소를 확인하고 다시 시도해 주세요.",
+  "subject_relation_loading": "더 불러오는 중…"
 }

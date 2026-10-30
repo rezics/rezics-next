@@ -20,6 +20,9 @@ import { subjectViewHref } from '../../subject/subject-href';
 import type { AccountProfile } from './account-read';
 import { CoverList } from './cover-list';
 import { listView } from './views';
+import { RelationStream } from './relation-stream';
+import { qualifiedNotes, type QualifiedNote } from './qualified-relations';
+import { relationPreviewCount } from './subject-relations-preview';
 import {
   bestRank,
   ExternalValue,
@@ -104,6 +107,8 @@ export type Item = {
   type?: string;
   /** Qualifier text such as a role or the credited name. */
   notes: string[];
+  qualified?: QualifiedNote[];
+  statement?: string | undefined;
   gated: boolean;
   /** The property a relation read found the item by, and the holder's date when the read carries one. */
   property?: string;
@@ -165,7 +170,9 @@ function StreamLink({
       className={linkClass}
       href={`${base}${base.includes('?') ? '&' : '?'}${query}`}
     >
-      {cursor ? m.subject_relations_more({}, { locale: value.locale as never }) : 'Start again'}
+      {cursor
+        ? m.subject_relations_more({}, { locale: value.locale as never })
+        : m.subject_relation_restart({}, { locale: value.locale as never })}
     </a>
   );
 }
@@ -196,7 +203,7 @@ export function yearText(value: unknown, locale: string): string | null {
 function datedItems(items: Item[], locale: string): Item[] {
   return items.map((item) => {
     const year = yearText(item.date, locale);
-    return year ? { ...item, notes: [year] } : item;
+    return year ? { ...item, notes: [...item.notes, year] } : item;
   });
 }
 
@@ -277,15 +284,18 @@ function limitOf(props: Record<string, unknown>): number {
 function linkItems(
   section: Section | undefined,
   limit: number,
+  value?: OverviewValue,
 ): { items: Item[]; count?: Count; more: boolean } | undefined {
   if (!section?.ok || section.read.kind !== 'links') return;
-  return holderItems(section.body, limit);
+  return holderItems(section.body, limit, value?.locale, value?.reader.spoilerLevel);
 }
 
 /** The holders in the body of a `links` read, with its exact or "at least" count. */
 export function holderItems(
   body: Record<string, unknown>,
   limit: number,
+  locale = 'en',
+  readerLevel = 0,
 ): { items: Item[]; count?: Count; more: boolean } | undefined {
   if (!Array.isArray(body.links)) return;
   const links = body.links.filter(isRecord).slice(0, limit);
@@ -300,8 +310,15 @@ export function holderItems(
             ...(typeof link.type === 'string' ? { type: link.type } : {}),
             ...(typeof link.property === 'string' ? { property: link.property } : {}),
             ...(typeof link.date === 'string' ? { date: link.date } : {}),
+            statement: typeof link.statement === 'string' ? link.statement : undefined,
             notes: [],
-            gated: false,
+            ...(isRecord(link.assertion) && Array.isArray(link.assertion.qualifiers)
+              ? { qualified: qualifiedNotes(link.assertion as unknown as Stmt, link.related, locale) }
+              : {}),
+            gated:
+              isRecord(link.assertion) && Array.isArray(link.assertion.qualifiers)
+                ? spoilerLevel(link.assertion as unknown as Stmt) > readerLevel
+                : false,
           },
         ]
       : [],
@@ -333,7 +350,7 @@ function noteOf(qualifier: Stmt['qualifiers'][number], related: Related, locale:
 }
 
 /** The statements the page subject holds for one property, shown as items with their qualifiers. */
-function statementItems(
+export function statementItems(
   section: Section | undefined,
   property: unknown,
   limit: number,
@@ -346,31 +363,17 @@ function statementItems(
       .flatMap((row): Item[] => {
         if (typeof row.target !== 'string' || !isRecord(row.statement)) return [];
         const statement = row.statement;
-        const qualifiers = Array.isArray(statement.qualifiers) ? statement.qualifiers.filter(isRecord) : [];
+
         return [
           {
             id: row.target,
             label: { text: typeof row.label === 'string' ? row.label : '', lang: undefined },
             ...(typeof row.type === 'string' ? { type: row.type } : {}),
-            notes: qualifiers.flatMap((qualifier) => {
-              if (!isRecord(qualifier.value) || qualifier.value.type !== 'value') return [];
-              const content = qualifier.value.content;
-              return typeof content === 'string'
-                ? [content]
-                : isRecord(content) && typeof content.text === 'string'
-                  ? [content.text]
-                  : isRecord(content) && typeof content.amount === 'string'
-                    ? [content.amount]
-                    : [];
-            }),
-            gated: qualifiers.some(
-              (qualifier) =>
-                isRecord(qualifier.property) &&
-                qualifier.property.id === 'rezics:spoilerLevel' &&
-                (!isRecord(qualifier.value) ||
-                  !isRecord(qualifier.value.content) ||
-                  Number(qualifier.value.content.amount) > value.reader.spoilerLevel),
-            ),
+            statement: typeof statement.id === 'string' ? statement.id : undefined,
+            ...(isRecord(row.summary) ? { summary: row.summary as unknown as SubjectSummary } : {}),
+            notes: [],
+            qualified: qualifiedNotes(statement as unknown as Stmt, row.related, value.locale),
+            gated: spoilerLevel(statement as unknown as Stmt) > value.reader.spoilerLevel,
           },
         ];
       });
@@ -383,26 +386,41 @@ function statementItems(
   const read = subjectRead(section);
   if (!read || typeof property !== 'string') return;
   const held = Object.hasOwn(read.subject.statements, property) ? read.subject.statements[property] : undefined;
-  const statements = bestRank((held ?? []) as unknown as Stmt[]).filter(
+  const candidates = (held ?? []) as unknown as Stmt[];
+  const statements = (read.subject.relationCounts ? candidates : bestRank(candidates)).filter(
     (statement) =>
+      statement.rank !== 'deprecated' &&
       statement.value.type === 'value' &&
       statement.property.data_type === 'wikibase-item' &&
       typeof statement.value.content === 'string',
   );
-  const items = statements.slice(0, limit).map((statement): Item => {
+  const items = statements.slice(0, limit).flatMap((statement): Item[] => {
     const target = statement.value.content as string;
     const entry = Object.hasOwn(read.related, target) ? read.related[target] : undefined;
-    return {
-      id: entry?.redirect ?? target,
-      label: pageText(entry?.labels, value.locale),
-      notes: statement.qualifiers.flatMap((qualifier) => {
-        const note = noteOf(qualifier, read.related, value.locale);
-        return note === null ? [] : [note];
-      }),
-      gated: spoilerLevel(statement) > value.reader.spoilerLevel,
-    };
+    if (!entry) return [];
+    return [
+      {
+        id: entry.redirect ?? target,
+        label: pageText(entry.labels, value.locale),
+        statement: statement.id,
+        ...(entry.type ? { type: entry.type } : {}),
+        notes: [],
+        qualified: qualifiedNotes(
+          statement,
+          Object.fromEntries(
+            Object.entries(read.related).map(([id, related]) => [
+              id,
+              { id: related.redirect ?? id, label: { value: pageText(related.labels, value.locale).text } },
+            ]),
+          ),
+          value.locale,
+        ),
+        gated: spoilerLevel(statement) > value.reader.spoilerLevel,
+      },
+    ];
   });
-  return { items, count: { value: statements.length, relation: 'exact' } };
+  const count = relationPreviewCount(read.subject as unknown as Record<string, unknown>, property);
+  return { items, count, more: count ? hasMore(count, items.length) : statements.length > 0 };
 }
 
 function LinkSection(props: Record<string, unknown>, slot: string, title: string, view: string, forward: boolean) {
@@ -410,6 +428,18 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
   if (!state) return null;
   const { value, section } = state;
   const id = String(props.id);
+  const definition = typeof props.property === 'string' ? value.relations[props.property] : undefined;
+  title = (forward ? definition?.forwardLabel : definition?.label) || title;
+  if (props.paged === true)
+    return (
+      <RelationStream
+        value={value}
+        section={section ?? { ok: false }}
+        node={id}
+        view={view}
+        title={pageText(props.title, value.locale).text || title}
+      />
+    );
   if (!section?.ok)
     return (
       <>
@@ -418,9 +448,9 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       </>
     );
   const limit = props.paged === true ? Number.POSITIVE_INFINITY : limitOf(props);
-  const found = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit);
+  const found = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit, value);
   if (!found) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
-  if (found.items.length === 0 && !(props.paged === true && found.more)) return null;
+  if (found.items.length === 0 && !found.more && !found.count?.value && props.paged !== true) return null;
   const listed = forward ? found : { ...found, items: datedItems(found.items, value.locale) };
   const text = pageText(props.title, value.locale);
   return (
@@ -434,6 +464,9 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       href={viewHref(value, view)}
       locale={value.locale}
     >
+      {listed.items.length === 0 && (
+        <p role="status">{m.subject_relation_empty_page({}, { locale: value.locale as never })}</p>
+      )}
       <CoverList items={listed.items} value={value} label={text.text || title} preview={props.paged !== true} />
       {props.paged === true && section.ok && typeof section.body.next === 'string' && (
         <StreamLink value={value} view={view} node={id} cursor={section.body.next} />
@@ -468,6 +501,26 @@ export function RelationGroups(props: Record<string, unknown>) {
   const title = pageText(props.title, value.locale);
   const heading = title.text || m.subject_relations({}, options);
   const id = String(props.id);
+  if (nodes.some((node) => node.props.paged === true))
+    return (
+      <div className="space-y-8">
+        {nodes.map((node) => {
+          const section = value.sections.get(node.id);
+          const property = String(node.props.property ?? '');
+          const title = value.relations[property]?.label || heading;
+          return (
+            <RelationStream
+              key={node.id}
+              value={value}
+              section={section ?? { ok: false }}
+              node={node.id}
+              view="relations"
+              title={title}
+            />
+          );
+        })}
+      </div>
+    );
 
   const entries: RelationEntry[] = [];
   const groupParts = new Map<RelationGroup, (Count | undefined)[]>();
@@ -478,7 +531,11 @@ export function RelationGroups(props: Record<string, unknown>) {
     const property = typeof node.props.property === 'string' ? node.props.property : '';
     const definition = Object.hasOwn(value.relations, property) ? value.relations[property] : undefined;
     const group = definition?.group ?? 'other';
-    const listed = linkItems(section, node.props.paged === true ? Number.POSITIVE_INFINITY : limitOf(node.props));
+    const listed = linkItems(
+      section,
+      node.props.paged === true ? Number.POSITIVE_INFINITY : limitOf(node.props),
+      value,
+    );
     if (!listed) {
       failed += 1;
       const parts = groupParts.get(group) ?? [];
@@ -524,7 +581,7 @@ export function RelationGroups(props: Record<string, unknown>) {
         const items = members.flatMap((entry) =>
           entry.items.map((item): Item => {
             const year = yearText(item.date, value.locale);
-            return { ...item, notes: [entry.label, year ?? ''].filter(Boolean) };
+            return { ...item, notes: [entry.label, ...item.notes, year ?? ''].filter(Boolean) };
           }),
         );
         const count = sumCounts(groupParts.get(group) ?? []);
@@ -588,7 +645,17 @@ export function SubjectList(props: Record<string, unknown>) {
   const { value, section } = state;
   const id = String(props.id);
   const title = pageText(props.title, value.locale);
-  const found = linkItems(section, props.paged === true ? Number.POSITIVE_INFINITY : limitOf(props));
+  if (props.paged === true)
+    return (
+      <RelationStream
+        value={value}
+        section={section ?? { ok: false }}
+        node={id}
+        view={listView(props.property) ?? 'relations'}
+        title={title.text}
+      />
+    );
+  const found = linkItems(section, props.paged === true ? Number.POSITIVE_INFINITY : limitOf(props), value);
   if (!found) return <Failed slot="subject-list" id={id} title={title.text} locale={value.locale} />;
   if (found.items.length === 0) return null;
   const listed = { ...found, items: datedItems(found.items, value.locale) };
@@ -600,7 +667,11 @@ export function SubjectList(props: Record<string, unknown>) {
       titleLang={title.lang}
       count={listed.count}
       more={props.paged !== true && listed.more}
-      href={viewHref(value, 'relations', typeof props.property === 'string' ? props.property : undefined)}
+      href={viewHref(
+        value,
+        listView(props.property) ?? 'relations',
+        listView(props.property) ? undefined : typeof props.property === 'string' ? props.property : undefined,
+      )}
       locale={value.locale}
     >
       <CoverList items={listed.items} value={value} label={title.text} preview={props.paged !== true} />
@@ -613,8 +684,10 @@ export function Appearances(props: Record<string, unknown>) {
   return LinkSection(
     props,
     'appearances',
-    m.subject_characters({}, { locale: locale as never }),
-    'characters',
+    props.direction === 'forward'
+      ? m.subject_characters({}, { locale: locale as never })
+      : m.subject_appearances({}, { locale: locale as never }),
+    props.direction === 'forward' ? 'characters' : 'appearances',
     props.direction === 'forward',
   );
 }
@@ -624,8 +697,10 @@ export function Credits(props: Record<string, unknown>) {
   return LinkSection(
     props,
     'credits',
-    m.subject_credits({}, { locale: locale as never }),
-    'credits',
+    props.direction === 'forward'
+      ? m.subject_credits({}, { locale: locale as never })
+      : m.subject_works({}, { locale: locale as never }),
+    props.direction === 'forward' ? 'credits' : 'works',
     props.direction === 'forward',
   );
 }
@@ -1064,4 +1139,15 @@ export function Sources(props: Record<string, unknown>) {
   if (!section.ok || !section.sources)
     return <Failed slot="subject-sources" id={id} title={value.sources} locale={value.locale} />;
   return <SourcesSection value={value} sources={section.sources} id={`${id}-title`} />;
+}
+
+export function OutgoingRelations(props: Record<string, unknown>) {
+  const value = useContext(OverviewContext);
+  return LinkSection(
+    props,
+    'outgoing-relations',
+    m.subject_relations({}, { locale: (value?.locale ?? 'en') as never }),
+    'relations',
+    true,
+  );
 }

@@ -80,9 +80,18 @@ function placesType(content: readonly unknown[], type: string): boolean {
   );
 }
 
-function problemError(value: unknown): Error {
+export class PageReadError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+function problemError(value: unknown, status: number): Error {
   const code = isRecord(value) && typeof value.code === 'string' && value.code ? value.code : 'internal_error';
-  return new Error(code);
+  return new PageReadError(code, status);
 }
 
 /** The context the page's reads are planned in. */
@@ -178,7 +187,7 @@ export async function loadSubjectPage(
     const { account: _account, ...page } = result.data;
     return { kind: 'page', page: { ...page, subject: page.subject ?? null } };
   }
-  throw problemError(result.error?.value);
+  throw problemError(result.error?.value, result.status);
 }
 
 /** The properties the page's inverse reads follow, for the definitions that label them. */

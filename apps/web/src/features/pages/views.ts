@@ -11,6 +11,7 @@ import {
 import { accountOf, viewIsPublic, type AccountProfile } from './account-read';
 import { countFromLinks, sumCounts, type Count } from '../count';
 import { bestRank, isRecord, type Stmt } from './shared';
+import { relationPreviewCount } from './subject-relations-preview';
 import type { SubjectCommunity } from './subject-community';
 
 /** One tab of a subject page: a view, and how many items its data has when that is known. */
@@ -44,10 +45,11 @@ export function listView(property: unknown): View | undefined {
 /** The view a data component previews. Components that preview no view return nothing. */
 export function previewedView(node: Node): View | undefined {
   switch (node.type) {
+    case 'OutgoingRelations':
     case 'RelationGroups':
       return 'relations';
     case 'Appearances':
-      return 'characters';
+      return node.props.direction === 'forward' ? 'characters' : 'appearances';
     case 'Credits':
       return node.props.direction === 'forward' ? 'credits' : 'works';
     case 'CollectionList':
@@ -104,8 +106,8 @@ function* walk(nodes: readonly unknown[]): Generator<Node> {
 }
 
 function previewLimit(node: Node, read: { limit?: number } | undefined): number {
-  if (typeof node.props.limit === 'number' && node.props.limit >= 1) return node.props.limit;
-  return read?.limit ?? 12;
+  if (typeof node.props.limit === 'number' && node.props.limit >= 1) return Math.min(node.props.limit, 12);
+  return Math.min(read?.limit ?? 12, 12);
 }
 
 /** The items and total a preview read returned for one node. Nothing when the read did not succeed. */
@@ -169,14 +171,17 @@ function previewCount(
       typeof property === 'string' && Object.hasOwn(body.subject.statements, property)
         ? body.subject.statements[property]
         : undefined;
-    const statements = bestRank((Array.isArray(held) ? held : []) as Stmt[]).filter(
+    const candidates = (Array.isArray(held) ? held : []) as Stmt[];
+    const statements = (isRecord(body.subject.relationCounts) ? candidates : bestRank(candidates)).filter(
       (statement) =>
+        statement.rank !== 'deprecated' &&
         statement.value.type === 'value' &&
         statement.property.data_type === 'wikibase-item' &&
         typeof statement.value.content === 'string',
     );
     const items = Math.min(statements.length, previewLimit(node, read));
-    return { items, count: { value: statements.length, relation: 'exact' } };
+    const count = typeof property === 'string' ? relationPreviewCount(body.subject, property) : undefined;
+    return { items, ...(count ? { count } : {}) };
   }
   return;
 }

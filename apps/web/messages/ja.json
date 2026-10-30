@@ -1872,5 +1872,15 @@
   "space_setup_paused": "設定を一時停止しました",
   "space_setup_paused_hint": "入力はこのページに保持されます。保存済みのステップは反映されています。",
   "space_setup_resume": "設定を再開",
-  "space_setup_created_hint": "最初の掲示板が作成されました。開いて交流を始めるか、Space ホームに戻れます。"
+  "space_setup_created_hint": "最初の掲示板が作成されました。開いて交流を始めるか、Space ホームに戻れます。",
+  "subject_credit_named": "クレジット表記",
+  "subject_credit_order": "順序",
+  "subject_credit_role": "担当",
+  "subject_credit_character": "登場人物",
+  "subject_relation_empty_page": "このページに表示できる項目はありません。",
+  "subject_relation_restart": "最初から読む",
+  "subject_relation_changed": "一覧が変更されました。最初から読み直してください。",
+  "subject_relation_unavailable": "この関係を表示できません。",
+  "subject_relation_invalid": "一覧のアドレスを確認して再試行してください。",
+  "subject_relation_loading": "追加を読み込み中…"
 }

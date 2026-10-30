@@ -953,6 +953,7 @@ export const dataComponents = {
   AccountCollections: accounts.AccountCollections,
   Summary: overview.Summary,
   RelationGroups: overview.RelationGroups,
+  OutgoingRelations: overview.OutgoingRelations,
   Appearances: overview.Appearances,
   Credits: overview.Credits,
   RatingSummary: overview.RatingSummary,

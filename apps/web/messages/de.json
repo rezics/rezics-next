@@ -1872,5 +1872,15 @@
   "space_setup_paused": "Einrichtung pausiert",
   "space_setup_paused_hint": "Deine Eingaben bleiben auf dieser Seite. Gespeicherte Schritte sind bereits wirksam.",
   "space_setup_resume": "Einrichtung fortsetzen",
-  "space_setup_created_hint": "Das erste Board wurde erstellt. Öffne es für eine Diskussion oder kehre zum Space zurück."
+  "space_setup_created_hint": "Das erste Board wurde erstellt. Öffne es für eine Diskussion oder kehre zum Space zurück.",
+  "subject_credit_named": "Genannt als",
+  "subject_credit_order": "Reihenfolge",
+  "subject_credit_role": "Funktion",
+  "subject_credit_character": "Figur",
+  "subject_relation_empty_page": "Auf dieser Seite sind keine Einträge sichtbar.",
+  "subject_relation_restart": "Neu beginnen",
+  "subject_relation_changed": "Die Liste hat sich geändert. Beginne erneut, um aktuelle Einträge zu lesen.",
+  "subject_relation_unavailable": "Diese Beziehung ist nicht verfügbar.",
+  "subject_relation_invalid": "Prüfe die Listenadresse und versuche es erneut.",
+  "subject_relation_loading": "Weitere werden geladen…"
 }

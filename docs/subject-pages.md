@@ -489,3 +489,17 @@ This specification adds no page, compiler, schema, client, Realm, Context, Sourc
 resolver export. It establishes no Source safety or identity acknowledgment, deployment default or main-branch
 completion. Manager acceptance requires full native check output and Root, Search and Community review of this
 owner contract and its evidence.
+
+## Qualified relation streams
+
+Credits and characters render each current native statement with its own credited name, order, detailed role and
+character qualifiers. Item names and canonical links come from the response's disclosed related summaries. Missing
+qualifier fills stay absent. Spoiler markings use the current stored qualifier and reader setting; the entire row,
+including title, metadata and links, remains behind the accessible reveal control until explicitly opened.
+
+`OutgoingRelations` selects the existing native forward stream for one property. Each group previews at most 12
+rows. In a full view each group owns its cursor, loading, retry and restart state. More resolves the current
+template and selected Context again and dispatches only that group's relation read. Other relation groups are
+returned as unrequested (204), retaining their existing client state. A continued document opened directly offers
+those groups a fresh-start link. No first-page slice or cross-group cursor represents a complete graph or total.
+The existing 16-read, 128-slot and native request bounds still apply.

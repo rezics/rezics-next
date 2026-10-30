@@ -1872,5 +1872,15 @@
   "space_setup_paused": "Configuration en pause",
   "space_setup_paused_hint": "Votre saisie est conservée sur cette page. Les étapes enregistrées ont déjà pris effet.",
   "space_setup_resume": "Reprendre la configuration",
-  "space_setup_created_hint": "Le premier forum a été créé. Ouvrez-le pour lancer une discussion ou revenez au Space."
+  "space_setup_created_hint": "Le premier forum a été créé. Ouvrez-le pour lancer une discussion ou revenez au Space.",
+  "subject_credit_named": "Crédité sous le nom de",
+  "subject_credit_order": "Ordre",
+  "subject_credit_role": "Rôle",
+  "subject_credit_character": "Personnage",
+  "subject_relation_empty_page": "Aucune entrée visible sur cette page.",
+  "subject_relation_restart": "Recommencer",
+  "subject_relation_changed": "La liste a changé. Recommencez pour lire les entrées actuelles.",
+  "subject_relation_unavailable": "Cette relation est indisponible.",
+  "subject_relation_invalid": "Vérifiez l’adresse de la liste et réessayez.",
+  "subject_relation_loading": "Chargement…"
 }

@@ -1,3 +1,7 @@
+import type { Source } from '@rezics/definitions/bulk';
+import { statementAudience } from './statement-disclosure.ts';
+import currentRelations from './current-relations-read.sql';
+import { fenceKey, sourceTuple, readAnchoredFences } from './fences.ts';
 import { semanticCopyRoles } from './erasure-producer.ts';
 import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
@@ -7,7 +11,7 @@ import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { readItemTypes, readLabels } from './subject.ts';
 import { languageRanges } from './language.ts';
 import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
-import { factDataTypes, resolveItem, type Statement } from './item.ts';
+import { factDataTypes, resolveItem, type Statement, type FactRow } from './item.ts';
 import { contextLinkChanges, linkChanges } from './link-changes.ts';
 import { slotView } from './slots.ts';
 import { contextSnapshot } from './context.ts';
@@ -862,10 +866,139 @@ export function linkProjection(pool: Pool): Relay {
   };
 }
 
+/** Current selected statements, batched by their source home, never copied from link projections. */
+async function currentRelationStatements(
+  pool: Pool,
+  entries: readonly { subject: string; property: string; statement: string }[],
+  context: string,
+  routeKey: Uint8Array,
+  deadline: number,
+): Promise<Map<string, Statement>> {
+  const defaults = context === GLOBAL_CONTEXT ? {} : ((await contextSnapshot(pool, context))?.defaults ?? {});
+  const homes = new Map<number, (typeof entries)[number][]>();
+  for (const entry of entries) {
+    const home = partitionOf(routeOf(entry.subject)!);
+    const group = homes.get(home) ?? [];
+    group.push(entry);
+    homes.set(home, group);
+  }
+  const rows: {
+    subject: string;
+    property: string;
+    candidate: string;
+    body: unknown;
+    release: string;
+    revision: number;
+    source: Source | null;
+  }[] = [];
+  for (const [home, group] of homes) {
+    requireAccessDeadline(deadline);
+    rows.push(
+      ...((await withReadTransaction(pool, async (client) =>
+        currentRelations.run(client, {
+          partition_no: home,
+          context_id: context,
+          defaults,
+          entries: group.map((entry) => ({
+            route: routeOf(entry.subject)!,
+            id: entry.subject,
+            property: entry.property,
+            candidate: entry.statement,
+          })),
+          ...(await statementAudience(client)),
+        }),
+      )) as typeof rows),
+    );
+  }
+  const tuples = new Map<string, ReturnType<typeof sourceTuple>>();
+  for (const row of rows)
+    if (row.source && 'field_group' in row.source) {
+      const tuple = sourceTuple(routeKey, row.source);
+      tuples.set(fenceKey(tuple), tuple);
+    }
+  const tupleHomes = new Map<number, ReturnType<typeof sourceTuple>[]>();
+  for (const tuple of tuples.values()) {
+    const home = partitionOf(tuple.route);
+    const group = tupleHomes.get(home) ?? [];
+    group.push(tuple);
+    tupleHomes.set(home, group);
+  }
+  const gone = new Set<string>();
+  for (const [home, group] of tupleHomes)
+    for (let offset = 0; offset < group.length; offset += 100) {
+      requireAccessDeadline(deadline);
+      for (const fence of await readAnchoredFences(pool, home, group.slice(offset, offset + 100)))
+        if (fence.takenDown) gone.add(fenceKey(fence));
+    }
+  const releases = new Map<string, Release>();
+  const result = new Map<string, Statement>();
+  for (const row of rows) {
+    if (row.source && 'field_group' in row.source && gone.has(fenceKey(sourceTuple(routeKey, row.source)))) continue;
+    let release = releases.get(row.release);
+    if (!release) {
+      release = (await readRelease(pool, row.release)) ?? undefined;
+      if (!release) continue;
+      releases.set(row.release, release);
+    }
+    const fact: FactRow = {
+      kind: 'statement',
+      property: row.property,
+      language: null,
+      statement_id: row.candidate,
+      operation: 'assert',
+      body: row.body,
+      fact_release: row.release,
+      fact_revision: row.revision,
+    };
+    const statement = resolveItem(row.subject, [fact], '', factDataTypes(release, [fact]), {
+      revision: row.revision,
+      release: row.release,
+      context,
+    }).statements[row.property]?.[0];
+    if (statement) result.set(`${row.subject}/${row.candidate}`, statement);
+  }
+  requireAccessDeadline(deadline);
+  return result;
+}
+
+function statementItems(statement: Statement): string[] {
+  return [statement, ...statement.qualifiers, ...statement.references.flatMap((reference) => reference.parts)].flatMap(
+    (snak) =>
+      snak.property.data_type === 'wikibase-item' &&
+      snak.value.type === 'value' &&
+      typeof snak.value.content === 'string'
+        ? [snak.value.content]
+        : [],
+  );
+}
+
+/** A concealed related value is omitted together with its label; it never becomes a readable raw id. */
+export function disclosedRelationStatement(
+  statement: Statement,
+  summaries: ReadonlyMap<string, SubjectSummary | null>,
+): Statement | null {
+  const disclosed = (snak: Pick<Statement, 'property' | 'value'>) =>
+    snak.property.data_type !== 'wikibase-item' ||
+    snak.value.type !== 'value' ||
+    typeof snak.value.content !== 'string' ||
+    !!summaries.get(snak.value.content);
+  if (!disclosed(statement)) return null;
+  return {
+    ...statement,
+    qualifiers: statement.qualifiers.filter(disclosed),
+    references: statement.references.flatMap((reference) => {
+      const parts = reference.parts.filter(disclosed);
+      return parts.length ? [{ ...reference, parts }] : [];
+    }),
+  };
+}
+
 export type SubjectLink = {
   subject: string;
   property: string;
   statement: string;
+  assertion?: Statement;
+  related?: Record<string, SubjectSummary>;
   type?: string;
   label?: string;
   summary?: SubjectSummary | null;
@@ -1095,6 +1228,7 @@ export async function listSubjectLinks(
     pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
   }
   const page = snapshot.page;
+  const statements = await currentRelationStatements(pool, page.links, context, options.routeKey, deadline);
   const includeLabels = options.includeLabels ?? options.property !== null;
   const summaryRelease = includeLabels ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
   const summaries = summaryRelease
@@ -1107,40 +1241,66 @@ export async function listSubjectLinks(
           release: summaryRelease,
           authorize: options.authorizeSummary ?? (async () => false),
         },
-        page.links.map((link) => link.subject),
+        [
+          ...new Set([...page.links.map((link) => link.subject), ...[...statements.values()].flatMap(statementItems)]),
+        ].slice(0, 256),
         { languages },
       )
     : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deadline);
-  return {
-    ...page,
-    links: page.links.flatMap((link) => {
-      if (!includeLabels) return [{ subject: link.subject, property: link.property, statement: link.statement }];
-      const summary = summaries.get(link.subject) ?? null;
-      if (options.authorizeSummary && !summary) return [];
-      return [
-        {
-          ...link,
-          type: summary?.type ?? link.type,
-          label: summary?.label?.value ?? '',
-          summary,
-        },
-      ];
-    }),
-  };
+  const links = page.links.flatMap((link): SubjectLink[] => {
+    const current = statements.get(`${link.subject}/${link.statement}`);
+    if (!current) return [];
+    if (!includeLabels) return [{ subject: link.subject, property: link.property, statement: link.statement }];
+    const assertion = options.authorizeSummary ? disclosedRelationStatement(current, summaries) : current;
+    if (
+      !assertion ||
+      (options.filter &&
+        !assertion.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+    )
+      return [];
+    const related = Object.fromEntries(
+      statementItems(assertion).flatMap((id) => {
+        const summary = summaries.get(id);
+        return summary ? [[id, summary]] : [];
+      }),
+    );
+    const summary = summaries.get(link.subject) ?? null;
+    if (options.authorizeSummary && !summary) return [];
+    const type = summary?.type ?? link.type;
+    return [
+      {
+        ...link,
+        ...(assertion.qualifiers.length ? { assertion, related } : {}),
+        ...(type ? { type } : {}),
+        label: summary?.label?.value ?? '',
+        summary,
+      },
+    ];
+  });
+  const { count, ...rest } = page;
+  const provedCount =
+    !options.filter &&
+    !options.cursor &&
+    !page.next &&
+    links.length === page.links.length &&
+    count?.exact &&
+    count.value === links.length;
+  return { ...rest, links, ...((!options.authorizeSummary || provedCount) && count ? { count } : {}) };
 }
 
 export type SubjectRelation = {
   statement: Statement;
   target: string | null;
   external: string | null;
+  related?: Record<string, SubjectSummary>;
   type?: string;
   label?: string;
   summary?: SubjectSummary | null;
 };
 export type SubjectRelationsPage = {
   relations: SubjectRelation[];
-  count: { value: number; exact: boolean };
+  count?: { value: number; exact: boolean };
   freshness: { consistency: 'eventual'; target_seconds: 10; caught_up: boolean };
   next: string | null;
   component: { partition: number; epoch: number; position: bigint };
@@ -1157,29 +1317,43 @@ function validRelationAfter(after: CursorKey[]): boolean {
   );
 }
 
-/** Forward relation page over the holder-local projection, with slot views filled only for this page. */
+type SubjectRelationsOptions = {
+  routeKey: Uint8Array;
+  subject: string;
+  property: string;
+  context?: string;
+  limit: number;
+  filter?: string;
+  type?: string;
+  language?: string;
+  languages?: readonly string[];
+  cursor?: string;
+  release: Release;
+  authorize: (client: PoolClient) => Promise<boolean>;
+  prepareAuthorization?: () => Promise<AccessCheck>;
+  deadline?: number;
+  authorizeSummary?: SummaryDependencies['authorize'];
+  seen: readonly SessionComponent[];
+  caughtUp?: boolean;
+};
+
+// Internal readers retain the skeleton count. Public callers supply summary authorization and
+// receive a count only when the current bounded page proves the whole counted set.
+export function listSubjectRelations(
+  pool: Pool,
+  ring: KeyRing,
+  options: SubjectRelationsOptions & { authorizeSummary?: never },
+): Promise<SubjectRelationsPage & { count: { value: number; exact: boolean } }>;
+export function listSubjectRelations(
+  pool: Pool,
+  ring: KeyRing,
+  options: SubjectRelationsOptions,
+): Promise<SubjectRelationsPage>;
+/** Forward relation page over the holder-local projection, with current statements filled only for this page. */
 export async function listSubjectRelations(
   pool: Pool,
   ring: KeyRing,
-  options: {
-    routeKey: Uint8Array;
-    subject: string;
-    property: string;
-    context?: string;
-    limit: number;
-    filter?: string;
-    type?: string;
-    language?: string;
-    languages?: readonly string[];
-    cursor?: string;
-    release: Release;
-    authorize: (client: PoolClient) => Promise<boolean>;
-    prepareAuthorization?: () => Promise<AccessCheck>;
-    deadline?: number;
-    authorizeSummary?: SummaryDependencies['authorize'];
-    seen: readonly SessionComponent[];
-    caughtUp?: boolean;
-  },
+  options: SubjectRelationsOptions,
 ): Promise<SubjectRelationsPage> {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
@@ -1188,7 +1362,6 @@ export async function listSubjectRelations(
   const context = options.context ?? GLOBAL_CONTEXT;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
-  const defaults = contextRecord?.defaults ?? {};
   const languages = options.languages ?? languageRanges(null, options.language);
   const binding = {
     operation: 'subject.relations',
@@ -1215,138 +1388,138 @@ export async function listSubjectRelations(
     options.caughtUp === undefined && options.prepareAuthorization
       ? await options.prepareAuthorization()
       : options.authorize;
-  const page = await withReadTransaction<SubjectRelationsPage>(pool, async (client) => {
-    const partition = await readPartition(client, partitionOf(route));
-    const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-      visibility: string;
-    } | null;
-    if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
-    const redirect = await redirectOf(client, options.subject);
-    if (redirect) throw new SubjectRedirectError(options.subject, redirect);
-    await client.query('SET LOCAL enable_seqscan = off');
-    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-    const scanLimit = options.type ? 4 * options.limit : options.limit;
-    let rows = (await listOutboundLinksByProperty.run(client, {
-      context_id: context,
-      route,
-      subject_id: options.subject,
-      property: options.property,
-      filter_value: options.filter ?? NIL_UUID,
-      after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-      after_target: typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID,
-      after_statement: typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID,
-      page_limit: scanLimit + 1,
-    })) as {
-      statement: string;
-      slot: string;
-      target: string | null;
-      type: string;
-      external: string | null;
-      value: 'value' | 'somevalue' | 'novalue';
-      order_key: string;
-    }[];
-    const privatePage = await privateLinks(client, {
-      subject: options.subject,
-      property: options.property,
-      after: cursor?.after,
-      limit: scanLimit + 1,
-    });
-    const privateRows = privatePage.entries.map((row) => ({
-      statement: row.candidate_id,
-      slot: row.slot_id,
-      target: row.target_id,
-      type: row.target_type,
-      external: null,
-      value: 'value' as const,
-      order_key: row.order_key,
-    }));
-    rows = [...rows, ...privateRows]
-      .sort((a, b) =>
-        a.order_key < b.order_key
-          ? -1
-          : a.order_key > b.order_key
-            ? 1
-            : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
-              ? -1
-              : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
-                ? 1
-                : a.statement.localeCompare(b.statement),
-      )
-      .slice(0, scanLimit + 1);
-    const visibleRows = rows.slice(0, scanLimit);
-    const selected: typeof visibleRows = [];
-    let examined = 0;
-    for (const row of visibleRows) {
-      examined++;
-      if (!options.type || (row.type !== '' && matchesTarget(options.release, row.type, [options.type])))
-        selected.push(row);
-      if (selected.length === options.limit) break;
-    }
-    const total = await readOutboundLinkCount.run(client, {
-      context_id: context,
-      route,
-      subject_id: options.subject,
-      property: options.property,
-      filter_value: options.filter ?? NIL_UUID,
-    });
-    const totalValue = Number(total?.value ?? 0) + privatePage.total;
-    let count = { value: totalValue, exact: true };
-    if (options.type) {
-      const sample = (await countOutboundLinkTypes.run(client, {
+  const page = await withReadTransaction<SubjectRelationsPage & { count: { value: number; exact: boolean } }>(
+    pool,
+    async (client) => {
+      const partition = await readPartition(client, partitionOf(route));
+      const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+        visibility: string;
+      } | null;
+      if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
+      const redirect = await redirectOf(client, options.subject);
+      if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+      await client.query('SET LOCAL enable_seqscan = off');
+      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+      const scanLimit = options.type ? 4 * options.limit : options.limit;
+      let rows = (await listOutboundLinksByProperty.run(client, {
         context_id: context,
         route,
         subject_id: options.subject,
         property: options.property,
         filter_value: options.filter ?? NIL_UUID,
-      })) as { type: string }[];
-      count = {
-        value:
-          sample.filter((row) => row.type !== '' && matchesTarget(options.release, row.type, [options.type!])).length +
-          privatePage.entries.filter((row) => matchesTarget(options.release, row.target_type, [options.type!])).length,
-        exact: totalValue <= 1000 && privatePage.total <= privatePage.entries.length,
-      };
-    }
-    const relations: SubjectRelation[] = [];
-    const holder = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
-      type?: string;
-    } | null;
-    for (const row of selected) {
-      const view = await slotView(client, options.subject, options.property, context, defaults, row.slot);
-      const fact = view.facts.find((entry) => entry.statement_id === row.statement);
-      if (!fact) continue;
-      const dataTypes = factDataTypes(options.release, [fact]);
-      const statement = resolveItem(options.subject, [fact], holder?.type ?? '', dataTypes, {
-        revision: fact.fact_revision ?? 1,
-        release: fact.fact_release ?? '',
-        context,
-      }).statements[options.property]?.[0];
-      if (!statement) continue;
-      relations.push({
-        statement,
+        after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+        after_target: typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID,
+        after_statement: typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID,
+        page_limit: scanLimit + 1,
+      })) as {
+        statement: string;
+        slot: string;
+        target: string | null;
+        type: string;
+        external: string | null;
+        value: 'value' | 'somevalue' | 'novalue';
+        order_key: string;
+      }[];
+      const privatePage = await privateLinks(client, {
+        subject: options.subject,
+        property: options.property,
+        after: cursor?.after,
+        limit: scanLimit + 1,
+      });
+      const privateRows = privatePage.entries.map((row) => ({
+        statement: row.candidate_id,
+        slot: row.slot_id,
+        target: row.target_id,
+        type: row.target_type,
+        external: null,
+        value: 'value' as const,
+        order_key: row.order_key,
+      }));
+      rows = [...rows, ...privateRows]
+        .sort((a, b) =>
+          a.order_key < b.order_key
+            ? -1
+            : a.order_key > b.order_key
+              ? 1
+              : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
+                ? -1
+                : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
+                  ? 1
+                  : a.statement.localeCompare(b.statement),
+        )
+        .slice(0, scanLimit + 1);
+      const visibleRows = rows.slice(0, scanLimit);
+      const selected: typeof visibleRows = [];
+      let examined = 0;
+      for (const row of visibleRows) {
+        examined++;
+        if (!options.type || (row.type !== '' && matchesTarget(options.release, row.type, [options.type])))
+          selected.push(row);
+        if (selected.length === options.limit) break;
+      }
+      const total = await readOutboundLinkCount.run(client, {
+        context_id: context,
+        route,
+        subject_id: options.subject,
+        property: options.property,
+        filter_value: options.filter ?? NIL_UUID,
+      });
+      const totalValue = Number(total?.value ?? 0) + privatePage.total;
+      let count = { value: totalValue, exact: true };
+      if (options.type) {
+        const sample = (await countOutboundLinkTypes.run(client, {
+          context_id: context,
+          route,
+          subject_id: options.subject,
+          property: options.property,
+          filter_value: options.filter ?? NIL_UUID,
+        })) as { type: string }[];
+        count = {
+          value:
+            sample.filter((row) => row.type !== '' && matchesTarget(options.release, row.type, [options.type!]))
+              .length +
+            privatePage.entries.filter((row) => matchesTarget(options.release, row.target_type, [options.type!]))
+              .length,
+          exact: totalValue <= 1000 && privatePage.total <= privatePage.entries.length,
+        };
+      }
+      const relations: SubjectRelation[] = selected.map((row) => ({
+        statement: { id: row.statement } as Statement,
         target: row.target,
         external: row.external,
-        ...(row.target === null ? {} : { type: row.type }),
-      });
-    }
-    const last = visibleRows[examined - 1];
-    return {
-      relations,
-      count,
-      freshness: {
-        consistency: 'eventual',
-        target_seconds: FRESHNESS_TARGET_SECONDS,
-        caught_up: caughtUp,
-      },
-      next:
-        rows.length > examined && last
-          ? encodeCursor(ring, binding, {
-              epoch: partition.epoch,
-              after: [last.order_key, last.target ?? NIL_UUID, last.statement],
-            })
-          : null,
-      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-    };
-  });
+        ...(row.target ? { type: row.type } : {}),
+      }));
+      const last = visibleRows[examined - 1];
+      return {
+        relations,
+        count,
+        freshness: {
+          consistency: 'eventual',
+          target_seconds: FRESHNESS_TARGET_SECONDS,
+          caught_up: caughtUp,
+        },
+        next:
+          rows.length > examined && last
+            ? encodeCursor(ring, binding, {
+                epoch: partition.epoch,
+                after: [last.order_key, last.target ?? NIL_UUID, last.statement],
+              })
+            : null,
+        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+      };
+    },
+  );
+  const statements = await currentRelationStatements(
+    pool,
+    page.relations.map((entry) => ({
+      subject: options.subject,
+      property: options.property,
+      statement: entry.statement.id,
+    })),
+    context,
+    options.routeKey,
+    deadline,
+  );
   const summaries = await readSubjectSummaries(
     {
       client: { query: pool.query.bind(pool) },
@@ -1356,12 +1529,33 @@ export async function listSubjectRelations(
       release: options.release,
       authorize: options.authorizeSummary ?? (async () => false),
     },
-    page.relations.flatMap((entry) => (entry.target ? [entry.target] : [])),
+    [
+      ...new Set([
+        ...page.relations.flatMap((entry) => (entry.target ? [entry.target] : [])),
+        ...[...statements.values()].flatMap(statementItems),
+      ]),
+    ].slice(0, 256),
     { languages },
   );
   requireAccessDeadline(deadline);
   const relations: SubjectRelation[] = [];
-  for (const entry of page.relations) {
+  for (const raw of page.relations) {
+    const current = statements.get(`${options.subject}/${raw.statement.id}`);
+    if (!current) continue;
+    const statement = options.authorizeSummary ? disclosedRelationStatement(current, summaries) : current;
+    if (
+      !statement ||
+      (options.filter &&
+        !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+    )
+      continue;
+    const related = Object.fromEntries(
+      statementItems(statement).flatMap((id) => {
+        const summary = summaries.get(id);
+        return summary ? [[id, summary]] : [];
+      }),
+    );
+    const entry = { ...raw, statement, ...(statement.qualifiers.length ? { related } : {}) };
     if (!entry.target) {
       relations.push({ ...entry, summary: null });
       continue;
@@ -1376,5 +1570,17 @@ export async function listSubjectRelations(
       summary,
     });
   }
-  return { ...page, relations };
+  const { count, ...rest } = page;
+  const provedCount =
+    !options.filter &&
+    !options.cursor &&
+    !page.next &&
+    relations.length === page.relations.length &&
+    count.exact &&
+    count.value === relations.length;
+  return {
+    ...rest,
+    relations,
+    ...(!options.authorizeSummary || provedCount ? { count } : {}),
+  };
 }

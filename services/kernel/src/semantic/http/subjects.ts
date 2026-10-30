@@ -1780,6 +1780,8 @@ function subjectRoutes(
                       subject: t.String(),
                       property: t.String(),
                       statement: t.String(),
+                      assertion: t.Optional(StatementSchema),
+                      related: t.Optional(t.Record(t.String(), SubjectSummarySchema)),
                       type: t.String(),
                       label: t.String(),
                       summary: SubjectSummarySchema,
@@ -1903,6 +1905,7 @@ function subjectRoutes(
                   t.Object(
                     {
                       statement: StatementSchema,
+                      related: t.Optional(t.Record(t.String(), SubjectSummarySchema)),
                       target: t.Union([t.String({ format: 'uuid' }), t.Null()]),
                       external: t.Union([t.String(), t.Null()]),
                       type: t.Optional(t.String()),
@@ -1912,7 +1915,7 @@ function subjectRoutes(
                     { additionalProperties: false },
                   ),
                 ),
-                count: t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Boolean() }),
+                count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Boolean() })),
                 freshness: t.Object(
                   {
                     consistency: t.Literal('eventual'),

@@ -524,7 +524,13 @@ async function pageAnswer(input: {
   if (Object.values(plan.reads).reduce((cost, read) => cost + readCost(read), 0) > MAX_PAGE_COST)
     reject([{ pointer: '/reads', code: 'out_of_range' }]);
   const observed = new Map(input.probes);
-  for (const descriptor of Object.values(plan.reads)) {
+  const continuedKey = input.continuation ? plan.nodes[input.continuation.node] : undefined;
+  for (const [readKey, descriptor] of Object.entries(plan.reads)) {
+    const key = canonicalize(descriptor)!;
+    if (continuedKey && readKey !== continuedKey && (descriptor.kind === 'links' || descriptor.kind === 'relations')) {
+      observed.set(key, { status: 204, body: {} });
+      continue;
+    }
     if (
       input.context?.population.kind === 'realm' &&
       (descriptor.kind === 'collections' || descriptor.kind === 'reactions' || descriptor.kind === 'search')
