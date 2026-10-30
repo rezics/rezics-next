@@ -209,19 +209,15 @@ async function makeSpace(title: string): Promise<RecoverySpace> {
 
 async function buildProbes(scale: number, label: string): Promise<GrowthProbes> {
   const claim = await makeSpace(`Claim ${label} ${scale}`);
-  const claimAddress = addressInPartition(
-    `claim-${label}-${scale}-${randomUUID().slice(0, 8)}`,
-    hotPartition,
-    [claim.spaceId],
-  );
+  const claimAddress = addressInPartition(`claim-${label}-${scale}-${randomUUID().slice(0, 8)}`, hotPartition, [
+    claim.spaceId,
+  ]);
   const claimKey = randomUUID();
 
   const change = await makeSpace(`Change ${label} ${scale}`);
-  const changeStart = addressInPartition(
-    `change-start-${label}-${scale}-${randomUUID().slice(0, 8)}`,
-    hotPartition,
-    [change.spaceId],
-  );
+  const changeStart = addressInPartition(`change-start-${label}-${scale}-${randomUUID().slice(0, 8)}`, hotPartition, [
+    change.spaceId,
+  ]);
   const changeClaim = await fixture.request('PUT', `/v1/spaces/${change.spaceId}/address`, {
     bearer: actor.bearer,
     key: randomUUID(),
@@ -231,19 +227,16 @@ async function buildProbes(scale: number, label: string): Promise<GrowthProbes> 
   if (changeClaim.response.status !== 200)
     throw new Error(`Could not prepare a changed-address probe: ${changeClaim.response.status}`);
   const changedSpace = changeClaim.value.space as Record<string, unknown>;
-  const changeTarget = addressInPartition(
-    `change-target-${label}-${scale}-${randomUUID().slice(0, 8)}`,
-    hotPartition,
-    [change.spaceId],
-  );
+  const changeTarget = addressInPartition(`change-target-${label}-${scale}-${randomUUID().slice(0, 8)}`, hotPartition, [
+    change.spaceId,
+  ]);
 
   const occupied = await makeSpace(`Occupied ${label} ${scale}`);
   const conflict = await makeSpace(`Conflict ${label} ${scale}`);
-  const occupiedAddress = addressInPartition(
-    `occupied-${label}-${scale}-${randomUUID().slice(0, 8)}`,
-    hotPartition,
-    [occupied.spaceId, conflict.spaceId],
-  );
+  const occupiedAddress = addressInPartition(`occupied-${label}-${scale}-${randomUUID().slice(0, 8)}`, hotPartition, [
+    occupied.spaceId,
+    conflict.spaceId,
+  ]);
   const occupiedClaim = await fixture.request('PUT', `/v1/spaces/${occupied.spaceId}/address`, {
     bearer: actor.bearer,
     key: randomUUID(),
