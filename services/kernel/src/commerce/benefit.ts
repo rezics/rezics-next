@@ -55,24 +55,56 @@ function id(value: unknown): value is string {
 /** Validate persisted bytes without inferring identity from subject/title/provider data. */
 export function decodeCapturedContentEdition(serialized: string | null): CapturedContentEdition | null {
   if (serialized === null) return null;
-  if (Buffer.byteLength(serialized, 'utf8') > MAX_CAPTURED_EDITION_BYTES) throw new TypeError('Oversized edition capture');
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_CAPTURED_EDITION_BYTES)
+    throw new TypeError('Oversized edition capture');
   const value: unknown = JSON.parse(serialized);
-  if (!object(value) || !keys(value, ['benefit', 'creatorAccountId', 'targetSubjectId', 'source', 'saleTermsReference', 'delivery', 'acquisition', 'quantity']))
+  if (
+    !object(value) ||
+    !keys(value, [
+      'benefit',
+      'creatorAccountId',
+      'targetSubjectId',
+      'source',
+      'saleTermsReference',
+      'delivery',
+      'acquisition',
+      'quantity',
+    ])
+  )
     throw new TypeError('Invalid edition capture');
   const { benefit, source } = value;
   if (
-    !object(benefit) || !keys(benefit, ['kind', 'resourceType', 'resource', 'version', 'action']) ||
-    benefit.kind !== 'content-edition' || benefit.resourceType !== 'content.edition' || benefit.action !== 'edition:read' ||
-    !object(benefit.resource) || !keys(benefit.resource, ['route', 'id']) || !id(benefit.resource.id) ||
+    !object(benefit) ||
+    !keys(benefit, ['kind', 'resourceType', 'resource', 'version', 'action']) ||
+    benefit.kind !== 'content-edition' ||
+    benefit.resourceType !== 'content.edition' ||
+    benefit.action !== 'edition:read' ||
+    !object(benefit.resource) ||
+    !keys(benefit.resource, ['route', 'id']) ||
+    !id(benefit.resource.id) ||
     benefit.resource.route !== routeOf(benefit.resource.id) ||
-    !object(benefit.version) || !keys(benefit.version, ['revisionId', 'sha256']) || !id(benefit.version.revisionId) ||
-    typeof benefit.version.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(benefit.version.sha256) ||
-    !id(value.creatorAccountId) || !id(value.targetSubjectId) ||
-    !object(source) || !keys(source, ['threadId', 'postId', 'licence']) || !id(source.threadId) || !id(source.postId) ||
-    typeof source.licence !== 'string' || source.licence.length < 1 || source.licence.length > 256 ||
-    typeof value.saleTermsReference !== 'string' || value.saleTermsReference.length < 1 || value.saleTermsReference.length > 256 ||
-    value.delivery !== 'fixed-content-edition' || value.acquisition !== 'one-time-account-bound' || value.quantity !== 1
-  ) throw new TypeError('Invalid edition capture');
+    !object(benefit.version) ||
+    !keys(benefit.version, ['revisionId', 'sha256']) ||
+    !id(benefit.version.revisionId) ||
+    typeof benefit.version.sha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(benefit.version.sha256) ||
+    !id(value.creatorAccountId) ||
+    !id(value.targetSubjectId) ||
+    !object(source) ||
+    !keys(source, ['threadId', 'postId', 'licence']) ||
+    !id(source.threadId) ||
+    !id(source.postId) ||
+    typeof source.licence !== 'string' ||
+    source.licence.length < 1 ||
+    source.licence.length > 256 ||
+    typeof value.saleTermsReference !== 'string' ||
+    value.saleTermsReference.length < 1 ||
+    value.saleTermsReference.length > 256 ||
+    value.delivery !== 'fixed-content-edition' ||
+    value.acquisition !== 'one-time-account-bound' ||
+    value.quantity !== 1
+  )
+    throw new TypeError('Invalid edition capture');
   // Construct a fresh bounded value, retaining neither unknown fields nor a revision body.
   return value as CapturedContentEdition;
 }

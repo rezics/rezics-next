@@ -44,18 +44,28 @@ const nullableId = t.Union([id, t.Null()]);
 /** Published Commerce capture DTO; this is not Accounts' opaque fact ABI. */
 const contentEditionSchema = t.Union([
   t.Null(),
-  t.Object({
-    benefit: t.Object({
-      kind: t.Literal('content-edition'), resourceType: t.Literal('content.edition'),
-      resource: t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, object),
-      version: t.Object({ revisionId: id, sha256: t.String({ pattern: '^[a-f0-9]{64}$' }) }, object),
-      action: t.Literal('edition:read'),
-    }, object),
-    creatorAccountId: id, targetSubjectId: id,
-    source: t.Object({ licence: t.String({ minLength: 1, maxLength: 256 }) }, object),
-    saleTermsReference: t.String({ minLength: 1, maxLength: 256 }),
-    delivery: t.Literal('fixed-content-edition'), acquisition: t.Literal('one-time-account-bound'), quantity: t.Literal(1),
-  }, object),
+  t.Object(
+    {
+      benefit: t.Object(
+        {
+          kind: t.Literal('content-edition'),
+          resourceType: t.Literal('content.edition'),
+          resource: t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, object),
+          version: t.Object({ revisionId: id, sha256: t.String({ pattern: '^[a-f0-9]{64}$' }) }, object),
+          action: t.Literal('edition:read'),
+        },
+        object,
+      ),
+      creatorAccountId: id,
+      targetSubjectId: id,
+      source: t.Object({ licence: t.String({ minLength: 1, maxLength: 256 }) }, object),
+      saleTermsReference: t.String({ minLength: 1, maxLength: 256 }),
+      delivery: t.Literal('fixed-content-edition'),
+      acquisition: t.Literal('one-time-account-bound'),
+      quantity: t.Literal(1),
+    },
+    object,
+  ),
 ]);
 const offerSchema = t.Object(
   {
@@ -163,11 +173,29 @@ function detail(operationId: string, action: string, exposure: 'gate:purchases' 
 }
 function offerView(offer: Offer, summary: SubjectSummary | null) {
   const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
-  return { id, targetSubjectId, title, currency, unitAmountMinor, state, summary, contentEdition: contentEditionTermsView(offer.contentEdition) };
+  return {
+    id,
+    targetSubjectId,
+    title,
+    currency,
+    unitAmountMinor,
+    state,
+    summary,
+    contentEdition: contentEditionTermsView(offer.contentEdition),
+  };
 }
 function offerReadView(offer: Offer, subject: SubjectSummary | null) {
   const { id, targetSubjectId, title, currency, unitAmountMinor, state } = offer;
-  return { id, targetSubjectId, subject, title, currency, unitAmountMinor, state, contentEdition: contentEditionTermsView(offer.contentEdition) };
+  return {
+    id,
+    targetSubjectId,
+    subject,
+    title,
+    currency,
+    unitAmountMinor,
+    state,
+    contentEdition: contentEditionTermsView(offer.contentEdition),
+  };
 }
 function entitlementView(entitlement: Entitlement, summary: SubjectSummary | null) {
   const { id, offerId, orderId, targetSubjectId, grantedAt, revokedAt, revokeReason } = entitlement;
@@ -287,22 +315,28 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       {
         headers,
         body: t.Union([
-          t.Object({
-            contentEditionId: id,
-            title: t.String({ minLength: 1, maxLength: 1024, pattern: '\\S' }),
-            currency: t.String({ pattern: '^[a-z]{3}$' }),
-            unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-            taxCode: t.String({ minLength: 1, maxLength: 256 }),
-          }, object),
+          t.Object(
+            {
+              contentEditionId: id,
+              title: t.String({ minLength: 1, maxLength: 1024, pattern: '\\S' }),
+              currency: t.String({ pattern: '^[a-z]{3}$' }),
+              unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+              taxCode: t.String({ minLength: 1, maxLength: 256 }),
+            },
+            object,
+          ),
           // Preserve the exact old request digest for authorized historical receipt replay only.
           // Its fresh command body always fails unavailable; no subject creates a native benefit.
-          t.Object({
-            targetSubjectId: id,
-            title: t.String({ minLength: 1, maxLength: 1024, pattern: '\\S' }),
-            currency: t.String({ pattern: '^[a-z]{3}$' }),
-            unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-            taxCode: t.String({ minLength: 1, maxLength: 256 }),
-          }, { ...object, description: 'Historical offer receipt replay only; fresh sales require contentEditionId.' }),
+          t.Object(
+            {
+              targetSubjectId: id,
+              title: t.String({ minLength: 1, maxLength: 1024, pattern: '\\S' }),
+              currency: t.String({ pattern: '^[a-z]{3}$' }),
+              unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+              taxCode: t.String({ minLength: 1, maxLength: 256 }),
+            },
+            { ...object, description: 'Historical offer receipt replay only; fresh sales require contentEditionId.' },
+          ),
         ]),
         response: {
           201: offerResponse,
@@ -316,7 +350,8 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
-        if (routeOf('contentEditionId' in body ? body.contentEditionId : body.targetSubjectId) === null) throw new ProblemError('invalid_request');
+        if (routeOf('contentEditionId' in body ? body.contentEditionId : body.targetSubjectId) === null)
+          throw new ProblemError('invalid_request');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(
@@ -524,7 +559,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
               const orders = rows.slice(0, size);
               const last = orders.at(-1);
               return {
-                orders: orders.map((order) => ({ ...order, contentEdition: contentEditionTermsView(order.contentEdition) })),
+                orders: orders.map((order) => ({
+                  ...order,
+                  contentEdition: contentEditionTermsView(order.contentEdition),
+                })),
                 next:
                   rows.length > size && last && partition
                     ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.id] })

@@ -198,14 +198,23 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       async (tx, command) => {
         // Replay is already resolved. Legacy subject-only creates may replay, never mint a benefit.
         const contentEdition = await captureCurrentContentEdition(input.contentEditionId ?? '');
-        if (contentEdition.creatorAccountId !== seller.accountId ||
-            contentEdition.benefit.resource.id !== input.contentEditionId ||
-            (input.targetSubjectId !== undefined && input.targetSubjectId !== contentEdition.targetSubjectId))
+        if (
+          contentEdition.creatorAccountId !== seller.accountId ||
+          contentEdition.benefit.resource.id !== input.contentEditionId ||
+          (input.targetSubjectId !== undefined && input.targetSubjectId !== contentEdition.targetSubjectId)
+        )
           throw new GrantDeniedError();
         const offer = await store.insertOffer(
           tx,
           r,
-          { ...input, targetSubjectId: contentEdition.targetSubjectId, contentEdition, id, creatorAccountId: seller.accountId, royaltyBasisPoints },
+          {
+            ...input,
+            targetSubjectId: contentEdition.targetSubjectId,
+            contentEdition,
+            id,
+            creatorAccountId: seller.accountId,
+            royaltyBasisPoints,
+          },
           { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
         );
         insertedTransactionId = command.transactionId;
@@ -668,8 +677,12 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           // No Content producer is installed. Financial truth/revocation remain independent;
           // neither a historical subject nor a stored approval may mint/restore access.
           decision = withoutUnverifiedBenefit(decision);
-          if (decision.changed && decision.entitlement.kind === 'none' &&
-              decision.settlement === state.order.settlement && decision.newTransactions.length === 0)
+          if (
+            decision.changed &&
+            decision.entitlement.kind === 'none' &&
+            decision.settlement === state.order.settlement &&
+            decision.newTransactions.length === 0
+          )
             decision = { changed: false };
           if (!decision.changed) throw new Unchanged();
           const applied = await store.applyCheckoutDecision(tx, r, state, decision, {

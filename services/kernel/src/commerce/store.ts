@@ -56,7 +56,11 @@ function iso(value: string): string {
   return new Date(value).toISOString();
 }
 function asOffer(row: OfferRow): Offer {
-  return { ...row, contentEdition: decodeCapturedContentEdition(row.contentEdition), unitAmountMinor: Number(row.unitAmountMinor) };
+  return {
+    ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    unitAmountMinor: Number(row.unitAmountMinor),
+  };
 }
 function asOrder(row: OrderRow): Order {
   return {
@@ -70,7 +74,12 @@ function asOrder(row: OrderRow): Order {
   };
 }
 function asEntitlement(row: EntitlementRow): Entitlement {
-  return { ...row, contentEdition: decodeCapturedContentEdition(row.contentEdition), grantedAt: iso(row.grantedAt), revokedAt: row.revokedAt === null ? null : iso(row.revokedAt) };
+  return {
+    ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    grantedAt: iso(row.grantedAt),
+    revokedAt: row.revokedAt === null ? null : iso(row.revokedAt),
+  };
 }
 function write(context: WriteContext) {
   return { transaction_id: context.transactionId, time: context.time };
@@ -448,6 +457,10 @@ export async function readContentEditionEntitlement(
   const route = routeOf(buyerAccountId);
   if (route === null || routeOf(entitlementId) !== route) return null;
   const entitlement = await readEntitlement(client, route, entitlementId);
-  return entitlement?.accountId === buyerAccountId && entitlement.contentEdition !== null &&
-    entitlement.contentEdition !== undefined && entitlement.revokedAt === null ? entitlement : null;
+  return entitlement?.accountId === buyerAccountId &&
+    entitlement.contentEdition !== null &&
+    entitlement.contentEdition !== undefined &&
+    entitlement.revokedAt === null
+    ? entitlement
+    : null;
 }
