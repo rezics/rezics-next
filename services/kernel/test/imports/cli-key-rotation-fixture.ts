@@ -87,6 +87,7 @@ export async function runCliKeyRotationJourney() {
       return { kid, privateJwk: { ...(await exportJWK(pair.privateKey)), kid, alg: 'ES256' } };
     }
     const old = await provision();
+    const privateValues = [old.privateJwk.d!];
     await writeFile(keyPath, JSON.stringify(old.privateJwk), { mode: 0o600 });
     let phase: Phase = 'pending';
     let controller = new AbortController();
@@ -109,9 +110,11 @@ export async function runCliKeyRotationJourney() {
       const url = new URL(request.url);
       if (url.origin === auth) {
         expect(['/signin/key', '/token', '/.well-known/jwks.json']).toContain(url.pathname);
+        // Native Auth consumes the request body. Capture its clone before dispatch.
+        const signInBody = url.pathname === '/signin/key' ? await request.clone().json() : undefined;
         const response = await native.host.service.handler(request);
         if (url.pathname === '/signin/key') {
-          const body = await request.clone().json();
+          const body = signInBody!;
           signIns.push({
             phase,
             status: response.status,
@@ -253,10 +256,10 @@ export async function runCliKeyRotationJourney() {
           },
         },
       });
-      console.log('CLI key rotation invocation', JSON.stringify({ phase, ...result }));
       expect(result.openHandles).toBe(0);
-      expect(result.stderr).not.toContain('Bearer ');
-      expect(result.stderr).not.toContain(old.privateJwk.d!);
+      expect(result.stderr.includes('Bearer ')).toBe(false);
+      expect(privateValues.some((value) => result.stderr.includes(value))).toBe(false);
+      console.log('CLI key rotation invocation', JSON.stringify({ phase, ...result }));
       expect(invocationBytes).toBe(next === 'resumed' ? 0 : input.byteLength);
       if (next === 'pending') sealedInputBytes = invocationBytes;
       return result;
@@ -350,6 +353,7 @@ export async function runCliKeyRotationJourney() {
     expect(await receipts(originalKeys)).toEqual(originalReceiptRowsBefore);
 
     const fresh = await provision();
+    privateValues.push(fresh.privateJwk.d!);
     await writeFile(keyPath, JSON.stringify(fresh.privateJwk), { mode: 0o600 });
     await credential({ kind: 'key', kid: old.kid, remove: true });
     phase = 'retired';
@@ -393,7 +397,7 @@ export async function runCliKeyRotationJourney() {
     expect(await observer.http(`/v1/subjects/${subject}`)).toMatchObject({ status: 200, body: publicBefore.body });
     const unchanged = await invoke('unchanged');
     const unchangedPublicWrites = writes.filter((w) => w.phase === 'unchanged');
-    expect(inspect().source?.present_count).toBe(1);
+    expect(inspect().source?.count).toBe(1);
     expect(inspect().records).toEqual(after.records);
     expect(await receipts(originalKeys)).toEqual(originalReceiptRowsBefore);
     const firstSignIn = signIns.find((s) => s.phase === 'pending')!;
