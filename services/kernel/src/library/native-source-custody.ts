@@ -128,6 +128,7 @@ import finishQuery from './native-source-custody-finish.sql';
 import proofQuery from './native-source-custody-proof.sql';
 import holdQuery from './native-source-custody-hold.sql';
 import heldQuery from './native-source-custody-held.sql';
+import retainedQuery from './native-source-custody-retained.sql';
 import releaseQuery from './native-source-custody-release.sql';
 import rawMember from './native-source-custody-raw-member.sql';
 import rawEntry from './native-source-custody-raw-entry.sql';
@@ -264,7 +265,7 @@ async function bindOwner(
   run: Execute,
   identity: NativeSourceIdentity,
   ensure: boolean,
-  releasing = false,
+  retained = false,
 ): Promise<{ collectionFence: string; accountFence: string }> {
   validate(identity);
   const values = parameters(identity);
@@ -289,7 +290,7 @@ async function bindOwner(
     !source ||
     source.accountId !== identity.accountId ||
     source.incarnation !== identity.incarnation ||
-    (!releasing && source.generation !== identity.generation) ||
+    (!retained && source.generation !== identity.generation) ||
     source.state !== 'active'
   )
     throw new Refused('binding');
@@ -576,6 +577,33 @@ export function createNativeLibrarySourceCustody({
           48,
         );
         if (!held || held.released || held.transactionId !== receipt.transactionId) throw new Refused('binding');
+        return {
+          status: 'held' as const,
+          custody: Object.freeze({
+            [custodyEvidence]: true as const,
+            identity: Object.freeze({ ...input.identity }),
+            captureId: input.captureId,
+            holdId: input.holdId,
+            transactionId: receipt.transactionId,
+          }),
+          work: work.receipt(),
+        };
+      });
+    },
+    revalidateHold(input) {
+      return account(input, async (work) => {
+        live(input);
+        if (!uuid.test(input.holdId)) throw new Refused('binding');
+        const run = executor(input.client, work, input.deadline);
+        // Current lifecycle/ownership fences still apply. Writer generations describe fresh reads,
+        // not the lifetime of an exact retained obligation from an earlier committed capture.
+        await bindOwner(run, input.identity, false, true);
+        await readState(run, input.identity, input.captureId);
+        const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
+        const [receipt] = await run<{ transactionId: string }>(proofQuery, values, 64, 3);
+        if (!receipt) throw new Refused('binding');
+        const [held] = await run<{ transactionId: string }>(retainedQuery, values);
+        if (!held || held.transactionId !== receipt.transactionId) throw new Refused('binding');
         return {
           status: 'held' as const,
           custody: Object.freeze({

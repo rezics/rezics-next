@@ -95,9 +95,19 @@ and current owner position/epoch, and refuses a receipt from the consuming trans
 client through adoption. No connection or callback crosses an owner checkout, and no process-local token or lock
 establishes durable proof. The hold locator references only that committed native custody. Releasing it changes
 only hold metadata, preserving facts, shared history and receipt provenance. An intervening native fact change
-invalidates capture/holding; it does not give this seam authority to withdraw or purge a public destination, or
+invalidates fresh capture/holding; it does not give this seam authority to withdraw or purge a public destination, or
 acknowledge destination disposition. Releasing an existing hold tolerates later fact/source generations while
 requiring its original capture binding, source incarnation/ownership and current owner/account fences.
+
+`revalidateHold` rereads that exact capture, its committed same-transaction receipt and the already committed,
+unreleased hold on the live receiving command client. It never inserts, recreates or updates custody. All original
+identity, scope, generation, owner/receiving epoch and effect keys must still match the retained capture; current
+source incarnation, ownership, partition and active unfenced account must still apply. Source generation and
+Collection/account writer counters may have advanced. An absent, altered, released or differently controlled hold
+is unavailable, as is a hold newly written by the consuming command. The returned opaque custody retains the old
+binding: it grants no fresh Source read, complete/current observation, publication, permission, byte access, new
+admission or ordinary purge authority. Each lookup uses bounded indexed native points and the original work
+allowance and deadline. There is no cross-partition transfer or destination acknowledgement authority here.
 
 Public/unlisted dynamic and frozen output remain `unavailable` with `output_authority`: there is no committed native
 published Collection output generation/receipt authority to capture. The published-log dependency range is not

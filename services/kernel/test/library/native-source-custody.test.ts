@@ -249,3 +249,173 @@ test('intervening child writer and native ordinal reorder invalidate complete ca
   expect(finalWriter.status).toBe('unavailable');
   if (finalWriter.status === 'unavailable') expect(finalWriter.reason).toBe('writer');
 });
+
+test('An exact already retained native Source hold can be revalidated after source generation changes without acquiring new read authority or accepting altered custody', async () => {
+  const { identity, members } = await make();
+  const { frontier } = await scan(identity);
+  const complete = await custody.finishCapture({ ...work(), identity, frontier });
+  if (complete.status !== 'complete') throw new Error('Missing committed capture');
+  const captureId = complete.capture.captureId;
+  const holdId = entryKey();
+  const held = await command(identity, (client, at) =>
+    custody.readAndHold({ ...work(), client, at, identity, captureId, holdId }),
+  );
+  if (held.value.status !== 'held') throw new Error('Missing retained hold');
+  const original = held.value.custody;
+  const holdRow = () =>
+    native.pool.query(
+      'SELECT *,xmin::text AS version FROM library.native_source_hold WHERE route=$1 AND capture_id=$2 AND hold_id=$3',
+      [identity.route, captureId, holdId],
+    );
+  const before = (await holdRow()).rows;
+  // A native child write changes the writer fence independently of the Source generation.
+  await native.pool.query(
+    'UPDATE library.collection_member SET ordinal_key=$4 WHERE route=$1 AND collection_id=$2 AND member_id=$3',
+    [identity.route, identity.collectionId, members[0], '0'],
+  );
+  const staleWriter = await command(identity, (client, at) =>
+    custody.readAndHold({ ...work(), client, at, identity, captureId, holdId: entryKey() }),
+  );
+  expect(staleWriter.value.status).toBe('unavailable');
+  if (staleWriter.value.status === 'unavailable') expect(staleWriter.value.reason).toBe('writer');
+  const retainedWriter = await command(identity, (client, at) =>
+    custody.revalidateHold({ ...work(), client, at, identity, captureId, holdId }),
+  );
+  expect(retainedWriter.value.status).toBe('held');
+  await native.pool.query(
+    'UPDATE library.collection SET source_generation=source_generation+1 WHERE route=$1 AND collection_id=$2',
+    [identity.route, identity.collectionId],
+  );
+  // A fresh factory and JSON locator still have to reread real native provenance.
+  custody = createNativeLibrarySourceCustody({ pool: native.pool });
+  const locator = JSON.parse(JSON.stringify({ identity, captureId, holdId }));
+  const reservation = work();
+  const retained = await command(identity, (client, at) =>
+    custody.revalidateHold({ ...reservation, ...locator, client, at }),
+  );
+  expect(retained.value.status).toBe('held');
+  if (retained.value.status !== 'held') throw new Error('Existing custody lost after native mutation');
+  expect(retained.value.custody).toEqual(original);
+  expect(retained.value.work.reservationId).toBe(reservation.allowance.reservationId);
+  expect(retained.value.work.used.statements).toBeGreaterThan(0);
+  expect(retained.value.work.used.nativePoints).toBeGreaterThan(0);
+  expect(retained.value.work.used.candidateKeys).toBe(0);
+  for (const axis of Object.keys(reservation.allowance.remaining) as (keyof typeof reservation.allowance.remaining)[])
+    expect(retained.value.work.used[axis]).toBeLessThanOrEqual(reservation.allowance.remaining[axis]);
+  expect((await holdRow()).rows).toEqual(before);
+  const staleRead = await command(identity, (client, at) =>
+    custody.readAndHold({ ...work(), client, at, identity, captureId, holdId: entryKey() }),
+  );
+  expect(staleRead.value.status).toBe('unavailable');
+  if (staleRead.value.status === 'unavailable') expect(staleRead.value.reason).toBe('binding');
+  expect((await custody.finishCapture({ ...work(), identity, frontier })).status).toBe('unavailable');
+  const newGeneration = { ...identity, generation: String(BigInt(identity.generation) + 1n) };
+  const converted = await command(identity, (client, at) =>
+    custody.revalidateHold({ ...work(), client, at, identity: newGeneration, captureId, holdId }),
+  );
+  expect(converted.value.status).toBe('unavailable');
+  const released = await command(identity, (client, at) =>
+    custody.releaseHold({ ...work(), client, at, identity, captureId, holdId }),
+  );
+  expect(released.value.status).toBe('released');
+  const recreated = await command(identity, (client, at) =>
+    custody.revalidateHold({ ...work(), client, at, identity, captureId, holdId }),
+  );
+  expect(recreated.value.status).toBe('unavailable');
+  expect((await holdRow()).rows[0].released).toBe(true);
+});
+
+test('retained revalidation refuses fresh absent foreign and altered native hold provenance without creating custody', async () => {
+  const { identity } = await make();
+  const { frontier } = await scan(identity);
+  const complete = await custody.finishCapture({ ...work(), identity, frontier });
+  if (complete.status !== 'complete') throw new Error('Missing committed capture');
+  const captureId = complete.capture.captureId;
+  const holdId = entryKey();
+  const binding = { identity, captureId, holdId };
+  const fresh = await command(identity, async (client, at) => {
+    expect((await custody.revalidateHold({ ...work(), ...binding, client, at })).status).toBe('unavailable');
+    expect((await custody.readAndHold({ ...work(), ...binding, client, at })).status).toBe('held');
+    return custody.revalidateHold({ ...work(), ...binding, client, at });
+  });
+  expect(fresh.value.status).toBe('unavailable');
+  expect(
+    (await command(identity, (client, at) => custody.revalidateHold({ ...work(), ...binding, client, at }))).value
+      .status,
+  ).toBe('held');
+  const other = await make();
+  const otherCapture = await scan(other.identity);
+  const otherComplete = await custody.finishCapture({ ...work(), identity: other.identity, ...otherCapture });
+  if (otherComplete.status !== 'complete') throw new Error('Missing foreign capture');
+  const changed = [
+    { ...binding, identity: { ...identity, incarnation: identity.incarnation + 'x' } },
+    { ...binding, identity: { ...identity, scope: 'private_builtin' as const } },
+    { ...binding, identity: { ...identity, ownerEpoch: identity.ownerEpoch + 1 } },
+    { ...binding, identity: { ...identity, receivingEpoch: '2' } },
+    { ...binding, identity: { ...identity, effectKey: entryKey() } },
+    { ...binding, identity: { ...identity, accountId: other.identity.accountId } },
+    { ...binding, captureId: otherComplete.capture.captureId },
+    { ...binding, holdId: entryKey() },
+  ];
+  for (const altered of changed) {
+    const refused = await command(identity, (client, at) =>
+      custody.revalidateHold({ ...work(), ...altered, client, at }),
+    );
+    expect(refused.value.status).toBe('unavailable');
+  }
+  const empty = work();
+  const depleted = await command(identity, (client, at) =>
+    custody.revalidateHold({
+      ...empty,
+      ...binding,
+      client,
+      at,
+      allowance: { ...empty.allowance, remaining: { ...empty.allowance.remaining, nativeRows: 0 } },
+    }),
+  );
+  expect(depleted.value.status).toBe('unavailable');
+  expect(depleted.value.work.used.statements).toBe(0);
+  const expired = await command(identity, (client, at) =>
+    custody.revalidateHold({ ...work(), ...binding, client, at, deadline: Date.now() - 1 }),
+  );
+  expect(expired.value.status).toBe('unavailable');
+  expect(expired.value.work.used.statements).toBe(0);
+  // A changed native capture no longer shares the immutable receipt's native transaction.
+  await native.pool.query('UPDATE library.native_source_capture SET effect_key=$3 WHERE route=$1 AND capture_id=$2', [
+    identity.route,
+    captureId,
+    entryKey(),
+  ]);
+  const alteredCapture = await native.pool.query(
+    'SELECT effect_key FROM library.native_source_capture WHERE route=$1 AND capture_id=$2',
+    [identity.route, captureId],
+  );
+  const forgedBinding = { ...identity, effectKey: alteredCapture.rows[0].effect_key };
+  const refusedCapture = await command(identity, (client, at) =>
+    custody.revalidateHold({ ...work(), ...binding, identity: forgedBinding, client, at }),
+  );
+  expect(refusedCapture.value.status).toBe('unavailable');
+  // Corrupting the hold's receipt reference is separately refused on an untouched capture.
+  const foreignHold = entryKey();
+  const foreignBinding = { identity: other.identity, captureId: otherComplete.capture.captureId, holdId: foreignHold };
+  expect(
+    (await command(other.identity, (client, at) => custody.readAndHold({ ...work(), ...foreignBinding, client, at })))
+      .value.status,
+  ).toBe('held');
+  await native.pool.query(
+    'UPDATE library.native_source_hold SET transaction_id=$4 WHERE route=$1 AND capture_id=$2 AND hold_id=$3',
+    [other.identity.route, foreignBinding.captureId, foreignHold, entryKey()],
+  );
+  const refusedHold = await command(other.identity, (client, at) =>
+    custody.revalidateHold({ ...work(), ...foreignBinding, client, at }),
+  );
+  expect(refusedHold.value.status).toBe('unavailable');
+  expect(
+    (
+      await native.pool.query('SELECT count(*)::integer AS n FROM library.native_source_hold WHERE route=$1 AND capture_id=$2', [
+        identity.route,
+        captureId,
+      ])
+    ).rows[0].n,
+  ).toBe(1);
+});
