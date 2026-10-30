@@ -5270,6 +5270,13 @@ CREATE UNIQUE INDEX acceptance_erasure_key ON semantic.acceptance USING btree (e
 
 
 --
+-- Name: acceptance_revision_detail; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX acceptance_revision_detail ON semantic.acceptance USING btree (route, subject_id, revision);
+
+
+--
 -- Name: account_agent_moved_link_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -5291,6 +5298,13 @@ CREATE UNIQUE INDEX adoption_erasure_key ON semantic.adoption USING btree (erasu
 
 
 --
+-- Name: adoption_revision_detail; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX adoption_revision_detail ON semantic.adoption USING btree (route, subject_id, revision);
+
+
+--
 -- Name: candidate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -5302,6 +5316,13 @@ CREATE UNIQUE INDEX candidate_erasure_key ON semantic.candidate USING btree (era
 --
 
 CREATE INDEX candidate_page ON semantic.candidate USING btree (route, subject_id, slot_id, revision, view_order, candidate_id);
+
+
+--
+-- Name: candidate_revision_detail; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX candidate_revision_detail ON semantic.candidate USING btree (route, subject_id, revision);
 
 
 --

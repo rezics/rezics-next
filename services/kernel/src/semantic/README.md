@@ -4,6 +4,8 @@ This module owns subject facts and their item projections, partition paging, and
 
 The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
 the shared worker and exact queue-association minimization for its asynchronous discovery index.
+The [catalogue editing contract](../../../../docs/catalogue-editing.md) owns ordinary multilingual corrections and
+minimal current-disclosure revision explanations, including their deferred native integration qualifications.
 
 ## Public exposure boundary
 
@@ -669,6 +671,8 @@ Credits keep their main role property and credited subject together with that st
 `schema:character` (P674) and their own qualifiers. No label or role is inferred from another statement.
 
 ## Current list presentation facts
+
+### Current list presentation facts
 
 `readListPresentationFacts({pool,access,actor,routeKey,deadline}, originals, {languages}?)`, exported
 from `semantic/list-presentation.ts` and `semantic/index.ts`, returns an original-keyed Map of

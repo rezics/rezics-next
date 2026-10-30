@@ -208,3 +208,114 @@ as emitted. Creating an arc creates no parent statement. The arc's own series, p
 admitted relationships open the existing relationship workspace. Acceptance and adoption use current heads and
 the actual reader; an unselected adoption stays pending. Other slots and their evidence remain intact. Ordinary
 forms submit no ingestion Source metadata, and existing source-or-consent and disclosure decisions remain native.
+
+# Catalogue editing
+
+The adopted [catalogue editorial journey](research/catalogue-editorial-journey-design.md) connects a correction
+to the current Subject reader and explains an individual change without inventing a historical Item. Imports
+owns browser binding. Semantic owns these native contracts. Subject creation, proposal, acceptance and adoption
+keep their existing APIs and authority. A selected scalar `schema:name` statement is independent of labels.
+
+## Ordinary multilingual correction
+
+The selected operation is `PATCH /v1/subjects/{id}/terms`. Required headers are a strong quoted `If-Match`
+containing the actual Subject revision, and the existing quoted `Idempotency-Key`. Its closed request is:
+
+```ts
+type TermsPatch = {
+  labels?: Record<string, string | null>;
+  descriptions?: Record<string, string | null>;
+  aliases?: Record<string, string[] | null>;
+};
+type TermsResult = { subject: string; revision: number };
+```
+
+Omitted fields and languages remain unchanged. Null removes that language entry. An alias array replaces that
+language's complete alias set. Native language, text, count and request byte limits apply; at least one valid
+label must remain. Type, release semantics and derived Account-agent terms cannot be edited here. The native
+validation exports are `TermsPatch`, `TermsResult`, `TermChange`, `patchTerms` and `termRevision` in
+`services/kernel/src/semantic/terms.ts`. These are validation and DTO declarations, not a delivered write adapter.
+
+The write must require the existing Global `statement:propose` grant together with current Subject eligibility,
+Actor, Scope, visibility, redirect and fence checks before inspecting a receipt or producing an effect. Unknown
+and concealed Subjects both return 404. A fresh stale revision returns 412; conflicting reuse of a key returns 422. A denied attempt has no effect. An authorized replay returns its original `{subject, revision}` without
+another revision. Unchanged input uses native `noEffect` semantics and the actual current revision. It never
+reports a fabricated change.
+
+One native Subject-partition command must atomically append a never-reused revision, current terms, immutable
+changed field/language identity and existing command bookkeeping. Its receipt stores only `TermsResult`, never
+an old full Item. The response supplies ETag and Session; the browser then reads the actual current Subject.
+Per-revision author-resource initialization must use the native authorship producer, and publication must call
+the actual `recordSubjectPageTransition` hook. Neither direct Access SQL nor a second permission engine supplies
+those obligations.
+
+Ordinary overrides must retain exact original imported term Source support and current tuple/field fences.
+They cannot detach provider evidence, turn a taken-down import into native text, or reconstruct withheld text.
+The [Source attribution contract](../services/kernel/src/semantic/source-record-attribution-contract.md) owns
+original `(subject, fact_revision)` support. Current Subject, labels, related, summary and Search readers must
+use bounded authoritative term heads, without scanning the Subject's complete history or adding a stale name
+cache. Existing personal-payload locators and minimizers must cover every new persisted payload and receipt/event
+role while preserving communal identity, the nonpersonal change skeleton, account time T and legal holds.
+
+The mutation is not mounted yet. Its exact per-revision authorship helper declarations and Source term-support
+producer are unavailable in this checkout. These missing native bindings are not replaced by successful shims.
+Focused acceptance cases retain the complete correction, CAS, replay, current-reader and denial obligations.
+
+## Individual revision explanation
+
+`GET /v1/subjects/{id}/revisions/{revision}` is implemented by `readRevisionDetail` in
+`services/kernel/src/semantic/revision-detail.ts`; its closed HTTP schema is `RevisionDetailSchema` in
+`services/kernel/src/semantic/http/subjects.ts`. The existing revisions list remains unchanged. The response is:
+
+```ts
+type Selection = { candidate: string; rank: 'normal' | 'preferred' };
+type Reading = {
+  decision: { head: number; verdict: 'accept' | 'reject' | 'abstain'; revision: number } | null;
+  selected: boolean;
+  rank: 'normal' | 'preferred' | 'deprecated' | null;
+};
+type RevisionDetail = {
+  subject: string;
+  revision: { revision: number; kind: string; release: string };
+  change:
+    | { kind: 'record' }
+    | { kind: 'candidate'; candidate: string; property: string; context: string; reading: Reading }
+    | {
+        kind: 'decision';
+        candidate: string;
+        property: string;
+        context: string;
+        head: number;
+        verdict: 'accept' | 'reject' | 'abstain';
+        reading: Reading;
+      }
+    | {
+        kind: 'adoption';
+        property: string;
+        context: string;
+        head: number;
+        mode: 'inherit' | 'replace' | 'suppress';
+        selection: Selection[];
+      };
+};
+```
+
+UUID fields are `subject`, `candidate` and `context`. Revision and head numbers are positive integers; adoption
+selection retains its native 32-entry bound. `record` is the minimal nonpersonal skeleton when existing revision
+metadata has no single corresponding editorial record. No actor, token, write basis, payload, historical snapshot
+or textual diff is returned. Once the term writer supplies actual immutable change identity, its selected tag is
+`{kind: 'terms', fields: TermChange[]}`, where `TermChange` is
+`{field: 'labels' | 'descriptions' | 'aliases', languages: string[]}`. That tag is not yet served.
+
+The read applies current Subject, Context, candidate, related-target and exact Source-tuple disclosure, including
+terminal erasure. Unknown and currently concealed records return 404. Original and redirected related targets
+must independently remain visible and authorized; preparation releases each checkout before foreign authority.
+The final read checks current disclosure again. Responses use `Cache-Control: no-cache` and the existing Session.
+`reading` uses actual current decision and selected slot rank in the record's Context (Global for proposals).
+An adoption's selection describes that recorded adoption only. Revision order never proves current adoption.
+
+The existing revision, candidate, decision and adoption stores remain authoritative. Three Subject/revision
+indexes locate the relevant record without enumerating history; candidate hydration and current selection retain
+the native selection bounds. No second history or personal-payload store is introduced. Native outcome checks,
+generated client/OpenAPI refresh and complete mutation integration remain deferred; type checking alone does
+not prove these acceptance outcomes.
