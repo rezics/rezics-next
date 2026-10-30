@@ -1,15 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import defaults from '../defaults.json';
@@ -52,6 +43,7 @@ import {
   type GateRunner,
 } from './merge.ts';
 import { canonicalConflictPaths, makeRebaseConflictContext } from './conflict-progress.ts';
+import { renameSync } from 'node:fs';
 
 import type { AffectedTestCheck, AffectedTestResult } from './types.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
@@ -1086,283 +1078,17 @@ type BatchLandingResult = {
   skippedIds: number[];
 };
 
+type SpawnTextResult = {
+  status: number | null;
+  stdout: string | null;
+  stderr: string | null;
+  error?: Error;
+};
+type SpawnText = (command: string, args: string[], options: { cwd: string; encoding: 'utf8' }) => SpawnTextResult;
+
 export class MergeTrain {
   private readonly workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
-
-  private controlPlaneSnapshot(mainBranch: string): ControlPlaneReleaseSnapshot {
-    const checkout = this.options.mainCheckout;
-    const devBranch = this.options.integrationBranch ?? 'dev';
-    const stabilizeBranch =
-      this.options.stabilizeBranch ?? localBranchSettings(checkout).stabilizeBranch ?? 'stabilize';
-    const mainHead = this.refHead(mainBranch);
-    if (!mainHead) throw new Error(`Control-plane release requires ${mainBranch}`);
-    const devHead = this.ensureBranch(devBranch);
-    const stabilizeHead = this.refHead(stabilizeBranch);
-    return {
-      mainBranch,
-      mainHead,
-      stabilizeBranch,
-      ...(stabilizeHead ? { stabilizeHead } : {}),
-      devBranch,
-      devHead,
-    };
-  }
-
-  private refHead(branch: string): string | undefined {
-    const result = spawnSync('git', ['rev-parse', '--verify', `refs/heads/${branch}`], {
-      cwd: this.options.mainCheckout,
-      encoding: 'utf8',
-    });
-    if (result.status === 0) return result.stdout.trim();
-    if (result.status === 128) return undefined;
-    throw new Error(result.stderr?.trim() || result.error?.message || `Cannot read ${branch}`);
-  }
-
-  private controlPlaneSnapshotMatches(snapshot: ControlPlaneReleaseSnapshot): boolean {
-    return (
-      this.refHead(snapshot.mainBranch) === snapshot.mainHead &&
-      this.refHead(snapshot.stabilizeBranch) === snapshot.stabilizeHead &&
-      this.refHead(snapshot.devBranch) === snapshot.devHead
-    );
-  }
-
-  private controlPlaneRecordPath(request: LandingRequest): string {
-    const key = createHash('sha256').update(`${request.taskId}\0${request.attempt}`).digest('hex');
-    return join(this.options.stateDirectory, `control-plane-release-${key}.json`);
-  }
-
-  private controlPlaneConflictPath(taskId: string): string {
-    const key = createHash('sha256').update(taskId).digest('hex');
-    return join(this.options.stateDirectory, `control-plane-conflict-${key}.json`);
-  }
-
-  private readControlPlaneRecord(request: LandingRequest): ControlPlaneReleaseRecord | undefined {
-    try {
-      const value = JSON.parse(readFileSync(this.controlPlaneRecordPath(request), 'utf8')) as ControlPlaneReleaseRecord;
-      if (
-        value.version === 1 &&
-        value.taskId === request.taskId &&
-        value.attempt === request.attempt &&
-        typeof value.mainCommit === 'string' &&
-        typeof value.devScriptTree === 'string' &&
-        typeof value.devCommit === 'string' &&
-        typeof value.lifecycleEvidence === 'string' &&
-        Array.isArray(value.compatibilityCommand)
-      )
-        return value;
-    } catch {
-      // A missing or incomplete record cannot certify recovery.
-    }
-    return undefined;
-  }
-
-  private writeControlPlaneRecord(request: LandingRequest, record: ControlPlaneReleaseRecord): void {
-    const path = this.controlPlaneRecordPath(request);
-    mkdirSync(this.options.stateDirectory, { recursive: true });
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
-    renameSync(temporary, path);
-  }
-
-  private controlPlaneRecordPublished(record: ControlPlaneReleaseRecord): boolean {
-    if (
-      this.refHead(record.mainBranch) === undefined ||
-      !this.commitIsAncestor(record.mainCommit, record.mainBranch) ||
-      !this.commitIsAncestor(record.devCommit, record.devBranch)
-    )
-      return false;
-    if (record.stabilizeCommit && !this.commitIsAncestor(record.stabilizeCommit, record.stabilizeBranch)) return false;
-    if (!record.stabilizeCommit && this.refHead(record.stabilizeBranch) !== undefined) return false;
-    return record.lifecycleEvidence.includes(
-      `release evidence: candidate=${record.mainCommit} dev-script-tree=${record.devScriptTree}`,
-    );
-  }
-
-  private mergeControlPlaneCandidate(
-    sourceCommit: string,
-    sourceBranch: string,
-    targetBranch: string,
-    targetHead: string,
-    logPath: string,
-  ): { commit?: string; conflicts?: string[]; cause?: string } {
-    if (isAncestor(this.options.mainCheckout, sourceCommit, targetHead)) return { commit: targetHead };
-    const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
-    mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
-    try {
-      git(this.options.mainCheckout, 'worktree', 'add', '--detach', tree, targetHead);
-      const merged = candidateGit(
-        tree,
-        ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
-        this.options.runCandidateGit,
-      );
-      const cause = `${merged.stdout ?? ''}${merged.stderr ?? ''}`.trim() || merged.error?.message || '';
-      if (merged.status !== 0) {
-        const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
-        try {
-          git(tree, 'merge', '--abort');
-        } catch {
-          // The merge may have failed before Git opened a merge state.
-        }
-        const message =
-          `Prepared control-plane merge ${sourceBranch} ${sourceCommit} into ${targetBranch} failed` +
-          `${conflicts.length ? ` on ${conflicts.join(', ')}` : ''}: ${cause || 'merge failed without conflict paths'}`;
-        appendFileSync(logPath, `${message}\n`);
-        return conflicts.length ? { conflicts, cause: cause || message } : { cause: message };
-      }
-      return { commit: git(tree, 'rev-parse', 'HEAD') };
-    } finally {
-      try {
-        git(this.options.mainCheckout, 'worktree', 'remove', '--force', tree);
-      } catch {
-        rmSync(tree, { recursive: true, force: true });
-      }
-    }
-  }
-
-  private prepareControlPlaneRelease(
-    request: LandingRequest,
-    snapshot: ControlPlaneReleaseSnapshot,
-    candidate: string,
-    lifecycleEvidence: string,
-    compatibilityCommand: string[],
-    logPath: string,
-  ): { prepared?: PreparedControlPlaneRelease; conflicts?: string[]; sourceBranch?: string; targetBranch?: string; cause?: string } {
-    if (!this.controlPlaneSnapshotMatches(snapshot)) return {};
-    let stabilizeCommit: string | undefined;
-    let devSource = candidate;
-    let sourceBranch = snapshot.mainBranch;
-    if (snapshot.stabilizeHead) {
-      const stable = this.mergeControlPlaneCandidate(
-        candidate,
-        snapshot.mainBranch,
-        snapshot.stabilizeBranch,
-        snapshot.stabilizeHead,
-        logPath,
-      );
-      if (!stable.commit)
-        return {
-          ...(stable.conflicts ? { conflicts: stable.conflicts } : {}),
-          sourceBranch: snapshot.mainBranch,
-          targetBranch: snapshot.stabilizeBranch,
-          cause: stable.cause ?? 'merge failed without a Git result',
-        };
-      stabilizeCommit = stable.commit;
-      devSource = stable.commit;
-      sourceBranch = snapshot.stabilizeBranch;
-    } else {
-      appendFileSync(
-        logPath,
-        `No ${snapshot.stabilizeBranch} branch exists; preparing ${snapshot.mainBranch} directly into ${snapshot.devBranch}.\n`,
-      );
-    }
-
-    const dev = this.mergeControlPlaneCandidate(
-      devSource,
-      sourceBranch,
-      snapshot.devBranch,
-      snapshot.devHead,
-      logPath,
-    );
-    if (!dev.commit)
-      return {
-        ...(dev.conflicts ? { conflicts: dev.conflicts } : {}),
-        sourceBranch,
-        targetBranch: snapshot.devBranch,
-        cause: dev.cause ?? 'merge failed without a Git result',
-      };
-
-    const record: ControlPlaneReleaseRecord = {
-      version: 1,
-      taskId: request.taskId,
-      attempt: request.attempt,
-      mainBranch: snapshot.mainBranch,
-      mainCommit: candidate,
-      mainExpected: snapshot.mainHead,
-      devBranch: snapshot.devBranch,
-      devScriptTree: snapshot.devHead,
-      devCommit: dev.commit,
-      stabilizeBranch: snapshot.stabilizeBranch,
-      ...(snapshot.stabilizeHead ? { stabilizeExpected: snapshot.stabilizeHead } : {}),
-      ...(stabilizeCommit ? { stabilizeCommit } : {}),
-      lifecycleEvidence,
-      compatibilityCommand,
-      recordedAt: new Date().toISOString(),
-    };
-    appendFileSync(
-      logPath,
-      `Prepared control-plane release candidate=${candidate} dev-script-tree=${snapshot.devHead}` +
-        `${stabilizeCommit ? ` stabilize=${stabilizeCommit}` : ''} dev=${dev.commit}\n`,
-    );
-    return { prepared: { snapshot, record } };
-  }
-
-  private publishControlPlaneRelease(prepared: PreparedControlPlaneRelease): boolean {
-    const { snapshot, record } = prepared;
-    if (!this.controlPlaneSnapshotMatches(snapshot)) return false;
-    const updates = [
-      { branch: snapshot.mainBranch, old: snapshot.mainHead, next: record.mainCommit },
-      ...(snapshot.stabilizeHead
-        ? [{ branch: snapshot.stabilizeBranch, old: snapshot.stabilizeHead, next: record.stabilizeCommit! }]
-        : []),
-      { branch: snapshot.devBranch, old: snapshot.devHead, next: record.devCommit },
-    ];
-    const references = [
-      ...updates.map(({ branch }) => `refs/heads/${branch}`),
-      ...(!snapshot.stabilizeHead ? [`refs/heads/${snapshot.stabilizeBranch}`] : []),
-    ];
-    const lines = ['start'];
-    for (const reference of references) {
-      const valid = spawnSync('git', ['check-ref-format', reference], {
-        cwd: this.options.mainCheckout,
-        encoding: 'utf8',
-      });
-      if (valid.status !== 0) throw new Error(`Invalid control-plane release ref: ${reference}`);
-    }
-    for (const update of updates) {
-      const reference = `refs/heads/${update.branch}`;
-      lines.push(
-        update.old === update.next
-          ? `verify ${reference} ${update.old}`
-          : `update ${reference} ${update.next} ${update.old}`,
-      );
-    }
-    if (!snapshot.stabilizeHead)
-      lines.push(`verify refs/heads/${snapshot.stabilizeBranch} ${'0'.repeat(snapshot.mainHead.length)}`);
-    lines.push('prepare', 'commit');
-    const transaction = spawnSync('git', ['update-ref', '--stdin'], {
-      cwd: this.options.mainCheckout,
-      encoding: 'utf8',
-      input: `${lines.join('\n')}\n`,
-    });
-    if (transaction.status === 0) {
-      rmSync(join(this.options.stateDirectory, 'control-plane-conflict.json'), { force: true });
-      rmSync(this.controlPlaneConflictPath(record.taskId), { force: true });
-      return true;
-    }
-    if (!this.controlPlaneSnapshotMatches(snapshot)) return false;
-    throw new Error(
-      `Atomic control-plane ref transaction failed: ${transaction.stderr?.trim() || transaction.error?.message || transaction.stdout?.trim() || transaction.status}`,
-    );
-  }
-
-  private syncMainCheckout(branch: string, knownHeads: readonly string[]): void {
-    const checkout = this.options.mainCheckout;
-    if (git(checkout, 'symbolic-ref', 'HEAD') !== `refs/heads/${branch}`)
-      throw new Error(`Main checkout HEAD changed; expected refs/heads/${branch}`);
-    const currentHead = this.refHead(branch);
-    if (!currentHead) throw new Error(`Main checkout branch ${branch} disappeared during control-plane release`);
-    const indexTree = git(checkout, 'write-tree');
-    const allowedTrees = new Set(
-      [currentHead, ...knownHeads].map((head) => git(checkout, 'rev-parse', `${head}^{tree}`)),
-    );
-    if (!allowedTrees.has(indexTree))
-      throw new Error('Main checkout index changed before control-plane release synchronization');
-    const worktreeDiff = spawnSync('git', ['diff', '--quiet'], { cwd: checkout, encoding: 'utf8' });
-    if (worktreeDiff.status !== 0)
-      throw new Error('Main checkout has tracked worktree changes before control-plane release synchronization');
-    git(checkout, 'reset', '--hard', `refs/heads/${branch}`);
-  }
 
   async run(): Promise<void> {
     await this.drainBoth(true);
@@ -2369,7 +2095,8 @@ export class MergeTrain {
       result.stage = 'merge';
       result.mergedCommit = entry.candidate;
       if (workspace) workspace.integrated(recorded.workspace!.module, target());
-      if (stabilize) {
+      if (controlPlane) this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
+      else if (stabilize) {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
         git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
         added = true;
@@ -3174,7 +2901,8 @@ export class MergeTrain {
           targetBranch,
           logPath,
         );
-        if (stabilize)
+        if (controlPlane) this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
+        else if (stabilize)
           await this.mergeStabilizedCommitIntoDev(
             candidate,
             trainTree,
@@ -3212,6 +2940,132 @@ export class MergeTrain {
         git(o.mainCheckout, 'worktree', 'remove', '--force', trainTree);
       }
     }
+  }
+
+  /** Publish a checked control-plane commit through the candidate branches without moving a ref past its current head. */
+  private propagateControlPlaneCommit(
+    mainCommit: string,
+    taskId: string,
+    managerId: string | undefined,
+    logPath: string,
+  ): void {
+    const mainBranch = this.options.mainBranch ?? 'main';
+    const stabilizeBranch =
+      this.options.stabilizeBranch ?? localBranchSettings(this.options.mainCheckout).stabilizeBranch ?? 'stabilize';
+    const devBranch = this.options.integrationBranch ?? 'dev';
+    if (!this.commitIsAncestor(mainCommit, mainBranch)) {
+      appendFileSync(
+        logPath,
+        `Cannot propagate control-plane commit ${mainCommit}: it is no longer on ${mainBranch}.\n`,
+      );
+      return;
+    }
+
+    const stableRef = `refs/heads/${stabilizeBranch}`;
+    const stableHead = spawnSync('git', ['rev-parse', '--verify', stableRef], {
+      cwd: this.options.mainCheckout,
+      encoding: 'utf8',
+    });
+    let devSource = mainCommit;
+    let sourceBranch = mainBranch;
+    if (stableHead.status === 0) {
+      const merged = this.mergeCommitIntoBranch(mainCommit, mainBranch, stabilizeBranch, logPath);
+      if (merged.conflicts) {
+        this.notifyControlPlaneConflict(taskId, managerId, mainBranch, mainCommit, stabilizeBranch, merged.conflicts);
+        return;
+      }
+      if (merged.error) {
+        appendFileSync(logPath, `Cannot merge ${mainBranch} into ${stabilizeBranch}: ${merged.error}\n`);
+        return;
+      }
+      if (!merged.commit) return;
+      devSource = merged.commit;
+      sourceBranch = stabilizeBranch;
+    } else
+      appendFileSync(
+        logPath,
+        `No ${stabilizeBranch} branch exists; merging ${mainBranch} directly into ${devBranch}.\n`,
+      );
+
+    const merged = this.mergeCommitIntoBranch(devSource, sourceBranch, devBranch, logPath);
+    if (merged.conflicts) {
+      this.notifyControlPlaneConflict(taskId, managerId, sourceBranch, devSource, devBranch, merged.conflicts);
+      return;
+    }
+    if (merged.error) appendFileSync(logPath, `Cannot merge ${sourceBranch} into ${devBranch}: ${merged.error}\n`);
+  }
+
+  /** Build a non-fast-forward merge away from the checkout, then compare-and-swap the target ref. */
+  private mergeCommitIntoBranch(
+    sourceCommit: string,
+    sourceBranch: string,
+    targetBranch: string,
+    logPath: string,
+    runSync: SpawnText = spawnSync,
+  ): { commit?: string; conflicts?: string[]; error?: string } {
+    const checkout = this.options.mainCheckout;
+    const targetRef = `refs/heads/${targetBranch}`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const targetResult = runSync('git', ['rev-parse', '--verify', targetRef], {
+        cwd: checkout,
+        encoding: 'utf8',
+      });
+      if (targetResult.status !== 0) {
+        const detail = targetResult.stderr?.trim() || targetResult.error?.message || 'missing ref';
+        return {
+          error: `branch ${targetBranch} does not exist: ${detail}`,
+        };
+      }
+      const targetHead = targetResult.stdout?.trim() ?? '';
+      if (isAncestor(checkout, sourceCommit, targetHead)) return { commit: targetHead };
+
+      const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
+      mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
+      try {
+        git(checkout, 'worktree', 'add', '--detach', tree, targetHead);
+        const merged = runSync(
+          'git',
+          ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
+          { cwd: tree, encoding: 'utf8' },
+        );
+        const output = `${merged.stdout ?? ''}${merged.stderr ?? ''}` || merged.error?.message || '';
+        if (merged.status !== 0) {
+          const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
+          try {
+            git(tree, 'merge', '--abort');
+          } catch {}
+          appendFileSync(
+            logPath,
+            `Merge ${sourceBranch} ${sourceCommit} into ${targetBranch} aborted${conflicts.length ? ` on ${conflicts.join(', ')}` : ''}: ${output}\n`,
+          );
+          return conflicts.length ? { conflicts } : { error: output.trim() || 'merge failed without conflict paths' };
+        }
+
+        const commit = git(tree, 'rev-parse', 'HEAD');
+        this.options.beforePromotionAdvance?.();
+        try {
+          git(checkout, 'update-ref', targetRef, commit, targetHead);
+          return { commit };
+        } catch (error) {
+          const current = spawnSync('git', ['rev-parse', '--verify', targetRef], {
+            cwd: checkout,
+            encoding: 'utf8',
+          });
+          if (current.status === 0 && current.stdout.trim() !== targetHead) {
+            appendFileSync(logPath, `${targetBranch} moved during merge; retrying against ${current.stdout.trim()}.\n`);
+            continue;
+          }
+          return { error: String(error) };
+        }
+      } catch (error) {
+        return { error: String(error) };
+      } finally {
+        try {
+          git(checkout, 'worktree', 'remove', '--force', tree);
+        } catch {}
+      }
+    }
+    return { error: `${targetBranch} moved during all five merge attempts` };
   }
 
   private notifyControlPlaneConflict(
@@ -3633,5 +3487,279 @@ export class MergeTrain {
     } finally {
       owned?.close();
     }
+  }
+
+  private controlPlaneSnapshot(mainBranch: string): ControlPlaneReleaseSnapshot {
+    const checkout = this.options.mainCheckout;
+    const devBranch = this.options.integrationBranch ?? 'dev';
+    const stabilizeBranch =
+      this.options.stabilizeBranch ?? localBranchSettings(checkout).stabilizeBranch ?? 'stabilize';
+    const mainHead = this.refHead(mainBranch);
+    if (!mainHead) throw new Error(`Control-plane release requires ${mainBranch}`);
+    const devHead = this.ensureBranch(devBranch);
+    const stabilizeHead = this.refHead(stabilizeBranch);
+    return {
+      mainBranch,
+      mainHead,
+      stabilizeBranch,
+      ...(stabilizeHead ? { stabilizeHead } : {}),
+      devBranch,
+      devHead,
+    };
+  }
+
+  private refHead(branch: string): string | undefined {
+    const result = spawnSync('git', ['rev-parse', '--verify', `refs/heads/${branch}`], {
+      cwd: this.options.mainCheckout,
+      encoding: 'utf8',
+    });
+    if (result.status === 0) return result.stdout.trim();
+    if (result.status === 128) return undefined;
+    throw new Error(result.stderr?.trim() || result.error?.message || `Cannot read ${branch}`);
+  }
+
+  private controlPlaneSnapshotMatches(snapshot: ControlPlaneReleaseSnapshot): boolean {
+    return (
+      this.refHead(snapshot.mainBranch) === snapshot.mainHead &&
+      this.refHead(snapshot.stabilizeBranch) === snapshot.stabilizeHead &&
+      this.refHead(snapshot.devBranch) === snapshot.devHead
+    );
+  }
+
+  private controlPlaneRecordPath(request: LandingRequest): string {
+    const key = createHash('sha256').update(`${request.taskId}\0${request.attempt}`).digest('hex');
+    return join(this.options.stateDirectory, `control-plane-release-${key}.json`);
+  }
+
+  private controlPlaneConflictPath(taskId: string): string {
+    const key = createHash('sha256').update(taskId).digest('hex');
+    return join(this.options.stateDirectory, `control-plane-conflict-${key}.json`);
+  }
+
+  private readControlPlaneRecord(request: LandingRequest): ControlPlaneReleaseRecord | undefined {
+    try {
+      const value = JSON.parse(readFileSync(this.controlPlaneRecordPath(request), 'utf8')) as ControlPlaneReleaseRecord;
+      if (
+        value.version === 1 &&
+        value.taskId === request.taskId &&
+        value.attempt === request.attempt &&
+        typeof value.mainCommit === 'string' &&
+        typeof value.devScriptTree === 'string' &&
+        typeof value.devCommit === 'string' &&
+        typeof value.lifecycleEvidence === 'string' &&
+        Array.isArray(value.compatibilityCommand)
+      )
+        return value;
+    } catch {
+      // A missing or incomplete record cannot certify recovery.
+    }
+    return undefined;
+  }
+
+  private writeControlPlaneRecord(request: LandingRequest, record: ControlPlaneReleaseRecord): void {
+    const path = this.controlPlaneRecordPath(request);
+    mkdirSync(this.options.stateDirectory, { recursive: true });
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
+    renameSync(temporary, path);
+  }
+
+  private controlPlaneRecordPublished(record: ControlPlaneReleaseRecord): boolean {
+    if (
+      this.refHead(record.mainBranch) === undefined ||
+      !this.commitIsAncestor(record.mainCommit, record.mainBranch) ||
+      !this.commitIsAncestor(record.devCommit, record.devBranch)
+    )
+      return false;
+    if (record.stabilizeCommit && !this.commitIsAncestor(record.stabilizeCommit, record.stabilizeBranch)) return false;
+    if (!record.stabilizeCommit && this.refHead(record.stabilizeBranch) !== undefined) return false;
+    return record.lifecycleEvidence.includes(
+      `release evidence: candidate=${record.mainCommit} dev-script-tree=${record.devScriptTree}`,
+    );
+  }
+
+  private mergeControlPlaneCandidate(
+    sourceCommit: string,
+    sourceBranch: string,
+    targetBranch: string,
+    targetHead: string,
+    logPath: string,
+  ): { commit?: string; conflicts?: string[]; cause?: string } {
+    if (isAncestor(this.options.mainCheckout, sourceCommit, targetHead)) return { commit: targetHead };
+    const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
+    mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
+    try {
+      git(this.options.mainCheckout, 'worktree', 'add', '--detach', tree, targetHead);
+      const merged = candidateGit(
+        tree,
+        ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
+        this.options.runCandidateGit,
+      );
+      const cause = `${merged.stdout ?? ''}${merged.stderr ?? ''}`.trim() || merged.error?.message || '';
+      if (merged.status !== 0) {
+        const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
+        try {
+          git(tree, 'merge', '--abort');
+        } catch {
+          // The merge may have failed before Git opened a merge state.
+        }
+        const message =
+          `Prepared control-plane merge ${sourceBranch} ${sourceCommit} into ${targetBranch} failed` +
+          `${conflicts.length ? ` on ${conflicts.join(', ')}` : ''}: ${cause || 'merge failed without conflict paths'}`;
+        appendFileSync(logPath, `${message}\n`);
+        return conflicts.length ? { conflicts, cause: cause || message } : { cause: message };
+      }
+      return { commit: git(tree, 'rev-parse', 'HEAD') };
+    } finally {
+      try {
+        git(this.options.mainCheckout, 'worktree', 'remove', '--force', tree);
+      } catch {
+        rmSync(tree, { recursive: true, force: true });
+      }
+    }
+  }
+
+  private prepareControlPlaneRelease(
+    request: LandingRequest,
+    snapshot: ControlPlaneReleaseSnapshot,
+    candidate: string,
+    lifecycleEvidence: string,
+    compatibilityCommand: string[],
+    logPath: string,
+  ): { prepared?: PreparedControlPlaneRelease; conflicts?: string[]; sourceBranch?: string; targetBranch?: string; cause?: string } {
+    if (!this.controlPlaneSnapshotMatches(snapshot)) return {};
+    let stabilizeCommit: string | undefined;
+    let devSource = candidate;
+    let sourceBranch = snapshot.mainBranch;
+    if (snapshot.stabilizeHead) {
+      const stable = this.mergeControlPlaneCandidate(
+        candidate,
+        snapshot.mainBranch,
+        snapshot.stabilizeBranch,
+        snapshot.stabilizeHead,
+        logPath,
+      );
+      if (!stable.commit)
+        return {
+          ...(stable.conflicts ? { conflicts: stable.conflicts } : {}),
+          sourceBranch: snapshot.mainBranch,
+          targetBranch: snapshot.stabilizeBranch,
+          cause: stable.cause ?? 'merge failed without a Git result',
+        };
+      stabilizeCommit = stable.commit;
+      devSource = stable.commit;
+      sourceBranch = snapshot.stabilizeBranch;
+    } else {
+      appendFileSync(
+        logPath,
+        `No ${snapshot.stabilizeBranch} branch exists; preparing ${snapshot.mainBranch} directly into ${snapshot.devBranch}.\n`,
+      );
+    }
+
+    const dev = this.mergeControlPlaneCandidate(
+      devSource,
+      sourceBranch,
+      snapshot.devBranch,
+      snapshot.devHead,
+      logPath,
+    );
+    if (!dev.commit)
+      return {
+        ...(dev.conflicts ? { conflicts: dev.conflicts } : {}),
+        sourceBranch,
+        targetBranch: snapshot.devBranch,
+        cause: dev.cause ?? 'merge failed without a Git result',
+      };
+
+    const record: ControlPlaneReleaseRecord = {
+      version: 1,
+      taskId: request.taskId,
+      attempt: request.attempt,
+      mainBranch: snapshot.mainBranch,
+      mainCommit: candidate,
+      mainExpected: snapshot.mainHead,
+      devBranch: snapshot.devBranch,
+      devScriptTree: snapshot.devHead,
+      devCommit: dev.commit,
+      stabilizeBranch: snapshot.stabilizeBranch,
+      ...(snapshot.stabilizeHead ? { stabilizeExpected: snapshot.stabilizeHead } : {}),
+      ...(stabilizeCommit ? { stabilizeCommit } : {}),
+      lifecycleEvidence,
+      compatibilityCommand,
+      recordedAt: new Date().toISOString(),
+    };
+    appendFileSync(
+      logPath,
+      `Prepared control-plane release candidate=${candidate} dev-script-tree=${snapshot.devHead}` +
+        `${stabilizeCommit ? ` stabilize=${stabilizeCommit}` : ''} dev=${dev.commit}\n`,
+    );
+    return { prepared: { snapshot, record } };
+  }
+
+  private publishControlPlaneRelease(prepared: PreparedControlPlaneRelease): boolean {
+    const { snapshot, record } = prepared;
+    if (!this.controlPlaneSnapshotMatches(snapshot)) return false;
+    const updates = [
+      { branch: snapshot.mainBranch, old: snapshot.mainHead, next: record.mainCommit },
+      ...(snapshot.stabilizeHead
+        ? [{ branch: snapshot.stabilizeBranch, old: snapshot.stabilizeHead, next: record.stabilizeCommit! }]
+        : []),
+      { branch: snapshot.devBranch, old: snapshot.devHead, next: record.devCommit },
+    ];
+    const references = [
+      ...updates.map(({ branch }) => `refs/heads/${branch}`),
+      ...(!snapshot.stabilizeHead ? [`refs/heads/${snapshot.stabilizeBranch}`] : []),
+    ];
+    const lines = ['start'];
+    for (const reference of references) {
+      const valid = spawnSync('git', ['check-ref-format', reference], {
+        cwd: this.options.mainCheckout,
+        encoding: 'utf8',
+      });
+      if (valid.status !== 0) throw new Error(`Invalid control-plane release ref: ${reference}`);
+    }
+    for (const update of updates) {
+      const reference = `refs/heads/${update.branch}`;
+      lines.push(
+        update.old === update.next
+          ? `verify ${reference} ${update.old}`
+          : `update ${reference} ${update.next} ${update.old}`,
+      );
+    }
+    if (!snapshot.stabilizeHead)
+      lines.push(`verify refs/heads/${snapshot.stabilizeBranch} ${'0'.repeat(snapshot.mainHead.length)}`);
+    lines.push('prepare', 'commit');
+    const transaction = spawnSync('git', ['update-ref', '--stdin'], {
+      cwd: this.options.mainCheckout,
+      encoding: 'utf8',
+      input: `${lines.join('\n')}\n`,
+    });
+    if (transaction.status === 0) {
+      rmSync(join(this.options.stateDirectory, 'control-plane-conflict.json'), { force: true });
+      rmSync(this.controlPlaneConflictPath(record.taskId), { force: true });
+      return true;
+    }
+    if (!this.controlPlaneSnapshotMatches(snapshot)) return false;
+    throw new Error(
+      `Atomic control-plane ref transaction failed: ${transaction.stderr?.trim() || transaction.error?.message || transaction.stdout?.trim() || transaction.status}`,
+    );
+  }
+
+  private syncMainCheckout(branch: string, knownHeads: readonly string[]): void {
+    const checkout = this.options.mainCheckout;
+    if (git(checkout, 'symbolic-ref', 'HEAD') !== `refs/heads/${branch}`)
+      throw new Error(`Main checkout HEAD changed; expected refs/heads/${branch}`);
+    const currentHead = this.refHead(branch);
+    if (!currentHead) throw new Error(`Main checkout branch ${branch} disappeared during control-plane release`);
+    const indexTree = git(checkout, 'write-tree');
+    const allowedTrees = new Set(
+      [currentHead, ...knownHeads].map((head) => git(checkout, 'rev-parse', `${head}^{tree}`)),
+    );
+    if (!allowedTrees.has(indexTree))
+      throw new Error('Main checkout index changed before control-plane release synchronization');
+    const worktreeDiff = spawnSync('git', ['diff', '--quiet'], { cwd: checkout, encoding: 'utf8' });
+    if (worktreeDiff.status !== 0)
+      throw new Error('Main checkout has tracked worktree changes before control-plane release synchronization');
+    git(checkout, 'reset', '--hard', `refs/heads/${branch}`);
   }
 }
