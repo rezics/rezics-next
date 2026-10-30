@@ -45,9 +45,9 @@ export function PublicViewsCard({ editor, writable = true }: { editor: ProfileEd
         {profile ? (
           <>
             {(['posts', 'reviews', 'collections', 'realms'] as const).map((view) => (
-              <label key={view} htmlFor={`${ids}-${view}`}>
+              <label key={view} htmlFor={`${ids}-${view}`} className="block min-h-11 w-full py-3">
                 <Field orientation="horizontal">
-                  <FieldContent>
+                  <FieldContent className="min-w-0">
                     <FieldTitle>{m[`settings_public_${view}`]()}</FieldTitle>
                   </FieldContent>
                   <Switch
@@ -63,9 +63,9 @@ export function PublicViewsCard({ editor, writable = true }: { editor: ProfileEd
               </label>
             ))}
             {profile.kind === 'organization' ? (
-              <label htmlFor={`${ids}-speakers`}>
+              <label htmlFor={`${ids}-speakers`} className="block min-h-11 w-full py-3">
                 <Field orientation="horizontal">
-                  <FieldContent>
+                  <FieldContent className="min-w-0">
                     <FieldTitle>{m.settings_public_speakers()}</FieldTitle>
                   </FieldContent>
                   <Switch
