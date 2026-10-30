@@ -199,22 +199,20 @@ export async function loadEditableCollectionPage(
       const status = resultStatus(result);
       if (filter && (status === 400 || status === 422)) {
         filterStatus = 'unsupported';
-        return readLibraryResult(
-          await client
-            .collections({ collectionId: input.id })
-            .members.get({ query: libraryListQuery(cursor), ...headers }),
-        );
+        return client
+          .collections({ collectionId: input.id })
+          .members.get({ query: libraryListQuery(cursor), ...headers });
       }
       if (filter && status === 202) {
         if (retry >= 3) {
           filterStatus = 'preparing';
-          return { members: [], next: null };
+          return { status: 200, data: { members: [], next: null } };
         }
         const delay = retryAfterMs(result) || 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
-      return readLibraryResult(result as Parameters<typeof readLibraryResult>[0]);
+      return result;
     }
   };
   const [collectionResult, first] = await Promise.all([
