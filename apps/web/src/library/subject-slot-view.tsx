@@ -800,7 +800,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                     <SubjectLabelMore query={labelQuery} next={labelNext} onPage={(page) => {
                       setLabelNext(page.next ?? null); setLabelChoices(page.labels); setLabelSearchState(page.state);
                     }} />
-                    <SubjectLabelReadNotice reason={labelReadReason} />
+                    <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
                     {labelSearchState === 'loaded' ? (
                       <ul aria-label={m.library_subject_label_input()} className="space-y-1">
                         {labelChoices.map((choice) => (

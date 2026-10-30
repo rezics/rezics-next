@@ -79,8 +79,9 @@ export async function loadLabelShelfPage(
     });
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
     if (result.status === 401 || result.status === 403) return { state: 'denied' };
-    if (result.error?.value?.code === 'index_not_ready' || result.error?.value?.code === 'semantic_not_ready')
-      return { state: 'preparing' };
+    const problem: unknown = result.error?.value;
+    const code = problem && typeof problem === 'object' && 'code' in problem ? problem.code : undefined;
+    if (code === 'index_not_ready' || code === 'semantic_not_ready') return { state: 'preparing' };
     const page = readLibraryResult(result);
     if (!('label' in page) || page.label.id !== input.labelId)
       throw new Error('FULL label shelf omitted its label summary');

@@ -102,7 +102,8 @@ export async function searchSubjectLabels(input: {
     if (!result.error && result.data && statusOf(result) !== undefined && statusOf(result)! < 400)
       return { labels: result.data.labels, next: result.data.next, state: 'loaded' };
     if (isPlatformClosedProblem(statusOf(result), result.error?.value)) return { labels: [], state: 'closed' };
-    return { labels: [], state: 'unavailable', reason: problemCode(result) };
+    const reason = problemCode(result);
+    return { labels: [], state: 'unavailable', ...(reason !== undefined ? { reason } : {}) };
   } catch (error) {
     return { labels: [], state: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }
@@ -150,10 +151,8 @@ export async function applySubjectLabelMutation(
       if (search.error || !search.data || (statusOf(search) ?? 500) >= 400) return refused(search, input.intent);
       let label = search.data.labels.find((item) => normalizeLibraryLabelName(item.name) === name);
       if (!label) {
-        const created = await client.libraryLabels.post(
-          { name },
-          { headers: { authorization, 'idempotency-key': input.createKey ?? crypto.randomUUID() } },
-        );
+        const createHeaders = { authorization, 'idempotency-key': input.createKey ?? crypto.randomUUID() };
+        const created = await client.libraryLabels.post({ name }, { headers: createHeaders });
         if (created.error || !created.data || (statusOf(created) ?? 500) >= 400) return refused(created, input.intent);
         label = { id: created.data.label.id, name, revision: created.data.label.revision };
       }

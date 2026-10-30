@@ -283,7 +283,11 @@ export async function handleLabelForm(
         input.revision === previous.undo.revision
       )
     )
-      feedback = { ...feedback, undo: previous.undo, undoKey: previous.undoKey };
+      feedback = {
+        ...feedback,
+        undo: previous.undo,
+        ...(previous.undoKey !== undefined ? { undoKey: previous.undoKey } : {}),
+      };
   } catch {
     feedback = { ok: false, reason: 'invalid_request' };
   }

@@ -57,18 +57,19 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
       const feedback: LabelFeedback = {
         ...result,
         operation: input.operation,
-        id: input.id,
-        name: input.name,
+        ...(input.id !== undefined ? { id: input.id } : {}),
+        ...(input.name !== undefined ? { name: input.name } : {}),
         ...(result.ok && input.operation === 'delete' && result.revision !== undefined
           ? { undo: { id: input.id!, name: input.name ?? '', revision: result.revision }, undoKey: crypto.randomUUID() }
           : {}),
       };
+      const previousUndo = page.feedback?.undo;
       const retained =
         feedback.undo ||
         (result.ok &&
           input.operation === 'restore' &&
-          page.feedback?.undo?.id === input.id &&
-          page.feedback.undo.revision === input.revision)
+          previousUndo?.id === input.id &&
+          previousUndo?.revision === input.revision)
           ? feedback
           : {
               ...feedback,
