@@ -830,7 +830,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   async function commitProvisioning(input: {
     authorization: string;
     receiptKey: string;
-    sourceRegistrationId?: string;
+    sourceRegistrationId: string | undefined;
     account: AccessAccount;
     receipt: ProvisioningReceiptMetadata | undefined;
     email: string | null;

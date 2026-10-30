@@ -47,8 +47,8 @@ function verificationPlugin(alreadyInTransaction = false) {
         adapter.create = async <T extends Record<string, unknown>, R = T>(query: {
           model: string;
           data: Omit<T, 'id'>;
-          select?: string[];
-          forceAllowId?: boolean;
+          select?: string[] | undefined;
+          forceAllowId?: boolean | undefined;
         }): Promise<R> => {
           const model = query.model;
           if (!['verification', 'oauthClientAssertion', 'oauthRefreshFamily'].includes(model))

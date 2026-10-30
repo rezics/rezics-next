@@ -245,7 +245,7 @@ export function credentialEffects(database: Pool, secret: string) {
     subjectAccountId: string;
     credential: CredentialEffect | PasskeyEffect;
     human: SessionProof;
-    sourceSessionId?: string;
+    sourceSessionId?: string | undefined;
   }) {
     text(input.key);
     text(input.subjectAccountId);

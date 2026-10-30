@@ -258,10 +258,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const accountId = access.registrationTarget(request);
     const sealed = credential ? sealCredential(id, accountId, handle, credential) : null;
     const operation = binding as AccountOperation | undefined;
-    const context =
-      operation && 'authorization' in operation
-        ? await required(access.authorizeOperation)(operation.authorization!, operation)
-        : undefined;
+    const context = operation && 'authorization' in operation ? await approved(operation) : undefined;
     const creator = context === undefined ? null : (access.actorAccountId?.(context) ?? null);
     const operator = operation?.kind === 'automated' ? operation.operatorAccountId : null;
     const result = await database.query<Stage & { request_digest: Buffer; credential_digest: Buffer | null }>(
@@ -831,7 +828,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       });
       return auth.internal.provisionCredentialless({
         authorization,
-        sourceRegistrationId: request?.kind === 'automated' ? request.registrationId : undefined,
+        ...(request?.kind === 'automated' ? { sourceRegistrationId: request.registrationId } : {}),
       });
     });
     const hasCredential = step('has-staged-credential', async (id: string, request?: AccountOperation) => {
