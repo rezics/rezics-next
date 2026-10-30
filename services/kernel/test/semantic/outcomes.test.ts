@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 const kernel = resolve(import.meta.dir, '../..');
 const suite = resolve(kernel, '../../specs/semantic-outcomes.test.ts');
-const driver = resolve(import.meta.dir, 'outcome-driver.ts');
+const driver = resolve(import.meta.dir, 'outcome-binding.ts');
 
 test('the original semantic outcome suite passes against the product with every test executed', async () => {
   const declared = readFileSync(suite, 'utf8').match(/^test\(/gm)?.length ?? 0;
@@ -22,6 +22,7 @@ test('the original semantic outcome suite passes against the product with every 
   ]);
   const output = `${stdout}${stderr}`;
   if (code !== 0) console.error(output);
+  else console.log(output);
   expect(code).toBe(0);
   expect(output).toMatch(new RegExp(`^\\s*${declared} pass$`, 'm'));
   expect(output).toMatch(/^\s*0 fail$/m);

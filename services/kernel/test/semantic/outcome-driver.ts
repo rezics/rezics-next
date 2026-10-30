@@ -113,6 +113,8 @@ export type SemanticOutcomeDriver = SemanticDriver & {
 };
 
 export type SemanticOutcomeOptions = {
+  /** Named development gate grants for the original fourteen semantic capability scenarios only. */
+  originalCapabilities?: boolean;
   linkProjection?: 'owned' | 'external';
   beforeClose?: () => Promise<void>;
   onOwnedResource?: OwnedResourceObserver;
@@ -426,6 +428,11 @@ async function startDriver(
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);
     await grantAccount(accounts.acceptor, ['context:accept', 'context:adopt', 'subject:merge']);
     await grantAccount(accounts.steward, ['definitions:publish', 'definitions:activate']);
+    if (options.originalCapabilities) {
+      await grantAccount(accounts.steward, ['gate:definition_publication']);
+      await grantAccount(accounts.acceptor, ['gate:subject_identity']);
+      await grantAccount(accounts.editor, ['gate:definition_publication', 'gate:subject_identity']);
+    }
     await grantAccount(accounts.suspended, [
       'subject:create',
       'statement:propose',

@@ -128,12 +128,31 @@ Delivered fresh processes returned exact body/ETag on GET 200, original-key repl
 mismatch 422, unpublished-cap 400 and revoked-authority 403. Replay and new-key each observed exactly one real
 same-pool existence point. Creation added one release/receipt/outbox/write-basis row; replay, reads and denials
 preserved their snapshots, while new-key added native receipt/outbox/write-basis bookkeeping without another release.
-The earlier scoped receipt printed an existing Commerce `stripe.ts` TS2379 diagnostic; landing subsequently
-failed while generating client declarations on that same optional-property mismatch. The Stripe caller now omits
-an absent cancellation signal, preserving the transport's existing optional contract and supplied-signal behaviour.
-Repeated combined acceptance passed with the same 97/1019 package and 2/79 kernel counts, including native
-compilation without that diagnostic. This receipt does not claim a passing root typecheck, whole-kernel check or
-landing regeneration; the landing batch owns those checks.
+The earlier scoped receipt printed an existing Commerce `stripe.ts` TS2379 diagnostic; repeated combined acceptance
+passed with the same counts and native compilation without that diagnostic. Current dev's complete Commerce caller
+supersedes the redundant candidate signal variant and is retained verbatim. These receipts do not claim a passing
+root typecheck, whole-kernel check or landing regeneration; the landing batch owns those checks.
+
+## Original semantic capability binding
+
+The shared native factory remains `createSemanticDriver(compose = createKernel, options = {})`; its test-only
+`SemanticOutcomeOptions.originalCapabilities?: boolean` defaults to absent. The original fourteen-scenario wrapper
+loads `outcome-binding.ts`, whose zero-argument `createSemanticDriver()` calls that same factory with
+`undefined, { originalCapabilities: true }`. No request or response is translated by this adapter.
+Only this opt-in setup adds native Global account grants: steward gets `gate:definition_publication`, acceptor
+gets `gate:subject_identity`, and editor gets both. Editor retains no publish/activate/merge resource rights.
+Anonymous and the pre-suspension revoked bearer get no gate grant. The existing governor's `gate:any` client scope
+permits native grant administration; ordinary people retain their exact mounted-action scopes, without gate scopes.
+Gate admission borrows the actual mounted operation's client scope, so direct group scopes are unnecessary.
+Unknown scopes and conflicting name/scope identities still reject through the existing factory.
+
+The frozen original suite hash is `4f9c5c03ad487df643b1a42e1edd750667d47fc16d064a48cbf7d5feebed4be1`.
+Its only gate-oracle changes are anonymous publication/activation and merge returning 403 `platform_closed`.
+Ordinary anonymous writes retain 401 `authentication_required`, and the suspended bearer retains 401
+`invalid_credentials` with the `invalid_token` challenge. Default fixture setup and public discovery keep both
+development groups closed. The separate public-slice exposure oracle and every original scenario remain intact.
+The pure construction sources and native historical test remain byte-equal to the reviewed package/native
+receipts above; their existing 97/1019, 72 malformed comparisons and 119 equality rows are retained evidence.
 
 Inspected sources include full Definitions validation/schema/compile, Filter parsing/admission/display and pinned
 TypeBox uniqueItems/hash implementations; actual kernel read/publication/bootstrap and mounted routes; Search
@@ -161,6 +180,15 @@ No external reference project or external research was required.
   same-object mutable/accessor/inherited/sparse negatives. Mounted kernel acceptance is
   `test/semantic/definition-construction-publication.test.ts`, with exact/excess caps, actual historical creation,
   isolated cold read, exact digest/ETag, replay/new-key, denied replay and actual effect snapshots.
+
+### Original native capability fixture
+
+- Touches: one isolated ordinary fixture, existing native Auth/client/persona setup and three named personas'
+  explicit Global gate grants through the native grant API, followed by unchanged route operations.
+- Bound: three extra grant commands containing four exact gate actions, no product query growth or global group
+  opening. Ordinary Access, request deadlines, revisions, receipts and source bounds remain unchanged.
+- Growth check: original fourteen native outcomes, default/opt-in capability witnesses, historical pin and unchanged
+  public-slice exposure tests preserve authority, effects and replay. Pure construction counter receipts are reused.
 
 ## Remaining parent boundaries
 
