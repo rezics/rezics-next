@@ -3114,5 +3114,18 @@
   "literary_relations": "創作者、系列與分類",
   "literary_relations_help": "選擇既有對象及準確的關係槽位。叢書成員關係應在各成員作品上提出，不推算成員總數。",
   "literary_terms_help": "名稱、描述及別名使用既有多語言名稱編輯器。原生名稱介面未提供時會顯示無法使用；名稱陳述不等於修改標題對應。",
-  "literary_authored_help": "撰寫原創文本，並提供其語言、依據和授權。既有文件維持完整。"
+  "literary_authored_help": "撰寫原創文本，並提供其語言、依據和授權。既有文件維持完整。",
+  "people_profile_title": "人物與組織目錄編輯器",
+  "people_profile_intro": "建立或修正作品署名所用的目錄身分。請區分人物或組織、其帳戶及筆名。",
+  "people_profile_terms": "名稱、描述與別名透過「編輯名稱和描述」修改。該原生詞條轉接器可能無法使用；名稱陳述不能取代這些詞條。",
+  "people_profile_disclosure": "個人事實與關係請使用公開證據。原生揭露、同意與目標帳戶資格規則決定是否允許提交。引用不會授予權限或使用權。",
+  "people_profile_credit": "作品署名",
+  "people_profile_credit_help": "先建立或開啟目錄身分，再到作品的關係編輯器中選取該確切身分，填寫附有引用的署名、角色與限定資訊。建立身分不會自動新增署名。",
+  "people_profile_no_credit": "目前發布版本未為此作品提供可用的署名欄位。",
+  "people_profile_created_id": "已建立的目錄身分：",
+  "people_profile_initial": "建立時的有據事實",
+  "people_profile_initial_help": "只新增本次實際輸入的事實。初始事實在建立時即被選用；後續修正是等待審核的獨立提案。空值無效，不會清空欄位。",
+  "people_profile_add_fact": "新增{field}",
+  "people_profile_remove_fact": "移除初始事實",
+  "people_profile_unsupported": "以下已發布欄位需要使用其專用編輯器，此處省略："
 }

@@ -3466,5 +3466,18 @@
   "literary_relations": "Creators, series and classifications",
   "literary_relations_help": "Use an existing target and its exact relation slot. Book-series membership is contributed on each member work; no member count is inferred.",
   "literary_terms_help": "Names, descriptions and aliases use the existing multilingual terms editor. A missing native terms producer remains unavailable; a name statement is not a title-map edit.",
-  "literary_authored_help": "Write original text with its own language, evidence and licence. Existing documents remain intact."
+  "literary_authored_help": "Write original text with its own language, evidence and licence. Existing documents remain intact.",
+  "people_profile_title": "Person and organization catalogue editor",
+  "people_profile_intro": "Create or correct the catalogue identity credited on works. Keep the named person or organization distinct from their account and from any pen name.",
+  "people_profile_terms": "Names, descriptions and aliases use Edit names and descriptions. That native terms adapter may be unavailable; a name statement does not replace these terms.",
+  "people_profile_disclosure": "Use public evidence for personal facts and relationships. Native disclosure, consent and target-owner eligibility decide whether a contribution is allowed. A citation does not grant permission or rights.",
+  "people_profile_credit": "Credit on the work",
+  "people_profile_credit_help": "Create or open the catalogue identity first. Then use the work’s relation editor to choose that exact identity and enter the cited credit, role and qualifiers. Creating an identity does not add a credit.",
+  "people_profile_no_credit": "This work has no admitted credit field in the current release.",
+  "people_profile_created_id": "Created catalogue identity:",
+  "people_profile_initial": "Initial cited facts",
+  "people_profile_initial_help": "Add only facts you are entering now. Initial facts are selected at creation; later corrections are separate proposals awaiting review. Empty values are invalid, never a request to clear a field.",
+  "people_profile_add_fact": "Add {field}",
+  "people_profile_remove_fact": "Remove initial fact",
+  "people_profile_unsupported": "These released fields need their existing dedicated editor and are omitted here:"
 }

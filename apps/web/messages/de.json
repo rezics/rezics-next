@@ -3114,5 +3114,18 @@
   "literary_relations": "Urheber, Reihen und Klassifikationen",
   "literary_relations_help": "Wählen Sie ein vorhandenes Ziel und dessen genaue Beziehungsstelle. Die Zugehörigkeit zu einer Buchreihe wird am Mitgliedswerk vorgeschlagen; eine Anzahl wird nicht abgeleitet.",
   "literary_terms_help": "Namen, Beschreibungen und Aliasse verwenden den bestehenden mehrsprachigen Editor. Fehlt die native Schnittstelle, bleibt die Funktion nicht verfügbar. Eine Namensaussage ändert nicht die Titelzuordnung.",
-  "literary_authored_help": "Verfassen Sie eigene Texte mit Sprache, Beleg und Lizenz. Vorhandene Dokumente bleiben erhalten."
+  "literary_authored_help": "Verfassen Sie eigene Texte mit Sprache, Beleg und Lizenz. Vorhandene Dokumente bleiben erhalten.",
+  "people_profile_title": "Katalogeditor für Personen und Organisationen",
+  "people_profile_intro": "Erstelle oder korrigiere die Katalogidentität eines Mitwirkenden. Person, Organisation, Konto und Pseudonym bleiben eigenständige Identitäten.",
+  "people_profile_terms": "Namen, Beschreibungen und Aliasse bearbeitest du unter „Namen und Beschreibungen bearbeiten“. Der native Adapter kann nicht verfügbar sein; eine Namensaussage ersetzt diese Angaben nicht.",
+  "people_profile_disclosure": "Belege persönliche Angaben und Beziehungen mit öffentlichen Quellen. Native Regeln für Offenlegung, Einwilligung und das Zielkonto entscheiden über die Zulässigkeit. Ein Beleg erteilt keine Berechtigung oder Rechte.",
+  "people_profile_credit": "Mitwirkung am Werk",
+  "people_profile_credit_help": "Erstelle oder öffne zuerst die Katalogidentität. Wähle dann im Beziehungseditor des Werks genau diese Identität und ergänze belegte Mitwirkung, Rolle und Qualifikatoren. Die Erstellung fügt keine Mitwirkung hinzu.",
+  "people_profile_no_credit": "Dieses Werk hat in der aktuellen Version kein zugelassenes Mitwirkungsfeld.",
+  "people_profile_created_id": "Erstellte Katalogidentität:",
+  "people_profile_initial": "Erste belegte Angaben",
+  "people_profile_initial_help": "Ergänze nur Angaben, die du jetzt eingibst. Erste Angaben werden bei der Erstellung ausgewählt; spätere Korrekturen sind getrennte Vorschläge zur Prüfung. Leere Werte sind ungültig und löschen kein Feld.",
+  "people_profile_add_fact": "{field} hinzufügen",
+  "people_profile_remove_fact": "Erste Angabe entfernen",
+  "people_profile_unsupported": "Diese veröffentlichten Felder benötigen ihren eigenen Editor und werden hier ausgelassen:"
 }

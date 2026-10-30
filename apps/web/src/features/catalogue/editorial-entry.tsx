@@ -9,6 +9,7 @@ import { CreateSubjectEntry } from './create-subject-entry';
 import { GameProfileEntry } from './game-profile-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
 import { MangaProfileEntry } from './manga-profile-entry';
+import { PeopleProfileEntry } from './people-profile-entry';
 import { RecipeEditorEntry } from './recipe-editor-entry';
 import { CharacterProfileEntry } from './character-profile-entry';
 import { AddonProfileEntry } from './addon-profile-entry';
@@ -50,6 +51,7 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
       return;
     }
     const entry =
+      match(node, PeopleProfileEntry, catalogueEntries.people) ??
       match(node, CreateSubjectEntry, catalogueEntries.create) ??
       match(node, AuthoredFieldEntry, catalogueEntries.authored) ??
       match(node, SubjectFactsEntry, catalogueEntries.facts) ??

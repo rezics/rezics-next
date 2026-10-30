@@ -13,6 +13,7 @@ import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
+import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import type { KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -289,6 +290,10 @@ export function SubjectFrame({
                 <AddonProfileEntry locale={locale} {...(frame.type === 'schema:VideoGame' ? { work: frame.id } : {})} />
               )}
               {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
+              {(frame.type === 'schema:Person' || frame.type === 'schema:Organization') && (
+                <PeopleProfileEntry id={frame.id} label={title} locale={locale} />
+              )}
+              {view === 'credits' && <PeopleProfileEntry work={frame.id} locale={locale} />}
               <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
               {(frame.type === 'schema:Book' || frame.type === 'schema:BookSeries') && (
                 <LiteraryProfileEntry id={frame.id} label={title} type={frame.type} locale={locale} />

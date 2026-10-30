@@ -11,6 +11,7 @@ import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
+import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
@@ -409,6 +410,10 @@ export function SubjectPage({
           realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
         >
           {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
+          {(read.subject.type === 'schema:Person' || read.subject.type === 'schema:Organization') && (
+            <PeopleProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          )}
+          {page.views?.includes('credits') && <PeopleProfileEntry work={read.subject.id} locale={locale} />}
           <GameProfileEntry
             id={read.subject.id}
             type={read.subject.type}

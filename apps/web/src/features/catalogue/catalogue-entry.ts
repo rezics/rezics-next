@@ -103,6 +103,12 @@ export const catalogueEntries = {
     label: m.changes_title({}, options(locale)),
     href: `${subject({ id, label: title, locale })}/changes`,
   }),
+  people: ({ id, label, work, locale }: Locale & { id?: string; label?: string; work?: string }): CatalogueEntry => ({
+    group: id ? 'edit' : 'create',
+    label: m.people_profile_title({}, options(locale)),
+    href: id ? `${subject({ id, label: label ?? '', locale })}/people`
+      : `/${locale}/catalogue/people${work ? `?work=${encodeURIComponent(work)}` : ''}`,
+  }),
 };
 
 /** Navigation may request sign-in; the native page still owns every current availability/authority decision. */

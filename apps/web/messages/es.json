@@ -3114,5 +3114,18 @@
   "literary_relations": "Creadores, series y clasificaciones",
   "literary_relations_help": "Elige un destino existente y su espacio de relación exacto. La pertenencia a una serie se propone en cada obra integrante; no se deduce un total.",
   "literary_terms_help": "Los nombres, descripciones y alias usan el editor multilingüe existente. Si falta la API nativa, la función sigue sin estar disponible. Una declaración de nombre no modifica el mapa de títulos.",
-  "literary_authored_help": "Escribe un texto original con su idioma, pruebas y licencia. Se conservan los documentos existentes."
+  "literary_authored_help": "Escribe un texto original con su idioma, pruebas y licencia. Se conservan los documentos existentes.",
+  "people_profile_title": "Editor de catálogo de personas y organizaciones",
+  "people_profile_intro": "Crea o corrige la identidad de catálogo acreditada en las obras. Mantén separadas la persona u organización, su cuenta y sus seudónimos.",
+  "people_profile_terms": "Los nombres, descripciones y alias se editan en Editar nombres y descripciones. Ese adaptador nativo puede no estar disponible; una afirmación de nombre no sustituye estos términos.",
+  "people_profile_disclosure": "Usa pruebas públicas para datos personales y relaciones. Las reglas nativas de divulgación, consentimiento y titularidad del destino deciden si se permite la contribución. Una cita no otorga permisos ni derechos.",
+  "people_profile_credit": "Crédito en la obra",
+  "people_profile_credit_help": "Crea o abre primero la identidad de catálogo. Después, selecciónala en el editor de relaciones de la obra y añade el crédito, el papel y los calificadores con su cita. Crear una identidad no añade un crédito.",
+  "people_profile_no_credit": "Esta obra no tiene un campo de créditos admitido en la versión actual.",
+  "people_profile_created_id": "Identidad de catálogo creada:",
+  "people_profile_initial": "Datos iniciales con citas",
+  "people_profile_initial_help": "Añade solo los datos que estás introduciendo. Los datos iniciales se seleccionan al crear; las correcciones posteriores son propuestas separadas pendientes de revisión. Los valores vacíos no son válidos y nunca borran un campo.",
+  "people_profile_add_fact": "Añadir {field}",
+  "people_profile_remove_fact": "Quitar dato inicial",
+  "people_profile_unsupported": "Estos campos publicados requieren su editor específico y se omiten aquí:"
 }

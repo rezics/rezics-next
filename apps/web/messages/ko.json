@@ -3114,5 +3114,18 @@
   "literary_relations": "창작자, 시리즈 및 분류",
   "literary_relations_help": "기존 대상과 정확한 관계 슬롯을 선택하세요. 시리즈 소속은 각 구성 작품에서 제안하며 구성 수를 추론하지 않습니다.",
   "literary_terms_help": "이름, 설명 및 별칭은 기존 다국어 편집기를 사용합니다. 원생 이름 API가 없으면 사용 불가로 표시됩니다. 이름 서술은 제목 맵 편집이 아닙니다.",
-  "literary_authored_help": "직접 쓴 글에 언어, 근거 및 라이선스를 지정하세요. 기존 문서는 보존됩니다."
+  "literary_authored_help": "직접 쓴 글에 언어, 근거 및 라이선스를 지정하세요. 기존 문서는 보존됩니다.",
+  "people_profile_title": "인물 및 조직 카탈로그 편집기",
+  "people_profile_intro": "작품의 크레딧에 쓰이는 카탈로그 식별 정보를 만들거나 수정합니다. 인물이나 조직, 계정, 필명은 서로 구분합니다.",
+  "people_profile_terms": "이름, 설명, 별칭은 이름 및 설명 편집에서 바꿉니다. 네이티브 용어 어댑터를 사용할 수 없는 경우가 있습니다. 이름 명제는 이 용어들을 대체하지 않습니다.",
+  "people_profile_disclosure": "개인 정보와 관계에는 공개된 근거를 사용하세요. 공개, 동의 및 대상 계정 자격에 관한 네이티브 규칙이 기여 허용 여부를 결정합니다. 인용은 권한이나 이용 권리를 부여하지 않습니다.",
+  "people_profile_credit": "작품 크레딧",
+  "people_profile_credit_help": "먼저 카탈로그 식별 정보를 만들거나 여세요. 그런 다음 작품의 관계 편집기에서 정확한 대상을 선택하고 인용이 있는 크레딧, 역할, 한정자를 입력하세요. 식별 정보 생성만으로 크레딧이 추가되지는 않습니다.",
+  "people_profile_no_credit": "현재 릴리스에는 이 작품에 허용된 크레딧 필드가 없습니다.",
+  "people_profile_created_id": "생성된 카탈로그 식별자:",
+  "people_profile_initial": "생성 시 인용된 정보",
+  "people_profile_initial_help": "지금 입력하는 정보만 추가하세요. 초기 정보는 생성 시 선택되며 이후 수정은 검토를 기다리는 별도 제안입니다. 빈 값은 유효하지 않으며 필드를 지우지 않습니다.",
+  "people_profile_add_fact": "{field} 추가",
+  "people_profile_remove_fact": "초기 정보 제거",
+  "people_profile_unsupported": "다음 출시된 필드는 전용 편집기가 필요하므로 여기서는 생략됩니다:"
 }

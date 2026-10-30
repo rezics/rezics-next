@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -262,6 +263,8 @@ export function SubjectFacts({
   review,
   initialReview,
   profile,
+  profileIntro,
+  profileRelations,
 }: {
   initial: EditorRead;
   locale: string;
@@ -269,6 +272,8 @@ export function SubjectFacts({
   review: (property: string, session?: string) => CandidateTransport;
   initialReview?: ReviewAddress | undefined;
   profile?: FactsProfile | undefined;
+  profileIntro?: ReactNode;
+  profileRelations?: ReactNode;
 }) {
   const o = { locale: locale as never };
   const [read, setRead] = useState(initial);
@@ -358,6 +363,7 @@ export function SubjectFacts({
           <p className="text-sm text-muted-foreground">{m.facts_intro({}, o)}</p>
         )}
         <p className="text-sm text-muted-foreground">{m.correction_global({}, o)}</p>
+        {profileIntro}
         {profile && subject && (
           <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: editorHref! }} />
         )}
@@ -437,6 +443,7 @@ export function SubjectFacts({
               </div>
             </fieldset>
           </form>
+          {profileRelations}
           {(!profile || admitted.has(reviewing?.property ?? '')) && (
             <>
               {reviewing && (

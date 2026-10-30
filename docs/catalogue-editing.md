@@ -461,3 +461,42 @@ released volume/chapter units; membership is contributed on each member, without
 conveniences are omitted, including a BookSeries author field when only contributor/publisher are emitted.
 Initial authored text and relations are entered after creation through the existing integrated editors. These
 ordinary forms submit no ingestion Source envelope and infer no prose, cover or rights permission.
+
+## Browser flow: person and organization catalogue profiles
+
+`/{locale}/catalogue/people` guides creation of the released `schema:Person` and `schema:Organization` catalogue
+identities. The existing Contribute menu in subject headers and compact frames links their identity under Edit to
+`/{locale}/subjects/{id}/{slug}/people`; work credit actions pass the exact work ID as `?work=` under Create. These
+entries share the standalone profile entry's destination and the menu's existing signed-out return flow. Duplicate discovery
+uses the existing global search. The work remains separate: after creating or finding the person or organization,
+the work's native relation editor selects that identity and contributes its cited role and qualifiers. Creation
+does not manufacture a credit or creator ownership.
+
+The profile reads the actual active immutable definitions and current subject in parallel. Effective properties
+and datatypes determine support. Initial multilingual terms reuse generic creation; optional initial scalar facts
+reuse its native value controls and validation. Only explicitly entered facts enter `POST /v1/subjects` and are
+selected at creation. The returned ID is read through the ordinary reader. An uncertain request freezes both
+terms and facts with the original key; confirmed creation with an unavailable reader retains its ID and retries
+only that read. Drafts survive Type switches and stale-metadata rejection, including fields no longer admitted.
+
+Corrections reuse the integrated multi-field editor's selected values, qualifiers, references, independent keys,
+partial results and exact-candidate review. Submission proposes an alternative; acceptance and selection remain
+separate. Unchanged fields and all other term languages remain intact. The profile links the existing terms adapter
+for the mounted native terms command; unavailable responses remain unavailable in this journey.
+`schema:name` proposals never replace term-map editing. Account-agent derived names, software-agent creation,
+eligibility, personal disclosure and `sourceOrConsent` stay with their existing native authorities. Ordinary forms
+never send ingestion Source metadata or infer private relationships.
+
+The present person and organization releases admit no authored biography field, so this profile supplies no
+biography or licence controls. Released media fields are identified as requiring their dedicated editor; this
+flow supplies no cover import or inferred rights. Future authored fields must use the existing authored composer.
+Metadata text retains its actual fallback language, independently of the entered facts' languages.
+
+The Storybook page is **Pages/Catalogue/Person and organization catalogue editor**, with base ID
+`pages-catalogue-person-and-organization-catalogue-editor`. Its `create-route`, `person-route` and
+`organization-route` stories enter the real router; `create`, `person`, `organization`, `correct-cited-fact`,
+`loading`, `empty`, `signed-out`, `denied`, `invalid`, `stale-metadata`, `unavailable`, `uncertain-submit`,
+`created-readback-unavailable` and `created-readback-concealed` expose the connected states. Locale, viewport and
+theme use globals. Connected relationship writes are deliberately unavailable in the preview; real routes bind
+the existing session relation editor. These fixtures do not establish native execution or visual acceptance;
+Web owns normal phone390/desktop1280, light/dark captures.

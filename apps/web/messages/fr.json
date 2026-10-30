@@ -3114,5 +3114,18 @@
   "literary_relations": "Créateurs, séries et classifications",
   "literary_relations_help": "Choisissez une cible existante et son emplacement de relation exact. L’appartenance à une série se propose sur chaque œuvre membre ; aucun total n’est déduit.",
   "literary_terms_help": "Les noms, descriptions et alias utilisent l’éditeur multilingue existant. Si l’API native manque, la fonction reste indisponible. Une déclaration de nom ne modifie pas la table des titres.",
-  "literary_authored_help": "Rédigez un texte original avec sa langue, ses sources et sa licence. Les documents existants sont conservés."
+  "literary_authored_help": "Rédigez un texte original avec sa langue, ses sources et sa licence. Les documents existants sont conservés.",
+  "people_profile_title": "Éditeur de catalogue des personnes et organisations",
+  "people_profile_intro": "Créez ou corrigez l’identité de catalogue créditée sur les œuvres. Distinguez la personne ou l’organisation de son compte et de ses pseudonymes.",
+  "people_profile_terms": "Les noms, descriptions et alias se modifient dans Modifier les noms et descriptions. Cet adaptateur natif peut être indisponible ; une assertion de nom ne remplace pas ces termes.",
+  "people_profile_disclosure": "Utilisez des preuves publiques pour les données personnelles et les relations. Les règles natives de divulgation, de consentement et de propriété de la cible décident si la contribution est autorisée. Une citation ne confère ni permission ni droits.",
+  "people_profile_credit": "Crédit sur l’œuvre",
+  "people_profile_credit_help": "Créez ou ouvrez d’abord l’identité de catalogue. Sélectionnez ensuite cette identité dans l’éditeur de relations de l’œuvre et renseignez le crédit, le rôle et les qualificatifs avec une citation. Créer une identité n’ajoute aucun crédit.",
+  "people_profile_no_credit": "Cette œuvre n’a aucun champ de crédit admis dans la version actuelle.",
+  "people_profile_created_id": "Identité de catalogue créée :",
+  "people_profile_initial": "Données initiales citées",
+  "people_profile_initial_help": "Ajoutez uniquement les données saisies maintenant. Les données initiales sont sélectionnées à la création ; les corrections ultérieures sont des propositions distinctes à examiner. Une valeur vide est invalide et n’efface jamais un champ.",
+  "people_profile_add_fact": "Ajouter {field}",
+  "people_profile_remove_fact": "Retirer la donnée initiale",
+  "people_profile_unsupported": "Ces champs publiés nécessitent leur éditeur dédié et sont omis ici :"
 }
