@@ -14,6 +14,7 @@ import { createDeletionFixture } from '../semantic/support/deletion-fixture.ts';
 // Reuse real Context creation and grant mutation; no alternate receiving/source harness.
 const f = await createDeletionFixture();
 let client: Awaited<ReturnType<typeof createWorkClient>>;
+const createdHomes = new Set<number>();
 beforeAll(async () => {
   await f.setup();
   client = await createWorkClient(process.env.DATABASE_URL!, f.pool);
@@ -29,6 +30,7 @@ async function create() {
   const answer = await f.call('POST', '/v1/contexts', 'owner', body, key);
   f.status(answer, 201);
   const resource = { route: routeOf(answer.body.context.id)!, id: answer.body.context.id as string };
+  createdHomes.add(partitionOf(resource.route));
   return { key, body, resource };
 }
 const rows = (resource: { route: number; id: string }, accountId = f.accounts.owner) =>
@@ -46,7 +48,7 @@ const deliver = (source: ContextRoleOccurrence) =>
 
 // This is intentionally the missing-receiver branch of the native acceptance. Genuine Source
 // enrollment and the delivered transition require Semantic's published native sink, not a test fake.
-test('Actual native Context OLD NEW creator occurrence delivery leaves missing receiver pending with bounded restart and no artifact authority invention', async () => {
+test('Actual native Context OLD NEW creator occurrence delivery enrolls genuine Source historical party before delivered state and leaves missing receiver pending with bounded restart and no artifact authority invention', async () => {
   const { resource, key, body } = await create();
   const created = await rows(resource);
   expect(created.map((row) => row.side).sort()).toEqual(['creator', 'new']);
@@ -116,7 +118,10 @@ test('Actual native Context OLD NEW creator occurrence delivery leaves missing r
 }, 30000);
 
 test('native pending partial index redrive examines eight exact inputs, wraps after restart and preserves skipped locks', async () => {
-  const route = 0x6d20;
+  // Context creation routes by its random idempotency key. Keep the exact batch-size fixture
+  // in a different home from every Context created above, even on a routing collision.
+  let route = 0x6d20;
+  while (createdHomes.has(partitionOf(route))) route += 16;
   const resource = { route, id: newId(route) };
   let sourceTransaction = '';
   // Small native producer fixture: actual initialization and role grant rows drive ORIGINAL triggers.
