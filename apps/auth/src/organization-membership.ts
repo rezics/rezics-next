@@ -75,7 +75,10 @@ export function isMembershipOperation(value: unknown): value is MembershipOperat
  * AUTH_PAGE_MANAGEMENT_SCOPES.membership = ['organization:membership'].
  */
 export function membershipProfile(
-  source: unknown = contract,
+  source: unknown = {
+    AUTH_PAGE_MANAGEMENT_CLIENT_ID: contract.AUTH_MANAGEMENT_CLIENT_ID,
+    AUTH_PAGE_MANAGEMENT_SCOPES: contract.AUTH_MANAGEMENT_SCOPES,
+  },
 ): { client_id: string; scope: ['organization:membership'] } | null {
   if (!record(source) || !text(source.AUTH_PAGE_MANAGEMENT_CLIENT_ID) || !record(source.AUTH_PAGE_MANAGEMENT_SCOPES))
     return null;
@@ -102,14 +105,8 @@ export function membershipSessionMatches(session: AccountSessionResult, accountI
   );
 }
 
-/** Project only native current holders. The installed management DTO currently
- * omits membership reservation IDs: removal/role CAS must stay unavailable until
- * its owner supplies members.items[].reservationId from current native membership.
- * relation.version/reservationId describe an operator and are NEVER member proof.
- * The shared owner must also preserve an authenticated native management read
- * before/after step-up: the installed read requires account:read, whereas this
- * mutation profile must remain exactly organization:membership. Do not widen it.
- */
+/** The separately authorized holder list is presentation only. Command metadata
+ * always comes from the exact selected-member point below. */
 export function parseMembershipPage(body: unknown, organizationId: string): MembershipPage {
   const unavailable = { kind: 'unavailable' } as const;
   if (
@@ -255,6 +252,34 @@ export async function loadMembershipPage(
   }
 }
 
+export type SelectedMembership =
+  | { kind: 'ready'; organizationId: string; memberAccountId: string;
+      membership: null | { role: 'owner' | 'member'; reservationId: string } }
+  | Exclude<MembershipPage, { kind: 'ready' }>;
+export function parseSelectedMembership(body: unknown, organizationId: string, memberAccountId: string): SelectedMembership {
+  if (!record(body) || !closed(body, ['organizationId', 'memberAccountId', 'membership']) ||
+    body.organizationId !== organizationId || body.memberAccountId !== memberAccountId)
+    return { kind: 'unavailable' };
+  if (body.membership === null) return { kind: 'ready', organizationId, memberAccountId, membership: null };
+  const current = body.membership;
+  if (!record(current) || !closed(current, ['role', 'reservationId']) ||
+    !role(current.role) || !membershipId(current.reservationId)) return { kind: 'unavailable' };
+  return { kind: 'ready', organizationId, memberAccountId,
+    membership: { role: current.role, reservationId: current.reservationId } };
+}
+export async function loadSelectedMembership(organizationId: string, memberAccountId: string): Promise<SelectedMembership> {
+  if (!membershipId(organizationId) || !membershipId(memberAccountId)) return { kind: 'unavailable' };
+  const response = await authPost('/account-management/organizations/member', { organizationId, memberAccountId });
+  return response.ok ? parseSelectedMembership(response.body, organizationId, memberAccountId) : readFailure(response.status);
+}
+export function membershipReadback(command: MembershipCommand, current: SelectedMembership): boolean {
+  return current.kind === 'ready' && current.organizationId === command.operation.organizationId &&
+    current.memberAccountId === command.operation.memberAccountId &&
+    (command.operation.role === null ? current.membership === null :
+      current.membership?.role === command.operation.role &&
+      (command.operation.reservationId === undefined || current.membership.reservationId === command.operation.reservationId));
+}
+
 function validCommand(value: unknown): value is MembershipCommand {
   return (
     record(value) &&
@@ -314,7 +339,11 @@ export async function submitMembership(command: MembershipCommand): Promise<Memb
     return 'denied';
   if (command.unresolved && !command.reference) return 'unknown';
   if (!command.reference) {
+    const current = await loadSelectedMembership(command.operation.organizationId, command.operation.memberAccountId);
+    if (current.kind !== 'ready') return current.kind === 'denied' ? 'denied' : 'unavailable';
+    if ((current.membership?.reservationId ?? undefined) !== command.operation.reservationId) return 'conflict';
     const approved = await authPost<unknown>('/account-operations/approve', {
+      accountId: command.accountId,
       operationKey: command.operationKey,
       operation: command.operation,
     });
@@ -333,6 +362,7 @@ export async function submitMembership(command: MembershipCommand): Promise<Memb
   command.unresolved = true;
   if (!saveMembershipCommand(command)) return 'unavailable';
   const executed = await authPost<unknown>('/account-operations/execute', {
+    accountId: command.accountId,
     operationKey: command.operationKey,
     operation: command.operation,
     reference: command.reference,
@@ -359,8 +389,11 @@ export async function reauthenticateMembership(
 ): Promise<boolean> {
   const saved = readMembershipCommand();
   if (!saved || saved === 'invalid' || JSON.stringify(saved) !== JSON.stringify(command)) return false;
+  return reauthenticateMembershipSession(command.accountId, email, password);
+}
+export async function reauthenticateMembershipSession(accountId: string, email: string, password: string): Promise<boolean> {
   const profile = membershipProfile();
   if (!profile) return false;
   const response = await authPost('/signin', { email, password, ...profile });
-  return response.ok && membershipSessionMatches(await loadAccountSession(), command.accountId);
+  return response.ok && membershipSessionMatches(await loadAccountSession(), accountId);
 }

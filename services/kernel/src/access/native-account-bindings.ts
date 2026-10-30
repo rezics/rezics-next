@@ -1,3 +1,4 @@
+import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
 import { createAuthHistoryProofBindings } from './shared-history-auth.ts';
 import { accessClock, installAccessClock } from './access-clock.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -86,7 +87,7 @@ export type NativeAccountBindingsConfig = {
 };
 
 export type NativeAccountBindings = {
-  trustedAccess: TrustedAccessPorts;
+  trustedAccess: TrustedAccessPorts & ManagementMembershipAccess;
   workflowPorts: AccountWorkflowPorts<LifecycleRequest>;
   lifecycle: ReturnType<typeof createLifecycleCommands>;
   internalLifecycle: ReturnType<typeof createLifecycleInternals>;
@@ -246,7 +247,11 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
         config.auth().internal.verifyCredentialEffect(reference, expected),
     }));
   const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
-  const trustedAccess: TrustedAccessPorts = {
+  const trustedAccess: TrustedAccessPorts & ManagementMembershipAccess = {
+    ...createManagementMembershipAccess({
+      pool, access, clock: accessClock(access),
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
     ...createAuthBindings({
       ...createAuthHistoryProofBindings(pool),
       pool,

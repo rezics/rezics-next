@@ -1968,3 +1968,32 @@ runtime modules or a kernel pool. Local completion and submission progress live
 outside DBOS, so final purge, executor loss and lost replies cannot erase them.
 Neither proof phase is an Auth/shared-history participant ACK. Kernel's own
 producer/minimizer closure remains necessary; Search cleanup remains undelivered.
+
+## Selected organization member command state
+
+`POST /account-management/organizations/member` accepts only
+`{ organizationId, memberAccountId }` and returns only
+`{ organizationId, memberAccountId, membership: null | { role: 'owner' | 'member', reservationId: string } }`.
+The selection is not authority. This private no-store read uses a current human
+session with the exact management `organization:membership` profile, strict Origin
+and JSON/CSRF checks, and the native membership mutation formula on that exact
+organization. It neither requests `account:read` nor changes the generic management
+list's separate `account:read`/`account:manage` privacy policy.
+
+The closed native declaration lives in
+`services/kernel/src/access/management-membership-source.ts`:
+`readOrganizationMembershipCommandState({ pool, access, clock? }, actor, selection, { deadline })`.
+`createManagementMembershipAccess` supplies the trusted Auth port
+`readOrganizationMembershipCommandState({ human, organizationId, memberAccountId, deadline })`;
+the default native bindings append it to `trustedAccess`, and the default Auth host
+consumes it there. Auth's signer and native Access bind the live proof; an absent
+port returns 503. The point returns the reservation actually installed by the current
+native role transaction and verifies its exact member-side coordination provenance.
+An incomplete or failed source is unavailable, never null membership. No holder
+enumeration, private profile, operator reservation or synthetic version is returned.
+
+Selected-member actions capture this current reservation before constructing their
+immutable descriptor and operation key. Reauthentication requires another submit;
+retries retain the descriptor/key, and native acknowledgement remains separate
+from fresh selected-member readback. Existing native ownership, last-holder,
+reservation and command CAS checks remain final authority.

@@ -11,6 +11,9 @@ import { m } from '../paraglide/messages.js';
 import {
   clearMembershipCommand,
   loadMembershipPage,
+  loadSelectedMembership,
+  membershipReadback,
+  reauthenticateMembershipSession,
   membershipId,
   membershipProfile,
   membershipSessionMatches,
@@ -135,29 +138,34 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
       setBusy(false);
     }
   }
-  function select(memberAccountId: string, desired: 'owner' | 'member' | null, reservationId?: string) {
-    if (lock.current || command || !membershipId(memberAccountId) || page?.kind !== 'ready') return;
-    const current = page.holders.find((row) => row.accountId === memberAccountId);
-    if ((current && (!reservationId || current.role === desired)) || (desired === null && !reservationId)) return;
-    const next = newMembershipCommand(accountId, {
-      kind: 'membership',
-      organizationId,
-      memberAccountId,
-      role: desired,
-      ...(reservationId ? { reservationId } : {}),
-    });
-    if (!saveMembershipCommand(next)) {
-      setNotice('unavailable');
-      return;
+  async function select(memberAccountId: string, desired: 'owner' | 'member' | null) {
+    if (lock.current || command || !membershipId(memberAccountId) || !accountId) return;
+    if (needsProfile) { setReauth(true); setNotice('step-up'); return; }
+    lock.current = true;
+    setBusy(true);
+    try {
+      const current = await loadSelectedMembership(organizationId, memberAccountId);
+      if (current.kind !== 'ready') { setNotice(current.kind); return; }
+      if (current.membership?.role === desired || (desired === null && current.membership === null)) {
+        setNotice('conflict'); return;
+      }
+      const next = newMembershipCommand(accountId, {
+        kind: 'membership', organizationId, memberAccountId, role: desired,
+        ...(current.membership ? { reservationId: current.membership.reservationId } : {}),
+      });
+      if (!saveMembershipCommand(next)) { setNotice('unavailable'); return; }
+      setCommand(next);
+      setConfirmed(false);
+      setNotice('');
+      setObserved(false);
+    } finally {
+      lock.current = false;
+      setBusy(false);
     }
-    setCommand(next);
-    setConfirmed(false);
-    setNotice('');
-    setObserved(false);
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || !command || !confirmed || page?.kind !== 'ready') return;
+    if (lock.current || !command || !confirmed) return;
     lock.current = true;
     setBusy(true);
     setNotice('');
@@ -176,21 +184,9 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
       setNotice(result);
       setConfirmed(false);
       if (result === 'step-up') setReauth(true);
-      // Every attempt replaces the displayed list with a fresh native read,
-      // including denials and uncertain writes. Never patch holders optimistically.
-      setPage(null);
-      const current = await loadMembershipPage(organizationId, accountId);
-      setPage(current);
-      setObserved(
-        result === 'acknowledged' &&
-          current.kind === 'ready' &&
-          (command.operation.role === null
-            ? current.next === null &&
-              !current.holders.some((row) => row.accountId === command.operation.memberAccountId)
-            : current.holders.some(
-                (row) => row.accountId === command.operation.memberAccountId && row.role === command.operation.role,
-              )),
-      );
+      const current = await loadSelectedMembership(organizationId, command.operation.memberAccountId);
+      setObserved(result === 'acknowledged' && membershipReadback(command, current));
+      setPage(await loadMembershipPage(organizationId, accountId));
     } finally {
       lock.current = false;
       setBusy(false);
@@ -198,11 +194,12 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
   }
   async function authenticate(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || !command || !email || !password) return;
+    if (lock.current || !accountId || !email || !password) return;
     lock.current = true;
     setBusy(true);
     try {
-      if (!(await reauthenticateMembership(command, email, password))) {
+      if (!(await (command ? reauthenticateMembership(command, email, password) :
+        reauthenticateMembershipSession(accountId, email, password)))) {
         setPage({ kind: 'unavailable' });
         setNotice('unavailable');
         return;
@@ -269,9 +266,9 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={busy || !!command || !holder.reservationId}
+                      disabled={busy || !!command}
                       onClick={() =>
-                        select(holder.accountId, holder.role === 'owner' ? 'member' : 'owner', holder.reservationId)
+                        void select(holder.accountId, holder.role === 'owner' ? 'member' : 'owner')
                       }
                     >
                       {m.auth_members_change_role()}
@@ -279,8 +276,8 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={busy || !!command || !holder.reservationId}
-                      onClick={() => select(holder.accountId, null, holder.reservationId)}
+                      disabled={busy || !!command}
+                      onClick={() => void select(holder.accountId, null)}
                     >
                       {m.auth_members_remove()}
                     </Button>
@@ -299,12 +296,14 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                 </Button>
               ) : null}
             </nav>
-            {!command ? (
+          </>
+        )}
+            {accountId && !command ? (
               <form
                 className="space-y-4"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  select(member, role);
+                  void select(member, role);
                 }}
               >
                 <Field>
@@ -333,33 +332,17 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                 </Field>
                 <Button
                   type="submit"
-                  disabled={busy || !membershipId(member) || page.holders.some((row) => row.accountId === member)}
+                  disabled={busy || !membershipId(member)}
                 >
                   {m.auth_members_review_add()}
                 </Button>
+                <Button type="button" variant="outline" disabled={busy || !membershipId(member)}
+                  onClick={() => void select(member, role)}>{m.auth_members_change_role()}</Button>
+                <Button type="button" variant="outline" disabled={busy || !membershipId(member)}
+                  onClick={() => void select(member, null)}>{m.auth_members_remove()}</Button>
               </form>
             ) : null}
-          </>
-        )}
-        {command ? (
-          <section className="space-y-4" aria-labelledby="membership-confirmation">
-            <h2 id="membership-confirmation" ref={confirmation} tabIndex={-1}>
-              {m.auth_members_confirm_heading()}
-            </h2>
-            <p className="break-all">
-              {m.auth_members_confirmation({
-                organization: command.operation.organizationId,
-                member: command.operation.memberAccountId,
-                effect,
-              })}
-            </p>
-            <p className="break-all">{m.auth_members_initiator({ account: command.accountId })}</p>
-            {command.operation.reservationId ? (
-              <p className="break-all">
-                {m.auth_members_reservation({ reservation: command.operation.reservationId })}
-              </p>
-            ) : null}
-            <p>{m.auth_members_authority()}</p>
+
             {reauth ? (
               <form onSubmit={(event) => void authenticate(event)} className="space-y-4">
                 <Field>
@@ -389,7 +372,27 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                   {m.auth_members_reauthenticate()}
                 </Button>
               </form>
-            ) : (
+            ) : null}
+        {command ? (
+          <section className="space-y-4" aria-labelledby="membership-confirmation">
+            <h2 id="membership-confirmation" ref={confirmation} tabIndex={-1}>
+              {m.auth_members_confirm_heading()}
+            </h2>
+            <p className="break-all">
+              {m.auth_members_confirmation({
+                organization: command.operation.organizationId,
+                member: command.operation.memberAccountId,
+                effect,
+              })}
+            </p>
+            <p className="break-all">{m.auth_members_initiator({ account: command.accountId })}</p>
+            {command.operation.reservationId ? (
+              <p className="break-all">
+                {m.auth_members_reservation({ reservation: command.operation.reservationId })}
+              </p>
+            ) : null}
+            <p>{m.auth_members_authority()}</p>
+            {!reauth ? (
               <form onSubmit={(event) => void submit(event)} className="space-y-4">
                 <label className="flex items-start gap-3">
                   <input
@@ -403,12 +406,12 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                 <Button
                   type="submit"
                   aria-busy={busy}
-                  disabled={busy || !confirmed || observed || page?.kind !== 'ready'}
+                  disabled={busy || !confirmed || observed}
                 >
                   {command.unresolved ? m.auth_members_retry_exact() : m.auth_members_submit()}
                 </Button>
               </form>
-            )}
+            ) : null}
             <Button
               type="button"
               variant="outline"
