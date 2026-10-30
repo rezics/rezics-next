@@ -1,8 +1,9 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { main, runLaunchSmoke } from '../scripts/launch-smoke.ts';
+import { main, parseSmokeArguments, resolveSmokeReportPath, runLaunchSmoke } from '../scripts/launch-smoke.ts';
 import { launchSmokeRequired } from './merge-train.ts';
 
 test('smoke drives start, waiting, wake result and success with a fake agent', async () => {
@@ -103,6 +104,36 @@ test('script exits nonzero and names each failed fake-agent step', async () => {
     }
   } finally {
     rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test('launch smoke accepts one explicit evidence report path and rejects ambiguous arguments', () => {
+  expect(parseSmokeArguments(['--report', '.temp/goal/lifecycle-smoke/manual.json'])).toEqual({
+    reportPath: '.temp/goal/lifecycle-smoke/manual.json',
+  });
+  expect(() => parseSmokeArguments(['--report'])).toThrow('--report requires a path');
+  expect(() => parseSmokeArguments(['--unknown'])).toThrow('unknown launch-smoke argument: --unknown');
+  expect(() => parseSmokeArguments(['--report', 'one.json', '--report', 'two.json'])).toThrow(
+    '--report can be supplied only once',
+  );
+  expect(resolveSmokeReportPath(root, '.temp/goal/lifecycle-smoke/manual.json')).toBe(
+    join(root, '.temp/goal/lifecycle-smoke/manual.json'),
+  );
+  expect(() => resolveSmokeReportPath(root, '../outside.json')).toThrow(
+    'lifecycle report path must stay inside the worktree',
+  );
+});
+
+test('launch smoke refuses report paths that traverse a symlink out of the worktree', () => {
+  const link = join(root, '.temp/goal/lifecycle-smoke', `report-link-${randomUUID()}`);
+  mkdirSync(join(root, '.temp/goal/lifecycle-smoke'), { recursive: true });
+  symlinkSync(tmpdir(), link, 'dir');
+  try {
+    expect(() => resolveSmokeReportPath(root, `${relative(root, link)}/report.json`)).toThrow(
+      'lifecycle report path cannot traverse a symbolic link',
+    );
+  } finally {
+    rmSync(link, { force: true });
   }
 });
 

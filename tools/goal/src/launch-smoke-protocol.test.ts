@@ -1,7 +1,8 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { runLaunchSmoke } from '../scripts/launch-smoke.ts';
+import { parseProviderObject, runLaunchSmoke } from '../scripts/launch-smoke.ts';
+import { parseWorkerResult } from './lifecycle-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -35,4 +36,39 @@ else if (step === 'wake') {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('strict result parsing keeps the Codex session in provider events and rejects undeclared exit fields', () => {
+  const checkId = '0e6b5080-1b17-4acf-9fd6-2b5181d3f7c8';
+  const waiting = {
+    status: 'waiting',
+    summary: 'check started',
+    blocker: null,
+    checks: [checkId],
+    approaches: [],
+  };
+  expect(parseWorkerResult(waiting, 'waiting', checkId)).toEqual(waiting);
+  expect(() => parseWorkerResult({ ...waiting, session: 'provider-thread' }, 'waiting', checkId)).toThrow(
+    'strict worker result schema',
+  );
+  expect(() => parseWorkerResult({ status: 'success' }, 'success')).toThrow('strict worker result schema');
+});
+
+test('provider result extraction reads the strict JSON from a Codex agent_message event', () => {
+  const checkId = '0e6b5080-1b17-4acf-9fd6-2b5181d3f7c8';
+  const waiting = {
+    status: 'waiting',
+    summary: 'check started',
+    blocker: null,
+    checks: [checkId],
+    approaches: [],
+  };
+  const events = [
+    { type: 'thread.started', thread_id: 'provider-thread' },
+    { type: 'item.completed', item: { type: 'reasoning', text: 'checking the task' } },
+    { type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify(waiting) } },
+    { type: 'turn.completed' },
+  ].map((event) => JSON.stringify(event));
+
+  expect(parseWorkerResult(parseProviderObject(events.join('\n'), 'waiting'), 'waiting', checkId)).toEqual(waiting);
 });
