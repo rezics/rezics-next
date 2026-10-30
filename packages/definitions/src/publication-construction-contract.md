@@ -154,6 +154,17 @@ development groups closed. The separate public-slice exposure oracle and every o
 The pure construction sources and native historical test remain byte-equal to the reviewed package/native
 receipts above; their existing 97/1019, 72 malformed comparisons and 119 equality rows are retained evidence.
 
+The managed four-file native acceptance passed without load reruns: all fourteen original scenarios with 871
+assertions, their wrapper with five assertions, two capability witnesses with 201 assertions, two historical
+publication tests with 79 assertions and three unchanged public-slice exposure tests with 94 assertions.
+The capability receipt confirms the exact named gates, publication 201, activation 200 and merge 200;
+editor resource denials preserve effects, anonymous gate and ordinary authentication results remain distinct,
+and suspension retains its invalid-token challenge. Actual Global grant rows use the native account identity
+encoding (`subject_kind = 'identity'`, empty role); inspection reads that encoding without creating raw grants.
+The historical receipt again confirms all three original modules, the same 4097-base/257-mapping digest,
+cold GET/ETag, replay/new-key, conflict and revoked-authority/no-effect behavior. These native results do not
+extend the retained pure construction receipts into an aggregate CPU, root or main-promotion claim.
+
 Inspected sources include full Definitions validation/schema/compile, Filter parsing/admission/display and pinned
 TypeBox uniqueItems/hash implementations; actual kernel read/publication/bootstrap and mounted routes; Search
 service/scope/facet callers and web search consumers. The two complete candidate reviews were read by exact path
