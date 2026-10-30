@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { composeWork } from '../../src/work/registry.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { ENTRY_RETENTION_SCHEDULE } from '../../src/library/entry-due-work.ts';
@@ -8,7 +9,12 @@ import type { DueEntryDeletionKey } from '../../src/library/entry-due-store.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { accountToken } from '../support/admitted-access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
-import { archive, growRetentionPopulation, renewRetentionIdentities } from './entry-retention-worker-runtime.ts';
+import {
+  archive,
+  growRetentionPopulation,
+  observeRetentionQueries,
+  renewRetentionIdentities,
+} from './entry-retention-worker-runtime.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let db: GrowthDatabase, f: NativeProfileFixture;
@@ -21,8 +27,18 @@ const partition = 4094;
 let subjects: string[];
 let noise: string;
 let targets: DueEntryDeletionKey[] = [];
+const completed = new Map<string, () => void>();
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  const outcomes = new WeakMap<PoolClient, string>();
+  await observeRetentionQueries(db.pool, ({ connection, sql, values }) => {
+    if (/INSERT INTO "dbos"\.workflow_output\b/i.test(sql)) outcomes.set(connection, String(values[0]));
+    if (/^COMMIT$/i.test(sql.trim())) {
+      const id = outcomes.get(connection);
+      outcomes.delete(connection);
+      if (id) completed.get(id)?.();
+    } else if (/^ROLLBACK$/i.test(sql.trim())) outcomes.delete(connection);
+  });
   f = await createProfileEntryFixture({ pool: db.pool, clock: () => new Date(time), projectLinks: false });
   actor = (await f.identity(['subject:read', 'library_entry:update', 'library_entry:delete'], partition)).actor;
   const route = routeOf(actor.accountId);
@@ -52,11 +68,24 @@ afterAll(async () => {
 
 async function runSegment(cutoff: string, start = partition) {
   const root = `retention-growth:${crypto.randomUUID()}`;
-  const handle = await client.enqueue(
-    { workflowName: 'library.entryRetentionSegment', workflowID: root, queueName: 'maintenance' },
-    { root, sequence: 0, cutoff, cursor: { partition: start } },
-  );
-  await handle.getResult({ pollingIntervalMs: 20 });
+  // Observe the SDK's real outcome COMMIT, then read its result once. Driver polling is not worker work.
+  // Every native worker/SDK query remains captured, including this final result and checkpoint read.
+  let timeout: ReturnType<typeof setTimeout>;
+  const committed = new Promise<void>((resolve, reject) => {
+    completed.set(root, resolve);
+    timeout = setTimeout(() => reject(new Error(`Native workflow outcome did not commit: ${root}`)), 120000);
+  });
+  try {
+    const handle = await client.enqueue(
+      { workflowName: 'library.entryRetentionSegment', workflowID: root, queueName: 'maintenance' },
+      { root, sequence: 0, cutoff, cursor: { partition: start } },
+    );
+    await committed;
+    await handle.getResult();
+  } finally {
+    clearTimeout(timeout!);
+    completed.delete(root);
+  }
   const steps = await client.listWorkflowSteps(root);
   const pages =
     steps
@@ -109,18 +138,27 @@ test('default registered worker pages charge actual native discovery, core comma
     async grow(_db, scale, previous) {
       time = origin + 86400000;
       await growRetentionPopulation(f, partition, noise, previous, scale);
+      const handles = [];
       for (let n = previous; n < scale; n++) {
         const root = `retention-unrelated:${n}`;
-        await client.enqueue(
-          {
-            workflowName: 'library.entryRetentionSegment',
-            workflowID: root,
-            queueName: 'maintenance',
-            delaySeconds: 86400,
-          },
-          { root, sequence: 0, cutoff: new Date(time).toISOString(), cursor: { partition: 4096 } },
+        handles.push(
+          await client.enqueue(
+            { workflowName: 'library.entryRetentionSegment', workflowID: root, queueName: 'maintenance' },
+            { root, sequence: 0, cutoff: new Date(origin - 1).toISOString(), cursor: { partition: 4095 } },
+          ),
         );
       }
+      // Real completed empty sweeps grow status, input, output and step history together.
+      await client.waitAll(handles);
+      const history = await db.admin.query(
+        `SELECT count(*)::integer AS count FROM dbos.workflow_status AS status
+         JOIN dbos.workflow_output AS output USING (workflow_uuid)
+         JOIN dbos.operation_outputs AS step USING (workflow_uuid)
+         WHERE status.workflow_uuid = ANY($1::text[]) AND status.status='SUCCESS'
+           AND step.function_name='library.entryRetentionPage'`,
+        [handles.map((handle) => handle.workflowID)],
+      );
+      expect(history.rows).toEqual([{ count: scale - previous }]);
     },
     prepare,
     async warmup() {

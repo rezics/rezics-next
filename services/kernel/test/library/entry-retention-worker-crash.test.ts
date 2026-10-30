@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { ENTRY_RETENTION_SCHEDULE } from '../../src/library/entry-due-work.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { archive, deletionKey } from './entry-retention-worker-runtime.ts';
+import { archive, deletionKey, renewRetentionIdentities } from './entry-retention-worker-runtime.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
@@ -109,12 +109,14 @@ test('native commit before DBOS page checkpoint recovers on the same executor an
     [k.accountId, k.deletionId],
   );
   expect(events.rows).toEqual([{ data: { deletionId: k.deletionId } }]);
+  await renewRetentionIdentities(f);
   expect((await f.commands.readEntry(f.owner.actor, subject)).incarnationId).toBe(replacement.incarnationId);
   recovered.process.kill('SIGTERM');
   expect(await recovered.process.exited).toBe(0);
 }, 300000);
 
 test('the actual worker delivers a parked D1 after restore and clear to D3 and preserves the live replacement', async () => {
+  await renewRetentionIdentities(f);
   const subject = await f.createSubject('game');
   const live = (await f.commands.putEntry(f.owner.actor, subject, { state: 'planned' }, entryKey())).value.entry;
   const removed = await f.commands.deleteEntry(f.owner.actor, subject, live.revision, entryKey(), live.incarnationId!);
@@ -124,6 +126,7 @@ test('the actual worker delivers a parked D1 after restore and clear to D3 and p
   await parked.until('worker-ready');
   const triggered = await client.triggerSchedule(ENTRY_RETENTION_SCHEDULE);
   await parked.until('source-parked');
+  await renewRetentionIdentities(f);
   // Discovery and delivery straddle a domain clock correction. Native owner Undo is still strictly before D1.
   time += 1000;
   const restored = (
@@ -151,10 +154,12 @@ test('the actual worker delivers a parked D1 after restore and clear to D3 and p
     [d1.accountId, 'library.entry.retention.purge', d1.deletionId],
   );
   expect(receipt.rows).toEqual([{ response: { purged: false } }]);
+  await renewRetentionIdentities(f);
   expect((await f.commands.readEntry(f.owner.actor, subject)).incarnationId).toBe(replacement.incarnationId);
   writeFileSync(timePath, String(Date.parse(k3.restoreUntil)));
   await (await client.triggerSchedule(ENTRY_RETENTION_SCHEDULE)).getResult({ pollingIntervalMs: 20 });
   await waitGone(k3.deletionId);
+  await renewRetentionIdentities(f);
   expect((await f.commands.readEntry(f.owner.actor, subject)).incarnationId).toBe(replacement.incarnationId);
   parked.process.kill('SIGTERM');
   expect(await parked.process.exited).toBe(0);
