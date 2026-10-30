@@ -12,7 +12,7 @@ import { createBody, page, problem, resourceFixture, type Persona, type Resource
 // Resource, typed, membership and discovery suites retain their own policy assertions unchanged.
 let f: ResourceFixture;
 beforeAll(async () => {
-  f = await resourceFixture();
+  f = await resourceFixture({ scopes: ['exposure:open'] });
   await f.available();
 }, 120_000);
 afterAll(async () => {
@@ -175,7 +175,10 @@ test('published routed Zone serves a common page and a currently eligible direct
     configured.pages[1]!.document,
   );
 
-  await f.access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'gate:collections');
+  await f.access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'operator', 'exposure:open');
+  const opened = await f.call('operator', 'POST', '/v1/platform/exposure/zone_sources:open', {});
+  expect(opened.status, JSON.stringify(opened.body)).toBe(200);
+
   const left = await collection('Site left', 'public');
   const right = await collection('Site right', 'public');
   const first = await subject('Site first');
