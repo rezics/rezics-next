@@ -1,5 +1,11 @@
 import type { ReactNode } from 'react';
-import { CommunityBanner, CommunityAvatar, CommunityMemberCount, CommunityRules, ImageCredit } from '../community/community-presentation-parts';
+import {
+  CommunityBanner,
+  CommunityAvatar,
+  CommunityMemberCount,
+  CommunityRules,
+  ImageCredit,
+} from '../community/community-presentation-parts';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Menu } from '@rezics/ui/menu';
@@ -52,7 +58,9 @@ export function BoardCommunity({
           <PageHeading className="break-words text-2xl sm:text-3xl">{title}</PageHeading>
           {summary ? <p className="line-clamp-1 max-w-3xl text-muted-foreground">{summary}</p> : null}
           {board.realmId !== null ? (
-            <div data-slot="board-community-members"><CommunityMemberCount members={community?.members} /></div>
+            <div data-slot="board-community-members">
+              <CommunityMemberCount members={community?.members} />
+            </div>
           ) : null}
           {board.visibility === 'protected' ? <Badge variant="secondary">{m.board_community_protected()}</Badge> : null}
         </div>

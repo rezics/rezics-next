@@ -6,7 +6,13 @@ import { RealmHomeHeader } from '../community/realm-home-header';
 import { RealmMembership } from '../community/realm-membership';
 import { loadSpacePage } from '../community/space';
 import { createStoryRecordedKernelFetch } from '../kernel/fake';
-import { appearanceAddress, appearancePath, available, appearanceRecording, configured } from '../kernel/fake/community';
+import {
+  appearanceAddress,
+  appearancePath,
+  available,
+  appearanceRecording,
+  configured,
+} from '../kernel/fake/community';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
@@ -22,27 +28,42 @@ function Home({ state }: { state: SourceState }) {
         fetch: (async (input, init) => {
           const request = new Request(input, init);
           if (new URL(request.url).pathname === `/v1/realms/${available.realmId}/presentation`) {
-            if (state === 'unavailable' || state === 'denied') return new Response(null, { status: state === 'denied' ? 403 : 503 });
+            if (state === 'unavailable' || state === 'denied')
+              return new Response(null, { status: state === 'denied' ? 403 : 503 });
           }
           if (state === 'no-images' || state === 'optional-unavailable') {
-            const snapshot = state === 'no-images' ? configured : {
-              ...available,
-              avatar: { state: 'unavailable', value: null } as const,
-              banner: { state: 'unavailable', value: null } as const,
-              rules: { state: 'unavailable', value: null } as const,
-            };
+            const snapshot =
+              state === 'no-images'
+                ? configured
+                : {
+                    ...available,
+                    avatar: { state: 'unavailable', value: null } as const,
+                    banner: { state: 'unavailable', value: null } as const,
+                    rules: { state: 'unavailable', value: null } as const,
+                  };
             const response = await appearanceRecording(request, snapshot);
             if (response) return Response.json(response);
           }
           return recorded(request);
         }) as typeof fetch,
       });
-      return loadSpacePage(client, new Request(`https://site.story${appearancePath}`), {}, { address: appearanceAddress }, 'anonymous');
+      return loadSpacePage(
+        client,
+        new Request(`https://site.story${appearancePath}`),
+        {},
+        { address: appearanceAddress },
+        'anonymous',
+      );
     },
   });
   if (!query.data?.realm) return <p role="status">{m.realm_shelf_unavailable()}</p>;
   const realm = query.data.realm;
-  return <RealmHomeHeader realm={realm} participation={<RealmMembership realm={realm} returnTo={`/${getLocale()}${appearancePath}`} />} />;
+  return (
+    <RealmHomeHeader
+      realm={realm}
+      participation={<RealmMembership realm={realm} returnTo={`/${getLocale()}${appearancePath}`} />}
+    />
+  );
 }
 
 const meta = {
@@ -51,7 +72,13 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-const example = (state: SourceState) => <PatternStory path={appearancePath}><div className="mx-auto max-w-5xl p-4 sm:p-8"><Home state={state} /></div></PatternStory>;
+const example = (state: SourceState) => (
+  <PatternStory path={appearancePath}>
+    <div className="mx-auto max-w-5xl p-4 sm:p-8">
+      <Home state={state} />
+    </div>
+  </PatternStory>
+);
 
 // The existing native-shaped recordings contain unknown members, never an invented total.
 export const Available: Story = {
