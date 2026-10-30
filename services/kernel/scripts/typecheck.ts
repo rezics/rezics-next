@@ -11,12 +11,7 @@ const repository = resolve(directory, '../..');
 
 function workspacePath(path: string): string | undefined {
   const relativePath = relative(repository, path);
-  if (
-    relativePath === '..' ||
-    relativePath.startsWith(`..${sep}`) ||
-    isAbsolute(relativePath) ||
-    relativePath === ''
-  )
+  if (relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath) || relativePath === '')
     return undefined;
   return relativePath.split(sep).join('/');
 }
