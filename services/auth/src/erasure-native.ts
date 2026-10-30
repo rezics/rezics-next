@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { AuthErasureBarrier, AuthErasureSource } from '@rezics/auth-contract';
 import { requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
+import { recoveryCopyRoles, recoveryCopyPendingCode, type RecoveryCopyPending } from './recovery-copy-source.ts';
 import {
   nativeAdditionalRoles,
   nativeRoleStores,
@@ -21,7 +22,12 @@ import {
 // 48 locators of at most 1 KiB leave room for the progress anchor under 64 KiB.
 export const ERASURE_PAGE_SIZE = 48;
 export const ERASURE_VERSION = 1;
-export type ErasurePage = { id: string; state: 'more' | 'consent' | 'pending'; code: string };
+export type ErasurePage = {
+  id: string;
+  state: 'more' | 'consent' | 'pending';
+  code: string;
+  externalPending?: RecoveryCopyPending;
+};
 type Obligation = {
   id: string;
   account_id: string;
@@ -39,6 +45,7 @@ type Obligation = {
   consent_due_at: Date | null;
   restore_generation?: string;
   user_replayed?: boolean;
+  recovery_copy_pending: RecoveryCopyPending;
 };
 type Store = { table: string; key: string; roles: string[]; client?: string; children?: string[] };
 // Order is the native foreign-key/consumer order. No payload is selected by this manifest.
@@ -185,6 +192,7 @@ const initialRoles = [
   { table: 'auth_attempt_account', role: 'account_id' },
   { table: 'auth_consent', role: 'account_id' },
   { table: 'auth_copy_role', role: 'account_id' },
+  ...recoveryCopyRoles.map((role) => ({ table: 'auth_recovery_copy_source', role })),
   ...nativeAdditionalRoles
     .filter(({ table }) => table === 'auth_workflow_request')
     .map(({ table, role }) => ({ table, role })),
@@ -283,6 +291,10 @@ export async function startNativeErasure(
         [accountId, barrier, ERASURE_VERSION, identity?.version ?? null, identity?.at ?? null],
       )
     ).rows[0]!;
+    await connection.query('UPDATE auth_erasure SET recovery_copy_pending=$2 WHERE id=$1', [
+      row.id,
+      await recoveryCopyPendingCode(connection, accountId),
+    ]);
     if (source) await acceptErasureSource(connection, row.id, source.identity, source.workflowId);
     return row.id;
   });
@@ -453,6 +465,7 @@ export async function nativeErasurePage(
       id,
       state: row.user_deleted_at && !restoreGeneration ? 'consent' : state,
       code,
+      ...(state === 'pending' ? { externalPending: row.recovery_copy_pending } : {}),
     });
     if (row.kernel_at && !row.source_discharged_at) return answer('pending', 'native-source');
     await connection.query("SELECT set_config('auth.erasure_obligation',$1,true)", [id]);
@@ -716,6 +729,8 @@ export async function nativeErasurePage(
       'UPDATE auth_erasure SET native_completed_at=COALESCE(native_completed_at,clock_timestamp()) WHERE id=$1',
       [id],
     );
+    const external = await recoveryCopyPendingCode(connection, row.account_id);
+    await connection.query('UPDATE auth_erasure SET recovery_copy_pending=$2 WHERE id=$1', [id, external]);
     const code = !covered ? 'native-role-coverage' : row.consent_completed_at ? 'shared-copy-custody' : 'consent';
     await checkpoint(connection, row, { code });
     return answer(row.consent_completed_at ? 'pending' : 'consent', code);
@@ -723,7 +738,7 @@ export async function nativeErasurePage(
   // The source-local page transaction has committed and released its only slot.
   // An interrupted reply resumes this same raw key and original source command.
   if (held && runtime && (await continueNativeConsumer(pool, id, held, runtime)))
-    return { id, state: result.state === 'consent' ? 'consent' : 'more', code: result.code };
+    return { ...result, state: result.state === 'consent' ? 'consent' : 'more' };
   return result;
 }
 

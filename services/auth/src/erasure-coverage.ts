@@ -36,6 +36,7 @@ export const nativeRoleStores = [
   ['auth_client_reduction', ['client_id']],
   ['auth_client_coverage', ['client_id']],
   ['oauthClientResource', ['id']],
+  ['auth_recovery_copy_source', ['delivery_id']],
 ] as const;
 export const nativeClientStores = [
   ['session', 'id', 'clientId'],
@@ -112,7 +113,7 @@ export function installNativeRoleProducer(pool: Pool): void {
             if (released) return;
             released = true;
             if (error) return release(error);
-            void client.query('RESET auth.native_role_producer').then(
+            return client.query('RESET auth.native_role_producer').then(
               () => release(),
               (failure: Error) => release(failure),
             );

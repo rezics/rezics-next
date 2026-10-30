@@ -520,7 +520,7 @@ proof of the current source's bound.
 ## Guarded human recovery
 
 Hosts configure
-`recoveryDelivery.deliver({ accountId, email, token, expiresAt, url })` as a
+`recoveryDelivery.deliver({ deliveryId, accountId, email, token, expiresAt, url })` as a
 private delivery port. `url` is
 `${issuer}/recovery#account_id=<encoded account id>&token=<encoded token>`.
 Auth builds that URL and the mail adapter sends it verbatim. Only the native
@@ -533,6 +533,67 @@ mails at most one link per account per 60 seconds, and only for a current active
 human. Unknown, automated and inactive addresses get the same HTTP answer and no
 message. Completion still denies automation and organizations, missing evidence,
 inactive accounts and Access outages.
+
+`deliveryId` is the actual newly inserted Better Auth verification row ID. The
+supported native Kysely adapter commits that INSERT, its typed ownership
+projection and `auth_recovery_copy_source` together, before the after-create hook
+or delivery. A deferred producer guard refuses typed reset writers that omit the
+Source record. The original hook still binds token, owner and five-minute expiry;
+it does not acquire credential authority or stand in for atomic recording.
+`auth_recovery.proof_hash` remains authentication evidence only. Source metadata
+contains the original nonsecret identity, pinned producer/version, native creation
+and expiry and the actual known account roles. It contains no email, token, URL,
+credential, identifying hash or guessed provider identity.
+
+Before the callback, Auth commits one in-flight attempt under the current
+all-role erasure fence, then releases its connection and locks. The callback wait
+has a five-second deadline. Legacy callbacks cannot be cancelled; late sends
+remain unresolved under their original identity. There is no automatic resend.
+The existing `Promise<void>` ABI is preserved apart from the additive identity.
+Void resolution records `legacy-void`; arbitrary returned values are discarded
+without decoding or serialization (`unsupported-result`, zero retained response
+bytes). Failure and timeout retain only fixed codes. No such result verifies a
+receiver, sink generation, copy disposition or erasure. A failed technical
+checkpoint cannot invalidate an otherwise successful recovery proof. Delivery
+failure keeps the existing exact proof/verification cleanup; custody survives it.
+
+Native-only `readRecoveryCopySource(database, deliveryId)` exposes the first
+Source/status types. `readRecoveryCopySourcePage(database, { accountId, role,
+after? })` reads one indexed typed role and at most 48 nonsecret locators, each
+at most 1 KiB, below 64 KiB including status. Neither is an HTTP account lookup.
+The existing native obligation records `recovery_copy_pending` separately from
+shared history: `recovery-copy-custody` for a known unresolved Source,
+`recovery-copy-coverage` for unconverted historical sends. This field also
+defaults to unknown coverage on older obligations; pending native pages expose
+it as `externalPending`. Local native cleanup and the
+original 310-second consent lifecycle continue; unresolved Source metadata is
+retained and indexed in the native role inventory. Empty pages, local expiry,
+absence of a user and disabled callbacks never prove historical zero data.
+Scoped native/shared-history proofs remain their existing proofs; neither closes
+this independent external branch or supplies a terminal Auth acknowledgement.
+
+No receiving owner with durable result verification is installed, so
+`sinkGeneration` is explicitly null and custody remains unknown. There is no
+optional receipt callback or configured namespace to mistake for owner evidence.
+An actual receiving adapter must adopt the independent generation/fence, exact
+result lookup/idempotence and bounded physical disposition boundary in the
+[external custody contract](src/external-custody-contract.md) before any Source
+can be minimized or certified. Restores and diagnostic Sources remain separate.
+
+### Recovery Source recording cost
+
+- Touches: the actual verification INSERT/typed projection, one exact Source
+  key, five fixed typed-role erasure locks/probes and the existing proof INSERT.
+  A native erasure acceptance or tail checks at most one indexed key per role.
+- Bound: one native transaction for creation, one dispatch checkpoint, at most
+  one callback outside all DB leases, and one fixed status update; no payload or
+  history discovery. Status pages seek one role/key index with LIMIT 48; a full
+  page of 1 KiB IDs and fixed codes stays below 64 KiB. No new erasure engine,
+  scheduling loop, per-provider scan or cascade is introduced.
+- Growth check: deferred to integration under this slice's minimal verification
+  instruction. Focused existing-fixture producer cases cover pre-hook custody,
+  rollback, released connections, void/ambiguous/late results and retained identity;
+  existing exact recovery and external receiving acceptance remain unchanged.
 
 Completion resolves the token with Better Auth's installed native verifier, checks
 its account, expiry and issuance epoch, then atomically deletes that exact native

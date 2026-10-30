@@ -7,6 +7,7 @@ import { nativeAttemptOptions } from './rate-limit.ts';
 import { nativeSessionLimits } from './session-limits.ts';
 import { nativeVerificationPlugin } from './verification-maintenance.ts';
 import { authBetterAuthLogger } from './diagnostics.ts';
+import { installNativeRoleProducer } from './erasure-coverage.ts';
 
 export const credentialOwnerSchema = {
   id: 'credential-owner-schema',
@@ -21,6 +22,7 @@ export const credentialOwnerSchema = {
 
 /** Shared with the official Better Auth migration generator. */
 export function betterAuthOptions(database: Pool, issuer: string, secret: string) {
+  installNativeRoleProducer(database);
   return {
     ...nativeAttemptOptions(database, issuer, secret),
     logger: authBetterAuthLogger,

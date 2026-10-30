@@ -4,6 +4,7 @@ import type { DBAdapter } from 'better-auth/adapters';
 import type { Pool } from 'pg';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { recordNativeRecoveryCopySource } from './recovery-copy-source.ts';
 
 type NativeDatabase = Extract<BetterAuthOptions['database'], { db: unknown }>['db'];
 // Resolve the public adapter package owned by the installed Better Auth version.
@@ -66,6 +67,7 @@ function verificationPlugin(alreadyInTransaction = false) {
               .set(attribution ?? { erasure_format: 'unknown' })
               .where('id', '=', id)
               .execute();
+            if (attribution?.erasure_format === 'reset-v1') await recordNativeRecoveryCopySource(db, id);
           } else if (model === 'oauthClientAssertion') {
             const client = nativeProtocolClient.getStore();
             if (!client) throw new Error('Auth assertion producer attribution missing');

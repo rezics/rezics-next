@@ -39,6 +39,16 @@ export {
 } from './native-workflow-proofs.ts';
 export { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 export { createRecoveryEstablishmentVerifier, type RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
+export {
+  readRecoveryCopySource,
+  readRecoveryCopySourcePage,
+  type RecoveryCopySource,
+  type RecoveryCopyLocator,
+  type RecoveryCopyRole,
+  type RecoveryCopyStatus,
+  type RecoveryCopyPending,
+  type RecoveryCopyCode,
+} from './recovery-copy-source.ts';
 export { createProvisioningEvidenceVerifier } from './provisioning-evidence.ts';
 export type {
   ProvisioningAuthorization,
@@ -140,7 +150,14 @@ export interface AuthServiceOptions {
   /** Trusted mounted x-action catalogue, supplied by production composition. */
   siteActions?: ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
   recoveryDelivery?: {
-    deliver(input: { accountId: string; email: string; token: string; expiresAt: Date; url: string }): Promise<void>;
+    deliver(input: {
+      deliveryId: string;
+      accountId: string;
+      email: string;
+      token: string;
+      expiresAt: Date;
+      url: string;
+    }): Promise<void>;
   };
 }
 
