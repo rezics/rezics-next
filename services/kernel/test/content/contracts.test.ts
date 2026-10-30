@@ -612,7 +612,7 @@ function publishedModels(): void {
   // Native reservation serves both routes; the generic HTTP input keeps its narrower purposes.
   type ImageMediaType = 'image/avif' | 'image/gif' | 'image/jpeg' | 'image/png' | 'image/webp';
   type GenericReservation = Kernel['~Routes']['v1']['media']['post'];
-  type RealmReservation = Kernel['~Routes']['v1']['realms'][':id']['media']['post'];
+  type RealmReservation = Kernel['~Routes']['v1']['realms'][':realmId']['media']['post'];
   same<
     Equal<
       GenericReservation['body'],
@@ -632,7 +632,7 @@ function publishedModels(): void {
         }
     >
   >();
-  same<Equal<RealmReservation['params'], { id: string }>>();
+  same<Equal<RealmReservation['params'], { realmId: string }>>();
   same<
     Equal<
       RealmReservation['body'],

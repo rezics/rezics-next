@@ -146,9 +146,9 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         ),
     )
     .post(
-      '/v1/realms/:id/media',
+      '/v1/realms/:realmId/media',
       {
-        params,
+        params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
         body: strictContentSchema(RealmMediaReservationInputSchema),
         headers: commandHeaders,
         response: {
@@ -167,7 +167,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
           security: secured,
         },
       },
-      async ({ params: { id }, actor, body, request, admission, job, session, set, status }) =>
+      async ({ params: { realmId: id }, actor, body, request, admission, job, session, set, status }) =>
         mutation(() =>
           admission.run('normal', job, async () => {
             existing(id);

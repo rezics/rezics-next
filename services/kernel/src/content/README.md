@@ -519,7 +519,7 @@ This section owns assets; Realm settings/revisions and presentation enrichment b
 Space assets, board overrides, rules and member counts are outside this producer.
 
 `realm-icon` and `realm-banner` are native media purposes with the actual Realm as `containerId`.
-`POST /v1/realms/{id}/media` accepts only `{ purpose, mediaType, byteCount, sha256? }`, with no undeclared fields.
+`POST /v1/realms/{realmId}/media` accepts only `{ purpose, mediaType, byteCount, sha256? }`, with no undeclared fields.
 It uses `parentCreationAuthorization` with current `realm:manage` on the active `community.realm` at authoritative T,
 then the existing uploader/new-media initializer, reservation receipt and reserved event. The media and Realm share
 an exact route/home. It adds no `media:create` grant on a Realm and no account-avatar reuse.
