@@ -5,6 +5,8 @@ import { locales, type Locale } from '../../paraglide/runtime.js';
 import { originalLanguage } from '../../subject/language';
 import type { Subject } from '../../subject/types';
 import { pageHead, type PagePaths } from '../../shell/head';
+import { shareCardImage } from '../../shell/share-card';
+import type { ShareCardProjection } from '../../media/share-card';
 import { accountOf, type AccountProfile } from './account-read';
 import { agentPath } from './agent';
 import { pageContext, type SubjectPageData } from './subject';
@@ -133,6 +135,7 @@ export function agentPageHead(
   paths: PagePaths = agentPagePaths(page.account.handle),
   _view?: AccountView,
   cursor?: string,
+  shareCard?: ShareCardProjection,
 ) {
   const profile = profileRead(page);
   const handle = profile?.handle ?? page.account.handle;
@@ -161,7 +164,7 @@ export function agentPageHead(
       title,
       ...(description ? { description } : {}),
       type: 'profile',
-      ...(image ? { image } : {}),
+      image: image ?? shareCardImage(shareCard),
       ...(cursor ? { robots: 'noindex, follow' } : {}),
       jsonLd: {
         '@context': 'https://schema.org',

@@ -15,6 +15,7 @@ import { defaultReader } from '../subject/reader';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
+import { projectShareCardPage } from '../media/share-card-page';
 
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
@@ -52,7 +53,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     if (!view) throw notFound();
     const locale = getLocale();
     const query = agentViewQuery(params.handle, locale, view, deps.cursor, location.searchStr);
-    const page = await context.queryClient.ensureQueryData(query).catch((error: unknown) => {
+    const page = await context.queryClient.fetchQuery({ ...query, staleTime: 0 }).catch((error: unknown) => {
       context.queryClient.removeQueries({ queryKey: query.queryKey });
       throw error;
     });
@@ -73,7 +74,13 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
         canonicalRedirect(agentPath(locale, canonicalHandle, view), location.searchStr, location.hash, 308),
       );
     }
-    return { ...page, paths: agentPagePaths(canonicalHandle, view) };
+    return {
+      ...page,
+      shareCard: page.overview.subject
+        ? projectShareCardPage({ kind: 'page', page: page.overview }, { id: page.overview.subject, locale })
+        : undefined,
+      paths: agentPagePaths(canonicalHandle, view),
+    };
   },
   head: ({ loaderData }) =>
     loaderData?.kind === 'page'
@@ -84,6 +91,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
           loaderData.paths,
           loaderData.view,
           loaderData.cursor,
+          loaderData.shareCard,
         )
       : { meta: [{ title: m.public_account_heading() }, { name: 'robots', content: 'noindex, nofollow' }] },
   component: AgentViewRoute,

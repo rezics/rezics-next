@@ -228,6 +228,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     });
     const view = 'overview' as const;
     const pageQuery = subjectPageQuery(params.id, getLocale(), view, deps.realm);
+    // A cached page is not current anonymous proof for a share-card reference.
+    await context.queryClient.fetchQuery(pageQuery);
     const page = await context.queryClient.ensureQueryData(pageQuery);
     if (page.kind === 'redirect') {
       if (page.target === 'account')
@@ -250,13 +252,25 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       context.queryClient.ensureQueryData(subjectReactionsQuery(params.id, getLocale())),
       context.queryClient.ensureQueryData(subjectRatingQuery(params.id, getLocale())),
     ]);
-    return { ...data, page: page.page, frame, relations, reactions, ratings, tabs: subjectTabs(page.page) };
+    return {
+      ...data,
+      shareCard: page.shareCard,
+      realm: deps.realm,
+      page: page.page,
+      frame,
+      relations,
+      reactions,
+      ratings,
+      tabs: subjectTabs(page.page),
+    };
   },
   head: ({ loaderData, match }) =>
     loaderData
       ? subjectHead(loaderData.page, {
           ...pageHeadContext(match.pathname),
           paths: loaderData.paths,
+          shareCard: loaderData.shareCard,
+          realm: loaderData.realm,
           ...(loaderData.frame.label ? { typeLabel: loaderData.frame.label } : {}),
           ...(loaderData.frame.schemaOrgType ? { schemaOrgType: loaderData.frame.schemaOrgType } : {}),
           ...(loaderData.ratings ? { ratings: loaderData.ratings } : {}),

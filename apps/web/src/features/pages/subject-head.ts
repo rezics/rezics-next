@@ -6,6 +6,8 @@ import { publicCardImage, publicCover } from '../../media/public-card';
 import { originalLanguage } from '../../subject/language';
 import { locales, type Locale } from '../../paraglide/runtime.js';
 import { pageHead, type PagePaths } from '../../shell/head';
+import { shareCardImage } from '../../shell/share-card';
+import type { ShareCardProjection } from '../../media/share-card';
 import { subjectBody, subjectDisplayLabel, subjectPageJsonLd, type SubjectPageData } from './subject';
 import { bestRank, isRecord, pageText, spoilerLevel, type Stmt } from './shared';
 import { readableDocument } from './values';
@@ -25,6 +27,9 @@ type SubjectHeadContext = {
   cursor?: string;
   includeJsonLd?: boolean;
   ratings?: { figure: PublicFigure };
+  /** Supplied only by the current anonymous page query, never by route/search input. */
+  shareCard?: ShareCardProjection | undefined;
+  realm?: string | undefined;
 };
 
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
@@ -110,16 +115,13 @@ export function subjectHead(page: SubjectPageData, context: SubjectHeadContext) 
   const read = subjectBody(page);
   const locale = context.locale;
   const paths = localePaths(context.paths);
-  if (!read)
-    return pageHead(
-      {},
-      {
-        origin: context.origin,
-        locale: locale as Locale,
-        path: pathForLocale(context.path, locale),
-        ...(paths === undefined ? {} : { paths }),
-      },
-    );
+  if (!read || context.realm !== undefined)
+    return pageHead(context.realm === undefined ? {} : { robots: 'noindex, follow' }, {
+      origin: context.origin,
+      locale: locale as Locale,
+      path: pathForLocale(context.path, locale),
+      ...(paths === undefined ? {} : { paths }),
+    });
 
   const titleLabel = subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject));
   const parts = [context.typeLabel, releaseYear(read.subject, locale)].filter((part): part is string => !!part);
@@ -127,7 +129,10 @@ export function subjectHead(page: SubjectPageData, context: SubjectHeadContext) 
   const titleWithView = context.viewLabel || context.view ? `${title} – ${context.viewLabel ?? context.view}` : title;
   const description = descriptionFor(read.subject, locale);
   const cover = publicCover(read.summary?.cover);
-  const image = publicCardImage(cover, titleLabel);
+  const image =
+    context.shareCard === undefined
+      ? (publicCardImage(cover, titleLabel) ?? shareCardImage())
+      : shareCardImage(context.shareCard);
   const jsonLd =
     context.includeJsonLd === false
       ? undefined

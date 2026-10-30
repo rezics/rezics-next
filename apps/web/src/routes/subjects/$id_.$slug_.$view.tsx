@@ -107,6 +107,10 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
         cursor,
       },
     });
+    // Reuse the current page read for the head; a retained navigation result is not public proof.
+    await context.queryClient.fetchQuery(
+      subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node),
+    );
     const loaded = await context.queryClient.ensureQueryData(
       subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node),
     );
@@ -153,6 +157,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       ...canonical,
       view: params.view,
       page: loaded.page,
+      shareCard: loaded.shareCard,
       type: typeData,
       frame,
       tabs,
@@ -168,6 +173,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       ? subjectHead(loaderData.page, {
           ...pageHeadContext(match.pathname),
           paths: loaderData.paths,
+          shareCard: loaderData.shareCard,
+          realm: loaderData.realm,
           ...(loaderData.type.label ? { typeLabel: loaderData.type.label } : {}),
           ...(loaderData.type.schemaOrgType ? { schemaOrgType: loaderData.type.schemaOrgType } : {}),
           view: loaderData.view,

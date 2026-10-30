@@ -13,6 +13,8 @@ import { loadSubjectPage } from './subject';
 import { readRatings, readOwnRating } from './subject-ratings';
 import { readReactionCounts, readOwnReaction } from './subject-reactions';
 import { communityOverview, withSubjectCommunity } from './subject-community';
+import { projectShareCardPage } from '../../media/share-card-page';
+import { locales } from '../../paraglide/runtime.js';
 
 const subjectKernelClient = createServerOnlyFn(async (locale: string, realm?: string) => {
   const { kernelClient } = await import('../../kernel/client');
@@ -48,7 +50,12 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
     setResponseHeader('cache-control', 'private, no-store');
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm);
     const loaded = await loadSubjectPage(client, data.id, data.view, data.locale, { realm: data.realm, authorization });
-    return withSubjectCommunity(client, loaded, data.view);
+    const cardLocale = locales.find((locale) => locale === data.locale);
+    const shareCard =
+      data.realm === undefined && authorization === undefined && cardLocale !== undefined
+        ? projectShareCardPage(loaded, { id: data.id, locale: cardLocale })
+        : undefined;
+    return { ...(await withSubjectCommunity(client, loaded, data.view)), shareCard };
   });
 
 const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
@@ -91,10 +98,16 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
       },
     );
     if (loaded.kind !== 'page') return loaded;
+    const cardLocale = locales.find((locale) => locale === data.locale);
+    const shareCard =
+      data.realm === undefined && authorization === undefined && cardLocale !== undefined
+        ? projectShareCardPage({ kind: 'page', page: loaded.overview }, { id: data.id, locale: cardLocale })
+        : undefined;
     const result = await withSubjectCommunity(client, { kind: 'page', page: loaded.page }, data.view, data.cursor);
     if (result.kind !== 'page') return result;
     return {
       ...loaded,
+      shareCard,
       page: result.page,
       overview: communityOverview(loaded.overview),
       ...(communityView ? { next: undefined, node: undefined } : {}),

@@ -15,6 +15,7 @@ import { defaultReader } from '../subject/reader';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
+import { projectShareCardPage } from '../media/share-card-page';
 
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
@@ -29,7 +30,7 @@ export const Route = createFileRoute('/@{$handle}')({
   loader: async ({ params, location, context }) => {
     const locale = getLocale();
     const query = agentPageQuery(params.handle, locale, location.searchStr);
-    const page = await context.queryClient.ensureQueryData(query).catch((error: unknown) => {
+    const page = await context.queryClient.fetchQuery({ ...query, staleTime: 0 }).catch((error: unknown) => {
       context.queryClient.removeQueries({ queryKey: query.queryKey });
       throw error;
     });
@@ -46,11 +47,25 @@ export const Route = createFileRoute('/@{$handle}')({
     if (canonicalHandle !== params.handle) {
       throw redirect(canonicalRedirect(agentPath(locale, canonicalHandle), location.searchStr, location.hash, 308));
     }
-    return { ...page, paths: agentPagePaths(canonicalHandle) };
+    return {
+      ...page,
+      shareCard: page.overview.subject
+        ? projectShareCardPage({ kind: 'page', page: page.overview }, { id: page.overview.subject, locale })
+        : undefined,
+      paths: agentPagePaths(canonicalHandle),
+    };
   },
   head: ({ loaderData }) =>
     loaderData?.kind === 'page'
-      ? agentPageHead(loaderData.overview, getLocale(), publicOrigin(), loaderData.paths, loaderData.view)
+      ? agentPageHead(
+          loaderData.overview,
+          getLocale(),
+          publicOrigin(),
+          loaderData.paths,
+          loaderData.view,
+          undefined,
+          loaderData.shareCard,
+        )
       : { meta: [{ title: m.public_account_heading() }, { name: 'robots', content: 'noindex, nofollow' }] },
   component: AgentRoute,
 });
