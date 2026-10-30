@@ -242,9 +242,7 @@ export function ProviderQueue({
         transport={{
           confirm: async (command) => {
             const result = await transport.decide({ ...scope, ...command });
-            return result.ok
-              ? { ...result, kind: command.operation === 'accept' ? 'accepted' : 'rejected' }
-              : result;
+            return result.ok ? { ...result, kind: command.operation === 'accept' ? 'accepted' : 'rejected' } : result;
           },
           refresh: async (batch) => {
             const commands = batch.attempts.map(({ command, result }) => ({
@@ -257,8 +255,7 @@ export function ProviderQueue({
               transport.read(nextScope, undefined, observed),
               transport.readings(commands),
             ]);
-            const next: QueueState =
-              queueRead.status === 'fulfilled' ? queueRead.value : { state: 'unavailable' };
+            const next: QueueState = queueRead.status === 'fulfilled' ? queueRead.value : { state: 'unavailable' };
             const readings =
               subjectRead.status === 'fulfilled'
                 ? subjectRead.value
@@ -285,7 +282,8 @@ export function ProviderQueue({
               <div key={index}>
                 <span className="font-medium">
                   {pageText(page.state === 'ready' ? page.names[snak.property.id] : undefined, locale).text ||
-                    m.candidate_field()}:{' '}
+                    m.candidate_field()}
+                  :{' '}
                 </span>
                 <CandidateValue snak={snak} related={names} locale={locale} />
               </div>
