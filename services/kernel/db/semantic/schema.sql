@@ -839,6 +839,26 @@ END; $$;
 
 
 --
+-- Name: capture_identity_public_writer(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_public_writer() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE h integer; v bigint; o uuid;
+BEGIN
+ IF TG_OP='DELETE' THEN h:=OLD.route>>4; o:=OLD.subject_id;
+ ELSE h:=NEW.route>>4; o:=NEW.subject_id; END IF;
+ INSERT INTO semantic.identity_public_writer(partition_no) VALUES(h)
+ ON CONFLICT(partition_no) DO UPDATE SET revision=semantic.identity_public_writer.revision+1
+ RETURNING revision INTO v;
+ INSERT INTO semantic.identity_public_dirty VALUES(h,o,v)
+ ON CONFLICT(partition_no,original) DO UPDATE SET revision=excluded.revision;
+ IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END $$;
+
+
+--
 -- Name: capture_identity_receiving_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1495,6 +1515,52 @@ BEGIN
  THEN RETURN NEW; END IF;
  RAISE EXCEPTION 'Immutable identity pre-arm page';
 END; $$;
+
+
+--
+-- Name: guard_identity_scope_claim(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_identity_scope_claim() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE b semantic.identity_scope_bridge;
+BEGIN
+ IF NEW.pending_job IS NULL OR (NEW.pending_job,NEW.pending_epoch) IS NOT DISTINCT FROM
+ (OLD.pending_job,OLD.pending_epoch) THEN RETURN NEW; END IF;
+ INSERT INTO semantic.identity_scope_bridge(partition_no,generation)
+ VALUES(NEW.partition_no,'00000000-0000-0000-0000-000000000000') ON CONFLICT DO NOTHING;
+ FOR b IN SELECT * FROM semantic.identity_scope_bridge
+ WHERE partition_no=NEW.partition_no AND generation IN
+ (NEW.generation,'00000000-0000-0000-0000-000000000000'::uuid)
+ ORDER BY generation FOR UPDATE LOOP
+  -- Advance even an empty prefix: later enrollment cannot miss a committed prior claim
+  -- through a SERIALIZABLE snapshot taken before this bridge lock was available.
+  UPDATE semantic.identity_scope_bridge SET version=version+1
+  WHERE partition_no=b.partition_no AND generation=b.generation;
+  IF NOT EXISTS(SELECT 1 FROM semantic.identity_scope_inverse i WHERE i.partition_no=b.partition_no AND i.generation=b.generation LIMIT 1) THEN CONTINUE; END IF;
+  IF b.generation=NEW.generation THEN
+   -- The delivered admission producer sealed this exact native inverse generation.
+   -- Its bounded export already resolved every Source PREPARATION receipt.
+   IF NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_prearm_directory d
+    JOIN semantic.identity_epoch_prearm_bridge n USING(partition_no,generation)
+    JOIN semantic.identity_epoch_native_commit c ON c.partition_no=d.partition_no
+     AND c.transaction_id=d.sealed_transaction_id AND c.xmin=d.xmin AND c.purpose='identity-prearm'
+    JOIN core.partition p ON p.partition_no=c.partition_no AND p.epoch=c.epoch
+     AND p.position>=c.position AND p.write_state='active' AND p.moved_to IS NULL
+    WHERE d.partition_no=NEW.partition_no AND d.generation=NEW.generation
+     AND d.job_id=NEW.pending_job AND d.job_epoch=NEW.pending_epoch AND NOT d.released
+     AND d.exhausted AND d.owner_epoch=NEW.owner_epoch AND d.basis_version=OLD.version
+     AND n.job_id=d.job_id AND n.job_epoch=d.job_epoch AND n.scope_digest=d.scope_digest
+     AND n.owner_epoch=d.owner_epoch AND n.basis_version=d.basis_version)
+   THEN RAISE EXCEPTION 'identity_scope_prearm_required' USING ERRCODE='40001'; END IF;
+  ELSIF b.closed_job IS DISTINCT FROM NEW.pending_job OR b.closed_epoch IS DISTINCT FROM NEW.pending_epoch
+   OR b.seal_transaction IS NULL THEN
+   RAISE EXCEPTION 'identity_scope_prearm_required' USING ERRCODE='40001';
+  END IF;
+ END LOOP;
+ RETURN NEW;
+END $$;
 
 
 --
@@ -3585,7 +3651,7 @@ CREATE TABLE semantic.identity_epoch_native_commit (
     "position" bigint NOT NULL,
     purpose text NOT NULL,
     CONSTRAINT identity_epoch_native_commit_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text])))
+    CONSTRAINT identity_epoch_native_commit_purpose_check CHECK ((purpose = ANY (ARRAY['bootstrap'::text, 'admission'::text, 'mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text, 'identity-receiving-plan'::text, 'identity-receiving-record'::text, 'identity-receiving-custody'::text, 'identity-prearm'::text, 'identity-prearm-cancel'::text, 'identity-scope-registration'::text, 'identity-scope-enrollment'::text, 'identity-scope-preparation'::text, 'identity-scope-cancellation'::text, 'identity-public-capture'::text, 'identity-scope-finish'::text, 'identity-scope-retirement'::text, 'identity-scope-directory-release'::text])))
 );
 
 
@@ -4001,6 +4067,271 @@ CREATE TABLE semantic.identity_epoch_topology_custody (
 
 
 --
+-- Name: identity_public_capture; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_capture (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    source_id text NOT NULL,
+    source_epoch integer NOT NULL,
+    configuration text NOT NULL,
+    read_definition text NOT NULL,
+    definition_digest text NOT NULL,
+    home integer DEFAULT 0 NOT NULL,
+    after_route integer,
+    after_id uuid,
+    version bigint DEFAULT 1 NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    transaction_id uuid,
+    CONSTRAINT identity_public_capture_home_check CHECK (((home >= 0) AND (home <= 4096)))
+);
+
+
+--
+-- Name: identity_public_capture_home; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_capture_home (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    home integer NOT NULL,
+    owner_epoch integer NOT NULL,
+    writer_revision bigint NOT NULL,
+    complete boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: identity_public_capture_key; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_capture_key (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    original uuid NOT NULL
+);
+
+
+--
+-- Name: identity_public_capture_page; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_capture_page (
+    partition_no integer NOT NULL,
+    capture_id uuid NOT NULL,
+    page_version bigint NOT NULL,
+    payload jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_public_capture_page_payload_check CHECK ((octet_length((payload)::text) <= 4096))
+);
+
+
+--
+-- Name: identity_public_dirty; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_dirty (
+    partition_no integer NOT NULL,
+    original uuid NOT NULL,
+    revision bigint NOT NULL
+);
+
+
+--
+-- Name: identity_public_writer; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_public_writer (
+    partition_no integer NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: identity_scope_attempt; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_attempt (
+    partition_no integer NOT NULL,
+    source_key text NOT NULL,
+    scope_id text NOT NULL,
+    registration uuid NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    attempt jsonb NOT NULL,
+    state text NOT NULL,
+    transaction_id uuid NOT NULL,
+    revision bigint NOT NULL,
+    CONSTRAINT identity_scope_attempt_state_check CHECK ((state = ANY (ARRAY['active'::text, 'finished'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: identity_scope_bridge; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_bridge (
+    partition_no integer NOT NULL,
+    generation uuid NOT NULL,
+    closed_job uuid,
+    closed_epoch bigint,
+    version bigint DEFAULT 1 NOT NULL,
+    seal_transaction uuid,
+    CONSTRAINT identity_scope_bridge_check CHECK (((closed_job IS NULL) = (closed_epoch IS NULL)))
+);
+
+
+--
+-- Name: identity_scope_completion; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_completion (
+    partition_no integer NOT NULL,
+    source_key text NOT NULL,
+    scope_id text NOT NULL,
+    registration uuid NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    source_generation text NOT NULL,
+    capture_id uuid NOT NULL,
+    attempt jsonb NOT NULL,
+    seal jsonb,
+    after_key jsonb,
+    version bigint DEFAULT 1 NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_scope_completion_after_key_check CHECK ((octet_length((after_key)::text) <= 512)),
+    CONSTRAINT identity_scope_completion_attempt_check CHECK ((octet_length((attempt)::text) <= 1024)),
+    CONSTRAINT identity_scope_completion_seal_check CHECK ((octet_length((seal)::text) <= 4096)),
+    CONSTRAINT identity_scope_completion_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: identity_scope_directory_release; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_directory_release (
+    partition_no integer NOT NULL,
+    generation uuid NOT NULL,
+    original uuid NOT NULL,
+    source_partition integer NOT NULL,
+    source_key text NOT NULL,
+    scope_id text NOT NULL,
+    registration uuid NOT NULL,
+    capture_id uuid NOT NULL,
+    transaction_id uuid NOT NULL
+);
+
+
+--
+-- Name: identity_scope_forward; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_forward (
+    partition_no integer NOT NULL,
+    source_key text NOT NULL,
+    scope_id text NOT NULL,
+    registration uuid NOT NULL,
+    dependency text NOT NULL,
+    original uuid,
+    dependency_home integer,
+    ticket jsonb,
+    sending_known boolean DEFAULT true NOT NULL,
+    directory_home integer,
+    directory_generation uuid,
+    directory_group uuid,
+    CONSTRAINT identity_scope_directory_intent CHECK ((((directory_home IS NULL) AND (directory_generation IS NULL) AND (directory_group IS NULL)) OR ((directory_home IS NOT NULL) AND (directory_generation IS NOT NULL) AND (directory_group IS NOT NULL)))),
+    CONSTRAINT identity_scope_forward_directory_home_check CHECK (((directory_home >= 0) AND (directory_home <= 4095)))
+);
+
+
+--
+-- Name: identity_scope_inverse; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_inverse (
+    partition_no integer NOT NULL,
+    generation uuid NOT NULL,
+    original uuid NOT NULL,
+    source_partition integer NOT NULL,
+    source_key text NOT NULL,
+    scope_id text NOT NULL,
+    registration uuid NOT NULL,
+    capture_id uuid NOT NULL,
+    source jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_scope_inverse_source_check CHECK ((octet_length((source)::text) <= 4096))
+);
+
+
+--
+-- Name: identity_scope_prearm_receipt; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_prearm_receipt (
+    partition_no integer NOT NULL,
+    source_key text NOT NULL,
+    scope_id text NOT NULL,
+    registration uuid NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    directory_transaction uuid NOT NULL,
+    page_id text NOT NULL,
+    ordinal integer NOT NULL,
+    disposition text NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT identity_scope_prearm_receipt_disposition_check CHECK ((disposition = ANY (ARRAY['unsafe'::text, 'cancelled'::text]))),
+    CONSTRAINT identity_scope_prearm_receipt_ordinal_check CHECK ((ordinal >= 0))
+);
+
+
+--
+-- Name: identity_scope_repair_cursor; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_repair_cursor (
+    partition_no integer NOT NULL,
+    next_home integer DEFAULT 0 NOT NULL,
+    source_key text DEFAULT ''::text NOT NULL,
+    scope_id text DEFAULT ''::text NOT NULL,
+    CONSTRAINT identity_scope_repair_cursor_next_home_check CHECK (((next_home >= 0) AND (next_home <= 4095))),
+    CONSTRAINT identity_scope_repair_cursor_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: identity_scope_summary; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_scope_summary (
+    partition_no integer NOT NULL,
+    source_key text NOT NULL,
+    scope_id text NOT NULL,
+    source jsonb NOT NULL,
+    registration uuid DEFAULT gen_random_uuid() NOT NULL,
+    capture_id uuid NOT NULL,
+    capture jsonb NOT NULL,
+    state text DEFAULT 'capturing'::text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    active integer DEFAULT 0 NOT NULL,
+    frontier jsonb,
+    scan_complete boolean DEFAULT false NOT NULL,
+    enrollment_home integer DEFAULT 0 NOT NULL,
+    maintenance_allowance jsonb,
+    CONSTRAINT identity_scope_summary_active_check CHECK ((active >= 0)),
+    CONSTRAINT identity_scope_summary_capture_check CHECK ((octet_length((capture)::text) <= 4096)),
+    CONSTRAINT identity_scope_summary_enrollment_home_check CHECK (((enrollment_home >= 0) AND (enrollment_home <= 4096))),
+    CONSTRAINT identity_scope_summary_maintenance_allowance_check CHECK ((octet_length((maintenance_allowance)::text) <= 2048)),
+    CONSTRAINT identity_scope_summary_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_scope_summary_revision_check CHECK ((revision > 0)),
+    CONSTRAINT identity_scope_summary_scope_id_check CHECK (((octet_length(scope_id) >= 1) AND (octet_length(scope_id) <= 256))),
+    CONSTRAINT identity_scope_summary_source_check CHECK ((octet_length((source)::text) <= 4096)),
+    CONSTRAINT identity_scope_summary_state_check CHECK ((state = ANY (ARRAY['capturing'::text, 'enrolling'::text, 'ready'::text, 'repair'::text, 'retiring'::text, 'retired'::text])))
+);
+
+
+--
 -- Name: inbound_link; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -4252,6 +4583,119 @@ CREATE TABLE semantic.provider_review_queue_ready (
     source_epoch integer NOT NULL,
     CONSTRAINT provider_review_queue_ready_route_check CHECK ((route = 0)),
     CONSTRAINT provider_review_queue_ready_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095)))
+);
+
+
+--
+-- Name: public_filter_bootstrap; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_bootstrap (
+    partition_no integer NOT NULL,
+    bootstrap uuid NOT NULL,
+    read_definition uuid NOT NULL,
+    request_key text NOT NULL,
+    consumer text NOT NULL,
+    snapshot_kind text NOT NULL,
+    native_snapshot pg_snapshot NOT NULL,
+    owner_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    state text NOT NULL,
+    account_after integer DEFAULT 0 NOT NULL,
+    queried text,
+    CONSTRAINT public_filter_bootstrap_account_after_check CHECK (((account_after >= 0) AND (account_after <= 4096))),
+    CONSTRAINT public_filter_bootstrap_consumer_check CHECK ((octet_length(consumer) <= 16384)),
+    CONSTRAINT public_filter_bootstrap_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_bootstrap_snapshot_kind_check CHECK ((snapshot_kind = ANY (ARRAY['pit'::text, 'prepared'::text]))),
+    CONSTRAINT public_filter_bootstrap_state_check CHECK ((state = ANY (ARRAY['capturing'::text, 'begun'::text, 'adopted'::text, 'aborting'::text, 'aborted'::text])))
+);
+
+
+--
+-- Name: public_filter_bootstrap_account; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_bootstrap_account (
+    partition_no integer NOT NULL,
+    bootstrap uuid NOT NULL,
+    account_partition integer NOT NULL,
+    owner_epoch integer NOT NULL,
+    revision bigint NOT NULL,
+    claim_revision bigint NOT NULL,
+    CONSTRAINT public_filter_bootstrap_account_account_partition_check CHECK (((account_partition >= 0) AND (account_partition <= 4095))),
+    CONSTRAINT public_filter_bootstrap_account_claim_revision_check CHECK ((claim_revision > 0)),
+    CONSTRAINT public_filter_bootstrap_account_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_bootstrap_account_revision_check CHECK ((revision > 0))
+);
+
+
+--
+-- Name: public_filter_read_definition; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_read_definition (
+    partition_no integer NOT NULL,
+    read_definition uuid DEFAULT gen_random_uuid() NOT NULL,
+    source_id uuid NOT NULL,
+    configuration uuid NOT NULL,
+    release_digest text NOT NULL,
+    subject_type text NOT NULL,
+    capture_digest text NOT NULL,
+    capture text NOT NULL,
+    dependency_keys jsonb NOT NULL,
+    CONSTRAINT public_filter_read_definition_capture_check CHECK ((octet_length(capture) <= 1048576)),
+    CONSTRAINT public_filter_read_definition_dependency_keys_check CHECK ((jsonb_typeof(dependency_keys) = 'array'::text))
+);
+
+
+--
+-- Name: public_filter_repair_advance; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_repair_advance (
+    partition_no integer NOT NULL,
+    bootstrap uuid NOT NULL,
+    execution text NOT NULL,
+    step uuid NOT NULL,
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    owner_epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    CONSTRAINT public_filter_repair_advance_check CHECK (((route / 16) = partition_no)),
+    CONSTRAINT public_filter_repair_advance_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_repair_advance_position_check CHECK (("position" > 0))
+);
+
+
+--
+-- Name: public_filter_repair_step; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_repair_step (
+    partition_no integer NOT NULL,
+    bootstrap uuid NOT NULL,
+    execution text NOT NULL,
+    step uuid NOT NULL,
+    predecessor uuid,
+    state text NOT NULL,
+    complete boolean NOT NULL,
+    CONSTRAINT public_filter_repair_step_state_check CHECK ((octet_length(state) <= 16384))
+);
+
+
+--
+-- Name: public_filter_source; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.public_filter_source (
+    partition_no integer NOT NULL,
+    source_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    configuration uuid DEFAULT gen_random_uuid() NOT NULL,
+    route_digest text NOT NULL,
+    owner_epoch integer NOT NULL,
+    family text NOT NULL,
+    CONSTRAINT public_filter_source_family_check CHECK ((family = 'global-subject-v1'::text)),
+    CONSTRAINT public_filter_source_owner_epoch_check CHECK ((owner_epoch > 0))
 );
 
 
@@ -5796,6 +6240,126 @@ ALTER TABLE ONLY semantic.identity_epoch_topology_custody
 
 
 --
+-- Name: identity_public_capture_home identity_public_capture_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_capture_home
+    ADD CONSTRAINT identity_public_capture_home_pkey PRIMARY KEY (partition_no, capture_id, home);
+
+
+--
+-- Name: identity_public_capture_key identity_public_capture_key_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_capture_key
+    ADD CONSTRAINT identity_public_capture_key_pkey PRIMARY KEY (partition_no, capture_id, original);
+
+
+--
+-- Name: identity_public_capture_page identity_public_capture_page_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_capture_page
+    ADD CONSTRAINT identity_public_capture_page_pkey PRIMARY KEY (partition_no, capture_id, page_version);
+
+
+--
+-- Name: identity_public_capture identity_public_capture_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_capture
+    ADD CONSTRAINT identity_public_capture_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: identity_public_dirty identity_public_dirty_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_dirty
+    ADD CONSTRAINT identity_public_dirty_pkey PRIMARY KEY (partition_no, original);
+
+
+--
+-- Name: identity_public_writer identity_public_writer_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_public_writer
+    ADD CONSTRAINT identity_public_writer_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: identity_scope_attempt identity_scope_attempt_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_attempt
+    ADD CONSTRAINT identity_scope_attempt_pkey PRIMARY KEY (partition_no, source_key, scope_id, registration, job_id, job_epoch);
+
+
+--
+-- Name: identity_scope_bridge identity_scope_bridge_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_bridge
+    ADD CONSTRAINT identity_scope_bridge_pkey PRIMARY KEY (partition_no, generation);
+
+
+--
+-- Name: identity_scope_completion identity_scope_completion_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_completion
+    ADD CONSTRAINT identity_scope_completion_pkey PRIMARY KEY (partition_no, source_key, scope_id, registration, job_id, job_epoch);
+
+
+--
+-- Name: identity_scope_directory_release identity_scope_directory_release_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_directory_release
+    ADD CONSTRAINT identity_scope_directory_release_pkey PRIMARY KEY (partition_no, generation, original, source_partition, source_key, scope_id, registration);
+
+
+--
+-- Name: identity_scope_forward identity_scope_forward_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_forward
+    ADD CONSTRAINT identity_scope_forward_pkey PRIMARY KEY (partition_no, source_key, scope_id, registration, dependency);
+
+
+--
+-- Name: identity_scope_inverse identity_scope_inverse_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_inverse
+    ADD CONSTRAINT identity_scope_inverse_pkey PRIMARY KEY (partition_no, generation, original, source_partition, source_key, scope_id, registration);
+
+
+--
+-- Name: identity_scope_prearm_receipt identity_scope_prearm_receipt_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_prearm_receipt
+    ADD CONSTRAINT identity_scope_prearm_receipt_pkey PRIMARY KEY (partition_no, source_key, scope_id, registration, job_id, job_epoch, directory_transaction, page_id, ordinal, disposition);
+
+
+--
+-- Name: identity_scope_repair_cursor identity_scope_repair_cursor_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_repair_cursor
+    ADD CONSTRAINT identity_scope_repair_cursor_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: identity_scope_summary identity_scope_summary_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_scope_summary
+    ADD CONSTRAINT identity_scope_summary_pkey PRIMARY KEY (partition_no, source_key, scope_id);
+
+
+--
 -- Name: inbound_link_context_count inbound_link_context_count_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -5897,6 +6461,86 @@ ALTER TABLE ONLY semantic.provider_review_queue_key
 
 ALTER TABLE ONLY semantic.provider_review_queue_ready
     ADD CONSTRAINT provider_review_queue_ready_pkey PRIMARY KEY (route, source, source_partition);
+
+
+--
+-- Name: public_filter_bootstrap_account public_filter_bootstrap_account_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_bootstrap_account
+    ADD CONSTRAINT public_filter_bootstrap_account_pkey PRIMARY KEY (partition_no, bootstrap, account_partition);
+
+
+--
+-- Name: public_filter_bootstrap public_filter_bootstrap_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_bootstrap
+    ADD CONSTRAINT public_filter_bootstrap_pkey PRIMARY KEY (partition_no, bootstrap);
+
+
+--
+-- Name: public_filter_read_definition public_filter_read_definition_partition_no_source_id_config_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_read_definition
+    ADD CONSTRAINT public_filter_read_definition_partition_no_source_id_config_key UNIQUE (partition_no, source_id, configuration, release_digest, subject_type, capture_digest);
+
+
+--
+-- Name: public_filter_read_definition public_filter_read_definition_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_read_definition
+    ADD CONSTRAINT public_filter_read_definition_pkey PRIMARY KEY (partition_no, read_definition);
+
+
+--
+-- Name: public_filter_repair_advance public_filter_repair_advance_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_repair_advance
+    ADD CONSTRAINT public_filter_repair_advance_pkey PRIMARY KEY (partition_no, bootstrap, execution, step, route, subject_id);
+
+
+--
+-- Name: public_filter_repair_step public_filter_repair_step_partition_no_bootstrap_execution__key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_repair_step
+    ADD CONSTRAINT public_filter_repair_step_partition_no_bootstrap_execution__key UNIQUE (partition_no, bootstrap, execution, predecessor);
+
+
+--
+-- Name: public_filter_repair_step public_filter_repair_step_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_repair_step
+    ADD CONSTRAINT public_filter_repair_step_pkey PRIMARY KEY (partition_no, bootstrap, execution, step);
+
+
+--
+-- Name: public_filter_source public_filter_source_partition_no_route_digest_owner_epoch__key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_source
+    ADD CONSTRAINT public_filter_source_partition_no_route_digest_owner_epoch__key UNIQUE (partition_no, route_digest, owner_epoch, family);
+
+
+--
+-- Name: public_filter_source public_filter_source_partition_no_source_id_configuration_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_source
+    ADD CONSTRAINT public_filter_source_partition_no_source_id_configuration_key UNIQUE (partition_no, source_id, configuration);
+
+
+--
+-- Name: public_filter_source public_filter_source_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_source
+    ADD CONSTRAINT public_filter_source_pkey PRIMARY KEY (partition_no, source_id);
 
 
 --
@@ -6783,6 +7427,41 @@ CREATE INDEX identity_epoch_topology_open_home ON semantic.identity_epoch_bootst
 
 
 --
+-- Name: identity_public_dirty_revision; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_public_dirty_revision ON semantic.identity_public_dirty USING btree (partition_no, revision, original);
+
+
+--
+-- Name: identity_scope_active_attempt; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_scope_active_attempt ON semantic.identity_scope_attempt USING btree (partition_no, source_key, scope_id, registration, job_id, job_epoch) WHERE (state = 'active'::text);
+
+
+--
+-- Name: identity_scope_forward_unresolved; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_scope_forward_unresolved ON semantic.identity_scope_forward USING btree (partition_no, source_key, scope_id, registration, dependency) WHERE (ticket IS NULL);
+
+
+--
+-- Name: identity_scope_pending_groups; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_scope_pending_groups ON semantic.identity_epoch_group USING btree (partition_no, terminal) WHERE (pending_job IS NOT NULL);
+
+
+--
+-- Name: identity_scope_repair_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_scope_repair_pending ON semantic.identity_scope_summary USING btree (partition_no, source_key, scope_id) WHERE (state = ANY (ARRAY['capturing'::text, 'enrolling'::text, 'repair'::text, 'retiring'::text]));
+
+
+--
 -- Name: inbound_link_all_present; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -6913,6 +7592,20 @@ CREATE UNIQUE INDEX provider_review_queue_key_erasure ON semantic.provider_revie
 --
 
 CREATE INDEX provider_review_queue_key_pending ON semantic.provider_review_queue_key USING btree (route, captured_position, erasure_key) WHERE (NOT published);
+
+
+--
+-- Name: public_filter_bootstrap_capture; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_bootstrap_capture ON semantic.public_filter_bootstrap USING btree (partition_no, request_key) WHERE (state = 'capturing'::text);
+
+
+--
+-- Name: public_filter_repair_root; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_repair_root ON semantic.public_filter_repair_step USING btree (partition_no, bootstrap, execution) WHERE (predecessor IS NULL);
 
 
 --
@@ -8262,6 +8955,20 @@ CREATE TRIGGER identity_epoch_step_immutable BEFORE DELETE OR UPDATE ON semantic
 
 
 --
+-- Name: subject identity_public_writer; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_public_writer AFTER INSERT OR DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_public_writer();
+
+
+--
+-- Name: identity_epoch_group identity_scope_claim; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER identity_scope_claim BEFORE UPDATE OF pending_job, pending_epoch ON semantic.identity_epoch_group FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_scope_claim();
+
+
+--
 -- Name: inbound_link inbound_copy_erasure; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -9060,6 +9767,54 @@ ALTER TABLE ONLY semantic.moderation
 
 
 --
+-- Name: public_filter_bootstrap_account public_filter_bootstrap_account_partition_no_bootstrap_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_bootstrap_account
+    ADD CONSTRAINT public_filter_bootstrap_account_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap);
+
+
+--
+-- Name: public_filter_bootstrap public_filter_bootstrap_partition_no_read_definition_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_bootstrap
+    ADD CONSTRAINT public_filter_bootstrap_partition_no_read_definition_fkey FOREIGN KEY (partition_no, read_definition) REFERENCES semantic.public_filter_read_definition(partition_no, read_definition);
+
+
+--
+-- Name: public_filter_read_definition public_filter_read_definition_partition_no_source_id_confi_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_read_definition
+    ADD CONSTRAINT public_filter_read_definition_partition_no_source_id_confi_fkey FOREIGN KEY (partition_no, source_id, configuration) REFERENCES semantic.public_filter_source(partition_no, source_id, configuration);
+
+
+--
+-- Name: public_filter_repair_advance public_filter_repair_advance_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_repair_advance
+    ADD CONSTRAINT public_filter_repair_advance_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: public_filter_repair_step public_filter_repair_step_partition_no_bootstrap_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_repair_step
+    ADD CONSTRAINT public_filter_repair_step_partition_no_bootstrap_fkey FOREIGN KEY (partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap);
+
+
+--
+-- Name: public_filter_source public_filter_source_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.public_filter_source
+    ADD CONSTRAINT public_filter_source_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
 -- Name: record_lifecycle record_lifecycle_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -9148,91 +9903,6 @@ ALTER TABLE ONLY semantic.statement_disclosure
 
 
 --
--- Source-owned catalogue/configuration/read binding. Search remains the sole observation/engine writer.
-CREATE TABLE semantic.public_filter_source (
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  source_id uuid NOT NULL DEFAULT gen_random_uuid(),
-  configuration uuid NOT NULL DEFAULT gen_random_uuid(),
-  route_digest text NOT NULL,
-  owner_epoch integer NOT NULL CHECK(owner_epoch > 0),
-  family text NOT NULL CHECK(family = 'global-subject-v1'),
-  PRIMARY KEY(partition_no, source_id),
-  UNIQUE(partition_no, route_digest, owner_epoch, family),
-  UNIQUE(partition_no, source_id, configuration)
-);
-CREATE TABLE semantic.public_filter_read_definition (
-  partition_no integer NOT NULL,
-  read_definition uuid NOT NULL DEFAULT gen_random_uuid(),
-  source_id uuid NOT NULL,
-  configuration uuid NOT NULL,
-  release_digest text NOT NULL,
-  subject_type text NOT NULL,
-  capture_digest text NOT NULL,
-  capture text NOT NULL CHECK(octet_length(capture) <= 1048576),
-  dependency_keys jsonb NOT NULL CHECK(jsonb_typeof(dependency_keys) = 'array'),
-  PRIMARY KEY(partition_no, read_definition),
-  UNIQUE(partition_no, source_id, configuration, release_digest, subject_type, capture_digest),
-  FOREIGN KEY(partition_no, source_id, configuration)
-    REFERENCES semantic.public_filter_source(partition_no, source_id, configuration)
-);
-CREATE TABLE semantic.public_filter_bootstrap (
-  partition_no integer NOT NULL,
-  bootstrap uuid NOT NULL,
-  read_definition uuid NOT NULL,
-  request_key text NOT NULL,
-  consumer text NOT NULL CHECK(octet_length(consumer) <= 16384),
-  snapshot_kind text NOT NULL CHECK(snapshot_kind IN ('pit','prepared')),
-  native_snapshot pg_snapshot NOT NULL,
-  owner_epoch integer NOT NULL CHECK(owner_epoch > 0),
-  source_position bigint NOT NULL,
-  state text NOT NULL CHECK(state IN ('capturing','begun','adopted','aborting','aborted')),
-  account_after integer NOT NULL DEFAULT 0 CHECK(account_after BETWEEN 0 AND 4096),
-  queried text,
-  PRIMARY KEY(partition_no, bootstrap),
-  FOREIGN KEY(partition_no, read_definition)
-    REFERENCES semantic.public_filter_read_definition(partition_no, read_definition)
-);
-CREATE UNIQUE INDEX public_filter_bootstrap_capture ON semantic.public_filter_bootstrap
-  (partition_no, request_key) WHERE state = 'capturing';
--- Retained ORIGINAL owner heads, never current truth or an Account allow cache.
-CREATE TABLE semantic.public_filter_bootstrap_account (
-  partition_no integer NOT NULL,
-  bootstrap uuid NOT NULL,
-  account_partition integer NOT NULL CHECK(account_partition BETWEEN 0 AND 4095),
-  owner_epoch integer NOT NULL CHECK(owner_epoch > 0),
-  revision bigint NOT NULL CHECK(revision > 0),
-  claim_revision bigint NOT NULL CHECK(claim_revision > 0),
-  PRIMARY KEY(partition_no, bootstrap, account_partition),
-  FOREIGN KEY(partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap)
-);
-CREATE TABLE semantic.public_filter_repair_step (
-  partition_no integer NOT NULL,
-  bootstrap uuid NOT NULL,
-  execution text NOT NULL,
-  step uuid NOT NULL,
-  predecessor uuid,
-  state text NOT NULL CHECK(octet_length(state) <= 16384),
-  complete boolean NOT NULL,
-  PRIMARY KEY(partition_no, bootstrap, execution, step),
-  UNIQUE(partition_no, bootstrap, execution, predecessor),
-  FOREIGN KEY(partition_no, bootstrap) REFERENCES semantic.public_filter_bootstrap(partition_no, bootstrap)
-);
-CREATE UNIQUE INDEX public_filter_repair_root ON semantic.public_filter_repair_step
-  (partition_no, bootstrap, execution) WHERE predecessor IS NULL;
--- Home-local Source advancement; no foreign Source position is used as an external version.
-CREATE TABLE semantic.public_filter_repair_advance (
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  bootstrap uuid NOT NULL,
-  execution text NOT NULL,
-  step uuid NOT NULL,
-  route integer NOT NULL CHECK(route / 16 = partition_no),
-  subject_id uuid NOT NULL,
-  owner_epoch integer NOT NULL CHECK(owner_epoch > 0),
-  position bigint NOT NULL CHECK(position > 0),
-  PRIMARY KEY(partition_no, bootstrap, execution, step, route, subject_id)
-);
-
-
 -- PostgreSQL database dump complete
 --
 
