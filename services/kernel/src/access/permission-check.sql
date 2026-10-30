@@ -1,5 +1,5 @@
 -- unbound: one permission formula probes the bounded read batch or single-route page and the fixed Global Context for governance reach.
--- On Global, the B-tree companion seeks the last exact-key range starting
+-- The B-tree companions seek the last exact-key range starting
 -- at or before T. Non-overlap makes it the only possible grant at T; check
 -- containment after LIMIT so neither expired nor future history is enumerated.
 -- Scalar role-grant/denial counts cannot become hashed ACL-wide EXISTS plans.
@@ -68,16 +68,29 @@ WITH input AS NOT MATERIALIZED (
         ORDER BY g.subject_kind DESC, g.subject_id DESC, g.subject_role DESC,
                  g.action DESC, g.valid DESC LIMIT 1
       ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0
-      ELSE (SELECT count(*) FROM access.resource_grant g
-        WHERE g.route = target.route AND g.resource_id = target.resource_id AND g.action = i.action
-          AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
-          AND g.valid @> (SELECT at FROM authority)) > 0
+      ELSE (SELECT count(*) FROM (
+        SELECT g.valid FROM access.resource_grant g
+        WHERE ROW(g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid)
+            >= ROW(target.route, target.resource_id, k.subject_kind, k.subject_id, k.subject_role, i.action,
+                   'empty'::tstzrange)
+          AND ROW(g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid)
+            <= ROW(target.route, target.resource_id, k.subject_kind, k.subject_id, k.subject_role, i.action,
+                   tstzrange((SELECT at FROM authority), NULL, '[)'))
+        ORDER BY g.route DESC, g.resource_id DESC, g.subject_kind DESC, g.subject_id DESC,
+                 g.subject_role DESC, g.action DESC, g.valid DESC LIMIT 1
+      ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0
     END) OR (NOT b.explicit AND (SELECT count(*) FROM unnest(:grant_roles::nullable(text[])) role(grant_role)
-      WHERE (SELECT count(*) FROM access.resource_role_grant g
-        WHERE g.route = target.route AND g.resource_id = target.resource_id AND g.grant_role = role.grant_role
-          AND g.subject_kind = k.subject_kind AND g.subject_id = k.subject_id AND g.subject_role = k.subject_role
-          AND g.valid @> (SELECT at FROM authority)
-      ) > 0
+      WHERE (SELECT count(*) FROM (
+        SELECT g.valid FROM access.resource_role_grant g
+        WHERE ROW(g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.grant_role, g.valid)
+            >= ROW(target.route, target.resource_id, k.subject_kind, k.subject_id, k.subject_role, role.grant_role,
+                   'empty'::tstzrange)
+          AND ROW(g.route, g.resource_id, g.subject_kind, g.subject_id, g.subject_role, g.grant_role, g.valid)
+            <= ROW(target.route, target.resource_id, k.subject_kind, k.subject_id, k.subject_role, role.grant_role,
+                   tstzrange((SELECT at FROM authority), NULL, '[)'))
+        ORDER BY g.route DESC, g.resource_id DESC, g.subject_kind DESC, g.subject_id DESC,
+                 g.subject_role DESC, g.grant_role DESC, g.valid DESC LIMIT 1
+      ) candidate WHERE candidate.valid @> (SELECT at FROM authority)) > 0
     ) > 0)) AS granted,
     (k.subject_kind = 'identity' AND (SELECT count(*) FROM access.resource_denial d
       WHERE d.route = target.route AND d.resource_id = target.resource_id AND d.action = i.action

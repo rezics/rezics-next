@@ -97,6 +97,9 @@ function detail(operationId: string, action: string, anonymous = false) {
     operationId,
     'x-exposure': 'gate:collections',
     'x-action': action,
+    ...(operationId.startsWith('collection_member.')
+      ? { 'x-authority-resource-types': ['library.collection'] }
+      : { 'x-resource-types': ['library.collection'] }),
     security: anonymous ? [{ bearerAuth: [] }, {}] : [{ bearerAuth: [] }],
     ...(anonymous ? {} : { 'x-rate-limit': writeRate }),
   };
@@ -163,6 +166,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             'Anonymous Collection sitemap feed in immutable route/id order. Each page visits at most four partitions and fetches at most 4 × limit candidates. Follow next through short or empty pages until null. lastModified is the stored Collection updated_at; external subject rendering changes do not advance it.',
           'x-exposure': 'public',
           'x-action': 'collection:read',
+          'x-resource-types': ['library.collection'],
           security: [{ bearerAuth: [] }, {}],
         },
       },

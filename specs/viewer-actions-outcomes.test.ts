@@ -180,8 +180,7 @@ test('a suspended account gets its normal refusal and never an old positive or a
   await offered(f, bearer);
   await native().suspend(f.editor);
   await problem(await send(bearer, [f.collection]), 401, 'invalid_credentials');
-  // Collection routes retain native gated-route credential masking.
-  await problem(await edit(f, bearer, 'Suspended edit'), 401, 'authentication_required');
+  await problem(await edit(f, bearer, 'Suspended edit'), 401, 'invalid_credentials');
   const [anonymous] = await read(null, [f.collection]);
   expect(operations(anonymous!, 'collection:read')).toContain('collection.get');
 });
@@ -215,7 +214,7 @@ test('an assigned actor whose principal lacks the action or is suspended or whos
     else await problem(await send(bearer, [f.collection]), 401, 'invalid_credentials');
     const command = await edit(f, bearer, 'Principal refused');
     if (cause === 'principal_grant') await problem(command, 404, 'not_found');
-    else await problem(command, 401, 'authentication_required');
+    else await problem(command, 401, 'invalid_credentials');
   }
 });
 

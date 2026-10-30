@@ -36,6 +36,7 @@ type Routes = TypedRoutes<Kernel['~Routes']>;
 // response keeps its schema's type. An error names the offending routes.
 const typed = [
   'GET /health',
+  'POST /v1/viewerActions',
   'POST /v1/webhooks/stripe',
   'GET /v1/offers/:offerId',
   'POST /v1/offers',

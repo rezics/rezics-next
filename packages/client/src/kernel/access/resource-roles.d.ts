@@ -35,6 +35,6 @@ export declare function resolveResourceRoles(actions: ActionCatalogue, extension
 /** Names why a type did not resolve. Undefined means the same rules kept the type. */
 export declare function explainUnresolvedResourceType(actions: ActionCatalogue, type: string, extension?: ResourceRoleCatalogue): UnresolvedResourceType | undefined;
 /** Refuses composition when a mounted command declares a resource type that does not resolve. */
-export declare function assertDeclaredResourceTypes(app: Parameters<typeof actionCatalogue>[0]): void;
+export declare function assertDeclaredResourceTypes(app: Parameters<typeof actionCatalogue>[0], extension?: ResourceRoleCatalogue): void;
 export declare function installResourceRoleCatalogue(access: Access, catalogue: ResolvedResourceRoles): void;
 export declare function resourceRoleCatalogue(access: Access): ResolvedResourceRoles | undefined;

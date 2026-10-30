@@ -5644,6 +5644,18 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
         operationId: string;
         'x-exposure': string;
         'x-action': string;
+        'x-authority-resource-types': string[];
+        security: ({
+            bearerAuth: never[];
+        } | {
+            bearerAuth?: never;
+        })[];
+        'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+    } | {
+        operationId: string;
+        'x-exposure': string;
+        'x-action': string;
+        'x-resource-types': string[];
         security: ({
             bearerAuth: never[];
         } | {
@@ -6028,6 +6040,18 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             operationId: string;
             'x-exposure': string;
             'x-action': string;
+            'x-authority-resource-types': string[];
+            security: ({
+                bearerAuth: never[];
+            } | {
+                bearerAuth?: never;
+            })[];
+            'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        } | {
+            operationId: string;
+            'x-exposure': string;
+            'x-action': string;
+            'x-resource-types': string[];
             security: ({
                 bearerAuth: never[];
             } | {
@@ -6229,6 +6253,18 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
         operationId: string;
         'x-exposure': string;
         'x-action': string;
+        'x-authority-resource-types': string[];
+        security: ({
+            bearerAuth: never[];
+        } | {
+            bearerAuth?: never;
+        })[];
+        'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+    } | {
+        operationId: string;
+        'x-exposure': string;
+        'x-action': string;
+        'x-resource-types': string[];
         security: ({
             bearerAuth: never[];
         } | {

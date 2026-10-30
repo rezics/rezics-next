@@ -8,6 +8,15 @@ import { accessActionCatalogue, assertInternalActionDeclarations, createAccess }
 import { deriveAccess } from '../access/derived-access.ts';
 import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
+import {
+  compileViewerActionBindings,
+  viewerActionsRoutes,
+  type ViewerActionResources,
+  type ViewerActionBindings,
+} from '../access/viewer-actions.ts';
+import { collectionViewerActionResource } from '../library/collection-reads.ts';
+import { realmViewerActionResource } from '../community/realm.ts';
+import { spaceViewerActionResource } from '../community/space.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
 import { createRealmMembership } from '../community/membership.ts';
@@ -50,6 +59,10 @@ import { declareKernelWriteRates } from './write-rate-routes.ts';
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
+  /** Trusted modules mount declarations before composition validation. */
+  modules?: readonly ((app: ReturnType<typeof createApp>) => void)[];
+  viewerActionResources?: ViewerActionResources;
+  resourceRoles?: import('../access/resource-roles.ts').ResourceRoleCatalogue;
   /** Trusted domain time only; authentication and request budgets retain real time. */
   clock?: () => Date;
   commerce?: CommerceDependencies;
@@ -250,12 +263,20 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   };
   const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
   let compositionFinished = false;
+  const accessFactory = typeof dependencies.access === 'function' ? dependencies.access : createAccess;
   const { resolveAccess, realmRoleReader } = createKernelAccessResolver({
     pool: dependencies.pool,
     tokens,
     clock,
     composedActions: () => (compositionFinished ? actionCatalogue(zones) : undefined),
-    ...(dependencies.access === undefined ? {} : { access: dependencies.access }),
+    access:
+      typeof dependencies.access === 'object'
+        ? dependencies.access
+        : (config) =>
+            accessFactory({
+              ...config,
+              ...(dependencies.resourceRoles ? { resourceRoles: dependencies.resourceRoles } : {}),
+            }),
     ...(dependencies.realmRoleReader === undefined ? {} : { realmRoleReader: dependencies.realmRoleReader }),
   });
   let opened: Promise<WorkClient> | undefined;
@@ -422,7 +443,34 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
   });
+  const viewerResources = new Map([
+    ['library.collection', collectionViewerActionResource],
+    ['community.realm', realmViewerActionResource],
+    ['community.space', spaceViewerActionResource],
+  ]);
+  for (const [type, resource] of dependencies.viewerActionResources ?? []) {
+    if (viewerResources.has(type)) throw new Error(`${type}: duplicate viewer actions registration`);
+    viewerResources.set(type, resource);
+  }
+  for (const module of dependencies.modules ?? []) module(zones as unknown as ReturnType<typeof createApp>);
+  let viewerBindings: ViewerActionBindings;
+  viewerActionsRoutes(zones as unknown as ReturnType<typeof createApp>, {
+    pool: dependencies.pool,
+    clock,
+    resources: viewerResources,
+    access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+    bindings: () => viewerBindings,
+  });
   declareKernelWriteRates(zones);
+  viewerBindings = compileViewerActionBindings(zones.routes);
+  for (const [type, resource] of viewerResources) {
+    const actions = new Set([
+      resource.readAction,
+      ...(viewerBindings.get(type) ?? []).map((binding) => binding.action),
+    ]);
+    if (actions.size > 64)
+      throw new Error(`${type}: viewer actions exceed 64 candidate actions or 256 operation bindings`);
+  }
   const parameterNames = new Map<string, { name: string; method: string; path: string }>();
   for (const route of zones.routes) {
     const segments = route.path.split('/');
@@ -455,7 +503,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     );
   compositionFinished = true;
   assertInternalActionDeclarations(actionCatalogue(zones));
-  assertDeclaredResourceTypes(zones);
+  assertDeclaredResourceTypes(zones, dependencies.resourceRoles);
   return zones as Kernel;
 }
 
@@ -466,6 +514,7 @@ type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
 };
 
 type KernelComposition = ZoneComposition &
+  ReturnType<typeof viewerActionsRoutes> &
   ReturnType<typeof sourceStatisticRoutes> &
   ReturnType<typeof ratingRoutes> &
   ReturnType<typeof collectionRoutes> &

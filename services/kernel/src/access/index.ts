@@ -30,7 +30,7 @@ import {
   createCommandAdmission,
   installCommandAdmission,
 } from './command-admission.ts';
-import { resourcePage, type ResourcePage } from '../request/access.ts';
+import { validReadDecisionActions, resourcePage, type ResourcePage } from '../request/access.ts';
 import type {
   Access,
   AccessConfig as KernelAccessConfig,
@@ -46,7 +46,8 @@ import type {
 import { accessRoot } from './derived-access.ts';
 import type { Account } from './account-data.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
-import { createAccess as permissionAccess } from './permission.ts';
+import { createAccess as permissionAccess, readDecisionTime, authorizePreparedReadGate } from './permission.ts';
+import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import timeRead from './permission-time.sql';
 import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
 import { installDurableIdentityBridge } from './durable-identity.ts';
@@ -118,8 +119,16 @@ type PlatformGateCheck = (
   resource: Resource,
   context: AccessContext,
   at: string,
+  client?: AccessClient,
 ) => Promise<boolean>;
 const platformGateChecks = new WeakMap<Access, PlatformGateCheck>();
+const preparedReadTimes = new WeakMap<Access, WeakMap<AccessContext, AuthoritativeTime>>();
+/** The native batch's already-observed kernel instant; no second clock query. */
+export function viewerActionReadTime(access: Access, context: AccessContext): AuthoritativeTime {
+  const time = preparedReadTimes.get(accessRoot(access))?.get(context);
+  if (!time) throw new AccessUnavailableError('overloaded');
+  return time;
+}
 const gateActionPattern = /^gate:([a-z][a-z_-]{0,62})$/;
 const reservedGateNames = new Set(['any', 'open', 'close']);
 
@@ -275,14 +284,14 @@ export function createAccess(config: AccessConfig): Access {
       return { allowed: false, explicit: false };
     }
   }
+  const readTimes = new WeakMap<AccessContext, AuthoritativeTime>();
+  const gateReads = new WeakMap<
+    AccessContext,
+    { actor: Actor; handle: ReadDecisions; time: AuthoritativeTime; checks: Map<string, Promise<boolean>> }
+  >();
   const access: Access = {
     async prepareReadDecisions(input) {
-      if (
-        input.actions.size < 1 ||
-        input.actions.size > 64 ||
-        [...input.actions].some((action) => !actions.has(action))
-      )
-        throw new RangeError('Invalid read decision actions');
+      if (!validReadDecisionActions(input, actions)) throw new RangeError('Invalid read decision actions');
       const { actor, context } = input;
       const identity = actor.kind === 'account' ? authentication.identity(actor) : undefined;
       if (
@@ -303,6 +312,11 @@ export function createAccess(config: AccessConfig): Access {
           deadline,
         },
       });
+      const time = readDecisionTime(handle);
+      if (time) {
+        readTimes.set(context, time);
+        gateReads.set(context, { actor, handle, time, checks: new Map() });
+      }
       return Object.freeze({
         decide(client, batch, time) {
           // Validation in the inner port always precedes any dependency access.
@@ -339,7 +353,8 @@ export function createAccess(config: AccessConfig): Access {
   };
   installAccountStandingCheck(access, (input) => accountStandingCheck(permissions, input));
   installAccessClock(access, clock);
-  platformGateChecks.set(access, async (actor, requested, clientAction, resource, context, at) => {
+  preparedReadTimes.set(access, readTimes);
+  platformGateChecks.set(access, async (actor, requested, clientAction, resource, context, at, client) => {
     requireAccessDeadline(context.deadline);
     if (
       actor.kind !== 'account' ||
@@ -350,6 +365,38 @@ export function createAccess(config: AccessConfig): Access {
       requested.some((action) => !/^gate:(?:any|[a-z][a-z_-]{0,62})$/.test(action))
     )
       return false;
+
+    const shared = gateReads.get(context);
+    if (shared && client) {
+      const identity = authentication.identity(actor);
+      if (
+        shared.actor !== actor ||
+        authoritativeTimeValue(shared.time) !== at ||
+        !identity ||
+        identityExpired(identity, clock)
+      )
+        return false;
+      for (const action of [...new Set(requested)]) {
+        const key = `${resource.route}/${resource.id}/${action}`;
+        let check = shared.checks.get(key);
+        if (!check) {
+          check = authorizePreparedReadGate(
+            shared.handle,
+            deadlineClient(client, context.deadline),
+            action,
+            clientAction,
+            resource,
+          );
+          shared.checks.set(key, check);
+        }
+        if (await check) {
+          requireAccessDeadline(context.deadline);
+          if (identityExpired(identity, clock)) throw new AccessUnavailableError('deadline');
+          return true;
+        }
+      }
+      return false;
+    }
 
     const originals = new WeakMap<AccountActor, AccountActor>();
     const gateActorFor = (action: string): AccountActor => {
@@ -447,9 +494,10 @@ export function authorizePlatformGate(
   resource: Resource,
   context: AccessContext,
   at: string,
+  client?: AccessClient,
 ): Promise<boolean> {
   return (
-    platformGateChecks.get(accessRoot(access))?.(actor, actions, clientAction, resource, context, at) ??
+    platformGateChecks.get(accessRoot(access))?.(actor, actions, clientAction, resource, context, at, client) ??
     Promise.resolve(false)
   );
 }

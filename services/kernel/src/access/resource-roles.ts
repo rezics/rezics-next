@@ -158,7 +158,10 @@ export function explainUnresolvedResourceType(
 }
 
 /** Refuses composition when a mounted command declares a resource type that does not resolve. */
-export function assertDeclaredResourceTypes(app: Parameters<typeof actionCatalogue>[0]): void {
+export function assertDeclaredResourceTypes(
+  app: Parameters<typeof actionCatalogue>[0],
+  extension?: ResourceRoleCatalogue,
+): void {
   const actions = actionCatalogue(app);
   const declared = new Set<string>();
   for (const metadata of actions.values()) {
@@ -166,7 +169,7 @@ export function assertDeclaredResourceTypes(app: Parameters<typeof actionCatalog
   }
   const failures: string[] = [];
   for (const type of [...declared].sort()) {
-    const unresolved = explainUnresolvedResourceType(actions, type);
+    const unresolved = explainUnresolvedResourceType(actions, type, extension);
     if (!unresolved) continue;
     failures.push(
       `Resource type ${unresolved.type} does not resolve: missing roles ${unresolved.missingRoles.join(', ')}; unmounted actions ${unresolved.unmountedActions.join(', ')}`,

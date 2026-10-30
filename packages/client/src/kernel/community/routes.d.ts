@@ -7406,6 +7406,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
         operationId: string;
         'x-exposure': string;
         'x-action': string;
+        'x-resource-types': string[];
         'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
         security: {
             bearerAuth: never[];
@@ -7813,6 +7814,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
             operationId: string;
             'x-exposure': string;
             'x-action': string;
+            'x-resource-types': string[];
             'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
             security: {
                 bearerAuth: never[];
@@ -8044,6 +8046,7 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
         operationId: string;
         'x-exposure': string;
         'x-action': string;
+        'x-resource-types': string[];
         'x-rate-limit': Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
         security: {
             bearerAuth: never[];

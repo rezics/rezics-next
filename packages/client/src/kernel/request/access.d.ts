@@ -99,8 +99,14 @@ export type ReadDecisions = Readonly<{
 export type PrepareReadDecisionsInput = {
     actor: Actor;
     actions: ReadonlySet<string>;
+    /** Composed candidate sets for a mixed-type read; each type remains bounded to 64. */
+    typeActions?: ReadonlyMap<string, ReadonlySet<string>>;
+    /** Shared authoritative instant for a personal batch. */
+    time?: AuthoritativeTime;
     context: AccessContext;
 };
+/** Validate the bounded catalogue before reading any authority dependency. */
+export declare function validReadDecisionActions(input: PrepareReadDecisionsInput, catalogue: ActionCatalogue): boolean;
 export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
 export type AccessCommandAuthorization = CommandAuthorization & {
     readonly check: AccessCheck;

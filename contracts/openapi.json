@@ -2534,7 +2534,10 @@
           {}
         ],
         "x-action": "collection:read",
-        "x-exposure": "gate:collections"
+        "x-exposure": "gate:collections",
+        "x-resource-types": [
+          "library.collection"
+        ]
       }
     },
     "/v1/accounts/{accountId}/notifications": {
@@ -22877,7 +22880,10 @@
           {}
         ],
         "x-action": "collection:read",
-        "x-exposure": "gate:collections"
+        "x-exposure": "gate:collections",
+        "x-resource-types": [
+          "library.collection"
+        ]
       },
       "post": {
         "operationId": "collection.create",
@@ -24390,7 +24396,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "library.collection"
+        ]
       },
       "get": {
         "operationId": "collection.get",
@@ -25183,7 +25192,10 @@
           {}
         ],
         "x-action": "collection:read",
-        "x-exposure": "gate:collections"
+        "x-exposure": "gate:collections",
+        "x-resource-types": [
+          "library.collection"
+        ]
       },
       "patch": {
         "operationId": "collection.update",
@@ -25986,7 +25998,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "library.collection"
+        ]
       }
     },
     "/v1/collections/{collectionId}/members": {
@@ -26969,6 +26984,9 @@
           {}
         ],
         "x-action": "collection:read",
+        "x-authority-resource-types": [
+          "library.collection"
+        ],
         "x-exposure": "gate:collections"
       },
       "post": {
@@ -27734,6 +27752,9 @@
           }
         ],
         "x-action": "collection:update",
+        "x-authority-resource-types": [
+          "library.collection"
+        ],
         "x-exposure": "gate:collections",
         "x-rate-limit": {
           "family": "write",
@@ -28442,6 +28463,9 @@
           }
         ],
         "x-action": "collection:update",
+        "x-authority-resource-types": [
+          "library.collection"
+        ],
         "x-exposure": "gate:collections",
         "x-rate-limit": {
           "family": "write",
@@ -29210,6 +29234,9 @@
           }
         ],
         "x-action": "collection:update",
+        "x-authority-resource-types": [
+          "library.collection"
+        ],
         "x-exposure": "gate:collections",
         "x-rate-limit": {
           "family": "write",
@@ -29980,6 +30007,9 @@
           }
         ],
         "x-action": "collection:update",
+        "x-authority-resource-types": [
+          "library.collection"
+        ],
         "x-exposure": "gate:collections",
         "x-rate-limit": {
           "family": "write",
@@ -57602,7 +57632,10 @@
           {}
         ],
         "x-action": "realm:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/media": {
@@ -101983,7 +102016,10 @@
           {}
         ],
         "x-action": "realm:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.realm"
+        ]
       },
       "patch": {
         "operationId": "realm.update",
@@ -103105,7 +103141,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/bans": {
@@ -103842,7 +103881,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/bans/{accountId}": {
@@ -104622,7 +104664,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       },
       "put": {
         "operationId": "realm.ban",
@@ -105567,7 +105612,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/boardScheme": {
@@ -106621,7 +106669,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/boards": {
@@ -109128,7 +109179,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/members/me": {
@@ -109731,7 +109785,10 @@
           {}
         ],
         "x-action": "realm:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/membership": {
@@ -110512,7 +110569,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       },
       "post": {
         "operationId": "realm.join",
@@ -111299,7 +111359,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/participation": {
@@ -111965,7 +112028,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/publications": {
@@ -112638,7 +112704,10 @@
           {}
         ],
         "x-action": "realm:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.realm"
+        ]
       },
       "post": {
         "operationId": "publication.publish",
@@ -113672,7 +113741,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/publications/{subjectId}": {
@@ -114226,7 +114298,10 @@
           {}
         ],
         "x-action": "realm:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/publications/{subjectId}:reject": {
@@ -115171,7 +115246,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/realms/{realmId}/publications/{subjectId}:withdraw": {
@@ -116116,7 +116194,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/reports": {
@@ -122630,7 +122711,10 @@
           {}
         ],
         "x-action": "collection:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "library.collection"
+        ]
       }
     },
     "/v1/sitemap/realms": {
@@ -123195,7 +123279,10 @@
           {}
         ],
         "x-action": "realm:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.realm"
+        ]
       }
     },
     "/v1/sitemap/spaces": {
@@ -123764,7 +123851,10 @@
           {}
         ],
         "x-action": "space:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.space"
+        ]
       }
     },
     "/v1/sitemap/threads": {
@@ -126308,7 +126398,10 @@
           {}
         ],
         "x-action": "space:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.space"
+        ]
       }
     },
     "/v1/spaces": {
@@ -127796,7 +127889,10 @@
           {}
         ],
         "x-action": "space:read",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "community.space"
+        ]
       },
       "patch": {
         "operationId": "space.update",
@@ -128785,7 +128881,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.space"
+        ]
       }
     },
     "/v1/spaces/{spaceId}/address": {
@@ -129859,7 +129958,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "community.space"
+        ]
       }
     },
     "/v1/statements/{id}/disclose": {
@@ -140249,7 +140351,10 @@
           {}
         ],
         "x-action": "collection:read",
-        "x-exposure": "gate:collections"
+        "x-exposure": "gate:collections",
+        "x-resource-types": [
+          "library.collection"
+        ]
       }
     },
     "/v1/subjects/{id}/counts": {
@@ -174068,6 +174173,411 @@
           "family": "write",
           "units": 1
         }
+      }
+    },
+    "/v1/viewerActions": {
+      "post": {
+        "operationId": "viewer_actions.read",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 100,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "resources"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "resources": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "viewerActions": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "action": {
+                                      "type": "string"
+                                    },
+                                    "operations": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    }
+                                  },
+                                  "required": [
+                                    "action",
+                                    "operations"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id",
+                              "viewerActions"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "error": {
+                                "const": "not_found",
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id",
+                              "error"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "resources"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "invalid_request",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Invalid Request",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/invalid_request",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "authentication_required",
+                        "invalid_credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "enum": [
+                        "Authentication Required",
+                        "Invalid Credentials"
+                      ],
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "https://rezics.com/problems/authentication_required",
+                        "https://rezics.com/problems/invalid_credentials"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Authentication required; Invalid credentials"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "dependency_unavailable",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Dependency Unavailable",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/dependency_unavailable",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {}
+        ],
+        "x-action": "viewer_actions:read",
+        "x-exposure": "public"
       }
     },
     "/v1/zones": {

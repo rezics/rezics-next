@@ -123,8 +123,9 @@ export function createApp({
   };
 
   const app = new Elysia()
-    .onRequest(({ request }) => {
+    .onRequest(({ request, set }) => {
       idFor(request);
+      if (new URL(request.url).pathname === '/v1/viewerActions') set.headers['cache-control'] = 'private, no-store';
     })
     .onParse('global', async ({ request, route }) => {
       const mounted = mountedFor(request, route);
@@ -216,6 +217,8 @@ export function createApp({
           cause: bodyError ?? error,
         });
       }
+      if (new URL(request.url).pathname === '/v1/viewerActions')
+        problem.headers.set('cache-control', 'private, no-store');
       return problem;
     })
     .onTransform('global', ({ body, request, route }) => {

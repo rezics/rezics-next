@@ -278,3 +278,30 @@ export async function updateSpace(deps: SpaceDependencies, actor: Actor, input: 
     },
   );
 }
+
+/** The read route's exact identity/head eligibility, batched by supplied full keys. */
+export const spaceViewerActionResource: import('../access/viewer-actions.ts').ViewerActionResource = {
+  readAction: 'space:read',
+  async read(client, ids, at) {
+    const result = await client.query<{ id: string; public: boolean }>(
+      `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
+       CROSS JOIN LATERAL (
+         WITH identity AS MATERIALIZED (
+           SELECT h.* FROM community.space h
+           WHERE h.route = wanted.route AND h.space_id = wanted.id
+           ORDER BY h.route, h.space_id LIMIT 1
+         )
+         SELECT h.space_id AS id, true AS public
+         FROM identity h
+         CROSS JOIN LATERAL (
+           SELECT r.created_at FROM community.space_revision r
+           WHERE r.route = h.route AND r.space_id = h.space_id AND r.revision_id = h.head_revision_id
+           ORDER BY r.route, r.space_id, r.revision_id LIMIT 1
+         ) r
+         WHERE h.state = 'active' AND h.created_at <= $3::timestamptz AND r.created_at <= $3::timestamptz
+       ) row`,
+      [ids.map((id) => routeOf(id)!), ids, at],
+    );
+    return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
+  },
+};

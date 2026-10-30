@@ -4,9 +4,15 @@ import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable }
 import { readAccount, type Account } from './account-data.ts';
 import { installAccountStandingCheck } from './account-standing.ts';
 import { accessCommandAttempt } from './command-admission.ts';
-import { authoritativeTimeValue, hasLiveCommandTransaction, type AuthoritativeTime } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  hasLiveCommandTransaction,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import {
   accessCheck,
+  validReadDecisionActions,
   resourcePage,
   type ResourcePage,
   type AccessRealmRoleReader,
@@ -99,6 +105,28 @@ type Prepared = {
 // Object identity is the trust boundary: serialized, spread, and caller-created
 // objects can never become evidence. The registry retains no request after GC.
 const prepared = new WeakMap<object, Prepared>();
+/** Opaque native batch evidence also serves admission's gate checks. Callers
+ * cannot manufacture this handle or replace the borrowed scope operand. */
+const readEvidence = new WeakMap<
+  ReadDecisions,
+  {
+    time: AuthoritativeTime;
+    gate(client: AccessClient, action: string, clientAction: string, resource: Resource): Promise<boolean>;
+  }
+>();
+export function readDecisionTime(handle: ReadDecisions): AuthoritativeTime | undefined {
+  return readEvidence.get(handle)?.time;
+}
+export function authorizePreparedReadGate(
+  handle: ReadDecisions,
+  client: AccessClient,
+  action: string,
+  clientAction: string,
+  resource: Resource,
+): Promise<boolean> {
+  return readEvidence.get(handle)?.gate(client, action, clientAction, resource) ?? Promise.resolve(false);
+}
+
 /** Internal evidence lifetime for separately anchored command proofs. This is
  * read from the opaque registry, never from caller-supplied authorization JSON.
  */
@@ -514,9 +542,10 @@ export function createAccess(config: PermissionConfig): Access {
   }
   async function prepareReadDecisions(input: PrepareReadDecisionsInput): Promise<ReadDecisions> {
     const requested = [...input.actions];
-    if (requested.length < 1 || requested.length > 64 || requested.some((action) => !actions.has(action)))
-      throw new RangeError('Invalid read decision actions');
+    if (!validReadDecisionActions(input, actions)) throw new RangeError('Invalid read decision actions');
     const admitted = new Set(requested);
+    const typeActions =
+      input.typeActions && new Map([...input.typeActions].map(([type, values]) => [type, new Set(values)]));
     const grantRolesByAction = new Map(
       requested.map((action) => [
         action,
@@ -533,7 +562,10 @@ export function createAccess(config: PermissionConfig): Access {
           throw new AccessUnavailableError('overloaded');
         const identity =
           actor.kind === 'account' ? Object.freeze({ ...actor, scopes: Object.freeze([...actor.scopes]) }) : actor;
-        const recorded = await readPermissionTime(pool, config.clock);
+        const recorded = await readPermissionTime(
+          pool,
+          input.time ? () => new Date(authoritativeTimeValue(input.time!)) : config.clock,
+        );
         if (!recorded?.databaseAt) throw new AccessUnavailableError('overloaded');
         const at = recorded.at;
         let principalId: string | null = null;
@@ -645,82 +677,125 @@ export function createAccess(config: PermissionConfig): Access {
         if (!Number.isFinite(origin)) throw new AccessUnavailableError('overloaded');
         const databaseDeadline = new Date(origin + Math.max(0, deadline - recorded.observedAt)).toISOString();
         requireAccessDeadline(deadline);
-        return Object.freeze({
-          async decide(client, batch, time) {
-            if (
-              !batch ||
-              !admitted.has(batch.action) ||
-              typeof batch.resourceType !== 'string' ||
-              !batch.resourceType.length ||
-              !Array.isArray(batch.ids) ||
-              batch.ids.length < 1 ||
-              batch.ids.length > 200 ||
-              batch.ids.some((id) => typeof id !== 'string' || readRoute(id) === null) ||
-              new Set(batch.ids).size !== batch.ids.length
-            )
-              throw new RangeError('Invalid read decision batch');
-            const ids = Object.freeze([...batch.ids]);
-            const action = batch.action;
-            const eligibility = batch.eligibility;
-            try {
-              requireAccessDeadline(deadline);
-              return await within(deadline, async () => {
-                const bounded = deadlineClient(client, deadline);
-                const scope = identity.kind === 'account' && identity.scopes.includes(action);
-                const rows = await permissionRead.run(bounded, {
-                  route: 0,
-                  resource_ids: [...ids],
-                  batch: true,
-                  include_explicit: scope,
-                  include_public: actions.get(action)!.anonymous,
-                  include_global: isGlobalReachAction(action),
-                  action,
-                  actor_id: identity.kind === 'account' ? identity.accountId : '',
-                  principal_id: principalId ?? '',
-                  assignment_route: assignmentRoute,
-                  assignment_request_id: assignmentRequestId,
-                  anonymous: !scope,
-                  floor: false,
-                  at: time ? authoritativeTimeValue(time) : '',
-                  roles,
-                  grant_roles: grantRolesByAction.get(action)!,
-                  deadline: databaseDeadline,
-                });
-                requireAccessDeadline(deadline);
-                if (
-                  rows.length !== ids.length ||
-                  new Set(rows.map((row) => row.resourceId)).size !== ids.length ||
-                  rows.some(
-                    (row) =>
-                      !ids.includes(row.resourceId) ||
-                      typeof row.allowed !== 'boolean' ||
-                      typeof row.explicit !== 'boolean' ||
-                      !row.at ||
-                      !row.live,
-                  )
-                )
-                  throw new AccessUnavailableError('overloaded');
-                const floor = eligibility ? await eligibility(bounded, ids, rows[0]!.at!) : undefined;
-                requireAccessDeadline(deadline);
-                if (eligibility && (!floor || typeof floor !== 'object'))
-                  throw new AccessUnavailableError('overloaded');
-                const result: Record<string, AccessDecision> = Object.create(null);
-                for (const row of rows) {
-                  const id = row.resourceId;
-                  if (!id || (floor && typeof floor[id] !== 'boolean')) throw new AccessUnavailableError('overloaded');
-                  result[id] = Object.freeze({
-                    allowed: row.allowed || (floor?.[id] === true && row.publicAllowed === true),
-                    explicit: row.explicit,
-                  });
-                }
-                return Object.freeze(result);
+        // The permission clock query above already observed authoritative T. Mint
+        // its opaque read token from that observation without a second SQL read.
+        const time =
+          input.time ??
+          (await mintReadTime({
+            query: (async () => ({
+              rows: [{ at }],
+              rowCount: 1,
+              command: 'SELECT',
+              oid: 0,
+              fields: [],
+            })) as AccessClient['query'],
+          }));
+        async function decide(
+          client: AccessClient,
+          batch: import('../request/access.ts').ReadDecisionInput,
+          decisionTime?: AuthoritativeTime,
+          borrowedScope?: string,
+        ): Promise<Readonly<Record<string, AccessDecision>>> {
+          const gate = borrowedScope !== undefined;
+          if (
+            !batch ||
+            (!gate && !admitted.has(batch.action)) ||
+            (!gate && typeActions !== undefined && !typeActions.get(batch.resourceType)?.has(batch.action)) ||
+            typeof batch.resourceType !== 'string' ||
+            !batch.resourceType.length ||
+            !Array.isArray(batch.ids) ||
+            batch.ids.length < 1 ||
+            batch.ids.length > 200 ||
+            batch.ids.some((id) => typeof id !== 'string' || readRoute(id) === null) ||
+            new Set(batch.ids).size !== batch.ids.length
+          )
+            throw new RangeError('Invalid read decision batch');
+          const ids = Object.freeze([...batch.ids]);
+          const action = batch.action;
+          const eligibility = batch.eligibility;
+          try {
+            requireAccessDeadline(deadline);
+            return await within(deadline, async () => {
+              const bounded = deadlineClient(client, deadline);
+              const scope = identity.kind === 'account' && identity.scopes.includes(borrowedScope ?? action);
+              const rows = await permissionRead.run(bounded, {
+                route: 0,
+                resource_ids: [...ids],
+                batch: true,
+                include_explicit: scope,
+                include_public: !gate && actions.get(action)!.anonymous,
+                include_global: isGlobalReachAction(action),
+                action,
+                actor_id: identity.kind === 'account' ? identity.accountId : '',
+                principal_id: principalId ?? '',
+                assignment_route: assignmentRoute,
+                assignment_request_id: assignmentRequestId,
+                anonymous: !scope,
+                floor: false,
+                at: decisionTime ? authoritativeTimeValue(decisionTime) : '',
+                roles,
+                grant_roles: gate
+                  ? [
+                      ...resolveResourceRoles(
+                        new Map([...actions, [action, { anonymous: false }]]),
+                        config.resourceRoles,
+                      ).roles,
+                    ]
+                      .filter(([, values]) => values.includes(action))
+                      .map(([role]) => role)
+                  : grantRolesByAction.get(action)!,
+                deadline: databaseDeadline,
               });
-            } catch (error) {
-              throwAccessUnavailable(error, deadline);
-              throw new AccessUnavailableError('overloaded');
-            }
+              requireAccessDeadline(deadline);
+              if (
+                rows.length !== ids.length ||
+                new Set(rows.map((row) => row.resourceId)).size !== ids.length ||
+                rows.some(
+                  (row) =>
+                    !ids.includes(row.resourceId) ||
+                    typeof row.allowed !== 'boolean' ||
+                    typeof row.explicit !== 'boolean' ||
+                    !row.at ||
+                    !row.live,
+                )
+              )
+                throw new AccessUnavailableError('overloaded');
+              const floor = eligibility ? await eligibility(bounded, ids, rows[0]!.at!) : undefined;
+              requireAccessDeadline(deadline);
+              if (eligibility && (!floor || typeof floor !== 'object')) throw new AccessUnavailableError('overloaded');
+              const result: Record<string, AccessDecision> = Object.create(null);
+              for (const row of rows) {
+                const id = row.resourceId;
+                if (!id || (floor && typeof floor[id] !== 'boolean')) throw new AccessUnavailableError('overloaded');
+                result[id] = Object.freeze({
+                  allowed: row.allowed || (floor?.[id] === true && row.publicAllowed === true),
+                  explicit: row.explicit,
+                });
+              }
+              return Object.freeze(result);
+            });
+          } catch (error) {
+            throwAccessUnavailable(error, deadline);
+            throw new AccessUnavailableError('overloaded');
+          }
+        }
+        const handle: ReadDecisions = Object.freeze({
+          decide: (client, batch, time) => decide(client, batch, time),
+        });
+        readEvidence.set(handle, {
+          time,
+          async gate(client, action, clientAction, resource) {
+            if (!/^gate:(?:any|[a-z][a-z_-]{0,62})$/.test(action)) return false;
+            const result = await decide(
+              client,
+              { action, resourceType: 'semantic.context', ids: [resource.id] },
+              time,
+              clientAction,
+            );
+            return result[resource.id]?.allowed === true;
           },
-        } satisfies ReadDecisions);
+        });
+        return handle;
       });
     } catch (error) {
       throwAccessUnavailable(error, deadline);

@@ -465,3 +465,21 @@ function subjectPosition(cursor: { epoch: number; after: CursorKey[] } | null): 
     throw invalidCursor();
   return collectionId;
 }
+
+/** Batch form of the ordinary Collection read's public eligibility. Only the
+ * requested full keys are examined; private rows remain available to Access grants. */
+export const collectionViewerActionResource: import('../access/viewer-actions.ts').ViewerActionResource = {
+  readAction: 'collection:read',
+  async read(client, ids) {
+    const result = await client.query<{ id: string; public: boolean }>(
+      `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
+       CROSS JOIN LATERAL (
+         SELECT collection_id AS id, state = 'active' AND visibility <> 'private' AS public
+         FROM library.collection WHERE route = wanted.route AND collection_id = wanted.id
+         ORDER BY route, collection_id LIMIT 1
+       ) row`,
+      [ids.map((id) => routeOf(id)!), ids],
+    );
+    return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
+  },
+};

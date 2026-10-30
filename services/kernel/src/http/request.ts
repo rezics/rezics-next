@@ -90,14 +90,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function sameResourceTypes(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
-  if (left === undefined || right === undefined) return left === right;
-  if (left.length !== right.length) return false;
-  const orderedLeft = [...left].sort();
-  const orderedRight = [...right].sort();
-  return orderedLeft.every((type, index) => type === orderedRight[index]);
-}
-
 function resourceTypesOf(route: MountedRoute, detail: Record<string, unknown>): readonly string[] | undefined {
   const value = detail['x-resource-types'];
   if (value === undefined) return undefined;
@@ -159,12 +151,11 @@ export function actionCatalogue(app: RouteApp): ActionCatalogue {
       throw new Error(`${label}: ${action} is declared with different security`);
     if (previous && previous.replay !== replay)
       throw new Error(`${label}: ${action} is declared with different replay authorization`);
-    if (previous && !sameResourceTypes(previous['x-resource-types'], resourceTypes))
-      throw new Error(`${label}: ${action} is declared with different resource types`);
+    const declaredTypes = [...new Set([...(previous?.['x-resource-types'] ?? []), ...(resourceTypes ?? [])])].sort();
     catalogue.set(action, {
       anonymous,
       ...(replay === undefined ? {} : { replay }),
-      ...(resourceTypes === undefined ? {} : { 'x-resource-types': resourceTypes }),
+      ...(declaredTypes.length ? { 'x-resource-types': declaredTypes } : {}),
     });
   }
   // Account updates authorize an automated account through management of its operator.

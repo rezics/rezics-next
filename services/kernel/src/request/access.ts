@@ -129,8 +129,24 @@ export type ReadDecisions = Readonly<{
 export type PrepareReadDecisionsInput = {
   actor: Actor;
   actions: ReadonlySet<string>;
+  /** Composed candidate sets for a mixed-type read; each type remains bounded to 64. */
+  typeActions?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Shared authoritative instant for a personal batch. */
+  time?: AuthoritativeTime;
   context: AccessContext;
 };
+/** Validate the bounded catalogue before reading any authority dependency. */
+export function validReadDecisionActions(input: PrepareReadDecisionsInput, catalogue: ActionCatalogue): boolean {
+  if (!input.actions.size || [...input.actions].some((action) => !catalogue.has(action))) return false;
+  if (!input.typeActions) return input.actions.size <= 64;
+  if (!input.typeActions.size || input.typeActions.size > 100) return false;
+  const union = new Set<string>();
+  for (const [type, actions] of input.typeActions) {
+    if (!type.length || !actions.size || actions.size > 64) return false;
+    for (const action of actions) union.add(action);
+  }
+  return union.size === input.actions.size && [...union].every((action) => input.actions.has(action));
+}
 export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 

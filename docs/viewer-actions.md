@@ -74,7 +74,10 @@ The kernel compiles bindings from mounted declarations. An operation whose route
 anchor declares an authority anchor: for example, a Collection-member command binds to its Collection. Modules do
 not redeclare direct bindings, enumerate callers' ACLs, infer actions from role names, or add frontend action lists.
 Composition rejects more than 64 candidate actions or 256 operation bindings for any resource type; it never
-silently truncates an answer.
+silently truncates an answer. The read action counts toward that candidate limit even when it has no offered
+operation. The authority declaration is `x-authority-resource-types`, a list of resource type names that replaces
+that operation's direct types for viewer-action binding. Direct declarations are per operation; the action
+catalogue retains their union for resource creation, without copying bindings between operations.
 
 ## Decision path and time
 
