@@ -163,10 +163,10 @@ test('native creation, pending omission and attribution are separate from active
   const p = await pending();
   const a = await person();
   expect(await readPublicIdentities(pool, [routeOf(p.accountId)!], [p.accountId])).toEqual([]);
-  expect(await activeAt(a.accountId)).toContainEqual({ route: routeOf(a.accountId), accountId: a.accountId });
-  expect(await activeAt(p.accountId)).not.toContainEqual({ route: routeOf(p.accountId), accountId: p.accountId });
+  expect(await activeAt(a.accountId)).toContainEqual({ route: routeOf(a.accountId)!, accountId: a.accountId });
+  expect(await activeAt(p.accountId)).not.toContainEqual({ route: routeOf(p.accountId)!, accountId: p.accountId });
   await internal.raiseFence({ accountId: a.accountId, key: key() });
-  expect(await activeAt(a.accountId)).not.toContainEqual({ route: routeOf(a.accountId), accountId: a.accountId });
+  expect(await activeAt(a.accountId)).not.toContainEqual({ route: routeOf(a.accountId)!, accountId: a.accountId });
   expect(await readPublicIdentities(pool, [routeOf(a.accountId)!], [a.accountId])).toMatchObject([
     { id: a.accountId, state: 'active' },
   ]);
@@ -186,9 +186,9 @@ test('native recovery evidence cannot lower a later fence; a current proof resto
     return evidence;
   };
   await expect(internal.clearFence({ accountId: a.accountId, key: key(), evidence: proof(first) })).rejects.toBeInstanceOf(LifecycleDeniedError);
-  expect(await activeAt(a.accountId)).not.toContainEqual({ route: routeOf(a.accountId), accountId: a.accountId });
+  expect(await activeAt(a.accountId)).not.toContainEqual({ route: routeOf(a.accountId)!, accountId: a.accountId });
   await internal.clearFence({ accountId: a.accountId, key: key(), evidence: proof(second) });
-  expect(await activeAt(a.accountId)).toContainEqual({ route: routeOf(a.accountId), accountId: a.accountId });
+  expect(await activeAt(a.accountId)).toContainEqual({ route: routeOf(a.accountId)!, accountId: a.accountId });
 });
 
 test('native rename forwards attribution while former spelling stays retired after its forwarding lifetime', async () => {
@@ -252,7 +252,7 @@ for (const kind of ['recovery', 'credential-reset', 'consent-reduction', 'sessio
       await d.pause();
       const receipt = await d.applyFence(a.accountId, kind);
       expect(Number.isFinite(Date.parse(receipt.at))).toBe(true);
-      expect(await activeAt(a.accountId)).not.toContainEqual({ route: routeOf(a.accountId), accountId: a.accountId });
+      expect(await activeAt(a.accountId)).not.toContainEqual({ route: routeOf(a.accountId)!, accountId: a.accountId });
       expect((await d.source.read(partitionOf(routeOf(a.accountId)!), [a.accountId])).accounts).toEqual([]);
       const reduced = await d.source.count(partition);
       expect(reduced.count).toBe(census.count - 1);
