@@ -1,6 +1,8 @@
-import { expect, test } from 'bun:test';
-import { continueProgress } from '../src/library/continue-read.ts';
+import { expect, mock, test } from 'bun:test';
 import continueSessionsRecording from '../src/kernel/recorded/library-continue-progress-sessions.json';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { continueProgress } = await import('../src/library/continue-read.ts');
 
 test("the Continue response's active sessions supply each card's formatted progress", () => {
   const progress = continueSessionsRecording.progressSessions.map((session) => continueProgress(session));
