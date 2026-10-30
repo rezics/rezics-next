@@ -109482,98 +109482,261 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "enum": [
-                        "offer_unavailable",
-                        "offer_revision_conflict"
-                      ],
-                      "type": "string"
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "effect_status": {
-                      "enum": [
-                        "not_applicable",
-                        "not_applied"
-                      ],
-                      "type": "string"
-                    },
-                    "errors": {
-                      "items": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "code": {
-                            "enum": [
-                              "required",
-                              "unknown_field",
-                              "invalid_type",
-                              "invalid_format",
-                              "out_of_range",
-                              "unsupported"
-                            ],
-                            "type": "string"
-                          },
-                          "pointer": {
-                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
-                            "type": "string"
-                          }
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "offer_unavailable",
+                            "offer_revision_conflict"
+                          ],
+                          "type": "string"
                         },
-                        "required": [
-                          "pointer",
-                          "code"
-                        ],
-                        "type": "object"
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "effect_status": {
+                          "enum": [
+                            "not_applicable",
+                            "not_applied"
+                          ],
+                          "type": "string"
+                        },
+                        "errors": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "required",
+                                  "unknown_field",
+                                  "invalid_type",
+                                  "invalid_format",
+                                  "out_of_range",
+                                  "unsupported"
+                                ],
+                                "type": "string"
+                              },
+                              "pointer": {
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "pointer",
+                              "code"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 16,
+                          "type": "array"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "enum": [
+                            false,
+                            false
+                          ],
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 409,
+                          "type": "number"
+                        },
+                        "title": {
+                          "enum": [
+                            "Offer Unavailable",
+                            "Offer Terms Changed"
+                          ],
+                          "type": "string"
+                        },
+                        "type": {
+                          "enum": [
+                            "https://rezics.com/problems/offer_unavailable",
+                            "https://rezics.com/problems/offer_revision_conflict"
+                          ],
+                          "type": "string"
+                        }
                       },
-                      "maxItems": 16,
-                      "type": "array"
-                    },
-                    "request_id": {
-                      "type": "string"
-                    },
-                    "retryable": {
-                      "enum": [
-                        false,
-                        false
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code",
+                        "retryable",
+                        "effect_status",
+                        "request_id"
                       ],
-                      "type": "string"
+                      "type": "object"
                     },
-                    "status": {
-                      "const": 409,
-                      "type": "number"
-                    },
-                    "title": {
-                      "enum": [
-                        "Offer Unavailable",
-                        "Offer Terms Changed"
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "const": "acquisition_pending",
+                          "type": "string"
+                        },
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "effect_status": {
+                          "const": "not_applied",
+                          "type": "string"
+                        },
+                        "errors": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "required",
+                                  "unknown_field",
+                                  "invalid_type",
+                                  "invalid_format",
+                                  "out_of_range",
+                                  "unsupported"
+                                ],
+                                "type": "string"
+                              },
+                              "pointer": {
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "pointer",
+                              "code"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 16,
+                          "type": "array"
+                        },
+                        "orderId": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "const": 409,
+                          "type": "number"
+                        },
+                        "title": {
+                          "const": "Acquisition Pending",
+                          "type": "string"
+                        },
+                        "type": {
+                          "const": "https://rezics.com/problems/acquisition_pending",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code",
+                        "retryable",
+                        "effect_status",
+                        "request_id"
                       ],
-                      "type": "string"
+                      "type": "object"
                     },
-                    "type": {
-                      "enum": [
-                        "https://rezics.com/problems/offer_unavailable",
-                        "https://rezics.com/problems/offer_revision_conflict"
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "const": "benefit_already_owned",
+                          "type": "string"
+                        },
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "effect_status": {
+                          "const": "not_applied",
+                          "type": "string"
+                        },
+                        "entitlementId": {
+                          "type": "string"
+                        },
+                        "errors": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "code": {
+                                "enum": [
+                                  "required",
+                                  "unknown_field",
+                                  "invalid_type",
+                                  "invalid_format",
+                                  "out_of_range",
+                                  "unsupported"
+                                ],
+                                "type": "string"
+                              },
+                              "pointer": {
+                                "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "pointer",
+                              "code"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 16,
+                          "type": "array"
+                        },
+                        "orderId": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "const": 409,
+                          "type": "number"
+                        },
+                        "title": {
+                          "const": "Benefit Already Owned",
+                          "type": "string"
+                        },
+                        "type": {
+                          "const": "https://rezics.com/problems/benefit_already_owned",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code",
+                        "retryable",
+                        "effect_status",
+                        "request_id"
                       ],
-                      "type": "string"
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code",
-                    "retryable",
-                    "effect_status",
-                    "request_id"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
-            "description": "Offer unavailable; Offer revision conflict"
+            "description": "Offer unavailable; Offer revision conflict; Acquisition pending; Benefit already owned"
           },
           "422": {
             "content": {

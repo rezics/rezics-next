@@ -1,3 +1,4 @@
+import { BenefitAcquisitionError } from './acquisition.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './money.ts';
 import { ContentEditionUnavailableError, contentEditionTermsView, decodeCapturedContentEdition } from './benefit.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
@@ -224,6 +225,24 @@ const unavailable = problemSchema(
   'transaction_retry_exhausted',
   'deadline_exceeded',
 );
+// Literal discriminants and private locator fields are published for the purchase UI.
+const acquisitionPendingProblem = t.Object({
+  ...problemSchema('acquisition_pending').properties,
+  code: t.Literal('acquisition_pending'),
+  effect_status: t.Literal('not_applied'),
+  orderId: t.Optional(id),
+}, object);
+const benefitAlreadyOwnedProblem = t.Object({
+  ...problemSchema('benefit_already_owned').properties,
+  code: t.Literal('benefit_already_owned'),
+  effect_status: t.Literal('not_applied'),
+  orderId: t.Optional(id),
+  entitlementId: t.Optional(id),
+}, object);
+const offerConflictProblem = t.Object({
+  ...problemSchema('offer_unavailable', 'offer_revision_conflict').properties,
+  code: t.Union([t.Literal('offer_unavailable'), t.Literal('offer_revision_conflict')]),
+}, object);
 const bearer = [{ bearerAuth: [] }];
 function detail(operationId: string, action: string, exposure: 'gate:purchases' | 'gate:selling', anonymous = false) {
   return { operationId, 'x-exposure': exposure, 'x-action': action, security: anonymous ? [...bearer, {}] : bearer };
@@ -316,6 +335,8 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
   try {
     return await run();
   } catch (error) {
+    if (error instanceof BenefitAcquisitionError)
+      throw new ProblemError(error.code, { effectStatus: 'not_applied', extensions: error.locators });
     if (error instanceof GrantDeniedError) throw new ProblemError(denied);
     if (error instanceof RangeError && error.message === 'Invalid configured sale amount')
       throw new ProblemError('invalid_request');
@@ -598,7 +619,11 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           400: problemSchema('invalid_request'),
           401: unauthorized,
           404: problemSchema('not_found'),
-          409: problemSchema('offer_unavailable', 'offer_revision_conflict'),
+          409: t.Union([
+            offerConflictProblem,
+            acquisitionPendingProblem,
+            benefitAlreadyOwnedProblem,
+          ]),
           422: problemSchema('idempotency_conflict'),
           503: unavailable,
         },

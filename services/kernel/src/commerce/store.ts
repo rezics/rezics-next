@@ -1,3 +1,4 @@
+import { canActivateBenefit, lockBenefitAcquisition } from './acquisition.ts';
 import type { StripeMoneyUnit } from './money.ts';
 import offerLock from './store-offer-lock.sql';
 import { routeOf } from '../route/route.ts';
@@ -382,12 +383,20 @@ export async function applyCheckoutDecision(
   if (!decision.changed) return { changed: false };
   if (context.amountTaxMinor != null && (!Number.isSafeInteger(context.amountTaxMinor) || context.amountTaxMinor < 0))
     throw new RangeError('Invalid Checkout tax amount');
+  if (decision.entitlement.kind === 'grant' || decision.entitlement.kind === 'restore')
+    await lockBenefitAcquisition(client, state.order);
   const lockedOrder = required(await orderLock.run(queryClient(client), { route, id: state.order.id }));
   if (lockedOrder.revision !== state.order.revision) throw new Error('Commerce order revision changed');
   const currentEntitlement = await entitlementLock.run(queryClient(client), { route, order_id: state.order.id });
   if (currentEntitlement?.id !== state.entitlement?.id || currentEntitlement?.revision !== state.entitlement?.revision)
     throw new Error('Commerce entitlement revision changed');
-  const action = decision.entitlement;
+  // Late money always applies, but another legitimate acquisition/active benefit owns the slot.
+  const action =
+    state.order.contentEdition &&
+    (decision.entitlement.kind === 'grant' || decision.entitlement.kind === 'restore') &&
+    !(await canActivateBenefit(client, state.order))
+      ? { kind: 'none' as const }
+      : decision.entitlement;
   if (
     (action.kind === 'grant' && currentEntitlement) ||
     (action.kind !== 'grant' && action.kind !== 'none' && !currentEntitlement)

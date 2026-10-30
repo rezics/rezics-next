@@ -5029,9 +5029,38 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         type: unknown;
                         title: unknown;
                         status: number;
-                        code: unknown;
+                        code: "offer_unavailable" | "offer_revision_conflict";
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    } | {
+                        orderId?: string;
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: "acquisition_pending";
+                        retryable: unknown;
+                        effect_status: "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    } | {
+                        orderId?: string;
+                        entitlementId?: string;
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: "benefit_already_owned";
+                        retryable: unknown;
+                        effect_status: "not_applied";
                         request_id: string;
                         detail?: string;
                         errors?: {

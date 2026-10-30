@@ -1,3 +1,9 @@
+import {
+  admitBenefitAcquisition,
+  lockBenefitAcquisition,
+  recordAcquisitionDisposition,
+  verifiedAcquisitionRelease,
+} from './acquisition.ts';
 import { readCommerceMoneyPolicy, validateOfferAmount, type CommerceMoneyPolicy } from './money.ts';
 import {
   captureCurrentContentEdition,
@@ -461,6 +467,7 @@ export function createCommerceCommands(config: {
           offer.targetSubjectId !== contentEdition.targetSubjectId
         )
           throw new GrantDeniedError();
+        await admitBenefitAcquisition(tx, buyer, id, contentEdition);
         await declareCommerceCommandHistory(tx, 'commerce.order.create', {
           creatorAccountId: offer.creatorAccountId,
           buyerAccountId: buyer.accountId,
@@ -702,6 +709,14 @@ export function createCommerceCommands(config: {
               checkoutExpiresAt: session ? new Date(session.expiresAt).toISOString() : null,
               revision: rows.revision,
             };
+            if (!session && settlement === 'failed' && 'creationAttemptId' in outcome) {
+              const attempt = await creationRead.run(tx, { route: r, id });
+              if (
+                attempt && outcome.creationAttemptId === attempt.firstAttemptId &&
+                !attempt.retried && current.settlement === 'pending'
+              )
+                await recordAcquisitionDisposition(tx, value, 'no-creation');
+            }
             return { value, events: [updated(id, value.revision)] };
           },
         );
@@ -862,6 +877,7 @@ export function createCommerceCommands(config: {
           // Fresh application fences the buyer before the first order lock, even
           // for a business no-op. Availability failures must roll back all money effects.
           const permitsBenefits = await buyerBenefits(tx, order.buyerAccountId);
+          if (permitsBenefits) await lockBenefitAcquisition(tx, order);
           const locked = await store.lockOrder(tx, r, id);
           if (!locked || locked.checkoutSessionId !== snapshot.sessionId) throw new Unchanged();
           if (claim && locked.revision !== claim.order.revision) throw new SupersededRefresh();
@@ -943,6 +959,11 @@ export function createCommerceCommands(config: {
               newTransactions: [],
             };
           }
+          const dispositionChanged = await recordAcquisitionDisposition(
+            tx,
+            applied.order,
+            verifiedAcquisitionRelease(applied.order, snapshot),
+          );
           const observations = permitsBenefits
             ? await appendCheckoutMoneyObservations(tx, r, applied.order, snapshot, {
                 transactionId: command.transactionId,
@@ -950,7 +971,7 @@ export function createCommerceCommands(config: {
               })
             : [];
           if (!businessChanged) {
-            if (!observations.length) throw new Unchanged();
+            if (!observations.length && !dispositionChanged) throw new Unchanged();
             const row = await metadataUpdate.run(tx, {
               route: r,
               id,

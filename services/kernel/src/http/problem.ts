@@ -28,6 +28,8 @@ export const PROBLEMS = {
   platform_closed: { status: 403, title: 'Platform Closed', retryable: false },
   stale_editorial_head: { status: 409, title: 'Stale Editorial Head', retryable: false },
   offer_unavailable: { status: 409, title: 'Offer Unavailable', retryable: false },
+  benefit_already_owned: { status: 409, title: 'Benefit Already Owned', retryable: false },
+  acquisition_pending: { status: 409, title: 'Acquisition Pending', retryable: false },
   offer_revision_conflict: { status: 409, title: 'Offer Terms Changed', retryable: false },
   media_unavailable: { status: 409, title: 'Media Unavailable', retryable: false },
   invalid_cursor: { status: 400, title: 'Invalid Cursor', retryable: false },

@@ -465,6 +465,43 @@ Commerce/Web handoff: operation `order.reconcile`; caller `requestOrderReconcili
 component examples retain the recorded pending order and substitute only the operation response. Web owns the
 390/1280 visual review; source and local typing are not native, integrated-journey or promoted-main proof.
 
+### One-time exact benefit acquisition
+
+The adopted account-bound quantity-one policy serializes fresh acquisition on the buyer home by the full native
+ContentEditionBenefit resource, immutable revision ID and complete SHA-256, and action. Offer IDs, prices, request
+keys, reloads and devices do not distinguish that benefit. Subjects, titles, latest versions and UNKNOWN historical
+subject-only mappings never supply equivalence. Holding an entitlement supplies no independent permission.
+
+After current ordinary buyer/parent authorization, exact receipt replay, actual offer/revision and Content capture,
+the same create-order transaction locks one native acquisition slot and rechecks indexed exact active entitlements
+and unreleased mapped orders. An authorized same-key replay returns its original order first. A different key returns
+`409 benefit_already_owned` for a current exact active entitlement, or `409 acquisition_pending` for an unresolved
+acquisition, including unknown creation, paid without resolved benefit, and failed without verified release.
+Neither response creates an order, receipt, business event, Session or charge. It never silently substitutes a prior
+order's price/revision/terms for newly displayed consent. Existing matching mapped history is conservative pending;
+there is no history scan or fabricated legacy mapping. Public offer responses and `{offerId,expectedOfferRevision}`
+request bodies are unchanged.
+
+These private Problems have `effect_status: not_applied`. After the current authorized own source and native IDs
+are validated, `orderId` identifies the actual prior order when the credential has `order:read`; owned problems may
+also include `entitlementId` with `entitlement:read`. Missing read scope omits that locator. No buyer selector,
+public owned bit, Session locator or other account detail is exposed. The UI must navigate to the prior order's
+actual terms or owned entitlement; it must not mint another key to retry purchase.
+
+Only verified native disposition releases an order: first physical definitive no-creation rejection with matching
+unretried creation evidence; terminal cancelled PaymentIntent with a terminal unpaid Session and complete no-charge
+associations; or a completed full successful refund/final lost dispute with associated native movements and no
+pending refund/dispute obligation. Revision-fenced creation/refresh application records this atomically. Mere failed
+settlement, expiry, elapsed time, pending adverse evidence and missing associations retain pending and known-order
+repair. Unsupported release proof remains pending; no cancellation or new payment engine is added. A late old
+payment still records actual money and reconciliation debt, but the current slot and active exact entitlement fence
+grant/restore so it cannot create a duplicate active benefit or imply an automatic refund. Historical receipts,
+purchases and native cash/entitlement evidence remain intact.
+
+Slot and order-disposition metadata have buyer-leading native locators in Commerce's existing terminal inventory.
+Bounded terminal minimization removes private slot keys alongside entitlements; financial disposition remains with
+its existing order under the pending financial field/expiry policy and custody obligations.
+
 ### Existing command identities
 
 Use shared native command receipts, scoped by partition, verified principal kind/ID, command kind and key.

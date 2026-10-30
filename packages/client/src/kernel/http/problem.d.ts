@@ -92,6 +92,16 @@ export declare const PROBLEMS: {
         readonly title: 'Offer Unavailable';
         readonly retryable: false;
     };
+    readonly benefit_already_owned: {
+        readonly status: 409;
+        readonly title: 'Benefit Already Owned';
+        readonly retryable: false;
+    };
+    readonly acquisition_pending: {
+        readonly status: 409;
+        readonly title: 'Acquisition Pending';
+        readonly retryable: false;
+    };
     readonly offer_revision_conflict: {
         readonly status: 409;
         readonly title: 'Offer Terms Changed';
