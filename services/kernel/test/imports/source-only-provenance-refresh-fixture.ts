@@ -58,7 +58,9 @@ export async function runJourney() {
     const approval = await runtime.identity.auth.internal.approveCredentialEffect(effect);
     await runtime.identity.auth.internal.applyCredentialEffect({ ...effect, authorization: approval.reference });
     const keyPath = join(directory, 'account.jwk');
-    await writeFile(keyPath, JSON.stringify({ ...(await exportJWK(pair.privateKey)), kid, alg: 'ES256' }), { mode: 0o600 });
+    await writeFile(keyPath, JSON.stringify({ ...(await exportJWK(pair.privateKey)), kid, alg: 'ES256' }), {
+      mode: 0o600,
+    });
     const editor = await openApiObserver(runtime);
     const api = 'https://source-provenance.import.test';
     const auth = new URL(runtime.identity.auth.verifier.jwksUrl).origin;
@@ -69,62 +71,83 @@ export async function runJourney() {
     async function invoke(date: string) {
       const offset = exchanges.length;
       let acquired = false;
-      const result = await runImportCli([
-        '--source', 'bangumi', '--dump', '-', '--state', state, '--api', api,
-        '--auth', auth, '--account-key', keyPath, '--account', runtime.identity.bulk.accountId,
-        '--client', runtime.identity.client.clientId,
-      ], {
-        stdin: (async function* () {
-          // Only an admitted native date changes; there is no native revision, media or private input.
-          yield new TextEncoder().encode(JSON.stringify({ id: 940001, type: 1, name: 'Same Book', date }) + '\n');
-          acquired = true;
-        })(),
-        observer: {
-          onCoordinator({ registration, converterModule, decoderModule }) {
-            expect(registration.source).toBe('bangumi');
-            expect(registration.converter_revision).toBe('bangumi@3');
-            expect(registration.converter_revision).toBe(createSourceRegistration('bangumi').converter_revision);
-            expect(converterModule).toContain('bangumi');
-            expect(decoderModule).toContain('dumps.ts');
+      const result = await runImportCli(
+        [
+          '--source',
+          'bangumi',
+          '--dump',
+          '-',
+          '--state',
+          state,
+          '--api',
+          api,
+          '--auth',
+          auth,
+          '--account-key',
+          keyPath,
+          '--account',
+          runtime.identity.bulk.accountId,
+          '--client',
+          runtime.identity.client.clientId,
+        ],
+        {
+          stdin: (async function* () {
+            // Only an admitted native date changes; there is no native revision, media or private input.
+            yield new TextEncoder().encode(JSON.stringify({ id: 940001, type: 1, name: 'Same Book', date }) + '\n');
+            acquired = true;
+          })(),
+          observer: {
+            onCoordinator({ registration, converterModule, decoderModule }) {
+              expect(registration.source).toBe('bangumi');
+              expect(registration.converter_revision).toBe('bangumi@3');
+              expect(registration.converter_revision).toBe(createSourceRegistration('bangumi').converter_revision);
+              expect(converterModule).toContain('bangumi');
+              expect(decoderModule).toContain('dumps.ts');
+            },
+            onAccountKey(_path, observation) {
+              expect(observation.regularFile).toBe(true);
+              expect(observation.mode & 0o777).toBe(0o600);
+            },
           },
-          onAccountKey(_path, observation) {
-            expect(observation.regularFile).toBe(true);
-            expect(observation.mode & 0o777).toBe(0o600);
-          },
-        },
-        fetch: (async (value: Request | string | URL, init?: RequestInit) => {
-          const request = value instanceof Request ? value : new Request(value, init);
-          const url = new URL(request.url);
-          if (url.origin === auth) {
-            const response = await support.host.service.handler(request);
-            authExchanges.push({ path: url.pathname, status: response.status });
-            expect(response.status).toBe(200);
+          fetch: (async (value: Request | string | URL, init?: RequestInit) => {
+            const request = value instanceof Request ? value : new Request(value, init);
+            const url = new URL(request.url);
+            if (url.origin === auth) {
+              const response = await support.host.service.handler(request);
+              authExchanges.push({ path: url.pathname, status: response.status });
+              expect(response.status).toBe(200);
+              return response;
+            }
+            expect(url.origin).toBe(api);
+            expect(request.headers.has('cookie')).toBe(false);
+            expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check']).toContain(url.pathname);
+            if (url.pathname !== '/v1/subjects:batchWrite') return runtime.replay(request);
+            expect(acquired).toBe(true);
+            const bytes = await request.clone().text();
+            const body = JSON.parse(bytes) as BatchWriteRequest;
+            for (const command of body.commands) {
+              expect(command.source).toMatchObject({
+                ...owner,
+                field_group: 'facts',
+                record_revision: 'unversioned',
+                converter_revision: 'bangumi@3',
+              });
+              expect('rights' in command).toBe(false);
+              const previous = commands.get(command.key);
+              if (previous) expect(command).toEqual(previous);
+              commands.set(command.key, command);
+            }
+            const response = await runtime.replay(request);
+            const responseBytes = await response.clone().text();
+            expect(response.status, responseBytes).toBe(200);
+            const parsed = JSON.parse(responseBytes) as BatchWriteResult;
+            expect(parsed.results).toHaveLength(body.commands.length);
+            expect(parsed.results.every((entry) => entry.status < 300 && 'value' in entry)).toBe(true);
+            exchanges.push({ bytes, body, result: parsed });
             return response;
-          }
-          expect(url.origin).toBe(api);
-          expect(request.headers.has('cookie')).toBe(false);
-          expect(['/v1/subjects:batchWrite', '/v1/sourceFences:check']).toContain(url.pathname);
-          if (url.pathname !== '/v1/subjects:batchWrite') return runtime.replay(request);
-          expect(acquired).toBe(true);
-          const bytes = await request.clone().text();
-          const body = JSON.parse(bytes) as BatchWriteRequest;
-          for (const command of body.commands) {
-            expect(command.source).toMatchObject({ ...owner, field_group: 'facts', record_revision: 'unversioned', converter_revision: 'bangumi@3' });
-            expect('rights' in command).toBe(false);
-            const previous = commands.get(command.key);
-            if (previous) expect(command).toEqual(previous);
-            commands.set(command.key, command);
-          }
-          const response = await runtime.replay(request);
-          const responseBytes = await response.clone().text();
-          expect(response.status, responseBytes).toBe(200);
-          const parsed = JSON.parse(responseBytes) as BatchWriteResult;
-          expect(parsed.results).toHaveLength(body.commands.length);
-          expect(parsed.results.every((entry) => entry.status < 300 && 'value' in entry)).toBe(true);
-          exchanges.push({ bytes, body, result: parsed });
-          return response;
-        }) as typeof fetch,
-      });
+          }) as typeof fetch,
+        },
+      );
       expect(result.code, JSON.stringify(result)).toBe(0);
       expect(result.openHandles).toBe(0);
       expect(acquired).toBe(true);
@@ -143,7 +166,9 @@ export async function runJourney() {
           bootstrap: session.bindings.journal(owner, bootstrap!.key),
           candidates: session.bindings.candidates(owner, 'facts', { limit: 100 }),
         };
-      } finally { session.close(); }
+      } finally {
+        session.close();
+      }
     }
     async function nativeClaim() {
       const result = await runtime.database.admin.query<{ subject_id: string }>(
@@ -157,9 +182,10 @@ export async function runJourney() {
       const rows = [];
       for (const key of keys) {
         const command = commands.get(key)!;
-        const route = command.op === 'create'
-          ? tupleRoute(runtime.identity.routeKey, owner.source, owner.external_id)
-          : routeOf(command.subject)!;
+        const route =
+          command.op === 'create'
+            ? tupleRoute(runtime.identity.routeKey, owner.source, owner.external_id)
+            : routeOf(command.subject)!;
         const result = await runtime.database.admin.query(
           'SELECT transaction_id,response FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2 AND principal_id=$3 AND command_kind=$4 AND idempotency_key=$5',
           [partitionOf(route), 'account', runtime.identity.bulk.accountId, `subject.batch_${command.op}`, key],
@@ -170,7 +196,9 @@ export async function runJourney() {
       return rows;
     }
     async function candidates(subject: string, property: string, context?: string) {
-      const response = await editor.http(`/v1/subjects/${subject}/candidates?${new URLSearchParams({ property, limit: '100', ...(context ? { context } : {}) })}`);
+      const response = await editor.http(
+        `/v1/subjects/${subject}/candidates?${new URLSearchParams({ property, limit: '100', ...(context ? { context } : {}) })}`,
+      );
       expect(response.status, JSON.stringify(response.body)).toBe(200);
       expect(response.body.next).toBeNull();
       return response.body.candidates as Candidate[];
@@ -207,10 +235,25 @@ export async function runJourney() {
     });
     expect(proposed.status).toBe(201);
     const independentId = proposed.body.candidate as string;
-    expect((await editor.http(`/v1/subjects/${subjectBefore}/candidates/${independentId}:accept`, { context, expected_head: null })).status).toBe(200);
-    expect((await editor.http(`/v1/subjects/${subjectBefore}:adopt`, {
-      context, property: 'schema:name', mode: 'replace', selection: [{ candidate: independentId, rank: 'normal' }], expected_head: null,
-    })).status).toBe(200);
+    expect(
+      (
+        await editor.http(`/v1/subjects/${subjectBefore}/candidates/${independentId}:accept`, {
+          context,
+          expected_head: null,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await editor.http(`/v1/subjects/${subjectBefore}:adopt`, {
+          context,
+          property: 'schema:name',
+          mode: 'replace',
+          selection: [{ candidate: independentId, rank: 'normal' }],
+          expected_head: null,
+        })
+      ).status,
+    ).toBe(200);
     const independentSelectionBefore = (await subject(subjectBefore, context)).statements;
     expect(independentSelectionBefore['schema:name']?.[0]?.id).toBe(independentId);
 
@@ -222,15 +265,28 @@ export async function runJourney() {
     expect(after.candidates).toHaveLength(2);
     const changedCommands = changed.exchanges.flatMap((exchange) => exchange.body.commands);
     expect(changedCommands.filter((command) => command.op === 'create')).toEqual([]);
-    expect(changedCommands.filter((command) => command.op === 'retract').map((command) => command.candidate).sort()).toEqual(original.map((candidate) => candidate.id).sort());
+    expect(
+      changedCommands
+        .filter((command) => command.op === 'retract')
+        .map((command) => command.candidate)
+        .sort(),
+    ).toEqual(original.map((candidate) => candidate.id).sort());
     const allFacts = (await Promise.all(properties.map((property) => candidates(subjectAfter, property)))).flat();
     const oldOwnedFacts = allFacts.filter((candidate) => original.some((old) => old.id === candidate.id));
     expect(oldOwnedFacts).toHaveLength(2);
-    const freshFacts = allFacts.filter((candidate) => candidate.source !== null && !original.some((old) => old.id === candidate.id)).map((candidate) => ({ ...candidate, digest: candidate.source!.digest }));
+    const freshFacts = allFacts
+      .filter((candidate) => candidate.source !== null && !original.some((old) => old.id === candidate.id))
+      .map((candidate) => ({ ...candidate, digest: candidate.source!.digest }));
     expect(freshFacts).toHaveLength(2);
     for (const fresh of freshFacts) {
       expect(fresh.retracted).toBeNull();
-      expect(fresh.source).toMatchObject({ ...owner, field_group: 'facts', digest: after.row.digest, record_revision: 'unversioned', converter_revision: 'bangumi@3' });
+      expect(fresh.source).toMatchObject({
+        ...owner,
+        field_group: 'facts',
+        digest: after.row.digest,
+        record_revision: 'unversioned',
+        converter_revision: 'bangumi@3',
+      });
       const old = original.find((candidate) => candidate.statement.property.id === fresh.statement.property.id)!;
       expect(fresh.statement.property).toEqual(old.statement.property);
       expect(fresh.statement.value).toEqual(old.statement.value);
@@ -245,11 +301,18 @@ export async function runJourney() {
     const reopened = new ImportSession(state);
     try {
       for (const old of oldJournals) expect(reopened.bindings.journal(owner, old.key)?.bytes).toBe(old.bytes);
-    } finally { reopened.close(); }
+    } finally {
+      reopened.close();
+    }
 
     const unchanged = await invoke('2001-01-01');
     expect(inspect()).toEqual(after);
-    const fence = await editor.http('/v1/sourceFences:takedown', { source: owner.source, externalId: owner.external_id, fieldGroup: 'facts', reason: 'Synthetic source-only rights complaint' });
+    const fence = await editor.http('/v1/sourceFences:takedown', {
+      source: owner.source,
+      externalId: owner.external_id,
+      fieldGroup: 'facts',
+      reason: 'Synthetic source-only rights complaint',
+    });
     expect(fence.status, JSON.stringify(fence.body)).toBe(200);
     const fenced = await invoke('2002-01-01');
     const final = inspect();
@@ -257,25 +320,66 @@ export async function runJourney() {
     expect(final.row.digest).not.toBe(after.row.digest);
     expect(await nativeClaim()).toBe(subjectBefore);
     expect(final.claim).toEqual(before.claim);
-    const disclosedFencedFacts = (await Promise.all(properties.map((property) => candidates(subjectAfter, property)))).flat().filter((candidate) => candidate.source?.source === owner.source && candidate.source.external_id === owner.external_id);
+    const disclosedFencedFacts = (await Promise.all(properties.map((property) => candidates(subjectAfter, property))))
+      .flat()
+      .filter(
+        (candidate) => candidate.source?.source === owner.source && candidate.source.external_id === owner.external_id,
+      );
     const independentSelectionAfter = (await subject(subjectAfter, context)).statements;
-    const independent = (await candidates(subjectAfter, 'schema:name', context)).find((candidate) => candidate.id === independentId)!;
+    const independent = (await candidates(subjectAfter, 'schema:name', context)).find(
+      (candidate) => candidate.id === independentId,
+    )!;
     expect(independent.source).toBeNull();
     expect(independent.retracted).toBeNull();
     expect(authExchanges.filter((exchange) => exchange.path === '/signin/key')).toHaveLength(4);
     expect(authExchanges.filter((exchange) => exchange.path === '/token')).toHaveLength(4);
     expect([...commands.values()].filter((command) => command.op === 'create')).toHaveLength(1);
-    console.log('Source-only provenance evidence', JSON.stringify({ before: before.row, after: after.row, fenced: final.row, subjectBefore, subjectAfter, oldOwnedFacts, freshFacts, originalReceiptsBefore, originalReceiptsAfter, bootstrap: final.bootstrap, fence, authExchanges }));
+    console.log(
+      'Source-only provenance evidence',
+      JSON.stringify({
+        before: before.row,
+        after: after.row,
+        fenced: final.row,
+        subjectBefore,
+        subjectAfter,
+        oldOwnedFacts,
+        freshFacts,
+        originalReceiptsBefore,
+        originalReceiptsAfter,
+        bootstrap: final.bootstrap,
+        fence,
+        authExchanges,
+      }),
+    );
     return {
-      initial, changed, unchanged, fenced, subjectBefore, subjectAfter,
-      digestBefore: before.row.digest, digestAfter: after.row.digest,
-      recordRevision: after.row.recordRevision, converterRevision: after.row.converter_revision,
-      freshFacts, oldOwnedFacts, newDateSlots, originalReceiptsBefore, originalReceiptsAfter,
-      bootstrapBefore: before.bootstrap, bootstrapAfter: final.bootstrap,
-      independentSelectionBefore, independentSelectionAfter,
+      initial,
+      changed,
+      unchanged,
+      fenced,
+      subjectBefore,
+      subjectAfter,
+      digestBefore: before.row.digest,
+      digestAfter: after.row.digest,
+      recordRevision: after.row.recordRevision,
+      converterRevision: after.row.converter_revision,
+      freshFacts,
+      oldOwnedFacts,
+      newDateSlots,
+      originalReceiptsBefore,
+      originalReceiptsAfter,
+      bootstrapBefore: before.bootstrap,
+      bootstrapAfter: final.bootstrap,
+      independentSelectionBefore,
+      independentSelectionAfter,
       unchangedWrites: unchanged.exchanges,
-      fencedFactWrites: fenced.exchanges.flatMap((exchange) => exchange.body.commands).filter((command) => command.source.field_group === 'facts'),
-      disclosedFencedFacts, close,
+      fencedFactWrites: fenced.exchanges
+        .flatMap((exchange) => exchange.body.commands)
+        .filter((command) => command.source.field_group === 'facts'),
+      disclosedFencedFacts,
+      close,
     };
-  } catch (error) { await close(); throw error; }
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
