@@ -149,6 +149,7 @@
   "catalogue_create_refresh": "已重新要求可用類型，送出前請確認選擇。",
   "account_menu": "帳戶",
   "account_security_settings": "安全性設定",
+  "account_security_unavailable": "安全性設定無法使用",
   "account_sign_in": "登入",
   "account_sign_out": "登出",
   "settings_managed_loading": "正在載入帳戶…",

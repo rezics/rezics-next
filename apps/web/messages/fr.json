@@ -149,6 +149,7 @@
   "catalogue_create_refresh": "Les types disponibles ont été redemandés. Vérifiez votre choix avant l’envoi.",
   "account_menu": "Compte",
   "account_security_settings": "Paramètres de sécurité",
+  "account_security_unavailable": "Paramètres de sécurité indisponibles",
   "account_sign_in": "Se connecter",
   "account_sign_out": "Se déconnecter",
   "settings_managed_loading": "Chargement des comptes…",

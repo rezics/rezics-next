@@ -149,6 +149,7 @@
   "catalogue_create_refresh": "사용 가능한 유형을 다시 요청했습니다. 제출 전에 선택을 확인하세요.",
   "account_menu": "계정",
   "account_security_settings": "보안 설정",
+  "account_security_unavailable": "보안 설정을 사용할 수 없습니다",
   "account_sign_in": "로그인",
   "account_sign_out": "로그아웃",
   "settings_managed_loading": "계정을 불러오는 중…",

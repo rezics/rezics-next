@@ -21,7 +21,7 @@ import { Link, useLocation, useRouter, type AnyRouter } from '@tanstack/react-ro
 import { createServerFn } from '@tanstack/react-start';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { PageHeading } from './page-heading';
 import { ShellSearch } from '../search/header-search/shell-search';
 import { HeaderSearchFilterProvider } from '../search/header-search/filter-region';
@@ -45,6 +45,7 @@ import { FeatureSlotsProvider } from './feature-slots';
 import type { SubjectPurchaseRegions } from '../features/pages/subject-slots';
 import { useSession } from '../session/query';
 import manropeFontUrl from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
+import { resolveAccountSecurity } from './account-menu-security';
 type ShellSession = NavigationSession;
 
 /** Hidden until the first Tab press; the sr-only utilities reveal it on focus. */
@@ -240,26 +241,26 @@ export function AccountMenu({
   session,
   csrfToken,
   phone = false,
+  readIssuer = readAuthIssuer,
 }: {
   session: ShellSession;
   csrfToken: string | null;
   phone?: boolean;
+  readIssuer?: () => Promise<string>;
 }) {
   const location = useLocation();
-  const [securitySettingsHref, setSecuritySettingsHref] = useState('/security');
+  const { subject } = useSession();
+  const lifecycle = useMemo(() => ({}), [session, subject, csrfToken, readIssuer]);
+  const [security, setSecurity] = useState<{ lifecycle: object; href: string | null } | null>(null);
+  // Hide the previous destination during the transition render, before effect cleanup runs.
+  const securitySettingsHref = session === 'signed-in' && security?.lifecycle === lifecycle ? security.href : null;
   const canOpenLibrary = useOperation('library_entry.list');
   const canOpenCollections = useOperation('collection.list');
   const canOpenFollowing = useOperation('follow.list');
   useEffect(() => {
     if (session !== 'signed-in') return;
-    let active = true;
-    void readAuthIssuer().then((issuer) => {
-      if (active && issuer) setSecuritySettingsHref(new URL('/security', issuer).href);
-    });
-    return () => {
-      active = false;
-    };
-  }, [session]);
+    return resolveAccountSecurity(readIssuer, (href) => setSecurity({ lifecycle, href }));
+  }, [session, lifecycle, readIssuer]);
   const settings = phone ? (
     <div className="space-y-4 border-t border-border pt-4">
       <h2 className="text-base font-semibold">{m.settings_heading()}</h2>
@@ -341,13 +342,13 @@ export function AccountMenu({
               </a>
             ) : null}
             {canOpenCollections ? (
-              <a href={`/${locale}/collections`} className={accountMenuLinkClass}>
+              <a href={`/${locale}/library/collections`} className={accountMenuLinkClass}>
                 <Folders aria-hidden="true" className="size-4" />
                 {m.library_nav_collections()}
               </a>
             ) : null}
             {canOpenFollowing ? (
-              <a href={`/${locale}/following`} className={accountMenuLinkClass}>
+              <a href={`/${locale}/library/following`} className={accountMenuLinkClass}>
                 <Users aria-hidden="true" className="size-4" />
                 {m.library_nav_following()}
               </a>
@@ -366,18 +367,30 @@ export function AccountMenu({
               <Users aria-hidden="true" className="size-4" />
               {m.av_accounts()}
             </a>
-            <a
-              href={securitySettingsHref}
-              data-account-security-settings
-              // React's client autoFocus only focuses on mount, while this popover is still hidden.
-              ref={(link) => {
-                link?.setAttribute('autofocus', '');
-              }}
-              className={accountMenuLinkClass}
-            >
-              <ShieldCheck aria-hidden="true" className="size-4" />
-              {m.account_security_settings()}
-            </a>
+            {securitySettingsHref ? (
+              <a
+                href={securitySettingsHref}
+                data-account-security-settings
+                // React's client autoFocus only focuses on mount, while this popover is still hidden.
+                ref={(link) => {
+                  link?.setAttribute('autofocus', '');
+                }}
+                className={accountMenuLinkClass}
+              >
+                <ShieldCheck aria-hidden="true" className="size-4" />
+                {m.account_security_settings()}
+              </a>
+            ) : (
+              <span
+                role="link"
+                aria-disabled="true"
+                data-account-security-settings
+                className={cn(accountMenuLinkClass, 'text-muted-foreground')}
+              >
+                <ShieldCheck aria-hidden="true" className="size-4" />
+                {m.account_security_unavailable()}
+              </span>
+            )}
             <form method="post" action="/auth/sign-out" className="m-0">
               <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
               <Button type="submit" variant="ghost" size="lg" className="w-full justify-start rounded-xl px-3">

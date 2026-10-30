@@ -149,6 +149,7 @@
   "catalogue_create_refresh": "Se han vuelto a solicitar los tipos disponibles. Revisa tu elección antes de enviar.",
   "account_menu": "Cuenta",
   "account_security_settings": "Configuración de seguridad",
+  "account_security_unavailable": "Configuración de seguridad no disponible",
   "account_sign_in": "Iniciar sesión",
   "account_sign_out": "Cerrar sesión",
   "settings_managed_loading": "Cargando cuentas…",

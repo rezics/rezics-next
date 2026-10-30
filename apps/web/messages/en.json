@@ -178,6 +178,7 @@
   "catalogue_create_refresh": "Available Types were requested again. Review your choice before submitting.",
   "account_menu": "Account",
   "account_security_settings": "Security settings",
+  "account_security_unavailable": "Security settings unavailable",
   "account_sign_in": "Sign in",
   "account_sign_out": "Sign out",
   "settings_managed_loading": "Loading accounts…",

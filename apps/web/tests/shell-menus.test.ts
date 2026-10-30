@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type Locator, type Page } from 'playwright';
+import { resolveAccountSecurity } from '../src/shell/account-menu-security';
 
 const app = join(import.meta.dir, '..');
 const phone = { width: 390, height: 844 };
@@ -186,3 +187,69 @@ test('shell menus do not add kernel reads and shell.tsx imports no shadcn dropdo
 async function expectActive(page: Page, locator: Locator): Promise<void> {
   expect(await locator.evaluate((element) => element === document.activeElement)).toBe(true);
 }
+
+test('Collections and Following use actual Library routes and Auth security remains honest while issuer resolution is absent or fails', async () => {
+  const shell = await Bun.file(join(app, 'src/shell/shell.tsx')).text();
+  for (const [guard, route] of [
+    ['canOpenCollections', 'collections'],
+    ['canOpenFollowing', 'following'],
+  ]) {
+    expect(shell).toContain(`{${guard} ? (`);
+    expect(shell).toContain('href={`/${locale}/library/' + route + '`}');
+    const source = await Bun.file(join(app, `src/routes/library/${route}.tsx`)).text();
+    expect(source).toContain(`createFileRoute('/library/${route}')`);
+    expect(source).toContain('beforeLoad: requireSignedIn');
+  }
+  expect(shell).not.toContain("useState('/security')");
+  expect(shell).toContain('m.account_security_unavailable()');
+  for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es']) {
+    expect((await messages(locale)).account_security_unavailable).toBeTruthy();
+  }
+
+  for (const read of [
+    async () => '',
+    async () => {
+      throw new Error('configuration unavailable');
+    },
+    () => {
+      throw new Error('configuration failed synchronously');
+    },
+    async () => 'not a URL',
+    async () => 'http://auth.example.test',
+    async () => 'https://user:password@auth.example.test',
+    async () => 'https://auth.example.test?return_to=elsewhere',
+    async () => 'https://auth.example.test#fragment',
+  ]) {
+    const result = await new Promise<string | null>((resolve) => resolveAccountSecurity(read, resolve));
+    expect(result).toBeNull();
+  }
+  const trusted = await new Promise<string | null>((resolve) =>
+    resolveAccountSecurity(async () => 'https://auth.example.test:8443/oidc', resolve),
+  );
+  expect(trusted).toBe('https://auth.example.test:8443/security');
+});
+
+test('issuer resolution reads once, stays unresolved until completion and ignores disposed success or failure', async () => {
+  for (const fails of [false, true]) {
+    const pending = Promise.withResolvers<string>();
+    let reads = 0;
+    const results: (string | null)[] = [];
+    const dispose = resolveAccountSecurity(
+      () => {
+        reads++;
+        return pending.promise;
+      },
+      (href) => results.push(href),
+    );
+    await Promise.resolve();
+    expect(reads).toBe(1);
+    expect(results).toEqual([]);
+    dispose();
+    if (fails) pending.reject(new Error('late configuration failure'));
+    else pending.resolve('https://previous-account.example.test');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(results).toEqual([]);
+    expect(reads).toBe(1);
+  }
+});

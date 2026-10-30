@@ -149,6 +149,7 @@
   "catalogue_create_refresh": "利用可能なタイプを再取得しました。送信前に選択を確認してください。",
   "account_menu": "アカウント",
   "account_security_settings": "セキュリティ設定",
+  "account_security_unavailable": "セキュリティ設定を利用できません",
   "account_sign_in": "ログイン",
   "account_sign_out": "ログアウト",
   "settings_managed_loading": "アカウントを読み込み中…",

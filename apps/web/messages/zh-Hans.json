@@ -149,6 +149,7 @@
   "catalogue_create_refresh": "已重新请求可用类型，提交前请确认选择。",
   "account_menu": "账户",
   "account_security_settings": "安全设置",
+  "account_security_unavailable": "安全设置不可用",
   "account_sign_in": "登录",
   "account_sign_out": "退出登录",
   "settings_managed_loading": "正在加载账户…",

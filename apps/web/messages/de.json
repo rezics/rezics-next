@@ -149,6 +149,7 @@
   "catalogue_create_refresh": "Verfügbare Typen wurden erneut angefordert. Prüfe deine Auswahl vor dem Senden.",
   "account_menu": "Konto",
   "account_security_settings": "Sicherheitseinstellungen",
+  "account_security_unavailable": "Sicherheitseinstellungen nicht verfügbar",
   "account_sign_in": "Anmelden",
   "account_sign_out": "Abmelden",
   "settings_managed_loading": "Konten werden geladen…",
