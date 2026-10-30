@@ -28,6 +28,7 @@ let kernel: ReturnType<typeof testKernel>;
 let bearer: string;
 let ownerSession: Headers;
 let ownerId: string;
+type Credentials = { bearer: string; accountId: string };
 const publicationPositions = new Map<string, SessionComponent>();
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let worker: Awaited<ReturnType<typeof composeWork>>;
@@ -50,12 +51,18 @@ async function pauseBackgroundRelays() {
   }
 }
 
-async function call(method: string, path: string, body?: unknown, key = randomUUID()) {
+async function call(
+  method: string,
+  path: string,
+  body?: unknown,
+  key = randomUUID(),
+  credentials: Credentials = { bearer, accountId: ownerId },
+) {
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
       method,
       headers: {
-        authorization: `Bearer ${bearer}`,
+        authorization: `Bearer ${credentials.bearer}`,
         'content-type': 'application/json',
         'idempotency-key': JSON.stringify(key),
       },
@@ -72,7 +79,7 @@ async function call(method: string, path: string, body?: unknown, key = randomUU
     const session = response.headers.get(SESSION_HEADER);
     const position =
       session &&
-      decodeSession(testTokens(), `account:${ownerId}`, session)?.find(
+      decodeSession(testTokens(), `account:${credentials.accountId}`, session)?.find(
         (component) => component.partition === routeOf(collectionId)! >> 4,
       );
     if (position) publicationPositions.set(collectionId, position);
@@ -91,9 +98,16 @@ async function subject(partition?: number) {
     await call('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Native publication subject' } }, key)
   ).subject.id as string;
 }
-async function collection(visibility = 'public') {
-  return (await call('POST', '/v1/collections', { title: 'Native publication Collection', visibility }))
-    .collection as CollectionView;
+async function collection(visibility = 'public', credentials?: Credentials) {
+  return (
+    await call(
+      'POST',
+      '/v1/collections',
+      { title: 'Native publication Collection', visibility },
+      randomUUID(),
+      credentials,
+    )
+  ).collection as CollectionView;
 }
 async function add(collectionId: string, subjectId: string) {
   return (await call('POST', `/v1/collections/${collectionId}/members`, { subjectId })).member.id as string;
@@ -177,6 +191,30 @@ beforeAll(async () => {
     actions: ['subject:create'],
     valid: '(,)',
   });
+  // Real unrelated curators provide native history across source partitions.
+  // Their effects retain partitionConcurrency=1 rather than changing queue policy
+  // or serializing the entire baseline behind one curator's partition head.
+  const baselineOwners: Credentials[] = [];
+  const baselinePartitions = new Set<number>();
+  while (baselineOwners.length < 8) {
+    const person = await auth.person(`baseline_${randomUUID().replaceAll('-', '')}`);
+    const partition = routeOf(person.accountId)! >> 4;
+    if (baselinePartitions.has(partition)) continue;
+    const signed = await auth.request('/signin', {
+      account_id: person.accountId,
+      password,
+      client_id: 'publication',
+      scope: scopes,
+    });
+    expect(signed.status).toBe(200);
+    const issued = await auth.request('/token', {}, cookies(signed));
+    expect(issued.status).toBe(200);
+    baselineOwners.push({
+      accountId: person.accountId,
+      bearer: ((await issued.json()) as { access_token: string }).access_token,
+    });
+    baselinePartitions.add(partition);
+  }
   // Capture the command module's actual second pool too, without changing its implementation.
   const NativePool = pg.Pool;
   pg.Pool = class extends NativePool {
@@ -228,8 +266,8 @@ beforeAll(async () => {
   for (let i = 0; i < 1500; i += 8) {
     if (i % 200 === 0) await refreshBearer();
     await Promise.all(
-      Array.from({ length: Math.min(8, 1500 - i) }, async () => {
-        const c = await collection();
+      Array.from({ length: Math.min(8, 1500 - i) }, async (_, owner) => {
+        const c = await collection('public', baselineOwners[owner]);
         const event = await notification(c.id);
         history.push({ event, effect: await enqueuePublication(event) });
       }),
