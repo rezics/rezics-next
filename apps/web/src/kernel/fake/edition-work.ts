@@ -78,7 +78,11 @@ export function traversalPage(
   const context: SelectedContext = options.realm
     ? { id: traversalContext, population: { kind: 'realm', id: options.realm, title: 'Harbour readers' } }
     : { id: PAGE_GLOBAL_CONTEXT, population: { kind: 'global' } };
-  const plan = planReads(platformRegistry, resolved.document, { subject: subject.id, context, ...options });
+  const plan = planReads(platformRegistry, resolved.document, {
+    subject: subject.id,
+    context,
+    ...(options.continuation ? { continuation: options.continuation } : {}),
+  });
   const reads: SubjectPageData['reads'] = {};
   for (const [key, read] of Object.entries(plan.reads)) {
     if (read.kind === 'subject') {

@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import {
   planReads,
@@ -13,13 +13,8 @@ import profileJson from '@rezics/composition/profiles/platform.json';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { SubjectPage, pageContext, pageRelationProperties, type SubjectPageData } from '../src/features/pages/subject';
-import { subjectPageMessages } from '../src/features/pages/route-support';
-import { subjectTabs } from '../src/features/pages/views';
-import { readRelationGroup, relationGroupKey } from '../src/features/pages/relation-stream-query';
-import { relationStreamItems } from '../src/features/pages/relation-stream';
-import { loadViewPages } from '../src/features/pages/subject-frame';
-import { statementItems, type OverviewValue } from '../src/features/pages/overview';
+import type { SubjectPageData } from '../src/features/pages/subject';
+import type { OverviewValue } from '../src/features/pages/overview';
 import { relationDefinitions } from '../src/subject/relations';
 import { defaultReader } from '../src/subject/reader';
 import {
@@ -29,6 +24,16 @@ import {
   traversalRelease,
   type TraversalScenario,
 } from '../src/kernel/fake/edition-work';
+
+// Direct Bun runs have no Workers runtime; transport assertions below use the actual injected client.
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { SubjectPage, pageContext, pageRelationProperties } = await import('../src/features/pages/subject');
+const { subjectPageMessages } = await import('../src/features/pages/route-support');
+const { subjectTabs } = await import('../src/features/pages/views');
+const { readRelationGroup, relationGroupKey } = await import('../src/features/pages/relation-stream-query');
+const { relationStreamItems } = await import('../src/features/pages/relation-stream');
+const { loadViewPages } = await import('../src/features/pages/subject-frame');
+const { statementItems } = await import('../src/features/pages/overview');
 
 const profile = profileJson as PresentationProfile;
 const definitions = (page: SubjectPageData) =>

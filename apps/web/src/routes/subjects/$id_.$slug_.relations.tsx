@@ -129,7 +129,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
       if (!frame) throw notFound();
       const type = subjectPageType(loaded.overview);
       const [typeData, relations] = await Promise.all([
-        type ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : Promise.resolve({}),
+        context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
         context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale())),
       ]);
       return {
