@@ -33,8 +33,10 @@ duplicate keys fail compilation and release validation. Older releases without t
 Existing `coverRatio`, stored media dimensions, cover metadata and accepted personal profile semantics stay intact.
 
 Until actual generated handoff, Web treats new fields as additive/optional and uses an explicit exact-Type
-fallback: `schema:Book` portrait 3:4, `schema:Movie` landscape 16:9, `schema:MusicAlbum` square 1:1;
-other Types use their existing valid `coverRatio`, otherwise square 1:1. Do not infer a vertical from a label or
+fallback: `schema:Book`, `bf:Instance`, `schema:ComicSeries` and `schema:PublicationVolume` use portrait 3:4;
+`schema:Movie`, `schema:TVSeries`, `schema:TVSeason`, `schema:Episode`, `rezics:AnimeRelease` and `schema:Recipe`
+use landscape 16:9; `schema:MusicAlbum` uses square 1:1. Other Types use their existing valid `coverRatio`,
+otherwise square 1:1. Do not infer a vertical from a label or
 substring. A missing or retired Collection kind uses this member-Type fallback; it never converts member Types.
 Facts remain absent without a delivered producer; no guessed author, runtime, episode or page count fills a row.
 
@@ -111,7 +113,7 @@ visibility, ownership or retention rights.
 
 Use actual Content `checkMediaObject`/`checkMediaObjects` in `content/cover-reference.ts` as low-level reference
 facts, plus `decideDownload` from `content/media.ts` with the real viewer Actor, Access, pool, trusted routeKey
-and deadline in the native download context. Select an actual returned AVIF or WebP variant, never original.
+and deadline in the native download context and the real trusted clock. Select an actual returned AVIF or WebP variant, never original.
 Each read independently rechecks current media/container, tuple, source and variant rights. Release Collection
 checkout before visiting a foreign media home and retain Collection final disclosure/currentness checks.
 

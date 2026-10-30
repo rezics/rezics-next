@@ -4,6 +4,10 @@ The immutable definition catalogue release format stored by the kernel. This pac
 exports the release types, the JSON Schema 2020-12 document at
 `@rezics/definitions/schema/release.json`, and pure validation and digest functions.
 
+The selected Type list hints and Collection presentation/editor contract live in
+[Collection presentation and editor](../../docs/collection-presentation.md). That page distinguishes the selected
+additive release shape from current compiler/schema delivery; it does not change this package's runtime today.
+
 ## Construction compatibility in source archives
 
 `bun run --cwd packages/definitions check` includes `test/construction-archive.test.ts`.

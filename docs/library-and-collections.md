@@ -6,7 +6,8 @@ first-public behavior, not a claim of runtime completion. The [Library module](.
 records actual implementation and remaining gaps. [Scope](scope.md) defers user-saved dynamic queries.
 
 The shared owner contracts are [Dynamic Collections](dynamic-collections.md), [Collection source](collection-source.md),
-[filtered lists](filtered-lists.md), [independent labels](library-labels.md),
+[filtered lists](filtered-lists.md), [Collection presentation and editor](collection-presentation.md),
+[independent labels](library-labels.md),
 [profile consumers](library-profile-consumers.md), and [deletion](deletion.md). Indexed evaluation and source-scoped
 concurrent identity currentness below supersede older per-page proof/replay, whole-slot observation and identity-basis protocols in
 those adoption surfaces and earlier research. Their ABI revisions belong to their owners; this adoption creates no
@@ -26,7 +27,10 @@ A Collection has one identity, curator, visibility, title/description, follow ta
 `ItemList` surface. Curated membership stores ordered occurrences, each with its own ID and note; duplicates remain
 editable. Dynamic membership derives unique subjects from native truth. One shared Collection members service and
 page serves curated, Everything, state and Liked, with shared filters, sorts, summaries, cursors and actions.
-Grid/list/table layouts are presentation only and do not change membership or authorization.
+Grid/list/table layout is a client UI choice. Collection presentation kind is an owner-selected or derived
+definitions Type; members keep their own Types. Neither changes membership or authorization. The joint
+[Collection presentation and editor contract](collection-presentation.md) owns the selected fields, editor operations
+and current delivery inventory.
 
 - **Everything** includes a subject with live explicit state, an effective live label assignment, retained
   session/history or retained holding. Removing one fact leaves membership while another survives. Empty entry
