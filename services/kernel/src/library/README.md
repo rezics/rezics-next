@@ -1671,7 +1671,9 @@ and historical releases; it never walks history or adds per-row release reads to
 assertions remain unchanged. Focused pure presentation and additive actual native fixture cases cover accepted
 labels versus current rename/retirement, unknown versus unavailable, disclosure and final fences. Native and
 promoted-main proof remain pending; local typing is not that proof. Metadata update/delete/Undo contracts and the
-720-hour restoration window remain unchanged.
+720-hour restoration window remain unchanged. Foreground local kernel typing, including route construction,
+and client typing passed. Native, unit and acceptance suites were not run; the update-pin conflict above
+remains unresolved.
 
 ### Copy page
 
