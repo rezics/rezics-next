@@ -143,32 +143,29 @@ async function listSitemap(
         thread_id: after?.id ?? (feed === 'boards' ? MAX_ID : ZERO_ID),
         limit: want,
       };
-      const scanned = await readBoardPageCandidateSnapshot(
-        dependencies,
-        boardId,
-        reader,
-        decisions,
-        async (client) => {
-          const statement = feed === 'boards' ? newestThreads : pageThreads;
-          const result = await client.query<(typeof pageThreads)['~reylo']['element']>(
-            statement.sql,
-            statement.params.map((name) => parameters[name as keyof typeof parameters]),
-          );
-          return result.rows;
-        },
-      );
+      const scanned = await readBoardPageCandidateSnapshot(dependencies, boardId, reader, decisions, async (client) => {
+        const statement = feed === 'boards' ? newestThreads : pageThreads;
+        const result = await client.query<(typeof pageThreads)['~reylo']['element']>(
+          statement.sql,
+          statement.params.map((name) => parameters[name as keyof typeof parameters]),
+        );
+        return result.rows;
+      });
       if (!scanned) {
         position = { boardId, scanning: false, thread: null };
         continue;
       }
       const rows = scanned.candidate;
       budget -= rows.length;
-      const disclosed = await withBoardDisclosure(boardId, scanned.board, () =>
-        discloseThreads(
-          dependencies,
-          rows.map((row) => row.thread_id),
-          reader,
-        ),
+      const disclosed = await withBoardDisclosure(
+        boardId,
+        scanned.board,
+        () =>
+          discloseThreads(
+            dependencies,
+            rows.map((row) => row.thread_id),
+            reader,
+          ),
         decisions,
       );
       for (const [index, row] of rows.entries()) {

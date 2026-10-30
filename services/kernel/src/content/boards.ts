@@ -251,27 +251,39 @@ export async function listBoardThreads(
           has_after: after !== null && after.kind === 'rank',
           limit: 200,
         };
-        const sql = sort === 'hot' ? boardRankPage.sql.replaceAll('candidate.active_rank', 'candidate.hot_rank') : boardRankPage.sql;
+        const sql =
+          sort === 'hot'
+            ? boardRankPage.sql.replaceAll('candidate.active_rank', 'candidate.hot_rank')
+            : boardRankPage.sql;
         const result = await client.query<{
           thread_id: string;
           active_rank?: number;
           hot_rank?: number;
           rank_refreshed_at: string | null;
-        }>(sql, boardRankPage.params.map((name) => parameters[name as keyof typeof parameters]));
+        }>(
+          sql,
+          boardRankPage.params.map((name) => parameters[name as keyof typeof parameters]),
+        );
         for (const row of result.rows) {
           if (row.rank_refreshed_at === null) throw new Error('Board rank freshness is missing');
-          candidates.push({ id: row.thread_id, rank: sort === 'hot' ? row.hot_rank! : row.active_rank!, rankRefreshedAt: row.rank_refreshed_at });
+          candidates.push({
+            id: row.thread_id,
+            rank: sort === 'hot' ? row.hot_rank! : row.active_rank!,
+            rankRefreshedAt: row.rank_refreshed_at,
+          });
         }
       } else {
         const parameters = {
           route: routeOf(boardId)!,
           board_id: boardId,
-          created_at:
-            after?.kind === 'created' ? after.createdAt : sort === 'oldest' ? '-infinity' : 'infinity',
+          created_at: after?.kind === 'created' ? after.createdAt : sort === 'oldest' ? '-infinity' : 'infinity',
           thread_id: after?.kind === 'created' ? after.threadId : '00000000-0000-0000-0000-000000000000',
           limit: 200,
         };
-        const sql = sort === 'oldest' ? pageBoardThreads.sql.replace(') < (', ') > (').replaceAll(' DESC', ' ASC') : pageBoardThreads.sql;
+        const sql =
+          sort === 'oldest'
+            ? pageBoardThreads.sql.replace(') < (', ') > (').replaceAll(' DESC', ' ASC')
+            : pageBoardThreads.sql;
         const result = await client.query<(typeof pageBoardThreads)['~reylo']['element']>(
           sql,
           pageBoardThreads.params.map((name) => parameters[name as keyof typeof parameters]),
@@ -297,7 +309,10 @@ export async function listBoardThreads(
   for (const candidate of candidates) {
     if ('rankRefreshedAt' in candidate) rankFreshness.set(candidate.id, candidate.rankRefreshedAt);
   }
-  const anchors: AnchoredPosition[] = [board.anchor, { partition: board.anchor.partition, epoch: selected.epoch, position: selected.position }];
+  const anchors: AnchoredPosition[] = [
+    board.anchor,
+    { partition: board.anchor.partition, epoch: selected.epoch, position: selected.position },
+  ];
   const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   const entries: string[] = [];
   const entryPositions: BoardPageAfter[] = [];

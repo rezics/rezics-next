@@ -28,7 +28,10 @@ export async function readPartition(client: Queryable, partitionNo: number): Pro
   };
 }
 
-export async function readPartitions(client: Queryable, partitionNos: readonly number[]): Promise<readonly Partition[]> {
+export async function readPartitions(
+  client: Queryable,
+  partitionNos: readonly number[],
+): Promise<readonly Partition[]> {
   const partitions = [...new Set(partitionNos)].sort((a, b) => a - b);
   if (partitions.length === 0) return [];
   const rows = await readBatch.run(client, { partitions });

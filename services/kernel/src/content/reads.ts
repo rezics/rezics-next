@@ -263,12 +263,12 @@ async function batchRealms(client: AccessClient, ids: readonly string[]): Promis
   return result.rows;
 }
 
-function requiredBanKeys(
-  actor: Actor,
-  boards: readonly Row[],
-): BanKey[] {
+function requiredBanKeys(actor: Actor, boards: readonly Row[]): BanKey[] {
   if (actor.kind !== 'account') return [];
-  const accountIds = new Set([actor.accountId, ...(actor.requestedBy?.split(':')[3] ? [actor.requestedBy.split(':')[3]!] : [])]);
+  const accountIds = new Set([
+    actor.accountId,
+    ...(actor.requestedBy?.split(':')[3] ? [actor.requestedBy.split(':')[3]!] : []),
+  ]);
   const realmIds = new Set<string>();
   for (const board of boards) {
     if (board.realm_id && board.visibility !== 'published') realmIds.add(board.realm_id);
@@ -332,7 +332,9 @@ async function batchSnapshot<T>(
   context: Pick<ReadContext, 'deadline'>,
   work: (client: AccessClient, anchors: ReadonlyMap<number, Partition>) => Promise<T>,
 ): Promise<{ value: T; anchors: ReadonlyMap<number, Partition> }> {
-  const poolGroups = new Map<Pool, Set<number>>([[dependencies.pool, new Set(ids.map((id) => partitionOf(route(id))))]]);
+  const poolGroups = new Map<Pool, Set<number>>([
+    [dependencies.pool, new Set(ids.map((id) => partitionOf(route(id))))],
+  ]);
   return within(context.deadline, () =>
     withConnection(dependencies.pool, async (connection) => {
       const client = deadlineClient(connection, context.deadline);
@@ -643,7 +645,9 @@ async function decideBoardAndRealms(
   actor: Actor,
   boards: readonly Row[],
   realms: readonly RealmBatchRow[],
-): Promise<Readonly<{ boards: ReadonlyMap<string, boolean>; realms: ReadonlyMap<string, boolean>; bans: ReadonlySet<string> }>> {
+): Promise<
+  Readonly<{ boards: ReadonlyMap<string, boolean>; realms: ReadonlyMap<string, boolean>; bans: ReadonlySet<string> }>
+> {
   const bans = createBanEvidence(client, actor, boards);
   const boardIds = boards.map((row) => row.id);
   const boardRows = new Map(boards.map((row) => [row.id, row]));
@@ -724,7 +728,11 @@ function contentFloor(row: Row, tombstone: boolean, placeholder: boolean, withhe
   );
 }
 
-type SelectionRound = Readonly<{ survivors: readonly string[]; revisions: ReadonlyMap<string, string>; anchors: readonly AnchoredPosition[] }>;
+type SelectionRound = Readonly<{
+  survivors: readonly string[];
+  revisions: ReadonlyMap<string, string>;
+  anchors: readonly AnchoredPosition[];
+}>;
 
 export async function selectBoardThreadCandidates(
   dependencies: ContentReadDependencies,
@@ -736,7 +744,11 @@ export async function selectBoardThreadCandidates(
 ): Promise<SelectionRound> {
   if (!threadIds.length) return { survivors: [], revisions: new Map(), anchors: [] };
   const selected = await batchSnapshot(dependencies, threadIds, context, async (client) => {
-    const threads = await batchRows(client, 'thread', threadIds.map((id) => batchKey(id)));
+    const threads = await batchRows(
+      client,
+      'thread',
+      threadIds.map((id) => batchKey(id)),
+    );
     const threadById = new Map(threads.map((row) => [row.id, row]));
     const posts = await batchRows(
       client,
@@ -767,11 +779,18 @@ export async function selectBoardThreadCandidates(
         withheld.set(post.id, isWithheld);
       }
     }
-    const threadEligible = new Map(threads.map((row) => [row.id, contentFloor(row, tombstones.get(row.id) ?? false, false)]));
+    const threadEligible = new Map(
+      threads.map((row) => [row.id, contentFloor(row, tombstones.get(row.id) ?? false, false)]),
+    );
     const postEligible = new Map(
       posts.map((row) => [
         row.id,
-        contentFloor(row, tombstones.get(row.id) ?? false, placeholders.get(row.id) ?? false, withheld.get(row.id) ?? false),
+        contentFloor(
+          row,
+          tombstones.get(row.id) ?? false,
+          placeholders.get(row.id) ?? false,
+          withheld.get(row.id) ?? false,
+        ),
       ]),
     );
     const threadAccess = threads.length
@@ -779,7 +798,8 @@ export async function selectBoardThreadCandidates(
           action: 'thread:read',
           resourceType: 'content.thread',
           ids: threads.map((row) => row.id),
-          eligibility: async (_client, ids) => Object.fromEntries(ids.map((id) => [id, threadEligible.get(id) === true])),
+          eligibility: async (_client, ids) =>
+            Object.fromEntries(ids.map((id) => [id, threadEligible.get(id) === true])),
         })
       : {};
     const postAccess = posts.length
@@ -805,7 +825,10 @@ export async function selectBoardThreadCandidates(
         !decisionAllowed(post, postAccess[post.id], context.actor, tombstones.get(post.id) ?? false)
       )
         continue;
-      if (query && (post.availability !== 'available' || revision.availability !== 'available' || revision.matches !== true))
+      if (
+        query &&
+        (post.availability !== 'available' || revision.availability !== 'available' || revision.matches !== true)
+      )
         continue;
       survivors.push(id);
       expected.set(id, revision.id);
@@ -829,11 +852,13 @@ export async function discloseBoardPageThreads(
   context: ReadContext,
   decisions: ReadDecisions,
   query = '',
-): Promise<Readonly<{
-  items: readonly Anchored<ThreadView | null>[];
-  boardAnchor: AnchoredPosition;
-  parentAllowed: boolean;
-}>> {
+): Promise<
+  Readonly<{
+    items: readonly Anchored<ThreadView | null>[];
+    boardAnchor: AnchoredPosition;
+    parentAllowed: boolean;
+  }>
+> {
   const ids = [boardId, ...threadIds];
   if (baseline.realmId) ids.push(baseline.realmId);
   const result = await batchSnapshot(dependencies, ids, context, async (client, anchors) => {
@@ -847,7 +872,11 @@ export async function discloseBoardPageThreads(
       return { items: new Map<string, ThreadView | null>(), parentAllowed: false };
 
     // Parent authorities pass in this same snapshot before any thread chain row is read.
-    const threads = await batchRows(client, 'thread', threadIds.map((id) => batchKey(id)));
+    const threads = await batchRows(
+      client,
+      'thread',
+      threadIds.map((id) => batchKey(id)),
+    );
     const byThread = new Map(threads.map((row) => [row.id, row]));
     const posts = await batchRows(
       client,
@@ -874,11 +903,18 @@ export async function discloseBoardPageThreads(
       postPlaceholder.set(post.id, post.availability === 'erased' || withheld);
       postWithheld.set(post.id, withheld);
     }
-    const threadFloor = new Map(threads.map((row) => [row.id, contentFloor(row, threadTombstone.get(row.id) ?? false, false)]));
+    const threadFloor = new Map(
+      threads.map((row) => [row.id, contentFloor(row, threadTombstone.get(row.id) ?? false, false)]),
+    );
     const postFloor = new Map(
       posts.map((row) => [
         row.id,
-        contentFloor(row, postTombstone.get(row.id) ?? false, postPlaceholder.get(row.id) ?? false, postWithheld.get(row.id) ?? false),
+        contentFloor(
+          row,
+          postTombstone.get(row.id) ?? false,
+          postPlaceholder.get(row.id) ?? false,
+          postWithheld.get(row.id) ?? false,
+        ),
       ]),
     );
     const threadAccess = threads.length
@@ -886,7 +922,8 @@ export async function discloseBoardPageThreads(
           action: 'thread:read',
           resourceType: 'content.thread',
           ids: threads.map((row) => row.id),
-          eligibility: async (_client, ids2) => Object.fromEntries(ids2.map((id) => [id, threadFloor.get(id) === true])),
+          eligibility: async (_client, ids2) =>
+            Object.fromEntries(ids2.map((id) => [id, threadFloor.get(id) === true])),
         })
       : {};
     const postAccess = posts.length
@@ -914,7 +951,12 @@ export async function discloseBoardPageThreads(
         (erased && postAccess[post.id]?.explicit !== true && thread.visibility === 'taken_down')
       )
         continue;
-      if (query && (expectedRevisions.get(id) !== revision.id || post.availability !== 'available' || revision.availability !== 'available'))
+      if (
+        query &&
+        (expectedRevisions.get(id) !== revision.id ||
+          post.availability !== 'available' ||
+          revision.availability !== 'available')
+      )
         continue;
       if (withheld && !postPlaceholder.get(post.id)) continue;
       passed.push(id);
@@ -963,7 +1005,11 @@ export async function discloseBoardPageThreads(
       if (!item) continue;
       if (context.actor.kind === 'account' && context.actor.accountId === post.author_id) {
         const until = post.deleted_at ? post.deleted_at.getTime() + 30 * 86400000 : 0;
-        if (item.availability === 'erased' && post.restorable && until > (dependencies.clock?.() ?? new Date()).getTime())
+        if (
+          item.availability === 'erased' &&
+          post.restorable &&
+          until > (dependencies.clock?.() ?? new Date()).getTime()
+        )
           item = { ...item, restorableUntil: new Date(until).toISOString() };
         if (item.availability === 'withheld' && post.decision_id) item = { ...item, decisionId: post.decision_id };
       }
@@ -1616,7 +1662,11 @@ export async function discloseThreads(
   // Discover only their current container keys in one batched snapshot, then
   // disclose each board's complete set in one final snapshot.
   const discovery = await batchSnapshot(dependencies, threadIds, context, async (client) => {
-    const rows = await batchRows(client, 'thread', threadIds.map((id) => batchKey(id)));
+    const rows = await batchRows(
+      client,
+      'thread',
+      threadIds.map((id) => batchKey(id)),
+    );
     return new Map(rows.map((row) => [row.id, row.board_id!]).filter((entry) => !!entry[1]));
   });
   const groups = new Map<string, string[]>();
@@ -1629,13 +1679,7 @@ export async function discloseThreads(
   }
   const results = new Map<string, Anchored<ThreadView | null>>();
   for (const [boardId, ids] of groups) {
-    const parent = await readBoardPageCandidateSnapshot(
-      dependencies,
-      boardId,
-      context,
-      decisions,
-      async () => null,
-    );
+    const parent = await readBoardPageCandidateSnapshot(dependencies, boardId, context, decisions, async () => null);
     const anchorFor = (id: string): AnchoredPosition => {
       const partition = discovery.anchors.get(partitionOf(route(id)))!;
       return { partition, epoch: partition.epoch, position: partition.position };
