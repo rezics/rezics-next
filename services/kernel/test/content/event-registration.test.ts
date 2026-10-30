@@ -31,6 +31,9 @@ const threadIndex = {
 };
 const media = { mediaId, containerId };
 const fixtures = {
+  'com.rezics.content.edition.created.v1': { editionId: itemId, editionRevision: '1' },
+  'com.rezics.content.edition.published.v1': { editionId: itemId, editionRevision: '2' },
+  'com.rezics.content.edition.unpublished.v1': { editionId: itemId, editionRevision: '3' },
   'com.rezics.content.realm-discovery.prepared.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
   'com.rezics.content.realm-discovery.outcome.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
   'com.rezics.content.realm-discovery.changed.v1': {

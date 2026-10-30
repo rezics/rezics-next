@@ -1,3 +1,5 @@
+import { mountContentEditionConsent } from '../content/edition-sale.ts';
+import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { NATIVE_CONTAINER_ACTIONS } from '../community/actions.ts';
@@ -88,7 +90,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   /** Trusted domain time only; authentication and request budgets retain real time. */
   clock?: () => Date;
   commerce?: CommerceDependencies;
-  content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
+  content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'> & { readConsent?: CurrentConsentReader };
   search?: SearchService;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
   shelves?: ShelfNativeReadBindings;
@@ -289,6 +291,8 @@ export function createKernelAccessResolver(options: {
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
+  if (dependencies.content?.readConsent)
+    mountContentEditionConsent(dependencies.pool, dependencies.content.readConsent);
   const sourceClock = dependencies.clock ?? systemClock;
   const clock = () => {
     const instant = sourceClock();

@@ -1186,3 +1186,72 @@ native interval settles. All membership, permission and source evidence is refre
 - Growth check: later reuse `test/community/growth-realm.test.ts`, `test/content/growth-threads.test.ts` and
   the existing media growth harness. Native, physical, visual, cleanup, main and root
   proof remain outstanding; focused cases and a compiler pass do not claim these outcomes.
+
+## Fixed authored paid editions
+
+A native `content.edition` is a pointer to exactly one authored post revision in the source post's route. It stores
+creator, target subject, thread/post/revision, canonical SHA256 and immutable SPDX licence; it stores no body, file or URL.
+`POST /v1/contentEditions` accepts only `{ postId, revisionId, targetSubjectId }`, requires current `post:revise` and the actual
+post and revision writer, and returns 201 `{ editionId, editionRevision }`. The revision writer is checked by its
+exact native `editorial.write_basis` transaction, without a history scan. Missing original provenance refuses enrollment.
+The target must already belong to that exact immutable revision's `subject_ids` and be currently readable through
+native `subject:read`. A different current head cannot add an association to the selected revision. Publication pins
+that original subject in the immutable source digest; missing, hidden or redirected subjects refuse sale and delivery.
+Creation makes a draft and initializes the narrow `content.edition.owner` role atomically through parent creation.
+The role adds only `edition:read`, `edition:sell`, and `edition:unpublish` on that edition.
+
+`POST /v1/contentEditions/{id}:publish` accepts `{}`, requires `Idempotency-Key`, quoted `If-Match: "1"`, current
+`edition:sell` AND source `post:revise`, and the same actual native author. Publication is a separate native command
+after owner grants exist. Its immutable operation records the real admitted actor, scopes, floor/operator and
+original delegation, source digest, executor transaction and exact receipt locator/digest. The receipt commits the
+entire allowlisted durable initiator record. Content's concrete `readEditionInitiator` independently verifies that
+operation, exact source, native write basis and original receipt; missing/collected or replaced evidence cannot
+restore a publisher. A draft is never sellable or byte deliverable. A new version requires a new edition ID.
+`POST /v1/contentEditions/{id}:unpublish` accepts `{}` with current revision `If-Match`, requires the current creator
+and native owner action, and is terminal. Both commands return `{ editionId, editionRevision }`; unpublication does
+not issue refunds. Receipt replay repeats fresh native admission and source guards before receipt lookup.
+
+`GET /v1/contentEditions/{id}` returns exactly `{ editionId, editionRevision, state, targetSubjectId,
+creatorAccountId, revisionId, sha256, licence }` under current `edition:read`. State is `draft`, `published` or
+`withdrawn`. Draft metadata additionally requires the creator's ordinary source read.
+`GET /v1/contentEditions/{id}/revision` returns exactly `{ editionId, revisionId, sha256, licence, body }`, where body is the
+canonical native DocumentSnapshot. Buying or granting `edition:read` never grants ordinary `post:read`.
+Both reads use private, no-store responses; conditional headers never skip authorization or return an unchecked 304.
+Unknown, removed and hidden resources return 404; ordinary native refusals and retryable infrastructure errors retain
+their normal problem semantics.
+
+`readContentEditionSaleAuthority({ pool, access, clock? }, editionId, context)` returns only an active current
+publication. The server-only `readContentEditionMechanicalSaleAuthority({ pool, access, clock? }, editionId,
+{ deadline })` uses that same private native verifier for fresh Commerce capture/fulfilment eligibility without a buyer
+actor or workflow ReadContext. It returns only the same closed native identifiers, creator and licence; it grants no
+delivery or cleanup authority and has no HTTP route, fact issuance, grant or write side effect. The normal caller
+entry retains its actual actor's subject and parent checks. Every sale/fulfilment independently restores its original
+publisher for `edition:sell` and `post:revise`
+at the same live native read T, before target checkout. Each action uses its own restored identity and current
+formula; neither identity grants anything to the request's buyer. The publisher also independently restores each
+subject, board, Realm, Space, thread and source/ancestor post read at that same T and fixed deadline. Each exact
+authority anchor validates its own native row before checkout of the edition home. Action evidence is never reused
+for another action; the real buyer still passes its own independent read checks. Current consent comes from the
+mounted Auth reader or the standard Auth consent configuration. Absent configuration is typed unavailability. Current seller grants,
+native author/source/licence/binding and original receipt are checked again before returning authority or bytes.
+One fixed deadline bounds all restorations and final evidence to at most 1,000 ms. Reads mint T on a released
+bounded connection and release it in finally; commands use only the executor's T.
+
+The buyer independently passes the ordinary board, thread, every ancestor post, Realm and Space reads and native
+lifecycle checks. Only the explicitly enrolled protected source post's own read grant can be supplied by the edition.
+Draft, takedown, erased/removed source or ancestry, pending account-erasure fence and missing source bytes refuse
+delivery before preparation and at final disclosure. Source erasure immediately disables edition reads. The existing
+[post cleanup](erased-post-cleanup.ts) nulls those same revision bytes; the edition has no surviving copy.
+
+The canonical benefit type is re-exported from `access/authenticated-benefit.ts`. Kernel composition mounts
+Commerce's `createContentEditionBuyerFactReader` on `AccessConfig.contentEditionBuyerFactReader`; Commerce never
+calls Content recursively. The Access owner's opaque issuer and formula integration and Commerce's native current
+entitlement reader are installed; the reader issues a fact only after releasing its buyer-home checkout. Native owner/direct
+grants still use the ordinary formula. No Content permission evaluator is added.
+
+| Operation | Touches | Bound | Growth check |
+| --- | --- | --- | --- |
+| Edition draft creation | Exact post/revision/write basis and selected subject association, released native subject and board/Realm/Space/account homes, ordinary ancestry, one edition INSERT and native owner grant initialization | One fixed source and subject; at most 33 posts; body at most 2 MiB; O(H log N) plus existing Access bounds | None: focused native outcomes in `test/content/edition.test.ts`; no growth claim in this delivery |
+| Edition publish/unpublish | Exact edition/source/subject, ordinary source/ancestry Access, one CAS; publication adds one immutable operation and receipt commitment | One source, subject and operation; at most 512 recorded scopes; no history scan | None: focused native outcomes in `test/content/edition.test.ts`; fixed indexed keys |
+| Edition metadata | Exact edition/source and released subject existence/read checks before and final, ordinary current parent guards and edition Access | One pinned subject; at most 33 posts and one board/Realm/Space; no bytes or source URLs | None: focused native outcomes in `test/content/edition.test.ts`; no growth run requested |
+| Edition sale/mechanical eligibility/byte read | Independent native publisher restorations per action and resource, exact receipt/operation/source, current subject and parent guards, final native checks; authenticated delivery separately checks the buyer edition grant and ancestry | At most 40 restorations for two sale actions, subject, board, Realm, Space, thread and at most 33 posts; shared 1,000 ms deadline; one exact revision at most 2 MiB; no history/entitlement enumeration or copied bytes | None: focused native outcomes in `test/content/edition.test.ts` and `test/content/edition-mechanical.test.ts`; producer integration and runtime verification remain separate |

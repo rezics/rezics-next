@@ -1,3 +1,4 @@
+import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { InvalidGlobalBoardDirectoryCursorError, listGlobalBoards } from './global-board-directory.ts';
@@ -358,7 +359,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  const routes = appealRoutes(
+  const routes = editionRoutes(appealRoutes(
     moderationRoutes(
       reportRoutes(
         documentRoutes(
@@ -376,7 +377,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       dependencies,
     ),
     dependencies,
-  )
+  ), dependencies)
     .get(
       '/v1/boards',
       {
