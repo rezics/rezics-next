@@ -21,12 +21,32 @@ const memberCases: [string, unknown[]][] = [
   ['boolean', [true, true]],
   ['signed-zero', [0, -0, 0]],
   ['equal-numbers', [1, 1.0]],
-  ['reordered-object', [{ b: 2, a: 1 }, { a: 1, b: 2 }]],
-  ['nested-array', [[1, { x: 'é' }], [1, { x: 'é' }]]],
+  [
+    'reordered-object',
+    [
+      { b: 2, a: 1 },
+      { a: 1, b: 2 },
+    ],
+  ],
+  [
+    'nested-array',
+    [
+      [1, { x: 'é' }],
+      [1, { x: 'é' }],
+    ],
+  ],
   ['unicode', ['é', 'é']],
 ];
 const uniquenessSites = [
-  'bases', 'mappings', 'properties', 'facets', 'qualifiers', 'targets', 'units', 'filter', 'recordKinds',
+  'bases',
+  'mappings',
+  'properties',
+  'facets',
+  'qualifiers',
+  'targets',
+  'units',
+  'filter',
+  'recordKinds',
 ];
 const matrix = uniquenessSites.flatMap((site) => memberCases.map(([name, items]) => [site, name, items] as const));
 
@@ -46,20 +66,23 @@ test('historical uniqueness coverage retains six schema keywords and all 72 site
   expect(new Set(matrix.map(([site, name]) => `${site}/${name}`)).size).toBe(72);
 });
 
-test.each(matrix)('historical uniqueness %s / %s preserves exact malformed-member and escaped/child-pointer diagnostics', (site, _name, members) => {
-  const items = structuredClone(members);
-  const release: any = constructionFixture();
-  release.types['grow:a~/b'] = structuredClone(release.types['grow:Root']);
-  const property = release.properties['grow:code'];
-  if (['bases', 'mappings', 'properties', 'facets'].includes(site)) release.types['grow:a~/b'][site] = items;
-  else if (site === 'filter') property.relation = { group: 'association', inverse: 'none', filter: items };
-  else if (site === 'recordKinds')
-    release.libraryProfiles = {
-      test: { id: 'test', importSources: [{ id: 'test', mappingVersion: 'test', recordKinds: items }] },
-    };
-  else property[site] = items;
-  expect(validateRelease(release), `${site}: ${JSON.stringify(items)}`).toEqual(matrixOracle.validate(release));
-});
+test.each(matrix)(
+  'historical uniqueness %s / %s preserves exact malformed-member and escaped/child-pointer diagnostics',
+  (site, _name, members) => {
+    const items = structuredClone(members);
+    const release: any = constructionFixture();
+    release.types['grow:a~/b'] = structuredClone(release.types['grow:Root']);
+    const property = release.properties['grow:code'];
+    if (['bases', 'mappings', 'properties', 'facets'].includes(site)) release.types['grow:a~/b'][site] = items;
+    else if (site === 'filter') property.relation = { group: 'association', inverse: 'none', filter: items };
+    else if (site === 'recordKinds')
+      release.libraryProfiles = {
+        test: { id: 'test', importSources: [{ id: 'test', mappingVersion: 'test', recordKinds: items }] },
+      };
+    else property[site] = items;
+    expect(validateRelease(release), `${site}: ${JSON.stringify(items)}`).toEqual(matrixOracle.validate(release));
+  },
+);
 
 test('crowded malformed children preserve the pinned eight-node diagnostic budget and exact pointer/code order', () => {
   const crowded: any = constructionFixture();
