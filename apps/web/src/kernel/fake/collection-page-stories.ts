@@ -67,9 +67,11 @@ const followResponse = () => ({
 const receipts = new Map<string, KernelRecording>();
 let finishPendingSave: (() => void) | undefined;
 const itemIds = members.map((member) => member.id);
+let editorNavigation = false;
 
-export function setCollectionStoryMode(next: CollectionStoryMode): void {
+export function setCollectionStoryMode(next: CollectionStoryMode, editor = false): void {
   mode = next;
+  editorNavigation = editor;
   destinationRevision = 3;
   destinationMembers = [];
   editedCollection = clone(baseCollection);
@@ -198,7 +200,7 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: '/v1/collections',
     story: ({ request }) => {
-      if (new URL(request.url).searchParams.get('curatorAccountId') === 'story-viewer')
+      if (editorNavigation && new URL(request.url).searchParams.get('curatorAccountId') === 'story-viewer')
         return {
           status: 200,
           collections: [collectionResponse(request).collection, destinationCollection()],

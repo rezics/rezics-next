@@ -169,6 +169,14 @@ export function CollectionMemberList({
         const title = localizedTitle?.text ?? m.library_subject_unavailable();
         const href = member.subject ? subjectHref({ id: member.subject.id, label: title }, getLocale()) : null;
         const rowRatio = collectionMemberRatio(member.subject, typeRatios, listPresentations);
+        const landscape = rowRatio === '16:9' || rowRatio === '4:3';
+        const columns = editing
+          ? landscape
+            ? 'grid-cols-[auto_128px_minmax(0,1fr)] sm:grid-cols-[auto_192px_minmax(0,1fr)]'
+            : 'grid-cols-[auto_72px_minmax(0,1fr)] sm:grid-cols-[auto_96px_minmax(0,1fr)]'
+          : landscape
+            ? 'grid-cols-[128px_minmax(0,1fr)] sm:grid-cols-[192px_minmax(0,1fr)]'
+            : 'grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[96px_minmax(0,1fr)]';
         const moveUpAfter = index === 1 && firstPage ? null : index >= 2 ? members[index - 2]!.id : undefined;
         const nextAfter = index < members.length - 1 ? members[index + 1]!.id : undefined;
         const beginDrag = (event: DragEvent<HTMLElement>) => {
@@ -178,7 +186,7 @@ export function CollectionMemberList({
         return (
           <ListRow
             key={member.id}
-            className={`grid min-w-0 items-start gap-x-3 gap-y-2 py-2 ${rowRatio === '16:9' || rowRatio === '4:3' ? 'grid-cols-[auto_128px_minmax(0,1fr)] sm:grid-cols-[auto_192px_minmax(0,1fr)]' : 'grid-cols-[auto_72px_minmax(0,1fr)] sm:grid-cols-[auto_96px_minmax(0,1fr)]'}`}
+            className={`grid min-w-0 items-start gap-x-3 gap-y-2 py-2 ${columns}`}
             data-member={member.id}
             onDragOver={editing && !busy ? (event) => event.preventDefault() : undefined}
             onDrop={
@@ -243,11 +251,11 @@ export function CollectionMemberList({
                 />
               </ListRowControl>
             ) : member.subject && member.note ? (
-              <p data-slot="collection-member-note" className="line-clamp-2 text-sm text-muted-foreground">
+              <p data-slot="collection-member-note" className="col-start-2 line-clamp-2 text-sm text-muted-foreground">
                 {member.note}
               </p>
             ) : null}
-            <ListRowControl className="col-span-2 col-start-2 flex flex-wrap items-center gap-1">
+            <ListRowControl className={`col-start-2 flex flex-wrap items-center gap-1 ${editing ? 'col-span-2' : ''}`}>
               {onCopy && member.subject ? (
                 <Menu
                   title={m.library_collection_actions()}

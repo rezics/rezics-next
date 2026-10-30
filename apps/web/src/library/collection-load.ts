@@ -170,7 +170,7 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
     listPresentations?: CollectionListPresentations;
     viewerActions?: CollectionViewerActions;
     memberState?: 'ready' | 'preparing' | 'unavailable';
-    /** The count is withheld when the authorized member page cannot prove the complete public set. */
+    /** An authorized known total; null when the current viewer's read cannot disclose one. */
     memberCount: number | null;
     /** The requested page, retained for its indexing policy. */
     cursor?: string;
