@@ -4,7 +4,14 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
-import { editorialAddress, editorialCommand, readEditorialContext, submitEditorialContext, type EditorialRead, type EditorialResult } from './editorial-context';
+import {
+  editorialAddress,
+  editorialCommand,
+  readEditorialContext,
+  submitEditorialContext,
+  type EditorialRead,
+  type EditorialResult,
+} from './editorial-context';
 
 async function credential() {
   setResponseHeader('cache-control', 'private, no-store');
@@ -22,5 +29,7 @@ export const changeEditorialWorkspace = createServerFn({ method: 'POST', strict:
   .validator(editorialCommand)
   .handler(async ({ data }): Promise<EditorialResult> => {
     const authorization = await credential();
-    return authorization ? submitEditorialContext(kernelClient(), authorization, data) : { ok: false, reason: 'denied' };
+    return authorization
+      ? submitEditorialContext(kernelClient(), authorization, data)
+      : { ok: false, reason: 'denied' };
   });

@@ -6,7 +6,13 @@ import { readEditorialWorkspace, changeEditorialWorkspace } from './editorial-co
 import { EditorialContextWorkspace } from './editorial-context-view';
 import type { EditorialTransport } from './editorial-context';
 
-export function EditorialContextSession({ id, locale, reviewHref, createHref, children }: {
+export function EditorialContextSession({
+  id,
+  locale,
+  reviewHref,
+  createHref,
+  children,
+}: {
   id?: string;
   locale: string;
   reviewHref?: (id: string) => string;
@@ -14,11 +20,32 @@ export function EditorialContextSession({ id, locale, reviewHref, createHref, ch
   children?: (id: string) => ReactNode;
 }) {
   const { state } = useSession();
-  const transport = useMemo<EditorialTransport>(() => ({
-    read: (address) => readEditorialWorkspace({ data: address, headers: csrfHeaders() }),
-    submit: (command) => changeEditorialWorkspace({ data: command, headers: csrfHeaders() }),
-  }), []);
-  if (state !== 'signed-in') return <p>{state === 'unavailable' ? m.editorial_unavailable({}, { locale: locale as never }) : state === 'signed-out' ? m.relation_sign_in({}, { locale: locale as never }) : m.candidate_loading({}, { locale: locale as never })}</p>;
-  return <EditorialContextWorkspace key={`${id ?? 'new'}:${locale}`} {...(id ? { id } : {})} locale={locale} transport={transport}
-    {...(reviewHref ? { reviewHref } : {})} {...(createHref ? { createHref } : {})} {...(children ? { children } : {})} />;
+  const transport = useMemo<EditorialTransport>(
+    () => ({
+      read: (address) => readEditorialWorkspace({ data: address, headers: csrfHeaders() }),
+      submit: (command) => changeEditorialWorkspace({ data: command, headers: csrfHeaders() }),
+    }),
+    [],
+  );
+  if (state !== 'signed-in')
+    return (
+      <p>
+        {state === 'unavailable'
+          ? m.editorial_unavailable({}, { locale: locale as never })
+          : state === 'signed-out'
+            ? m.relation_sign_in({}, { locale: locale as never })
+            : m.candidate_loading({}, { locale: locale as never })}
+      </p>
+    );
+  return (
+    <EditorialContextWorkspace
+      key={`${id ?? 'new'}:${locale}`}
+      {...(id ? { id } : {})}
+      locale={locale}
+      transport={transport}
+      {...(reviewHref ? { reviewHref } : {})}
+      {...(createHref ? { createHref } : {})}
+      {...(children ? { children } : {})}
+    />
+  );
 }

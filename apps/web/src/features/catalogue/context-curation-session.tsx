@@ -21,18 +21,20 @@ export function ContextCurationSession({
 }) {
   return (
     <EditorialContextSession id={context} locale={locale} {...(createHref ? { createHref } : {})}>
-    {() => <CandidateReview
-      id={id}
-      locale={locale}
-      context={context}
-      initialProperty={property}
-      slot={slot}
-      transport={{
-        read: (property, cursor, session) =>
-          readSubjectContext({ data: { id, context, property, slot, cursor, session }, headers: csrfHeaders() }),
-        confirm: (command) => confirmSubjectContext({ data: command, headers: csrfHeaders() }),
-      }}
-    />}
+      {() => (
+        <CandidateReview
+          id={id}
+          locale={locale}
+          context={context}
+          initialProperty={property}
+          slot={slot}
+          transport={{
+            read: (property, cursor, session) =>
+              readSubjectContext({ data: { id, context, property, slot, cursor, session }, headers: csrfHeaders() }),
+            confirm: (command) => confirmSubjectContext({ data: command, headers: csrfHeaders() }),
+          }}
+        />
+      )}
     </EditorialContextSession>
   );
 }

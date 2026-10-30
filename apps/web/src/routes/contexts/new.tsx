@@ -8,4 +8,6 @@ export const Route = createFileRoute('/contexts/new')({
   head: () => ({ meta: [{ title: m.editorial_create() }, { name: 'robots', content: 'noindex, nofollow' }] }),
   component: NewContext,
 });
-function NewContext() { return <EditorialContextPage {...Route.useSearch()} />; }
+function NewContext() {
+  return <EditorialContextPage {...Route.useSearch()} />;
+}

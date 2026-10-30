@@ -7,16 +7,29 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { locales } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
-import { editorialCommand, type EditorialCommand, type EditorialFailure, type EditorialRead, type EditorialTransport } from './editorial-context';
+import {
+  editorialCommand,
+  type EditorialCommand,
+  type EditorialFailure,
+  type EditorialRead,
+  type EditorialTransport,
+} from './editorial-context';
 
 /** Private, short-lived reading. A known tombstone exists only after this workspace's native delete response. */
-export function EditorialContextWorkspace({ id, locale, transport, reviewHref, createHref, children }: {
+export function EditorialContextWorkspace({
+  id,
+  locale,
+  transport,
+  reviewHref,
+  createHref,
+  children,
+}: {
   id?: string;
   locale: string;
   transport: EditorialTransport;
   reviewHref?: (id: string) => string;
   createHref?: string;
-  children?: (id: string) => ReactNode;
+  children?: ((id: string) => ReactNode) | undefined;
 }) {
   const o = { locale: locale as never };
   const fieldId = useId();
@@ -48,14 +61,23 @@ export function EditorialContextWorkspace({ id, locale, transport, reviewHref, c
       if (!mounted.current) return;
       session.current = next.session ?? session.current;
       setReading(next);
-      if (next.ok) { setKnownDeleted(false); setRestoreBlocked(false); }
-    } catch { if (mounted.current) setReading({ ok: false, reason: 'unavailable' }); }
-    finally { running.current = false; if (mounted.current) setBusy(false); }
+      if (next.ok) {
+        setKnownDeleted(false);
+        setRestoreBlocked(false);
+      }
+    } catch {
+      if (mounted.current) setReading({ ok: false, reason: 'unavailable' });
+    } finally {
+      running.current = false;
+      if (mounted.current) setBusy(false);
+    }
   }
   useEffect(() => {
     mounted.current = true;
     if (id) void refresh(id);
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
     // Route/session identity remounts this private workspace. Mutations own subsequent reads.
   }, [id, transport]);
 
@@ -64,11 +86,16 @@ export function EditorialContextWorkspace({ id, locale, transport, reviewHref, c
     let command = pending;
     if (!command) {
       try {
-        command = editorialCommand({ operation, key: crypto.randomUUID(),
+        command = editorialCommand({
+          operation,
+          key: crypto.randomUUID(),
           ...(session.current ? { session: session.current } : {}),
           ...(operation === 'create' ? { labels: { [language]: name.trim() } } : { id: currentId }),
         });
-      } catch { setFailure({ ok: false, reason: 'invalid' }); return; }
+      } catch {
+        setFailure({ ok: false, reason: 'invalid' });
+        return;
+      }
       setPending(command);
     }
     running.current = true;
@@ -94,67 +121,170 @@ export function EditorialContextWorkspace({ id, locale, transport, reviewHref, c
       setName('');
       running.current = false;
       await refresh(result.id);
-    } catch { if (mounted.current) setFailure({ ok: false, reason: 'unavailable' }); }
-    finally { running.current = false; if (mounted.current) setBusy(false); }
+    } catch {
+      if (mounted.current) setFailure({ ok: false, reason: 'unavailable' });
+    } finally {
+      running.current = false;
+      if (mounted.current) setBusy(false);
+    }
   }
   const active = reading?.ok ? reading.context : undefined;
-  const errorText = (reason: EditorialFailure['reason']) => reason === 'denied' ? m.editorial_denied({}, o)
-    : reason === 'missing' ? m.editorial_missing({}, o)
-    : reason === 'invalid' ? m.editorial_invalid({}, o)
-    : reason === 'conflict' ? m.editorial_conflict({}, o) : m.editorial_unavailable({}, o);
+  const errorText = (reason: EditorialFailure['reason']) =>
+    reason === 'denied'
+      ? m.editorial_denied({}, o)
+      : reason === 'missing'
+        ? m.editorial_missing({}, o)
+        : reason === 'invalid'
+          ? m.editorial_invalid({}, o)
+          : reason === 'conflict'
+            ? m.editorial_conflict({}, o)
+            : m.editorial_unavailable({}, o);
   const uncertain = pending && failure?.reason === 'unavailable';
   const action = knownDeleted ? 'restore' : 'delete';
   const eligibleAttempt = (knownDeleted && !restoreBlocked) || active?.kind === 'community';
   return (
     <section aria-label={m.editorial_title({}, o)} aria-busy={busy} className="min-w-0 space-y-6">
       <header className="space-y-2">
-        <h2 className="text-2xl font-semibold">{active ? pickText(active.labels, locale).text || m.context_unnamed({}, o) : m.editorial_title({}, o)}</h2>
+        <h2 className="text-2xl font-semibold">
+          {active ? pickText(active.labels, locale).text || m.context_unnamed({}, o) : m.editorial_title({}, o)}
+        </h2>
         <p className="text-sm text-muted-foreground">{m.editorial_intro({}, o)}</p>
       </header>
       {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {notice && <p role="status">{notice === 'delete' ? m.editorial_deleted({}, o) : notice === 'restore' ? m.editorial_restored({}, o) : m.editorial_created({}, o)}</p>}
-      {knownDeleted && !active && <Tombstone shape="row" reason="deleted" labels={{ deleted: m.contribution_tombstone({}, o) }} />}
+      {notice && (
+        <p role="status">
+          {notice === 'delete'
+            ? m.editorial_deleted({}, o)
+            : notice === 'restore'
+              ? m.editorial_restored({}, o)
+              : m.editorial_created({}, o)}
+        </p>
+      )}
+      {knownDeleted && !active && (
+        <Tombstone shape="row" reason="deleted" labels={{ deleted: m.contribution_tombstone({}, o) }} />
+      )}
       {failure && <p role="alert">{errorText(failure.reason)}</p>}
       {reading && !reading.ok && <p role="status">{errorText(reading.reason)}</p>}
       {!currentId && (
-        <form className="max-w-xl space-y-4" onSubmit={(event) => { event.preventDefault(); void submit('create'); }}>
+        <form
+          className="max-w-xl space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit('create');
+          }}
+        >
           <p>{m.editorial_empty({}, o)}</p>
           <Field>
             <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
-            <NativeSelect id={`${fieldId}-language`} value={language} disabled={busy || !!pending} onChange={(event) => setLanguage(event.target.value)}>
-              {locales.map((value) => <NativeSelectOption key={value} value={value}>{languageNames.of(value) ?? value}</NativeSelectOption>)}
+            <NativeSelect
+              id={`${fieldId}-language`}
+              value={language}
+              disabled={busy || !!pending}
+              onChange={(event) => setLanguage(event.target.value)}
+            >
+              {locales.map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {languageNames.of(value) ?? value}
+                </NativeSelectOption>
+              ))}
             </NativeSelect>
           </Field>
           <Field>
             <FieldLabel htmlFor={`${fieldId}-name`}>{m.catalogue_create_label({}, o)}</FieldLabel>
-            <Input id={`${fieldId}-name`} value={name} maxLength={250} required disabled={busy || !!pending} onChange={(event) => { setName(event.target.value); setFailure(undefined); }} />
+            <Input
+              id={`${fieldId}-name`}
+              value={name}
+              maxLength={250}
+              required
+              disabled={busy || !!pending}
+              onChange={(event) => {
+                setName(event.target.value);
+                setFailure(undefined);
+              }}
+            />
           </Field>
-          {!pending && <Button type="submit" disabled={busy || !name.trim()}>{m.editorial_create({}, o)}</Button>}
+          {!pending && (
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {m.editorial_create({}, o)}
+            </Button>
+          )}
         </form>
       )}
       {active?.kind === 'global' && <p>{m.editorial_global({}, o)}</p>}
       {active && (
         <div className="flex flex-wrap gap-3">
-          {reviewHref && <a className={buttonVariants({ variant: 'outline' })} href={reviewHref(active.id)}>{m.editorial_review({}, o)}</a>}
-          <a className={buttonVariants({ variant: 'outline' })} href={`/${locale}/contexts/${encodeURIComponent(active.id)}`}>{m.editorial_open({}, o)}</a>
-          <a className={buttonVariants({ variant: 'outline' })} href={createHref ?? `/${locale}/contexts/new`}>{m.editorial_create({}, o)}</a>
+          {reviewHref && (
+            <a className={buttonVariants({ variant: 'outline' })} href={reviewHref(active.id)}>
+              {m.editorial_review({}, o)}
+            </a>
+          )}
+          <a
+            className={buttonVariants({ variant: 'outline' })}
+            href={`/${locale}/contexts/${encodeURIComponent(active.id)}${createHref?.includes('?') ? createHref.slice(createHref.indexOf('?')) : ''}`}
+          >
+            {m.editorial_open({}, o)}
+          </a>
         </div>
+      )}
+      {currentId && (
+        <a className={buttonVariants({ variant: 'outline' })} href={createHref ?? `/${locale}/contexts/new`}>
+          {m.editorial_create({}, o)}
+        </a>
       )}
       <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
         {currentId && <p className="text-sm text-muted-foreground">{m.editorial_authority({}, o)}</p>}
-        {confirmation && <p>{confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}</p>}
+        {confirmation && (
+          <p>{confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}</p>
+        )}
         <div className="flex flex-wrap gap-3">
-          {pending ? <>
-            {!restoreBlocked && <Button disabled={busy} onClick={() => void submit(pending.operation)}>{m.editorial_retry({}, o)}</Button>}
-            {!uncertain && <Button variant="outline" disabled={busy} onClick={() => { setPending(undefined); setFailure(undefined); if (currentId) void refresh(); }}>{m.editorial_revise({}, o)}</Button>}
-          </> : eligibleAttempt && <>
-            <Button variant={action === 'delete' ? 'destructive' : 'default'} disabled={busy}
-              onClick={() => confirmation ? void submit(action) : setConfirmation(action)}>
-              {confirmation ? m.contribution_confirm({}, o) : action === 'delete' ? m.editorial_delete({}, o) : m.editorial_restore({}, o)}
+          {pending ? (
+            <>
+              {!restoreBlocked && (
+                <Button disabled={busy} onClick={() => void submit(pending.operation)}>
+                  {m.editorial_retry({}, o)}
+                </Button>
+              )}
+              {!uncertain && (
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    setPending(undefined);
+                    setFailure(undefined);
+                    if (currentId) void refresh();
+                  }}
+                >
+                  {m.editorial_revise({}, o)}
+                </Button>
+              )}
+            </>
+          ) : (
+            eligibleAttempt && (
+              <>
+                <Button
+                  variant={action === 'delete' ? 'destructive' : 'default'}
+                  disabled={busy}
+                  onClick={() => (confirmation ? void submit(action) : setConfirmation(action))}
+                >
+                  {confirmation
+                    ? m.contribution_confirm({}, o)
+                    : action === 'delete'
+                      ? m.editorial_delete({}, o)
+                      : m.editorial_restore({}, o)}
+                </Button>
+                {confirmation && (
+                  <Button variant="outline" onClick={() => setConfirmation(undefined)}>
+                    {m.candidate_cancel({}, o)}
+                  </Button>
+                )}
+              </>
+            )
+          )}
+          {currentId && !pending && (
+            <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
+              {m.candidate_reload({}, o)}
             </Button>
-            {confirmation && <Button variant="outline" onClick={() => setConfirmation(undefined)}>{m.candidate_cancel({}, o)}</Button>}
-          </>}
-          {currentId && !pending && <Button variant="outline" disabled={busy} onClick={() => void refresh()}>{m.candidate_reload({}, o)}</Button>}
+          )}
         </div>
       </div>
       {active && !busy && children?.(active.id)}

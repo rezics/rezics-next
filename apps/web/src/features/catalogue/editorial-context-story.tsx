@@ -13,17 +13,34 @@ export function EditorialContextStory({ scenario = 'ready' }: { scenario?: Edito
   const locale = getLocale();
   const fixture = useMemo(() => editorialContextFixture(scenario, locale), [scenario, locale]);
   const create = ['create', 'invalid', 'conflict', 'uncertain'].includes(scenario);
-  return <PatternStory path={create ? '/contexts/new' : `/contexts/${fixture.id}`} visitor="Signed In">
-    <AppShell>
-      <article className="mx-auto w-full max-w-4xl space-y-8">
-        <PageHeading>{create ? m.editorial_create() : m.editorial_title()}</PageHeading>
-        <EditorialContextWorkspace key={`${scenario}:${locale}`} locale={locale} transport={fixture.transport}
-          {...(!create ? { id: fixture.id } : {})}
-          reviewHref={(context) => `${subjectHref({ id: fixture.review.id, label: 'The Art of Reading' }, locale).href}/context-review?${new URLSearchParams({ context })}`}>
-          {!create && scenario !== 'global' ? (context) => <CandidateReview id={fixture.review.id} context={context} locale={locale}
-            initialProperty={fixture.review.property} transport={fixture.review.transport} /> : undefined}
-        </EditorialContextWorkspace>
-      </article>
-    </AppShell>
-  </PatternStory>;
+  return (
+    <PatternStory path={create ? '/contexts/new' : `/contexts/${fixture.id}`} visitor="Signed In">
+      <AppShell>
+        <article className="mx-auto w-full max-w-4xl space-y-8">
+          <PageHeading>{create ? m.editorial_create() : m.editorial_title()}</PageHeading>
+          <EditorialContextWorkspace
+            key={`${scenario}:${locale}`}
+            locale={locale}
+            transport={fixture.transport}
+            {...(!create ? { id: fixture.id } : {})}
+            reviewHref={(context) =>
+              `${subjectHref({ id: fixture.review.id, label: 'The Art of Reading' }, locale).href}/context-review?${new URLSearchParams({ context })}`
+            }
+          >
+            {!create && scenario !== 'global'
+              ? (context) => (
+                  <CandidateReview
+                    id={fixture.review.id}
+                    context={context}
+                    locale={locale}
+                    initialProperty={fixture.review.property}
+                    transport={fixture.review.transport}
+                  />
+                )
+              : undefined}
+          </EditorialContextWorkspace>
+        </article>
+      </AppShell>
+    </PatternStory>
+  );
 }
