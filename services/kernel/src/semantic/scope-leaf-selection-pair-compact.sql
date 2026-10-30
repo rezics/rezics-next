@@ -5,10 +5,11 @@ WITH input AS NOT MATERIALIZED (
 )
 SELECT erasure_key::text AS after, statement_id::text AS candidate_id, slot_id::text AS slot_id
 FROM semantic.fact CROSS JOIN input
-WHERE route = input.route AND subject_id = input.subject_id AND property = input.property
-  AND kind = 'statement' AND operation = 'assert'
-  AND body->'value'->>'type' = 'value'
-  AND body->'value'->>'content' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-  AND body->'value'->>'content' = input.value
-  AND (input.after IS NULL OR erasure_key > input.after)
-ORDER BY erasure_key LIMIT 1;
+WHERE semantic.fact.route = input.route AND semantic.fact.subject_id = input.subject_id
+  AND semantic.fact.property = input.property AND semantic.fact.kind = 'statement'
+  AND semantic.fact.operation = 'assert'
+  AND semantic.fact.body->'value'->>'type' = 'value'
+  AND semantic.fact.body->'value'->>'content' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND semantic.fact.body->'value'->>'content' = input.value
+  AND (input.after IS NULL OR semantic.fact.erasure_key > input.after)
+ORDER BY semantic.fact.erasure_key LIMIT 1;
