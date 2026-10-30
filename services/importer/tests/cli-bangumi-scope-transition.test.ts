@@ -33,13 +33,13 @@ test('ordinary Bangumi registration discards ignored fields without visiting the
   }
   expect(seen).toEqual([]);
   const returned = convert({ id: 71001, type: 1, name: 'The Cartographer’s Book: Revised' });
-  expect(registration.converter_revision).toBe('bangumi@3');
+  expect(registration.converter_revision).toBe('bangumi@4');
   expect(returned.digest).not.toBe(initial.digest);
   expect(returned.proposals).toHaveLength(2);
   expect(convert(JSON.parse(JSON.stringify(returned.normalized)))).toEqual(returned);
   for (const proposal of returned.proposals) {
     expect(proposal.op).toBe('propose');
-    expect(proposal.source).toMatchObject({ source: 'bangumi', external_id: '71001', converter_revision: 'bangumi@3' });
+    expect(proposal.source).toMatchObject({ source: 'bangumi', external_id: '71001', converter_revision: 'bangumi@4' });
   }
 });
 
@@ -89,7 +89,7 @@ test('ordinary Bangumi CLI seals the whole transition input before any Auth or p
         }) as unknown as typeof fetch,
       },
     );
-    expect(revisions).toEqual(['bangumi@3']);
+    expect(revisions).toEqual(['bangumi@4']);
     expect(result.code).toBe(2);
     expect(result.openHandles).toBe(0);
     expect(requests).toEqual([]);
