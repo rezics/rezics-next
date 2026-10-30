@@ -1,3 +1,4 @@
+import { readNativePermissionAccount } from './account-authority.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -79,6 +80,8 @@ export async function actingCommandAccount(
 ): Promise<Account | null> {
   if (!accessCommandAttempt(context)) throw new TypeError('Command admission requires a live attempt');
   const admission = admissions.get(accessRoot(access));
+  if (!admission && context.work)
+    context.work.unavailable('Access installed command admission native account producer');
   return admission
     ? admission(actor, context)
     : readAccount(
@@ -107,7 +110,7 @@ export function createCommandAdmission(
 ): Admission {
   const observations = new WeakMap<
     object,
-    WeakMap<AccountActor, { deadline: number; account: Promise<Account | null> }>
+    WeakMap<AccountActor, { deadline: number; work: AccessContext['work']; account: Promise<Account | null> }>
   >();
   return async (actor, context) => {
     requireAccessDeadline(context.deadline);
@@ -149,17 +152,19 @@ export function createCommandAdmission(
       });
       return account;
     };
-    if (snapshot.durableTime === attempt.time) return remember(snapshot.account);
+    if (!context.work && snapshot.durableTime === attempt.time) return remember(snapshot.account);
     let actors = observations.get(attempt.time);
     if (!actors) {
       actors = new WeakMap();
       observations.set(attempt.time, actors);
     }
     let observation = actors.get(actor);
-    if (!observation) {
+    if (!observation || observation.work !== context.work) {
       const account = within(deadline, async () => {
         const original = snapshot.account;
-        const current = await readAccount(deadlineClient(context.pool, deadline), original.route, actor.accountId);
+        const current = context.work
+          ? await readNativePermissionAccount(deadlineClient(context.pool, deadline), actor.accountId, context.work)
+          : await readAccount(deadlineClient(context.pool, deadline), original.route, actor.accountId);
         if (current?.state === 'suspended') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
         return current &&
           current.accountId === original.accountId &&
@@ -172,11 +177,12 @@ export function createCommandAdmission(
           ? original
           : null;
       }).catch((error: unknown) => {
+        context.work?.fail(error);
         throwAccessUnavailable(error, deadline);
         if (error instanceof AuthenticationError) throw error;
         return null;
       });
-      observation = { deadline, account };
+      observation = { deadline, work: context.work, account };
       actors.set(actor, observation);
     }
     const account = await observation.account;

@@ -1,9 +1,14 @@
+import { accessNativeWork, accessCheckout } from './work.ts';
+import { readNativePermissionAccount } from './account-authority.ts';
+import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
+import timeRead from './permission-time.sql';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
-import type { IdentityExpiry } from './identity-expiry.ts';
+import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRemoteJWKSet, customFetch, jwtVerify, type FetchImplementation, type JWTPayload } from 'jose';
+import { withConnection } from '../database/pool.ts';
 import type { QueryConfig } from 'pg';
 import {
   AuthenticationError,
@@ -183,9 +188,10 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
     return verifier;
   }
 
-  const authenticate: Access['authenticate'] = async (token, context) => {
+  const authenticate: Access['authenticate'] = async (token, context: AccessContext) => {
     try {
       remaining(context.deadline);
+      context.work?.unavailable('Auth ES256 verification/JWKS native work producer');
       const { config, keys } = resolveVerifier();
       const at = new Date();
       const { payload, protectedHeader } = await within(context.deadline, () =>
@@ -267,6 +273,39 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
   };
   return {
     authenticate,
+    /** Refresh only an identity already verified by THIS authenticator/pool.
+     * No cryptography or key-fetch callback is treated as zero work. */
+    async refresh(actor: AccountActor, context: AccessContext): Promise<boolean> {
+      const proof = identities.get(actor);
+      if (!proof || proof.pool !== context.pool || !context.work) return false;
+      const deadline = Math.min(context.deadline, proof.deadline);
+      try {
+        remaining(deadline);
+        const time = context.time;
+        if (!time) return context.work.unavailable('Auth native account refresh requires a live AuthoritativeTime');
+        authoritativeTimeValue(time);
+        if (identityExpired(proof, clock)) return false;
+        const current = await within(deadline, () =>
+          readNativePermissionAccount(deadlineClient(context.pool, deadline), actor.accountId, context.work!),
+        );
+        remaining(deadline);
+        authoritativeTimeValue(time);
+        return (
+          !identityExpired(proof, clock) &&
+          !!current &&
+          current.kind === 'actor' &&
+          current.state === 'active' &&
+          !current.fenced &&
+          Number.isSafeInteger(actor.authnEpoch) &&
+          actor.authnEpoch > 0 &&
+          BigInt(actor.authnEpoch) >= current.minimumAuthnEpoch &&
+          current.operatorAccountId === proof.account.operatorAccountId
+        );
+      } catch (error) {
+        context.work.fail(error);
+        throw error;
+      }
+    },
     approvalScope,
     durableScope,
     /** Private operation proof, not a row/Actor registration API. */
@@ -298,6 +337,7 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
     /** Internal native approval proof only. Reconstructed actors have no proof. */
     async restoreApproval(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor> {
       try {
+        context.work?.unavailable('Auth approval restoration full account/assignment native work producer');
         const facts = approvedIdentityClaims(proof, approvalScope, context.pool);
         if (!facts) throw invalid();
         const { actor, expires } = facts;
@@ -342,4 +382,35 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
       return identities.get(actor);
     },
   };
+}
+
+/** Native read time minted from this exact admitted SQL observation. Caller releases it. */
+export async function readNativeAccessTime(
+  context: AccessContext,
+  clock?: KernelClock,
+  instant?: string,
+): Promise<AuthoritativeTime> {
+  const input = { at: instant ?? clock?.().toISOString() ?? '' };
+  const row = await within(context.deadline, () =>
+    accessCheckout(context.work, () =>
+      withConnection(context.pool, (client) =>
+        accessNativeWork(context.work, 'time', input, {}, () =>
+          timeRead.run(deadlineClient(client, context.deadline), input),
+        ),
+      ),
+    ),
+  ).catch((error: unknown) => {
+    context.work?.fail(error);
+    throw error;
+  });
+  if (!row) throw new AccessUnavailableError('overloaded');
+  return mintReadTime({
+    query: (async () => ({
+      rows: [{ at: row.at }],
+      rowCount: 1,
+      command: 'SELECT',
+      oid: 0,
+      fields: [],
+    })) as AccessClient['query'],
+  });
 }

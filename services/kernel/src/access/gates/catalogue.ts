@@ -1,3 +1,4 @@
+import { accessNativeWork, accessCheckout, accessTransaction, type AccessWorkAccounting } from '../work.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../unavailable.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
@@ -6,17 +7,19 @@ import {
   runCommand,
   authoritativeTimeValue,
   type CommandAuthorization,
-  type CommandOutcome,
   type AuthoritativeTime,
+  type CommandOutcome,
 } from '../../command/command.ts';
 import { readPartition } from '../../partition/partition.ts';
-import { withConnection } from '../../database/pool.ts';
+import { withConnection, discardConnection } from '../../database/pool.ts';
 import { deadlineClient, within } from '../authenticate.ts';
 import type { AccountActor, AccessContext, Resource } from '../../request/access.ts';
 import { partitionOf } from '../../route/route.ts';
 import openingClose from './opening-close.sql';
 import openingOpen from './opening-open.sql';
 import openingRead from './opening-read.sql';
+import openingPartitionRead from './opening-partition-read.sql';
+import openingMovedTargetRead from './opening-moved-target-read.sql';
 
 export const GLOBAL_CONTEXT: Resource = Object.freeze({
   route: 0,
@@ -38,40 +41,82 @@ export async function readExposure(
   group: string,
   at: Date | AuthoritativeTime,
   deadline: number,
+  work?: AccessWorkAccounting,
+  time?: AuthoritativeTime,
 ): Promise<ExposureState> {
   if (!isExposureGroup(group) || (at instanceof Date && !Number.isFinite(at.getTime())))
     throw new TypeError('Invalid exposure lookup');
-  const native = !(at instanceof Date);
-  const instant = native ? authoritativeTimeValue(at) : at.toISOString();
+  const nativeTime = time ?? (at instanceof Date ? undefined : at);
+  const instant = nativeTime ? authoritativeTimeValue(nativeTime) : (at as Date).toISOString();
   requireAccessDeadline(deadline);
   return within(deadline, () =>
-    withConnection(pool, async (client) => {
-      const bounded = deadlineClient(client, deadline);
-      await bounded.query(native ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN READ ONLY');
-      try {
-        if (native) {
-          const partition = await readPartition(bounded, partitionOf(GLOBAL_CONTEXT.route));
-          if (!partition) throw new CommandUnavailableError('overloaded', 0);
-          if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', 0, partition.movedTo);
-        }
-        const row = await openingRead.run(bounded, { group, at: instant });
-        if (!row || typeof row.open !== 'boolean' || typeof row.at !== 'string')
-          throw new Error('Exposure catalogue read failed');
-        await bounded.query('COMMIT');
-        const readAt = new Date(row.at);
-        if (!Number.isFinite(readAt.getTime()) || (native && row.at !== instant))
-          throw new Error('Exposure catalogue time was invalid');
-        return { open: row.open, at: native ? row.at : readAt.toISOString() };
-      } catch (error) {
+    accessCheckout(work, () =>
+      withConnection(pool, async (client) => {
+        const bounded = deadlineClient(client, deadline);
         try {
-          await client.query('ROLLBACK');
-        } catch {
-          // Preserve the original read failure.
+          await accessTransaction(
+            work,
+            bounded,
+            nativeTime || work ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN READ ONLY',
+          );
+          if (nativeTime || work) {
+            const input = { partition_no: partitionOf(GLOBAL_CONTEXT.route) };
+            if (work) {
+              // Only closed native state and a length are projected initially. The
+              // handoff locator is arbitrary text; reserve its observed byte bound
+              // before fetching it in this same repeatable-read snapshot.
+              const partition = await accessNativeWork(work, 'opening-partition', input, {}, () =>
+                openingPartitionRead.run(bounded, input),
+              );
+              if (!partition) throw new CommandUnavailableError('overloaded', input.partition_no);
+              if (partition.writeState === 'moved') {
+                const movedToBytes = partition.movedToBytes;
+                if (movedToBytes === null || !Number.isSafeInteger(movedToBytes) || movedToBytes < 0)
+                  throw new Error('Invalid exposure partition handoff length');
+                const targetInput = { ...input, bytes: movedToBytes };
+                const target = await accessNativeWork(work, 'opening-moved-target', targetInput, { movedToBytes }, () =>
+                  openingMovedTargetRead.run(bounded, targetInput),
+                );
+                if (!target || typeof target.movedTo !== 'string')
+                  throw new Error('Exposure partition handoff read failed');
+                throw new CommandUnavailableError('moved', input.partition_no, target.movedTo);
+              }
+            } else {
+              const partition = await readPartition(bounded, input.partition_no);
+              if (!partition) throw new CommandUnavailableError('overloaded', input.partition_no);
+              if (partition.writeState === 'moved')
+                throw new CommandUnavailableError('moved', input.partition_no, partition.movedTo);
+            }
+          }
+          const input = { group, at: instant };
+          const row = await accessNativeWork(work, 'opening', input, {}, () => openingRead.run(bounded, input));
+          if (!row || typeof row.open !== 'boolean' || typeof row.at !== 'string')
+            throw new Error('Exposure catalogue read failed');
+          await accessTransaction(work, bounded, 'COMMIT');
+          const readAt = new Date(row.at);
+          if (!Number.isFinite(readAt.getTime()) || (nativeTime && row.at !== instant))
+            throw new Error('Exposure catalogue time was invalid');
+          if (nativeTime) authoritativeTimeValue(nativeTime);
+          return { open: row.open, at: nativeTime || work ? row.at : readAt.toISOString() };
+        } catch (error) {
+          if (work) {
+            work.fail(error);
+            discardConnection(client, error instanceof Error ? error : new Error('Exposure read failed'));
+            throw error;
+          }
+          try {
+            await client.query('ROLLBACK');
+          } catch {
+            // Preserve the original read failure.
+          }
+          throw error;
         }
-        throw error;
-      }
-    }),
-  );
+      }),
+    ),
+  ).catch((error: unknown) => {
+    work?.fail(error);
+    throw error;
+  });
 }
 
 export type ExposureMutationContext = AccessContext & { actor: AccountActor };

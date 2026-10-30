@@ -17,6 +17,8 @@ import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contracts.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { readNativeAccessTime } from './authenticate.ts';
+import { readNativeAccountStates, readNativePermissionAccount, type PermissionAccount } from './account-authority.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { readAccountActionStates, accountProfileAuthorityAnchor } from './account-viewer-actions.ts';
 import { installAccountStandingCheck } from './account-standing.ts';
@@ -24,6 +26,7 @@ import { accessCommandAttempt } from './command-admission.ts';
 import {
   authoritativeTimeValue,
   mintReadTime,
+  releaseOperationalTime,
   hasLiveCommandTransaction,
   type AuthoritativeTime,
 } from '../command/command.ts';
@@ -79,10 +82,10 @@ export type PermissionConfig = {
   actions: ActionCatalogue;
   resourceRoles?: ResourceRoleCatalogue | undefined;
   /** Retrieve the already-read account from the request; do not query again here. */
-  accountEvidence: (actor: AccountActor, context: PermissionContext) => Account | null | undefined;
+  accountEvidence: (actor: AccountActor, context: PermissionContext) => PermissionAccount | null | undefined;
   authenticate?: Access['authenticate'];
   /** Private, per-factory standing evidence shared with the main Access adapter. */
-  standingAccounts?: WeakMap<AccountActor, Account>;
+  standingAccounts?: WeakMap<AccountActor, PermissionAccount>;
   /** Server-owned Realm integration. Read only this Realm/member anchor on the
    * supplied released connection. Return positive and negative proofs for the existing ACL subject roles
    * using native current/next temporal seeks, never an interval-history scan.
@@ -231,7 +234,7 @@ const bind = (actor: Actor, action: string, resource: Resource, page?: ResourceP
     resource.authenticatedBenefit === undefined ? null : contentEditionBenefitBinding(resource.authenticatedBenefit),
   ]);
 
-function eligible(account: Account, actor: AccountActor): boolean {
+function eligible(account: PermissionAccount, actor: AccountActor): boolean {
   return (
     account.accountId === actor.accountId &&
     account.route === routeOf(actor.accountId) &&
@@ -386,7 +389,7 @@ export function createAccess(config: PermissionConfig): Access {
   // Copy metadata so later mutation of the caller's map cannot expand a mounted catalogue.
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
   const catalogue = resolveResourceRoles(actions, config.resourceRoles);
-  const standingAccounts = config.standingAccounts ?? new WeakMap<AccountActor, Account>();
+  const standingAccounts = config.standingAccounts ?? new WeakMap<AccountActor, PermissionAccount>();
   const standingScopes = Object.freeze([...actions.keys()]);
   async function preparePermission(
     actor: Actor,
@@ -437,7 +440,7 @@ export function createAccess(config: PermissionConfig): Access {
       if (benefit && !time) return evidence;
       const ownAccount = metadata.authority === 'own-account';
       const binding = bind(actor, action, resource, page);
-      let account: Account | null | undefined;
+      let account: PermissionAccount | null | undefined;
       if (actor.kind === 'anonymous') {
         if (!metadata.anonymous) return evidence;
       } else {
@@ -1060,7 +1063,10 @@ export function createAccess(config: PermissionConfig): Access {
         const handle: ReadDecisions = Object.freeze({
           decide: (client, batch, time) => decide(client, batch, time),
           async prepareAccountAuthority(requestedIds): Promise<AccountAuthority> {
-            if (context.work)
+            if (
+              context.work &&
+              ['account:read', 'account:update', 'account:manage'].some((action) => !admitted.has(action))
+            )
               context.work.unavailable(
                 'Access AccountAuthority current account/operator projection native work producer',
               );
@@ -1074,8 +1080,12 @@ export function createAccess(config: PermissionConfig): Access {
               )
             )
               throw new RangeError('Invalid Account authority batch');
+            requireAccessDeadline(deadline);
+            authoritativeTimeValue(time);
             const ids = Object.freeze([...requestedIds]);
-            const subjects = new Map((await readAccountActionStates(pool, ids)).map((row) => [row.id, row]));
+            const subjects = new Map(
+              (await readNativeAccountStates(pool, ids, context.work)).map((row) => [row.id, row]),
+            );
             const foreignIds = [
               ...new Set([
                 ...(identity.kind === 'account' ? [identity.accountId] : []),
@@ -1087,7 +1097,11 @@ export function createAccess(config: PermissionConfig): Access {
             type AccountState = Awaited<ReturnType<typeof readAccountActionStates>>[number];
             const foreign = new Map<string, AccountState>();
             for (let offset = 0; offset < foreignIds.length; offset += 100)
-              for (const row of await readAccountActionStates(pool, foreignIds.slice(offset, offset + 100)))
+              for (const row of await readNativeAccountStates(
+                pool,
+                foreignIds.slice(offset, offset + 100),
+                context.work,
+              ))
                 foreign.set(row.id, row);
             const live = (row: AccountState | undefined) => row?.state === 'active' && !row.fenced;
             const acting = identity.kind === 'account' ? foreign.get(identity.accountId) : undefined;
@@ -1115,18 +1129,20 @@ export function createAccess(config: PermissionConfig): Access {
               if (subject.kind === 'organization') add('account:manage', subject.id);
             }
             const answers = new Map<string, Readonly<Record<string, AccessDecision>>>();
-            if (currentActor)
+            if (currentActor && !context.work)
               for (const [action, keys] of anchors)
                 answers.set(
                   action,
                   await decide(pool, { action, resourceType: 'access.account', ids: [...keys] }, time),
                 );
             requireAccessDeadline(deadline);
+            authoritativeTimeValue(time);
             // The handle binds identity, T, actions, full target keys and CURRENT
-            // operator relationship. Foreign formula work is already released.
+            // operator relationship. Metered grants are evaluated only at final T.
             return Object.freeze({
               async decide(client, batch, decisionTime = time) {
                 if (
+                  (context.work && decisionTime !== time) ||
                   authoritativeTimeValue(decisionTime) !== authoritativeTimeValue(time) ||
                   !['profile', 'self', 'verification'].includes(batch.kind) ||
                   !['account:read', 'account:update'].includes(batch.action) ||
@@ -1138,11 +1154,40 @@ export function createAccess(config: PermissionConfig): Access {
                 )
                   throw new RangeError('Invalid Account authority binding');
                 return within(deadline, async () => {
+                  // No pool checkout or foreign callback is hidden in final work.
+                  // All full-key statements use the caller's supplied read client.
+                  const finalForeign = context.work ? new Map<string, AccountState>() : foreign;
+                  if (context.work) {
+                    for (let offset = 0; offset < foreignIds.length; offset += 100)
+                      for (const row of await readNativeAccountStates(
+                        deadlineClient(client, deadline),
+                        foreignIds.slice(offset, offset + 100),
+                        context.work,
+                      ))
+                        finalForeign.set(row.id, row);
+                  }
+                  const finalActing = identity.kind === 'account' ? finalForeign.get(identity.accountId) : undefined;
+                  const finalActor =
+                    currentActor &&
+                    (!context.work ||
+                      (live(finalActing) &&
+                        finalActing?.kind === 'actor' &&
+                        finalActing.operatorAccountId === acting?.operatorAccountId &&
+                        BigInt(finalActing.minimumAuthnEpoch) <=
+                          BigInt(identity.kind === 'account' ? identity.authnEpoch : 0)));
+                  const finalAnswers = context.work
+                    ? new Map<string, Readonly<Record<string, AccessDecision>>>()
+                    : answers;
+                  if (context.work && finalActor)
+                    for (const [action, keys] of anchors)
+                      finalAnswers.set(
+                        action,
+                        await decide(client, { action, resourceType: 'access.account', ids: [...keys] }, decisionTime),
+                      );
                   const current = new Map(
-                    (await readAccountActionStates(deadlineClient(client, deadline), batch.ids)).map((row) => [
-                      row.id,
-                      row,
-                    ]),
+                    (await readNativeAccountStates(deadlineClient(client, deadline), batch.ids, context.work)).map(
+                      (row) => [row.id, row],
+                    ),
                   );
                   const result: Record<string, AccountAuthorityDecision> = Object.create(null);
                   for (const id of batch.ids) {
@@ -1152,14 +1197,14 @@ export function createAccess(config: PermissionConfig): Access {
                     let action = batch.action;
                     let anchor = id;
                     let eligible =
-                      currentActor &&
+                      finalActor &&
                       live(row) &&
                       row?.kind === before?.kind &&
                       row?.operatorAccountId === before?.operatorAccountId;
                     if (batch.kind === 'profile') {
                       action = profile.action;
                       anchor = profile.id;
-                      eligible = eligible && (!profile.operatorId || live(foreign.get(profile.operatorId)));
+                      eligible = eligible && (!profile.operatorId || live(finalForeign.get(profile.operatorId)));
                     } else if (batch.kind === 'self') {
                       eligible = eligible && identity.kind === 'account' && identity.accountId === id;
                     } else {
@@ -1167,10 +1212,10 @@ export function createAccess(config: PermissionConfig): Access {
                       action = self ? batch.action : 'account:manage';
                       eligible =
                         eligible &&
-                        acting?.operatorAccountId === null &&
+                        finalActing?.operatorAccountId === null &&
                         ((self && row?.kind === 'actor') || (!self && row?.kind === 'organization'));
                     }
-                    const answer = answers.get(action)?.[anchor];
+                    const answer = finalAnswers.get(action)?.[anchor];
                     result[id] = Object.freeze({
                       action,
                       allowed: eligible && answer?.allowed === true,
@@ -1178,7 +1223,11 @@ export function createAccess(config: PermissionConfig): Access {
                     });
                   }
                   requireAccessDeadline(deadline);
+                  authoritativeTimeValue(decisionTime);
                   return Object.freeze(result);
+                }).catch((error: unknown) => {
+                  context.work?.fail(error);
+                  throw error;
                 });
               },
             });
@@ -1264,7 +1313,6 @@ export function createAccess(config: PermissionConfig): Access {
     },
   };
   installAccountStandingCheck(access, async ({ accountId, action, target, context }) => {
-    if (context.work) context.work.unavailable('Access AccountStanding current native account producer');
     const page = 'ids' in target ? resourcePage(target) : undefined;
     const resource = page ? { route: page.route, id: page.ids[0]! } : (Object.freeze({ ...target }) as Resource);
     const ids = page?.ids ?? [resource.id];
@@ -1275,9 +1323,15 @@ export function createAccess(config: PermissionConfig): Access {
       if (!uuidPattern.test(accountId)) return denied();
       // Copy only the admitted fields. In particular, an effect's command T and
       // any caller-provided session/delegation fields cannot enter this check.
-      const currentContext = { pool: deadlineClient(context.pool, deadline) as typeof context.pool, deadline };
+      const currentContext: AccessContext = {
+        pool: deadlineClient(context.pool, deadline) as typeof context.pool,
+        deadline,
+        ...(context.work ? { work: context.work } : {}),
+      };
       return await within(deadline, async () => {
-        const account = await readAccount(currentContext.pool, routeOf(accountId), accountId);
+        const account = context.work
+          ? await readNativePermissionAccount(currentContext.pool, accountId, context.work)
+          : await readAccount(currentContext.pool, routeOf(accountId), accountId);
         if (!account || account.kind !== 'actor' || account.state !== 'active' || account.fenced) return denied();
         const authnEpoch = Number(account.minimumAuthnEpoch > 1n ? account.minimumAuthnEpoch : 1n);
         if (!Number.isSafeInteger(authnEpoch)) return denied();
@@ -1290,26 +1344,35 @@ export function createAccess(config: PermissionConfig): Access {
           authnEpoch,
         });
         standingAccounts.set(actor, account);
+        let ownedTime: AuthoritativeTime | undefined;
         try {
+          if (context.work) {
+            ownedTime = await readNativeAccessTime(currentContext, config.clock);
+            currentContext.time = ownedTime;
+          }
           const evidence = await preparePermission(actor, action, resource, currentContext, page, true);
-          return await withConnection(currentContext.pool, async (client) => {
-            const decision = await checkPreparedPermission(
-              deadlineClient(client, deadline),
-              actor,
-              action,
-              resource,
-              evidence,
-              undefined,
-              config.clock,
-              page,
-            );
-            return decision.decisions ?? denied();
-          });
+          return await accessCheckout(context.work, () =>
+            withConnection(currentContext.pool, async (client) => {
+              const decision = await checkPreparedPermission(
+                deadlineClient(client, deadline),
+                actor,
+                action,
+                resource,
+                evidence,
+                ownedTime,
+                config.clock,
+                page,
+              );
+              return decision.decisions ?? denied();
+            }),
+          );
         } finally {
+          if (ownedTime) releaseOperationalTime(ownedTime);
           standingAccounts.delete(actor);
         }
       });
     } catch (error) {
+      context.work?.fail(error);
       throwAccessUnavailable(error, deadline);
       throwEvidenceFailure(error);
       return denied();

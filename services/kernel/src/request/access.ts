@@ -307,8 +307,6 @@ export async function accessCommandAuthorization(
       current = undefined;
       try {
         const preparation = commandAccessContext(context, attempt);
-        if (context.work && actor.kind === 'account')
-          context.work.unavailable('Auth command admission current identity/consent native work producer');
         await requireCommandAdmission(access, actor, preparation);
         const evidence = access.prepare ? await access.prepare(actor, action, target, preparation) : null;
         const prepared: Prepared = {

@@ -1,3 +1,6 @@
+import { readNativeAccessTime } from '../authenticate.ts';
+import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../../command/command.ts';
+import type { AccessWorkAccounting } from '../work.ts';
 import type { Pool } from 'pg';
 import { authorizePlatformGate } from '../index.ts';
 import type { Access, Actor } from '../../request/access.ts';
@@ -25,21 +28,38 @@ export async function admitGroup(input: {
   clientAction: string;
   deadline: number;
   clock: () => Date;
+  work?: AccessWorkAccounting;
+  time?: AuthoritativeTime;
 }): Promise<void> {
-  const state = await readExposure(input.pool, input.group, input.clock(), input.deadline);
-  if (state.open) return;
-  if (input.actor.kind !== 'account') throw new PlatformClosedError();
-
-  const allowed = await authorizePlatformGate(
-    input.access(),
-    input.actor,
-    [`gate:${input.group}`, 'gate:any'],
-    input.clientAction,
-    GLOBAL_CONTEXT,
-    { pool: input.pool, deadline: input.deadline },
-    state.at,
-  );
-  if (!allowed) throw new PlatformClosedError();
+  let ownedTime: AuthoritativeTime | undefined;
+  try {
+    const time = input.work ? (input.time ?? (ownedTime = await readNativeAccessTime(input, input.clock))) : undefined;
+    const at = time ? new Date(authoritativeTimeValue(time)) : input.clock();
+    const state = await readExposure(input.pool, input.group, at, input.deadline, input.work, time);
+    if (state.open) return;
+    if (input.actor.kind !== 'account') throw new PlatformClosedError();
+    const allowed = await authorizePlatformGate(
+      input.access(),
+      input.actor,
+      [`gate:${input.group}`, 'gate:any'],
+      input.clientAction,
+      GLOBAL_CONTEXT,
+      {
+        pool: input.pool,
+        deadline: input.deadline,
+        ...(input.work ? { work: input.work } : {}),
+        ...(time ? { time } : {}),
+      },
+      state.at,
+    );
+    if (!allowed) throw new PlatformClosedError();
+  } catch (error) {
+    // An ordinary closed decision keeps its successful receipt usable.
+    if (!(error instanceof PlatformClosedError)) input.work?.fail(error);
+    throw error;
+  } finally {
+    if (ownedTime) releaseOperationalTime(ownedTime);
+  }
 }
 
 export async function admitExposure(input: {
@@ -50,6 +70,8 @@ export async function admitExposure(input: {
   route: MountedRoute | undefined;
   deadline: number;
   clock: () => Date;
+  work?: AccessWorkAccounting;
+  time?: AuthoritativeTime;
 }): Promise<void> {
   const { route } = input;
   if (!route) return;
@@ -66,5 +88,7 @@ export async function admitExposure(input: {
     clientAction: actionLabelOfMountedRoute(route),
     deadline: input.deadline,
     clock: input.clock,
+    ...(input.work ? { work: input.work } : {}),
+    ...(input.time ? { time: input.time } : {}),
   });
 }

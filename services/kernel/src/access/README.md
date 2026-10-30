@@ -63,16 +63,50 @@ native rows using a result row count. There is no blanket callback estimate. The
 A missing declaration refuses BEFORE that callback, with `AccessWorkUnavailableError.dependency` naming
 `Content resource eligibility.prepare`, `Content resource eligibility.verify`, `Resource ReadDecisionEligibility`,
 `Content AccessRealmRoleReader`, `Content AccessRealmRoleReader.batch`, or `Commerce ContentEditionBuyerFactReader`.
-No foreign native implementation is claimed by publishing these ports. The explicitly unsupported metered variants
-are account command admission (`Auth command admission current identity/consent native work producer`) and
-`ReadDecisions.prepareAccountAuthority` (`Access AccountAuthority current account/operator projection native work
-producer`). Both refuse before their dependent work. The latter's existing prepared answer map is not a metered
-permission cache. Other explicitly unsupported entry points are `accountStandingCheck`
-(`Access AccountStanding current native account producer`), standalone platform-gate transactions
-(`Access standalone platform gate native transaction producer`) and bearer `actorOf` authentication
-(`Auth bearer authentication native work producer`). They refuse before their dependent IO. A metered platform
-gate with an existing shared read window executes its final formula afresh instead of using the legacy check map.
-Unmetered entry points keep their existing behavior.
+No foreign native implementation is claimed by publishing these ports.
+
+Native account variants use the existing `account-viewer-actions.sql` full-key projection through
+`readNativeAccountStates`: UUID, kind/state enums, fence, current operator and positive bigint authentication floor.
+`ReadDecisions.prepareAccountAuthority` supports batches admitting `account:read`, `account:update` and
+`account:manage` for `access.account`. Its metered preparation retains only target/operator bindings. Each final
+call rereads current actor/operator and targets and executes fresh ordinary/explicit formulas on the supplied
+client, at the SAME live T object. It checks self, profile operator, verification kind, scopes, principal,
+assignments, role validity and denials through the existing formula. It neither uses the unmetered prepared answer
+map nor checks out another connection under the caller's checkout. Unrelated action windows cannot prepare native
+Account authority and retain the explicit AccountAuthority dependency refusal before IO.
+
+`createAccountPublicEligibility(resource)` supplies the native public-account floor for
+`account:read_public_identity`, using the same current full-key projection. Only active, unfenced accounts qualify;
+an independent grant still uses the ordinary formula. Its zero-IO preparation and actual one-statement verification
+have exact producer declarations. Unknown resource callbacks still require their owners' declarations.
+
+`accountStandingCheck` observes a fresh native account anchor, mints its OWN admitted read time (ignoring a caller's
+command time), prepares native permission evidence and releases that time in `finally`. It admits its checkout and
+final formula in the same parent ledger. The installed authenticator can refresh only its own already-verified
+bearer/account proof, retaining its original pool, deadline, JWT wall-clock expiry, authentication floor and fence.
+Native command admission compares the closed current account projection against the actual authenticated snapshot;
+its per-attempt observation is reusable only with the same accounting object. No partial Account or bearer is minted.
+
+Standalone fixed Global gate checks support the existing exact `gate:<group>` or `gate:any` formula with the mounted
+operation's scope operand. They prepare before resource checkout and admit each checkout, transaction control and
+final formula. Native read minting passes the original timestamp text directly to PostgreSQL, preserving
+microseconds; a provided read time must match the exact window. Expiry is checked again after final transaction
+control. A borrowed client requires the already-prepared shared read window, so foreign preparation never
+runs under a resource checkout. Shared-window checks also execute afresh. `admitGroup` / `admitExposure` accept optional `work`/`time`;
+the native opening probe has no open cache, and a locally minted read time is always released. Failed transactions
+discard only their own checked-out connection rather than dispatch unadmitted rollback work after ledger failure.
+Native opening reads preserve the Global partition handoff check in the same repeatable-read snapshot.
+The metered path first projects only the schema-closed partition state and handoff byte length. A moved partition
+then reserves a separate exact-key locator fetch using that length before dispatch, and preserves the exact moved
+target in the native unavailable error. No unbounded node or locator text is read before admission.
+Exposure admission does not become configuration or Source authority.
+
+The remaining authentication dependency is external ES256 verification/JWKS transport: direct metered
+`authenticate` refuses with `Auth ES256 verification/JWKS native work producer` before cryptography/key fetch;
+`actorOf` retains `Auth bearer authentication native work producer`. Approval restoration's full private account /
+assignment path requires `Auth approval restoration full account/assignment native work producer`. These callbacks
+have no declared native bound here and are never metered as zero. Already-verified native refreshed-account paths
+are supported. Unmetered behavior stays compatible.
 
 ### Native declaration proof
 
@@ -82,6 +116,19 @@ explicit borrowed checkout separately. Closed projections contain UUIDs, enums, 
 timestamp/range text, never native content bodies. Byte bounds use those shapes plus the actual serialized input;
 completed projection bytes are measured directly. Witness work is zero: Access does not produce Source witnesses.
 
+- `account-viewer-actions.sql`: N full keys, N unique account candidates plus N generated input rows, at most
+  N output rows, N point seeks plus the statement point. UUIDs are at most 36 ASCII bytes, positive PostgreSQL
+  bigint text at most 19, and kind/state are schema-closed enums. Missing rows retain the entire 2N plan charge.
+- `gates/opening-read.sql`: one scalar time row and one exact group/time nonoverlapping opening candidate;
+  two plan rows and one key seek plus the statement point. Opening output is a boolean and timestamp.
+- `gates/opening-partition-read.sql`: one partition primary-key candidate, one seek plus the statement point;
+  its output is a schema-closed state and an int4 byte length. A missing partition retains the candidate charge.
+- `gates/opening-moved-target-read.sql`: one partition primary-key candidate and seek plus the statement point,
+  only after the preceding length observation in the same repeatable-read snapshot. SQL enforces that length;
+  the declared JSON projection covers six encoded bytes per observed source byte plus its fixed object envelope.
+  Arbitrary handoff text has no invented fixed maximum, and never supplies permission evidence.
+- Transaction control: one statement point, no data rows; its receipt contains only the control declaration and
+  void result, never transport metadata. Failed control retains its entire admitted declaration.
 - `permission-time.sql`: one scalar row and its two timestamp projections.
 - `permission-assignment.sql`: one primary-key assignment and one full-key account, at most two native rows.
 - `permission-inverse.sql`: one canonical coverage point and two account/kind ranges per admitted human.

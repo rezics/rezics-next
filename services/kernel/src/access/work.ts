@@ -187,9 +187,19 @@ const rowBytes = (row: unknown, count: number) => 2 + count * (bytes(row) + 1);
  * Byte reservations cover parameters and the closed projection. Only bytes and
  * the outer empty seek can settle below their bound on a completed statement.
  */
-export function accessNativeWork<T>(
-  work: AccessWorkAccounting | undefined,
-  operation: 'time' | 'assignment' | 'inverse' | 'membership' | 'candidates' | 'formula',
+export function accessNativeDeclaration(
+  operation:
+    | 'time'
+    | 'assignment'
+    | 'inverse'
+    | 'membership'
+    | 'candidates'
+    | 'formula'
+    | 'account-state'
+    | 'opening'
+    | 'opening-partition'
+    | 'opening-moved-target'
+    | 'transaction',
   input: unknown,
   shape: Readonly<{
     members?: number;
@@ -201,10 +211,9 @@ export function accessNativeWork<T>(
     public?: boolean;
     global?: boolean;
     assignment?: boolean;
+    movedToBytes?: number;
   }>,
-  dispatch: () => Promise<T>,
-): Promise<T> {
-  if (!work) return dispatch();
+) {
   const members = shape.members ?? 0;
   const groups = shape.groups ?? 0;
   const targets = (shape.targets ?? 1) + (shape.global ? 1 : 0);
@@ -217,6 +226,48 @@ export function accessNativeWork<T>(
     projection = 0,
     examinedKeys = 0;
   switch (operation) {
+    case 'account-state':
+      // unnest contributes one input row and the unique account point contributes
+      // at most one candidate per full key, including absent accounts.
+      examinedKeys = points = shape.targets ?? 1;
+      rows = examinedKeys * 2;
+      projection = rowBytes(
+        {
+          id: uuid,
+          kind: 'organization',
+          state: 'suspended',
+          fenced: false,
+          operatorAccountId: uuid,
+          minimumAuthnEpoch: '9'.repeat(19),
+        },
+        examinedKeys,
+      );
+      break;
+    case 'opening':
+      examinedKeys = points = 1; // exact Global group/time exclusion-key probe
+      rows = 2; // authority scalar and at most one nonoverlapping opening
+      projection = bytes({ open: false, at: timestamp });
+      break;
+    case 'opening-partition':
+      examinedKeys = points = rows = 1; // core.partition unique primary key
+      projection = bytes({ writeState: 'fenced', movedToBytes: 2147483647 }); // SQL int4 octet_length
+      break;
+    case 'opening-moved-target': {
+      const length = shape.movedToBytes;
+      if (length === undefined || !Number.isSafeInteger(length) || length < 0)
+        throw new TypeError('Invalid native partition handoff byte bound');
+      examinedKeys = points = rows = 1;
+      // Every source byte can require at most six JSON bytes (e.g. a control
+      // character escaped as a Unicode sequence). No locator body is constructed
+      // to declare this bound; SQL enforces the same admitted length.
+      projection = bytes({ movedTo: '' }) + 6 * length;
+      break;
+    }
+    case 'transaction':
+      // A control statement has no tuple projection. The call site returns void,
+      // avoiding pg's transport metadata as a fabricated data receipt.
+      projection = bytes(null);
+      break;
     case 'time':
       rows = 1;
       projection = bytes({ at: timestamp, databaseAt: timestamp });
@@ -295,14 +346,40 @@ export function accessNativeWork<T>(
     bytes: bytes(input) + projection,
     emptySeeks: 1,
   });
-  return work.run(`access.${operation}`, bound, dispatch, (result) => ({
-    ...bound,
-    bytes: bytes(input) + bytes(result),
-    emptySeeks: result === null || result === undefined || (Array.isArray(result) && !result.length) ? 1 : 0,
-  }));
+  return {
+    bound,
+    actual: (result: unknown): AccessWork => ({
+      ...bound,
+      bytes: bytes(input) + bytes(result),
+      emptySeeks: result === null || result === undefined || (Array.isArray(result) && !result.length) ? 1 : 0,
+    }),
+  };
+}
+
+export function accessNativeWork<T>(
+  work: AccessWorkAccounting | undefined,
+  operation: Parameters<typeof accessNativeDeclaration>[0],
+  input: unknown,
+  shape: Parameters<typeof accessNativeDeclaration>[2],
+  dispatch: () => Promise<T>,
+): Promise<T> {
+  if (!work) return dispatch();
+  const declaration = accessNativeDeclaration(operation, input, shape);
+  return work.run(`access.${operation}`, declaration.bound, dispatch, declaration.actual);
 }
 
 /** Reserve before an explicit pool checkout, including its wait and failure. */
 export function accessCheckout<T>(work: AccessWorkAccounting | undefined, dispatch: () => Promise<T>): Promise<T> {
   return work ? work.run('access.pool-checkout', { ...EMPTY_ACCESS_WORK, points: 1 }, dispatch) : dispatch();
+}
+
+/** Explicit transaction control; no SQL inspection or hidden queries. */
+export function accessTransaction(
+  work: AccessWorkAccounting | undefined,
+  client: import('../request/access.ts').AccessClient,
+  statement: 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' | 'BEGIN READ ONLY' | 'COMMIT' | 'ROLLBACK',
+): Promise<void> {
+  return accessNativeWork(work, 'transaction', { statement }, {}, async () => {
+    await client.query(statement);
+  });
 }

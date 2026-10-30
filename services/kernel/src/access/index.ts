@@ -1,4 +1,6 @@
-import { accessCheckout } from './work.ts';
+export { createAccountPublicEligibility } from './account-authority.ts';
+import type { PermissionAccount } from './account-authority.ts';
+import { accessCheckout, accessTransaction } from './work.ts';
 export {
   AccessWorkAccounting,
   AccessWorkUnavailableError,
@@ -40,7 +42,7 @@ import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable }
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
 import { installAccessClock } from './access-clock.ts';
 export { accessClock } from './access-clock.ts';
-import { withConnection } from '../database/pool.ts';
+import { withConnection, discardConnection } from '../database/pool.ts';
 import {
   accessCommandAttempt,
   commandAccessContext,
@@ -61,12 +63,17 @@ import type {
   ActionCatalogue,
 } from '../request/access.ts';
 import { accessRoot } from './derived-access.ts';
-import type { Account } from './account-data.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess, readDecisionTime, authorizePreparedReadGate } from './permission.ts';
-import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
+import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import timeRead from './permission-time.sql';
-import { createAuthenticator, deadlineClient, within, type AuthenticationConfig } from './authenticate.ts';
+import {
+  createAuthenticator,
+  readNativeAccessTime,
+  deadlineClient,
+  within,
+  type AuthenticationConfig,
+} from './authenticate.ts';
 import { installDurableIdentityBridge } from './durable-identity.ts';
 import { installApprovalIdentityBridge } from './approved-identity.ts';
 
@@ -186,7 +193,7 @@ export function createAccess(config: AccessConfig): Access {
   const authentication = createAuthenticator(config.auth, clock);
   const admission = createCommandAdmission(authentication.identity, clock);
   const prepared = new WeakMap<object, Prepared>();
-  const standingAccounts = new WeakMap<AccountActor, Account>();
+  const standingAccounts = new WeakMap<AccountActor, PermissionAccount>();
   const permissions = permissionAccess({
     actions,
     resourceRoles: config.resourceRoles,
@@ -220,10 +227,16 @@ export function createAccess(config: AccessConfig): Access {
       const expires = identity?.expires ?? Infinity;
       if (identity && identityExpired(identity, clock)) return null;
       const attempt = accessCommandAttempt(context);
+      const nativeTime = attempt?.time ?? context.time;
+      if (
+        context.work &&
+        actor.kind === 'account' &&
+        !standing &&
+        !(await authentication.refresh(actor, { ...context, ...(nativeTime ? { time: nativeTime } : {}) }))
+      )
+        return null;
       if (identity?.durableTime && (identity.durableTime !== attempt?.time || identity.durableAction !== action))
         return null;
-      if (attempt && actor.kind === 'account' && context.work)
-        context.work.unavailable('Auth command admission current identity/consent native work producer');
       if (attempt && actor.kind === 'account' && !(await admission(actor, context))) return null;
       const deadline = Math.min(
         context.deadline,
@@ -330,6 +343,12 @@ export function createAccess(config: AccessConfig): Access {
         (!identity || identity.pool !== context.pool || identity.durableTime || identityExpired(identity, clock))
       )
         throw new AccessUnavailableError('overloaded');
+      if (
+        context.work &&
+        actor.kind === 'account' &&
+        !(await authentication.refresh(actor, { ...context, ...(input.time ? { time: input.time } : {}) }))
+      )
+        throw new AccessUnavailableError('overloaded');
       const deadline = Math.min(
         context.deadline,
         identity?.deadline ?? Infinity,
@@ -413,6 +432,8 @@ export function createAccess(config: AccessConfig): Access {
     )
       return false;
 
+    if (context.work && (resource.route !== 0 || resource.id !== '00000000-0000-8000-8000-000000000000'))
+      context.work.unavailable('Access metered platform gates require the fixed Global Context');
     const shared = gateReads.get(context);
     if (shared && client) {
       const identity = authentication.identity(actor);
@@ -445,7 +466,69 @@ export function createAccess(config: AccessConfig): Access {
       return false;
     }
 
-    if (context.work) context.work.unavailable('Access standalone platform gate native transaction producer');
+    if (context.work) {
+      if (client)
+        return context.work.unavailable(
+          'Access metered platform gate requires a shared read window before resource checkout',
+        );
+      const identity = authentication.identity(actor);
+      if (!identity || identity.pool !== context.pool || identityExpired(identity, clock)) return false;
+      const deadline = Math.min(context.deadline, identity.deadline);
+      let ownedTime: AuthoritativeTime | undefined;
+      try {
+        const time = context.time ?? (ownedTime = await readNativeAccessTime({ ...context, deadline }, undefined, at));
+        if (context.time && authoritativeTimeValue(time) !== at) return false;
+        if (!(await authentication.refresh(actor, { ...context, deadline, time }))) return false;
+        const native = permissionAccess({
+          actions: new Map([...actions, ...requested.map((action) => [action, { anonymous: false }] as const)]),
+          resourceRoles: config.resourceRoles,
+          accountEvidence: (candidate) => (candidate === actor ? identity.account : undefined),
+          ...(config.realmRoleReader ? { realmRoleReader: config.realmRoleReader } : {}),
+          ...(config.clock ? { clock: config.clock } : {}),
+        });
+        const handle = await native.prepareReadDecisions!({
+          actor,
+          actions: new Set(requested),
+          time,
+          context: { ...context, deadline, time },
+        });
+        const evaluate = async (connection: AccessClient) => {
+          const bounded = deadlineClient(connection, deadline);
+          for (const action of new Set(requested)) {
+            if (await authorizePreparedReadGate(handle, bounded, action, clientAction, resource)) {
+              if (identityExpired(identity, clock)) throw new AccessUnavailableError('deadline');
+              return true;
+            }
+          }
+          return false;
+        };
+        return await accessCheckout(context.work, () =>
+          within(deadline, () =>
+            withConnection(context.pool, async (connection) => {
+              const bounded = deadlineClient(connection, deadline);
+              try {
+                await accessTransaction(context.work, bounded, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+                const allowed = await evaluate(bounded);
+                await accessTransaction(context.work, bounded, 'COMMIT');
+                authoritativeTimeValue(time);
+                if (identityExpired(identity, clock)) throw new AccessUnavailableError('deadline');
+                return allowed;
+              } catch (error) {
+                // A failed ledger forbids further dispatch. Release destroys an open
+                // transaction's connection below rather than sending unadmitted IO.
+                discardConnection(connection, error instanceof Error ? error : new Error('Gate read failed'));
+                throw error;
+              }
+            }),
+          ),
+        );
+      } catch (error) {
+        context.work.fail(error);
+        throw error;
+      } finally {
+        if (ownedTime) releaseOperationalTime(ownedTime);
+      }
+    }
     const originals = new WeakMap<AccountActor, AccountActor>();
     const gateActorFor = (action: string): AccountActor => {
       const gateActor = Object.freeze({ ...actor, scopes: Object.freeze([action]) });
