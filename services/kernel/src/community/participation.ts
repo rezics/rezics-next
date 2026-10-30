@@ -10,6 +10,7 @@ import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import read from './realm-read.sql';
 import { realmReadEligibility } from './realm.ts';
+import { participationEligibilityAccessWork } from './eligibility-access-work.ts';
 
 export type RealmParticipationReadDecision = { readable?: boolean };
 export type RealmParticipationCheck = (
@@ -50,17 +51,23 @@ export async function prepareRealmParticipationResult(
 /** The native participation eligibility shared by checks and parent validation. */
 export function realmParticipationAnchor(resource: Resource) {
   let visibility: 'public' | 'protected' | null = null;
+  const native = participationEligibilityAccessWork<{ route: number; id: string }>(resource);
   const eligibility = createResourcePublicEligibility({
     resource,
     action: 'realm:participate',
-    async prepare() {
-      return { route: resource.route, id: resource.id };
+    work: native.work,
+    prepare(context) {
+      return native.prepare(context, async () => ({ route: resource.route, id: resource.id }));
     },
-    async verify({ client, at }) {
-      const row = await read.run(client, { route: resource.route, id: resource.id, at });
-      if (!row) throw new ProblemError('not_found');
-      visibility = row?.visibility === 'public' || row?.visibility === 'protected' ? row.visibility : null;
-      return visibility === 'public';
+    verify(context) {
+      return native.verify(context, async (dispatch) => {
+        const { client, at } = context;
+        const parameters = { route: resource.route, id: resource.id, at };
+        const row = await dispatch(native.realmPlan, parameters, () => read.run(client, parameters));
+        if (!row) throw new ProblemError('not_found');
+        visibility = row?.visibility === 'public' || row?.visibility === 'protected' ? row.visibility : null;
+        return visibility === 'public';
+      });
     },
   });
   return { resource: { ...resource, eligibility }, visibility: () => visibility };

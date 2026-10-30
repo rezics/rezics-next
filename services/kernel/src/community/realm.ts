@@ -43,6 +43,7 @@ import insert from './realm-insert.sql';
 import append from './realm-revision.sql';
 import moveHead from './realm-head.sql';
 import host from './realm-space.sql';
+import { realmEligibilityAccessWork, realmReadBanAccounts } from './eligibility-access-work.ts';
 
 export type RealmDependencies = SpaceDependencies;
 export type RealmContext = SpaceContext;
@@ -222,37 +223,45 @@ class RealmReadDeniedError extends ProblemError {
 
 function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
   const resource = Object.freeze({ route: identity.route, id: identity.id });
+  const native = realmEligibilityAccessWork<{ binding: Awaited<ReturnType<typeof bindingRead.run>> }>(resource);
   return createResourcePublicEligibility({
     resource,
     action: 'realm:read',
-    async prepare({ pool, deadline }) {
-      return {
-        binding: await bindingRead.run(deadlineClient(pool, deadline), { ...resource, at: 'infinity', subject: null }),
-      };
+    work: native.work,
+    prepare(context) {
+      return native.prepare(context, async (dispatch) => {
+        const parameters = { ...resource, at: 'infinity', subject: null };
+        return {
+          binding: await dispatch(
+            native.bindingPlan,
+            parameters,
+            () => bindingRead.run(deadlineClient(context.pool, context.deadline), parameters),
+            true,
+          ),
+        };
+      });
     },
-    async verify({ client, actor, at, evidence }) {
-      const row = await read.run(client, { route: resource.route, id: resource.id, at });
-      const current = await bindingRead.run(client, { ...resource, at, subject: null });
-      if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding))
-        throw new RealmReadDeniedError();
-      if (row?.visibility === 'protected' && actor.kind === 'account') {
-        // Auth/Access validates the assignment reference. Its principal is a
-        // second fixed identity, never an expansion of grants or memberships.
-        const principal = actor.requestedBy?.split(':')[3];
-        const accountIds = [...new Set([actor.accountId, ...(principal ? [principal] : [])])];
-        if (
-          await currentReadBan.run(client, {
-            route: resource.route,
-            realm_id: resource.id,
-            account_ids: accountIds,
-            at,
-          })
-        )
-          // A false floor alone would leave independent grants available.
+    verify(context) {
+      return native.verify(context, async (dispatch) => {
+        const { client, actor, at, evidence } = context;
+        const parameters = { ...resource, at };
+        const row = await dispatch(native.realmPlan, parameters, () => read.run(client, parameters));
+        const binding = { ...resource, at, subject: null };
+        const current = await dispatch(native.bindingPlan, binding, () => bindingRead.run(client, binding));
+        if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding))
           throw new RealmReadDeniedError();
-      }
-      observe?.(row);
-      return row?.visibility === 'public';
+        if (row?.visibility === 'protected' && actor.kind === 'account') {
+          // Auth/Access validates the assignment reference. Its principal is a
+          // second fixed identity, never an expansion of grants or memberships.
+          const accountIds = realmReadBanAccounts(actor);
+          const ban = { route: resource.route, realm_id: resource.id, account_ids: accountIds, at };
+          if (await dispatch(native.banPlan(accountIds.length), ban, () => currentReadBan.run(client, ban)))
+            // A false floor alone would leave independent grants available.
+            throw new RealmReadDeniedError();
+        }
+        observe?.(row);
+        return row?.visibility === 'public';
+      });
     },
   });
 }

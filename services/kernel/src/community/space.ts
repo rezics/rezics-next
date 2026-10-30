@@ -29,6 +29,8 @@ import read from './space-read.sql';
 import insert from './space-insert.sql';
 import append from './space-revision.sql';
 import moveHead from './space-head.sql';
+import eligibilityRead from './space-eligibility-read.sql';
+import { spaceEligibilityAccessWork } from './eligibility-access-work.ts';
 
 export type SpaceDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>;
 export type SpaceContext = Readonly<{ idempotencyKey: string; deadline: number }>;
@@ -171,22 +173,33 @@ export async function readSpaceForViewer(
 
 export function spaceReadEligibility(identity: Resource): ResourceEligibility {
   const resource = Object.freeze({ route: identity.route, id: identity.id });
+  const native = spaceEligibilityAccessWork<Awaited<ReturnType<typeof eligibilityRead.run>>>(resource);
   return createResourcePublicEligibility({
     resource,
     action: 'space:read',
-    async prepare({ pool, resource: identity }) {
-      const row = await read.run(pool, { route: identity.route, id: identity.id, at: new Date().toISOString() });
-      return row ?? null;
+    work: native.work,
+    prepare(context) {
+      return native.prepare(context, async (dispatch) => {
+        const { pool, resource: identity } = context;
+        const parameters = { route: identity.route, id: identity.id, at: new Date().toISOString() };
+        return (
+          (await dispatch(native.spacePlan, parameters, () => eligibilityRead.run(pool, parameters), true)) ?? null
+        );
+      });
     },
-    async verify({ client, at, evidence }) {
-      const current = await read.run(client, { route: resource.route, id: resource.id, at });
-      if (
-        !current ||
-        current.head_revision_id !== evidence.head_revision_id ||
-        current.lifecycle_version !== evidence.lifecycle_version
-      )
-        throw new ProblemError('not_found');
-      return true;
+    verify(context) {
+      return native.verify(context, async (dispatch) => {
+        const { client, at, evidence } = context;
+        const parameters = { ...resource, at };
+        const current = await dispatch(native.spacePlan, parameters, () => eligibilityRead.run(client, parameters));
+        if (
+          !current ||
+          current.head_revision_id !== evidence.head_revision_id ||
+          current.lifecycle_version !== evidence.lifecycle_version
+        )
+          throw new ProblemError('not_found');
+        return true;
+      });
     },
   });
 }

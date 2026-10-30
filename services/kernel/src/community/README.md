@@ -151,6 +151,28 @@ supplies public read eligibility only while the current Realm is public.
 eligibility verification at Access's authoritative T. A protected Realm requires a
 native `realm:read` grant; denied and missing reads both return null.
 
+The native `realmReadEligibility` (including `readRealm`'s private row observer),
+`spaceReadEligibility` and `realmParticipationAnchor` callbacks supply optional
+`ResourceEligibilityOptions.work` producers to the existing Access/Source ledger.
+Realm preparation reserves its exact container binding read, including the pool
+wait. Verification reserves the current Realm/head/active host, current binding
+and, for an account, at most two protected-read ban probes for the fixed actor and
+delegating principal. Public Realms do not dispatch the ban plan. Space preparation
+and verification each read the active identity and exact head; their closed
+eligibility projection excludes revision address text. Participation preparation
+constructs identity data without IO; verification dispatches one native Realm read.
+The SQL/schema derivations are adjacent in `eligibility-access-work.ts`.
+
+These declarations admit work only. Every verification still uses Access's supplied
+authoritative T, current lifecycle/head/binding comparisons and ordinary grant and
+denial formula. Receipts belong to one callback context/result and charge dispatched
+plan bounds even on empty results; successful receipts release only undispatched
+branches and unused projection bytes. Failure or timeout retains the full envelope.
+No membership, actor, authentication, scope or general formula accounting is supplied
+by these resource callbacks; those remain Access's independent producers. Unsupported
+identity/time variants have no bound and are refused before callback IO. Focused
+callback admission coverage lives in `test/community/eligibility-access-work.test.ts`.
+
 `createRealmParticipationCheck({ pool, access })` checks `realm:participate` and the
 independent `realm:read` anchor at one T. The read anchor ensures that the standing
 participation grant cannot expose a protected Realm to a non-member. The
