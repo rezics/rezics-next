@@ -1,21 +1,15 @@
 import type { Kernel } from '@rezics/client';
 import { kernelClient } from '../../kernel/client.ts';
 import { sitemapLocales, type SitemapFeed } from '../feeds.ts';
-import { canonicalProjectionUnavailable } from '../canonical.ts';
 import { sitemapFamilyFromPagePaths } from '../url.ts';
 
 type SpacePage = Kernel['~Routes']['v1']['sitemap']['spaces']['get']['response'][200];
 type SpaceItem = SpacePage['items'][number];
 
-/** Community must supply its standalone-only native page, without filtering/hydrating it in Web. */
+/** Community supplies the standalone-only native page, without filtering/hydrating it in Web. */
 export type StandaloneSpaceProjection = (page: SpacePage) => SpacePage;
-const unavailable: StandaloneSpaceProjection = () =>
-  canonicalProjectionUnavailable(
-    'spaces',
-    'Community standalone-only Space inventory; carried families belong to Realms',
-  );
 
-export function createSpaceFeed(standalone: StandaloneSpaceProjection = unavailable): SitemapFeed<SpaceItem> {
+export function createSpaceFeed(standalone: StandaloneSpaceProjection = (page) => page): SitemapFeed<SpaceItem> {
   return {
     type: 'spaces',
     key: ({ id }) => `${id.slice(24, 28)}${id}`,

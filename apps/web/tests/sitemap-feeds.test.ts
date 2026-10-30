@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'bun:test';
+import type { Kernel } from '@rezics/client';
+import type { SitemapFeed } from '../src/sitemap/feeds.ts';
 import type {
   SitemapExportFeed,
   SitemapExportOptions,
@@ -14,7 +16,7 @@ mock.module('../src/sitemap/pack.ts', () => ({
   sitemapIndexXml: () => '',
 }));
 
-const { exportSitemapFeed, exportSitemapFeedSegment } = await import('../src/sitemap/export.ts');
+const { exportSitemapFeed, exportSitemapFeedSegment, exportSitemaps } = await import('../src/sitemap/export.ts');
 
 const origin = 'https://public.example';
 const locales = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'] as const;
@@ -30,6 +32,9 @@ const samplePages: Record<FeedName, { items: Record<string, unknown>[]; next: st
   spaces: { items: [{ id, address: 'sample-space', lastModified }], next: 'spaces-next' },
 };
 const endpointCalls: { feed: FeedName; query: Record<string, unknown> }[] = [];
+let feedResponse:
+  | ((feed: FeedName, query: Record<string, unknown>) => { status: number; data?: unknown })
+  | undefined;
 
 mock.module('../src/kernel/client.ts', () => ({
   kernelClient() {
@@ -40,6 +45,7 @@ mock.module('../src/kernel/client.ts', () => ({
           {
             async get({ query }: { query: Record<string, unknown> }) {
               endpointCalls.push({ feed, query });
+              if (feedResponse) return feedResponse(feed, query);
               return { status: 200, data: samplePages[feed] };
             },
           },
@@ -310,4 +316,103 @@ test('an expired 400 cursor still restarts the feed exactly once', async () => {
   };
   await exportSitemapFeed('expired-cursor', feed, exportOptions(new MemoryStore(), new MemorySteps(), feed));
   expect(cursors).toEqual([null, 'expired-token', null]);
+});
+
+test('default Community feeds consume actual tagged native canonical destinations and standalone Space inventory without hydration and retain sparse cursors raw items and unavailable replacement failure', async () => {
+  const { feed: realms } = await import('../src/sitemap/feeds/realms.ts');
+  const { feed: spaces } = await import('../src/sitemap/feeds/spaces.ts');
+  type RealmPage = Kernel['~Routes']['v1']['sitemap']['realms']['get']['response'][200];
+  type SpacePage = Kernel['~Routes']['v1']['sitemap']['spaces']['get']['response'][200];
+  const carriedAddress = 'current space/空?#%';
+  const standaloneAddress = 'standalone space/空?#%';
+  const realmId = keyedId(20);
+  const realmPage: RealmPage = {
+    items: [
+      {
+        id: keyedId(1),
+        lastModified,
+        canonicalDestination: { kind: 'space', spaceId: keyedId(10), address: carriedAddress },
+      },
+      { id: keyedId(2), lastModified, canonicalDestination: { kind: 'realm', realmId } },
+    ],
+    next: 'opaque-source-cursor',
+  };
+  const spacePage: SpacePage = {
+    items: [{ id: keyedId(3), address: standaloneAddress, lastModified }],
+    next: 'opaque-source-cursor',
+  };
+
+  async function verify<Item extends { id: string }>(
+    feed: SitemapFeed<Item>,
+    source: { items: Item[]; next: string | null },
+    paths: string[],
+  ) {
+    const sparse = { items: [], next: 'opaque-sparse-cursor' };
+    const terminal = { items: [], next: null };
+    feedResponse = (name, query) => {
+      if (name !== feed.type) throw new Error(`Unexpected hydration read: ${name}`);
+      const data =
+        query.cursor === undefined
+          ? source
+          : query.cursor === source.next
+            ? sparse
+            : query.cursor === sparse.next
+              ? terminal
+              : undefined;
+      if (!data) throw new Error(`Unexpected cursor: ${query.cursor}`);
+      return { status: 200, data };
+    };
+    endpointCalls.length = 0;
+    const page = await feed.read(null);
+    expect(page).toBe(source);
+    expect(page.items).toBe(source.items);
+    expect(endpointCalls).toEqual([{ feed: feed.type, query: { limit: 1_000 } }]);
+    // Both default adapters preserve the native page, ids and ordering key.
+    page.items.forEach((item, index) => {
+      expect(item).toBe(source.items[index]);
+      expect(feed.key!(item)).toBe(`${item.id.slice(24, 28)}${item.id}`);
+      expect(feed.family(item)).toEqual(family(paths[index]!));
+    });
+    expect(await feed.read(source.next)).toBe(sparse);
+    expect(endpointCalls).toHaveLength(2);
+    endpointCalls.length = 0;
+    const packed: SitemapFamily[] = [];
+    const store = new MemoryStore();
+    const options = {
+      ...exportOptions(store, new MemorySteps(), feed),
+      pack: async (_origin: string, families: readonly SitemapFamily[]) => {
+        packed.push(...families);
+        return [];
+      },
+    };
+    await exportSitemapFeed('default-community', feed, options);
+    expect(endpointCalls).toEqual([
+      { feed: feed.type, query: { limit: 1_000 } },
+      { feed: feed.type, query: { cursor: source.next, limit: 1_000 } },
+      { feed: feed.type, query: { cursor: sparse.next, limit: 1_000 } },
+    ]);
+    expect(packed).toEqual(paths.map((path) => family(path)));
+
+    await store.put('index.xml', 'prior index');
+    await store.put('shards/prior.xml.gz', 'prior shard');
+    const previous = new Map(store.objects);
+    for (const status of [503, 200]) {
+      feedResponse = () => ({ status });
+      await expect(exportSitemaps(options)).rejects.toMatchObject({ status });
+      for (const [key, bytes] of previous) expect(store.objects.get(key)).toEqual(bytes);
+      expect(store.objects.has(`runs/${options.runId}/published.json`)).toBe(false);
+    }
+    const transportError = new Error('Community transport unavailable');
+    feedResponse = () => {
+      throw transportError;
+    };
+    await expect(feed.read(null)).rejects.toBe(transportError);
+  }
+
+  try {
+    await verify(realms, realmPage, [`/spaces/${encodeURIComponent(carriedAddress)}`, `/realms/${realmId}`]);
+    await verify(spaces, spacePage, [`/spaces/${encodeURIComponent(standaloneAddress)}`]);
+  } finally {
+    feedResponse = undefined;
+  }
 });
