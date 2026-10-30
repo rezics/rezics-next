@@ -20,7 +20,10 @@ protocol server; local server IDs and receipts do not claim native authorization
 ## Repair and decisions
 
 Retention now additionally requires equality of the producing converter revision from the immutable prior
-proposal and the freshly converted proposal. The existing subject, group, full-statement and one-to-one matching
+proposal and the freshly converted proposal. When the acknowledged converter changes, only candidates with
+the current run's exact saved signature can be retained. This also handles converter rollback: a matching
+older candidate left behind a field fence is still old work, not proof of the current refresh.
+The existing subject, group, full-statement and one-to-one matching
 rules stay intact. A revision mismatch follows ordinary owned retraction and fresh proposal planning with
 run-specific stable keys; no empty acknowledgement or synthetic effect count substitutes for a proposal.
 The existing bounded candidate lookup supplies all comparison evidence without reading history or rewriting
@@ -52,7 +55,7 @@ checks. No declared-path exceptions are needed.
 
 ## Results
 
-Implementation revision: `5288dbc8d27e54a02fff88c6967a70761888c263`.
+Initial implementation revision: `5288dbc8d27e54a02fff88c6967a70761888c263`.
 Edited-file `oxfmt --check` and the direct
 `node_modules/.bin/tsc --noEmit -p services/importer/tsconfig.json` passed.
 The five focused cases and six existing source-statistic cases passed (369 assertions across the local invocation).
@@ -64,9 +67,17 @@ the successful same-converter statistic refresh, then observed real `conversion-
 The initial local command also included `ledger-outcomes.test.ts`. Its child inherited the root stack-routing
 preload and queued for a remote slot; the existing wrapper timed out at 120 seconds before any ledger assertion.
 That invocation exited 1 with 11 passing local cases and one wrapper timeout. This is not a ledger pass or a
-product assertion failure. The local ledger proof therefore runs the unchanged specification directly with
-its existing driver and an explicit scratch Bun configuration that retains test environment isolation without
-the stack-routing preload. The named native acceptance still uses its unmodified managed command and wrapper.
+product assertion failure. An explicit scratch Bun configuration still inherited root routing and queued a
+direct ledger invocation; it was allowed to finish. The local ledger proof instead imports the unchanged
+specification in-process through a scratch test entry, retaining the existing driver and test-environment
+isolation without requesting a native stack. The named native acceptance uses its unmodified managed command.
+
+The first actual local ledger run reached all 28 cases: 27 passed, with 7,842 assertions. The first failure was
+`fence keys do not suppress another source record or field group`: after a fenced transition to the second
+converter, switching back retained an old matching first-converter candidate instead of producing a fresh
+proposal. A focused rollback regression was added and committed before the follow-up production correction;
+it reproduced the missing public proposal. The correction checks the acknowledged converter transition and
+the current run's exact candidate signature as well as the producing revision.
 
 An independent read-only review of the implementation revision found no blocking provenance, fence, identity,
 recovery or statistic-retention defect. Native authorization/disclosure evidence remains with acceptance.

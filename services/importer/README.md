@@ -183,7 +183,9 @@ candidate effects for unrelated fields such as an unchanged unknown author.
 
 A trusted converter revision change reconciles every unfenced field even when its semantic values match.
 The bounded current owned-candidate comparison reads the producing revision from each immutable saved proposal;
-an old revision cannot supply provenance for the new converter. Ordinary retractions and fresh proposals use
+an old revision cannot supply provenance for the new converter. A transition from the acknowledged converter
+also refreshes candidates from an earlier matching revision left behind a fence; only already acknowledged
+proposals from the current run can be retained during that transition. Ordinary retractions and fresh proposals use
 stable run-specific operation keys while preserving the source digest, native revision, bound subject and prior
 request/receipt bytes. Exact source/record/field fences are checked before the unchanged shortcut and again at
 dispatch. Same-run recovery can retain candidates already acknowledged from the current converter. VNDB's

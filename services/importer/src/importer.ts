@@ -636,7 +636,11 @@ export class Importer {
     for (const candidate of candidates) {
       if (
         omissions.some((o) => o.field_group === candidate.field_group) ||
-        (skipCover && candidate.field_group === 'cover')
+        (skipCover && candidate.field_group === 'cover') ||
+        // A converter transition refreshes even older matching revisions left
+        // behind a fence. Only this run's acknowledged proposals can survive it.
+        (acknowledged?.converter_revision !== row.converter_revision &&
+          candidate.signature !== hash(`${run.id}:${candidate.key}`))
       )
         continue;
       const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
