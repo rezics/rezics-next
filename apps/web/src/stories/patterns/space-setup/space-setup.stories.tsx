@@ -8,6 +8,7 @@ import boardRecording from '../../../kernel/recorded/board-realm.json';
 import { m } from '../../../paraglide/messages.js';
 import { localizeUrl } from '../../../paraglide/runtime.js';
 import { PatternStory } from '../../page';
+import type { BoardChoiceSource } from '../../../community/setup-board-picker';
 
 const meta = {
   title: 'Patterns/Community/Space Setup',
@@ -118,7 +119,14 @@ function Journey({ retry = false }: { retry?: boolean }) {
         : { kind: 'failure', reason: 'denied', status: 404 };
     },
   };
-  return <SpaceSetupForm initial={emptySetup} transport={transport} />;
+  const boardChoices: BoardChoiceSource = {
+    schemes: async () => ({ schemes: [{ id: schemeId, label: 'Discussion' }], next: null }),
+    concepts: async ({ schemeId: selected }) => ({
+      concepts: selected === schemeId ? [{ id: conceptId, label: 'Introductions' }] : [],
+      next: null,
+    }),
+  };
+  return <SpaceSetupForm initial={emptySetup} transport={transport} boardChoices={boardChoices} />;
 }
 const render: NonNullable<Story['render']> = (args) => (
   <PatternStory visitor="Signed In" path="/realms/new">
@@ -289,11 +297,11 @@ export const Created: Story = {
     await reachRealm(view);
     await userEvent.click(view.getByRole('button', { name: m.space_setup_create_realm() }));
     await view.findByRole('button', { name: m.space_setup_save_scheme() });
-    await choose(view, schemeId);
+    await userEvent.click(await view.findByRole('radio', { name: 'Discussion' }));
     await userEvent.click(view.getByRole('button', { name: m.space_setup_save_scheme() }));
     await view.findByRole('button', { name: m.space_setup_create_board() });
     await userEvent.type(view.getByRole('textbox', { name: m.space_setup_title() }), 'Start here');
-    await choose(view, conceptId);
+    await userEvent.click(await view.findByRole('radio', { name: 'Introductions' }));
     await userEvent.click(view.getByRole('button', { name: m.space_setup_create_board() }));
     await expect(await view.findByRole('link', { name: m.space_setup_open_board() })).toHaveAttribute(
       'href',

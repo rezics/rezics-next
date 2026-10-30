@@ -1954,16 +1954,26 @@ Back keeps drafts, and Cancel pauses the editor with Resume on the same page. Un
 selection references, survive those controls but are not persisted across navigation. Saved commands are not undone.
 
 The production transport remains `changeSpaceSetup`, `readSpaceSetup` and `resolveSpaceSetupChoice` in
-`community/space-actions.ts`. Context and SKOS subject point readers return real labels. No bounded catalogue reader
-for setup options is installed: the default chooser explicitly explains that browsing is unavailable and offers a
-single existing-reference lookup. It supplies no default Context, Realm, owner, Concept, membership or Global grant.
+`community/space-actions.ts`. Context retains its existing point reader and reference control. Only the scheme/topic
+regions use `community/setup-board-picker-control.tsx`, with shared Input, RadioGroup, Field and Button controls.
+`community/setup-board-picker.ts` owns the consumer-local `BoardChoiceSource` display interface: `schemes({query,
+cursor?})` returns `{schemes: readonly {id,label}[], next: string|null}`, and `concepts({schemeId,query,cursor?})`
+returns the analogous `concepts` page. A supplied native source takes precedence over the isolated typed unavailable
+adapter. The installed generated client currently exports no bounded SKOS scheme/member list reader; the default
+therefore shows unavailable with Retry, never an invented endpoint, catalogue, successful empty page or UUID form.
+The adapter defines no native producer module. Once installed, Semantic's actual source should be passed as
+`SpaceSetupForm.boardChoices`. Choice labels are display data, never permission, publication or membership verdicts.
+It supplies no default Context, Realm, owner, Concept, membership or Global grant.
 The current server still checks parent creation grants, role authority, scheme membership and current readability.
 The existing Space home and lifecycle/removal controls remain the destination, rather than a second home layout.
 
 Uncertain requests lock editing and replay the entire saved command with its original key and expected head.
 Conflicts and current refusals preserve work and require an explicit current-state refresh before another write.
 A confirmed write keeps its returned identity even if the following read fails; recovery refreshes instead of
-replaying that confirmed write. Invalid selections and unavailable readers retain entered values.
+replaying that confirmed write. Invalid selections and unavailable readers retain entered values. A pending topic
+is bound to its exact saved scheme. Choosing a different scheme or refreshing a changed saved scheme clears that
+topic with an explanation, preserving title, purpose and visibility. No existing board is remapped or created by
+selection. Source replacement clears pending display selections; search changes preserve the chosen label.
 
 The complete Pattern folder has autodocs, a Journey docs page and these state IDs, shared across phone390 and
 desktop1280 through viewport, locale and theme globals:
@@ -1981,14 +1991,26 @@ desktop1280 through viewport, locale and theme globals:
 - `patterns-community-space-setup--unavailable`
 - `patterns-community-space-setup--created`
 
+Focused board-choice IDs use the actual AppShell and the existing form, with explicit display/response contract
+fixtures: `patterns-community-space-setup-board-choices--selection`, `--stale-scheme`, `--denied`, and
+`--uncertain-retry` (each suffix uses that full prefix). Review these same IDs at ordinary 390/1280 widths in
+light/dark through existing Storybook globals; there are no width, locale or theme exports.
+
 The page composition ID remains `pages-community-space-setup--new-community`. Plays advance, select, save, retry,
 refresh a conflict/refusal, pause/resume and reach links containing returned native IDs. They use explicit typed
-transport fixtures; production source defaults remain the actual point readers and unavailable catalogue above.
-Native acceptance and Web/Root screenshot review follow integration; local typing does not establish those outcomes.
+transport fixtures; production source defaults remain the actual Context point reader and typed unavailable board
+source above. Native acceptance and Web screenshot review follow integration; local typing does not establish those
+outcomes. No screenshots were run for this change.
 
-The journey adds no reads to the existing two-resource snapshot and viewer-action batch. Each explicit selection
-performs one current point read. Rendering is linear in the fixed four steps and supplied labels, without catalogue
-scans, counts, membership probes, additional per-card requests or new continuations.
+The journey adds no reads to the existing two-resource snapshot and viewer-action batch. Context selection retains
+one current point read. Board search debounces 250 ms; each search or Next requests one bounded producer page and
+replaces the displayed page. It never walks all cursors, refills per row or counts the catalogue. Cancelled awaits
+ignore late source/query/scheme responses; the exact display interface has no I/O abort signal, so cancellation
+cannot promise to stop producer I/O. Native scheme save and board creation still verify the current installed
+release, readability, membership, lifecycle, admission, current actions and CAS. `tests/setup-board-picker.test.ts`
+names the acceptance and covers paging/isolation, unavailable versus empty, changed-scheme invalidation, refusal and
+stable uncertain retry through the existing generated command client. Native proof remains integration work.
+No external reference-project source was needed for these existing controls and command surfaces.
 
 ## Thread reading
 

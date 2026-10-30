@@ -7,6 +7,13 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
 import { m } from '../../../paraglide/messages.js';
+import { SetupBoardPicker } from '../../../community/setup-board-picker-control';
+import {
+  currentBoardConcept,
+  unavailableBoardChoiceSource,
+  type BoardChoiceSource,
+  type BoardConceptSelection,
+} from '../../../community/setup-board-picker';
 import {
   applySetupResult,
   setupAttempt,
@@ -200,9 +207,11 @@ function Choice({
 export function SpaceSetupForm({
   initial,
   transport,
+  boardChoices = unavailableBoardChoiceSource,
 }: {
   initial: SetupSnapshot | SetupFailure;
   transport: SetupTransport;
+  boardChoices?: BoardChoiceSource;
 }) {
   const [snapshot, setSnapshot] = useState(initial.kind === 'ready' ? initial : emptySetup);
   const [problem, setProblem] = useState<SetupFailure | null>(initial.kind === 'failure' ? initial : null);
@@ -222,16 +231,30 @@ export function SpaceSetupForm({
   const [realmSummary, setRealmSummary] = useState(snapshot.realm?.summary ?? '');
   const [visibility, setVisibility] = useState<'public' | 'protected'>(snapshot.realm?.visibility ?? 'public');
   const [contextReference, setContextReference] = useState(snapshot.realm?.contextId ?? '');
-  const [schemeReference, setSchemeReference] = useState(snapshot.realm?.schemeId ?? '');
-  const [conceptReference, setConceptReference] = useState('');
   const [context, setContext] = useState<SetupChoice | null>(null);
   const [scheme, setScheme] = useState<SetupChoice | null>(null);
-  const [concept, setConcept] = useState<SetupChoice | null>(null);
+  const [conceptSelection, setConceptSelection] = useState<BoardConceptSelection | null>(null);
+  const [conceptCleared, setConceptCleared] = useState(false);
   const [boardTitle, setBoardTitle] = useState('');
   const [boardVisibility, setBoardVisibility] = useState<'published' | 'protected' | 'draft'>('published');
   const [purpose, setPurpose] = useState<'discussion' | 'reviews'>('discussion');
   const locked = busy || pending !== null || needsRefresh;
   const { space, realm, permitted } = snapshot;
+  const concept = currentBoardConcept(conceptSelection, realm?.schemeId ?? null)?.choice ?? null;
+  useEffect(() => {
+    if (conceptSelection && !currentBoardConcept(conceptSelection, realm?.schemeId ?? null)) {
+      setConceptSelection(null);
+      setConceptCleared(true);
+    }
+  }, [conceptSelection, realm?.schemeId]);
+  const previousBoardChoices = useRef(boardChoices);
+  useEffect(() => {
+    if (previousBoardChoices.current !== boardChoices) {
+      previousBoardChoices.current = boardChoices;
+      setScheme(null);
+      setConceptSelection(null);
+    }
+  }, [boardChoices]);
 
   async function refresh(spaceId = space?.id) {
     if (inFlight.current) return;
@@ -249,7 +272,6 @@ export function SpaceSetupForm({
           setRealmSummary(current.realm?.summary ?? '');
           setVisibility(current.realm?.visibility ?? 'public');
           setContextReference(current.realm?.contextId ?? '');
-          setSchemeReference(current.realm?.schemeId ?? '');
         }
         setSnapshot(current);
         setLoaded(true);
@@ -471,6 +493,11 @@ export function SpaceSetupForm({
             <Button onClick={() => setPaused(false)}>{m.space_setup_resume()}</Button>
           ) : (
             <form className="space-y-6" onSubmit={submitStep}>
+              {conceptCleared && (step === 2 || step === 3) ? (
+                <p role="status" className="text-sm leading-relaxed text-muted-foreground">
+                  {m.space_setup_board_choice_scheme_changed()}
+                </p>
+              ) : null}
               <fieldset disabled={locked || !loaded || !canEdit} className="space-y-5">
                 {step === 0 ? (
                   space ? (
@@ -549,14 +576,17 @@ export function SpaceSetupForm({
                     <p className="text-sm leading-relaxed text-muted-foreground">{m.space_setup_authority()}</p>
                   </>
                 ) : step === 2 ? (
-                  <Choice
+                  <SetupBoardPicker
                     kind="scheme"
-                    reference={schemeReference}
-                    onReferenceChange={setSchemeReference}
-                    label={m.space_setup_scheme_label()}
+                    source={boardChoices}
                     value={scheme}
-                    onChange={setScheme}
-                    transport={transport}
+                    onChange={(choice) => {
+                      setScheme(choice);
+                      if (conceptSelection && choice?.id !== conceptSelection.schemeId) {
+                        setConceptSelection(null);
+                        setConceptCleared(true);
+                      }
+                    }}
                     disabled={locked}
                   />
                 ) : (
@@ -567,17 +597,17 @@ export function SpaceSetupForm({
                       onChange={setBoardTitle}
                       description={m.space_setup_board_title_hint()}
                     />
-                    <Choice
+                    <SetupBoardPicker
                       kind="concept"
-                      reference={conceptReference}
-                      onReferenceChange={setConceptReference}
-                      label={m.space_setup_concept_label()}
+                      schemeId={realm?.schemeId ?? ''}
+                      source={boardChoices}
                       value={concept}
-                      onChange={setConcept}
-                      transport={transport}
+                      onChange={(choice) => {
+                        setConceptSelection(choice && realm?.schemeId ? { schemeId: realm.schemeId, choice } : null);
+                        setConceptCleared(false);
+                      }}
                       disabled={locked}
                     />
-                    <p className="text-sm text-muted-foreground">{m.space_setup_concept_hint()}</p>
                     <SelectField
                       label={m.space_setup_visibility()}
                       value={boardVisibility}

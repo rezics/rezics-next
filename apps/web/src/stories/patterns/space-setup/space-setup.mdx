@@ -10,10 +10,13 @@ board organization and the first board appear progressively, with a compact summ
 Back keeps drafts. Cancel pauses the editor without undoing saved commands; Resume restores the draft on this page.
 Unsaved entries are not persisted across navigation. Every successful command retains the native returned identity.
 
-Context, scheme and topic selection use the existing authenticated point readers. There is no bounded catalogue
-producer for a chooser in the current setup contract. The default UI explains this and offers an existing reference
-loader; it renders a returned name only after a successful read. No default Realm, Context, owner, membership or
-Global grant is supplied. These stories explicitly simulate that existing transport; they do not wire runtime data.
+Context selection retains the existing authenticated point reader. Scheme and topic regions use reusable searchable
+choice controls consuming the exact `BoardChoiceSource` display interface. Until the native bounded SKOS list reader
+is installed, the default source returns typed unavailable and offers Retry. It never supplies an invented list or
+accepts a manually entered topic ID. Native commands remain responsible for current membership and authority.
+No default Realm, Context, owner, membership or Global grant is supplied. Journey stories supply explicit transport
+and display fixtures; they do not claim installed list availability. The Board Choices story group shows these
+controls in AppShell with selection, changed scheme, denial and uncertain retry states.
 
 An unconfirmed command locks editing and replays the exact body, key and expected head. A definite conflict or
 refusal requires an explicit current-state refresh before another write; entries remain available for review.
