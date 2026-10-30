@@ -16,9 +16,11 @@ type RouteNode = {
   children?: Record<string, RouteNode>;
 };
 
+type PublicCachePathMatch = { marked: boolean; specificity: number[]; depth: number };
+
 function routePattern(path: string): RegExp {
   const segments = path.split('/').map((segment) => {
-    if (/^@\{\$[^}]+\}$/.test(segment)) return '@[^/]+';
+    if (/^@\{\$[^}]+\}_?$/.test(segment)) return '@[^/]+';
     if (segment.startsWith('$')) return '[^/]+';
     if (segment === '*') return '.+';
     return segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -26,21 +28,62 @@ function routePattern(path: string): RegExp {
   return new RegExp(`^${segments.join('/')}/?$`);
 }
 
-function hasPublicCachePath(route: RouteNode, pathname: string, parentPath = '/', inherited = false): boolean {
+function routeSpecificity(path: string): number[] {
+  return path
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => {
+      if (segment === '*') return 0;
+      if (segment.startsWith('$') || /^@\{\$[^}]+\}_?$/.test(segment)) return 1;
+      return 2;
+    });
+}
+
+function moreSpecific(left: PublicCachePathMatch, right: PublicCachePathMatch): boolean {
+  const length = Math.min(left.specificity.length, right.specificity.length);
+  for (let index = 0; index < length; index += 1) {
+    if (left.specificity[index] !== right.specificity[index])
+      return left.specificity[index]! > right.specificity[index]!;
+  }
+  return left.specificity.length > right.specificity.length || left.depth > right.depth;
+}
+
+function hasPublicCachePath(
+  route: RouteNode,
+  pathname: string,
+  parentPath = '/',
+  inherited = false,
+  depth = 0,
+): PublicCachePathMatch | undefined {
   const routePath = route.options?.path ?? route.options?.id ?? '';
   const fullPath = routePath.startsWith('/') ? routePath : `${parentPath.replace(/\/$/, '')}/${routePath}`;
   const marked = inherited || route.options?.staticData?.publicCache === true;
-  if (routePath && routePattern(fullPath || '/').test(pathname) && marked) return true;
-  return Object.values(route.children ?? {}).some((child) => hasPublicCachePath(child, pathname, fullPath, marked));
+  const matches: PublicCachePathMatch[] = [];
+  if (routePath && routePattern(fullPath || '/').test(pathname))
+    matches.push({ marked, specificity: routeSpecificity(fullPath), depth });
+  for (const child of Object.values(route.children ?? {})) {
+    const match = hasPublicCachePath(child, pathname, fullPath, marked, depth + 1);
+    if (match) matches.push(match);
+  }
+  return matches.reduce<PublicCachePathMatch | undefined>(
+    (best, match) => (best === undefined || moreSpecific(match, best) ? match : best),
+    undefined,
+  );
 }
 
 export function isPublicCacheRequest(request: Request): boolean {
   const publicUrl = deLocalizeUrl(new URL(request.url));
   const root = routeTree as unknown as RouteNode;
-  return (
-    root.options?.staticData?.publicCache === true ||
-    Object.values(root.children ?? {}).some((route) => hasPublicCachePath(route, publicUrl.pathname))
+  if (root.options?.staticData?.publicCache === true) return true;
+  const matches = Object.values(root.children ?? {}).flatMap((route) => {
+    const match = hasPublicCachePath(route, publicUrl.pathname);
+    return match ? [match] : [];
+  });
+  const best = matches.reduce<PublicCachePathMatch | undefined>(
+    (current, match) => (current === undefined || moreSpecific(match, current) ? match : current),
+    undefined,
   );
+  return best?.marked === true;
 }
 const nonce = createIsomorphicFn()
   .server(() => requestNonce(getRequest()))
