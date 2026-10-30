@@ -281,6 +281,24 @@ command deadline, receipt/session transport and problem responses apply. This op
 resource-grant declaration. A 409 requires a current-source refresh; it does not shorten or restart the original
 waiting period. Approval remains a separate platform authority and is not exposed by this request route.
 
+`readOwnRealmClaim({pool, access, clock?}, actor, {realmId, requestId?}, {deadline})` in
+`realm-claim-status.ts` returns `RealmClaimStatus | null`. The closed status contains `realmId`, `requestId`,
+`state: 'pending' | 'approved'`, the stored original `orphanedAt` and `requestedAt`, nullable `approvedAt`, and
+`currentEpisode`. Dates are normalized to UTC ISO only for disclosure; episode identity retains native precision.
+The actual authenticated account must equal the stored claimant. Current ordinary `realm:read`,
+`realm:participate` and host `space:read` admission apply before the request read and again before disclosure.
+Removed, hidden or denied containers return 404; unavailable native authority remains a typed failure.
+
+`GET /v1/realms/{realmId}/claimRequests/mine` returns `{claimRequest: RealmClaimStatus | null}` for only the
+current native orphan episode's exact `(route, realm_id, orphaned_at, account_id)` key. Null means known point
+absence after current admission, including an active Realm with no current orphan episode. The static route
+precedes `GET /v1/realms/{realmId}/claimRequests/{requestId}`, which returns `{claimRequest: RealmClaimStatus}`
+for an own exact receipt. Missing, unrelated and unreadable receipts share 404. Neither route lists history.
+An obsolete pending or approved receipt can have `currentEpisode: false`; approved is an original request fact,
+never current ownership or management authority. These reads neither reset the thirty-day clock nor resubmit.
+Accounts retains sole approval authority, source locking and account-erasure disposition remain unchanged, and
+the read adds no durable payload, event or locator.
+
 The approval source is `lockRealmClaimApprovalSource(tx, {realmId, requestId})`. It locks the actual current
 Realm/head and exact routed `realm_claim_request`, retaining the original `orphaned_at`, `claim_eligible_at`,
 `account_id` and `requested_at`. Only an active, pending, same-episode request after the original 720-hour deadline
