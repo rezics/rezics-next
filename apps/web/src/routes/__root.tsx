@@ -29,8 +29,10 @@ import { createNavigation } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 import { Tags, ChartNoAxesCombined, FileText } from 'lucide-react';
 import { subjectPurchaseRegions } from '../checkout/subject-purchase';
+import { contextsNavigation } from '../features/contexts/navigation';
 
 export const commerceNavigation = createNavigation([
+  ...contextsNavigation,
   {
     id: 'commerce.creator-offers',
     kind: 'navigation',

@@ -463,6 +463,52 @@ An uncertain request remains sealed for exact retry; a definite refusal allows e
 All actions preserve current session identity, CSRF, native response/session headers and current authority through
 the existing BFF. The generated lifecycle response supplies no restoration deadline.
 
+### Editorial Context workspace
+
+`/{locale}/my/contexts` is the signed-in **Editorial Contexts** directory in the existing Web shell. It lists
+current readable Contexts, not Contexts owned by the reader. Search, active/deleted selection and cursor navigation
+consume one bounded native directory page; an unavailable producer renders unavailable rather than scanning a
+catalogue or substituting sample rows. `/{locale}/my/contexts/new` accepts a name and its data language only, through
+the generated native Context creation method. Optional settings/defaults are omitted until a released choice can
+be supplied. The returned Context DTO is not an Item.
+
+`/{locale}/my/contexts/{id}` reads the native Context and read-only settings/defaults. A disclosed subject picker
+links to the existing subject Context review with the selected Context; reading grants no acceptance or adoption.
+Creation is offered only from native `viewerActions` on the Global `semantic.context` parent. Community deletion
+and restoration use current native actions for that exact resource, never creator history, website scopes or a
+copied authorizer. Global has neither lifecycle action. A missing resolver leaves changes disabled.
+
+The agreed additions are `GET /v1/contexts?query?&limit?&cursor?&deleted? -> {contexts,next}` and
+`GET /v1/contexts/{id}/lifecycle -> {context}`. Each directory entry is exactly
+`{id,kind,labels,state,deletedAt,purgeAfter}`; labels and lifecycle dates come only from the current authorized
+server response. These methods are visibly unavailable adapters while absent from the generated client, to be
+replaced by the producer's generated bindings on landing. Existing create/read/delete/restore methods are bound
+now. This source and typing delivery is not native Goal completion.
+
+Each mutation seals one payload and idempotency key. Unknown outcomes permit only exact replay while retaining the
+draft. Confirmed writes reread native current Context, lifecycle and actions with returned session continuity;
+a failed reread never resurrects cached labels or grants. Conflicts, expiry and holds require current rereading
+and explicit review before a new intent. Deleted metadata can be displayed only from the lifecycle read, including
+a directly opened deleted Context. Server-supplied purge dates are informational: no browser clock grants restore
+eligibility or promises success. Context deletion makes its editorial source unavailable and normally allows a
+30-day restore period subject to current native permission and retention checks. This workspace changes no
+Realm/Space binding, fallback, grant or ownership.
+
+Private query keys include actor, locale, directory query/filter/cursor or resource identity. Private data is
+removed on actor retirement, logout and denial, and hidden during current rereads. All eight launch locales share
+the same phone390/desktop1280 behavior stories. Ordinary Web visual review receives these exact story IDs, each
+reviewed at both widths through viewport globals:
+
+- `context-workspace--directory`, `context-workspace--empty`, `context-workspace--search-empty`
+- `context-workspace--loading`, `context-workspace--unavailable`, `context-workspace--stale-cursor`
+- `context-workspace--create`, `context-workspace--create-denied`, `context-workspace--active`
+- `context-workspace--global`, `context-workspace--read-only`, `context-workspace--permission-unavailable`
+- `context-workspace--deleted`, `context-workspace--revoked`, `context-workspace--expired`
+- `context-workspace--retention-hold`, `context-workspace--delete`, `context-workspace--restore`
+- `context-workspace--conflict`, `context-workspace--unknown-outcome`, `context-workspace--confirmed-reread-unavailable`
+
+Theme and locale also use globals; these fixtures make no native or visual approval claim.
+
 ## Relation contributions
 
 The canonical Global overview links to `/{locale}/subjects/{id}/{slug}/relation-edit`. The route keeps the
