@@ -240,6 +240,29 @@ items, an exception to the shared list maximum of 100. Their positions use the s
 `lastModified` is the current head revision time; a Realm also uses the time of its newest board when that is later.
 Realm and Space items come in strictly increasing `(route, id)` order.
 
+## Addressed community setup
+
+The served `/realms/new` setup entry launches a Space home through the ordinary Space creation,
+address, Realm creation/settings, board-scheme and first-board commands. The Space home links to
+setup only after a private current viewer-action read permits a relevant operation; the personal
+Realms page also exposes the creation entry. The existing home regions remain separate.
+
+Setup resolves an existing readable Context by its ID and existing `skos:ConceptScheme` and
+`skos:Concept` subjects by their IDs. It shows their returned labels before selection. Realm
+creation grants neither Context nor Global authority and creates no membership. Scheme membership,
+participation and all command authority remain current server checks, never client certificates.
+
+Each step uses its own command key and returned IDs. Space address, Realm settings and scheme
+writes use the returned revision as `If-Match`. An uncertain response retains the entire original
+command and key for replay. A definite conflict offers an explicit current-head refresh while
+retaining created identities and entered values for review before the next command. A saved
+address links to the actual Space home; a returned first-board ID links to that board. Setup does
+not define role removal or succession policy.
+
+The setup snapshot performs at most a Space point read, its readable carried Realm point read,
+and one viewer-action batch of at most two resources. Each selection is one existing point read;
+there is no catalogue, grant, membership or descendant scan and no per-card request fanout.
+
 ## Cost
 
 | Operation                                                    | Touches                                                                                                                                                                                                                                                                                           | Bound                                                                                                                                                                                                          | Growth check                                                                                                                                                                                                                                                                                                             |

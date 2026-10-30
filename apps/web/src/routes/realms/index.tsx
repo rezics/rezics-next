@@ -1,7 +1,7 @@
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { createFileRoute } from '@tanstack/react-router';
+import { Link, createFileRoute } from '@tanstack/react-router';
 import { MyRealmsPageView } from '../../community/my-realms-page';
 import { myRealmsQuery } from '../../community/realm-membership-queries';
 import { useQuery } from '@tanstack/react-query';
@@ -25,5 +25,12 @@ function MyRealms() {
   const { data = initial, isError, error } = useQuery(myRealmsQuery(Route.useSearch().cursor));
   if (isError) throw error;
   if (!data) throw new Error('Realm list is unavailable');
-  return <MyRealmsPageView page={data} />;
+  return (
+    <div className="space-y-6">
+      <Link to="/realms/new" className="inline-flex min-h-10 items-center text-primary underline underline-offset-4">
+        {m.space_setup_heading()}
+      </Link>
+      <MyRealmsPageView page={data} />
+    </div>
+  );
 }

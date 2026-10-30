@@ -9,6 +9,7 @@ import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import { RealmMembership } from './realm-membership';
 import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
+import { SpaceSetupEntry } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
@@ -186,6 +187,7 @@ export function SpacePage({ page }: { page: SpacePageData }) {
           <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
         ) : null}
       </header>
+      <SpaceSetupEntry spaceId={page.space.id} />
       <section aria-label={m.space_follow_label()}>
         <FollowTargetControl targetId={page.space.id} />
       </section>

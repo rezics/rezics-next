@@ -5,6 +5,16 @@ import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
+import * as v from 'valibot';
+import { prepareSession, viewerCredential } from '../session/request';
+import {
+  commandSetup,
+  readSetup,
+  readSetupChoice,
+  setupCommandSchema,
+  setupReadSchema,
+  setupChoiceSchema,
+} from './space-setup';
 import {
   requestRealmMembership,
   loadMyRealms,
@@ -118,3 +128,24 @@ export const changeRealmMembership = createServerFn({ method: 'POST' })
       return { outcome: 'refused' };
     }
   });
+
+async function setupCredential() {
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  await prepareSession(request, env as Partial<SessionEnv>);
+  const authorization = viewerCredential(request);
+  if (!authorization) throw new Error('Sign in to set up a community');
+  return authorization;
+}
+
+export const readSpaceSetup = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(setupReadSchema, input))
+  .handler(async ({ data }) => readSetup(kernelClient(), await setupCredential(), data.spaceId));
+
+export const resolveSpaceSetupChoice = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(setupChoiceSchema, input))
+  .handler(async ({ data }) => readSetupChoice(kernelClient(), await setupCredential(), data));
+
+export const changeSpaceSetup = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => v.parse(setupCommandSchema, input))
+  .handler(async ({ data }) => commandSetup(kernelClient(), await setupCredential(), data));
