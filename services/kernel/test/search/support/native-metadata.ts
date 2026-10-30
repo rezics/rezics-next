@@ -120,6 +120,11 @@ export function resolveControls(prefix: string): MetadataControl[] {
   change('missing attributes', (body) => {
     delete body.indices[0]!.attributes;
   });
+  change('incomplete attribute collection', (body) => {
+    const attributes: unknown[] = ['open'];
+    attributes.length = 2;
+    body.indices[0]!.attributes = attributes;
+  });
   for (const attributes of [
     null,
     'open',

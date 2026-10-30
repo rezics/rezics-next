@@ -158,8 +158,7 @@ export async function subjectGenerations(
       attributes.length < 1 ||
       attributes.length > 2 ||
       !attributes.includes('open') ||
-      attributes.some((value) => value !== 'open' && value !== 'hidden') ||
-      new Set(attributes).size !== attributes.length ||
+      (attributes.length === 2 && !attributes.includes('hidden')) ||
       Object.hasOwn(index, 'data_stream')
     )
       throw unavailable();
