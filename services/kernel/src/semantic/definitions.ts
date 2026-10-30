@@ -15,7 +15,7 @@ import pointer from './definitions-active.sql';
 import exists from './definitions-exists.sql';
 import publish from './definitions-publish.sql';
 import read from './definitions-read.sql';
-import { composedRelease, readComposedRelease } from './extensions.ts';
+import { readComposedRelease } from './extensions.ts';
 
 export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const resource = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
@@ -50,8 +50,6 @@ export async function readRelease(
   options: { composed?: boolean } = {},
 ): Promise<Release | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
-  const composed = options.composed === false ? null : composedRelease(digest);
-  if (composed) return composed;
   const cached = releases.get(digest);
   if (cached) return (await exists.run(pool, { route: resource.route, digest })) ? cached : null;
   const row = await read.run(pool, { route: resource.route, digest });
@@ -88,7 +86,10 @@ export function commandOptions(
   options: WriteOptions,
   kind: string,
   action: string,
-  target: { partition: number; resource: { route: number; id: string } } = { partition: 0, resource },
+  target: { partition: number; resource: { route: number; id: string } } = {
+    partition: 0,
+    resource,
+  },
 ) {
   return {
     partition: target.partition,
@@ -132,7 +133,12 @@ export async function publishRelease(pool: Pool, options: WriteOptions & { relea
     // The database await must retain owned data, not a mutable caller graph.
     submitted = structuredClone(options.release);
     publishedDigest = releaseDigest(submitted as Release);
-    if (!(await exists.run(pool, { route: resource.route, digest: publishedDigest })))
+    if (
+      !(await exists.run(pool, {
+        route: resource.route,
+        digest: publishedDigest,
+      }))
+    )
       throw new DefinitionInputError(caps);
   }
   const release = validated(submitted);
@@ -149,20 +155,33 @@ export async function publishRelease(pool: Pool, options: WriteOptions & { relea
       });
       return {
         value: { digest, created: rows !== null },
-        events: [{ type: 'com.rezics.definitions.published.v1', subject: GLOBAL_CONTEXT, data: { digest } }],
+        events: [
+          {
+            type: 'com.rezics.definitions.published.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { digest },
+          },
+        ],
       };
     },
   );
   return {
     ...command.value,
-    component: { partition: command.partition, epoch: command.epoch, position: command.position },
+    component: {
+      partition: command.partition,
+      epoch: command.epoch,
+      position: command.position,
+    },
     replayed: command.replayed,
   };
 }
 
 export async function activateRelease(
   pool: Pool,
-  options: WriteOptions & { releaseDigest: string; expectedHead: number | null },
+  options: WriteOptions & {
+    releaseDigest: string;
+    expectedHead: number | null;
+  },
 ) {
   const command = await runCommand(
     pool,
@@ -182,13 +201,23 @@ export async function activateRelease(
       const head = rows[0]!.head;
       return {
         value: { digest, head },
-        events: [{ type: 'com.rezics.definitions.activated.v1', subject: GLOBAL_CONTEXT, data: { digest, head } }],
+        events: [
+          {
+            type: 'com.rezics.definitions.activated.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { digest, head },
+          },
+        ],
       };
     },
   );
   return {
     ...command.value,
-    component: { partition: command.partition, epoch: command.epoch, position: command.position },
+    component: {
+      partition: command.partition,
+      epoch: command.epoch,
+      position: command.position,
+    },
     replayed: command.replayed,
   };
 }
@@ -211,7 +240,12 @@ export async function bootstrapRelease(pool: Pool, release: Release, clock: () =
     const command = await runCommand(pool, { partition: 0, clock }, async (tx, { transactionId }) => {
       const active = await pointer.run(tx, { route: resource.route });
       if (active) throw new AlreadyActive(active.digest);
-      await publish.run(tx, { route: resource.route, digest, body, transaction_id: transactionId });
+      await publish.run(tx, {
+        route: resource.route,
+        digest,
+        body,
+        transaction_id: transactionId,
+      });
       const rows = await activate.run(tx, {
         route: resource.route,
         digest,
@@ -222,8 +256,16 @@ export async function bootstrapRelease(pool: Pool, release: Release, clock: () =
       return {
         value: digest,
         events: [
-          { type: 'com.rezics.definitions.published.v1', subject: GLOBAL_CONTEXT, data: { digest } },
-          { type: 'com.rezics.definitions.activated.v1', subject: GLOBAL_CONTEXT, data: { digest, head: 1 } },
+          {
+            type: 'com.rezics.definitions.published.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { digest },
+          },
+          {
+            type: 'com.rezics.definitions.activated.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { digest, head: 1 },
+          },
         ],
       };
     });

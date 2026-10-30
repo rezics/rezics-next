@@ -1,6 +1,8 @@
 import type { ZoneStarter } from '@rezics/composition';
 import type { AccessClient } from '../request/access.ts';
+import { readAccount } from '../access/account-data.ts';
 import type { CommandTransaction } from '../command/command.ts';
+import { routeOf } from '../route/route.ts';
 import head from './resource-head.sql';
 import lock from './resource-lock.sql';
 import insert from './resource-insert.sql';
@@ -25,6 +27,12 @@ function model(row: NonNullable<Awaited<ReturnType<typeof head.run>>>): ZoneHead
 export async function readZoneHead(client: AccessClient, route: number, id: string): Promise<ZoneHead | null> {
   const row = await head.run(client, { route, id });
   return row ? model(row) : null;
+}
+/** Public Zone payload remains eligible only while its native owner account is live. */
+export async function zoneOwnerIsActive(client: AccessClient, row: ZoneHead): Promise<boolean> {
+  if (!row.ownerId) return false;
+  const owner = await readAccount(client, routeOf(row.ownerId)!, row.ownerId);
+  return owner?.state === 'active' && !owner.fenced;
 }
 /** Caller owns the command transaction; locks the exact resource head, never starts or commits a transaction. */
 export async function lockZoneHead(tx: CommandTransaction, route: number, id: string): Promise<ZoneHead | null> {

@@ -1,3 +1,4 @@
+import { recordSemanticProducerRole } from './erasure-producer.ts';
 import type { Pool, PoolClient } from 'pg';
 import { currentCommand, runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -299,7 +300,15 @@ export async function ensureAccountAgent(
   const agentRoute = routeOf(agentId)!;
   try {
     const outcome = await runCommand(pool, { partition: partitionOf(agentRoute) }, async (tx, { transactionId }) => {
-      const result = await ensureInTransaction(tx, transactionId, options);
+      await recordSemanticProducerRole(tx, transactionId, accountIdOf(options.account), 'subject');
+      const state = await tx.query(
+        'SELECT state,authn_fenced AS fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE',
+        [routeOf(account), account],
+      );
+      // An old producer input is never authority to restore the display name after native account T.
+      const effective =
+        state.rows[0]?.state === 'deleted' || state.rows[0]?.fenced ? { ...options, name: null } : options;
+      const result = await ensureInTransaction(tx, transactionId, effective);
       if (!result.changed) throw new NoAgentChange(result.value);
       return { value: result.value, events: result.events };
     });
@@ -340,6 +349,7 @@ export async function verifyAccountAgent(
     const command = await runCommand(pool, { partition: partitionOf(nodeRoute) }, async (tx, { transactionId }) => {
       if (currentCommand(tx).basis !== null)
         throw new AccountAgentVerificationError('Verification requires platform work');
+      await recordSemanticProducerRole(tx, transactionId, account, 'subject');
       const node = await readAgentSubject(tx, agentId);
       if (!node)
         throw new AccountAgentVerificationError(
@@ -423,6 +433,7 @@ export async function unverifyAccountAgent(
   const command = await runCommand(pool, { partition: partitionOf(nodeRoute) }, async (tx, { transactionId }) => {
     if (currentCommand(tx).basis !== null)
       throw new AccountAgentVerificationError('Verification reversal requires platform work');
+    await recordSemanticProducerRole(tx, transactionId, account, 'subject');
     const node = await readAgentSubject(tx, agentId);
     if (!node) throw new AccountAgentVerificationError('The account agent does not exist');
     const mapping = await accountAgentForNode(tx, agentId);

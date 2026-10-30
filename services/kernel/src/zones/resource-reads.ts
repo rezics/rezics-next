@@ -13,7 +13,7 @@ import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../t
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ZoneConfigurationResponse, ZoneMetadataResponse, ZoneOwned, ZonePublic } from './contract.ts';
 import { zoneReadable, zoneReadEligibility, zoneWithheld } from './eligibility.ts';
-import { hasZoneOwnerRole, ownerZoneKeys, readZoneHead, type ZoneHead } from './resource-store.ts';
+import { hasZoneOwnerRole, ownerZoneKeys, readZoneHead, type ZoneHead, zoneOwnerIsActive } from './resource-store.ts';
 
 export function requireZoneAccount(actor: Actor): asserts actor is AccountActor {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -122,6 +122,7 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
       const at = authoritativeTimeValue(time);
       const row = await readZoneHead(client, identity.route, id);
       if (!row || !row.configuration || !row.mounts || row.state === 'purged') throw new ProblemError('not_found');
+      if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
       const allowed = await readCheck(client, time);
       if (!configuration) {
         if (!zoneReadable(row)) throw new ProblemError('not_found');
@@ -264,6 +265,7 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
         const time = await mintReadTime(client, clock);
         const row = await readZoneHead(client, identity.route, id);
         if (!row || !zoneReadable(row) || !row.configuration) throw new ProblemError('not_found');
+        if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
         if (!(await check(client, time))) {
           if (actor.kind === 'account') {
             const account = await readAccount(client, routeOf(actor.accountId)!, actor.accountId);

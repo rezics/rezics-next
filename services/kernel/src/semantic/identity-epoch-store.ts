@@ -144,7 +144,7 @@ export function identityReceiptKey(receipt: IdentityReceipt): string {
 const json = serializeIdentityValue;
 const receiptValue = identityReceiptValue;
 const receiptKey = identityReceiptKey;
-function decodeReceipt(value: ReturnType<typeof identityReceiptValue>): IdentityReceipt {
+function decodeReceipt(value: ReturnType<typeof identityReceiptValue> | { kind: 'erased' }): IdentityJob['receipt'] {
   return value.kind === 'subject.merge'
     ? { ...value, command: { ...value.command, digest: Buffer.from(value.command.digest, 'base64') } }
     : value;

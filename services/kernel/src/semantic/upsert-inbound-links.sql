@@ -3,7 +3,7 @@
 WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MATERIALIZED (
   SELECT change.*, COALESCE(change.context_id, '00000000-0000-8000-8000-000000000000'::uuid) AS ctx, COALESCE(change.suppressed, false) AS suppression, :transaction_id::uuid AS transaction_id
   FROM jsonb_to_recordset(:changes::jsonb) AS change(
-    context_id uuid, suppressed boolean, subject_id uuid, property text, source_subject_id uuid, statement_id uuid,
+    erasure_roles jsonb, context_id uuid, suppressed boolean, subject_id uuid, property text, source_subject_id uuid, statement_id uuid,
     source_revision integer, source_security_revision bigint, present boolean,
     source_type text, order_key text, filter_value uuid
   )
@@ -21,14 +21,14 @@ WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MAT
 ), written AS (
   INSERT INTO semantic.inbound_link (
     route, subject_id, context_id, property, source_subject_id, statement_id, source_revision,
-    source_security_revision, present, suppressed, recorded_transaction_id, source_type, order_key, filter_value
+    source_security_revision, present, suppressed, recorded_transaction_id, erasure_roles, source_type, order_key, filter_value
   )
   SELECT input.route, subject_id, ctx, property, source_subject_id, statement_id, source_revision,
-    source_security_revision, present, suppression, transaction_id, source_type, order_key, filter_value FROM accepted CROSS JOIN input
+    source_security_revision, present, suppression, transaction_id, erasure_roles, source_type, order_key, filter_value FROM accepted CROSS JOIN input
   ON CONFLICT (route, subject_id, context_id, property, source_subject_id, statement_id, filter_value)
   DO UPDATE SET source_revision = EXCLUDED.source_revision,
     source_security_revision = EXCLUDED.source_security_revision, present = EXCLUDED.present, suppressed = EXCLUDED.suppressed,
-    recorded_transaction_id = EXCLUDED.recorded_transaction_id,
+    recorded_transaction_id = EXCLUDED.recorded_transaction_id, erasure_roles = EXCLUDED.erasure_roles,
     source_type = EXCLUDED.source_type, order_key = EXCLUDED.order_key
   RETURNING subject_id
 ), contributions AS (

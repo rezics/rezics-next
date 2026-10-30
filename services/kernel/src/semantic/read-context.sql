@@ -1,3 +1,3 @@
-SELECT context_id::text AS id, kind, labels, settings_id, settings_release, defaults
+SELECT context_id::text AS id, kind, labels, settings_id, settings_release, defaults, recorded_transaction_id::text
 FROM semantic.context
 WHERE route = :route::integer AND context_id = :context_id::uuid AND state = 'active';

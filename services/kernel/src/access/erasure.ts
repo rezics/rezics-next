@@ -44,7 +44,10 @@ export const ERASURE_PARTICIPANTS = Object.freeze({
 });
 export const ERASURE_PARTICIPANT_VERSION = 1;
 /** Owners register every effect that writes cross-partition erasure locators here. */
-export const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string> = new Set<string>();
+export const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string> = new Set<string>([
+  'semantic_erasure',
+  'semantic_erasure_locator',
+]);
 export type ErasureOutcome = 'erased' | 'none';
 export type RetentionException = {
   store: string;
@@ -290,6 +293,9 @@ export async function resolveLateErasureItem(deps: { pool: Pool; clock?: () => D
       basis: { actorAccountId: '00000000-0000-8000-8000-000000000001', clientId: 'internal-access', requestedBy: null },
     },
     async (tx, { time }) => {
+      // Exact account/item predicates remain indexed before fresh participant tables have planner statistics.
+      await tx.query('SET LOCAL enable_seqscan=off');
+      await tx.query('SET LOCAL enable_bitmapscan=off');
       const record = await lock.run(tx, key);
       if (!record || !participants(record.version).includes(input.participant)) throw new LifecycleDeniedError();
       const rows = await resolveLate.run(tx, { ...key, at: authoritativeTimeValue(time) });

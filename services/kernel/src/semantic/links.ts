@@ -1,3 +1,4 @@
+import { semanticCopyRoles } from './erasure-producer.ts';
 import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
@@ -288,6 +289,7 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
   // A command checks each target under the same partition fence as its upserts.
   for (let offset = 0; offset < changes.length; offset += 100) {
     const page = changes.slice(offset, offset + 100);
+    const roles = await Promise.all(page.map(change => semanticCopyRoles(pool,change.sourceSubjectId,change.statementId)));
     const partition = partitionOf(page[0]!.route);
     const command = await runCommand(pool, { partition }, async (tx, { transactionId }) => {
       const forwarded: StoredChange[] = [];
@@ -305,6 +307,7 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
           changes: local
             .filter((change) => change.route === route)
             .map((change) => ({
+              erasure_roles: roles[page.indexOf(change)] ?? [],
               subject_id: change.subjectId,
               context_id: change.context_id ?? GLOBAL_CONTEXT,
               suppressed: change.suppressed ?? false,
@@ -388,6 +391,7 @@ async function applyOutboundChanges(pool: Pool, changes: StoredOutboundChange[])
           dateTargets.map(async (target) => [target, (await readHolderKeys(pool, target)).date] as const),
         ),
       );
+      const roles = await Promise.all(page.map(change => semanticCopyRoles(pool,change.subjectId,change.statementId)));
       await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
         await upsertOutboundLinks.run(tx, {
           route,
@@ -408,6 +412,7 @@ async function applyOutboundChanges(pool: Pool, changes: StoredOutboundChange[])
                       ? (dateKeys.get(target) ?? '1')
                       : target);
             return {
+              erasure_roles: roles[page.indexOf(change)] ?? [],
               subject_id: change.subjectId,
               context_id: change.context_id ?? GLOBAL_CONTEXT,
               suppressed: change.suppressed ?? false,

@@ -1,6 +1,7 @@
 import { withReadTransaction } from './read.ts';
 import type { Pool } from 'pg';
 import { createResourcePublicEligibility, initializeResourceGrants, type ParentAnchor } from '../access/index.ts';
+import { readAccount } from '../access/account-data.ts';
 import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
@@ -12,6 +13,7 @@ import contextPublicEvidence from './context-public-evidence.sql';
 import readContextStatement from './read-context.sql';
 import readGlobalContext from './context-read-global.sql';
 import readCommunityContext from './context-read-community.sql';
+import readContextCreator from './context-read-creator.sql';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 
 export const CREATE_CONTEXT = 'context.create';
@@ -156,6 +158,7 @@ type ContextRow = {
   settings_id: string | null;
   settings_release: string | null;
   defaults: Record<string, 'inherit' | 'suppress'>;
+  recorded_transaction_id: string | null;
 };
 
 export async function readContext(
@@ -174,6 +177,12 @@ export async function readContext(
     const row = (await readContextStatement.run(client, { route, context_id: id })) as ContextRow | undefined;
     if (!row || !(await authorize(client))) {
       return null;
+    }
+    if (row.kind === 'community') {
+      const creator = await readContextCreator.run(client, { route, context_id: id });
+      if (!creator?.accountId) return null;
+      const account = await readAccount(client, routeOf(creator.accountId)!, creator.accountId);
+      if (!account || account.state !== 'active' || account.fenced) return null;
     }
     return {
       context: {

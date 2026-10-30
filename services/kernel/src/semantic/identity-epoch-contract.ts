@@ -90,7 +90,7 @@ export type IdentityMapping =
 export type IdentityJob = Readonly<{
   ref: IdentityJobRef;
   intent: IdentityIntent;
-  receipt: IdentityReceipt;
+  receipt: IdentityReceipt | Readonly<{ kind: 'erased' }>;
   state: 'preparing' | 'pending' | 'cancelling' | 'cancelled' | 'published';
   mapping: IdentityStepProgress | null;
   participants: Readonly<{

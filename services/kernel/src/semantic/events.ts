@@ -53,6 +53,20 @@ const contextLifecycle = Type.Object(
 
 /** Closed semantic event catalogue. Envelope identity and ordering belong to the kernel. */
 export const SEMANTIC_EVENTS = {
+  'com.rezics.semantic.composite.registered.v1': Type.Object(
+    { context: UUID, digest: Type.String() },
+    { additionalProperties: false },
+  ),
+  'com.rezics.semantic.erasure.scheduled.v1': Type.Object({ accountId: UUID }, { additionalProperties: false }),
+  'com.rezics.semantic.erasure.locator-scheduled.v1': Type.Object(
+    { position: Type.String({ pattern: '^[0-9]+$' }) },
+    { additionalProperties: false },
+  ),
+  'com.rezics.semantic.erasure.locator-advanced.v1': Type.Object(
+    { position: Type.String({ pattern: '^[0-9]+$' }) },
+    { additionalProperties: false },
+  ),
+  'com.rezics.semantic.erasure.progress.v1': Type.Object({ accountId: UUID }, { additionalProperties: false }),
   [IDENTITY_EPOCH_HOME_AVAILABLE]: Type.Object(
     { partition: Type.Integer({ minimum: 0, maximum: 4095 }), after: UUID },
     { additionalProperties: false },

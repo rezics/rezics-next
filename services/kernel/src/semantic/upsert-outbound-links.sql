@@ -3,7 +3,7 @@
 WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MATERIALIZED (
   SELECT change.*, COALESCE(change.context_id, '00000000-0000-8000-8000-000000000000'::uuid) AS ctx, COALESCE(change.suppressed, false) AS suppression, :transaction_id::uuid AS transaction_id
   FROM jsonb_to_recordset(:changes::jsonb) AS change(
-    context_id uuid, suppressed boolean, subject_id uuid, property text, filter_value uuid, order_key text, target_subject_id uuid,
+    erasure_roles jsonb, context_id uuid, suppressed boolean, subject_id uuid, property text, filter_value uuid, order_key text, target_subject_id uuid,
     statement_id uuid, slot_id uuid, relation boolean, source_type text, source_order_key text, outbound_order text,
     source_revision integer, source_security_revision bigint, target_revision integer, target_type text,
     external text, value text, present boolean
@@ -41,19 +41,19 @@ WITH input AS NOT MATERIALIZED (SELECT :route::integer AS route), changes AS MAT
     route, subject_id, context_id, property, filter_value, order_key, target_subject_id, statement_id, slot_id,
     relation, source_type, source_order_key, outbound_order, source_revision, source_security_revision,
     target_revision, target_type, external, value,
-    present, suppressed, recorded_transaction_id
+    present, suppressed, recorded_transaction_id, erasure_roles
   )
   SELECT input.route, subject_id, ctx, property, filter_value, order_key, target_subject_id, statement_id, slot_id,
     relation, source_type, source_order_key, outbound_order, source_revision, source_security_revision,
     target_revision, target_type, external, value,
-    present, suppression, transaction_id FROM checked CROSS JOIN input
+    present, suppression, transaction_id, erasure_roles FROM checked CROSS JOIN input
   ON CONFLICT (route, subject_id, context_id, property, filter_value, order_key, target_subject_id, statement_id)
   DO UPDATE SET slot_id = EXCLUDED.slot_id, relation = EXCLUDED.relation, source_type = EXCLUDED.source_type,
     source_order_key = EXCLUDED.source_order_key, outbound_order = EXCLUDED.outbound_order,
     source_revision = EXCLUDED.source_revision,
     source_security_revision = EXCLUDED.source_security_revision, target_revision = EXCLUDED.target_revision,
     target_type = EXCLUDED.target_type, external = EXCLUDED.external, value = EXCLUDED.value,
-    present = EXCLUDED.present, suppressed = EXCLUDED.suppressed, recorded_transaction_id = EXCLUDED.recorded_transaction_id
+    present = EXCLUDED.present, suppressed = EXCLUDED.suppressed, recorded_transaction_id = EXCLUDED.recorded_transaction_id, erasure_roles = EXCLUDED.erasure_roles
   RETURNING subject_id
 ), contributions AS (
   SELECT c.*, COALESCE(base.present, false)::integer AS base_present,

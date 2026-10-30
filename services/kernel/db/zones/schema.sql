@@ -52,6 +52,7 @@ CREATE TABLE zones.zone (
     updated_at timestamp with time zone NOT NULL,
     creation_transaction_id uuid NOT NULL,
     transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT zone_check CHECK ((route = ((get_byte(uuid_send(zone_id), 10) * 256) + get_byte(uuid_send(zone_id), 11)))),
     CONSTRAINT zone_check1 CHECK (((owner_id IS NULL) OR (route = ((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11))))),
     CONSTRAINT zone_check2 CHECK (((deleted_at IS NULL) = (restore_until IS NULL))),
@@ -73,10 +74,24 @@ ALTER TABLE ONLY zones.zone
 
 
 --
+-- Name: zone_erasure_key; Type: INDEX; Schema: zones; Owner: -
+--
+
+CREATE UNIQUE INDEX zone_erasure_key ON zones.zone USING btree (erasure_key, route);
+
+
+--
 -- Name: zone_owner_keys; Type: INDEX; Schema: zones; Owner: -
 --
 
 CREATE INDEX zone_owner_keys ON zones.zone USING btree (route, owner_id, state, zone_id);
+
+
+--
+-- Name: zone zone_erasure_capture; Type: TRIGGER; Schema: zones; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER zone_erasure_capture AFTER INSERT OR UPDATE ON zones.zone DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_zone_erasure();
 
 
 --

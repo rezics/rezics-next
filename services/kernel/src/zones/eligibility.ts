@@ -1,5 +1,5 @@
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
-import { readZoneHead, type ZoneHead } from './resource-store.ts';
+import { readZoneHead, type ZoneHead, zoneOwnerIsActive } from './resource-store.ts';
 
 /** Separate lifecycle evidence survives all ordinary resource state changes. */
 export function zoneWithheld(row: ZoneHead, pointer: string): boolean {
@@ -25,7 +25,11 @@ export function zoneReadEligibility(resource: { route: number; id: string }) {
     async verify({ client, evidence }) {
       const head = await readZoneHead(client, resource.route, resource.id);
       return (
-        head !== null && head.revision === evidence.revision && zoneReadable(head) && head.visibility !== 'private'
+        head !== null &&
+        head.revision === evidence.revision &&
+        zoneReadable(head) &&
+        head.visibility !== 'private' &&
+        (await zoneOwnerIsActive(client, head))
       );
     },
   });

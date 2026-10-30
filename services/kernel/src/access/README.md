@@ -1315,6 +1315,11 @@ refill after skips, so it may return fewer than `limit` items.
 
 ### Governance bootstrap
 
+The installed `platform.governance` role includes `zone:create` on the Global Context. A governor may delegate
+that existing action through the ordinary grant command; Zone creation still checks the current grant and initializes
+the actual owner role in the Zone's native command transaction. Bootstrap does not create Zones, grant the action to
+other accounts automatically, or open public exposure.
+
 - Touches: one native Global command to install the governance role and its receipt/outbox, followed by a separately
   authorized standing-parent command for `organization:create`. Replays recheck the role installation marker and the
   standing-parent marker; a conflicting operator is refused before the second command.

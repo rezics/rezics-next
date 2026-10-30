@@ -64,6 +64,7 @@ import readRevisions from './candidates-read-revisions.sql';
 import readSlotCandidate from './candidates-read-slot-candidate.sql';
 import readSubjectRevision from './candidates-read-subject-revision.sql';
 import readCandidateVisibility from './candidates-read-visibility.sql';
+import readCandidateOwners from './candidates-read-owners.sql';
 import updateSubjectRelease from './update-subject-release.sql';
 
 export class SubjectNotFoundError extends Error {}
@@ -941,6 +942,28 @@ export async function listCandidates(
       const window = rows.slice(0, options.limit);
       const hidden = new Set<string>();
       if (window.length) {
+        const owners = listed(
+          await readCandidateOwners.run(client, {
+            route: routeOf(options.subject)!,
+            subject_id: options.subject,
+            candidate_ids: window.map((row) => row.candidate_id),
+          }),
+        ) as {
+          candidate_id: string;
+          principal_kind: 'account' | 'anonymous' | 'erased';
+          principal_id: string;
+          account_state: string | null;
+          account_fenced: boolean | null;
+        }[];
+        const located = new Set(owners.map((owner) => owner.candidate_id));
+        for (const row of window) if (!located.has(row.candidate_id)) hidden.add(row.candidate_id);
+        for (const owner of owners) {
+          if (
+            owner.principal_kind === 'account' &&
+            (owner.account_state !== 'active' || owner.account_fenced !== false)
+          )
+            hidden.add(owner.candidate_id);
+        }
         const concealed = await readHiddenIds.run(client, {
           route: routeOf(options.subject)!,
           subject_id: options.subject,

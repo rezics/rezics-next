@@ -49,7 +49,12 @@ const program = `
       registrations++;
       pool = context.pool;
       assert.equal(DBOS.isInitialized(), false);
-      await module.register({ ...context, addService(start) {
+      await module.register({ ...context, addEffects(effects) {
+        const erasure = effects.find(effect => effect.name === 'semantic_erasure');
+        assert.ok(erasure, 'Semantic registers its account tombstone effect even when no local data applies');
+        assert.deepEqual(erasure.types, ['com.rezics.access.account-tombstoned.v1']);
+        context.addEffects(effects);
+      }, addService(start) {
         context.addService(async () => {
           assert.equal(DBOS.isInitialized(), true);
           const service = await start();
@@ -338,3 +343,35 @@ test('actual native subject relation events converge through registered Semantic
     await child.child.exited;
   }
 }, 60_000);
+
+test('default Semantic composition registers its real locator and bounded local continuation', async () => {
+  const effects: import('../../src/events/effects.ts').Effect[] = [];
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { WORK_QUEUES } = await import('../../src/work/queues.ts');
+  const client = await createWorkClient(databaseUrl!, pool);
+  try {
+    await semanticWorkModule.register({
+      pool,
+      env: process.env,
+      clock: () => new Date(),
+      queues: WORK_QUEUES,
+      client,
+      addEffects(registered) {
+        effects.push(...registered);
+      },
+      addService() {},
+    });
+  } finally {
+    await client.close();
+  }
+  const locator = effects.find((effect) => effect.name === 'semantic_erasure_locator');
+  const local = effects.find((effect) => effect.name === 'semantic_erasure_local');
+  expect(locator?.types).toContain('com.rezics.zone.configured.v1');
+  expect(locator?.types).toContain('com.rezics.semantic.erasure.locator-scheduled.v1');
+  expect(local?.types).toEqual(['com.rezics.semantic.erasure.scheduled.v1']);
+  const { ERASURE_LOCATOR_EFFECTS } = await import('../../src/access/erasure.ts');
+  expect(ERASURE_LOCATOR_EFFECTS.has(locator!.name)).toBe(true);
+  const tombstone = effects.find((effect) => effect.name === 'semantic_erasure');
+  expect(tombstone?.types).toEqual(['com.rezics.access.account-tombstoned.v1']);
+  expect(ERASURE_LOCATOR_EFFECTS.has(tombstone!.name)).toBe(true);
+});

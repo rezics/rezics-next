@@ -8,13 +8,14 @@ import {
   type ExtensionViolation,
 } from '@rezics/definitions/extension';
 import { releaseDigest, type Release } from '@rezics/definitions';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
-import { runCommand, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import composite from './composite-read.sql';
 import registerComposite from './composite-register.sql';
 import readCommunity from './context-read-community.sql';
+import readContextOwner from './context-read-creator.sql';
 import {
   activeRelease,
   commandOptions,
@@ -42,6 +43,11 @@ const pairs = new Map<string, string>();
 const bases = new Map<string, string>();
 /** Composed digests this process has registered, so a stored digest resolves in any process. */
 const registered = new Set<string>();
+
+/** Compatibility cache probe. Current Context custody requires the asynchronous native read below. */
+export function composedRelease(_digest: string): Release | null {
+  return null;
+}
 
 export class ExtensionInputError extends Error {
   constructor(readonly violations: ExtensionViolation[]) {
@@ -71,6 +77,8 @@ export async function activeExtension(
   const route = contextRoute(context);
   if (route === null || (context !== GLOBAL_CONTEXT && !(await readCommunity.run(db, { route, context_id: context }))))
     throw new ProblemError('not_found');
+  if (context !== GLOBAL_CONTEXT && !(await readContextOwner.run(db, { route, context_id: context })))
+    throw new ProblemError('not_found');
   return storedActiveExtension(db, route, context);
 }
 
@@ -99,13 +107,34 @@ async function compose(db: Db, parent: Layer, digest: string, extension: Extensi
   }
   // Only a digest that a write stores needs a row; reads may run in a read-only transaction.
   if (persist && !registered.has(result)) {
-    await registerComposite.run(db, {
+    const input = {
       digest: result,
       parent_digest: parent.digest,
       extension_route: contextRoute(extension.context)!,
       extension_context_id: extension.context,
       extension_digest: digest,
-    });
+    };
+    if (db instanceof Pool) {
+      // A persisted derived key belongs to the extension home, with its own committed source event.
+      await runCommand(db, { partition: partitionOf(input.extension_route) }, async (tx) => {
+        const owner = await activeExtension(tx, extension.context);
+        if (!owner || owner.digest !== digest) throw new DefinitionNotFoundError();
+        await registerComposite.run(tx, input);
+        return {
+          value: null,
+          events: [
+            {
+              type: 'com.rezics.semantic.composite.registered.v1',
+              data: { context: extension.context, digest: result },
+            },
+          ],
+        };
+      });
+    } else {
+      if (currentCommand(db).partition !== partitionOf(input.extension_route))
+        throw new TypeError('Composite registration requires its extension home');
+      await registerComposite.run(db, input);
+    }
     registered.add(result);
   }
   return { digest: result, release };
@@ -154,10 +183,6 @@ export function baseOf(digest: string): string {
   return bases.get(digest) ?? digest;
 }
 
-export function composedRelease(digest: string): Release | null {
-  return composed.get(digest) ?? null;
-}
-
 /** Resolve a stored composed digest again, in a process that has not composed it yet. */
 export async function readComposedRelease(db: Db, digest: string): Promise<Release | null> {
   const row = await composite.run(db, { digest });
@@ -165,6 +190,23 @@ export async function readComposedRelease(db: Db, digest: string): Promise<Relea
   const parent = await readRelease(db, row.parent_digest);
   if (!parent) return null;
   const context = row.extension_context_id;
+  if (context !== GLOBAL_CONTEXT) {
+    if (!(await readContextOwner.run(db, { route: row.extension_route, context_id: context }))) return null;
+    // A warm body is not current authority. Retain the current communal extension; an older private body
+    // needs its actual live source, even while physical minimization is paused.
+    const eligible = await db.query(
+      `SELECT 1 FROM semantic.context_extension e WHERE e.route=$1 AND e.context_id=$2 AND e.digest=$3 AND (
+        EXISTS (SELECT 1 FROM semantic.context_extension_head(e.route,e.context_id) h WHERE h.digest=e.digest)
+        OR EXISTS (SELECT 1 FROM editorial.write_basis b JOIN access.account a
+          ON a.route=((get_byte(uuid_send(b.principal_id),10)*256)+get_byte(uuid_send(b.principal_id),11))
+          AND a.account_id=b.principal_id AND a.state='active' AND NOT a.authn_fenced
+          WHERE b.partition_no=e.route/16 AND b.transaction_id=e.recorded_transaction_id AND b.principal_kind='account'))`,
+      [row.extension_route, context, row.extension_digest],
+    );
+    if (!eligible.rowCount) return null;
+  }
+  const cached = composed.get(digest);
+  if (cached) return cached;
   const extension =
     extensions.get(row.extension_digest) ??
     (await loadExtension(db, row.extension_route, context, row.extension_digest));
@@ -197,7 +239,10 @@ async function checked(db: Db, context: string, value: unknown): Promise<Extensi
   const base = await activeRelease(db);
   if (!base) throw new DefinitionNotFoundError();
   const sources = await adoptionSources(db, context, value);
-  const violations = validateExtension(value, base.release, { context, sources });
+  const violations = validateExtension(value, base.release, {
+    context,
+    sources,
+  });
   if (violations.length) throw new ExtensionInputError(violations);
   return value as Extension;
 }
@@ -205,7 +250,11 @@ async function checked(db: Db, context: string, value: unknown): Promise<Extensi
 function target(context: string) {
   const route = contextRoute(context);
   if (route === null) throw new DefinitionNotFoundError();
-  return { partition: partitionOf(route), resource: { route, id: context }, route };
+  return {
+    partition: partitionOf(route),
+    resource: { route, id: context },
+    route,
+  };
 }
 
 async function requireContext(tx: CommandTransaction, context: string, route: number): Promise<void> {
@@ -232,20 +281,34 @@ export async function publishExtension(pool: Pool, options: WriteOptions & { con
       });
       return {
         value: { digest, created: rows !== null },
-        events: [{ type: 'com.rezics.definitions.published.v1', subject: options.context, data: { digest } }],
+        events: [
+          {
+            type: 'com.rezics.definitions.published.v1',
+            subject: options.context,
+            data: { digest },
+          },
+        ],
       };
     },
   );
   return {
     ...command.value,
-    component: { partition: command.partition, epoch: command.epoch, position: command.position },
+    component: {
+      partition: command.partition,
+      epoch: command.epoch,
+      position: command.position,
+    },
     replayed: command.replayed,
   };
 }
 
 export async function activateExtension(
   pool: Pool,
-  options: WriteOptions & { context: string; extensionDigest: string; expectedHead: number | null },
+  options: WriteOptions & {
+    context: string;
+    extensionDigest: string;
+    expectedHead: number | null;
+  },
 ) {
   const where = target(options.context);
   const command = await runCommand(
@@ -256,7 +319,11 @@ export async function activateExtension(
       // This runs after command authorization and receipt lookup, even for a malformed digest.
       if (!DIGEST.test(digest)) throw new DefinitionNotFoundError();
       await requireContext(tx, options.context, where.route);
-      const row = await read.run(tx, { route: where.route, context_id: options.context, digest });
+      const row = await read.run(tx, {
+        route: where.route,
+        context_id: options.context,
+        digest,
+      });
       if (!row) throw new DefinitionNotFoundError();
       const prior = await activeExtension(tx, options.context);
       if ((prior?.head ?? 0) !== (options.expectedHead ?? 0)) throw new StaleEditorialHeadError();
@@ -276,13 +343,23 @@ export async function activateExtension(
       const head = rows[0]!.head;
       return {
         value: { digest, head },
-        events: [{ type: 'com.rezics.definitions.activated.v1', subject: options.context, data: { digest, head } }],
+        events: [
+          {
+            type: 'com.rezics.definitions.activated.v1',
+            subject: options.context,
+            data: { digest, head },
+          },
+        ],
       };
     },
   );
   return {
     ...command.value,
-    component: { partition: command.partition, epoch: command.epoch, position: command.position },
+    component: {
+      partition: command.partition,
+      epoch: command.epoch,
+      position: command.position,
+    },
     replayed: command.replayed,
   };
 }

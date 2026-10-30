@@ -43,13 +43,19 @@ explicit platform authority and seed review requirements. Ordinary provider impo
 community and before search. Registration adds one service starter through `WorkContext.addService`. After the
 single DBOS launch, that starter runs the existing `linkProjection` through `startRelays` on the same native worker
 pool, retaining the `semantic_links` consumer, event handling, checkpoints, freshness and relation disclosure.
-The outer worker relay continues to own effects delivery separately.
+The module registers `semantic_erasure` for native tombstones, `semantic_erasure_local` for bounded local
+continuation and `semantic_erasure_locator` for native source delivery. Tombstones synchronize the real agent
+and close the participant fence before discovery. Source-home role locators, payload minimization and permanent
+checkpoints use the same native worker lifecycle. Completed local work stays idle at `pending-shared-custody`;
+missing Accounts receipt/outbox/DBOS custody never authorizes a Semantic ACK. The outer worker relay owns effects
+delivery and the actual locator open-work protocol.
 
 The service returns the actual relay stop handle. Work shutdown stops scheduling and drains in-flight projection
 before SDK, client and pool teardown; a later starter failure also drains this service. Repeated stop and worker
 signals use the existing worker lifecycle. Relay cadence, concurrency and pool-size validation retain their existing
 bounds. Projection cost remains the existing [Links projection write](#links-projection-write) Cost entry.
-This module composes only the native relation projector; it does not supply Source, index or publication factories.
+This module composes the native relation projector, delivered identity workflow and local erasure effects. It
+does not create another process, queue or participant.
 Native registration, convergence and drain evidence lives in `test/semantic/work-module.test.ts`.
 
 ## Subject page feed
@@ -986,9 +992,10 @@ Communal subjects and immutable definition releases are not automatically privat
 Contribution attribution and current community Context resource ownership must establish owner deletion authority.
 
 Implemented behavior includes community Context owner deletion and restoration below, native subject/candidate
-hide, takedown and moderation restore, terminal
-consent-statement retraction, source-fence disclosure, and immediate derived-account-agent name clearing. Name
-clearing removes old labels without retaining name history; it remains a field clear. Native takedown retains
+hide, takedown and moderation restore, terminal consent-statement retraction, source-fence disclosure, immediate
+derived-account-agent name clearing, and the indexed local account erasure runtime in
+[account-erasure-contract.md](account-erasure-contract.md). Agent synchronization alone remains a field clear;
+the default local continuation minimizes actual located source records and preserves pending shared custody. Native takedown retains
 data, but its free-text scope does not implement least-field/passage/image withholding.
 
 Required remaining work: contribution soft deletion with immediate tombstones and suppression, current-owner restore
@@ -996,9 +1003,9 @@ within 30 days without rewinding current adoption/visibility, separate platform 
 automatic minimal personal/private payload purge and account-erasure de-identification. Account confirmation
 is final in first scope: private cleanup starts at the same native T by bounded durable work, without a 30-day
 account grace. The 30-day restore window applies to individually deleted records. Only platform legal-order
-purge can remove retained takedown fields, subject to legal holds. Content owns source fences. No semantic purge job or
-purge bound is implemented. The required job caps examined source keys before filters, commits durable fragment
-checkpoints in one owner partition, and retains nonpersonal identity/decision skeleton. Takedown alone never
+purge can remove retained takedown fields, subject to legal holds. Content owns source fences. Account cleanup uses the bounded local runtime described in the account-erasure contract; individual record
+retention and legal-order purge remain separate work. Its pages cap raw keys before filtering, commit native
+checkpoints with owning mutations, and retain only eligible communal/progress skeletons. Takedown alone never
 creates its deadline. Workflow-history retention does not establish semantic erasure. Public aggregate disclosure follows
 [aggregate-disclosure.md](aggregate-disclosure.md) and its separately owned backend in `links.ts`, `subject.ts` and
 `graph.ts`: omit an unproved number while retaining internal counters. The deletion audit asserts empty inverse
@@ -1014,6 +1021,7 @@ Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP 
 | State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                         |
 | Owned lifecycle and retention | Community Context DELETE/restore is implemented; contribution DELETE/restore, purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.             |
 | Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters. |
+| Community Context deletion, restoration and current disclosure | Context PK/active point and direct current temporal owner-grant probe at native T; ordinary Access/command/receipt/basis/outbox; one Context update for a real transition. Readers probe current Context before cached extension/overlay use. | Constant selected point rows and statements; logarithmic indexed blocks in Context population and subject history, plus existing separately charged Access/command work. No dependent-subject enumeration, history scan, cross-home SQL or cached permission. Delete and restore use the same bounded shape. | `test/semantic/growth-context-lifecycle.test.ts` retains history and population scales 64/512/4096 and all native pool work across delete/restore/Context/definition/overlay reads. Scoped acceptance passed after a normal 60s timeout/cascade and automatic isolated 2/8352 scoped pass. Raw all-scale cost evidence was not independently recovered in review, so this row does not certify physical all-Cost, retention/account cleanup or main closure. `context-lifecycle.test.ts` preserves settings/extensions/current decisions; `context-lifecycle-command.test.ts` adds receipt/noEffect/rollback/denial/state/time controls. |
 
 ### Community Context lifecycle
 
@@ -1052,14 +1060,72 @@ counter is rewound. Ordinary DELETE retains native rows and payload. This capabi
 account-terminal cleanup, legal hold commands or takedown deadline. Future retention must remove minimal personal
 or private fields and preserve the nonpersonal identity skeleton unless that skeleton is itself private.
 
-- Touches: Context PK/active index and one direct temporal owner-grant probe on the prepared native client;
-  the ordinary Access evidence/command fence, receipt, basis and outbox; one Context update on a real transition.
-  Readers perform selected Context point checks before current cached extension or overlay selection.
-- Bound: constant point rows and statements per command/read, logarithmic B-tree blocks in Context population or
-  subject history. No dependent-subject enumeration, adoption-history scan, fanout write, cross-home SQL join or
-  source-local permission cache. Restore costs the same bounded point work as delete.
-- Growth check: `test/semantic/growth-context-lifecycle.test.ts` captures every native pool statement across delete,
-  restore, Context/definition and subject-overlay reads at 64/512/4096 history and population scales. Rows and
-  statements remain constant and blocks logarithmic with the ordinary planner, scale and deadline settings.
-  `context-lifecycle.test.ts` preserves the original settings/extensions/decision contracts;
-  `context-lifecycle-command.test.ts` adds receipt/noEffect, rollback, inert denial and state/time evidence.
+The bounded lifecycle derivation and evidence qualifications are recorded in the Community Context deletion,
+restoration and current disclosure row of the [Cost table](#cost).
+
+## Cost: Zone account-owner fence
+
+### Zone read and mutation owner fence
+
+- Touches: after the exact Zone head lookup, read the current owner through the Access account primary key
+  `(routeOf(owner_id), owner_id)`. The native account state and `fenced` bit are checked in the same database
+  transaction as the Zone visibility decision or mutation. A missing owner fails closed. No owner, role, subject,
+  history, or account-wide scan is used.
+- Bound: at most two exact account point statements per Zone metadata/configuration/page read (eligibility plus the
+  response guard) and one per mutation; constant rows and statements, O(log A + log Z) B-tree blocks where A is
+  Accounts history and Z is Zone data. Zone-owned list already checks the requesting account once for the whole
+  page and does not add a per-row owner lookup.
+- Growth check: `test/zones/resource-growth.test.ts`: `Zone resource point metadata and bounded owned keys retain native growth bounds`, scales `[64, 512, 4096]`; native T behavior is covered by
+  `test/zones/account-erasure-user-cases.test.ts`.
+
+### Community Context current-owner fence
+
+- Touches: a community Context read seeks the native resource-owner grant prefix and its exact current Access
+  account records. A transferred Context follows its surviving current owner, independently of minimized former
+  creator provenance. Global Context reads add no statement.
+- Bound: a resource/role-prefixed owner probe and one returned owner account point, with logarithmic indexed
+  access; ownership membership remains governed by native Access grants.
+- Growth check: `test/semantic/growth-context-lifecycle.test.ts`: `Context native delete restore and current overlay disclosure stay bounded without scanning dependents`, scales `[64, 512, 4096]`; native account T behavior is covered by
+  `test/semantic/account-erasure-user-cases.test.ts`.
+
+## Cost: Semantic account tombstone effect
+
+### Existing account-agent identity cleanup
+
+- Touches: one exact Access account/agent source read and, when a derived Semantic agent exists, the existing
+  account-agent subject/backlink keys and a single local label revision. Verified identities continue through the
+  existing bounded reversal workflow; unrelated Semantic subjects are not enumerated.
+- Bound: constant point reads and writes for an ordinary unverified account agent. Verified reversal retains the
+  existing paged inbound-link bound; this effect adds no account-wide or subject-wide scan and makes no claim about
+  all-role erasure or shared custody.
+- Growth check: `test/semantic/agent-verification-reversal.test.ts`: `verification reversal growth stays flat across survivor in-degree`, scales `[64, 512, 4096]`; registration is covered by
+  `test/semantic/work-module.test.ts`.
+
+## Cost: Semantic candidate owner fence
+
+### Candidate page and disclosure owner checks
+
+- Touches: one bounded batch joining each returned proposal candidate to its exact revision transaction, editorial
+  principal and Access account primary key; direct Content disclosure checks use the same exact candidate and owner
+  evidence. Missing owner evidence fails closed on candidate pages.
+- Bound: one additional statement for a candidate page with at most the requested page size plus one indexed
+  transaction and account join per candidate; one additional indexed join for a point disclosure read. Rows are
+  O(page size), independent of unrelated subjects and account count. No subject or history sweep is used.
+- Growth check: `test/semantic/account-erasure-user-cases.test.ts`: `native T fences a live moderator private candidate overlay while retaining the communal subject` and
+  `native T fences disclosed personal consent at the Semantic source before consumer catchup`.
+
+## Cost: indexed local account erasure
+
+- Touches: actual source/provenance transaction joins and same-home keyed role locators; one pending locator and
+  exact owning row per continuation, followed by released-home account progress. The registered locator effect
+  uses the actual participant fence, late-item and open-work protocols. No account-wide graph or payload scan.
+- Bound: one pending locator, one unsettled receipt and at most one exact Context child key, or one empty routing-home key; all count within native ceilings of 100 raw keys, 64 KiB returned and 1 KiB per locator;
+  fixed 4096-home routing discovery plus work proportional to this account's source records. Permanent applicability,
+  per-home receipts and delivery cursors survive process loss and workflow replay. Native growth captures all SQL
+  and pools. The default account-and-T workflow uses one persisted DBOS step per native page on the existing
+  effects queue and partition key; no queue settings change or nested page loop is involved. Its actual workflow
+  ID remains a pending shared-copy locator in native progress. Pending shared custody is observable and idle,
+  and never authorizes a Semantic ACK.
+- Growth check: `test/semantic/growth-account-erasure-local.test.ts` and
+  `test/semantic/account-erasure-local-runtime.test.ts`; default composition is covered by `work-module.test.ts`.
+  The owning contract retains historical-coverage, full shared-custody and final-ACK launch requirements.

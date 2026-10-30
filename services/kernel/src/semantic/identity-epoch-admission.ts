@@ -13,6 +13,7 @@ import sourcePoints from './identity-epoch-read-sources.sql';
 import handoff from './identity-epoch-admission-handoff.sql';
 import inputs from './identity-epoch-admission-inputs.sql';
 import holdSource from './identity-epoch-admission-hold-source.sql';
+import { identityErasureRoles, bindSemanticProducerRoles } from './erasure-producer.ts';
 import waiters from './identity-epoch-admission-waiters.sql';
 import insertJob from './identity-epoch-admission-insert-job.sql';
 import insertBases from './identity-epoch-admission-insert-bases.sql';
@@ -518,6 +519,7 @@ async function deliverHome(
   stage: 'acquired' | 'closed',
   measured?: Work,
 ) {
+  const roles = await identityErasureRoles(pool, ref.jobId);
   try {
     if (stage === 'acquired') {
       const retained = await load(pool, ref, measured);
@@ -563,6 +565,7 @@ async function deliverHome(
       });
     }
     await runCommand(pool, { partition: home }, async (tx) => {
+      bindSemanticProducerRoles(tx, roles);
       await measuredQuery(tx, selectControl.sql, [home], measured);
       // Acquire always checks the irreversible local fence, even after an earlier successful receipt.
       if (stage === 'acquired')

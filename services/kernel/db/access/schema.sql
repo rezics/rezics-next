@@ -2393,6 +2393,13 @@ CREATE TRIGGER rating_controller AFTER INSERT OR UPDATE OF operator_account_id O
 
 
 --
+-- Name: resource_role_grant semantic_resource_role_erasure; Type: TRIGGER; Schema: access; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER semantic_resource_role_erasure AFTER INSERT OR UPDATE ON access.resource_role_grant DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_resource_role_erasure();
+
+
+--
 -- Name: workflow_approval workflow_approval_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 

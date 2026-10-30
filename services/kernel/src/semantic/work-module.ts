@@ -14,6 +14,28 @@ import { stepIdentityEpochAdmission, wakeIdentityEpochAdmissionWaiters } from '.
 import { runCommand } from '../command/command.ts';
 import { linkProjection } from './links.ts';
 import { installIdentityEpochBootstrap } from './identity-epoch-bootstrap-install.ts';
+import { synchronizeAccountAgent } from '../access/account-agent-effect.ts';
+import type { CloudEvent } from '../events/log.ts';
+import { beginSemanticErasure, createSemanticLocatorEffect, SEMANTIC_ERASURE_SCHEDULED } from './account-erasure.ts';
+import { registerSemanticErasureWork } from './account-erasure-work.ts';
+
+const ACCOUNT_TOMBSTONED = 'com.rezics.access.account-tombstoned.v1';
+
+/** Synchronize the account-agent label and close the real local participant fence from the native tombstone.
+ * The scheduled local workflow performs owned cleanup; shared custody and final acknowledgement remain separate.
+ */
+export function createSemanticErasureEffect(pool: Parameters<typeof synchronizeAccountAgent>[0]) {
+  return {
+    name: 'semantic_erasure',
+    types: [ACCOUNT_TOMBSTONED],
+    async run(event: CloudEvent) {
+      const accountId = (event.data as { accountId?: unknown } | null)?.accountId;
+      if (typeof accountId !== 'string') throw new TypeError('Invalid account tombstone event');
+      await synchronizeAccountAgent(pool, accountId);
+      await beginSemanticErasure(pool, accountId);
+    },
+  };
+}
 
 /** Native relation projection shares the worker pool and registered service lifecycle. */
 export const semanticWorkModule: WorkModule = {
@@ -21,7 +43,18 @@ export const semanticWorkModule: WorkModule = {
   async register(context) {
     // Establish the writer cut before DBOS can resume an old bootstrap delivery.
     await installIdentityEpochBootstrap(context.pool);
+    const scheduleErasure = registerSemanticErasureWork(context);
     context.addEffects([
+      createSemanticErasureEffect(context.pool),
+      createSemanticLocatorEffect(context.pool),
+      {
+        name: 'semantic_erasure_local',
+        types: [SEMANTIC_ERASURE_SCHEDULED],
+        async run(event) {
+          const accountId = (event.data as { accountId: string }).accountId;
+          await scheduleErasure(accountId);
+        },
+      },
       {
         name: 'identity_epoch_admission_wake',
         types: [IDENTITY_EPOCH_HOME_AVAILABLE],

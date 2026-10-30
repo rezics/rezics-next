@@ -30,6 +30,7 @@ import {
   insertZone,
   lockZoneHead,
   readZoneHead,
+  zoneOwnerIsActive,
   type ZoneHead,
 } from './resource-store.ts';
 
@@ -286,6 +287,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
         async (tx, command) => {
           const row = await lockZoneHead(tx, resource.route, id);
           if (!row || row.state === 'purged') throw new ProblemError('not_found');
+          if (!(await zoneOwnerIsActive(tx, row))) throw new ProblemError('not_found');
           if (row.revision !== expected) throw new ProblemError('precondition_failed');
           if (row.writeFenced || !row.configuration || !row.mounts) throw new ProblemError('conflict');
           const configuration = prepared.prepared(currentCommand(tx));

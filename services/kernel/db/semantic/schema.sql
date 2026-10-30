@@ -110,6 +110,482 @@ END; $$;
 
 
 --
+-- Name: capture_acceptance_current_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_acceptance_current_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'acceptance_current',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_acceptance_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_acceptance_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'acceptance',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_account_agent_moved_link_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_account_agent_moved_link_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'account_agent_moved_link',NEW.erasure_key,native_tx);
+ PERFORM semantic.record_erasure_locator(NEW.route/16,NEW.account_id,'subject','account_agent_moved_link',NEW.erasure_key,native_tx,NULL);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_account_agent_subject_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_account_agent_subject_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'account_agent_subject',NEW.erasure_key,native_tx);
+ PERFORM semantic.record_erasure_locator(NEW.route/16,NEW.account_id,'subject','account_agent_subject',NEW.erasure_key,native_tx,NULL);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_adoption_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_adoption_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'adoption',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_candidate_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_candidate_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'candidate',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_context_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_context_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'context',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_context_extension_activation_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_context_extension_activation_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'context_extension_activation',NEW.erasure_key,native_tx);
+ SELECT recorded_transaction_id INTO native_tx FROM semantic.context_extension WHERE route=NEW.route AND context_id=NEW.context_id AND digest=NEW.digest;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'context_extension_activation',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_context_extension_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_context_extension_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'context_extension',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_copy_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_copy_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r record; existing_key bigint;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ -- BEFORE INSERT also runs for ON CONFLICT. Use the exact receiving native key, never the discarded sequence value.
+ IF TG_OP='INSERT' THEN
+  IF TG_TABLE_NAME='inbound_link' THEN
+   SELECT erasure_key INTO existing_key FROM semantic.inbound_link x WHERE x.route=NEW.route AND x.subject_id=NEW.subject_id
+    AND x.context_id=NEW.context_id AND x.property=NEW.property AND x.source_subject_id=NEW.source_subject_id
+    AND x.statement_id=NEW.statement_id AND x.filter_value=NEW.filter_value;
+  ELSE
+   SELECT erasure_key INTO existing_key FROM semantic.outbound_link x WHERE x.route=NEW.route AND x.subject_id=NEW.subject_id
+    AND x.context_id=NEW.context_id AND x.property=NEW.property AND x.statement_id=NEW.statement_id AND x.filter_value=NEW.filter_value AND x.order_key=NEW.order_key AND x.target_subject_id=NEW.target_subject_id;
+  END IF;
+  IF existing_key IS NOT NULL THEN NEW.erasure_key:=existing_key; END IF;
+ END IF;
+ FOR r IN SELECT * FROM jsonb_to_recordset(NEW.erasure_roles) AS x(account_id uuid,role text) LOOP
+  INSERT INTO semantic.erasure_copy_role(partition_no,store,record_key,transaction_id,account_id,role) VALUES(NEW.route/16,TG_TABLE_NAME,NEW.erasure_key,NEW.recorded_transaction_id,r.account_id,r.role) ON CONFLICT DO NOTHING;
+ END LOOP;
+ NEW.erasure_roles:='[]';
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_definition_activation_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_definition_activation_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'definition_activation',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_definition_release_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_definition_release_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'definition_release',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_erasure_roles(integer, text, bigint, uuid); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_erasure_roles(p_home integer, p_store text, p_key bigint, p_tx uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $_$
+DECLARE b editorial.write_basis; provenance_key bigint; r record; native_position bigint; acting_human uuid;
+BEGIN
+ SELECT position INTO native_position FROM core.partition WHERE partition_no=p_home;
+ FOR r IN SELECT account_id,role FROM semantic.erasure_copy_role
+   WHERE partition_no=p_home AND store=p_store AND record_key=p_key AND transaction_id=p_tx LOOP
+  PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,p_tx,native_position);
+ END LOOP;
+ FOR r IN SELECT transaction_id,account_id,role FROM semantic.erasure_source_role
+   WHERE partition_no=p_home AND transaction_id IN (p_tx,nullif(current_setting('semantic.erasure_native_transaction',true),'')::uuid) LOOP
+  PERFORM semantic.record_erasure_locator(p_home,r.account_id,r.role,p_store,p_key,r.transaction_id,native_position);
+ END LOOP;
+ SELECT * INTO b FROM editorial.write_basis WHERE partition_no=p_home AND transaction_id=p_tx;
+ IF NOT FOUND THEN RETURN; END IF;
+ INSERT INTO semantic.erasure_provenance(partition_no,transaction_id) VALUES(p_home,p_tx)
+ ON CONFLICT(partition_no,transaction_id) DO UPDATE SET transaction_id=EXCLUDED.transaction_id
+ RETURNING record_key INTO provenance_key;
+ IF b.principal_kind='account' THEN
+  PERFORM semantic.record_erasure_locator(p_home,b.principal_id,'actor',p_store,p_key,p_tx,b.position);
+  PERFORM semantic.record_erasure_locator(p_home,b.principal_id,'actor','write_basis',provenance_key,p_tx,b.position);
+ END IF;
+ IF b.requested_by ~ '^urn:rezics:request:[0-9a-f-]{36}:[0-9a-f-]{36}$' THEN
+  acting_human:=split_part(b.requested_by,':',4)::uuid;
+  PERFORM semantic.record_erasure_locator(p_home,acting_human,'acting-human',p_store,p_key,p_tx,b.position);
+  PERFORM semantic.record_erasure_locator(p_home,acting_human,'acting-human','write_basis',provenance_key,p_tx,b.position);
+  PERFORM semantic.record_erasure_locator(p_home,b.principal_id,'delegate',p_store,p_key,p_tx,b.position);
+ END IF;
+END; $_$;
+
+
+--
+-- Name: capture_external_claim_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_external_claim_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'external_claim',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_fact_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_fact_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'fact',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_hidden_candidate_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_hidden_candidate_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.moderation WHERE route=NEW.route AND subject_id=NEW.subject_id AND security_revision=NEW.security_revision);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'hidden_candidate',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_ack_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_ack_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_ack',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_admission_attempt_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_admission_attempt_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_admission_attempt',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_admission_plan_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_admission_plan_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_admission_plan',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_admission_receipt_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_admission_receipt_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_admission_receipt',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_admission_source_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_admission_source_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'identity_epoch_admission_source',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_change_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_change_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_change',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_effect_receipt_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_effect_receipt_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_effect_receipt',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_home_gate_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_home_gate_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'identity_epoch_home_gate',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_input_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_input_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_input',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_job_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_job_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_job',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: capture_identity_epoch_key(integer, uuid); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -126,6 +602,23 @@ BEGIN
  INSERT INTO semantic.identity_epoch_dirty(route,original) VALUES(r,id)
  ON CONFLICT(route,original) DO UPDATE SET revision=semantic.identity_epoch_dirty.revision+1;
  UPDATE semantic.identity_epoch_group SET ready=false,version=version+1 WHERE partition_no=r/16 AND terminal=id AND pending_job IS NULL;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_mapping_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_mapping_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'identity_epoch_mapping',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
 END; $$;
 
 
@@ -154,6 +647,229 @@ BEGIN
     IF TG_OP IN ('UPDATE','INSERT') THEN PERFORM semantic.capture_identity_epoch_key(NEW.route,NEW.subject_id); END IF;
   END IF;
   IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+END; $$;
+
+
+--
+-- Name: capture_identity_epoch_step_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_identity_epoch_step_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.identity_epoch_job WHERE partition_no=NEW.partition_no AND job_id=NEW.job_id);
+ PERFORM semantic.capture_erasure_roles(NEW.partition_no,'identity_epoch_step',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_inbound_link_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_inbound_link_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'inbound_link',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_moderation_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_moderation_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'moderation',NEW.erasure_key,native_tx);
+ PERFORM semantic.record_erasure_locator(NEW.route/16,NEW.actor,'operator','moderation',NEW.erasure_key,native_tx,NULL);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_outbound_link_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_outbound_link_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'outbound_link',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_redirect_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_redirect_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'redirect',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_release_composite_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_release_composite_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ SELECT recorded_transaction_id INTO native_tx FROM semantic.context_extension
+ WHERE route=NEW.extension_route AND context_id=NEW.extension_context_id AND digest=NEW.extension_digest;
+ PERFORM semantic.capture_erasure_roles(NEW.extension_route/16,'release_composite',NEW.erasure_key,native_tx);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_resource_role_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_resource_role_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE k bigint;
+BEGIN
+ IF NEW.subject_kind<>'identity' OR NEW.grant_role NOT IN ('semantic.context.owner','semantic.zone.owner') THEN RETURN NEW; END IF;
+ IF NEW.grant_role='semantic.context.owner' THEN
+  SELECT erasure_key INTO k FROM semantic.context WHERE route=NEW.route AND context_id=NEW.resource_id;
+  IF k IS NOT NULL THEN PERFORM semantic.record_erasure_locator(NEW.route/16,NEW.subject_id,'owner','context',k,NEW.transaction_id,NULL); END IF;
+ ELSE
+  SELECT erasure_key INTO k FROM zones.zone WHERE route=NEW.route AND zone_id=NEW.resource_id;
+  IF k IS NOT NULL THEN PERFORM semantic.record_erasure_locator(NEW.route/16,NEW.subject_id,'owner','zone',k,NEW.transaction_id,NULL); END IF;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_retraction_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_retraction_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT recorded_transaction_id FROM semantic.revision WHERE route=NEW.route AND subject_id=NEW.subject_id AND revision=NEW.revision);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'retraction',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_revision_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_revision_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'revision',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_source_candidate_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_source_candidate_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT r.recorded_transaction_id FROM semantic.candidate c JOIN semantic.revision r USING(route,subject_id,revision) WHERE c.route=NEW.route AND c.subject_id=NEW.subject_id AND c.candidate_id=NEW.candidate_id);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'source_candidate',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_statement_disclosure_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_statement_disclosure_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=(SELECT r.recorded_transaction_id FROM semantic.candidate c JOIN semantic.revision r USING(route,subject_id,revision) WHERE c.route=NEW.route AND c.subject_id=NEW.subject_id AND c.candidate_id=NEW.candidate_id);
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'statement_disclosure',NEW.erasure_key,native_tx);
+ PERFORM semantic.record_erasure_locator(NEW.route/16,NEW.account_id,'subject','statement_disclosure',NEW.erasure_key,native_tx,NULL);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_subject_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_subject_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_tx uuid;
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ native_tx:=NEW.recorded_transaction_id;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'subject',NEW.erasure_key,native_tx);
+ 
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_zone_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_zone_erasure() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN NEW; END IF;
+ PERFORM semantic.capture_erasure_roles(NEW.route/16,'zone',NEW.erasure_key,NEW.transaction_id);
+ PERFORM semantic.record_erasure_locator(NEW.route/16,NEW.owner_id,'owner','zone',NEW.erasure_key,NEW.transaction_id,NULL);
+ RETURN NEW;
 END; $$;
 
 
@@ -254,6 +970,20 @@ BEGIN
   ) THEN RAISE EXCEPTION 'identity_epoch_birth_custody_required'; END IF;
   RETURN NEW;
 END; $$;
+
+
+--
+-- Name: erasure_mutation_allowed(text, integer, bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.erasure_mutation_allowed(p_store text, p_route integer, p_key bigint) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+ SELECT current_setting('semantic.erasure_cleanup',true)='on' AND EXISTS (
+ SELECT 1 FROM semantic.erasure_locator l JOIN semantic.erasure_home h USING(partition_no,account_id)
+ WHERE l.partition_no=p_route/16 AND l.account_id=nullif(current_setting('semantic.erasure_account',true),'')::uuid
+ AND l.store=p_store AND l.record_key=p_key AND l.state='pending' AND h.state='local')
+$$;
 
 
 --
@@ -393,6 +1123,11 @@ CREATE FUNCTION semantic.prevent_fact_mutation() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP IN ('UPDATE','DELETE') AND semantic.erasure_mutation_allowed(TG_TABLE_NAME,coalesce((to_jsonb(OLD)->>'route')::integer,(to_jsonb(OLD)->>'partition_no')::integer*16),(to_jsonb(OLD)->>'erasure_key')::bigint) THEN
+    IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+    IF TG_OP='UPDATE' AND NEW.operation='retract' AND NEW.body='{}'::jsonb AND NEW.release IS NULL
+      AND (to_jsonb(NEW)-ARRAY['operation','body','release'])=(to_jsonb(OLD)-ARRAY['operation','body','release']) THEN RETURN NEW; END IF;
+  END IF;
   -- Only the derived account node's display label is erasable personal data.
   IF TG_OP = 'DELETE' AND OLD.kind = 'label' AND EXISTS (
     SELECT 1 FROM semantic.account_agent_subject account
@@ -411,7 +1146,11 @@ $$;
 
 CREATE FUNCTION semantic.prevent_moderation_mutation() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$ BEGIN RAISE EXCEPTION 'Semantic moderation records are immutable' USING ERRCODE = '23514'; END; $$;
+    AS $$ BEGIN
+  IF TG_OP IN ('UPDATE','DELETE') AND semantic.erasure_mutation_allowed(TG_TABLE_NAME,coalesce((to_jsonb(OLD)->>'route')::integer,(to_jsonb(OLD)->>'partition_no')::integer*16),(to_jsonb(OLD)->>'erasure_key')::bigint) THEN
+    IF TG_OP='UPDATE' AND NEW.body='{}'::jsonb AND NEW.actor IS NULL
+     AND (to_jsonb(NEW)-ARRAY['body','actor'])=(to_jsonb(OLD)-ARRAY['body','actor']) THEN RETURN NEW; END IF;
+  END IF; RAISE EXCEPTION 'Semantic moderation records are immutable' USING ERRCODE = '23514'; END; $$;
 
 
 --
@@ -446,7 +1185,16 @@ CREATE FUNCTION semantic.prevent_redirect_mutation() RETURNS trigger
 
 CREATE FUNCTION semantic.prevent_revision_mutation() RETURNS trigger
     LANGUAGE plpgsql
-    AS $$ BEGIN RAISE EXCEPTION 'Semantic revisions are immutable' USING ERRCODE = '23514'; END; $$;
+    AS $$ BEGIN
+  IF TG_OP IN ('UPDATE','DELETE') AND semantic.erasure_mutation_allowed(TG_TABLE_NAME,coalesce((to_jsonb(OLD)->>'route')::integer,(to_jsonb(OLD)->>'partition_no')::integer*16),(to_jsonb(OLD)->>'erasure_key')::bigint) THEN
+    IF TG_OP='DELETE' AND TG_TABLE_NAME IN ('external_claim','acceptance') THEN RETURN OLD; END IF;
+    IF TG_OP='UPDATE' AND (
+      (TG_TABLE_NAME='candidate' AND to_jsonb(NEW)->'statement'='{}'::jsonb AND (to_jsonb(NEW)-ARRAY['statement','erasure_private'])=(to_jsonb(OLD)-ARRAY['statement','erasure_private']) AND to_jsonb(NEW)->'erasure_private'='true'::jsonb)
+      OR (TG_TABLE_NAME='revision' AND to_jsonb(NEW)->'source'='null'::jsonb AND to_jsonb(NEW)->'verification_receipt_id'='null'::jsonb AND to_jsonb(NEW)->'revocation_receipt_id'='null'::jsonb AND (to_jsonb(NEW)-ARRAY['source','verification_receipt_id','revocation_receipt_id'])=(to_jsonb(OLD)-ARRAY['source','verification_receipt_id','revocation_receipt_id']))
+      OR (TG_TABLE_NAME='retraction' AND to_jsonb(NEW)->'references'='[]'::jsonb AND (to_jsonb(NEW)-'references')=(to_jsonb(OLD)-'references'))
+      OR (TG_TABLE_NAME='adoption' AND to_jsonb(NEW)->'selection'='[]'::jsonb AND to_jsonb(NEW)->>'mode'='suppress' AND (to_jsonb(NEW)-ARRAY['selection','mode'])=(to_jsonb(OLD)-ARRAY['selection','mode']))
+    ) THEN RETURN NEW; END IF;
+  END IF; RAISE EXCEPTION 'Semantic revisions are immutable' USING ERRCODE = '23514'; END; $$;
 
 
 --
@@ -457,11 +1205,15 @@ CREATE FUNCTION semantic.protect_identity_epoch_job() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Identity job intent and receipts are immutable' USING ERRCODE='23514'; END IF;
-  IF (to_jsonb(NEW)-'state') IS DISTINCT FROM (to_jsonb(OLD)-'state') OR OLD.state='published' THEN
-    RAISE EXCEPTION 'Identity job intent and receipts are immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
+ IF TG_OP='UPDATE' AND semantic.erasure_mutation_allowed('identity_epoch_job',OLD.partition_no*16,OLD.erasure_key)
+   AND NEW.receipt='{"kind":"erased"}'::jsonb AND NEW.receipt_key='erased:'||OLD.job_id::text
+   AND NEW.intent=(OLD.intent-'verificationReceipt')
+   AND (to_jsonb(NEW)-ARRAY['intent','receipt','receipt_key'])=(to_jsonb(OLD)-ARRAY['intent','receipt','receipt_key']) THEN RETURN NEW; END IF;
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Identity job intent and receipts are immutable' USING ERRCODE='23514'; END IF;
+ IF (to_jsonb(NEW)-'state') IS DISTINCT FROM (to_jsonb(OLD)-'state') OR OLD.state='published' THEN
+  RAISE EXCEPTION 'Identity job intent and receipts are immutable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
 END; $$;
 
 
@@ -526,6 +1278,44 @@ BEGIN
 END; $$;
 
 
+
+
+--
+-- Name: record_erasure_locator(integer, uuid, text, text, bigint, uuid, bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.record_erasure_locator(p_home integer, p_account uuid, p_role text, p_store text, p_key bigint, p_tx uuid, p_position bigint) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE delivery bigint; is_global boolean:=false;
+BEGIN
+ SELECT position INTO delivery FROM core.partition WHERE partition_no=p_home;
+ IF p_position IS NULL THEN SELECT position INTO p_position FROM core.partition WHERE partition_no=p_home; END IF;
+ IF p_store='outbound_link' THEN SELECT context_id='00000000-0000-8000-8000-000000000000' INTO is_global FROM semantic.outbound_link WHERE route BETWEEN p_home*16 AND p_home*16+15 AND erasure_key=p_key;
+ ELSIF p_store='inbound_link' THEN SELECT context_id='00000000-0000-8000-8000-000000000000' INTO is_global FROM semantic.inbound_link WHERE route BETWEEN p_home*16 AND p_home*16+15 AND erasure_key=p_key; END IF;
+ IF p_account IS NULL OR p_account='00000000-0000-0000-0000-000000000000' OR p_account='00000000-0000-8000-8000-000000000001' THEN RETURN; END IF;
+ INSERT INTO semantic.erasure_locator(partition_no,account_id,role,store,record_key,source_transaction_id,source_position,delivery_position,projection_global)
+ VALUES(p_home,p_account,p_role,p_store,p_key,p_tx,p_position,delivery,coalesce(is_global,false))
+ ON CONFLICT(partition_no,account_id,role,store,record_key) DO UPDATE
+ SET source_transaction_id=EXCLUDED.source_transaction_id,source_position=EXCLUDED.source_position,delivery_position=EXCLUDED.delivery_position,
+ state=CASE WHEN semantic.erasure_locator.delivery_position IS DISTINCT FROM EXCLUDED.delivery_position THEN 'pending' ELSE semantic.erasure_locator.state END;
+ -- A new native local obligation invalidates a previously empty local page. Late resolution uses the account-home inbox.
+ UPDATE semantic.erasure_home SET state='local' WHERE partition_no=p_home AND account_id=p_account AND state='complete' AND EXISTS (SELECT 1 FROM semantic.erasure_locator l WHERE l.partition_no=p_home AND l.account_id=p_account AND l.role=p_role AND l.store=p_store AND l.record_key=p_key AND l.state='pending');
+END; $$;
+
+
+--
+-- Name: erasure_record_key; Type: SEQUENCE; Schema: semantic; Owner: -
+--
+
+CREATE SEQUENCE semantic.erasure_record_key
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -542,6 +1332,7 @@ CREATE TABLE semantic.acceptance (
     head integer NOT NULL,
     verdict text NOT NULL,
     revision integer NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT acceptance_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT acceptance_head_check CHECK ((head >= 1)),
     CONSTRAINT acceptance_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -562,6 +1353,7 @@ CREATE TABLE semantic.acceptance_current (
     head integer NOT NULL,
     verdict text NOT NULL,
     revision integer NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT acceptance_current_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT acceptance_current_head_check CHECK ((head >= 1)),
     CONSTRAINT acceptance_current_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -591,6 +1383,7 @@ CREATE TABLE semantic.account_agent_moved_link (
     order_key text,
     reversal_prepared boolean DEFAULT false NOT NULL,
     reversed boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT account_agent_moved_link_receipt_check CHECK (((length(receipt_id) >= 1) AND (length(receipt_id) <= 255)))
 );
 
@@ -607,6 +1400,7 @@ CREATE TABLE semantic.account_agent_subject (
     agent_id uuid NOT NULL,
     verified boolean DEFAULT false NOT NULL,
     receipt_id text,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT account_agent_subject_account_route_check CHECK ((account_route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT account_agent_subject_receipt_check CHECK (((verified AND (receipt_id IS NOT NULL) AND ((length(receipt_id) >= 1) AND (length(receipt_id) <= 255))) OR ((NOT verified) AND (receipt_id IS NULL)))),
     CONSTRAINT account_agent_subject_route_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))))
@@ -626,6 +1420,7 @@ CREATE TABLE semantic.adoption (
     mode text NOT NULL,
     selection jsonb NOT NULL,
     revision integer NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT adoption_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT adoption_head_check CHECK ((head >= 1)),
     CONSTRAINT adoption_mode_check CHECK ((mode = ANY (ARRAY['inherit'::text, 'replace'::text, 'suppress'::text]))),
@@ -655,6 +1450,8 @@ CREATE TABLE semantic.candidate (
     origin text NOT NULL,
     view_order integer DEFAULT 0 NOT NULL,
     relation boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    erasure_private boolean DEFAULT false NOT NULL,
     CONSTRAINT candidate_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT candidate_check1 CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
     CONSTRAINT candidate_origin_check CHECK ((origin = ANY (ARRAY['compact'::text, 'proposal'::text]))),
@@ -684,6 +1481,7 @@ CREATE TABLE semantic.context (
     purge_after timestamp with time zone,
     security_revision bigint DEFAULT 0 NOT NULL,
     held boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT context_check CHECK ((route = ((get_byte(uuid_send(context_id), 10) * 256) + get_byte(uuid_send(context_id), 11)))),
     CONSTRAINT context_defaults_check CHECK (((jsonb_typeof(defaults) = 'object'::text) AND (NOT jsonb_path_exists(defaults, '$.*?(@ != "inherit" && @ != "suppress")'::jsonpath)))),
     CONSTRAINT context_global_active CHECK (((kind <> 'global'::text) OR (state = 'active'::text))),
@@ -709,6 +1507,7 @@ CREATE TABLE semantic.context_extension (
     digest text NOT NULL,
     body jsonb NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT context_extension_check CHECK ((route = ((get_byte(uuid_send(context_id), 10) * 256) + get_byte(uuid_send(context_id), 11)))),
     CONSTRAINT context_extension_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT context_extension_route_check CHECK (((route >= 0) AND (route <= 65535)))
@@ -725,6 +1524,7 @@ CREATE TABLE semantic.context_extension_activation (
     head integer NOT NULL,
     digest text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT context_extension_activation_head_check CHECK ((head >= 1)),
     CONSTRAINT context_extension_activation_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
@@ -739,6 +1539,7 @@ CREATE TABLE semantic.definition_activation (
     head integer NOT NULL,
     digest text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT definition_activation_head_check CHECK ((head >= 1)),
     CONSTRAINT definition_activation_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
@@ -753,8 +1554,182 @@ CREATE TABLE semantic.definition_release (
     digest text NOT NULL,
     body jsonb NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT definition_release_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT definition_release_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: erasure_copy_role; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_copy_role (
+    partition_no integer NOT NULL,
+    store text NOT NULL,
+    record_key bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    role text NOT NULL
+);
+
+
+--
+-- Name: erasure_delivery; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_delivery (
+    partition_no integer NOT NULL,
+    source_position bigint NOT NULL,
+    after_store text DEFAULT ''::text NOT NULL,
+    after_key bigint DEFAULT 0 NOT NULL,
+    after_account uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    after_role text DEFAULT ''::text NOT NULL,
+    complete boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: erasure_fence; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_fence (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    at timestamp with time zone
+);
+
+
+--
+-- Name: erasure_home; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_home (
+    partition_no integer NOT NULL,
+    account_id uuid NOT NULL,
+    at timestamp with time zone NOT NULL,
+    state text DEFAULT 'local'::text NOT NULL,
+    applied boolean DEFAULT false NOT NULL,
+    CONSTRAINT erasure_home_state_check CHECK ((state = ANY (ARRAY['local'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: erasure_inbox; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_inbox (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    source_partition integer NOT NULL,
+    store text NOT NULL,
+    record_key bigint NOT NULL,
+    role text NOT NULL,
+    delivery_position bigint NOT NULL,
+    late boolean NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    CONSTRAINT erasure_inbox_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'minimized'::text, 'resolved'::text])))
+);
+
+
+--
+-- Name: erasure_locator; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_locator (
+    partition_no integer NOT NULL,
+    account_id uuid NOT NULL,
+    role text NOT NULL,
+    store text NOT NULL,
+    record_key bigint NOT NULL,
+    source_transaction_id uuid,
+    source_position bigint,
+    delivery_position bigint NOT NULL,
+    projection_global boolean DEFAULT false NOT NULL,
+    priority smallint GENERATED ALWAYS AS (
+CASE
+    WHEN projection_global THEN 1
+    ELSE
+    CASE store
+        WHEN 'inbound_link'::text THEN 0
+        WHEN 'outbound_link'::text THEN 0
+        WHEN 'source_candidate'::text THEN 0
+        WHEN 'external_claim'::text THEN 0
+        WHEN 'acceptance'::text THEN 0
+        WHEN 'acceptance_current'::text THEN '-1'::integer
+        WHEN 'retraction'::text THEN 0
+        WHEN 'statement_disclosure'::text THEN 0
+        WHEN 'release_composite'::text THEN 0
+        WHEN 'context_extension_activation'::text THEN 0
+        WHEN 'context_extension'::text THEN 1
+        WHEN 'fact'::text THEN 2
+        WHEN 'candidate'::text THEN 3
+        WHEN 'account_agent_subject'::text THEN 7
+        WHEN 'revision'::text THEN 8
+        WHEN 'write_basis'::text THEN 9
+        ELSE 4
+    END
+END) STORED,
+    state text DEFAULT 'pending'::text NOT NULL,
+    CONSTRAINT erasure_locator_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT erasure_locator_role_check CHECK ((role = ANY (ARRAY['actor'::text, 'author'::text, 'editor'::text, 'acting-human'::text, 'delegate'::text, 'owner'::text, 'subject'::text, 'operator'::text]))),
+    CONSTRAINT erasure_locator_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'minimized'::text])))
+);
+
+
+--
+-- Name: erasure_progress; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_progress (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    at timestamp with time zone NOT NULL,
+    partition_no integer DEFAULT 0 NOT NULL,
+    state text DEFAULT 'local'::text NOT NULL,
+    applied boolean DEFAULT false NOT NULL,
+    workflow_id text,
+    CONSTRAINT erasure_progress_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4096))),
+    CONSTRAINT erasure_progress_state_check CHECK ((state = ANY (ARRAY['local'::text, 'pending-shared-custody'::text])))
+);
+
+
+--
+-- Name: erasure_provenance; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_provenance (
+    partition_no integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    record_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    minimized boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: erasure_shared_custody; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_shared_custody (
+    partition_no integer NOT NULL,
+    account_id uuid NOT NULL,
+    role text NOT NULL,
+    transaction_id uuid NOT NULL,
+    outbox_position bigint,
+    state text DEFAULT 'pending'::text NOT NULL,
+    CONSTRAINT erasure_shared_custody_state_check CHECK ((state = 'pending'::text))
+);
+
+
+--
+-- Name: erasure_source_role; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_source_role (
+    partition_no integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    role text NOT NULL
 );
 
 
@@ -768,6 +1743,7 @@ CREATE TABLE semantic.external_claim (
     external_id text NOT NULL,
     subject_id uuid NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT external_claim_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -790,6 +1766,7 @@ CREATE TABLE semantic.fact (
     recorded_transaction_id uuid NOT NULL,
     release text,
     relation boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT fact_check CHECK ((((operation = 'expand'::text) AND (kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NULL) AND (body = '{}'::jsonb)) OR ((operation <> 'expand'::text) AND (((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text])) AND (language IS NOT NULL) AND (property IS NULL) AND (statement_id IS NULL)) OR ((kind = 'statement'::text) AND (language IS NULL) AND (property IS NOT NULL) AND (statement_id IS NOT NULL)))))),
     CONSTRAINT fact_kind_check CHECK ((kind = ANY (ARRAY['label'::text, 'description'::text, 'alias'::text, 'statement'::text]))),
     CONSTRAINT fact_log_seq_check CHECK ((((log_seq >= 1) AND (log_seq <= 33)) AND ((log_seq <> 33) OR (operation = 'expand'::text)))),
@@ -809,6 +1786,7 @@ CREATE TABLE semantic.hidden_candidate (
     candidate_id uuid NOT NULL,
     visibility text NOT NULL,
     security_revision bigint NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT hidden_candidate_candidate_route_check CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
     CONSTRAINT hidden_candidate_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT hidden_candidate_security_revision_check CHECK ((security_revision > 0)),
@@ -832,6 +1810,7 @@ CREATE TABLE semantic.identity_epoch_ack (
     native_epoch integer NOT NULL,
     native_position bigint NOT NULL,
     native_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT identity_epoch_ack_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text]))),
     CONSTRAINT identity_epoch_ack_version_check CHECK ((version = 1))
 );
@@ -847,6 +1826,7 @@ CREATE TABLE semantic.identity_epoch_admission_attempt (
     job_epoch bigint NOT NULL,
     scope_digest text NOT NULL,
     state text NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT identity_epoch_admission_attempt_state_check CHECK ((state = ANY (ARRAY['acquired'::text, 'closed'::text])))
 );
 
@@ -880,7 +1860,8 @@ CREATE TABLE semantic.identity_epoch_admission_plan (
     closed_transaction_id uuid,
     closed_epoch integer,
     closed_position bigint,
-    waiting boolean DEFAULT true NOT NULL
+    waiting boolean DEFAULT true NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
 );
 
 
@@ -898,6 +1879,7 @@ CREATE TABLE semantic.identity_epoch_admission_receipt (
     scope_digest text NOT NULL,
     stage text NOT NULL,
     version integer NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT identity_epoch_admission_receipt_stage_check CHECK ((stage = ANY (ARRAY['acquired'::text, 'closed'::text]))),
     CONSTRAINT identity_epoch_admission_receipt_version_check CHECK ((version = 1))
 );
@@ -919,7 +1901,8 @@ CREATE TABLE semantic.identity_epoch_admission_source (
     source_revision bigint NOT NULL,
     source_transaction_id uuid NOT NULL,
     owner_epoch integer NOT NULL,
-    source_owner_epoch integer NOT NULL
+    source_owner_epoch integer NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
 );
 
 
@@ -1076,7 +2059,8 @@ CREATE TABLE semantic.identity_epoch_change (
     job_id uuid NOT NULL,
     original uuid NOT NULL,
     previous_terminal uuid NOT NULL,
-    terminal uuid NOT NULL
+    terminal uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
 );
 
 
@@ -1122,6 +2106,7 @@ CREATE TABLE semantic.identity_epoch_effect_receipt (
     native_epoch integer,
     native_position bigint,
     native_transaction_id uuid,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT identity_epoch_effect_receipt_check CHECK (((native_transaction_id IS NULL) = (native_partition IS NULL))),
     CONSTRAINT identity_epoch_effect_receipt_check1 CHECK (((native_transaction_id IS NULL) = (native_epoch IS NULL))),
     CONSTRAINT identity_epoch_effect_receipt_check2 CHECK (((native_transaction_id IS NULL) = (native_position IS NULL))),
@@ -1162,6 +2147,7 @@ CREATE TABLE semantic.identity_epoch_home_gate (
     pending_job uuid,
     pending_epoch bigint,
     recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT identity_epoch_home_gate_check CHECK ((route = ((get_byte(uuid_send(destination), 10) * 256) + get_byte(uuid_send(destination), 11)))),
     CONSTRAINT identity_epoch_home_gate_check1 CHECK (((pending_job IS NULL) = (pending_epoch IS NULL))),
     CONSTRAINT identity_epoch_home_gate_epoch_check CHECK ((epoch >= 0)),
@@ -1181,7 +2167,8 @@ CREATE TABLE semantic.identity_epoch_input (
     basis_version bigint NOT NULL,
     original_count bigint NOT NULL,
     control_partition integer NOT NULL,
-    owner_epoch integer
+    owner_epoch integer,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
 );
 
 
@@ -1225,6 +2212,7 @@ CREATE TABLE semantic.identity_epoch_job (
     scope_digest text NOT NULL,
     state text NOT NULL,
     recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT identity_epoch_job_epoch_check CHECK ((epoch > 0)),
     CONSTRAINT identity_epoch_job_state_check CHECK ((state = ANY (ARRAY['preparing'::text, 'pending'::text, 'cancelling'::text, 'cancelled'::text, 'published'::text])))
 );
@@ -1258,6 +2246,7 @@ CREATE TABLE semantic.identity_epoch_mapping (
     control_group uuid,
     source_revision bigint DEFAULT 0 NOT NULL,
     owner_epoch integer DEFAULT 1 NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT identity_epoch_mapping_check CHECK ((route = ((get_byte(uuid_send(original), 10) * 256) + get_byte(uuid_send(original), 11)))),
     CONSTRAINT identity_epoch_mapping_epoch_check CHECK ((epoch >= 0)),
     CONSTRAINT identity_epoch_mapping_origin_check CHECK ((origin = ANY (ARRAY['creation'::text, 'published'::text]))),
@@ -1395,6 +2384,7 @@ CREATE TABLE semantic.identity_epoch_step (
     frontier jsonb NOT NULL,
     state text NOT NULL,
     work jsonb NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT identity_epoch_step_frontier_check CHECK (((octet_length((frontier)::text) <= 2048) AND (jsonb_array_length((frontier -> 'after'::text)) <= 8))),
     CONSTRAINT identity_epoch_step_state_check CHECK ((state = ANY (ARRAY['more'::text, 'complete'::text]))),
     CONSTRAINT identity_epoch_step_step_check CHECK ((step = ANY (ARRAY['mapping'::text, 'search-canonical-index'::text, 'library-private-follow-counts'::text]))),
@@ -1437,6 +2427,8 @@ CREATE TABLE semantic.inbound_link (
     filter_value uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     context_id uuid DEFAULT '00000000-0000-8000-8000-000000000000'::uuid NOT NULL,
     suppressed boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    erasure_roles jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT inbound_link_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT inbound_link_property_check CHECK ((char_length(property) >= 1)),
     CONSTRAINT inbound_link_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -1504,10 +2496,11 @@ CREATE TABLE semantic.moderation (
     security_revision bigint NOT NULL,
     action text NOT NULL,
     visibility text NOT NULL,
-    actor uuid NOT NULL,
+    actor uuid,
     body jsonb NOT NULL,
     recorded_transaction_id uuid NOT NULL,
     candidate_id uuid,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT moderation_action_check CHECK ((action = ANY (ARRAY['hide'::text, 'take_down'::text, 'restore'::text]))),
     CONSTRAINT moderation_body_check CHECK ((jsonb_typeof(body) = 'object'::text)),
     CONSTRAINT moderation_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
@@ -1544,6 +2537,8 @@ CREATE TABLE semantic.outbound_link (
     recorded_transaction_id uuid NOT NULL,
     context_id uuid DEFAULT '00000000-0000-8000-8000-000000000000'::uuid NOT NULL,
     suppressed boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
+    erasure_roles jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT outbound_link_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT outbound_link_property_check CHECK ((char_length(property) >= 1)),
     CONSTRAINT outbound_link_route_check CHECK (((route >= 0) AND (route <= 65535))),
@@ -1610,7 +2605,8 @@ CREATE TABLE semantic.redirect (
     subject_id uuid NOT NULL,
     sequence integer NOT NULL,
     target uuid NOT NULL,
-    recorded_transaction_id uuid NOT NULL
+    recorded_transaction_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
 );
 
 
@@ -1638,6 +2634,7 @@ CREATE TABLE semantic.release_composite (
     extension_route integer NOT NULL,
     extension_context_id uuid NOT NULL,
     extension_digest text NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT release_composite_digest_check CHECK ((digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT release_composite_parent_digest_check CHECK ((parent_digest ~ '^sha256:[0-9a-f]{64}$'::text))
 );
@@ -1653,6 +2650,7 @@ CREATE TABLE semantic.retraction (
     candidate_id uuid NOT NULL,
     revision integer NOT NULL,
     "references" jsonb NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT retraction_references_check CHECK ((jsonb_typeof("references") = 'array'::text))
 );
 
@@ -1672,6 +2670,7 @@ CREATE TABLE semantic.revision (
     verification_receipt_id text,
     revocation_receipt_id text,
     revoked_survivor_id uuid,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT revision_kind_check CHECK ((kind = ANY (ARRAY['create'::text, 'propose'::text, 'accept'::text, 'reject'::text, 'adopt'::text, 'merge'::text, 'retract'::text, 'identity'::text]))),
     CONSTRAINT revision_release_check CHECK ((release ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT revision_revision_check CHECK ((revision >= 1)),
@@ -1693,6 +2692,7 @@ CREATE TABLE semantic.source_candidate (
     field_group text NOT NULL,
     statement_digest text NOT NULL,
     candidate_id uuid NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT source_candidate_statement_digest_check CHECK ((statement_digest ~ '^[0-9a-f]{64}$'::text))
 );
 
@@ -1706,11 +2706,12 @@ CREATE TABLE semantic.statement_disclosure (
     subject_id uuid NOT NULL,
     candidate_id uuid NOT NULL,
     target_id uuid NOT NULL,
-    account_id uuid NOT NULL,
+    account_id uuid,
     property text NOT NULL,
     disclosed boolean DEFAULT false NOT NULL,
     source_order_key text NOT NULL COLLATE pg_catalog."C",
-    target_order_key text NOT NULL COLLATE pg_catalog."C"
+    target_order_key text NOT NULL COLLATE pg_catalog."C",
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL
 );
 
 
@@ -1728,6 +2729,7 @@ CREATE TABLE semantic.subject (
     current_facts integer DEFAULT 0 NOT NULL,
     current_release text DEFAULT 'sha256:0000000000000000000000000000000000000000000000000000000000000000'::text NOT NULL,
     projection_pending boolean DEFAULT false NOT NULL,
+    erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT subject_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT subject_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
@@ -1838,6 +2840,94 @@ ALTER TABLE ONLY semantic.definition_activation
 
 ALTER TABLE ONLY semantic.definition_release
     ADD CONSTRAINT definition_release_pkey PRIMARY KEY (route, digest);
+
+
+--
+-- Name: erasure_copy_role erasure_copy_role_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_copy_role
+    ADD CONSTRAINT erasure_copy_role_pkey PRIMARY KEY (partition_no, store, record_key, transaction_id, account_id, role);
+
+
+--
+-- Name: erasure_delivery erasure_delivery_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_delivery
+    ADD CONSTRAINT erasure_delivery_pkey PRIMARY KEY (partition_no, source_position);
+
+
+--
+-- Name: erasure_fence erasure_fence_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_fence
+    ADD CONSTRAINT erasure_fence_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: erasure_home erasure_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_home
+    ADD CONSTRAINT erasure_home_pkey PRIMARY KEY (partition_no, account_id);
+
+
+--
+-- Name: erasure_inbox erasure_inbox_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_inbox
+    ADD CONSTRAINT erasure_inbox_pkey PRIMARY KEY (route, account_id, source_partition, store, record_key, role, delivery_position);
+
+
+--
+-- Name: erasure_locator erasure_locator_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_locator
+    ADD CONSTRAINT erasure_locator_pkey PRIMARY KEY (partition_no, account_id, role, store, record_key);
+
+
+--
+-- Name: erasure_progress erasure_progress_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_progress
+    ADD CONSTRAINT erasure_progress_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: erasure_provenance erasure_provenance_partition_no_record_key_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_provenance
+    ADD CONSTRAINT erasure_provenance_partition_no_record_key_key UNIQUE (partition_no, record_key);
+
+
+--
+-- Name: erasure_provenance erasure_provenance_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_provenance
+    ADD CONSTRAINT erasure_provenance_pkey PRIMARY KEY (partition_no, transaction_id);
+
+
+--
+-- Name: erasure_shared_custody erasure_shared_custody_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_shared_custody
+    ADD CONSTRAINT erasure_shared_custody_pkey PRIMARY KEY (partition_no, account_id, role, transaction_id);
+
+
+--
+-- Name: erasure_source_role erasure_source_role_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_role
+    ADD CONSTRAINT erasure_source_role_pkey PRIMARY KEY (partition_no, transaction_id, account_id, role);
 
 
 --
@@ -2305,10 +3395,52 @@ ALTER TABLE ONLY semantic.subject
 
 
 --
+-- Name: acceptance_current_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX acceptance_current_erasure_key ON semantic.acceptance_current USING btree (erasure_key, route);
+
+
+--
 -- Name: acceptance_current_rejected; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX acceptance_current_rejected ON semantic.acceptance_current USING btree (route, subject_id, context_id, slot_id, revision DESC, candidate_id) WHERE (verdict = 'reject'::text);
+
+
+--
+-- Name: acceptance_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX acceptance_erasure_key ON semantic.acceptance USING btree (erasure_key, route);
+
+
+--
+-- Name: account_agent_moved_link_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX account_agent_moved_link_erasure_key ON semantic.account_agent_moved_link USING btree (erasure_key, route);
+
+
+--
+-- Name: account_agent_subject_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX account_agent_subject_erasure_key ON semantic.account_agent_subject USING btree (erasure_key, route);
+
+
+--
+-- Name: adoption_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX adoption_erasure_key ON semantic.adoption USING btree (erasure_key, route);
+
+
+--
+-- Name: candidate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX candidate_erasure_key ON semantic.candidate USING btree (erasure_key, route);
 
 
 --
@@ -2326,10 +3458,101 @@ CREATE INDEX context_active ON semantic.context USING btree (route, context_id) 
 
 
 --
+-- Name: context_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX context_erasure_key ON semantic.context USING btree (erasure_key, route);
+
+
+--
+-- Name: context_extension_activation_child; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_extension_activation_child ON semantic.context_extension_activation USING btree (route, context_id, digest, head);
+
+
+--
+-- Name: context_extension_activation_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX context_extension_activation_erasure_key ON semantic.context_extension_activation USING btree (erasure_key, route);
+
+
+--
+-- Name: context_extension_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX context_extension_erasure_key ON semantic.context_extension USING btree (erasure_key, route);
+
+
+--
+-- Name: definition_activation_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX definition_activation_erasure_key ON semantic.definition_activation USING btree (erasure_key, route);
+
+
+--
+-- Name: definition_release_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX definition_release_erasure_key ON semantic.definition_release USING btree (erasure_key, route);
+
+
+--
+-- Name: erasure_inbox_unsettled; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX erasure_inbox_unsettled ON semantic.erasure_inbox USING btree (route, account_id, source_partition, store, record_key, role, delivery_position) WHERE (late AND (state <> 'resolved'::text));
+
+
+--
+-- Name: erasure_locator_event; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX erasure_locator_event ON semantic.erasure_locator USING btree (partition_no, delivery_position, store, record_key, account_id, role);
+
+
+--
+-- Name: erasure_locator_record; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX erasure_locator_record ON semantic.erasure_locator USING btree (partition_no, store, record_key, account_id, role);
+
+
+--
+-- Name: erasure_locator_source; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX erasure_locator_source ON semantic.erasure_locator USING btree (partition_no, source_transaction_id, store, record_key, account_id, role);
+
+
+--
+-- Name: erasure_locator_work; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX erasure_locator_work ON semantic.erasure_locator USING btree (partition_no, account_id, priority, store, record_key, role) WHERE (state = 'pending'::text);
+
+
+--
+-- Name: external_claim_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX external_claim_erasure_key ON semantic.external_claim USING btree (erasure_key, route);
+
+
+--
 -- Name: fact_compact_candidate; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX fact_compact_candidate ON semantic.fact USING btree (route, subject_id, statement_id, log_seq DESC) WHERE ((kind = 'statement'::text) AND (operation = 'assert'::text) AND (statement_id IS NOT NULL));
+
+
+--
+-- Name: fact_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX fact_erasure_key ON semantic.fact USING btree (erasure_key, route);
 
 
 --
@@ -2344,6 +3567,48 @@ CREATE INDEX fact_label ON semantic.fact USING btree (route, subject_id, languag
 --
 
 CREATE INDEX fact_terms ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE (kind <> 'statement'::text);
+
+
+--
+-- Name: hidden_candidate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX hidden_candidate_erasure_key ON semantic.hidden_candidate USING btree (erasure_key, route);
+
+
+--
+-- Name: identity_epoch_ack_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_ack_erasure_key ON semantic.identity_epoch_ack USING btree (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_admission_attempt_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_admission_attempt_erasure_key ON semantic.identity_epoch_admission_attempt USING btree (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_admission_plan_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_admission_plan_erasure_key ON semantic.identity_epoch_admission_plan USING btree (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_admission_receipt_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_admission_receipt_erasure_key ON semantic.identity_epoch_admission_receipt USING btree (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_admission_source_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_admission_source_erasure_key ON semantic.identity_epoch_admission_source USING btree (erasure_key, route);
 
 
 --
@@ -2368,6 +3633,13 @@ CREATE INDEX identity_epoch_bootstrap_unacknowledged ON semantic.identity_epoch_
 
 
 --
+-- Name: identity_epoch_change_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_change_erasure_key ON semantic.identity_epoch_change USING btree (partition_no, erasure_key);
+
+
+--
 -- Name: identity_epoch_current_original; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -2382,6 +3654,41 @@ CREATE INDEX identity_epoch_dirty_pending ON semantic.identity_epoch_dirty USING
 
 
 --
+-- Name: identity_epoch_effect_receipt_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_effect_receipt_erasure_key ON semantic.identity_epoch_effect_receipt USING btree (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_generation_original; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX identity_epoch_generation_original ON semantic.identity_epoch_original USING btree (generation, original) WHERE present;
+
+
+--
+-- Name: identity_epoch_home_gate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_home_gate_erasure_key ON semantic.identity_epoch_home_gate USING btree (erasure_key, route);
+
+
+--
+-- Name: identity_epoch_input_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_input_erasure_key ON semantic.identity_epoch_input USING btree (partition_no, erasure_key);
+
+
+--
+-- Name: identity_epoch_job_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_job_erasure_key ON semantic.identity_epoch_job USING btree (partition_no, erasure_key);
+
+
+--
 -- Name: identity_epoch_job_home_epoch; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -2393,6 +3700,13 @@ CREATE UNIQUE INDEX identity_epoch_job_home_epoch ON semantic.identity_epoch_job
 --
 
 CREATE INDEX identity_epoch_job_receipt ON semantic.identity_epoch_job USING btree (partition_no, receipt_key);
+
+
+--
+-- Name: identity_epoch_mapping_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_mapping_erasure_key ON semantic.identity_epoch_mapping USING btree (erasure_key, route);
 
 
 --
@@ -2452,6 +3766,13 @@ CREATE INDEX identity_epoch_source_hold_key ON semantic.identity_epoch_admission
 
 
 --
+-- Name: identity_epoch_step_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_epoch_step_erasure_key ON semantic.identity_epoch_step USING btree (partition_no, erasure_key);
+
+
+--
 -- Name: identity_epoch_topology_open_home; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -2480,6 +3801,13 @@ CREATE INDEX inbound_link_count_unfiltered ON semantic.inbound_link_count USING 
 
 
 --
+-- Name: inbound_link_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX inbound_link_erasure_key ON semantic.inbound_link USING btree (erasure_key, route);
+
+
+--
 -- Name: inbound_link_key_reemit; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -2501,6 +3829,13 @@ CREATE INDEX merge_member_pending ON semantic.merge_member USING btree (route, s
 
 
 --
+-- Name: moderation_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX moderation_erasure_key ON semantic.moderation USING btree (erasure_key, route);
+
+
+--
 -- Name: outbound_link_context_overrides; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -2512,6 +3847,13 @@ CREATE INDEX outbound_link_context_overrides ON semantic.outbound_link USING btr
 --
 
 CREATE INDEX outbound_link_count_unfiltered ON semantic.outbound_link_count USING btree (route, subject_id, property) INCLUDE (value) WHERE ((filter_value = '00000000-0000-0000-0000-000000000000'::uuid) AND (value > 0));
+
+
+--
+-- Name: outbound_link_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX outbound_link_erasure_key ON semantic.outbound_link USING btree (erasure_key, route);
 
 
 --
@@ -2550,6 +3892,41 @@ CREATE INDEX outbound_link_statement ON semantic.outbound_link USING btree (rout
 
 
 --
+-- Name: redirect_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX redirect_erasure_key ON semantic.redirect USING btree (erasure_key, route);
+
+
+--
+-- Name: release_composite_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX release_composite_erasure_key ON semantic.release_composite USING btree (erasure_key, extension_route);
+
+
+--
+-- Name: release_composite_extension; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX release_composite_extension ON semantic.release_composite USING btree (extension_route, extension_context_id, extension_digest, digest);
+
+
+--
+-- Name: retraction_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX retraction_erasure_key ON semantic.retraction USING btree (erasure_key, route);
+
+
+--
+-- Name: revision_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX revision_erasure_key ON semantic.revision USING btree (erasure_key, route);
+
+
+--
 -- Name: revision_identity_version; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -2564,10 +3941,24 @@ CREATE INDEX revision_transaction ON semantic.revision USING btree (recorded_tra
 
 
 --
+-- Name: source_candidate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX source_candidate_erasure_key ON semantic.source_candidate USING btree (erasure_key, route);
+
+
+--
 -- Name: source_candidate_retract; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE INDEX source_candidate_retract ON semantic.source_candidate USING btree (route, subject_id, candidate_id, source, external_id, field_group);
+
+
+--
+-- Name: statement_disclosure_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX statement_disclosure_erasure_key ON semantic.statement_disclosure USING btree (erasure_key, route);
 
 
 --
@@ -2585,6 +3976,27 @@ CREATE INDEX statement_disclosure_outbound ON semantic.statement_disclosure USIN
 
 
 --
+-- Name: subject_erasure_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX subject_erasure_key ON semantic.subject USING btree (erasure_key, route);
+
+
+--
+-- Name: acceptance_current acceptance_current_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER acceptance_current_erasure_capture AFTER INSERT OR UPDATE ON semantic.acceptance_current DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_acceptance_current_erasure();
+
+
+--
+-- Name: acceptance acceptance_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER acceptance_erasure_capture AFTER INSERT OR UPDATE ON semantic.acceptance DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_acceptance_erasure();
+
+
+--
 -- Name: acceptance acceptance_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -2596,6 +4008,27 @@ CREATE TRIGGER acceptance_immutable BEFORE DELETE OR UPDATE ON semantic.acceptan
 --
 
 CREATE TRIGGER acceptance_immutable_truncate BEFORE TRUNCATE ON semantic.acceptance FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: account_agent_moved_link account_agent_moved_link_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER account_agent_moved_link_erasure_capture AFTER INSERT OR UPDATE ON semantic.account_agent_moved_link DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_account_agent_moved_link_erasure();
+
+
+--
+-- Name: account_agent_subject account_agent_subject_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER account_agent_subject_erasure_capture AFTER INSERT OR UPDATE ON semantic.account_agent_subject DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_account_agent_subject_erasure();
+
+
+--
+-- Name: adoption adoption_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER adoption_erasure_capture AFTER INSERT OR UPDATE ON semantic.adoption DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_adoption_erasure();
 
 
 --
@@ -2613,6 +4046,13 @@ CREATE TRIGGER adoption_immutable_truncate BEFORE TRUNCATE ON semantic.adoption 
 
 
 --
+-- Name: candidate candidate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER candidate_erasure_capture AFTER INSERT OR UPDATE ON semantic.candidate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_candidate_erasure();
+
+
+--
 -- Name: candidate candidate_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -2627,6 +4067,48 @@ CREATE TRIGGER candidate_immutable_truncate BEFORE TRUNCATE ON semantic.candidat
 
 
 --
+-- Name: context context_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER context_erasure_capture AFTER INSERT OR UPDATE ON semantic.context DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_context_erasure();
+
+
+--
+-- Name: context_extension_activation context_extension_activation_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER context_extension_activation_erasure_capture AFTER INSERT OR UPDATE ON semantic.context_extension_activation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_context_extension_activation_erasure();
+
+
+--
+-- Name: context_extension context_extension_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER context_extension_erasure_capture AFTER INSERT OR UPDATE ON semantic.context_extension DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_context_extension_erasure();
+
+
+--
+-- Name: definition_activation definition_activation_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER definition_activation_erasure_capture AFTER INSERT OR UPDATE ON semantic.definition_activation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_definition_activation_erasure();
+
+
+--
+-- Name: definition_release definition_release_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER definition_release_erasure_capture AFTER INSERT OR UPDATE ON semantic.definition_release DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_definition_release_erasure();
+
+
+--
+-- Name: external_claim external_claim_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER external_claim_erasure_capture AFTER INSERT OR UPDATE ON semantic.external_claim DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_external_claim_erasure();
+
+
+--
 -- Name: external_claim external_claim_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -2638,6 +4120,13 @@ CREATE TRIGGER external_claim_immutable BEFORE DELETE OR UPDATE ON semantic.exte
 --
 
 CREATE TRIGGER external_claim_immutable_truncate BEFORE TRUNCATE ON semantic.external_claim FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: fact fact_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER fact_erasure_capture AFTER INSERT OR UPDATE ON semantic.fact DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_fact_erasure();
 
 
 --
@@ -2659,6 +4148,41 @@ CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH
 --
 
 CREATE TRIGGER identity_epoch_admission_handoff_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_admission_handoff FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: hidden_candidate hidden_candidate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER hidden_candidate_erasure_capture AFTER INSERT OR UPDATE ON semantic.hidden_candidate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_hidden_candidate_erasure();
+
+
+--
+-- Name: identity_epoch_ack identity_epoch_ack_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_ack_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_ack DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_ack_erasure();
+
+
+--
+-- Name: identity_epoch_admission_attempt identity_epoch_admission_attempt_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_admission_attempt_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_admission_attempt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_admission_attempt_erasure();
+
+
+--
+-- Name: identity_epoch_admission_plan identity_epoch_admission_plan_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_admission_plan_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_admission_plan DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_admission_plan_erasure();
+
+
+--
+-- Name: identity_epoch_admission_receipt identity_epoch_admission_receipt_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_admission_receipt_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_admission_receipt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_admission_receipt_erasure();
 
 
 --
@@ -2689,6 +4213,13 @@ ALTER TABLE semantic.subject DISABLE TRIGGER identity_epoch_birth_custody;
 --
 
 CREATE TRIGGER identity_epoch_bootstrap_basis_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_bootstrap_basis FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: identity_epoch_admission_source identity_epoch_admission_source_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_admission_source_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_admission_source DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_admission_source_erasure();
 
 
 --
@@ -2724,6 +4255,13 @@ CREATE TRIGGER identity_epoch_capture_redirect AFTER INSERT OR DELETE OR UPDATE 
 --
 
 CREATE TRIGGER identity_epoch_capture_subject AFTER INSERT OR DELETE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_source();
+
+
+--
+-- Name: identity_epoch_change identity_epoch_change_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_change_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_change DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_change_erasure();
 
 
 --
@@ -2769,10 +4307,45 @@ CREATE TRIGGER identity_epoch_installation_immutable_truncate BEFORE TRUNCATE ON
 
 
 --
+-- Name: identity_epoch_effect_receipt identity_epoch_effect_receipt_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_effect_receipt_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_effect_receipt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_effect_receipt_erasure();
+
+
+--
+-- Name: identity_epoch_home_gate identity_epoch_home_gate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_home_gate_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_home_gate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_home_gate_erasure();
+
+
+--
+-- Name: identity_epoch_input identity_epoch_input_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_input_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_input DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_input_erasure();
+
+
+--
+-- Name: identity_epoch_job identity_epoch_job_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_job_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_job DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_job_erasure();
+
+
+--
 -- Name: identity_epoch_job identity_epoch_job_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
 CREATE TRIGGER identity_epoch_job_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_job FOR EACH ROW EXECUTE FUNCTION semantic.protect_identity_epoch_job();
+
+
+--
+-- Name: identity_epoch_mapping identity_epoch_mapping_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_mapping_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_mapping DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_mapping_erasure();
 
 
 --
@@ -2811,10 +4384,38 @@ CREATE TRIGGER identity_epoch_receipt_closure_immutable BEFORE DELETE OR UPDATE 
 
 
 --
+-- Name: identity_epoch_step identity_epoch_step_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER identity_epoch_step_erasure_capture AFTER INSERT OR UPDATE ON semantic.identity_epoch_step DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_identity_epoch_step_erasure();
+
+
+--
 -- Name: identity_epoch_step identity_epoch_step_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
 CREATE TRIGGER identity_epoch_step_immutable BEFORE DELETE OR UPDATE ON semantic.identity_epoch_step FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: inbound_link inbound_copy_erasure; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER inbound_copy_erasure BEFORE INSERT OR UPDATE ON semantic.inbound_link FOR EACH ROW EXECUTE FUNCTION semantic.capture_copy_erasure();
+
+
+--
+-- Name: inbound_link inbound_link_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER inbound_link_erasure_capture AFTER INSERT OR UPDATE ON semantic.inbound_link DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_inbound_link_erasure();
+
+
+--
+-- Name: moderation moderation_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER moderation_erasure_capture AFTER INSERT OR UPDATE ON semantic.moderation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_moderation_erasure();
 
 
 --
@@ -2832,10 +4433,45 @@ CREATE TRIGGER moderation_immutable_truncate BEFORE TRUNCATE ON semantic.moderat
 
 
 --
+-- Name: outbound_link outbound_copy_erasure; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER outbound_copy_erasure BEFORE INSERT OR UPDATE ON semantic.outbound_link FOR EACH ROW EXECUTE FUNCTION semantic.capture_copy_erasure();
+
+
+--
+-- Name: outbound_link outbound_link_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER outbound_link_erasure_capture AFTER INSERT OR UPDATE ON semantic.outbound_link DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_outbound_link_erasure();
+
+
+--
+-- Name: redirect redirect_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER redirect_erasure_capture AFTER INSERT OR UPDATE ON semantic.redirect DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_redirect_erasure();
+
+
+--
 -- Name: redirect redirect_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
 CREATE TRIGGER redirect_immutable BEFORE DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.prevent_redirect_mutation();
+
+
+--
+-- Name: release_composite release_composite_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER release_composite_erasure_capture AFTER INSERT OR UPDATE ON semantic.release_composite DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_release_composite_erasure();
+
+
+--
+-- Name: retraction retraction_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER retraction_erasure_capture AFTER INSERT OR UPDATE ON semantic.retraction DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_retraction_erasure();
 
 
 --
@@ -2853,6 +4489,13 @@ CREATE TRIGGER retraction_immutable_truncate BEFORE TRUNCATE ON semantic.retract
 
 
 --
+-- Name: revision revision_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER revision_erasure_capture AFTER INSERT OR UPDATE ON semantic.revision DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_revision_erasure();
+
+
+--
 -- Name: revision revision_immutable; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -2864,6 +4507,27 @@ CREATE TRIGGER revision_immutable BEFORE DELETE OR UPDATE ON semantic.revision F
 --
 
 CREATE TRIGGER revision_immutable_truncate BEFORE TRUNCATE ON semantic.revision FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: source_candidate source_candidate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER source_candidate_erasure_capture AFTER INSERT OR UPDATE ON semantic.source_candidate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_source_candidate_erasure();
+
+
+--
+-- Name: statement_disclosure statement_disclosure_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER statement_disclosure_erasure_capture AFTER INSERT OR UPDATE ON semantic.statement_disclosure DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_statement_disclosure_erasure();
+
+
+--
+-- Name: subject subject_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER subject_erasure_capture AFTER INSERT OR UPDATE ON semantic.subject DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_subject_erasure();
 
 
 --
@@ -2967,6 +4631,14 @@ ALTER TABLE ONLY semantic.context_extension_activation
 
 ALTER TABLE ONLY semantic.definition_activation
     ADD CONSTRAINT definition_activation_route_digest_fkey FOREIGN KEY (route, digest) REFERENCES semantic.definition_release(route, digest);
+
+
+--
+-- Name: erasure_progress erasure_progress_route_account_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_progress
+    ADD CONSTRAINT erasure_progress_route_account_id_fkey FOREIGN KEY (route, account_id) REFERENCES access.erasure(route, account_id);
 
 
 --
