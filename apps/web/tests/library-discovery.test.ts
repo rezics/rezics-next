@@ -93,9 +93,7 @@ test('bounded owner discovery requests the agreed opt-in preview without a membe
       { preconnect: fetch.preconnect },
     ),
   });
-  await expect(
-    loadMineCollectionsForOwner(client, 'owner', 'Bearer viewer', { layout: 'previews' }),
-  ).rejects.toThrow();
+  await expect(loadMineCollectionsForOwner(client, 'owner', 'Bearer viewer', { layout: 'previews' })).rejects.toThrow();
   expect(requests).toHaveLength(1);
   const url = new URL(requests[0]!.url);
   expect(url.pathname).toBe('/v1/collections');
