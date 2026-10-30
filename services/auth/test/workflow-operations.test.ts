@@ -578,7 +578,10 @@ test('a refusal is recognized by its status, whatever class the binding gives it
 
 test('DBOS preserves only typed boundary status while sanitizing the original failure', async () => {
   class DifferentlyNamedBoundaryFailure extends Error {
-    constructor(message: string, readonly status: number | undefined) {
+    constructor(
+      message: string,
+      readonly status: number | undefined,
+    ) {
       super(message);
     }
   }
