@@ -98,7 +98,6 @@ function assertPartition(partition: number): void {
     throw new TypeError('Partition must be an integer from 0 through 4095');
 }
 
-
 function termValues(rows: FactRow[], kind: 'label' | 'description' | 'alias') {
   const current = new Map<string, string>();
   const aliases = new Map<string, string[]>();

@@ -231,7 +231,8 @@ export async function candidateSources(
     max_bytes: 2147483647,
   };
   const result = await client.query<(typeof provenance)['~reylo']['element']>(
-    provenance.sql, provenance.params.map((name) => parameters[name as keyof typeof parameters]),
+    provenance.sql,
+    provenance.params.map((name) => parameters[name as keyof typeof parameters]),
   );
   for (const row of result.rows) sources.set(`${row.subject_id}\n${row.id}`, row.source as Source | null);
   return sources;

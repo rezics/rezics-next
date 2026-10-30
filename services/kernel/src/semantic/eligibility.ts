@@ -14,8 +14,7 @@ import subjectPublicEvidence from './scope-leaf-evidence-eligibility.sql';
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value) ?? 'null');
 type Identity = { route: number; id: string };
 // Both SQL parameter names (subject_id and context_id) have the same UTF-8 size.
-const parameterBytes = (identity: Identity): number =>
-  bytes({ route: identity.route, subject_id: identity.id });
+const parameterBytes = (identity: Identity): number => bytes({ route: identity.route, subject_id: identity.id });
 /** Execute only the declared point plan. The typed run() convenience wrapper can
  * dispatch catalogue freshness reads, which have no place in a reserved receipt.
  */
@@ -24,7 +23,14 @@ async function point<I extends Record<string, unknown>, R extends QueryResultRow
   statement: { sql: string; params: readonly string[]; '~reylo': { input: I; element: R } },
   input: I,
 ): Promise<R | null> {
-  return (await client.query<R>(statement.sql, statement.params.map((name) => input[name]))).rows[0] ?? null;
+  return (
+    (
+      await client.query<R>(
+        statement.sql,
+        statement.params.map((name) => input[name]),
+      )
+    ).rows[0] ?? null
+  );
 }
 type PublicState = { visibility: string; security_revision: string } | null;
 type Prepare = ResourceEligibilityPrepareContext;
@@ -151,8 +157,7 @@ export function relatedReadEligibility(
     async () => ({ value: { ids: batch }, usage: EMPTY_ACCESS_WORK }),
   );
   const verify = measured<Verify<{ ids: string[] }>, boolean>(
-    ({ resource }) =>
-      batch.includes(resource.id) ? pointWork(resource, publicStateBytes, false) : EMPTY_ACCESS_WORK,
+    ({ resource }) => (batch.includes(resource.id) ? pointWork(resource, publicStateBytes, false) : EMPTY_ACCESS_WORK),
     async ({ client, resource: identity }) => {
       if (batch.length > 256) throw new TypeError('A related read accepts at most 256 ids');
       if (!batch.includes(identity.id)) return { value: false, usage: EMPTY_ACCESS_WORK };
@@ -182,8 +187,7 @@ export function subjectReadEligibility(resource: { route: number; id: string }):
       const current = await publicState(client, resource, false);
       return {
         value:
-          current.value?.visibility === 'visible' &&
-          current.value.security_revision === evidence.security_revision,
+          current.value?.visibility === 'visible' && current.value.security_revision === evidence.security_revision,
         usage: current.usage,
       };
     },

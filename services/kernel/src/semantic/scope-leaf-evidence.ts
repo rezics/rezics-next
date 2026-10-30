@@ -10,7 +10,14 @@ import { subjectReadEligibility } from './eligibility.ts';
 import { sourceTuple } from './fences.ts';
 import { statementSlotId } from './item.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
-import { normalizeSourceStatement, LeafNativeWork, LeafReservationUnavailable, sourceBytes, sourceObject, selectedRank } from './scope-leaf-selection.ts';
+import {
+  normalizeSourceStatement,
+  LeafNativeWork,
+  LeafReservationUnavailable,
+  sourceBytes,
+  sourceObject,
+  selectedRank,
+} from './scope-leaf-selection.ts';
 import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -112,20 +119,25 @@ type CurrentEvidence = Omit<Extract<LeafEvidence, { state: 'current' }>, 'usage'
 type NativeAnchor = NonNullable<Awaited<ReturnType<LeafNativeWork['anchor']>>>;
 type NativeCandidate = NonNullable<Awaited<ReturnType<LeafNativeWork['candidate']>>>;
 const basisOf = (anchor: NativeAnchor, request: LeafRequest): string =>
-  createHash('sha256').update(JSON.stringify([request.subject, anchor, request.leaf])).digest('hex');
+  createHash('sha256')
+    .update(JSON.stringify([request.subject, anchor, request.leaf]))
+    .digest('hex');
 
 function validateProgress(request: LeafRequest): void {
   const progress = request.after;
   if (progress === null) return;
-  if (!/^[a-f0-9]{64}$/.test(progress.basis) ||
-      !['compact', 'selection', 'witness'].includes(progress.phase) ||
-      !Number.isSafeInteger(progress.valueOrdinal) || progress.valueOrdinal < 0 ||
-      (progress.after !== null && (progress.phase === 'witness'
+  if (
+    !/^[a-f0-9]{64}$/.test(progress.basis) ||
+    !['compact', 'selection', 'witness'].includes(progress.phase) ||
+    !Number.isSafeInteger(progress.valueOrdinal) ||
+    progress.valueOrdinal < 0 ||
+    (progress.after !== null &&
+      (progress.phase === 'witness'
         ? !uuid.test(progress.after)
-        : !/^(0|[1-9][0-9]*)$/.test(progress.after) || BigInt(progress.after) > (1n << 64n) - 2n)))
+        : !/^(0|[1-9][0-9]*)$/.test(progress.after) || BigInt(progress.after) > (1n << 64n) - 2n))
+  )
     throw new RangeError('Invalid leaf progress');
-  const count = request.leaf.facet === 'statement' && 'values' in request.leaf
-    ? new Set(request.leaf.values).size : 1;
+  const count = request.leaf.facet === 'statement' && 'values' in request.leaf ? new Set(request.leaf.values).size : 1;
   if (progress.valueOrdinal >= count) throw new RangeError('Invalid leaf progress value ordinal');
 }
 
@@ -137,24 +149,40 @@ async function prepareLeafAccess(pool: Pool, subject: string, options: LeafOptio
     return work.accounting.unavailable('Commerce Members preparation work-definition/native work producer');
   const route = routeOf(subject);
   if (route === null) throw new RangeError('Subject id must be a canonical routed id');
-  return accessCheck(options.access, options.actor, 'subject:read', {
-    route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }),
-  }, { pool, deadline: options.deadline, work: work.accounting });
+  return accessCheck(
+    options.access,
+    options.actor,
+    'subject:read',
+    {
+      route,
+      id: subject,
+      eligibility: subjectReadEligibility({ route, id: subject }),
+    },
+    { pool, deadline: options.deadline, work: work.accounting },
+  );
 }
 function liveAnchor(anchor: NativeAnchor | null): anchor is NativeAnchor {
-  return !!anchor && anchor.visibility === 'visible' && anchor.redirect === null &&
-    anchor.type !== null && anchor.revision !== null;
+  return (
+    !!anchor &&
+    anchor.visibility === 'visible' &&
+    anchor.redirect === null &&
+    anchor.type !== null &&
+    anchor.revision !== null
+  );
 }
 
 async function currentTarget(
-  pool: Pool, target: string, options: LeafOptions, work: LeafNativeWork,
+  pool: Pool,
+  target: string,
+  options: LeafOptions,
+  work: LeafNativeWork,
 ): Promise<NativeAnchor | null> {
   const route = routeOf(target);
   if (route === null) return null;
   const check = await prepareLeafAccess(pool, target, options, work);
   return work.snapshot(pool, route, async (client) => {
     const anchor = await work.anchor(client, route, target);
-    return liveAnchor(anchor) && await check(client, options.nativeT) ? anchor : null;
+    return liveAnchor(anchor) && (await check(client, options.nativeT)) ? anchor : null;
   });
 }
 
@@ -162,23 +190,39 @@ async function currentTarget(
  * Only immutable release bodies are retained within this invocation, never allow.
  */
 async function publicCandidate(
-  pool: Pool, row: NativeCandidate, property: string, rank: 'normal' | 'preferred',
-  witness: string, options: LeafOptions, work: LeafNativeWork, releases: Map<string, Release['properties']>,
+  pool: Pool,
+  row: NativeCandidate,
+  property: string,
+  rank: 'normal' | 'preferred',
+  witness: string,
+  options: LeafOptions,
+  work: LeafNativeWork,
+  releases: Map<string, Release['properties']>,
 ): Promise<SelectedLeafFact | null> {
-  if (!row.body || row.release === null || row.revision === null || row.property !== property)
-    throw new LeafNotReady();
+  if (!row.body || row.release === null || row.revision === null || row.property !== property) throw new LeafNotReady();
   if (row.source_bytes > 0 && row.source === null) throw new LeafNotReady();
   if (row.source !== null) {
-    if (!sourceObject(row.source) || typeof row.source.source !== 'string' ||
-        typeof row.source.external_id !== 'string' || row.source.field_group !== 'facts') throw new LeafNotReady();
+    if (
+      !sourceObject(row.source) ||
+      typeof row.source.source !== 'string' ||
+      typeof row.source.external_id !== 'string' ||
+      row.source.field_group !== 'facts'
+    )
+      throw new LeafNotReady();
     const tuple = sourceTuple(options.routeKey, row.source as Source);
     const fences = await work.snapshot(pool, tuple.route, (client) => {
       const inputBytes = sourceBytes([tuple]);
-      const bound = { ...EMPTY_ACCESS_WORK, keys: 1, points: 1, rows: 3,
-        bytes: 2 * inputBytes + 512, emptySeeks: 1 };
-      return work.accounting.run('Content source-fence native point', bound,
+      const bound = { ...EMPTY_ACCESS_WORK, keys: 1, points: 1, rows: 3, bytes: 2 * inputBytes + 512, emptySeeks: 1 };
+      return work.accounting.run(
+        'Content source-fence native point',
+        bound,
         () => readFences(client, [tuple]),
-        (result) => ({ ...bound, bytes: inputBytes + sourceBytes(result), emptySeeks: result[0]?.securityRevision === null ? 1 : 0 }));
+        (result) => ({
+          ...bound,
+          bytes: inputBytes + sourceBytes(result),
+          emptySeeks: result[0]?.securityRevision === null ? 1 : 0,
+        }),
+      );
     });
     if (fences[0]?.takenDown !== false) return null;
   }
@@ -189,7 +233,7 @@ async function publicCandidate(
       if (sourceObject(raw) && typeof raw.property === 'string') names.push(raw.property);
   const missing = names.filter((name) => !Object.hasOwn(properties, name));
   if (missing.length) {
-    properties = { ...properties, ...await work.release(pool, row.release, missing) };
+    properties = { ...properties, ...(await work.release(pool, row.release, missing)) };
     releases.set(row.release, properties);
   }
   const normalized = normalizeSourceStatement(property, row.body, properties);
@@ -198,20 +242,26 @@ async function publicCandidate(
   if (normalized.facet?.kind === 'item') targets.add(normalized.value);
   for (const qualifier of normalized.qualifiers ?? [])
     if (properties[qualifier.property]?.datatype === 'wikibase-item') targets.add(qualifier.value);
-  if (normalized.facet?.kind === 'quantity' && routeOf(normalized.facet.unit) !== null) targets.add(normalized.facet.unit);
+  if (normalized.facet?.kind === 'quantity' && routeOf(normalized.facet.unit) !== null)
+    targets.add(normalized.facet.unit);
   // Every target, including discarded qualifiers, is reserved before preparation.
   // No cross-home connection or cached permission survives this stage.
-  for (const target of targets) if (!await currentTarget(pool, target, options, work)) return null;
+  for (const target of targets) if (!(await currentTarget(pool, target, options, work))) return null;
   return { witness, statement: normalized, release: row.release, revision: row.revision, rank };
 }
 
-async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOptions, work: LeafNativeWork): Promise<CurrentEvidence> {
+async function readNativeLeaf(
+  pool: Pool,
+  request: LeafRequest,
+  options: LeafOptions,
+  work: LeafNativeWork,
+): Promise<CurrentEvidence> {
   const route = routeOf(request.subject);
   if (route === null) throw new RangeError('Subject id must be a canonical routed id');
   const check = await prepareLeafAccess(pool, request.subject, options, work);
   const initial = await work.snapshot(pool, route, async (client) => {
     const anchor = await work.anchor(client, route, request.subject);
-    if (!liveAnchor(anchor) || !await check(client, options.nativeT)) throw new LeafNotReady();
+    if (!liveAnchor(anchor) || !(await check(client, options.nativeT))) throw new LeafNotReady();
     return anchor;
   });
   const basis = basisOf(initial, request);
@@ -261,7 +311,7 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
       // Length guards apply before driver transfer. Leave room for final native revalidation.
       const maxBytes = Math.max(0, work.remaining('bytes') - 8192);
       const row = await work.candidate(client, route, request.subject, witness, maxBytes);
-      if (row && (row.body === null || row.property === null || row.source_bytes > 0 && row.source === null))
+      if (row && (row.body === null || row.property === null || (row.source_bytes > 0 && row.source === null)))
         throw new LeafNotReady();
       if (!row || row.property !== leaf.property || row.slot_id !== id) return;
       if (state.operation !== 'expand') {
@@ -269,7 +319,7 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
         rank = sourceObject(row.body) ? selectedRank(row.body.rank) : null;
       }
       if (!rank) return;
-      if (row.body === null || row.source_bytes > 0 && row.source === null) throw new LeafNotReady();
+      if (row.body === null || (row.source_bytes > 0 && row.source === null)) throw new LeafNotReady();
       pending.set(witness, { row, rank, witness });
     };
 
@@ -291,9 +341,10 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
           // Hold room for final source checks and refuse the next whole unit
           // before consuming its key. There is no per-slot extra key allowance.
           if (work.remaining('keys') < 7 || work.remaining('witnesses') < 1) {
-            continueAt({ basis, phase: 'selection', valueOrdinal: 0,
-              after: ordinal === 0 ? null : String(ordinal - 1) },
-              { basis, phase: 'selection', valueOrdinal: 0, after: null });
+            continueAt(
+              { basis, phase: 'selection', valueOrdinal: 0, after: ordinal === 0 ? null : String(ordinal - 1) },
+              { basis, phase: 'selection', valueOrdinal: 0, after: null },
+            );
             return;
           }
           const selected = await work.selected(client, route, request.subject, slotId, ordinal);
@@ -306,8 +357,10 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
         let after = request.after?.after ?? null;
         while (state.log_seq !== null && (after === null || BigInt(after) < BigInt(state.log_seq))) {
           if (work.remaining('keys') < 6 || work.remaining('witnesses') < 1) {
-            continueAt({ basis, phase: 'compact', valueOrdinal: 0, after },
-              { basis, phase: 'compact', valueOrdinal: 0, after: null });
+            continueAt(
+              { basis, phase: 'compact', valueOrdinal: 0, after },
+              { basis, phase: 'compact', valueOrdinal: 0, after: null },
+            );
             return;
           }
           const raw = await work.compact(client, route, request.subject, slotId, after);
@@ -327,8 +380,10 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
     let after = request.after?.after ?? null;
     while (ordinal < values.length) {
       if (work.remaining('keys') < 7 || work.remaining('witnesses') < 2) {
-        continueAt({ basis, phase, valueOrdinal: ordinal, after },
-          { basis, phase: 'compact', valueOrdinal: 0, after: null });
+        continueAt(
+          { basis, phase, valueOrdinal: ordinal, after },
+          { basis, phase: 'compact', valueOrdinal: 0, after: null },
+        );
         return;
       }
       const raw = await work.pair(client, route, request.subject, leaf.property, values[ordinal]!, phase, after);
@@ -337,8 +392,14 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
         evidence.progress = { basis, phase, valueOrdinal: ordinal, after: raw.after };
         return;
       }
-      if (phase === 'compact') { phase = 'witness'; after = null; }
-      else { ordinal++; phase = 'compact'; after = null; }
+      if (phase === 'compact') {
+        phase = 'witness';
+        after = null;
+      } else {
+        ordinal++;
+        phase = 'compact';
+        after = null;
+      }
     }
     // Both SQL ranges enumerate the complete current-source possible-pair
     // superset (compact assertions and all native candidates). A resumed suffix
@@ -347,7 +408,16 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
   });
   const facts: SelectedLeafFact[] = [];
   for (const chosen of pending.values()) {
-    const fact = await publicCandidate(pool, chosen.row, leaf.property, chosen.rank, chosen.witness, options, work, releases);
+    const fact = await publicCandidate(
+      pool,
+      chosen.row,
+      leaf.property,
+      chosen.rank,
+      chosen.witness,
+      options,
+      work,
+      releases,
+    );
     if (fact) facts.push(fact);
     else if (request.after && !relation && chosen.row.source !== null) throw new LeafBasisChanged();
   }
@@ -357,7 +427,7 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
     const anchor = await work.anchor(client, route, request.subject);
     if (!liveAnchor(anchor)) throw new LeafNotReady();
     if (basisOf(anchor, request) !== basis) throw new LeafBasisChanged();
-    if (!await check(client, options.nativeT)) throw new LeafNotReady();
+    if (!(await check(client, options.nativeT))) throw new LeafNotReady();
   });
   if (relationEmptyPairProven) evidence.coverage = { kind: 'empty_pair', basis };
   if (complete) evidence.coverage = { kind: 'selection', basis };
@@ -365,7 +435,11 @@ async function readNativeLeaf(pool: Pool, request: LeafRequest, options: LeafOpt
 }
 
 /** Native selected evidence only; matching remains the shared Search pure matcher. */
-export async function readScopeLeafEvidence(pool: Pool, request: LeafRequest, options: LeafOptions): Promise<LeafEvidence> {
+export async function readScopeLeafEvidence(
+  pool: Pool,
+  request: LeafRequest,
+  options: LeafOptions,
+): Promise<LeafEvidence> {
   validateBudget(request?.budget);
   validateRevalidation(request);
   validateProgress(request);
@@ -373,8 +447,11 @@ export async function readScopeLeafEvidence(pool: Pool, request: LeafRequest, op
   // Work admission has no receipt-producing native adapter in its owning module.
   // Refuse BEFORE IO rather than borrowing a request Actor or hiding owner IO.
   if (options.work) work.accounting.unavailable('Commerce Members preparation work-definition/native work producer');
-  const result = await work.accounting.capture(() => withPublicStatementReader(() =>
-    withRequestDeadline(options.deadline, () => readNativeLeaf(pool, request, options, work))));
+  const result = await work.accounting.capture(() =>
+    withPublicStatementReader(() =>
+      withRequestDeadline(options.deadline, () => readNativeLeaf(pool, request, options, work)),
+    ),
+  );
   if (result.state === 'complete') return { ...result.value, usage: result.usage };
   if (result.state === 'unavailable') throw new AccessWorkUnavailableError(result.dependency);
   if (result.error instanceof LeafBasisChanged) return { state: 'basis_changed', usage: result.usage };
