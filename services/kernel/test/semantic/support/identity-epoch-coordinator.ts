@@ -15,7 +15,7 @@ export async function createIdentityCoordinatorFixture(_options: { poolMax: numb
     async admitRealCrossHomeMergeWithAllRoleFacts(): Promise<{ job: IdentityJobRef }> {
       const terminal = (await fixture.create('Coordinator survivor', 0x5f11)).id;
       const redirected = await crossHomeLegacy(fixture, terminal, 0x5f12);
-      const intent = { kind: 'merge' as const, redirected, survivor: terminal, release: release.digest.toString('hex') };
+      const intent = { kind: 'merge' as const, redirected, survivor: terminal, release: Buffer.from(release.digest).toString('hex') };
       const admitted = await ordinaryAdmission(fixture, store, intent);
       const result = await admitted.execute();
       return { job: result.value };
