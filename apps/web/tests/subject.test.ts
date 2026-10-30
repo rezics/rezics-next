@@ -23,6 +23,8 @@ type Snak = Subject['statements'][string][number]['qualifiers'][number];
 const subjects = fixtures.subjects as Subject[];
 const [kokoro, soseki, taketori, novel, shortStory] = subjects as [Subject, Subject, Subject, Subject, Subject];
 const property = (id: string) => fixtures.properties.find((entry) => entry.id === id)!;
+const localKernel = createFakeKernelFetch(fixtures);
+const kernel = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: localKernel });
 // The kernel stores only books today, so the author and genres are books too; the page never reads the type.
 // The kernel does not check reference targets on write, so a value may name a subject nobody can label.
 const dangling = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e09';
@@ -57,10 +59,27 @@ function site(): Promise<string> {
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString()).slice(-8000);
     };
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      KERNEL_ORIGIN: kernel.url.origin,
+      PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
+      REZICS_TEST_RUNTIME: '1',
+    };
+    for (const name of [
+      'AUTH_ISSUER',
+      'WEBSITE_CLIENT_ID',
+      'WEBSITE_CLIENT_KEY',
+      'API_RESOURCE',
+      'WEBSITE_SCOPES',
+      'SITE_ORIGINS',
+      'WORKER_INSPECTOR_PORT',
+    ])
+      delete env[name];
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env,
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
@@ -96,6 +115,7 @@ afterAll(async () => {
     try {
       process.kill(-child.pid, 'SIGTERM');
     } catch {}
+  await kernel.stop(true);
 });
 
 const languageOf = (page: Page, selector: string) =>
@@ -179,9 +199,15 @@ test(
   'a subject page renders the subject in the page language on the server',
   async () => {
     const origin = await site();
-    const response = await fetch(`${origin}/en/subjects/${kokoro.id}`);
+    const canonicalPath = `/en/subjects/${kokoro.id}/${encodeURIComponent(slug(kokoro.labels.en!))}`;
+    const alias = await fetch(`${origin}/en/subjects/${kokoro.id}`, { redirect: 'manual' });
+    expect(alias.status).toBe(301);
+    expect(alias.headers.get('cache-control')).toBe('private, no-store');
+    expect(new URL(alias.headers.get('location')!, origin).href).toBe(`${origin}${canonicalPath}`);
+
+    const response = await fetch(`${origin}${canonicalPath}`);
     expect(response.status).toBe(200);
-    expect(response.headers.get('cache-control')).toMatch(/(?=.*\bprivate\b)(?=.*\bno-store\b)/);
+    expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=60');
 
     const page = await open(`/en/subjects/${kokoro.id}`, { javaScriptEnabled: false });
     expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(kokoro.labels.en);

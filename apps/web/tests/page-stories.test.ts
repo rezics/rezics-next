@@ -16,8 +16,8 @@ const visitors = ['Signed In', 'Signed Out'] as const;
 type Visitor = (typeof visitors)[number];
 type StoryIndexEntry = { id: string; importPath: string; name: string; type: string };
 const homeRepresentatives: Record<Visitor, { id: string; name: string }> = {
-  'Signed In': { id: 'pages-home--signed-in-one-desktop', name: 'Signed In · 1 Continue · 1280 desktop' },
-  'Signed Out': { id: 'pages-home--signed-out-desktop', name: 'Signed Out · 0 Continue · 1280 desktop' },
+  'Signed In': { id: 'pages-discovery-home--signed-in-one-phone', name: 'Member, one in-progress title' },
+  'Signed Out': { id: 'pages-discovery-home--signed-out-phone', name: 'Signed out' },
 };
 const recorded = join(app, 'src/kernel/recorded');
 const englishTextExceptions: { story: string; locale: string; text: string }[] = [];
