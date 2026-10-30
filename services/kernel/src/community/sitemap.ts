@@ -5,14 +5,16 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { readRealm } from './realm.ts';
+import { realmReadEligibility } from './realm.ts';
 import { spaceReadEligibility } from './space.ts';
+import { readSpaceAddress } from './space-address.ts';
 import realmsPage from './sitemap-realms-page.sql';
 import newestRealmBoard from './sitemap-realm-board-newest.sql';
 import spacesPage from './sitemap-spaces-page.sql';
 import readSpace from './sitemap-space-read.sql';
-import readSpaceRealm from './sitemap-space-realm.sql';
-import readRealmSlot from './realm-space.sql';
+import readRealmHead from './sitemap-realm-read.sql';
+import type { Static } from 'typebox';
+import type { SitemapRealmItemSchema, SitemapSpaceItemSchema } from './schemas.ts';
 
 export const COMMUNITY_SITEMAP_MAX_LIMIT = 1000;
 const CANDIDATES_PER_ITEM = 4;
@@ -20,8 +22,8 @@ const ZERO_ID = '00000000-0000-0000-0000-000000000000';
 const ANONYMOUS: Actor = Object.freeze({ kind: 'anonymous' });
 
 export type CommunitySitemapInput = { cursor?: string; limit?: number };
-export type SitemapRealmItem = { id: string; lastModified: string };
-export type SitemapSpaceItem = { id: string; address: string; lastModified: string };
+export type SitemapRealmItem = Static<typeof SitemapRealmItemSchema>;
+export type SitemapSpaceItem = Static<typeof SitemapSpaceItemSchema>;
 export type CommunitySitemapPage<Item> = { items: Item[]; next: string | null };
 export type CommunitySitemapDependencies = Readonly<{
   pool: Pool;
@@ -109,6 +111,48 @@ function sitemapTimestamp(value: string): string {
   return value.replace(/(\.\d{3})000Z$/, '$1Z');
 }
 
+function latestTimestamp(...values: (string | null)[]): string {
+  return values.reduce<string>(
+    (latest, value) => (value !== null && comparableTimestamp(value) > comparableTimestamp(latest) ? value : latest),
+    '',
+  );
+}
+
+async function anonymousCheck(
+  dependencies: CommunitySitemapDependencies,
+  deadline: number,
+  kind: 'realm' | 'space',
+  route: number,
+  id: string,
+) {
+  const identity = { route, id };
+  return accessCheck(
+    dependencies.access,
+    ANONYMOUS,
+    kind === 'realm' ? 'realm:read' : 'space:read',
+    {
+      ...identity,
+      eligibility: kind === 'realm' ? realmReadEligibility(identity) : spaceReadEligibility(identity),
+    },
+    { pool: dependencies.pool, deadline },
+  );
+}
+
+/** The address anchor is always released before the final home read. A non-null
+ * head address without its exact active claim is stale/incomplete, never fallback.
+ */
+async function activeAddress(
+  dependencies: CommunitySitemapDependencies,
+  deadline: number,
+  spaceId: string,
+  address: string,
+): Promise<boolean> {
+  return withConnection(dependencies.pool, async (client) => {
+    const claim = await readSpaceAddress(deadlineClient(client, deadline), address);
+    return claim?.spaceId === spaceId;
+  });
+}
+
 function candidatePosition(candidate: Candidate): Position {
   return { route: candidate.route, id: candidate.id };
 }
@@ -134,19 +178,51 @@ async function listedRealm(
   dependencies: CommunitySitemapDependencies,
   deadline: number,
   candidate: Candidate,
+  at: string,
 ): Promise<SitemapRealmItem | null> {
-  const realm = await readRealm(dependencies, ANONYMOUS, candidate.id, { deadline });
-  if (!realm || realm.state !== 'active' || realm.visibility !== 'public') return null;
-  const board = await withConnection(dependencies.pool, (client) =>
-    newestRealmBoard.run(client, { route: candidate.route, id: candidate.id }),
+  const params = { ...candidate, at };
+  const initial = await withConnection(dependencies.pool, (client) =>
+    readRealmHead.run(deadlineClient(client, deadline), params),
   );
-  const boardAt = board?.created_at ?? null;
-  const revisionAt = realm.revisionCreatedAt;
-  return {
-    id: candidate.id,
-    lastModified:
-      boardAt !== null && comparableTimestamp(boardAt) > comparableTimestamp(revisionAt) ? boardAt : revisionAt,
-  };
+  if (!initial) return null;
+  const realmCheck = await anonymousCheck(dependencies, deadline, 'realm', candidate.route, candidate.id);
+  const spaceCheck = await anonymousCheck(dependencies, deadline, 'space', candidate.route, initial.space_id);
+  const admitted = await withConnection(dependencies.pool, async (client) => {
+    const home = deadlineClient(client, deadline);
+    return (await realmCheck(home)) && (await spaceCheck(home));
+  });
+  if (!admitted) return null;
+  if (initial.address !== null && !(await activeAddress(dependencies, deadline, initial.space_id, initial.address)))
+    return null;
+
+  return withConnection(dependencies.pool, async (client) => {
+    const home = deadlineClient(client, deadline);
+    if (!(await realmCheck(home)) || !(await spaceCheck(home))) return null;
+    const board = await newestRealmBoard.run(home, candidate);
+    const current = await readRealmHead.run(home, params);
+    if (
+      !current ||
+      current.revision_created_at === null ||
+      current.space_revision_created_at === null ||
+      current.head_revision_id !== initial.head_revision_id ||
+      current.space_id !== initial.space_id ||
+      current.space_head_revision_id !== initial.space_head_revision_id ||
+      current.address !== initial.address
+    )
+      return null;
+    return {
+      id: candidate.id,
+      canonicalDestination:
+        current.address === null
+          ? { kind: 'realm', realmId: candidate.id }
+          : { kind: 'space', spaceId: current.space_id, address: current.address },
+      lastModified: latestTimestamp(
+        sitemapTimestamp(current.revision_created_at),
+        sitemapTimestamp(current.space_revision_created_at),
+        board?.created_at ?? null,
+      ),
+    };
+  });
 }
 
 async function listedSpace(
@@ -155,25 +231,27 @@ async function listedSpace(
   candidate: Candidate,
   at: string,
 ): Promise<SitemapSpaceItem | null> {
-  const resource = {
-    route: candidate.route,
-    id: candidate.id,
-    eligibility: spaceReadEligibility({ route: candidate.route, id: candidate.id }),
-  };
-  const check = await accessCheck(dependencies.access, ANONYMOUS, 'space:read', resource, {
-    pool: dependencies.pool,
-    deadline,
+  const check = await anonymousCheck(dependencies, deadline, 'space', candidate.route, candidate.id);
+  const params = { ...candidate, at };
+  const initial = await withConnection(dependencies.pool, async (client) => {
+    const home = deadlineClient(client, deadline);
+    if (!(await check(home))) return null;
+    return readSpace.run(home, params);
   });
+  if (!initial || initial.address === null || initial.revision_created_at === null) return null;
+  if (!(await activeAddress(dependencies, deadline, candidate.id, initial.address))) return null;
   return withConnection(dependencies.pool, async (client) => {
-    if (!(await check(deadlineClient(client, deadline)))) return null;
-    const head = await readSpace.run(client, { route: candidate.route, id: candidate.id, at });
-    if (!head || head.address === null || head.revision_created_at === null) return null;
-    const slot = await readRealmSlot.run(client, { route: candidate.route, space: candidate.id, at });
-    const realmId = slot?.realm_id ?? null;
-    if (realmId !== null) {
-      const realm = await readSpaceRealm.run(client, { route: candidate.route, id: realmId, at });
-      if (!realm) return null;
-    }
+    const home = deadlineClient(client, deadline);
+    if (!(await check(home))) return null;
+    const head = await readSpace.run(home, params);
+    if (
+      !head ||
+      head.address === null ||
+      head.revision_created_at === null ||
+      head.head_revision_id !== initial.head_revision_id ||
+      head.address !== initial.address
+    )
+      return null;
     return { id: candidate.id, address: head.address, lastModified: sitemapTimestamp(head.revision_created_at) };
   });
 }
@@ -194,7 +272,7 @@ async function list<Item extends SitemapRealmItem | SitemapSpaceItem>(
     position = candidatePosition(candidate);
     const item =
       feed === 'realms'
-        ? await listedRealm(dependencies, deadline, candidate)
+        ? await listedRealm(dependencies, deadline, candidate, at)
         : await listedSpace(dependencies, deadline, candidate, at);
     if (!item) continue;
     items.push(item as Item);
@@ -218,7 +296,7 @@ export function listSitemapRealms(
   return list<SitemapRealmItem>(dependencies, deadline, 'realms', input);
 }
 
-/** Addressed Spaces readable to anonymous readers with no protected Realm slot. */
+/** Independently anonymous-readable addressed Spaces with an empty native Realm slot. */
 export function listSitemapSpaces(
   dependencies: CommunitySitemapDependencies,
   deadline: number,

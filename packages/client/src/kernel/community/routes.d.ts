@@ -3958,6 +3958,14 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             items: {
                                 id: string;
                                 lastModified: string;
+                                canonicalDestination: {
+                                    kind: "space";
+                                    spaceId: string;
+                                    address: string;
+                                } | {
+                                    kind: "realm";
+                                    realmId: string;
+                                };
                             }[];
                             next: string | null;
                         };

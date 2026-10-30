@@ -147460,6 +147460,50 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "canonicalDestination": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "address": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "space",
+                                    "type": "string"
+                                  },
+                                  "spaceId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "spaceId",
+                                  "address"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "realm",
+                                    "type": "string"
+                                  },
+                                  "realmId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "realmId"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
                           "id": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                             "type": "string"
@@ -147471,7 +147515,8 @@
                         },
                         "required": [
                           "id",
-                          "lastModified"
+                          "lastModified",
+                          "canonicalDestination"
                         ],
                         "type": "object"
                       },

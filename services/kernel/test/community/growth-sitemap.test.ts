@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -38,6 +39,7 @@ function population(name: string, kind: 'realm' | 'space', visibility: 'public' 
       const spaceRevisionId = newId(route);
       const realmId = newId(route);
       const realmRevisionId = newId(route);
+      const address = `sitemap-${spaceId}`;
       return {
         'community.space': [
           { route, space_id: spaceId, state: 'active', head_revision_id: spaceRevisionId, created_at: at, creator },
@@ -48,11 +50,23 @@ function population(name: string, kind: 'realm' | 'space', visibility: 'public' 
             space_id: spaceId,
             revision_id: spaceRevisionId,
             predecessor: null,
-            address: `sitemap-${spaceId}`,
+            address,
             title: 'Sitemap growth Space',
             summary: '',
             created_at: at,
             author: creator,
+          },
+        ],
+        'community.space_address_claim': [
+          {
+            route: createHash('sha256').update(address).digest().readUInt16BE(0),
+            normalized_address: address,
+            space_id: spaceId,
+            state: 'active',
+            expires_at: null,
+            reserved_until: null,
+            reservation_id: null,
+            transaction_id: newId(route),
           },
         ],
         ...(kind === 'realm'
@@ -93,7 +107,7 @@ function population(name: string, kind: 'realm' | 'space', visibility: 'public' 
 
 async function reset(): Promise<void> {
   await db.admin.query(
-    'TRUNCATE community.realm, community.realm_revision, community.space, community.space_revision CASCADE',
+    'TRUNCATE community.realm, community.realm_revision, community.space, community.space_revision, community.space_address_claim CASCADE',
   );
 }
 

@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
+import type { SitemapRealmItem, SitemapSpaceItem } from '../../src/community/sitemap.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -18,7 +20,6 @@ const creator = newId(0x1234);
 const initialAt = '2026-10-01T00:00:00.000Z';
 const fixedNow = Date.parse('2026-10-27T00:00:00.000Z');
 
-type SitemapItem = { id: string; address?: string; lastModified: string };
 type SpaceFixture = { id: string; revision: string; address: string | null };
 type RealmFixture = { id: string; revision: string; spaceId: string; visibility: 'public' | 'protected' };
 
@@ -70,6 +71,7 @@ beforeAll(async () => {
   const inaccessible = await addSpace('hidden-space-address', initialAt);
   anonymouslyUnreadable.add(inaccessible.id);
   const noAddress = await addSpace(null, initialAt);
+  await addSpace('standalone-address', initialAt);
   const publicHost = await addSpace('public-host', initialAt);
   const protectedHost = await addSpace('protected-host', initialAt);
   const publicRealm = await addRealm(publicHost.id, 'public');
@@ -100,9 +102,20 @@ async function addSpace(address: string | null, at: string): Promise<SpaceFixtur
       [route, id, revision, address, at, creator],
     );
   });
+  if (address !== null) await activateAddress(id, address);
   const value = { id, revision, address };
   spaces.push(value);
   return value;
+}
+
+// Install the native address tuple at its SHA-256 route; revision text alone is not a claim.
+async function activateAddress(spaceId: string, address: string): Promise<void> {
+  await db.admin.query(
+    `INSERT INTO community.space_address_claim
+     (route,normalized_address,space_id,state,expires_at,reserved_until,transaction_id)
+     VALUES ($1,$2,$3,'active',NULL,NULL,$4)`,
+    [createHash('sha256').update(address).digest().readUInt16BE(0), address, spaceId, newId(route)],
+  );
 }
 
 async function addRealm(spaceId: string, visibility: 'public' | 'protected'): Promise<RealmFixture> {
@@ -156,8 +169,12 @@ async function get(feed: 'realms' | 'spaces', values: Record<string, string> = {
   return { response, text: await response.clone().text(), body: await response.json() };
 }
 
-async function walk(feed: 'realms' | 'spaces', limit: number, token?: string): Promise<SitemapItem[]> {
-  const items: SitemapItem[] = [];
+async function walk<Feed extends 'realms' | 'spaces'>(
+  feed: Feed,
+  limit: number,
+  token?: string,
+): Promise<(Feed extends 'realms' ? SitemapRealmItem : SitemapSpaceItem)[]> {
+  const items: (Feed extends 'realms' ? SitemapRealmItem : SitemapSpaceItem)[] = [];
   let cursor: string | null = null;
   let pages = 0;
   do {
@@ -234,7 +251,12 @@ test('the Realm and Space sitemap feeds walk every listed item exactly once thro
     .map((realm) => realm.id)
     .sort();
   const expectedSpaces = spaces
-    .filter((space) => space.address !== null && space.id !== spaces[0]!.id && space.id !== spaces[3]!.id)
+    .filter(
+      (space) =>
+        space.address !== null &&
+        !anonymouslyUnreadable.has(space.id) &&
+        !realms.some((realm) => realm.spaceId === space.id),
+    )
     .map((space) => space.id)
     .sort();
   for (const limit of [1, 2, 1000]) {
@@ -242,14 +264,38 @@ test('the Realm and Space sitemap feeds walk every listed item exactly once thro
     const realmIds = listedRealms.map((item) => item.id);
     expect(new Set(realmIds).size).toBe(realmIds.length);
     expect([...realmIds].sort()).toEqual(expectedRealms);
-    for (const item of listedRealms) expect(Object.keys(item).sort()).toEqual(['id', 'lastModified']);
+    for (const item of listedRealms) {
+      expect(Object.keys(item).sort()).toEqual(['canonicalDestination', 'id', 'lastModified']);
+      const realm = realms.find((realm) => realm.id === item.id)!;
+      const host = spaces.find((space) => space.id === realm.spaceId)!;
+      expect(item.canonicalDestination).toEqual(
+        host.address === null
+          ? { kind: 'realm', realmId: realm.id }
+          : { kind: 'space', spaceId: host.id, address: host.address },
+      );
+    }
 
     const listedSpaces = await walk('spaces', limit);
     const spaceIds = listedSpaces.map((item) => item.id);
     expect(new Set(spaceIds).size).toBe(spaceIds.length);
     expect([...spaceIds].sort()).toEqual(expectedSpaces);
     for (const item of listedSpaces) expect(Object.keys(item).sort()).toEqual(['address', 'id', 'lastModified']);
-    expect(listedSpaces.find((item) => item.id === spaces[2]!.id)?.address).toBe('public-host');
+    const publicRealm = realms.find((realm) => realm.visibility === 'public')!;
+    expect(listedRealms.find((item) => item.id === publicRealm.id)?.canonicalDestination).toEqual({
+      kind: 'space',
+      spaceId: publicRealm.spaceId,
+      address: 'public-host',
+    });
+    expect(listedSpaces.some((item) => item.id === publicRealm.spaceId)).toBe(false);
+    expect(listedSpaces.find((item) => item.address === 'standalone-address')).toBeDefined();
+    const destinations = [
+      ...listedRealms.map((item) => item.canonicalDestination),
+      ...listedSpaces.map((item) => ({ kind: 'space' as const, spaceId: item.id, address: item.address })),
+    ];
+    for (const realm of realms.filter((realm) => realm.visibility === 'public'))
+      expect(destinations.filter((item) => item.kind === 'space' && item.spaceId === realm.spaceId)).toHaveLength(1);
+    const families = destinations.map((item) => (item.kind === 'space' ? item.spaceId : item.realmId));
+    expect(new Set(families).size).toBe(families.length);
   }
 });
 
@@ -297,24 +343,36 @@ test('a bearer caller receives the same Realm and Space feeds as an anonymous ca
 
 test('lastModified follows a new Realm or Space revision and a new board in the Realm', async () => {
   const publicRealm = realms.find((realm) => realm.visibility === 'public')!;
-  const publicSpace = spaces.find((space) => space.id === publicRealm.spaceId)!;
+  const publicHost = spaces.find((space) => space.id === publicRealm.spaceId)!;
+  const publicSpace = spaces.find((space) => space.address === 'standalone-address')!;
   const beforeRealm = (await walk('realms', 1000)).find((item) => item.id === publicRealm.id)!.lastModified;
   const beforeSpace = (await walk('spaces', 1000)).find((item) => item.id === publicSpace.id)!;
 
   const newSpaceRevision = newId(route);
   const spaceAt = '2026-10-02T00:00:00.000Z';
-  await inTransaction(async (client) => {
-    await client.query(
-      `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,address,title,summary,created_at,author)
-     VALUES ($1,$2,$3,$4,'public-host-v2','Sitemap Space revision','',$5,$6)`,
-      [route, publicSpace.id, newSpaceRevision, publicSpace.revision, spaceAt, creator],
+  for (const [space, address, revision] of [
+    [publicHost, 'public-host-v2', newId(route)],
+    [publicSpace, 'standalone-address-v2', newSpaceRevision],
+  ] as const) {
+    await inTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,address,title,summary,created_at,author)
+       VALUES ($1,$2,$3,$4,$5,'Sitemap Space revision','',$6,$7)`,
+        [route, space.id, revision, space.revision, address, spaceAt, creator],
+      );
+      await client.query('UPDATE community.space SET head_revision_id=$3 WHERE route=$1 AND space_id=$2', [
+        route,
+        space.id,
+        revision,
+      ]);
+    });
+    await activateAddress(space.id, address);
+    await db.admin.query(
+      `UPDATE community.space_address_claim SET state='reserved',reserved_until='2026-11-01'
+       WHERE route=$1 AND normalized_address=$2 AND space_id=$3`,
+      [createHash('sha256').update(space.address!).digest().readUInt16BE(0), space.address, space.id],
     );
-    await client.query('UPDATE community.space SET head_revision_id=$3 WHERE route=$1 AND space_id=$2', [
-      route,
-      publicSpace.id,
-      newSpaceRevision,
-    ]);
-  });
+  }
   const newRealmRevision = newId(route);
   const realmAt = '2026-10-03T00:00:00.000Z';
   await inTransaction(async (client) => {
@@ -347,7 +405,9 @@ test('lastModified follows a new Realm or Space revision and a new board in the 
   expect(realmItem.lastModified > beforeRealm).toBe(true);
   expect(spaceItem.lastModified).toBe(spaceAt);
   expect(spaceItem.lastModified > beforeSpace.lastModified).toBe(true);
-  expect(spaceItem.address).toBe('public-host-v2');
+  expect(spaceItem.address).toBe('standalone-address-v2');
+  expect(realmItem.canonicalDestination).toEqual({ kind: 'space', spaceId: publicHost.id, address: 'public-host-v2' });
+  expect((await walk('spaces', 1000)).some((item) => item.id === publicHost.id)).toBe(false);
 });
 
 test('a cursor that stops on a skipped candidate contains no id, route or timestamp of that candidate in its decoded bytes', async () => {
@@ -385,4 +445,44 @@ test('a cursor that stops on a skipped candidate contains no id, route or timest
     expect(typeof decoded.after[0]).toBe('number');
     expect(typeof decoded.after[1]).toBe('string');
   }
+});
+
+test('the canonical family union excludes protected, unreadable and removed carried chains', async () => {
+  const hidden: { host: SpaceFixture; realm: RealmFixture }[] = [];
+  for (const state of ['protected', 'unreadable', 'removed-host', 'removed-realm'] as const) {
+    const host = await addSpace(`excluded-${state}`, initialAt);
+    const realm = await addRealm(host.id, state === 'protected' ? 'protected' : 'public');
+    hidden.push({ host, realm });
+    if (state === 'unreadable') anonymouslyUnreadable.add(host.id);
+    if (state === 'removed-host')
+      await db.admin.query("UPDATE community.space SET state='removed' WHERE route=$1 AND space_id=$2", [
+        route,
+        host.id,
+      ]);
+    if (state === 'removed-realm')
+      await db.admin.query("UPDATE community.realm SET state='removed' WHERE route=$1 AND realm_id=$2", [
+        route,
+        realm.id,
+      ]);
+  }
+  const listedRealms = await walk('realms', 1);
+  const listedSpaces = await walk('spaces', 1);
+  const families = [
+    ...listedRealms.map((item) =>
+      item.canonicalDestination.kind === 'space'
+        ? item.canonicalDestination.spaceId
+        : item.canonicalDestination.realmId,
+    ),
+    ...listedSpaces.map((item) => item.id),
+  ];
+  for (const { host, realm } of hidden) {
+    expect(listedRealms.some((item) => item.id === realm.id)).toBe(false);
+    expect(families).not.toContain(host.id);
+    expect(families).not.toContain(realm.id);
+    expect(JSON.stringify([...listedRealms, ...listedSpaces])).not.toContain(host.address!);
+  }
+  const publicRealm = realms.find((realm) => realm.visibility === 'public')!;
+  expect(families.filter((id) => id === publicRealm.spaceId)).toHaveLength(1);
+  const standalone = spaces.find((space) => space.address === 'standalone-address')!;
+  expect(listedSpaces.some((item) => item.id === standalone.id)).toBe(true);
 });

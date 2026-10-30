@@ -326,15 +326,47 @@ parameter or a raw Context override is not a substitute for that binding.
 
 ## Sitemap feeds
 
-`GET /v1/sitemap/realms` returns public Realms as `{ id, lastModified }`. `GET /v1/sitemap/spaces`
-returns anonymously readable Spaces with an address as `{ id, address, lastModified }`; it omits a
-Space whose Realm slot is occupied by a protected or inactive Realm. Both are public server-to-server
-feeds evaluated as an anonymous reader, even when a bearer is present. They use keyset cursors and
+`GET /v1/sitemap/realms` returns `{ id, lastModified, canonicalDestination }`. A live, PUBLIC,
+independently anonymous-readable Realm owns its carried-home family in this feed. Its host Space must
+also be live and independently anonymous-readable. When that Space's current head address has an exact
+active native claim bound to that Space, the closed destination is
+`{ kind: 'space', spaceId, address }`. When the otherwise eligible host has no head address, it is
+`{ kind: 'realm', realmId }`. A non-null head address with a missing, pending, reserved or foreign claim
+is incomplete or stale and suppresses the family; it never becomes a Realm fallback. Denial, removal,
+missing heads and failed dependencies also never become fallback or change a Context pointer.
+
+`GET /v1/sitemap/spaces` retains `{ id, address, lastModified }` and emits only independently
+anonymous-readable, live addressed Spaces with an exact active address claim and an empty native carried
+Realm slot. Any occupied slot suppresses this entry, including protected, unreadable and removed Realms.
+Thus a public carried Realm and its host appear exactly once, in the Realm feed. The unique same-home
+slot and exact current lifecycle/heads establish ownership; clients do not infer it from request flags.
+
+Both are public server-to-server feeds evaluated as an anonymous reader, even when a staff bearer is
+present. Community owns closed item/response schemas; ordinary Board sitemap items are unchanged. The
+route response types expose the handler's tagged destination to generated API/client contracts. Web's
+existing sitemap consumer owns locale/domain/path construction from this native destination; the kernel
+supplies no URL. Both feeds use keyset cursors and
 may return fewer items than requested when candidates are skipped. Pages may contain up to 1,000
 items, an exception to the shared list maximum of 100. Their positions use the shared opaque list cursor contract in
 [`../tokens/list-cursor.ts`](../tokens/list-cursor.ts), bound to the feed route, anonymous viewer and empty query.
-`lastModified` is the current head revision time; a Realm also uses the time of its newest board when that is later.
-Realm and Space items come in strictly increasing `(route, id)` order.
+`lastModified` is the current Space head revision time for standalone Spaces; a Realm family uses the
+latest of its Realm head, host Space head (including address changes), and newest board source time.
+No history walk or observation timestamp supplies modification time. Realm and Space items come in
+strictly increasing native source `(route, id)` order; destination choice never changes item identity
+or cursor position. Each page examines at most `4 * limit` candidates without refilling. Suppressed
+candidates advance the signed source cursor, so sparse or empty pages can still have `next`.
+
+Each candidate has a fixed bounded same-home Realm/Space/head/slot neighborhood and anonymous Access
+checks before and at final disclosure. Address validation uses one independently anchored exact claim
+lookup, released before the final home read. That read rechecks native lifecycle, slot, public visibility,
+and unchanged source/host head versions after the address lookup. No cross-home connection is held,
+no cross-home join or per-item HTTP request occurs, and no memberships, threads, descendants or history
+are scanned. Derived cost is `O(limit log R)` for `R = N + U*t + M` with a fixed statement shape per
+candidate kind. Existing growth suites remain post-integration evidence with their original bounds.
+Their addressed positive fixtures install actual `community.space_address_claim` rows: the normalized
+head address at its SHA-256-derived route, in `active` state, bound to the exact Space ID. Revision
+address text alone grants no eligibility. HTTP walking checks the union of both feeds so each carried
+public family occurs once while standalone Spaces remain present and denied or removed chains stay absent.
 
 ## Addressed community setup
 
@@ -378,7 +410,7 @@ there is no catalogue, grant, membership or descendant scan and no per-card requ
 | Publish membership, read terminal or change, or prove a role | Publish reads the Realm and opens or closes one membership interval, with at most one terminal insert. Terminal/change reads use one primary-key point read; role proof uses two membership index seeks and the Realm existence point.                                                            | Constant rows and statements per operation; logarithmic blocks in Realm membership indexes, plus bounded Access.                                                                                               | `test/community/growth-membership.test.ts`: “publish, terminal reads and role proofs stay within their bound as Realms and members grow”.                                                                                                                                                                                |
 | Read current Realm membership                                | One unique `realm_member_open` index point read filtered at T; closed history does not widen the lookup.                                                                                                                                                                                          | One row and statement; logarithmic blocks in the Realm's membership history, including closed intervals.                                                                                                       | `test/community/growth-membership-history.test.ts`: “current membership is one index point read as the same account and Realm accumulate closed intervals”.                                                                                                                                                              |
 | List own Realms                                              | Keyset-read at most 80 caller-route inverse rows, then confirm each candidate with one current `realm_member` primary-key read.                                                                                                                                                                   | At most 160 rows and a constant number of statements; logarithmic blocks in the inverse and membership indexes.                                                                                                | `test/community/own-realms.test.ts`: “own Realm pages use confirmed memberships, signed cursors and bounded inverse scans”.                                                                                                                                                                                              |
-| List Realm and Space sitemap pages                           | Keyset-read at most four candidates per requested item (limit at most 1,000); each eligible item reads its exact head and related Realm/board slot as applicable. Skipped protected or inactive candidates remain bounded.                                                                        | Linear rows in page limit with at most four times the limit candidates; logarithmic blocks in feed indexes.                                                                                                    | `test/community/growth-sitemap.test.ts`: “Realm sitemap page stays within its bound as listed items grow”; “Space sitemap page stays within its bound as listed items grow”; “Realm sitemap page stays within its bound as protected Realms grow”; “Space sitemap page stays within its bound as protected Realms grow”. |
+| List Realm and Space sitemap pages                           | Keyset-read at most four candidates per requested item (limit at most 1,000); fixed same-home current Realm/Space/head/slot and board seeks, independently prepared anonymous Access before and at disclosure, one separately released exact active-address claim lookup, and final unchanged-head/lifecycle/slot validation. No refill or history scan. | Linear rows in page limit with at most four times the limit candidates; logarithmic indexed seeks in source, head, slot, board and address indexes; fixed statements per candidate kind. | `test/community/growth-sitemap.test.ts`: “Realm sitemap page stays within its bound as listed items grow”; “Space sitemap page stays within its bound as listed items grow”; “Realm sitemap page stays within its bound as protected Realms grow”; “Space sitemap page stays within its bound as protected Realms grow”. |
 | Check Realm participation or ensure its member grant         | Participation checks `realm:participate`, the independent `realm:read` eligibility and one exact Realm head at shared T. Grant ensure reads the exact Realm head and idempotently inserts the member-group grant in the command.                                                                  | Constant rows and statements; logarithmic blocks, plus bounded Access membership proof.                                                                                                                        | `test/community/participation.test.ts`: “Realm participation stays bounded as Realms, members and grants grow”.                                                                                                                                                                                                          |
 | Join a Realm                                                 | Acceptance command reads the Realm and current-ban key, inserts one operation and receipt; reserve and publish workflow steps restore the initiator; follow is one point upsert on the member account partition. Publication rechecks the ban.                                                    | Constant rows and statements per step; logarithmic blocks, plus bounded Access and initiator restoration; independent of member history.                                                                       | `test/community/growth-join.test.ts`: “Join a Realm has constant rows and statements as Realms and its members grow”.                                                                                                                                                                                                    |
 | Leave a Realm                                                | Acceptance command reads the Realm and current-ban key and inserts one operation and receipt; reserve, publish and release steps restore the initiator. No follow is written or removed.                                                                                                          | Constant rows and statements per step; logarithmic blocks, plus bounded Access and initiator restoration; independent of member history.                                                                       | `test/community/growth-join.test.ts`: “Leave a Realm has constant rows and statements as Realms and its members grow”.                                                                                                                                                                                                   |

@@ -13,12 +13,8 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
 import { REACTION_KINDS } from '../content/events.ts';
-import {
-  SitemapBoardItemSchema,
-  SitemapBoardPageSchema,
-  SitemapQuerySchema,
-  sitemapPageSchema,
-} from '../content/schemas.ts';
+import { SitemapQuerySchema } from '../content/schemas.ts';
+import { SitemapRealmPageSchema, SitemapSpacePageSchema } from './schemas.ts';
 import { InvalidCommunitySitemapCursorError, listSitemapRealms, listSitemapSpaces } from './sitemap.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -225,10 +221,8 @@ const banResponse = t.Object(
 );
 const banPage = t.Object({ items: t.Array(banRecord), next: t.Union([t.String(), t.Null()]) }, closed);
 const sitemapQuery = strict(SitemapQuerySchema);
-const sitemapRealmPage = strict(SitemapBoardPageSchema);
-const sitemapSpacePage = strict(
-  sitemapPageSchema(t.Object({ ...SitemapBoardItemSchema.properties, address: t.String() }, closed)),
-);
+const sitemapRealmPage = strict(SitemapRealmPageSchema);
+const sitemapSpacePage = strict(SitemapSpacePageSchema);
 const banQuery = t.Object(
   { limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })), cursor: t.Optional(t.String()) },
   closed,

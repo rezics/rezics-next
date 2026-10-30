@@ -7,10 +7,14 @@ WITH input AS NOT MATERIALIZED (
   WHERE h.route = i.route AND h.space_id = i.id
     AND h.state = 'active' AND h.created_at <= i.at
 )
-SELECT r.address,
+SELECT h.head_revision_id, r.address,
        to_char(r.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS revision_created_at
 FROM identity AS h CROSS JOIN input i
 JOIN community.space_revision AS r
   ON r.route = i.route AND r.space_id = h.space_id AND r.revision_id = h.head_revision_id
 WHERE r.created_at <= h.at
+  -- Any occupied carried slot belongs to the Realm feed, including denied or removed Realms.
+  AND NOT EXISTS (
+    SELECT 1 FROM community.realm s WHERE s.route = i.route AND s.space_id = h.space_id
+  )
 LIMIT 1;
