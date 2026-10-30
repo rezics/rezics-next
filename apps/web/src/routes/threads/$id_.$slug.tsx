@@ -23,7 +23,7 @@ import { documentImageForPost, type ThreadDocumentMedia } from '../../threads/do
 import { ContentActions } from '@rezics/ui/content-actions';
 import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
@@ -85,20 +85,30 @@ export function ThreadReadingHeader({ page, title }: { page: ThreadReadingPage; 
 }
 
 function ThreadPage() {
-  const page = Route.useLoaderData();
-  const [postIds, setPostIds] = useState(() => page.posts.posts.map((post) => post.id));
-  const { state: session } = useSession();
+  const loadedPage = Route.useLoaderData();
+  const [refreshed, setRefreshed] = useState<{ source: typeof loadedPage; scope: object; page?: ThreadReadingPage }>();
+  const [postIds, setPostIds] = useState(() => loadedPage.posts.posts.map((post) => post.id));
+  const { state: session, subject, csrfToken } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
   const location = useLocation();
   const id = Route.useParams().id;
   const cursor = Route.useSearch().cursor;
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
+  const readScope = useMemo(() => ({}), [loadedPage, id, cursor, session, subject, csrfToken]);
+  const expiredRead = refreshed?.source === loadedPage && refreshed.scope !== readScope;
+  if (expiredRead) setRefreshed({ source: loadedPage, scope: readScope });
+  const currentPageUnavailable = refreshed?.source === loadedPage && (expiredRead || !refreshed.page);
+  const page = !currentPageUnavailable && refreshed?.source === loadedPage ? refreshed.page! : loadedPage;
   const personalQuery = useQuery({
     ...threadPersonalQuery(id, cursor, postIds),
     enabled: session === 'signed-in',
   });
-  const personal = session === 'signed-in' ? personalQuery.data : undefined;
+  const personal =
+    session === 'signed-in' && personalQuery.data?.viewerId === subject ? personalQuery.data : undefined;
+  const currentRead = useRef({ scope: readScope, sequence: 0 });
+  if (currentRead.current.scope !== readScope) currentRead.current = { scope: readScope, sequence: 0 };
+  useEffect(() => () => { currentRead.current = { scope: {}, sequence: 0 }; }, []);
   useEffect(() => setPostIds(page.posts.posts.map((post) => post.id)), [page.posts]);
 
   useEffect(() => {
@@ -115,11 +125,18 @@ function ThreadPage() {
   }
 
   async function refreshThreadPage() {
+    const read = currentRead.current;
+    const sequence = ++read.sequence;
+    const current = () => currentRead.current === read && read.sequence === sequence;
+    await queryClient.cancelQueries({ queryKey: ['thread-page', id] });
+    if (!current()) throw new Error('Thread reader changed');
     const updated = await queryClient.fetchQuery({
       ...threadPageQuery(id, cursor, session === 'signed-in' ? 'session' : 'anonymous'),
       staleTime: 0,
+      retry: false,
     });
-    if ('redirect' in updated) return;
+    if (!current() || 'redirect' in updated) throw new Error('Current thread page unavailable');
+    setRefreshed({ source: loadedPage, scope: readScope, page: updated });
     rememberThreadSlug(updated.thread.id, updated.thread.title);
     const destination = threadLocation(getLocale(), { id: updated.thread.id, title: updated.thread.title }, cursor);
     if (new URL(destination, window.location.origin).pathname !== location.pathname)
@@ -127,10 +144,18 @@ function ThreadPage() {
     return updated;
   }
 
+  if (currentPageUnavailable) return (
+    <div role="alert" className="space-y-3 p-4">
+      <p>{m.thread_post_unavailable()}</p>
+      <Button onClick={() => void refreshThreadPage().catch(() => {})}>{m.thread_post_refresh()}</Button>
+    </div>
+  );
+
   return (
     <ThreadReading
       key={id}
       page={page}
+      readAuthority={readScope}
       Post={ThreadReadingPost}
       signedOut={<SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />}
       personal={personal}
@@ -184,6 +209,7 @@ function postDeleteFailureText(failure: WriteFailure): string {
 
 export function ThreadReadingPost({
   post,
+  readAuthority,
   authors,
   mentions,
   documentMedia,
@@ -209,6 +235,7 @@ export function ThreadReadingPost({
   review,
 }: {
   post: ThreadPost;
+  readAuthority?: object | undefined;
   authors: PageAuthors;
   mentions: DocumentMentions;
   documentMedia?: ThreadDocumentMedia | undefined;
@@ -224,7 +251,7 @@ export function ThreadReadingPost({
   returnTo: string;
   verification: VerificationConfig;
   onMutation: () => Promise<void>;
-  onPageRefresh: () => Promise<void>;
+  onPageRefresh: () => Promise<ThreadReadingPage | undefined>;
   onOpeningPostChange: (restored: boolean) => void;
   replyParents: ReplyParents;
   replyPending: boolean;
@@ -236,13 +263,29 @@ export function ThreadReadingPost({
   const [editing, setEditing] = useState(false);
   const [editKey, setEditKey] = useState('');
   const [restoreError, setRestoreError] = useState('');
+  const [existingReviewId, setExistingReviewId] = useState<string>();
+  const [, updateIntent] = useState(0);
   const [removedMinHeight, setRemovedMinHeight] = useState<number>();
   const menuButton = useRef<HTMLButtonElement>(null);
   const itemElement = useRef<HTMLLIElement>(null);
   const deleteKey = useRef<string | undefined>(undefined);
-  const restoreKey = useRef<string | undefined>(undefined);
-  const restoreSnapshot = useRef<ThreadPost | undefined>(undefined);
-  const restorePending = useRef(false);
+  const scope = useMemo(() => ({}), [readAuthority, signedIn, personalReady, viewerId, post.id, post.threadId, target.kind, target.id]);
+  const feedbackScope = useRef(scope);
+  const intent = useRef({ scope, key: undefined as string | undefined, pending: false, applied: false, uncertain: false, deleted: false, read: 0 });
+  if (intent.current.scope !== scope) {
+    intent.current = { scope, key: undefined, pending: false, applied: false, uncertain: false, deleted: false, read: 0 };
+    deleteKey.current = undefined;
+  }
+  const restoreIntent = useRef<((expected: object) => Promise<void>) | undefined>(undefined);
+  useEffect(() => () => {
+    restoreIntent.current = undefined;
+    intent.current = { scope: {}, key: undefined, pending: false, applied: false, uncertain: false, deleted: false, read: 0 };
+  }, []);
+  useEffect(() => {
+    setRestoreError('');
+    setExistingReviewId(undefined);
+    feedbackScope.current = scope;
+  }, [scope]);
   const restoreMenuFocus = useRef(false);
   const restorePostFocus = useRef(false);
   const ownsPost = viewerId !== undefined && post.availability === 'available' && post.authorId === viewerId;
@@ -279,43 +322,79 @@ export function ThreadReadingPost({
     setEditing(false);
   }
 
-  async function restoreRemovedPost(snapshot?: ThreadPost) {
-    if (restorePending.current) return;
-    restorePending.current = true;
-    setRestoreError('');
-    restoreKey.current ??= crypto.randomUUID();
+  async function refreshCurrentPost() {
+    const command = intent.current;
+    const read = ++command.read;
     try {
-      const result = await restorePostAction({
-        data: { postId: post.id, idempotencyKey: restoreKey.current },
-        headers: csrfHeaders(),
-      });
-      if (!result.ok) {
-        if (result.reason === 'conflict') {
-          restoreKey.current = undefined;
-          setRestoreError(m.thread_post_restore_conflict());
-        } else {
-          setRestoreError(m.thread_post_restore_failure());
-        }
-        return;
-      }
-
-      restoreKey.current = undefined;
-      restorePostFocus.current = true;
-      if (snapshot) {
-        onChange(snapshot);
-        if (target.kind === 'thread') onOpeningPostChange(true);
-      } else {
-        // A fresh tombstone has no body by contract. Once restored, reload its readable page entry.
-        await onPageRefresh();
-      }
+      const page = await onPageRefresh();
+      if (intent.current !== command || command.read !== read) return;
+      if (!page) throw new Error('Current thread page unavailable');
+      command.deleted = false;
+      const current = page.posts.posts.find((item) => item.id === post.id);
+      if (current?.availability === 'erased') command.applied = false;
+      setRestoreError('');
+      return current;
     } catch {
-      setRestoreError(m.thread_post_restore_failure());
-    } finally {
-      restorePending.current = false;
+      if (intent.current === command && command.read === read) {
+        setRestoreError(command.applied ? m.thread_post_restore_read_failure() : command.uncertain ? m.thread_post_restore_unknown() : m.thread_post_delete_read_failure());
+      }
+      return;
     }
   }
 
+  async function restoreRemovedPost(expected = scope) {
+    const command = intent.current;
+    if (command.scope !== expected || command.pending || !signedIn || !personalReady || !viewerId) return;
+    command.pending = true;
+    setRestoreError('');
+    setExistingReviewId(undefined);
+    try {
+      // A confirmed write is never repeated because its subsequent read failed.
+      if (command.applied) {
+        await refreshCurrentPost();
+        return;
+      }
+      if (command.uncertain) {
+        const current = await refreshCurrentPost();
+        if (intent.current !== command || !current) return;
+        if (current.availability !== 'erased' || !current.restorableUntil) return;
+      }
+      command.key ??= crypto.randomUUID();
+      const result = await restorePostAction({
+        data: { postId: post.id, idempotencyKey: command.key },
+        headers: csrfHeaders(),
+      });
+      if (intent.current !== command) return;
+      if (!result.ok) {
+        command.uncertain = result.reason === 'unavailable';
+        if (result.reason === 'conflict') {
+          command.key = undefined;
+          setExistingReviewId(result.existingReviewId);
+          setRestoreError(m.thread_post_restore_conflict());
+        } else {
+          setRestoreError(command.uncertain ? m.thread_post_restore_unknown() : m.thread_post_restore_failure());
+        }
+        return;
+      }
+      command.applied = true;
+      command.uncertain = false;
+      command.key = undefined;
+      restorePostFocus.current = true;
+      await refreshCurrentPost();
+    } catch {
+      if (intent.current === command) {
+        command.uncertain = true;
+        setRestoreError(m.thread_post_restore_unknown());
+      }
+    } finally {
+      command.pending = false;
+      if (intent.current === command) updateIntent((value) => value + 1);
+    }
+  }
+  restoreIntent.current = restoreRemovedPost;
+
   async function deletePost() {
+    const command = intent.current;
     deleteKey.current ??= crypto.randomUUID();
     const result = await erasePost({
       data: {
@@ -326,30 +405,34 @@ export function ThreadReadingPost({
       headers: csrfHeaders(),
     });
     if (!result.ok) throw new Error(postDeleteFailureText(result));
+    if (intent.current !== command) return;
     if (removedMinHeight === undefined) setRemovedMinHeight(itemElement.current?.getBoundingClientRect().height);
-    restoreSnapshot.current = post;
+    command.deleted = true;
     restoreMenuFocus.current = true;
     setRestoreError('');
-    const deleted: ThreadPost = {
-      ...post,
+    // This byte-free placeholder records the applied deletion, not a native expiry or a read grant.
+    onChange({
+      id: post.id,
+      threadId: post.threadId,
+      route: post.route,
+      parentId: post.parentId,
       body: null,
       sha256: null,
       availability: 'erased',
       removed: true,
-      restorableUntil: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-    };
-    onChange(deleted);
+    });
     if (target.kind === 'thread') onOpeningPostChange(false);
-    undoToast(m.thread_post_deleted_toast(), () => void restoreRemovedPost(post), { undo: m.thread_post_undo() });
+    const expected = scope;
+    const restore = restoreIntent;
+    undoToast(m.thread_post_deleted_toast(), () => void restore.current?.(expected), { undo: m.thread_post_undo() });
+    await refreshCurrentPost();
   }
 
   if (post.availability !== 'available') {
     const canRestore =
       post.availability === 'erased' &&
-      'authorId' in post &&
-      viewerId === post.authorId &&
-      'restorableUntil' in post &&
-      Boolean(post.restorableUntil);
+      signedIn && personalReady && viewerId !== undefined && !intent.current.applied &&
+      (intent.current.deleted || Boolean('restorableUntil' in post && post.restorableUntil));
     return (
       <RemovedPost
         post={post}
@@ -360,9 +443,12 @@ export function ThreadReadingPost({
         itemRef={itemElement}
         menuButton={menuButton}
         {...(removedMinHeight !== undefined ? { minHeight: removedMinHeight } : {})}
-        restoreError={restoreError}
+        restoreError={feedbackScope.current === scope ? restoreError : ''}
+        existingReviewId={feedbackScope.current === scope ? existingReviewId : undefined}
+        deadlineUnknown={intent.current.deleted && !('restorableUntil' in post && post.restorableUntil)}
+        {...(feedbackScope.current === scope && restoreError ? { onRefresh: () => void refreshCurrentPost() } : {})}
         onCopyLink={copyLink}
-        {...(canRestore ? { onRestore: () => void restoreRemovedPost(restoreSnapshot.current) } : {})}
+        {...(canRestore ? { onRestore: () => void restoreRemovedPost() } : {})}
       >
         <ReplyContext parentId={post.parentId} parents={replyParents} />
       </RemovedPost>

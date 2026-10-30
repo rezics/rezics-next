@@ -52,3 +52,8 @@ export const Report: Story = {
 export const Loading: Story = { ...Reading.Loading };
 export const Unavailable: Story = { ...Reading.Unavailable };
 export const CurrentDenial: Story = { ...Reading.CurrentDenial };
+
+export const RestorablePost: Story = {
+  ...Reading.RestorablePost,
+  play: async (context) => Reading.RestorablePost.play!(context),
+};

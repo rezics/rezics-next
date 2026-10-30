@@ -650,8 +650,15 @@ References to deleted, withheld or unavailable records render with `Tombstone`; 
 `Withheld`, leaving the other fields visible. A deleted or withheld page answers 404, following
 [the SEO policy](../../docs/seo.md). Sitemaps drop the URL at the next export; they never authorize page disclosure.
 Warm HTML and validators require [current public rendering](../../docs/seo.md#public-html-cache) before reuse; a TTL never authorizes withdrawn content.
-Restore and Undo call the owner's restore route only once
-that route exists.
+Restore and Undo use the native author's restore route. Its 204 confirms the write, while the existing current
+thread-page read alone supplies body, title, author, media and placement. A failed read after 204 offers a read retry;
+it does not repeat the confirmed write or reveal an earlier local body. An uncertain restore retains its original
+key and checks the current native tombstone before a deliberate retry. Session, actor or target changes retire the
+local intent and any pending disclosure. Delete immediately substitutes a byte-free placeholder, then reads the
+current owner tombstone for its actual deadline. Until that read succeeds, the deadline is explicitly unknown;
+the browser clock never creates it. Native author, permission, expiry, purge and takedown rules remain authoritative.
+A restore conflict links to an existing review only when the native optional `existingThreadId` is supplied; other
+conflicts offer a generic current-state refresh.
 
 ## Cost
 
@@ -2438,6 +2445,25 @@ reading, rich documents with edited and unedited posts, community context, an ex
 parent selection/cancellation, deleted and withheld posts, a deleted organization byline with readable posts, own edit,
 both recorded history versions, reporting, loading, unavailable and current denial states. These are review inputs;
 typing alone establishes no native or visual pass.
+
+`pages-community-thread-reading--restorable-post` and `patterns-community-thread-reading--restorable-post` add a
+constructed native owner tombstone with a fixed source deadline to the same reading region. The fixture establishes
+presentation only, without claiming a successful native restore. Existing `--deleted-post`, `--withheld-post` and
+`--current-denial` states remain review inputs. The focused `tests/thread-undo-current-read.test.ts` covers withheld,
+erased, missing, denied and unavailable reads after restore; a native deadline versus a fake browser clock; read
+retry after a known write; original-key retry after uncertainty; and optional native review hints. Native disclosure
+and visual review remain deferred. No external reference-project source applies to this existing command/read repair.
+
+### Delete and restore current read
+
+- Touches: one native command per explicit intent, followed after 204 by one existing fixed thread-page read at the
+  current cursor and credential mode. That page retains its established identity, context and media batches. A read
+  retry sends no write. An uncertain command retry first reads the current page and writes with the original key only
+  when that page still supplies an eligible native tombstone.
+- Bound: one visible page per read, no continuation drain, ancestry traversal, extra exact-body reader or per-post
+  request. The native reader continues to own current authorization and source fences.
+- Growth check: the focused consumer cases establish read/write separation only; native growth and physical proof
+  remain deferred under the minimal verification contract.
 
 ### Current document images
 

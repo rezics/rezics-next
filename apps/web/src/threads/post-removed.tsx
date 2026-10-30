@@ -8,6 +8,7 @@ import type { ReactNode, Ref } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { PageAuthors } from '../identity/read';
 import { Byline } from './byline';
+import { ExistingReviewNotice } from './write-prompts';
 import type { ThreadPost } from './reads';
 
 export function RemovedPost({
@@ -20,6 +21,9 @@ export function RemovedPost({
   menuButton,
   minHeight,
   restoreError,
+  existingReviewId,
+  deadlineUnknown = false,
+  onRefresh,
   onCopyLink,
   onRestore,
   children,
@@ -33,6 +37,9 @@ export function RemovedPost({
   menuButton: Ref<HTMLButtonElement>;
   minHeight?: number | undefined;
   restoreError?: string | undefined;
+  existingReviewId?: string | undefined;
+  deadlineUnknown?: boolean;
+  onRefresh?: () => void;
   onCopyLink: () => void | Promise<void>;
   onRestore?: () => void;
   children?: ReactNode;
@@ -42,7 +49,7 @@ export function RemovedPost({
   const erasedPost = post.availability === 'erased';
   const deleted = erasedPost || ('removed' in post && post.removed === true);
   const restorableUntil = 'restorableUntil' in post ? post.restorableUntil : undefined;
-  const owner = viewerId !== undefined && authorId === viewerId;
+  const owner = viewerId !== undefined && (authorId === viewerId || Boolean(restorableUntil) || deadlineUnknown);
   const common = {
     id: anchorId,
     ref: itemRef,
@@ -109,10 +116,18 @@ export function RemovedPost({
           </div>
         ) : null}
       </div>
+      {deadlineUnknown ? (
+        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+          <p>{m.thread_post_restore_deadline_unknown()}</p>
+          {onRestore ? <Button variant="outline" size="sm" onClick={onRestore}>{m.thread_post_restore()}</Button> : null}
+        </div>
+      ) : null}
       {restoreError ? (
-        <p className="mt-3 text-sm text-destructive" role="alert">
-          {restoreError}
-        </p>
+        <div className="mt-3 space-y-2 text-sm" role="alert">
+          <p className="text-destructive">{restoreError}</p>
+          {existingReviewId ? <ExistingReviewNotice reviewId={existingReviewId} /> : null}
+          {onRefresh ? <Button variant="outline" size="sm" onClick={onRefresh}>{m.thread_post_refresh()}</Button> : null}
+        </div>
       ) : null}
     </ListRow>
   );

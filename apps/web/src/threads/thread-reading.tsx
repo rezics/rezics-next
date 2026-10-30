@@ -25,7 +25,8 @@ export type ThreadReadingPersonal = Awaited<ReturnType<typeof readThreadPersonal
 
 /** The real reading region; native commands, one composer and immutable revision views stay together. */
 export function ThreadReading({
-  page,
+  page: sourcePage,
+  readAuthority,
   personal,
   session,
   returnTo,
@@ -38,6 +39,7 @@ export function ThreadReading({
   authorErasure,
 }: {
   page: ThreadReadingPage;
+  readAuthority?: object;
   Post: typeof ThreadReadingPost;
   signedOut: ReactNode;
   personal: ThreadReadingPersonal | undefined;
@@ -49,11 +51,15 @@ export function ThreadReading({
   onPostIdsChange?: (ids: string[]) => void;
   authorErasure?: Omit<ComponentProps<typeof AuthorErasureEntry>, 'threadId'>;
 }) {
-  const { thread, realm, posts: loadedPosts, authors, provenanceSubjects, verification, mentions, now } = page;
-  const [posts, setPosts] = useState(loadedPosts);
-  const [currentMentions, setCurrentMentions] = useState(mentions);
-  const [documentMedia, setDocumentMedia] = useState(page.documentMedia);
-  const [displayTitle, setDisplayTitle] = useState(thread.title);
+  const [reading, setReading] = useState({ source: sourcePage, page: sourcePage });
+  // Replace the complete disclosure together, including bylines, media, placement and title.
+  const page = reading.source === sourcePage ? reading.page : sourcePage;
+  if (reading.source !== sourcePage) setReading({ source: sourcePage, page: sourcePage });
+  const { thread, realm, posts, authors, provenanceSubjects, verification, mentions: currentMentions, now, documentMedia } = page;
+  const displayTitle = thread.title;
+  function setPosts(update: (posts: ThreadReadingPage['posts']) => ThreadReadingPage['posts']) {
+    setReading((current) => ({ ...current, page: { ...current.page, posts: update(current.page.posts) } }));
+  }
   const [replyTarget, setReplyTarget] = useState<{ parentId: string | null; focusRequest: number }>({
     parentId: null,
     focusRequest: 0,
@@ -62,6 +68,10 @@ export function ThreadReading({
   const replyParents = useMemo(() => new Map(posts.posts.map((post) => [post.id, post])), [posts.posts]);
   // Private data is consumed only while the session still says signed in.
   const currentPersonal = session === 'signed-in' ? personal : undefined;
+  const refreshScope = useMemo(() => ({}), [readAuthority, thread.id, thread.boardId, realm?.id, session, currentPersonal?.viewerId]);
+  const currentRefresh = useRef(refreshScope);
+  currentRefresh.current = refreshScope;
+  useEffect(() => () => { currentRefresh.current = {}; }, []);
   // A private query can temporarily have no data when its post IDs change. Keep the local draft and intent mounted,
   // but expose no participation controls until current personal data is available again.
   const composer = useRef<{ viewerId: string | null; initialKey: string } | null>(null);
@@ -69,10 +79,6 @@ export function ThreadReading({
     composer.current = { viewerId: currentPersonal.viewerId, initialKey: currentPersonal.idempotencyKey };
   }
   const summary = realm?.summary?.trim();
-  useEffect(() => setPosts(loadedPosts), [loadedPosts]);
-  useEffect(() => setCurrentMentions(mentions), [mentions]);
-  useEffect(() => setDocumentMedia(page.documentMedia), [page.documentMedia]);
-  useEffect(() => setDisplayTitle(thread.title), [thread.id, thread.title]);
   useEffect(() => onPostIdsChange?.(posts.posts.map((post) => post.id)), [posts.posts, onPostIdsChange]);
 
   function selectReplyParent(parentId: string | null) {
@@ -83,12 +89,12 @@ export function ThreadReading({
     setPosts((current) => ({ ...current, posts: current.posts.map((item) => (item.id === post.id ? post : item)) }));
   }
   async function refreshPage() {
+    const scope = currentRefresh.current;
     const updated = await onPageRefresh();
-    if (!updated) return;
-    setPosts(updated.posts);
-    setCurrentMentions(updated.mentions);
-    setDocumentMedia(updated.documentMedia);
-    setDisplayTitle(updated.thread.title);
+    if (currentRefresh.current !== scope) throw new Error('Thread reader changed');
+    if (!updated) throw new Error('Current thread page unavailable');
+    setReading({ source: sourcePage, page: updated });
+    return updated;
   }
 
   return (
@@ -125,6 +131,7 @@ export function ThreadReading({
                       key={post.id}
                       anchorId={`post-${post.id}`}
                       post={post}
+                      readAuthority={readAuthority}
                       authors={authors}
                       mentions={currentMentions}
                       documentMedia={documentMedia}
@@ -146,7 +153,9 @@ export function ThreadReading({
                       onPageRefresh={refreshPage}
                       onOpeningPostChange={(restored) => {
                         const title = restored ? thread.title : null;
-                        setDisplayTitle(title);
+                        setReading((current) => ({
+                          ...current, page: { ...current.page, thread: { ...current.page.thread, title } },
+                        }));
                         rememberThreadSlug(thread.id, title);
                       }}
                       replyParents={replyParents}

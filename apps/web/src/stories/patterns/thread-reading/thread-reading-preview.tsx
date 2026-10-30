@@ -22,6 +22,7 @@ export type ReadingState =
   | 'community'
   | 'existing-reply'
   | 'deleted-organization'
+  | 'restorable'
   | 'deleted'
   | 'withheld'
   | 'own'
@@ -33,7 +34,7 @@ export type ReadingState =
 function readingThread(state: ReadingState) {
   if (state === 'deleted-organization') return { id: deletedOrganizationThreadId, title: owned.thread.title };
   return (
-    state === 'own' || state === 'existing-reply'
+    state === 'own' || state === 'existing-reply' || state === 'restorable'
       ? owned
       : state === 'history'
         ? history
@@ -65,13 +66,18 @@ function Connected({ state }: { state: ReadingState }) {
   if (!loaded) return <ErrorPage />;
   // Explicit lifecycle examples replace the current payload; no earlier revision body is used as a fallback.
   const page =
-    state === 'deleted' || state === 'withheld'
+    state === 'deleted' || state === 'withheld' || state === 'restorable'
       ? {
           ...loaded,
           posts: {
             ...loaded.posts,
             posts: loaded.posts.posts.map((post, index): ThreadPost => {
               if (index !== 1 || post.availability !== 'available') return post;
+              if (state === 'restorable') return {
+                id: post.id, threadId: post.threadId, route: post.route, parentId: post.parentId,
+                availability: 'erased', removed: true, body: null, sha256: null,
+                restorableUntil: '2099-11-23T03:04:05.000Z',
+              };
               return state === 'deleted'
                 ? { ...post, body: null, sha256: null, removed: true, availability: 'erased' }
                 : { ...post, body: null, sha256: null, removed: true, availability: 'withheld' };
@@ -94,7 +100,7 @@ function Connected({ state }: { state: ReadingState }) {
         await queryClient.invalidateQueries();
       }}
       onPageRefresh={async () => {
-        const next = await queryClient.fetchQuery({ ...threadPageQuery(id, undefined, 'anonymous'), staleTime: 0 });
+        const next = await queryClient.fetchQuery({ ...threadPageQuery(id, undefined, session === 'signed-in' ? 'session' : 'anonymous'), staleTime: 0, retry: false });
         return 'redirect' in next ? undefined : next;
       }}
     />

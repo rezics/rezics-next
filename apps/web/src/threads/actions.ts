@@ -12,6 +12,7 @@ import { replyParentId } from './reply-context-intent';
 import { replyToThreadRequest } from './reply-context-request';
 import {
   erasePostRequest,
+  findExistingReview,
   restorePostRequest,
   revisePostRequest,
   startThreadRequest,
@@ -163,7 +164,9 @@ function refusal(status: number, headers: HeadersInit | undefined, body?: unknow
   if (status === 404) return { ok: false, reason: 'not-found' };
   if (status === 409) {
     const code = body && typeof body === 'object' && 'code' in body ? body.code : undefined;
-    return { ok: false, reason: code === 'media_unavailable' ? 'media-unavailable' : 'conflict' };
+    if (code === 'media_unavailable') return { ok: false, reason: 'media-unavailable' };
+    const existingReviewId = findExistingReview(body);
+    return { ok: false, reason: 'conflict', ...(existingReviewId ? { existingReviewId } : {}) };
   }
   if (status === 400 || status === 413 || status === 422) return { ok: false, reason: 'invalid' };
   if (status === 429) {

@@ -187,3 +187,12 @@ export const Report: Story = {
 export const Loading: Story = { args: { state: 'loading' } };
 export const Unavailable: Story = { args: { state: 'unavailable' } };
 export const CurrentDenial: Story = { args: { state: 'denied' } };
+
+export const RestorablePost: Story = {
+  args: { state: 'restorable' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('button', { name: m.thread_post_restore(), exact: true })).toBeVisible();
+    await expect(canvasElement.querySelector('time[datetime="2099-11-23T03:04:05.000Z"]')).toBeVisible();
+  },
+};
