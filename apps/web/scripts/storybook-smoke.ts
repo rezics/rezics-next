@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import { observeStorybook, settle, type StoryPreview } from './screenshots.ts';
 
 export type SmokeStoryEntry = { id: string; title: string; name: string; type: string };
 export type SmokeStoryIndex = { entries: Record<string, SmokeStoryEntry> };
@@ -14,9 +15,6 @@ export type SmokeStories = {
   subject: SmokeStoryEntry;
   copies: SmokeStoryEntry;
   coverMedia: string;
-};
-type StoryPreview = {
-  __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string; phase?: string } };
 };
 
 export function selectSmokeStories(
@@ -108,6 +106,8 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         if (message.type() === 'error') errors.push(`${message.text()} (${location})`);
       });
       try {
+        // Page init scripts also run in each composed ref before its preview installs the channel.
+        await page.addInitScript(observeStorybook);
         const storyId = scenario.composed ? `ui_${scenario.id}` : scenario.id;
         const globals = scenario.globals ? `&globals=${encodeURIComponent(scenario.globals)}` : '';
         if (scenario.composed) {
@@ -138,17 +138,8 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
         if (rendered === 'error') {
           throw new Error(`Story ${storyId} failed to render: ${(await errorOverlay.innerText()).slice(0, 2_000)}`);
         }
-        const phase = await frame.waitForFunction(
-          (id) => {
-            const render = (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender;
-            return render?.id === id && (render.phase === 'finished' || render.phase === 'errored') && render.phase;
-          },
-          scenario.id,
-          { timeout: 30_000 },
-        );
-        if ((await phase.jsonValue()) !== 'finished') {
-          throw new Error(`Story ${storyId} failed its play function: ${errors.join('; ')}`);
-        }
+        // The manager prefixes composed ids; the active ref emits its own unprefixed story id.
+        const outcome = await settle(frame, scenario.id, errors, { timeout: 30_000, fonts: false });
         if (scenario.id === stories.shell.id || scenario.id === stories.signedInShell.id) {
           await frame.getByRole('dialog').waitFor({ state: 'visible', timeout: 10_000 });
         }
@@ -186,6 +177,16 @@ export async function smokeStorybook(origin?: string, suppliedBrowser?: Browser)
           throw new Error(`The recorded cover media ${scenario.coverMedia} did not load from /media/.`);
         }
         if (errors.length) throw new Error(`Story ${storyId} emitted browser errors: ${errors.join('; ')}`);
+        const latest = await frame.evaluate(() => (globalThis as StoryPreview).__REZICS_STORY_OUTCOME__?.read());
+        if (
+          latest?.storyId !== scenario.id ||
+          latest.renderId !== outcome.renderId ||
+          latest.cycle !== outcome.cycle ||
+          latest.phase !== 'finished' ||
+          latest.status !== 'success'
+        ) {
+          throw new Error(`Story ${storyId} render outcome changed during smoke. ${latest?.errors.join(' | ') ?? ''}`);
+        }
       } finally {
         await page.close();
       }

@@ -4,6 +4,8 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { stackRun } from '../../../scripts/stack-run.ts';
 
+export { observeStorybook, settle };
+
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
@@ -26,7 +28,7 @@ type Options = {
 type Job = { id: string; locale: string; theme: string; width?: number; widthSuffix?: boolean };
 type CaptureFailure = { job: Job; error: string };
 type CaptureResult = { files: string[]; failures: CaptureFailure[] };
-type StoryOutcome = {
+export type StoryOutcome = {
   storyId: string;
   renderId?: number;
   cycle: number;
@@ -34,7 +36,7 @@ type StoryOutcome = {
   status?: string;
   errors: string[];
 };
-type StoryPreview = {
+export type StoryPreview = {
   __STORYBOOK_PREVIEW__?: {
     currentRender?: { id: string; renderId: number; phase?: string; abortController: { signal: AbortSignal } };
   };
@@ -371,7 +373,12 @@ function observeStorybook(): void {
   });
 }
 
-async function settle(page: Page, id: string, pageErrors: readonly string[] = []): Promise<StoryOutcome> {
+async function settle(
+  page: Pick<Page, 'waitForFunction' | 'evaluate'>,
+  id: string,
+  pageErrors: readonly string[] = [],
+  { timeout = 60_000, fonts = true } = {},
+): Promise<StoryOutcome> {
   const failure = (outcome: StoryOutcome | undefined, timeout?: unknown) => {
     const errors = [...(outcome?.errors ?? []), ...pageErrors].slice(0, 5);
     const details = errors.length ? ` First page errors: ${errors.join(' | ')}` : '';
@@ -390,7 +397,7 @@ async function settle(page: Page, id: string, pageErrors: readonly string[] = []
         );
       },
       id,
-      { timeout: 60_000 },
+      { timeout },
     );
   } catch (error) {
     const unavailable = (phase: string): StoryOutcome => ({ storyId: id, cycle: 0, phase, errors: [] });
@@ -420,10 +427,12 @@ async function settle(page: Page, id: string, pageErrors: readonly string[] = []
   }
   const outcome = await page.evaluate(() => (globalThis as StoryPreview).__REZICS_STORY_OUTCOME__?.read());
   if (outcome?.storyId !== id || outcome.phase !== 'finished' || outcome.status !== 'success') throw failure(outcome);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    if (document.fonts.status !== 'loaded') await document.fonts.ready;
-  });
+  if (fonts) {
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      if (document.fonts.status !== 'loaded') await document.fonts.ready;
+    });
+  }
   return outcome;
 }
 
