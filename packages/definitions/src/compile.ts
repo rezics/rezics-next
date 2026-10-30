@@ -18,6 +18,7 @@ import {
   type RelationGroup,
   type Release,
   type SavedFilter,
+  type TypeDefinition,
 } from './index.ts';
 
 export type CatalogueViolation = {
@@ -150,6 +151,8 @@ export async function compileCatalogue(input: {
         add({ ...location, pointer: at(location.pointer, key) }, 'unsupported', 'Unsupported key');
   };
   const parsed = dictionary<Node>();
+  type ListDeclaration = { value: NonNullable<TypeDefinition['listPresentation']>; location: Location };
+  const listDeclarations = new Map<string, ListDeclaration>();
   const files = Object.keys(input.schemas).sort(compare);
   const maxSchemaFiles = 256;
   if (files.length > maxSchemaFiles)
@@ -206,8 +209,31 @@ export async function compileCatalogue(input: {
           const definition = object(value);
           if (definition.annotations !== undefined) {
             const annotationLocation = { ...location, pointer: at(location.pointer, 'annotations') };
-            allowed(definition.annotations, 'facets cover_ratio schema_org_type library', annotationLocation);
+            allowed(definition.annotations, 'facets cover_ratio schema_org_type library list_presentation', annotationLocation);
             const annotations = object(definition.annotations);
+            if (Object.hasOwn(annotations, 'list_presentation')) {
+              const location = { file, pointer: at(annotationLocation.pointer, 'list_presentation') };
+              const hint = annotations.list_presentation;
+              allowed(hint, 'imageAspect keyFacts', location);
+              if (record(hint)) {
+                if (!['portrait', 'landscape', 'square'].includes(hint.imageAspect as string))
+                  add({ ...location, pointer: at(location.pointer, 'imageAspect') }, 'invalid', 'Expected portrait, landscape or square');
+                if (!Array.isArray(hint.keyFacts))
+                  add({ ...location, pointer: at(location.pointer, 'keyFacts') }, 'invalid', 'Expected a list of property CURIEs');
+                else {
+                  if (hint.keyFacts.length > 4)
+                    add({ ...location, pointer: at(location.pointer, 'keyFacts') }, 'limit', 'At most four key facts are allowed');
+                  const seen = new Set<string>();
+                  hint.keyFacts.forEach((key, index) => {
+                    const pointer = at(at(location.pointer, 'keyFacts'), index);
+                    if (typeof key !== 'string') add({ file, pointer }, 'invalid', 'Expected a property CURIE');
+                    else if (seen.has(key)) add({ file, pointer }, 'duplicate', 'Duplicate key fact');
+                    else seen.add(key);
+                  });
+                }
+                listDeclarations.set(name, { value: hint as ListDeclaration['value'], location });
+              }
+            }
             const facets = annotations.facets;
             if (facets !== undefined && typeof facets !== 'string')
               add(
@@ -265,7 +291,7 @@ export async function compileCatalogue(input: {
   const library = compileLibraryProfiles(parsed, add);
   stop();
 
-  // Native library mappings are compiler data, outside LinkML's scalar annotations ABI.
+  // Native inert mappings are compiler data, outside LinkML's scalar annotations ABI.
   // Preserve every other source field and all ordinary LinkML induction and linting.
   const linkmlSchemas = { ...input.schemas };
   for (const [file, source] of Object.entries(parsed)) {
@@ -275,6 +301,10 @@ export async function compileCatalogue(input: {
       const annotations = object(object(definition).annotations);
       if (Object.hasOwn(annotations, 'library')) {
         delete annotations.library;
+        changed = true;
+      }
+      if (Object.hasOwn(annotations, 'list_presentation')) {
+        delete annotations.list_presentation;
         changed = true;
       }
     }
@@ -472,6 +502,16 @@ export async function compileCatalogue(input: {
     return result;
   };
   const facetOrigins = new Map<string, Map<string, { name: string; location: Location }>>();
+  // Memoize the nearest explicit whole object, including absence. LinkML has
+  // already rejected inheritance cycles; no emitted reader needs an ancestor walk.
+  const effectiveLists = new Map<string, ListDeclaration | undefined>();
+  const listFor = (name: string): ListDeclaration | undefined => {
+    if (effectiveLists.has(name)) return effectiveLists.get(name);
+    const parent = parents.get(name);
+    const value = listDeclarations.get(name) ?? (parent ? listFor(parent) : undefined);
+    effectiveLists.set(name, value);
+    return value;
+  };
   for (const term of classes) {
     const properties = unique(
       Object.keys(object(term.value.attributes)).flatMap((name) => slotKeysByName.get(name) ?? []),
@@ -540,6 +580,7 @@ export async function compileCatalogue(input: {
       properties,
       facets,
       ...(effectiveCoverRatio === undefined ? {} : { coverRatio: effectiveCoverRatio }),
+      ...(listFor(term.name) === undefined ? {} : { listPresentation: structuredClone(listFor(term.name)!.value) }),
       ...(typeof ownSchemaOrgType === 'string' ? { schemaOrgType: ownSchemaOrgType } : {}),
     };
     const reference = library.reference(term.name);
@@ -772,6 +813,18 @@ export async function compileCatalogue(input: {
         );
       }
     }
+  // Check every authored declaration, including unused abstract bases. Retain
+  // its actual source pointer when an inherited selection is invalid.
+  for (const [name, declaration] of listDeclarations) {
+    const attributes = object(object(object(derived.classes)[name]).attributes);
+    const properties = new Set(Object.keys(attributes).flatMap((slot) => slotKeysByName.get(slot) ?? []));
+    declaration.value.keyFacts.forEach((key, index) => {
+      const location = { ...declaration.location, pointer: at(at(declaration.location.pointer, 'keyFacts'), index) };
+      const property = release.properties[key];
+      if (!expand(key, location) || !properties.has(key) || !property || !facetable(property))
+        add(location, 'invalid', `Key fact ${key} must be an effective property representable by Search Fact`);
+    });
+  }
   if (classes.length > RELEASE_LIMITS.types || slots.length > RELEASE_LIMITS.properties)
     add({ file: input.root, pointer: '' }, 'limit', 'Release collection limit exceeded');
   if (typeof release.catalogue.id !== 'string' || !iri.test(release.catalogue.id))

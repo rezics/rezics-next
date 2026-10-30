@@ -4,9 +4,50 @@ The immutable definition catalogue release format stored by the kernel. This pac
 exports the release types, the JSON Schema 2020-12 document at
 `@rezics/definitions/schema/release.json`, and pure validation and digest functions.
 
-The selected Type list hints and Collection presentation/editor contract live in
-[Collection presentation and editor](../../docs/collection-presentation.md). That page distinguishes the selected
-additive release shape from current compiler/schema delivery; it does not change this package's runtime today.
+The joint contract lives in [Collection presentation and editor](../../docs/collection-presentation.md).
+This package delivers its optional Type list-presentation data through the compiler, release schema,
+bundled catalogue and both normal definitions recordings. Collection runtime and Web rendering have separate owners.
+
+## Type list presentation
+
+`TypeDefinition.listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: string[] }`
+is a closed inert object. Frames mean 3:4, 16:9 and 1:1 respectively. `keyFacts` preserves author order,
+contains 0–4 unique effective property CURIEs, and admits only existing Search Fact projections:
+`wikibase-item`, `time`, `quantity`, or a `string` with an admitted pattern. Documents, media, free text,
+external IDs, executable formatters, JSON paths and private Library fields cannot supply these hints.
+Localized property/value labels and unit metadata retain their existing meaning in all eight locales.
+
+Author exactly that object as `classes.<name>.annotations.list_presentation`, including on abstract bases.
+The nearest explicit declaration replaces the whole object; `keyFacts: []` clears inherited facts.
+Compilation emits the effective object on each applicable Type. Unknown fields, missing members, invalid
+frames, nonarrays, duplicates, over-four lists and unknown, out-of-Type or unrepresentable properties fail
+with source pointers. Release validation enforces the same closure and references with release pointers.
+Only this custom object and the existing library mapping are removed before ordinary LinkML induction;
+all other annotations and LinkML validation remain intact. Older releases may omit hints entirely.
+
+The published inventory is data in `catalogue/`: Book and edition, manga work and volume, and visual novel
+use portrait; Movie, TV series, season, episode, anime release and Recipe use landscape; MusicAlbum uses
+square; person and character use portrait. Generic Types inherit the safe square frame and empty facts
+from Thing. Book selects author/datePublished/wordCount; Movie selects director/datePublished/duration;
+Recipe selects cookTime/suitableForDiet; MusicAlbum selects datePublished/genre. Other selections use only
+each Type's effective properties. Existing `coverRatio`, media dimensions, source authority, membership,
+LibraryProfileSource and accepted profile pins remain unchanged; hints convey no authority or fact values.
+
+Regenerate `release/rezics.json` with `bun run --cwd packages/definitions release`, then regenerate both
+`apps/web/src/kernel/recorded/definitions-active.json` and `definitions-release.json` in the same change with
+`bun apps/web/scripts/record.ts definitions-active definitions-release`. The normal recorder owns stack
+placement and returned artifacts; generated release identity and recording bodies must agree.
+
+### Cost
+
+- Touches: existing bounded type/property collections, at most four property references per hinted Type,
+  one effective inert object per emitted Type, and the existing immutable definitions response/recordings.
+- Bound: linear in admitted catalogue bytes/types/properties with memoized hint inheritance; the existing
+  4 MiB release and construction caps stay exact. No SQL, request branch, deployment or authorization path
+  is added. Whole-release bytes, ETag and publication permissions retain their existing rules.
+- Growth check: `type-list-presentation.test.ts` and `type-list-presentation-expansion.test.ts` exercise
+  real 10/100 manifests, inheritance, clearing, invalid references, immutable pins, source exclusion and
+  bundle/recording parity. Original expansion and historical archive construction controls run unchanged.
 
 ## Construction compatibility in source archives
 

@@ -56,6 +56,11 @@ export type TypeDefinition = {
   properties: string[];
   facets: string[];
   coverRatio?: string;
+  /** Effective inert card frame and ordered Search Fact property hints. */
+  listPresentation?: {
+    imageAspect: 'portrait' | 'landscape' | 'square';
+    keyFacts: string[];
+  };
   /** Explicit https://schema.org/Type IRI used as JSON-LD @type; absent in older releases. */
   schemaOrgType?: string;
   library?: LibraryProfileReference;
@@ -387,6 +392,11 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
       if (expand(base) === undefined) add(at(at(pointer, 'bases'), index));
     });
     const typeProperties = new Set(type.properties);
+    type.listPresentation?.keyFacts.forEach((key, index) => {
+      const property = release.properties[key];
+      if (expand(key) === undefined || !typeProperties.has(key) || !property || !facetable(property))
+        add(at(at(at(pointer, 'listPresentation'), 'keyFacts'), index));
+    });
     type.facets.forEach((facet, index) => {
       const facetPointer = at(at(pointer, 'facets'), index);
       const property = release.properties[facet];

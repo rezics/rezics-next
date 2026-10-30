@@ -23,6 +23,9 @@ classes:
       - name
       - sameAs
     annotations:
+      list_presentation:
+        imageAspect: square
+        keyFacts: []
       cover_ratio: 1:1
   CreativeWork:
     abstract: true
@@ -67,6 +70,9 @@ classes:
     is_a: Thing
     description: A character represented in a creative work.
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: []
       cover_ratio: 3:4
   CreativeWorkSeries:
     abstract: true
@@ -89,6 +95,9 @@ classes:
       - bangumiPersonId
       - vndbId
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:birthDate]
       cover_ratio: 3:4
       schema_org_type: https://schema.org/Person
   Organization:

@@ -27,6 +27,9 @@ classes:
     slots:
       - bangumiSubjectId
     annotations:
+      list_presentation:
+        imageAspect: square
+        keyFacts: [schema:datePublished, schema:genre]
       facets: contributor partOfSeries genre keywords inLanguage
       cover_ratio: 1:1
       schema_org_type: https://schema.org/MusicAlbum

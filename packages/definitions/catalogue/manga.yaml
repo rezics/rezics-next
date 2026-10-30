@@ -29,6 +29,9 @@ classes:
     exact_mappings:
       - wd:Q21198342
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:author, schema:datePublished, schema:genre]
       facets: keywords genre datePublished author illustrator voiceActor publisher contributor character partOfSeries inLanguage
       schema_org_type: https://schema.org/ComicSeries
     slots:
@@ -58,6 +61,9 @@ classes:
     exact_mappings:
       - wd:Q1238720
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:author, schema:datePublished, schema:numberOfPages]
       facets: keywords genre datePublished author illustrator voiceActor publisher contributor character partOfSeries inLanguage
       schema_org_type: https://schema.org/PublicationVolume
     slots:

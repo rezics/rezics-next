@@ -34,6 +34,9 @@ classes:
       - wordCount
       - workFormat
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:author, schema:datePublished, schema:wordCount]
       library:
         id: book.reading
         entryStateSet:
@@ -88,6 +91,9 @@ classes:
       - inLanguage
       - translator
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:author, schema:datePublished, schema:numberOfPages]
       library:
         id: book.edition
         entryStateSet:

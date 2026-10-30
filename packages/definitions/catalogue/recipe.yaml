@@ -32,6 +32,9 @@ classes:
       - keywords
       - suitableForDiet
     annotations:
+      list_presentation:
+        imageAspect: landscape
+        keyFacts: [schema:cookTime, schema:suitableForDiet]
       library:
         id: recipe.cooking
         entryStateSet:

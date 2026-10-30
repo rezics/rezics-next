@@ -47,6 +47,9 @@ classes:
       - screenwriter
       - voiceActor
     annotations:
+      list_presentation:
+        imageAspect: landscape
+        keyFacts: [schema:datePublished, schema:director]
       facets: exampleOfWork animeReleaseContains filmDistributor inLanguage datePublished distributionFormat publisher translator author illustrator director musicBy producer productionCompany screenwriter voiceActor
       schema_org_type: https://schema.org/CreativeWork
   TVSeries:
@@ -85,6 +88,9 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      list_presentation:
+        imageAspect: landscape
+        keyFacts: [schema:director, schema:datePublished, schema:numberOfEpisodes]
       library:
         id: anime.series
         entryStateSet:
@@ -145,6 +151,9 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      list_presentation:
+        imageAspect: landscape
+        keyFacts: [schema:director, schema:datePublished, schema:duration]
       library:
         id: anime.film
         entryStateSet:
@@ -205,6 +214,9 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      list_presentation:
+        imageAspect: landscape
+        keyFacts: [schema:director, schema:datePublished, schema:numberOfEpisodes]
       library:
         id: anime.season
         entryStateSet:
@@ -262,6 +274,9 @@ classes:
       - genre
       - keywords
     annotations:
+      list_presentation:
+        imageAspect: landscape
+        keyFacts: [schema:director, schema:datePublished, schema:duration]
       library:
         id: anime.episode
         entryStateSet:

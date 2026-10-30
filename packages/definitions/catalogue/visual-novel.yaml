@@ -34,6 +34,9 @@ classes:
       - basedOnWork
       - spinOffOf
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:author, schema:datePublished, schema:genre]
       library:
         id: visual-novel.reading
         entryStateSet:
