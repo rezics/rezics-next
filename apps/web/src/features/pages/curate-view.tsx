@@ -12,6 +12,9 @@ import { publishCuration, readCuration, type CurationRead } from './curate-actio
 import { confirmSubjectCandidate, readSubjectCandidates } from './curate-actions';
 import { CandidateReview } from '../../subject/candidate-review';
 import { useSession } from '../../session/query';
+import { PresentationPreviewPanel, PresentationPreviewContext } from './presentation-preview-view';
+import { readPresentationPreview } from './curate-actions';
+import { useContext } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { CurationPublication, type PublicationConfirmation, type PublicationTransport } from './curation-publish';
 import { CurationFailureNotice, CurationPublicationRecovery } from './curation-publish-view';
@@ -75,6 +78,7 @@ export function CurationView({
   initial: CurationRead;
   transport?: PublicationTransport;
 }) {
+  const preview = useContext(PresentationPreviewContext);
   const [current, setCurrent] = useState(initial);
   const [failure, setFailure] = useState<CurationFailure | null>(null);
   const [message, setMessage] = useState('');
@@ -179,6 +183,12 @@ export function CurationView({
         </p>
       ) : null}
       {failure ? <Failure failure={failure} /> : null}
+      <PresentationPreviewPanel
+        key={getLocale()}
+        locale={getLocale()}
+        read={(input) => readPresentationPreview({ data: input, headers: csrfHeaders() })}
+        {...preview}
+      />
       <CurationPublicationRecovery
         publication={publication}
         profile={profile}

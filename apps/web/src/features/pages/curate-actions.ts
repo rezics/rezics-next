@@ -9,6 +9,12 @@ import { curationFailure, publishProfile, type CurationFailure, type PublishInpu
 import { pickText } from '@rezics/composition';
 import { readRelease } from '../../subject/definitions';
 import {
+  loadPresentationPreview,
+  presentationPreviewClient,
+  previewInput,
+  type PresentationPreview,
+} from './presentation-preview';
+import {
   readCandidates,
   selectCandidate,
   type CandidateCommand,
@@ -92,6 +98,19 @@ export const publishCuration = createServerFn({ method: 'POST' })
     if (!authorization) return { ok: false, reason: 'forbidden' };
     if ('ok' in data) return data;
     return publishProfile(kernelClient(), { ...data, authorization });
+  });
+
+/** Inspection uses the current session only at the BFF; every native read is explicitly anonymous. */
+export const readPresentationPreview = createServerFn({ method: 'POST', strict: false })
+  .validator((value: unknown) => previewInput(value))
+  .handler(async ({ data }): Promise<PresentationPreview> => {
+    const authorization = await sessionBearer();
+    if (!authorization) return { ok: false, reason: 'denied' };
+    if (!data) return { ok: false, reason: 'invalid' };
+    const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+    // No fixture fallback can claim to be the current native public page.
+    if (!origin) return { ok: false, reason: 'unavailable' };
+    return loadPresentationPreview(presentationPreviewClient(origin, globalThis.fetch), data);
   });
 
 function candidateAddress(input: unknown) {

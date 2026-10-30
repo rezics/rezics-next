@@ -82,6 +82,26 @@ Algolia, Discourse, OpenSearch and HTTP/accessibility/JSON-LD sources, with prov
   `content.authored_field`. The registry has no selected authored-document descriptor; current
   ThreadList/ReviewList lack read callbacks, and `pages.read` lacks the specified Realm selector and
   aggregate continuation. A body reference is not yet a composed authored-body journey.
+- **Curation inspection:** `/curate/presentation` now has a separate active published inspection region.
+  It makes one anonymous current `pages.read` with an existing Subject address (and optional Realm) or a
+  configured route, then reads the response's immutable profile and separately observes the active head.
+  The pinned profile digest and document must agree with the native selection through the existing
+  composition helper. Native scope/key are the selection witness; the client does not reconstruct a Type
+  hierarchy or claim the independently observed head was part of the aggregate snapshot. A changed active
+  profile asks for another inspection. Unknown routes cannot become generic previews, and failed native
+  reads never become a successful static shell. The native aggregate retains its 16-read/128-slot and
+  current Context/publication/source bounds; the two control reads add no per-row body, media or Subject IO.
+  The shared registry renders the actual returned title, cover, facts and document without admin feature
+  slots or SEO scripts. Its query client sees anonymous session state and is separate from the curator's
+  cache, and anonymous registry controls preserve the curator's imperative CSRF token. All inspection
+  transport strips credentials and session tokens and uses `no-store`; editor
+  state and publish/activate behavior are independent. There is no safe unpublished-draft preview API on
+  this path, so the region explicitly says **ACTIVE published preview**. Additional personal host regions
+  and supplementary rating/community reads are not synthesized by this inspection.
+  Connected examples are `patterns-curation-presentation-resolution--current-resolution`,
+  `--route-resolution`, `--denied`, `--unavailable` and `--draft-distinction`, using shared viewport,
+  locale and theme globals. They use a recorded public Subject body inside clearly identified
+  contract-shaped aggregate fixtures; native execution and Web visual review remain separate.
 
 ## Remaining whole work and evidence level
 

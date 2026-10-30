@@ -2,6 +2,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import { createIsomorphicFn, createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { useSyncExternalStore } from 'react';
+import { createContext, useContext } from 'react';
 import { personalRead } from '../kernel/query';
 import type { SessionEnv } from './client';
 import { readSessionState, type SessionState } from './state';
@@ -64,13 +65,19 @@ export const exposureQuery = queryOptions({
 const subscribe = () => () => {};
 type ClientSession = { state: 'unknown' | SessionState; csrfToken: string | null; subject?: string | null };
 
+/** Read-only registry hosts use an isolated client seeded with an anonymous session. */
+export const AnonymousSessionContext = createContext(false);
+
 function useBrowserSession(): ClientSession {
+  const anonymous = useContext(AnonymousSessionContext);
   const hydrated = useSyncExternalStore(
     subscribe,
     () => true,
     () => false,
   );
   const { data } = useQuery({ ...sessionQuery, enabled: personalRead.enabled && hydrated });
+  // An isolated anonymous host must not clear the surrounding curator's imperative CSRF token.
+  if (anonymous) return { state: 'signed-out', csrfToken: null, subject: null };
   // A guard can seed the server cache, so hydration also initializes imperative transports.
   if (hydrated && data) browserCsrfToken = data.csrfToken;
   return hydrated && data ? data : { state: 'unknown', csrfToken: null };
