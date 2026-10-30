@@ -1,4 +1,6 @@
 -- Local positive evidence only. No branch proves foreign/shared absence.
+-- Subject-home subject_offer_reference copies are minimal offer-key locators. Their source
+-- ownership is the indexed creator offer range below; foreign cleanup/custody remains pending.
 -- Each probe is anchored to this account's native home and indexed ownership prefix.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id

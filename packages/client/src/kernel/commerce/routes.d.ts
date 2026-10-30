@@ -3814,6 +3814,27 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     };
 } & {
     v1: {
+        subjects: {
+            ':id': {
+                offers: {
+                    get: {
+                        body: unknown;
+                        params: { id: string };
+                        query: { cursor?: string; limit?: number };
+                        headers: unknown;
+                        response: {
+                            200: import('./model.ts').SubjectOffersPage;
+                            400: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
+                            401: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
+                            404: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
+                            409: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
+                            503: { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: 'not_applicable' | 'not_applied'; request_id: string; detail?: string };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
         commerceMoney: {
             get: {
                 body: unknown;

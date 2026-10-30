@@ -1,4 +1,5 @@
 import { BenefitAcquisitionError } from './acquisition.ts';
+import { listSubjectOffers } from './subject-offers.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './money.ts';
 import { ContentEditionUnavailableError, contentEditionTermsView, decodeCapturedContentEdition } from './benefit.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
@@ -372,6 +373,65 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
     },
   });
   const routes = app
+    .get(
+      '/v1/subjects/:id/offers',
+      {
+        params: t.Object({ id }),
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 20, default: 10 })),
+          },
+          object,
+        ),
+        response: {
+          200: t.Object(
+            {
+              offers: t.Array(
+                t.Object(
+                  {
+                    id,
+                    targetSubjectId: id,
+                    title: t.String(),
+                    currency: t.String(),
+                    unitAmountMinor: t.Integer(),
+                    ...capturedMoneySchemas,
+                    revision: t.Integer({ minimum: 1 }),
+                    contentEdition: contentEditionSchema,
+                  },
+                  object,
+                ),
+              ),
+              next: nullableId,
+              projectionState: t.Union([t.Literal('ready'), t.Literal('preparing')]),
+            },
+            object,
+          ),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          401: unauthorized,
+          404: problemSchema('not_found'),
+          409: problemSchema('stale_cursor'),
+          503: unavailable,
+        },
+        detail: detail('subject_offers.list', 'subject:read', 'gate:purchases', true),
+      },
+      async ({ params, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          listSubjectOffers(
+            {
+              pool,
+              tokens,
+              routeKey: deps.routeKey,
+              access: deps.access(),
+            },
+            actor,
+            params.id,
+            { ...query, deadline: job.deadline },
+          ),
+        );
+      },
+    )
     .get(
       '/v1/commerceMoney',
       {
