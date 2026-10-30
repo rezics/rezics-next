@@ -352,8 +352,9 @@ async function site(): Promise<string> {
     for (;;) {
       if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
       try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
+        const response = await fetch(`${origin}/@vite/client`, { signal: AbortSignal.timeout(60_000) });
+        if (response.ok) return origin;
+        throw new Error(`Vite answered ${response.status} while starting:\n${await response.text()}`);
       } catch {
         // The Vite server is still starting.
       }
