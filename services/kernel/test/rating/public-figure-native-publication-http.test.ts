@@ -33,6 +33,8 @@ async function exactPublicOutcome(fixture: NativePublicationFixture, subjectId: 
     score,
   };
   const published = await fixture.current(subjectId);
+  const asOf = published.asOf;
+  if (asOf === null) throw new Error('A current published native figure must have an asOf timestamp');
   expect(published).toEqual({
     questionId: STANDARD_QUESTION_ID,
     populationId: GLOBAL_CONTEXT.id,
@@ -114,7 +116,7 @@ async function exactPublicOutcome(fixture: NativePublicationFixture, subjectId: 
         score,
         priorEpoch: 1,
         revision: published.revision,
-        asOf: published.asOf,
+        asOf,
       },
     ],
   ]);
