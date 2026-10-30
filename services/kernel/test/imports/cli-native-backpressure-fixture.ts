@@ -327,6 +327,19 @@ export async function runCliNativeBackpressureJourney() {
       }
       return result;
     }
+    function journals(commands: readonly BatchCommand[]) {
+      return local((db) =>
+        commands.map((command) => {
+          const row = db
+            .query(
+              'SELECT source,external_id,key,bytes,signature,acknowledgement FROM binding_journal WHERE source=? AND external_id=? AND key=?',
+            )
+            .get(source, command.source.external_id, command.key);
+          expect(row).not.toBeNull();
+          return row;
+        }),
+      );
+    }
     async function selection(id: string, context: string) {
       const path = `/v1/subjects/${id}?context=${context}`;
       const response = await editor.http(path);
@@ -341,6 +354,7 @@ export async function runCliNativeBackpressureJourney() {
     expect(completedBaselineBefore.source.count).toBe(rows.length);
     const originalBindings = bindings();
     const originalCommands = [...knownCommands.values()];
+    const originalJournalRowsBefore = journals(originalCommands);
     const originalReceiptRowsBefore = await receipts(originalCommands);
     const id = originalBindings[1]!.claim.subject;
     const listing = await editor.http(`/v1/subjects/${id}/candidates?property=schema:name&limit=100`);
@@ -445,6 +459,8 @@ export async function runCliNativeBackpressureJourney() {
     expect(resumedBodies).toEqual(pendingPreparedBytes.toSorted());
     expect(baseline().source.count).toBe(rows.length);
     expect(bindings()).toEqual(originalBindings);
+    const originalJournalRowsAfter = journals(originalCommands);
+    expect(originalJournalRowsAfter).toEqual(originalJournalRowsBefore);
     const originalReceiptRowsAfter = await receipts(originalCommands);
     const independentSelectionAfter = await selection(id, context);
     expect(await runtime.mediaBoundary.observe(mediaId)).toEqual(mediaBefore);
@@ -496,6 +512,8 @@ export async function runCliNativeBackpressureJourney() {
         completedBaselineAfterExhaustion,
         pending,
         originalBindings,
+        originalJournalRowsBefore,
+        originalJournalRowsAfter,
         originalReceiptRowsBefore,
         originalReceiptRowsAfter,
         independentSelectionBefore,
