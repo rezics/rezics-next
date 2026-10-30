@@ -262,18 +262,43 @@ Handled locator rows are deleted except `ban_actor`, which stays until the reaso
 It empties each reason at that ban's own expiry, leaves the ban in place, removes the locator and reports the
 earliest remaining expiry as `nextDueAt`.
 
-### Erase account community records and expire ban reasons
+The tombstone consumer closes the account's locator fence before paging memberships, archived revisions,
+community records and notices, then waits for Rating's own tombstone purge. It rechecks any pending phase and the
+rating completion status after a durable ten-minute delay. Before acknowledgement it probes the member and
+revision locators, party locators, inbox notices, seen marker and unresolved late-item frontier. It allows only
+`ban_actor` locators whose reason is covered by the one retention exception. An account with no located community
+rows and no prior vote is acknowledged as `community: none`; otherwise it is `community: erased`. Replayed
+tombstones resume the same account-and-phase workflow IDs and the acknowledgement is idempotent. Late locator
+effects after fence closure minimize their source and resolve their own late item; the consumer repeats its proof
+until that work is visible as resolved.
 
-- Touches: one account-partition primary-key range of at most 50 locator keys; one source point update or delete
-  per key, plus one primary-key operation read and one primary-key DBOS status read per membership operation.
-  Locator deletion and the earliest remaining ban expiry are account-partition commands or indexed seeks.
-- Bound: rows and statements are linear in the page, at most 50 keys; blocks are O(k log B). Total work is linear
-  in the account's own records and independent of other Realms' bans, operations and verdicts.
-- Growth check: `test/community/account-erasure-records.test.ts`, “an account community record erasure page stays
-  within its bound as other Realms' bans, operations and verdicts grow”, with a constant page at 256, 1024 and
-  4096 unrelated Realms.
-- Fence cost: each party-locator effect adds one locked account-key read, or one first-account insert; closing is
-  one statement. Rows and statements stay constant per effect, with logarithmic blocks in accounts per partition.
+The participant retains only ban reasons from the last 183 days, for complaints by the banned person. The single
+exception is `community.realm_ban.reason`, with purpose “Ban reasons kept for complaints by the banned person,
+open six months after each ban” and the latest retained ban's own expiry. Each ban reason is emptied at its own
+183-day expiry; the ban row and Access denial remain. An acknowledgement records only this participant's outcome
+and exception. It does not imply that the account-wide erasure is complete while other participants or the global
+effects frontier remain pending.
+
+Memberships are closed and erased. Archived revision text is erased; current revisions and creator IDs remain under
+item 5 of `docs/deletion.md`. Bans against the account are deleted. The account is removed from bans it issued,
+membership operations and curator verdicts. The recent ban reason above is the only Community retention exception.
+
+### Community account-erasure phases and cost
+
+| Phase | Touches and bound |
+| --- | --- |
+| Fence close | One locked account-key read and one fence update in the account's partition. Each locator effect adds one locked account-key read, or one first-account insert. |
+| Memberships | The membership producer's bounded page plus one account-partition progress-row read and update. Total work is linear in this account's Realm membership data. |
+| Archived revisions | At most 50 account-partition revision locator keys per page, owner-partition archive clears, and one account-partition locator cleanup and progress update. Total work is linear in the account's archived revisions. |
+| Community records | At most 50 account-partition party locator keys per page and one source point update or delete per key; membership operations add one operation-key read and one DBOS status read. Growth stays independent of unrelated Realms' records. |
+| Notices | The notice producer's bounded inbox page plus one account-partition progress-row read and update. Total work is linear in this account's notices and seen state. |
+| Rating wait | The rating completion read uses constant indexed probes; no rating rows are copied or purged by Community. |
+| Locator proof and acknowledgement | Constant locator existence probes, one account-partition progress update and one Access acknowledgement command. |
+| Ban-reason expiry | At most 50 due `ban_actor` locator keys per page, one owner-partition reason clear per key, then locator removal and one earliest-expiry indexed seek. Total work is linear in this account's retained reasons. |
+
+Each workflow step commits one bounded command per partition and releases its connection before crossing partitions or
+waiting. Progress is keyed by the account in its home partition. Total work is linear in that account's own
+community, rating and notice data; no step scans unrelated Realms or account histories.
 
 ## Realm home shelf
 

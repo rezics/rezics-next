@@ -256,6 +256,29 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: account_erasure_progress; Type: TABLE; Schema: community; Owner: -
+--
+
+CREATE TABLE community.account_erasure_progress (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    step bigint DEFAULT 0 NOT NULL,
+    phase text NOT NULL,
+    cursor jsonb,
+    erased_at timestamp with time zone NOT NULL,
+    community_found boolean DEFAULT false NOT NULL,
+    phase_pending boolean DEFAULT false NOT NULL,
+    reasons_kept_until timestamp with time zone,
+    rating_had_votes boolean DEFAULT false NOT NULL,
+    CONSTRAINT account_erasure_progress_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT account_erasure_progress_check1 CHECK (isfinite(erased_at)),
+    CONSTRAINT account_erasure_progress_check2 CHECK (((reasons_kept_until IS NULL) OR isfinite(reasons_kept_until))),
+    CONSTRAINT account_erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['close'::text, 'memberships'::text, 'revisions'::text, 'records'::text, 'notices'::text, 'rating'::text, 'proof'::text, 'complete'::text]))),
+    CONSTRAINT account_erasure_progress_step_check CHECK ((step >= 0))
+);
+
+
+--
 -- Name: erasure_fence; Type: TABLE; Schema: community; Owner: -
 --
 
@@ -614,9 +637,15 @@ WITH (fillfactor='50');
 
 
 --
+-- Name: account_erasure_progress account_erasure_progress_pkey; Type: CONSTRAINT; Schema: community; Owner: -
+--
+ALTER TABLE ONLY community.account_erasure_progress
+    ADD CONSTRAINT account_erasure_progress_pkey PRIMARY KEY (route, account_id);
+
+
+--
 -- Name: erasure_fence erasure_fence_pkey; Type: CONSTRAINT; Schema: community; Owner: -
 --
-
 ALTER TABLE ONLY community.erasure_fence
     ADD CONSTRAINT erasure_fence_pkey PRIMARY KEY (route, account_id);
 

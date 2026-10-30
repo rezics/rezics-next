@@ -250,3 +250,16 @@ export async function deleteAccountNoticeSeen(pool: Pool, accountId: string): Pr
     (await deleteNoticeSeen.run(client, { route, account_id: accountId })) === null ? 0 : 1,
   );
 }
+
+/** Provisional consumer contract; the notice erasure producer owns paging and seen-marker cleanup. */
+export type NoticeErasureCursor = string;
+
+export async function eraseAccountNoticesPage(
+  _deps: { pool: Pool },
+  _accountId: string,
+  _after: NoticeErasureCursor | null,
+): Promise<{ next: NoticeErasureCursor | null; found: number; pending: number }> {
+  const error = new Error('Notice erasure phase unavailable: producer has not landed');
+  error.name = 'CommunityErasureProducerUnavailableError';
+  throw error;
+}

@@ -297,6 +297,8 @@ populations in the removal event before deleting those vote rows in the same vot
 page is empty, the remaining `voter_realm` rows are deleted and the voter remains `ineligible`. A suspension retains
 both votes and Realm memberships for reinstatement.
 
+The rating tombstone purge is participant `community`'s rating part; `readRatingErasureDone` reports its completion.
+
 ## Cost
 
 | Operation                           | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Bound                                                                                                                                                                                                                                                                                                                                                                    | Growth check                                                                                                                                                                                                                                                                                    |
