@@ -1,9 +1,11 @@
+import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
+import { moderationCommandHeaders, validateModerationKey } from './command-intent';
 
 export type ModerationCommand = (path: string, body: unknown) => Promise<unknown>;
 type TakeDownInput = {
@@ -64,8 +66,55 @@ export async function submitModerationAppealResolution(
   }
 }
 
+export type ReportActionInput = { reportId: string; idempotencyKey: string } & (
+  | { action: 'dismiss' }
+  | {
+      action: 'take-down';
+      targetKind: 'board' | 'thread' | 'post';
+      targetId: string;
+      reason: string;
+      statement: string;
+    }
+);
+
+export async function sendModerationReportAction(
+  client: KernelClient,
+  data: ReportActionInput,
+  authorization: string,
+): Promise<{ ok: true }> {
+  const headers = moderationCommandHeaders(authorization, data.idempotencyKey);
+  if (data.action === 'dismiss') {
+    const result = await client.reports({ id: data.reportId }).$dismiss.post({}, { headers });
+    if (result.error) throw new Error('Report dismissal failed');
+    return { ok: true };
+  }
+  const command =
+    data.targetKind === 'board' ? client.boards : data.targetKind === 'thread' ? client.threads : client.posts;
+  const result = await command({ id: data.targetId }).$takeDown.post(
+    { reason: decisionReason(data.reason, data.statement) },
+    { headers },
+  );
+  if (result.error) throw new Error('Board takedown failed');
+  return { ok: true };
+}
+
+export async function sendModerationAppealResolution(
+  client: KernelClient,
+  data: ResolveAppealInput & { idempotencyKey: string },
+  authorization: string,
+): Promise<AppealResolutionResult> {
+  return submitModerationAppealResolution(async () => {
+    const result = await client['moderation-appeals']({ id: data.id }).$resolve.post(
+      { outcome: data.outcome, statement: data.statement },
+      { headers: moderationCommandHeaders(authorization, data.idempotencyKey) },
+    );
+    if (result.error) throw Object.assign(new Error('Appeal resolution failed'), { status: result.status });
+    return result.data;
+  }, data);
+}
+
 export const actionOnReport = createServerFn({ method: 'POST' })
-  .validator((input: unknown) => {
+  .validator((input: unknown): ReportActionInput => {
     if (!input || typeof input !== 'object') throw new Error('Invalid moderation action');
     const value = input as Record<string, unknown>;
     if (typeof value.reportId !== 'string' || value.reportId.length > 128) throw new Error('Invalid moderation action');
@@ -80,14 +129,23 @@ export const actionOnReport = createServerFn({ method: 'POST' })
       throw new Error('Invalid moderation target');
     if (value.action === 'take-down' && (typeof value.reason !== 'string' || typeof value.statement !== 'string'))
       throw new Error('A reason and statement are required');
+    const idempotencyKey = validateModerationKey(value.idempotencyKey);
+    if (value.action === 'dismiss') return { action: 'dismiss', reportId: value.reportId, idempotencyKey };
+    if (
+      (value.targetKind !== 'board' && value.targetKind !== 'thread' && value.targetKind !== 'post') ||
+      typeof value.targetId !== 'string' ||
+      typeof value.reason !== 'string' ||
+      typeof value.statement !== 'string'
+    )
+      throw new Error('Invalid moderation action');
     return {
-      action: value.action,
+      action: 'take-down',
       reportId: value.reportId,
-      ...(value.targetKind === 'board' || value.targetKind === 'thread' || value.targetKind === 'post'
-        ? { targetKind: value.targetKind, targetId: value.targetId as string }
-        : {}),
-      ...(typeof value.reason === 'string' ? { reason: value.reason } : {}),
-      ...(typeof value.statement === 'string' ? { statement: value.statement } : {}),
+      idempotencyKey,
+      targetKind: value.targetKind,
+      targetId: value.targetId,
+      reason: value.reason,
+      statement: value.statement,
     };
   })
   .handler(async ({ data }): Promise<{ ok: true }> => {
@@ -96,38 +154,11 @@ export const actionOnReport = createServerFn({ method: 'POST' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     if (!authorization) throw new Error('Sign in required');
-    const client = kernelClient() as unknown as {
-      boards: (params: { id: string }) => {
-        $takeDown: { post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
-      };
-      threads: (params: { id: string }) => {
-        $takeDown: { post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
-      };
-      posts: (params: { id: string }) => {
-        $takeDown: { post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
-      };
-      reports: (params: { id: string }) => {
-        $dismiss: { post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
-      };
-    };
-    const headers = { authorization, 'idempotency-key': JSON.stringify(crypto.randomUUID()) };
-    if (data.action === 'dismiss') {
-      const result = await client.reports({ id: data.reportId }).$dismiss.post({}, { headers });
-      if (result.error) throw new Error('Report dismissal failed');
-      return { ok: true };
-    }
-    const command =
-      data.targetKind === 'board' ? client.boards : data.targetKind === 'thread' ? client.threads : client.posts;
-    const result = await command({ id: data.targetId! }).$takeDown.post(
-      { reason: decisionReason(data.reason ?? '', data.statement ?? '') },
-      { headers },
-    );
-    if (result.error) throw new Error('Board takedown failed');
-    return { ok: true };
+    return sendModerationReportAction(kernelClient(), data, authorization);
   });
 
 export const actionOnAppeal = createServerFn({ method: 'POST' })
-  .validator((input: unknown): ResolveAppealInput => {
+  .validator((input: unknown): ResolveAppealInput & { idempotencyKey: string } => {
     if (!input || typeof input !== 'object') throw new Error('Invalid appeal resolution');
     const value = input as Record<string, unknown>;
     if (
@@ -139,7 +170,12 @@ export const actionOnAppeal = createServerFn({ method: 'POST' })
       Array.from(value.statement.trim()).length > 2000
     )
       throw new Error('Invalid appeal resolution');
-    return { id: value.id, outcome: value.outcome, statement: value.statement.trim() };
+    return {
+      id: value.id,
+      outcome: value.outcome,
+      statement: value.statement.trim(),
+      idempotencyKey: validateModerationKey(value.idempotencyKey),
+    };
   })
   .handler(async ({ data }): Promise<AppealResolutionResult> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -147,25 +183,5 @@ export const actionOnAppeal = createServerFn({ method: 'POST' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     if (!authorization) throw new Error('Sign in required');
-    const client = kernelClient() as unknown as {
-      'moderation-appeals': (params: { id: string }) => {
-        $resolve: {
-          post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown; status?: number }>;
-        };
-      };
-    };
-    return submitModerationAppealResolution(async (_path, body) => {
-      const result = await client['moderation-appeals']({ id: data.id }).$resolve.post(
-        body as { outcome: 'uphold' | 'reverse'; statement: string },
-        { headers: { authorization, 'idempotency-key': JSON.stringify(crypto.randomUUID()) } },
-      );
-      if (result.error) {
-        const status =
-          typeof result.error === 'object' && result.error !== null && 'status' in result.error
-            ? Number(result.error.status)
-            : result.status;
-        throw Object.assign(new Error('Appeal resolution failed'), { status });
-      }
-      return result.data;
-    }, data);
+    return sendModerationAppealResolution(kernelClient(), data, authorization);
   });

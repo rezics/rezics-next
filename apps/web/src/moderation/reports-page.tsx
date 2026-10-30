@@ -6,6 +6,7 @@ import { useState, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { actionOnReport } from './actions';
+import { createModerationIntent } from './command-intent';
 import type { Report, ResolvedReportTarget } from './reports-read';
 import { PageHeading } from '../shell/page-heading';
 
@@ -141,10 +142,16 @@ export function ModerationReportsView({
 function ReportActions({ reportId, target }: { reportId: string; target: Report['target'] }) {
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
+  const [commandIntent] = useState(createModerationIntent);
   async function dismiss() {
+    if (pending) return;
     setPending(true);
     try {
-      await actionOnReport({ data: { action: 'dismiss', reportId }, headers: csrfHeaders() });
+      const intent = { action: 'dismiss' as const, reportId };
+      await actionOnReport({
+        data: { ...intent, idempotencyKey: commandIntent.keyFor(intent) },
+        headers: csrfHeaders(),
+      });
       location.reload();
     } catch {
       setMessage(m.moderation_action_failed());
@@ -154,18 +161,20 @@ function ReportActions({ reportId, target }: { reportId: string; target: Report[
   }
   async function takeDown(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
     const data = new FormData(event.currentTarget);
+    const intent = {
+      action: 'take-down' as const,
+      reportId,
+      targetKind: target.kind,
+      targetId: target.id,
+      reason: String(data.get('reason') ?? ''),
+      statement: String(data.get('statement') ?? ''),
+    };
     setPending(true);
     try {
       await actionOnReport({
-        data: {
-          action: 'take-down',
-          reportId,
-          targetKind: target.kind,
-          targetId: target.id,
-          reason: String(data.get('reason') ?? ''),
-          statement: String(data.get('statement') ?? ''),
-        },
+        data: { ...intent, idempotencyKey: commandIntent.keyFor(intent) },
         headers: csrfHeaders(),
       });
       location.reload();
@@ -177,7 +186,7 @@ function ReportActions({ reportId, target }: { reportId: string; target: Report[
   }
   return (
     <div className="space-y-3">
-      <form className="space-y-3" onSubmit={takeDown}>
+      <form className="space-y-3" onSubmit={takeDown} onChange={() => commandIntent.changed()}>
         <label className="block space-y-1">
           <span>{m.moderation_reason_label()}</span>
           <textarea

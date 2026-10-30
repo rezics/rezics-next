@@ -1002,6 +1002,20 @@ does not establish either outcome.
 - **Growth check:** `tests/moderation-decision.test.ts` checks the two-read bound, author and deadline gates, pending appeal state, overlong draft preservation and refreshed late/duplicate states.
 - **Visual check:** Decision stories cover open, pending and expired appeals in English and Simplified Chinese at 390 and 1280 pixels.
 
+### Appeal retry and reviewer confirmation
+
+The decision form, report actions and independent appeal resolution keep one browser command UUID for an unchanged
+intent across uncertain responses. Server functions validate and forward that UUID as the existing quoted
+`Idempotency-Key`; each attempt still uses the current session and native command authorization. Editing a statement
+or changing the action or target starts a new intent. Draft text survives failures and the author retains the existing
+success/conflict decision reread, inclusive 183-day deadline and single-appeal rules.
+
+An independent reviewer sees the confirmed upheld/reversed result and statement in the queue row until navigation;
+the page does not immediately reload the pending-only queue. Denied, unknown and conflicting commands never display
+confirmation. This uses existing command responses and queue DTOs, without additional queue or per-card reads.
+`Patterns/Appeal Resolution` documents pending, uncertain-response retry, confirmed outcomes, current-authority refusal,
+conflict and read-only states, with shared locale/theme/viewport globals and the same component used by the page.
+
 ### Board moderation reports (`/boards/{id}/moderation`)
 
 - **Touches:** One page of at most 20 reports for the selected board, thread or known post, then one existing target read for each distinct target on that page. A post-specific report page uses `?post=<id>`; report APIs are target-scoped, so the page does not discover child reports by walking the board.

@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { csrfHeaders } from '../threads/composer';
-import { actionOnAppeal } from './actions';
+import { AppealResolution } from './appeal-resolution';
 import { appealTarget, type Appeal } from './appeals-read';
 import { moderationTargetContent, type ModerationTarget } from './reports-page';
 
@@ -78,39 +76,7 @@ function AppealCard({
   target: ModerationTarget | undefined;
   mayResolve: boolean;
 }) {
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState('');
-  const [conflicted, setConflicted] = useState(false);
-  const [forbidden, setForbidden] = useState(false);
   const identity = appealTarget(appeal);
-  const resolution = appeal.decision.appeal;
-
-  async function resolve(form: HTMLFormElement, outcome: 'uphold' | 'reverse') {
-    const statement = String(new FormData(form).get('statement') ?? '').trim();
-    if (!statement || pending || conflicted || forbidden || !mayResolve || resolution) return;
-    setPending(true);
-    setMessage('');
-    try {
-      const result = await actionOnAppeal({ data: { id: appeal.id, outcome, statement }, headers: csrfHeaders() });
-      if (result.state === 'forbidden') {
-        setForbidden(true);
-        setMessage(m.moderation_appeal_other_moderator());
-        setPending(false);
-        return;
-      }
-      if (result.state === 'conflict') {
-        setMessage(m.moderation_appeal_conflict());
-        setConflicted(true);
-        setPending(false);
-        return;
-      }
-      // The queue is the authoritative receipt; show its newly committed outcome after reload.
-      location.reload();
-    } catch {
-      setMessage(m.moderation_appeal_action_failed());
-      setPending(false);
-    }
-  }
 
   return (
     <li className="space-y-3 rounded-lg border p-4">
@@ -129,51 +95,7 @@ function AppealCard({
       <p className="whitespace-pre-wrap">
         <span className="font-medium">{m.moderation_appeal_reason_label()}:</span> {appeal.statement}
       </p>
-      {resolution ? (
-        <p role="status" className="font-medium">
-          {resolution.outcome === 'upheld' ? m.moderation_appeal_upheld() : m.moderation_appeal_reversed()}
-          <span className="block font-normal">{resolution.statement}</span>
-        </p>
-      ) : mayResolve && !forbidden ? (
-        <form className="space-y-3" onSubmit={(event) => event.preventDefault()}>
-          <label className="block space-y-1">
-            <span>{m.moderation_statement_label()}</span>
-            <textarea
-              name="statement"
-              required
-              maxLength={2000}
-              className="min-h-20 w-full rounded-md border bg-background p-2"
-            />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={pending || conflicted}
-              className="rounded-md bg-primary px-4 py-2 text-primary-foreground"
-              onClick={(event) => {
-                const form = event.currentTarget.form;
-                if (form) void resolve(form, 'uphold');
-              }}
-            >
-              {m.moderation_appeal_uphold_action()}
-            </button>
-            <button
-              type="button"
-              disabled={pending || conflicted}
-              className="rounded-md border px-4 py-2"
-              onClick={(event) => {
-                const form = event.currentTarget.form;
-                if (form) void resolve(form, 'reverse');
-              }}
-            >
-              {m.moderation_appeal_reverse_action()}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <p className="text-sm text-muted-foreground">{m.moderation_appeal_other_moderator()}</p>
-      )}
-      {message ? <p role="alert">{message}</p> : null}
+      <AppealResolution appealId={appeal.id} mayResolve={mayResolve} resolution={appeal.decision.appeal} />
     </li>
   );
 }

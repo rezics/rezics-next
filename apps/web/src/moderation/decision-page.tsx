@@ -6,6 +6,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { appealDecision } from './appeal';
+import { createModerationIntent } from './command-intent';
 import {
   canAppealDecision,
   canAttemptAppealWithoutTarget,
@@ -53,6 +54,7 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [commandIntent] = useState(createModerationIntent);
   const locale = getLocale();
   const allowed = page.target
     ? canAppealDecision(decision, page.target.authorId ?? null, page.viewerId, clockNow)
@@ -65,11 +67,14 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
     setSaving(true);
     setError(null);
     try {
-      const result = await appealDecision({ data: { id: decision.id, statement: text }, headers: csrfHeaders() });
+      const intent = { id: decision.id, statement: text };
+      const result = await appealDecision({
+        data: { ...intent, idempotencyKey: commandIntent.keyFor(intent) },
+        headers: csrfHeaders(),
+      });
       if (result.state === 'pending' || result.state === 'updated') {
         setDecision(result.decision);
         setClockNow(Date.now());
-        setText('');
       } else if (result.state === 'invalid') {
         setText(result.text);
         setError(m.decision_appeal_too_long());
@@ -120,6 +125,12 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
           {m.decision_deadline_label()}{' '}
           <DecisionTime instant={decision.appealDeadline} now={clockNow} locale={locale} />
         </p>
+        {text && (decision.appeal || !allowed) ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm font-medium">{m.decision_appeal_prompt()}</p>
+            <p className="whitespace-pre-wrap text-sm">{text}</p>
+          </div>
+        ) : null}
         {decision.appeal ? (
           <AppealState appeal={decision.appeal} />
         ) : allowed ? (
@@ -131,7 +142,11 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
               id="appeal-statement"
               name="statement"
               value={text}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => {
+                commandIntent.changed();
+                setText(event.target.value);
+              }}
+              disabled={saving}
               rows={5}
               aria-describedby={error ? 'appeal-error appeal-count' : 'appeal-count'}
               aria-invalid={Boolean(error)}

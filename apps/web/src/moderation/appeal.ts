@@ -1,3 +1,4 @@
+import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -5,6 +6,7 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import type { ModerationDecision } from './decision-read';
+import { moderationCommandHeaders, validateModerationKey } from './command-intent';
 
 type AppealResult = { status: number; error?: unknown };
 type AppealReads = {
@@ -32,15 +34,6 @@ export async function submitDecisionAppeal(id: string, text: string, reads: Appe
   return { state: 'failed' };
 }
 
-type DecisionKernel = {
-  'moderation-decisions': (params: { id: string }) => {
-    $appeal: {
-      post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown; status?: number }>;
-    };
-    get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }>;
-  };
-};
-
 export const appealDecision = createServerFn({ method: 'POST' })
   .validator((input: unknown) => {
     if (
@@ -53,7 +46,11 @@ export const appealDecision = createServerFn({ method: 'POST' })
       typeof input.statement !== 'string'
     )
       throw new Error('Invalid appeal');
-    return { id: input.id, statement: input.statement };
+    return {
+      id: input.id,
+      statement: input.statement,
+      idempotencyKey: validateModerationKey('idempotencyKey' in input ? input.idempotencyKey : undefined),
+    };
   })
   .handler(async ({ data }): Promise<AppealSubmission> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -61,27 +58,34 @@ export const appealDecision = createServerFn({ method: 'POST' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'failed' };
-    const client = kernelClient() as unknown as DecisionKernel;
-    const resource = client['moderation-decisions']({ id: data.id });
-    return submitDecisionAppeal(data.id, data.statement, {
-      appeal: async (id, statement) => {
-        const response = await client['moderation-decisions']({ id }).$appeal.post(
-          {
-            statement,
-          },
-          { headers: { authorization, 'idempotency-key': JSON.stringify(crypto.randomUUID()) } },
-        );
-        const errorStatus =
-          response.error && typeof response.error === 'object' && 'status' in response.error
-            ? Number(response.error.status)
-            : undefined;
-        return { status: response.status ?? errorStatus ?? (response.error ? 500 : 201), error: response.error };
-      },
-      decision: async (id) => {
-        const response = await (id === data.id ? resource : client['moderation-decisions']({ id })).get({
-          headers: { authorization },
-        });
-        return response.error ? null : ((response.data as ModerationDecision | undefined) ?? null);
-      },
-    });
+    return sendDecisionAppeal(kernelClient(), data, authorization);
   });
+
+export async function sendDecisionAppeal(
+  client: KernelClient,
+  data: { id: string; statement: string; idempotencyKey: string },
+  authorization: string,
+): Promise<AppealSubmission> {
+  const resource = client['moderation-decisions']({ id: data.id });
+  return submitDecisionAppeal(data.id, data.statement, {
+    appeal: async (id, statement) => {
+      const response = await client['moderation-decisions']({ id }).$appeal.post(
+        {
+          statement,
+        },
+        { headers: moderationCommandHeaders(authorization, data.idempotencyKey) },
+      );
+      const errorStatus =
+        response.error && typeof response.error === 'object' && 'status' in response.error
+          ? Number(response.error.status)
+          : undefined;
+      return { status: response.status ?? errorStatus ?? (response.error ? 500 : 201), error: response.error };
+    },
+    decision: async (id) => {
+      const response = await (id === data.id ? resource : client['moderation-decisions']({ id })).get({
+        headers: { authorization },
+      });
+      return response.error ? null : response.data;
+    },
+  });
+}
