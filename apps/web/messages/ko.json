@@ -2596,5 +2596,9 @@
   "value_change": "변경 설명",
   "value_change_unavailable": "안전하게 표시할 변경 설명을 사용할 수 없습니다. 변경 페이지에는 실제 반환된 정보만 표시됩니다.",
   "value_withheld": "대상 페이지에서 스포일러를 표시한 후 읽으세요.",
-  "value_not_selected": "현재 읽기 결과에서 이 서술을 선택된 값으로 사용할 수 없습니다. 변경되었거나 숨겨졌을 수 있습니다."
+  "value_not_selected": "현재 읽기 결과에서 이 서술을 선택된 값으로 사용할 수 없습니다. 변경되었거나 숨겨졌을 수 있습니다.",
+  "subject_view_unavailable": "이 페이지를 사용할 수 없습니다.",
+  "subject_view_changed": "이 페이지가 변경되었습니다. 다시 시도해 주세요.",
+  "subject_view_retry": "다시 시도",
+  "subject_view_restart": "처음부터 다시 시작"
 }

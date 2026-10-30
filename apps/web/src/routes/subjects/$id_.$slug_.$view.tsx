@@ -1,12 +1,5 @@
 import { isView, type View } from '@rezics/composition';
-import {
-  createFileRoute,
-  notFound,
-  redirect,
-  useRouter,
-  useLocation,
-  type ErrorComponentProps,
-} from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectPageType } from '../../features/pages/subject';
@@ -34,6 +27,7 @@ import { WriteReviewAction } from '../../subject/write-review';
 import { subjectHead } from '../../features/pages/subject-head';
 import { pageHeadContext } from '../../shell/head-context';
 import { SubjectCandidateCuration } from '../../features/pages/curate-view';
+import { SubjectViewError } from '../../subject/view-error';
 
 const viewLabel = {
   overview: () => m.subject_overview(),
@@ -249,26 +243,5 @@ function SubjectViewRoute() {
       {...(nonce !== undefined ? { nonce } : {})}
       renderJsonLd={false}
     />
-  );
-}
-
-/** A refused cursor or changed selection is recoverable through a new, authorized first page. */
-function SubjectViewError({ error, reset }: ErrorComponentProps) {
-  const location = useLocation();
-  const search = new URLSearchParams(location.searchStr);
-  search.delete('cursor');
-  const query = search.toString();
-  return (
-    <div className="space-y-4 p-6">
-      <p>
-        {error instanceof Error && error.message === 'dependency_unavailable'
-          ? 'This page changed. Try again.'
-          : 'This page is unavailable.'}
-      </p>
-      <button type="button" onClick={reset}>
-        Try again
-      </button>
-      <a href={`${location.pathname}${query ? `?${query}` : ''}`}>Start again</a>
-    </div>
   );
 }

@@ -2596,5 +2596,9 @@
   "value_change": "Explicación del cambio",
   "value_change_unavailable": "No hay una explicación segura del cambio disponible. Cambios solo muestra los metadatos realmente devueltos.",
   "value_withheld": "Muestra primero este spoiler en la página del tema.",
-  "value_not_selected": "Esta afirmación no está disponible como valor seleccionado en la lectura actual. Puede haber cambiado o estar oculta."
+  "value_not_selected": "Esta afirmación no está disponible como valor seleccionado en la lectura actual. Puede haber cambiado o estar oculta.",
+  "subject_view_unavailable": "Esta página no está disponible.",
+  "subject_view_changed": "Esta página ha cambiado. Inténtalo de nuevo.",
+  "subject_view_retry": "Intentar de nuevo",
+  "subject_view_restart": "Volver a empezar"
 }

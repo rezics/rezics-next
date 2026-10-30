@@ -2596,5 +2596,9 @@
   "value_change": "変更の説明",
   "value_change_unavailable": "安全に表示できる変更の説明は利用できません。変更ページには実際に返された情報だけが表示されます。",
   "value_withheld": "対象ページでネタバレを表示してから読んでください。",
-  "value_not_selected": "現在の読み取り結果では、この記述を選択値として利用できません。変更または非公開になった可能性があります。"
+  "value_not_selected": "現在の読み取り結果では、この記述を選択値として利用できません。変更または非公開になった可能性があります。",
+  "subject_view_unavailable": "このページは利用できません。",
+  "subject_view_changed": "このページは変更されました。もう一度お試しください。",
+  "subject_view_retry": "もう一度試す",
+  "subject_view_restart": "最初からやり直す"
 }

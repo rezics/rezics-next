@@ -2597,5 +2597,9 @@
   "value_change": "变更说明",
   "value_change_unavailable": "安全的变更说明不可用。变更页只列出实际返回的元数据。",
   "value_withheld": "请先在主题页揭示此剧透。",
-  "value_not_selected": "此陈述在当前读取结果中不再是可用的所选值，可能已变更或被隐藏。"
+  "value_not_selected": "此陈述在当前读取结果中不再是可用的所选值，可能已变更或被隐藏。",
+  "subject_view_unavailable": "此页面目前无法使用。",
+  "subject_view_changed": "此页面已变更，请重试。",
+  "subject_view_retry": "重试",
+  "subject_view_restart": "重新开始"
 }

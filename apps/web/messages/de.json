@@ -2596,5 +2596,9 @@
   "value_change": "Änderungserklärung",
   "value_change_unavailable": "Eine sichere Änderungserklärung ist nicht verfügbar. Änderungen zeigt nur tatsächlich zurückgegebene Informationen.",
   "value_withheld": "Blende diesen Spoiler zuerst auf der Eintragsseite ein.",
-  "value_not_selected": "Diese Aussage ist in der aktuellen Ansicht nicht als ausgewählter Wert verfügbar. Sie wurde möglicherweise geändert oder verborgen."
+  "value_not_selected": "Diese Aussage ist in der aktuellen Ansicht nicht als ausgewählter Wert verfügbar. Sie wurde möglicherweise geändert oder verborgen.",
+  "subject_view_unavailable": "Diese Seite ist nicht verfügbar.",
+  "subject_view_changed": "Diese Seite hat sich geändert. Versuche es erneut.",
+  "subject_view_retry": "Erneut versuchen",
+  "subject_view_restart": "Von vorne beginnen"
 }

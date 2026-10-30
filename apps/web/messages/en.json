@@ -2899,5 +2899,9 @@
   "value_change": "Change explanation",
   "value_change_unavailable": "A safe change explanation is unavailable. Changes lists only the metadata actually returned.",
   "value_withheld": "Reveal this spoiler on the subject page before reading it.",
-  "value_not_selected": "This statement is not available as a selected value in the current reading. It may have changed or be concealed."
+  "value_not_selected": "This statement is not available as a selected value in the current reading. It may have changed or be concealed.",
+  "subject_view_unavailable": "This page is unavailable.",
+  "subject_view_changed": "This page changed. Try again.",
+  "subject_view_retry": "Try again",
+  "subject_view_restart": "Start again"
 }

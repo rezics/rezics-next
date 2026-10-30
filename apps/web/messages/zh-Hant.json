@@ -2596,5 +2596,9 @@
   "value_change": "變更說明",
   "value_change_unavailable": "安全的變更說明無法使用。變更頁只列出實際傳回的中繼資料。",
   "value_withheld": "請先在主題頁揭示此劇透。",
-  "value_not_selected": "此陳述在目前的讀取結果中不再是可用的所選值，可能已變更或被隱藏。"
+  "value_not_selected": "此陳述在目前的讀取結果中不再是可用的所選值，可能已變更或被隱藏。",
+  "subject_view_unavailable": "此頁面目前無法使用。",
+  "subject_view_changed": "此頁面已變更，請再試一次。",
+  "subject_view_retry": "再試一次",
+  "subject_view_restart": "重新開始"
 }
