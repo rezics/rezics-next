@@ -368,8 +368,8 @@ export async function allocateDiscovery(pool: Pool,prefix: string,registry: Disc
     try {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,1))',[discoveryAlias(prefix)]);
       const {rows}=await client.query<{generation:string;state:string}>('SELECT generation::text,state FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 ORDER BY generation',[prefix]);
-      if (rows.filter((row)=>row.state!=='retired').length>=3) throw new Error('Discovery live generation limit reached');
       if (rows.some((row)=>!['active','retiring','retired','quarantined'].includes(row.state))) { await client.query('COMMIT'); return; }
+      if (rows.filter((row)=>row.state!=='retired').length>=3) throw new Error('Discovery live generation limit reached');
       const generation=Number(BigInt(rows.at(-1)?.generation ?? '0')+1n);
       const consumer=discoveryConsumer(prefix,generation);
       await client.query(`INSERT INTO search.discovery_generation(prefix,generation,incarnation,kinds,state) VALUES ($1,$2,$3,$4,'allocated')`,
@@ -488,7 +488,11 @@ export async function advanceDiscovery(options: {
 }): Promise<void> {
   const {pool,search,prefix,registry}=options;
   let generations=await discoveryGenerations(pool,prefix);
-  if (generations.length===0) { await allocateDiscovery(pool,prefix,registry); generations=await discoveryGenerations(pool,prefix); }
+  const kinds=registry.entries.map(({kind})=>kind).sort();
+  if (generations.length===0 || (generations.every((row)=>['active','retiring','quarantined'].includes(row.state)) &&
+      generations.some((row)=>row.state==='active' && !isDeepStrictEqual(row.kinds,kinds)))) {
+    await allocateDiscovery(pool,prefix,registry); generations=await discoveryGenerations(pool,prefix);
+  }
   const target=generations.find((row)=>!['active','retiring','quarantined'].includes(row.state));
   if (!target) return;
   if (!isDeepStrictEqual(target.kinds,registry.entries.map(({kind})=>kind).sort())) throw new Error('Discovery registry changed during population');

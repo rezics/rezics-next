@@ -259,9 +259,9 @@ export function startDiscoveryIndexing(options: {
     const next=running.then(step); running=next.catch((error)=>{console.error('Discovery maintenance failed',error);});
     return next;
   };
-  const schedule=(delay:number)=>{
+  const schedule=(waitMs:number)=>{
     if (stopped || paused) return;
-    timer=setTimeout(()=>{ timer=undefined; void refresh().then(()=>schedule(delay),()=>schedule(options.intervalMs ?? 100)); },delay);
+    timer=setTimeout(()=>{ timer=undefined; void refresh().then(()=>schedule(delay),()=>schedule(options.intervalMs ?? 100)); },waitMs);
   };
   schedule(0);
   return {

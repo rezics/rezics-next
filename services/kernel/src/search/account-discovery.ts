@@ -365,10 +365,11 @@ export function createDiscoveryProjection(options: {
             const key=parseDiscoveryDocumentId(registry,action.id), values=[key.route,key.id,target.prefix,target.generation,key.kind];
             // Erasure can commit after source/locator reads; session custody excludes its physical purge.
             if (key.owner==='accounts' && await readErasureStatus(client,key.id)) throw new Error('Account erasure requires physical cleanup');
-            const {rows:[old]}=await client.query<{position:string; revision:string; settled:boolean}>(
-              'SELECT position::text,revision::text,settled FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',values);
+            const {rows:[old]}=await client.query<{position:string; revision:string; settled:boolean; deleted:boolean}>(
+              'SELECT position::text,revision::text,settled,deleted FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',values);
             const revision=action.op==='index' && action.document.owner==='accounts' ? BigInt(action.document.revision) : 0n;
             if (old && revision>0n && BigInt(old.revision)>revision) throw new Error('Account native revision rewound; new incarnation required');
+            if (old?.deleted && BigInt(old.position)===action.version && action.op==='index') throw new Error('Discovery native position cannot resurrect its keyed deletion');
             if (old && (BigInt(old.position)>action.version || (BigInt(old.position)===action.version && old.settled && !repair))) continue;
             await client.query(`INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind,position,revision,deleted,settled)
               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false) ON CONFLICT(route,source_id,prefix,generation,kind)
