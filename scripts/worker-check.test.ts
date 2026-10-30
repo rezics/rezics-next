@@ -55,6 +55,23 @@ function restoreWorkerEnvironment(old: NodeJS.ProcessEnv): void {
   }
 }
 
+function stopOwnedWorkerCheck(id: string, cwd: string): void {
+  try {
+    const record = JSON.parse(
+      readFileSync(join(cwd, '.temp/goal/checks/results', `${id}.json`), 'utf8'),
+    ) as { status?: string; runnerPid?: number; runnerHost?: string };
+    if (record.status === 'running' && record.runnerHost === hostname() && record.runnerPid) {
+      try {
+        process.kill(-record.runnerPid, 'SIGTERM');
+      } catch {
+        // The owned runner may have exited between reading its record and signaling its group.
+      }
+    }
+  } catch {
+    // A failed launch may not have published its result record.
+  }
+}
+
 function cleanTestEnvironment(environment: Record<string, string | undefined>): Record<string, string | undefined> {
   const clean = { ...environment };
   for (const key of Object.keys(clean)) {
@@ -674,6 +691,10 @@ test('stack-free placement: explicit pure file tests lint and pure type commands
     .toBe(false);
   expect(await needsStack(['bun', 'x', 'oxlint', '.'])).toBe(false);
   expect(await needsStack(['bun', 'x', 'oxfmt', '--check', '.'])).toBe(false);
+  expect(await needsStack(['bun', 'run', 'lint'])).toBe(false);
+  expect(await needsStack(['bun', 'run', 'format:check'])).toBe(false);
+  expect(await needsStack(['bun', 'run', '--cwd', 'services/importer', 'typecheck'])).toBe(false);
+  expect(await needsStack(['bun', 'run', '--cwd', 'packages/filter', 'typecheck'])).toBe(false);
   expect(await needsStack(['bun', 'check', '--no-script', '-p', 'packages/filter/tsconfig.json'])).toBe(false);
   expect(await needsStack(['tsc', '--noEmit', '-p', 'packages/filter/tsconfig.json'])).toBe(false);
 });
@@ -699,6 +720,7 @@ test('stack-free placement: cwd and env wrappers retain command meaning and ambi
   expect(await needsStack(['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', 'bun', 'test', importerFile])).toBe(
     false,
   );
+  expect(await needsStack(['bun', 'test', join(repository, 'services/kernel/test/native.test.ts')])).toBe(true);
   expect(await needsStack(['bun', 'test', 'test/native.test.ts'], join(repository, 'services/kernel'))).toBe(true);
   expect(await needsStack(['bun', 'run', '--cwd=services/kernel', 'check'])).toBe(true);
   expect(await needsStack(['sh', '-c', 'bun test services/importer/tests/media-fence-evidence.test.ts'])).toBe(true);
@@ -759,12 +781,13 @@ test('stack-free placement: a real managed local check completes while every fak
     REZICS_STACK_SLOTS: '1',
     REZICS_STACK_LEASE_DIR: fixture.memory,
   });
+  let id: string | undefined;
   let waiting: Promise<number> | undefined;
   try {
     workerEnv(fixture, hosts);
     process.env.REZICS_CHECK_MEMORY_GIB = '1';
     process.env.WORKER_REMOTE_MODE = 'queued';
-    const id = startWorkerCheck(command, fixture.root);
+    id = startWorkerCheck(command, fixture.root);
     const resultDirectory = join(fixture.root, '.temp/goal/checks/results');
     const recordFile = join(resultDirectory, `${id}.json`);
     const recordLog = join(fixture.root, JSON.parse(readFileSync(recordFile, 'utf8')).log as string);
@@ -794,7 +817,10 @@ test('stack-free placement: a real managed local check completes while every fak
     expect(existsSync(fixture.remoteEvents)).toBe(false);
   } finally {
     await holder.release();
-    if (waiting) await waiting.catch(() => undefined);
+    if (waiting) {
+      const status = await waiting.catch(() => 75);
+      if (status === 75 && id) stopOwnedWorkerCheck(id, fixture.root);
+    }
     restoreWorkerEnvironment(old);
   }
 });

@@ -299,6 +299,240 @@ function checkLogContents(file: string): string {
   }
 }
 
+type EnvironmentCommand = { prefix: string[]; command: string[] };
+
+/** Parse the ordinary `env` prefix forms without interpreting shell text. */
+function splitEnvironmentCommand(argv: readonly string[]): EnvironmentCommand | undefined {
+  const parseOne = (input: readonly string[]): EnvironmentCommand | undefined => {
+    const executable = input[0] ?? '';
+    const prefix = [executable];
+    let index = 1;
+    while (index < input.length) {
+      const argument = input[index]!;
+      if (argument === '--') {
+        prefix.push(argument);
+        index += 1;
+        break;
+      }
+      if (argument === '-u' || argument === '--unset') {
+        const name = input[index + 1];
+        if (!name || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return undefined;
+        prefix.push(argument, name);
+        index += 2;
+        continue;
+      }
+      if (argument.startsWith('--unset=')) {
+        const name = argument.slice('--unset='.length);
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return undefined;
+        prefix.push(argument);
+        index += 1;
+        continue;
+      }
+      if (argument === '-i' || argument === '--ignore-environment') {
+        prefix.push(argument);
+        index += 1;
+        continue;
+      }
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(argument)) {
+        prefix.push(argument);
+        index += 1;
+        continue;
+      }
+      if (argument.startsWith('-')) return undefined;
+      break;
+    }
+    if (index >= input.length) return undefined;
+    return { prefix, command: input.slice(index) };
+  };
+
+  let command = [...argv];
+  const prefix: string[] = [];
+  while (command[0]?.split(/[\\/]/).at(-1) === 'env') {
+    const parsed = parseOne(command);
+    if (!parsed) return undefined;
+    prefix.push(...parsed.prefix);
+    command = parsed.command;
+    if (prefix.includes('--')) break;
+  }
+  return { prefix, command };
+}
+
+function pathSegments(path: string): string[] {
+  return resolve(path).split(/[\\/]+/).filter(Boolean);
+}
+
+function hasPathPair(path: string, parent: string, child: string): boolean {
+  const segments = pathSegments(path);
+  return segments.some((segment, index) => segment === parent && segments[index + 1] === child);
+}
+
+/** Paths whose runner owns a database, browser, or other stack admission. */
+function isNativeStackPath(path: string): boolean {
+  return (
+    hasPathPair(path, 'services', 'kernel') ||
+    hasPathPair(path, 'services', 'auth') ||
+    hasPathPair(path, 'apps', 'auth') ||
+    hasPathPair(path, 'apps', 'web')
+  );
+}
+
+function isNativeScript(path: string): boolean {
+  const segments = pathSegments(path);
+  const entries = [
+    ['scripts', 'typecheck.ts'],
+    ['scripts', 'typecheck.test.ts'],
+    ['scripts', 'remote-check.ts'],
+    ['scripts', 'remote-check.test.ts'],
+  ];
+  return entries.some((entry) =>
+    segments.some((segment, index) => segment === entry[0] && segments[index + 1] === entry[1]),
+  );
+}
+
+function bunExecutable(value: string): boolean {
+  return value === 'bun' || value === process.execPath || value.split(/[\\/]/).at(-1) === 'bun';
+}
+
+function executableName(value: string): string {
+  return value.split(/[\\/]/).at(-1) ?? value;
+}
+
+function projectNeedsNativeStack(args: readonly string[], cwd: string): boolean {
+  if (isNativeStackPath(cwd)) return true;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    const project = argument === '-p' || argument === '--project' ? args[index + 1] :
+      argument.startsWith('--project=') ? argument.slice('--project='.length) : undefined;
+    if (project && isNativeStackPath(resolve(cwd, project))) return true;
+  }
+  return false;
+}
+
+function pureCompilerOrTool(command: string, args: readonly string[], cwd: string): boolean {
+  const name = executableName(command);
+  if (name === 'oxlint' || name === 'oxfmt') return true;
+  if (name === 'tsc') return args.includes('--noEmit') && !projectNeedsNativeStack(args, cwd);
+  if (name === 'check') {
+    const hasProject = args.some((argument, index) =>
+      argument === '-p' || argument === '--project' || argument.startsWith('--project='),
+    );
+    return args.includes('--no-script') && hasProject && !projectNeedsNativeStack(args, cwd);
+  }
+  if (name === 'lint') return args.includes('--no-script');
+  return false;
+}
+
+function packageScript(cwd: string, script: string): string | undefined {
+  let directory = resolve(cwd);
+  while (true) {
+    const manifest = join(directory, 'package.json');
+    if (existsSync(manifest)) {
+      try {
+        const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { scripts?: Record<string, unknown> };
+        const value = parsed.scripts?.[script];
+        return typeof value === 'string' ? value : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    const parent = resolve(directory, '..');
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+}
+
+function testFilesNeedStack(args: readonly string[], cwd: string): boolean {
+  let directory = cwd;
+  const files: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === '--cwd' && args[index + 1]) {
+      directory = resolve(cwd, args[index + 1]!);
+      index += 1;
+      continue;
+    }
+    if (argument.startsWith('--cwd=')) {
+      directory = resolve(cwd, argument.slice('--cwd='.length));
+      continue;
+    }
+    if (argument.startsWith('-') || /[*?{}\[\]]/.test(argument)) continue;
+    if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(argument)) files.push(resolve(directory, argument));
+  }
+  if (files.length === 0 || isNativeStackPath(directory)) return true;
+  return files.some((file) => isNativeStackPath(file) || isNativeScript(file));
+}
+
+function classifyWorkerCommand(argv: readonly string[], cwd: string, depth = 0): boolean {
+  if (argv.length === 0 || depth > 4) return true;
+  const command = argv[0]!;
+  const args = argv.slice(1);
+  const name = executableName(command);
+  if (['sh', 'bash', 'dash', 'zsh', 'fish', 'pwsh', 'powershell', 'cmd'].includes(name)) return true;
+
+  if (bunExecutable(command)) {
+    let index = 1;
+    let directory = cwd;
+    while (index < argv.length) {
+      const argument = argv[index]!;
+      if (argument === '--cwd' && argv[index + 1]) {
+        directory = resolve(cwd, argv[index + 1]!);
+        index += 2;
+      } else if (argument.startsWith('--cwd=')) {
+        directory = resolve(cwd, argument.slice('--cwd='.length));
+        index += 1;
+      } else break;
+    }
+    const operation = argv[index];
+    const rest = argv.slice(index + 1);
+    if (operation === 'test') return testFilesNeedStack(rest, directory);
+    if (operation === 'run') {
+      let scriptIndex = index + 1;
+      while (scriptIndex < argv.length) {
+        const argument = argv[scriptIndex]!;
+        if (argument === '--cwd' && argv[scriptIndex + 1]) {
+          directory = resolve(cwd, argv[scriptIndex + 1]!);
+          scriptIndex += 2;
+        } else if (argument.startsWith('--cwd=')) {
+          directory = resolve(cwd, argument.slice('--cwd='.length));
+          scriptIndex += 1;
+        } else break;
+      }
+      const script = argv[scriptIndex];
+      if (!script || isNativeStackPath(directory)) return true;
+      const scriptPath = resolve(directory, script);
+      if (isNativeStackPath(scriptPath) || isNativeScript(scriptPath)) return true;
+      if (script.includes('/') || script.includes('\\') || /\.(?:[cm]?[jt]sx?)$/.test(script)) return true;
+      const source = packageScript(directory, script);
+      if (!source || /[;&|<>`$]/.test(source)) return true;
+      const tokens = source.trim().split(/\s+/).filter(Boolean);
+      return tokens.length === 0 || classifyWorkerCommand(tokens, directory, depth + 1);
+    }
+    if (operation === 'x') {
+      const tool = rest[0];
+      if (!tool) return true;
+      return !pureCompilerOrTool(tool, rest.slice(1), directory);
+    }
+    if (operation === 'check' || operation === 'lint')
+      return !pureCompilerOrTool(operation, rest, directory);
+    if (operation === 'fmt') return false;
+    if (operation && (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(operation) || operation.endsWith('.ts'))) {
+      return true;
+    }
+    return true;
+  }
+
+  if (name === 'oxlint' || name === 'oxfmt') return false;
+  if (name === 'tsc') return !pureCompilerOrTool(command, args, cwd);
+  return true;
+}
+
+/** Whether the command has a known stack requirement; unknown commands stay on the existing admission path. */
+export function workerCheckNeedsStack(argv: readonly string[], cwd = process.cwd()): boolean {
+  const parsed = splitEnvironmentCommand(argv);
+  if (!parsed) return true;
+  return classifyWorkerCommand(parsed.command, resolve(cwd));
+}
+
 export async function runWorkerCheck(
   argv: readonly string[],
   cwd = process.cwd(),
@@ -334,6 +568,7 @@ export async function runWorkerCheck(
   applyTaskPriority(root, env);
   // The wrapper records the complete command duration; nested stack and remote wait recorders would double-count it.
   delete env.GOAL_CHECK_WAIT_FILE;
+  const needsStack = workerCheckNeedsStack(argv, root);
   const commandClass = checkClass(argv, root);
   argv = scopeRootTypecheck(argv, root, env, (line) => writeSync(descriptor, `${line}\n`));
   const command = resolveRepositoryBun(argv, root);
@@ -379,7 +614,7 @@ export async function runWorkerCheck(
   }
   const remoteHostsFile = env.KERNEL_CHECK_REMOTE;
   let remoteEligible = false;
-  if (!localOnly && env.KERNEL_CHECK_ON_REMOTE !== '1' && remoteHostsFile && weight >= 2) {
+  if (needsStack && !localOnly && env.KERNEL_CHECK_ON_REMOTE !== '1' && remoteHostsFile && weight >= 2) {
     try {
       accessSync(remoteHostsFile, constants.R_OK);
       remoteEligible = true;
@@ -779,10 +1014,13 @@ export function resolveRepositoryBun(
   root: string,
   executable = process.execPath,
 ): string[] {
-  if (command[0] !== 'bun') return [...command];
+  const parsed = splitEnvironmentCommand(command);
+  if (!parsed || parsed.command[0] !== 'bun') return [...command];
+  const prefix = parsed.prefix;
+  const args = parsed.command.slice(1);
   // Test fixtures and standalone check roots may not have a package manifest. In that case the
   // current Bun is the only available runtime; repository checks still enforce the pinned binary.
-  if (!existsSync(join(root, 'package.json'))) return [executable, ...command.slice(1)];
+  if (!existsSync(join(root, 'package.json'))) return [...prefix, executable, ...args];
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     packageManager?: string;
   };
@@ -793,7 +1031,7 @@ export function resolveRepositoryBun(
   });
   if (revision.error || revision.status !== 0) throw revision.error ?? new Error('Could not read pinned Bun revision');
   const pinned = Bun.revision === revision.stdout.trim() ? executable : join(root, 'node_modules/.bin/bun');
-  return [pinned, ...command.slice(1)];
+  return [...prefix, pinned, ...args];
 }
 
 /** Start a detached check whose durable result can be retrieved by id after this process exits. */
