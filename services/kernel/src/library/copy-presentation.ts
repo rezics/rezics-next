@@ -49,8 +49,10 @@ export function presentCopy(
     source?.kind === 'supported' && kind
       ? source.profile.copies?.kinds.find((candidate) => candidate.id === kind)
       : undefined;
-  let statusEditing: CopyPresentation['statusEditing'] = source === null ? unavailable : { state: 'unsupported' };
-  if (original && acceptedStatus && current && source?.kind === 'supported') {
+  // The native writer requires the current source to retain this exact subject identity.
+  const sameSource = source !== null && source.subjectId === fact.copy.subjectId;
+  let statusEditing: CopyPresentation['statusEditing'] = sameSource ? { state: 'unsupported' } : unavailable;
+  if (original && acceptedStatus && current && sameSource && source?.kind === 'supported') {
     const statuses = current.statuses.flatMap((candidate) => {
       if (!hasCopyStatus(source.profile, current.id, candidate.id)) return [];
       const label = chooseLabel(candidate.labels, languages);

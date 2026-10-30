@@ -151,7 +151,7 @@ test('original kind and explicitly accepted newer status resolve separate exact 
       kinds: [{
         id: 'installation',
         labels: { en: 'Renamed kind' },
-        statuses: [{ id: 'archived', labels: { fr: 'Archivée' } }],
+        statuses: [{ id: 'archived', labels: { en: 'Archived', fr: 'Archivée' } }],
       }],
     },
   };
@@ -161,7 +161,7 @@ test('original kind and explicitly accepted newer status resolve separate exact 
   };
   const fact = { copy: { ...copy, status: 'archived' }, kindPin: pin, statusPin };
   const current = { ...source, kind: 'supported', pin: statusPin, profile: statusProfile } as const;
-  expect(presentCopy(fact, snapshot, current, ['zh-Hant'], statusSnapshot)).toEqual({
+  expect(presentCopy(fact, snapshot, current, ['zh-Hant', 'fr'], statusSnapshot)).toEqual({
     meaning: 'known',
     kindLabel: '安裝',
     kindLabelLanguage: 'zh-Hant',
@@ -169,6 +169,8 @@ test('original kind and explicitly accepted newer status resolve separate exact 
     statusLabelLanguage: 'fr',
     statusEditing: { state: 'supported', statuses: [{ id: 'archived', label: 'Archivée', labelLanguage: 'fr' }] },
   });
+  expect(presentCopy(fact, snapshot, { ...current, subjectId: 'other-source' }, [], statusSnapshot).statusEditing)
+    .toEqual({ state: 'unavailable' });
   expect(presentCopy(fact, snapshot, current, [], null)).toEqual({
     meaning: 'unavailable', statusEditing: { state: 'unavailable' },
   });

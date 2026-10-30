@@ -5130,30 +5130,13 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         copyId: string;
                     };
                     query: {
-                        presentation?: "FULL";
                         view?: "BASIC" | "FULL";
+                        presentation?: "FULL";
                     };
                     headers: unknown;
                     response: {
                         200: {
                             copy: {
-                                presentation?: {
-                                    meaning: "known" | "unknown" | "unavailable";
-                                    kindLabel?: string;
-                                    kindLabelLanguage?: string;
-                                    statusLabel?: string;
-                                    statusLabelLanguage?: string;
-                                    statusEditing: {
-                                        state: "supported";
-                                        statuses: {
-                                            id: string;
-                                            label: string;
-                                            labelLanguage: string;
-                                        }[];
-                                    } | {
-                                        state: "unsupported" | "unavailable";
-                                    };
-                                };
                                 subject?: {
                                     id: string;
                                     type: string;
@@ -5204,6 +5187,23 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 acquiredOn: string | null;
                                 disposedOn: string | null;
                                 note: string | null;
+                                presentation?: {
+                                    meaning: "known" | "unavailable" | "unknown";
+                                    kindLabel?: string;
+                                    kindLabelLanguage?: string;
+                                    statusLabel?: string;
+                                    statusLabelLanguage?: string;
+                                    statusEditing: {
+                                        state: "supported";
+                                        statuses: {
+                                            id: string;
+                                            label: string;
+                                            labelLanguage: string;
+                                        }[];
+                                    } | {
+                                        state: "unavailable" | "unsupported";
+                                    };
+                                };
                             };
                         };
                         400: {

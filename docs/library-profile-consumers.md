@@ -105,7 +105,8 @@ and label-selection helpers. Every displayed label reports its genuine selected 
 allow token. A readable current profile offers statuses for the exact stored kind; it does not infer or change
 the historic kind. The current status choices may differ from the accepted status and use current labels. A
 readable retired profile or absent kind proves `unsupported`. Hidden, missing or failed source/dependency evidence
-is `unavailable`, without an inferred retirement. Missing original meaning cannot establish support. Unsupported
+is `unavailable`, without an inferred retirement. A changed source identity cannot advertise a status write that
+the native validator would reject. Missing original meaning cannot establish support. Unsupported
 or unavailable advice has no fabricated empty choices. Explicit status writes independently authorize and validate
 the submitted value at native command time. Metadata-only edits, delete, receipts and the exact 720-hour Undo
 remain under their native contracts; the detail read creates no write, migration, activation or preparation.
