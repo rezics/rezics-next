@@ -438,8 +438,9 @@ export async function runNamedLifecycleRegressions(options: {
     id: 'remote-root-gate-group-performance-seam',
     status: 'unverified',
     evidence: {
+      incident: 'one gate host runs root and promoted acceptance groups sequentially',
       source: 'dev:scripts/gate.ts',
-      dispatch: 'runRemoteGroups starts both runRemoteGroup calls with Promise.all',
+      supportedSeam: 'runRemoteGroups starts both runRemoteGroup calls with Promise.all',
       existingFixture: 'tools/goal/src/root-gate.test.ts exercises local workspace concurrency, not remote group dispatch',
       limitation: 'No remote-host fixture exercises group start timing; remote hosts remain untouched.',
     },
@@ -481,7 +482,6 @@ export async function runSmallPromotionScenario(): Promise<SmallPromotionEvidenc
       savePromotion(run);
     };
     h.settings.gate = ['fixture-root-gate'];
-    h.settings.promotionParallelism = 2;
     await h.seed('promotion-alpha', [], ['fixture-alpha-acceptance']);
     await h.seed('promotion-beta', [], ['fixture-beta-acceptance']);
 
