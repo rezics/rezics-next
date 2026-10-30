@@ -438,9 +438,13 @@ export class WorkerStore implements AttemptFence {
   saveDevVerifierRun(run: DevVerifierRun): void {
     this.db
       .transaction(() => {
-        this.db.query('INSERT OR REPLACE INTO dev_verifier_runs VALUES (?,?,?)').run(run.key, run.createdAt, JSON.stringify(run));
         this.db
-          .query('DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET 5000)')
+          .query('INSERT OR REPLACE INTO dev_verifier_runs VALUES (?,?,?)')
+          .run(run.key, run.createdAt, JSON.stringify(run));
+        this.db
+          .query(
+            'DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET 5000)',
+          )
           .run();
       })
       .immediate();
@@ -474,7 +478,9 @@ export class WorkerStore implements AttemptFence {
             JSON.stringify(finding),
           );
         this.db
-          .query('DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET 2000)')
+          .query(
+            'DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET 2000)',
+          )
           .run();
       })
       .immediate();

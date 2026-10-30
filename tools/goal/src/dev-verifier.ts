@@ -186,7 +186,14 @@ function truncatedOutput(output: string): boolean {
 function assertionLines(output: string): string[] {
   const assertion = firstFailure(output).assertion;
   if (!assertion || assertion === 'Gate exited unsuccessfully') return [];
-  return [...new Set(assertion.split('\n').map((line) => line.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      assertion
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 function stableAssertions(output: string): string[] {
   return assertionLines(output).slice(0, MAX_FINDING_ASSERTIONS);
@@ -196,7 +203,9 @@ function tooManyAssertions(output: string): boolean {
 }
 function environmentIdentity(settings: Settings): NodeJS.ProcessEnv {
   return Object.fromEntries(
-    Object.entries(gateEnvironment(process.env, settings.stateDirectory)).sort(([left], [right]) => left.localeCompare(right)),
+    Object.entries(gateEnvironment(process.env, settings.stateDirectory)).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
   );
 }
 function toolchainIdentity(settings: Settings): unknown {
@@ -395,7 +404,9 @@ function installDependenciesCached(
       logPath: newLogPath,
     };
   } else {
-    const previousLogs = new Set(readdirSync(stateDirectory).filter((name) => name.startsWith(logPrefix) && name.endsWith(logSuffix)));
+    const previousLogs = new Set(
+      readdirSync(stateDirectory).filter((name) => name.startsWith(logPrefix) && name.endsWith(logSuffix)),
+    );
     const passed = installDependencies(tree, stateDirectory);
     const logName = readdirSync(stateDirectory).find(
       (name) => name.startsWith(logPrefix) && name.endsWith(logSuffix) && !previousLogs.has(name),
@@ -425,7 +436,10 @@ function installDependenciesCached(
 function knownExisting(store: DevVerifierOptions['store'], signature: string): boolean {
   try {
     if (store.devVerifierHasKnownExisting) return store.devVerifierHasKnownExisting(signature);
-    if (store.devVerifierFindings) return store.devVerifierFindings(FINDING_LIMIT).some((item) => item.signature === signature && item.status === 'existing');
+    if (store.devVerifierFindings)
+      return store
+        .devVerifierFindings(FINDING_LIMIT)
+        .some((item) => item.signature === signature && item.status === 'existing');
     return Boolean(
       store.db
         ?.query("SELECT 1 FROM dev_verifier_findings WHERE signature=? AND status='existing' LIMIT 1")
@@ -498,12 +512,7 @@ function makeFinding(
   };
 }
 
-function evidence(
-  commit: string,
-  check: Check,
-  result: GateOutcome,
-  logPath: string,
-): DevVerifierEvidence {
+function evidence(commit: string, check: Check, result: GateOutcome, logPath: string): DevVerifierEvidence {
   return {
     commit,
     command: [...check.command],
@@ -554,11 +563,7 @@ function commandPresentAt(settings: Settings, commit: string, check: Check): boo
   return sourcePresentAt(settings.mainCheckout, commit, check.command);
 }
 
-async function compareRange(
-  options: DevVerifierOptions,
-  base: string,
-  target: string,
-): Promise<Comparison> {
+async function compareRange(options: DevVerifierOptions, base: string, target: string): Promise<Comparison> {
   const { settings, store } = options;
   const checks: IndexedCheck[] = createChecks(settings, store, base, target, target).map((check, index) => ({
     ...check,
@@ -623,8 +628,7 @@ async function compareRange(
     for (const check of baseMissing)
       results[check.index]!.baselineReason = 'The selected command source is absent at the exact verified baseline.';
     const missingBaselineRuns = baselineChecks.filter(
-      (check) =>
-        !baseMissing.includes(check) && !cachedRun(store, runCacheKey(settings, base, check, selection)),
+      (check) => !baseMissing.includes(check) && !cachedRun(store, runCacheKey(settings, base, check, selection)),
     );
     let baseSetup: { passed: boolean; output: string; logPath: string } | undefined;
     if (missingBaselineRuns.length) {
@@ -682,13 +686,20 @@ async function compareRange(
       const baseEv = baseResult;
       if (headUnknown || baselineUnknown) {
         const message = headUnknown
-          ? result.headReason ?? (headResult ? 'The head failure is infrastructure, unavailable, incomplete, or has no stable assertion.' : 'The head command did not run.')
-          : result.baselineReason ?? (baseResult ? 'The baseline result is infrastructure, unavailable, incomplete, or has no stable assertion.' : 'The baseline command did not run.');
+          ? (result.headReason ??
+            (headResult
+              ? 'The head failure is infrastructure, unavailable, incomplete, or has no stable assertion.'
+              : 'The head command did not run.'))
+          : (result.baselineReason ??
+            (baseResult
+              ? 'The baseline result is infrastructure, unavailable, incomplete, or has no stable assertion.'
+              : 'The baseline command did not run.'));
         const finding = makeFinding(
           result.check,
           base,
           target,
-          headAssertions.join('\n') || (headResult ? firstFailure(headResult.output).assertion : 'Head check unavailable'),
+          headAssertions.join('\n') ||
+            (headResult ? firstFailure(headResult.output).assertion : 'Head check unavailable'),
           'unknown',
           baseEv,
           headEv,
@@ -710,7 +721,9 @@ async function compareRange(
           status,
           baseEv,
           headEv,
-          status === 'existing' ? 'The same stable assertion failed at the exact previous verified baseline and current head.' : 'This stable assertion failed at the head and was absent at the exact previous verified baseline.',
+          status === 'existing'
+            ? 'The same stable assertion failed at the exact previous verified baseline and current head.'
+            : 'This stable assertion failed at the head and was absent at the exact previous verified baseline.',
         );
         findings.push(finding);
       }
@@ -735,7 +748,10 @@ function suspectsFor(
     .map((task) => {
       const taskCommitList = taskCommits(task, settings.mainCheckout);
       if (!taskCommitList.some((commit) => position.has(commit))) return undefined;
-      if (!check.closure.includes('**') && !filesInCommits(settings.mainCheckout, taskCommitList).some((file) => matches(file, check.closure)))
+      if (
+        !check.closure.includes('**') &&
+        !filesInCommits(settings.mainCheckout, taskCommitList).some((file) => matches(file, check.closure))
+      )
         return undefined;
       const commit = (task.integratedCommit ?? task.mergedCommit)!;
       return position.has(commit) ? { task, commit, position: position.get(commit)! } : undefined;
@@ -767,7 +783,14 @@ async function probeAt(
     const installed = installDependenciesCached(options, commit, tree);
     if (!installed.passed) return null;
     if (!commandPresentAt(settings, commit, check)) return null;
-    const result = await executeCheck(options, options.runGate ?? gateRunner(2 * 60 * 60_000), check, commit, tree, key);
+    const result = await executeCheck(
+      options,
+      options.runGate ?? gateRunner(2 * 60 * 60_000),
+      check,
+      commit,
+      tree,
+      key,
+    );
     if (
       result.timedOut ||
       infraFailure(result.output, result.timedOut) ||
@@ -802,7 +825,7 @@ async function proveExistingOrReintroduced(
   suspects: readonly Suspect[],
   selection: string,
 ): Promise<ExistingProbe> {
-    if (knownExisting(options.store, findingSignature(check, assertion))) return { status: 'existing' };
+  if (knownExisting(options.store, findingSignature(check, assertion))) return { status: 'existing' };
   if (suspects.length < 2) return { status: 'existing' };
   const sampleIndexes = Array.from({ length: suspects.length - 1 }, (_, index) => index);
   const selected =
@@ -973,7 +996,16 @@ async function reconcile(
   const comparison = await compareRange(options, base, target);
   const selection = selectionIdentity(comparison.checks);
   const groups = groupNewFindings(comparison.findings, comparison.checks);
-  const unknownChecks = comparison.results.filter((item) => item.headReason || (item.head && !item.head.passed && comparison.findings.some((finding) => finding.check.command.join('\0') === item.check.command.join('\0') && finding.status === 'unknown')));
+  const unknownChecks = comparison.results.filter(
+    (item) =>
+      item.headReason ||
+      (item.head &&
+        !item.head.passed &&
+        comparison.findings.some(
+          (finding) =>
+            finding.check.command.join('\0') === item.check.command.join('\0') && finding.status === 'unknown',
+        )),
+  );
   const unknown = unknownChecks.length > 0 || comparison.findings.some((finding) => finding.status === 'unknown');
 
   // A matching baseline assertion is ordinarily pre-existing. When another landing first made that assertion pass,
@@ -998,17 +1030,22 @@ async function reconcile(
     if (item.status === 'new') {
       item.finding.status = 'new';
       item.finding.reason = 'The same assertion passed at an intermediate landing prefix and failed again at the head.';
-      const group = groups.find((candidate) => candidate.check.signature === checkSignature(item.finding.check, candidate.check.index));
+      const group = groups.find(
+        (candidate) => candidate.check.signature === checkSignature(item.finding.check, candidate.check.index),
+      );
       if (group) {
         group.findings.push(item.finding);
         group.targets = [...new Set([...group.targets, item.finding.assertion])];
       } else {
-        const check = comparison.checks.find((candidate) => candidate.signature === checkSignature(item.finding.check, candidate.index));
+        const check = comparison.checks.find(
+          (candidate) => candidate.signature === checkSignature(item.finding.check, candidate.index),
+        );
         if (check) groups.push({ check, findings: [item.finding], targets: [item.finding.assertion] });
       }
     } else if (item.status === 'unknown') {
       item.finding.status = 'unknown';
-      item.finding.reason = 'The bounded prefix comparison could not establish whether this matching assertion was pre-existing.';
+      item.finding.reason =
+        'The bounded prefix comparison could not establish whether this matching assertion was pre-existing.';
     }
   }
   saveComparisonFindings(options.store, comparison);
@@ -1075,11 +1112,21 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
             );
             if (proof.status === 'unknown') {
               unknownOwner = true;
-              updateFindingOwner(options, [finding], undefined, 'New failure is visible, but its owner is unknown because prefix evidence was incomplete.');
+              updateFindingOwner(
+                options,
+                [finding],
+                undefined,
+                'New failure is visible, but its owner is unknown because prefix evidence was incomplete.',
+              );
               continue;
             }
             if (proof.status === 'existing') {
-              updateFindingOwner(options, [finding], undefined, 'Failure is pre-existing on the exact baseline; no landing was assigned.');
+              updateFindingOwner(
+                options,
+                [finding],
+                undefined,
+                'Failure is pre-existing on the exact baseline; no landing was assigned.',
+              );
               continue;
             }
             cleanIndex = proof.cleanIndex;
@@ -1099,7 +1146,9 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
             options,
             [finding],
             owner ?? undefined,
-            owner ? `New failure attributed to the owning landing ${owner.id}.` : 'New failure has no proven owner in the captured verified range.',
+            owner
+              ? `New failure attributed to the owning landing ${owner.id}.`
+              : 'New failure has no proven owner in the captured verified range.',
           );
         }
         owned.push({ group, owners: [...new Map(owners.map((task) => [task.id, task])).values()], unknownOwner });
@@ -1150,7 +1199,8 @@ function readFindingCounts(stateDirectory: string | undefined): VerificationFind
       count: number;
     }[];
     const result = { ...empty };
-    for (const row of counts) if (row.status in result) result[row.status as keyof VerificationFindingCounts] = row.count;
+    for (const row of counts)
+      if (row.status in result) result[row.status as keyof VerificationFindingCounts] = row.count;
     return result;
   } catch {
     return empty;

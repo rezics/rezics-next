@@ -101,7 +101,9 @@ function context(root: string, tasks: Task[] = [], affectedCommand = ['affected-
   mkdirSync(worktreeRoot, { recursive: true });
   const store = new WorkerStore(openDb(join(stateDirectory, 'goal.sqlite')));
   for (const [index, item] of tasks.entries())
-    store.db.query('INSERT INTO worker_tasks VALUES (?,?,?,?)').run(item.id, index + 1, item.currentAttempt, JSON.stringify(item));
+    store.db
+      .query('INSERT INTO worker_tasks VALUES (?,?,?,?)')
+      .run(item.id, index + 1, item.currentAttempt, JSON.stringify(item));
   const events: any[] = [];
   const settings = {
     mainCheckout: root,
@@ -121,7 +123,11 @@ function context(root: string, tasks: Task[] = [], affectedCommand = ['affected-
 }
 
 function runner(
-  run: (command: readonly string[], cwd: string, log: string) => Promise<{ passed: boolean; output: string; timedOut: boolean }>,
+  run: (
+    command: readonly string[],
+    cwd: string,
+    log: string,
+  ) => Promise<{ passed: boolean; output: string; timedOut: boolean }>,
 ): GateRunner {
   return async (command, cwd, log) => {
     const result = await run(command, cwd, log);
@@ -203,7 +209,9 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
     expect(executed.filter((command) => command.join(' ') === verifierCommand.join(' '))).toHaveLength(1);
     expect(executed.filter((command) => command.join(' ') === legacyAffectedCommand.join(' '))).toHaveLength(0);
     expect(
-      executed.filter((command) => command.join(' ') === [...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' ')),
+      executed.filter(
+        (command) => command.join(' ') === [...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' '),
+      ),
     ).toHaveLength(1);
   } finally {
     ctx.close();
@@ -254,7 +262,11 @@ test('baseline equivalence never creates a task verification receipt for a faile
   const base = git(root, 'rev-parse', 'dev-verified');
   const landing = commit(root, 'services/kernel/acceptance-owner.ts', 'export const landed = true;\n', 'landing');
   git(root, 'update-ref', 'refs/heads/dev', landing, base);
-  const ctx = context(root, [task('acceptance-owner', base, landing, ['services/kernel/**'], ['bun', 'scripts/legacy-failure.ts'])], ['true']);
+  const ctx = context(
+    root,
+    [task('acceptance-owner', base, landing, ['services/kernel/**'], ['bun', 'scripts/legacy-failure.ts'])],
+    ['true'],
+  );
   const runGate = gateRunner(10_000, ctx.stateDirectory);
 
   try {
@@ -290,8 +302,14 @@ test('a head assertion added beside a matching baseline assertion remains new an
   try {
     await verifyDev({ ...ctx, runGate });
     const findings = ctx.store.devVerifierFindings().filter((item) => item.headCommit === bad);
-    expect(findings.map((item) => [item.assertion, item.status])).toContainEqual(['AssertionError: baseline A', 'existing']);
-    expect(findings.map((item) => [item.assertion, item.status])).toContainEqual(['AssertionError: newly introduced B', 'new']);
+    expect(findings.map((item) => [item.assertion, item.status])).toContainEqual([
+      'AssertionError: baseline A',
+      'existing',
+    ]);
+    expect(findings.map((item) => [item.assertion, item.status])).toContainEqual([
+      'AssertionError: newly introduced B',
+      'new',
+    ]);
     expect(ctx.store.task('bad').state).toBe('stopped');
     expect(ctx.events.map((event) => event.taskId)).toEqual(['bad']);
     expect(git(root, 'rev-parse', 'dev')).not.toBe(bad);
@@ -367,7 +385,11 @@ test('a passing infrastructure retry cannot hide another unresolved new failure'
     expect(ctx.store.task('first').state).toBe('stopped');
     expect(ctx.store.task('second').state).toBe('integrated');
     expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
-    expect(ctx.store.devVerifierFindings().some((item) => item.status === 'new' && item.assertion.includes('new shared failure'))).toBe(true);
+    expect(
+      ctx.store
+        .devVerifierFindings()
+        .some((item) => item.status === 'new' && item.assertion.includes('new shared failure')),
+    ).toBe(true);
   } finally {
     ctx.close();
   }
@@ -383,10 +405,15 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
     'add acceptance command',
   );
   git(missingRoot, 'update-ref', 'refs/heads/dev', missingHead, missingBase);
-  const missingContext = context(
-    missingRoot,
-    [task('new-acceptance', missingBase, missingHead, ['services/kernel/**'], ['bun', 'test', 'services/kernel/new.test.ts'])],
-  );
+  const missingContext = context(missingRoot, [
+    task(
+      'new-acceptance',
+      missingBase,
+      missingHead,
+      ['services/kernel/**'],
+      ['bun', 'test', 'services/kernel/new.test.ts'],
+    ),
+  ]);
   const missingCalls: string[] = [];
   const missingRunner = runner(async (command) => {
     missingCalls.push(command.join(' '));
@@ -399,7 +426,10 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
     await verifyDev({ ...missingContext, runGate: missingRunner });
     expect(missingContext.store.devVerifierFindings()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ status: 'unknown', reason: expect.stringContaining('absent at the exact verified baseline') }),
+        expect.objectContaining({
+          status: 'unknown',
+          reason: expect.stringContaining('absent at the exact verified baseline'),
+        }),
       ]),
     );
     expect(missingCalls.some((command) => command.includes('new.test.ts'))).toBe(true);
@@ -416,26 +446,42 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
   const setupBase = git(setupRoot, 'rev-parse', 'HEAD');
   git(setupRoot, 'branch', '-f', 'dev', setupBase);
   git(setupRoot, 'branch', '-f', 'dev-verified', setupBase);
-  const setupHead = commit(setupRoot, 'services/kernel/setup-change.ts', 'export const changed = true;\n', 'fix install setup');
+  const setupHead = commit(
+    setupRoot,
+    'services/kernel/setup-change.ts',
+    'export const changed = true;\n',
+    'fix install setup',
+  );
   git(setupRoot, 'rm', 'bun.lock', 'package.json');
   git(setupRoot, 'commit', '-m', 'remove broken baseline lock');
   const finalSetupHead = git(setupRoot, 'rev-parse', 'HEAD');
   git(setupRoot, 'update-ref', 'refs/heads/dev', finalSetupHead, setupBase);
   const setupContext = context(setupRoot, [task('setup-change', setupBase, finalSetupHead)]);
-  const setupRunner = runner(async () => ({ passed: false, output: 'AssertionError: new failure after setup', timedOut: false }));
+  const setupRunner = runner(async () => ({
+    passed: false,
+    output: 'AssertionError: new failure after setup',
+    timedOut: false,
+  }));
   try {
     await verifyDev({ ...setupContext, runGate: setupRunner });
     expect(setupContext.store.devVerifierFindings()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ status: 'unknown', reason: expect.stringContaining('Baseline dependency setup failed') }),
+        expect.objectContaining({
+          status: 'unknown',
+          reason: expect.stringContaining('Baseline dependency setup failed'),
+        }),
       ]),
     );
     expect(git(setupRoot, 'rev-parse', 'dev-verified')).toBe(setupBase);
-    expect(readdirSync(setupContext.stateDirectory).filter((name) => name.startsWith('dev-verify-install-'))).toHaveLength(1);
+    expect(
+      readdirSync(setupContext.stateDirectory).filter((name) => name.startsWith('dev-verify-install-')),
+    ).toHaveLength(1);
     setupContext.close();
     const restarted = new WorkerStore(openDb(join(setupContext.stateDirectory, 'goal.sqlite')));
     await verifyDev({ ...setupContext, store: restarted, runGate: setupRunner });
-    expect(readdirSync(setupContext.stateDirectory).filter((name) => name.startsWith('dev-verify-install-'))).toHaveLength(1);
+    expect(
+      readdirSync(setupContext.stateDirectory).filter((name) => name.startsWith('dev-verify-install-')),
+    ).toHaveLength(1);
     restarted.db.close();
   } finally {
     try {
@@ -445,7 +491,12 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
 
   const infraRoot = repository();
   const infraBase = git(infraRoot, 'rev-parse', 'dev-verified');
-  const infraHead = commit(infraRoot, 'services/kernel/infra-change.ts', 'export const changed = true;\n', 'infra landing');
+  const infraHead = commit(
+    infraRoot,
+    'services/kernel/infra-change.ts',
+    'export const changed = true;\n',
+    'infra landing',
+  );
   git(infraRoot, 'update-ref', 'refs/heads/dev', infraHead, infraBase);
   const infraContext = context(infraRoot, [task('infra-change', infraBase, infraHead)]);
   const transportCalls: string[] = [];
