@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
@@ -102,7 +103,7 @@ beforeAll(async () => {
      VALUES ($1,$2,$3,'Suspended public','public','active',1,now(),now(),$2)`,
     [routeOf(suspended), newId(routeOf(suspended)!), suspended],
   );
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [suspended]);
+  await suspendAccount(db.admin, suspended);
 });
 afterAll(async () => {
   await db?.close();

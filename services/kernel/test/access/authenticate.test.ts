@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } from 'jose';
@@ -295,7 +296,7 @@ test('forged expired revoked and wrong-audience sessions fail closed', async () 
     })),
   ])
     await invalid(access.authenticate(await signed(claims), context()));
-  for (const state of ['pending', 'suspended', 'deleted']) {
+  for (const state of ['pending', 'deleted']) {
     await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
       routeOf(person),
       person,
@@ -310,6 +311,14 @@ test('forged expired revoked and wrong-audience sessions fail closed', async () 
       ]);
     }
   }
+  const suspendedId = '00000000-0000-7000-8000-123400000099';
+  await pool.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+    [routeOf(suspendedId), suspendedId],
+  );
+  const suspendedBearer = await signed({ sub: suspendedId });
+  await suspendAccount(pool, suspendedId);
+  await invalid(access.authenticate(suspendedBearer, context()));
   await pool.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2', [
     routeOf(robot),
     robot,
@@ -422,10 +431,7 @@ test('delegated signed claims require an actual principal-created matching assig
   delegated = await signed({ requested_by: requestedBy, sub: robot, authn_epoch: 2 });
   await invalid(access.authenticate(delegated, context()));
   delegated = await signed({ requested_by: requestedBy });
-  await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(principal),
-    principal,
-  ]);
+  await suspendAccount(pool, principal);
   await invalid(access.authenticate(delegated, context()));
 });
 

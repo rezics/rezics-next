@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import {afterAll,beforeAll,expect,test} from 'bun:test';
 import {newId} from '../../src/route/route.ts';
 import {STANDARD_QUESTION_ID} from '../../src/rating/votes.ts';
@@ -13,5 +14,5 @@ test('own vote batch preserves zero tombstones and owner scope boundaries',async
  const actor={kind:'account' as const,accountId,clientId:'own-votes',scopes:['rating:vote'],authnEpoch:1,requestedBy:null};const got=await readOwnVotes(db.admin,actor,STANDARD_QUESTION_ID,ids);
  expect([...got.keys()]).toEqual([ids[0]!]);expect(got.get(ids[0]!)).toEqual({units:0,revision:1,at:'2026-10-27T00:00:00.000Z'});
  await expect(readOwnVotes(db.admin,{...actor,scopes:[]},STANDARD_QUESTION_ID,ids)).rejects.toThrow();await expect(readOwnVotes(db.admin,actor,STANDARD_QUESTION_ID,Array.from({length:101},()=>ids[0]!))).rejects.toThrow();
- await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2",[route,accountId]);await expect(readOwnVotes(db.admin,actor,STANDARD_QUESTION_ID,ids)).rejects.toThrow();
+ await suspendAccount(db.admin, accountId);await expect(readOwnVotes(db.admin,actor,STANDARD_QUESTION_ID,ids)).rejects.toThrow();
 });

@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { clientDeclarations, committedDeclarations } from '../../scripts/client.ts';
 import { notificationAllowed } from '../../src/access/index.ts';
@@ -188,10 +189,7 @@ test('notificationAllowed is true for a mandatory kind even when the recipient t
   const person = await fixture.person('notifications-mandatory');
   expect((await call(person, { expectedVersion: 0, notifications: allOff })).status).toBe(200);
   expect(await notificationAllowed(db.pool, { recipient: person.accountId, kind: 'moderation_decision' })).toBe(true);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(person.accountId),
-    person.accountId,
-  ]);
+  await suspendAccount(db.admin, person.accountId);
   expect(await notificationAllowed(db.pool, { recipient: person.accountId, kind: 'moderation_decision' })).toBe(true);
   expect(await notificationAllowed(db.pool, { recipient: person.accountId, kind: 'reply' })).toBe(false);
 });

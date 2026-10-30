@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   createAuthHost,
@@ -363,11 +364,13 @@ if (crashProcess) {
       ).toBe(503);
       fault = undefined;
       const saved = await snapshot(id);
-      await pool.query(`UPDATE access.account SET state=$2,operator_account_id=$3 WHERE account_id=$1`, [
-        id,
-        change === 'suspended' ? 'suspended' : 'active',
-        change === 'operator' ? human.accountId : null,
-      ]);
+      if (change === 'suspended') await suspendAccount(pool, id);
+      else
+        await pool.query(`UPDATE access.account SET state=$2,operator_account_id=$3 WHERE account_id=$1`, [
+          id,
+          'active',
+          change === 'operator' ? human.accountId : null,
+        ]);
       await expect(bindings.trustedAccess.completeRecovery!(saved.witness[0]!.reference)).rejects.toThrow();
       expect((await bindings.internalLifecycle.readFenceState(id))!.fenced).toBe(true);
     }

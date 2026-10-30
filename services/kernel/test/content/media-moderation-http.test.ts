@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, createProvisioningEvidenceVerifier } from '@rezics/auth';
 import { createKernelClient } from '@rezics/client';
@@ -351,7 +352,7 @@ test('current uploader, anonymous, suspended, scope and revoked replay denials r
   const id = await target();
   const key = Bun.randomUUIDv7();
   expect((await call(id, input, key)).response.status).toBe(200);
-  const stable = await effects();
+  let stable = await effects();
   async function reject(options: Parameters<typeof call>[3], status: number) {
     const start = observer.records.length;
     denied(await call(id, input, key, options), status);
@@ -363,17 +364,15 @@ test('current uploader, anonymous, suspended, scope and revoked replay denials r
   await reject({ bearer: uploaderBearer }, 403);
   await reject({ anonymous: true }, 401);
   await reject({ bearer: noScopeBearer }, 403);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(moderatorId),
-    moderatorId,
-  ]);
+  await suspendAccount(db.admin, moderatorId);
+  stable = await effects();
   try {
     await reject({}, 401);
   } finally {
-    await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(moderatorId),
-      moderatorId,
-    ]);
+    await reinstateAccount(db.admin, moderatorId);
+    bearer = await issue(moderatorId, [action]);
+    noScopeBearer = await issue(moderatorId, ['media:read']);
+    stable = await effects();
   }
   await db.admin.query(
     'DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4',

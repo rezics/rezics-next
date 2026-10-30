@@ -1,3 +1,5 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -319,25 +321,21 @@ test('anonymous uploader author and suspended denials preserve state; bytes and 
   const unscoped = await f.authenticate(moderatorId, false);
   expect(unscoped.scopes).toEqual(['subject:read']);
   await grant(admin, f.mediaId, suspendedId);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(suspendedId),
-    suspendedId,
-  ]);
+  await suspendAccount(admin, suspendedId);
   const before = await facts(admin, f.mediaId);
   const anchor = await readPartition(admin, partition);
   try {
     for (const actor of [{ kind: 'anonymous' } as const, author, suspended, unscoped]) {
       const start = observer.records.length;
-      await expect(f.execute(input(f.mediaId), context(), actor)).rejects.toBeInstanceOf(GrantDeniedError);
+      await expect(f.execute(input(f.mediaId), context(), actor)).rejects.toBeInstanceOf(
+        actor === suspended ? AuthenticationError : GrantDeniedError,
+      );
       expect(observer.records.slice(start).some((r) => /core.receipt/.test(r.statement))).toBe(false);
       expect(await facts(admin, f.mediaId)).toEqual(before);
       expect(await readPartition(admin, partition)).toEqual(anchor);
     }
   } finally {
-    await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(suspendedId),
-      suspendedId,
-    ]);
+    await reinstateAccount(admin, suspendedId);
   }
   const wrong = await insertMedia(admin);
   await expect(f.execute(input(wrong))).rejects.toBeInstanceOf(GrantDeniedError);

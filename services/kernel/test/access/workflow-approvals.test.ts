@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { AccountOperation } from '@rezics/auth';
@@ -317,11 +318,7 @@ for (const fact of ['assignment', 'principal-grant', 'principal-state', 'provena
         f.target,
         principal,
       ]);
-    if (fact === 'principal-state')
-      await admin.query(`UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2`, [
-        routeOf(principal),
-        principal,
-      ]);
+    if (fact === 'principal-state') await suspendAccount(admin, principal);
     if (fact === 'provenance')
       await admin.query(
         'DELETE FROM access.principal_assignment WHERE route=$1 AND principal_id=$2 AND request_id=$3',

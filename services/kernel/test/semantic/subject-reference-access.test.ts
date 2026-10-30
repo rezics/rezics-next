@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
@@ -161,15 +162,6 @@ test('references enforce current explicit denial, suspension and native visibili
     f.resource.route,
     f.resource.id,
   ]);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(f.actorId),
-    f.actorId,
-  ]);
-  expect(await read()).toBeNull();
-  await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-    routeOf(f.actorId),
-    f.actorId,
-  ]);
   for (const visibility of ['hidden', 'taken_down']) {
     await admin.query(
       'UPDATE semantic.subject SET visibility=$3, security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2',
@@ -182,6 +174,8 @@ test('references enforce current explicit denial, suspension and native visibili
     await observed(() => readSubjectReference(pool, newId(f.resource.route), (client) => authorize(client))),
   ).toBeNull();
   expect(await observed(() => readSubjectReference(pool, 'invalid', (client) => authorize(client)))).toBeNull();
+  await suspendAccount(admin, f.actorId);
+  expect(await read()).toBeNull();
 });
 
 test('reference survivors in different partitions need fresh independent authorization after revocation', async () => {

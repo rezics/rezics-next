@@ -183,12 +183,12 @@ test('owned listing is raw-key bounded and binds its cursor to viewer, filter, l
   expect((await f.call('editor', 'POST', `${path(first.id)}:restore`, {}, f.conditional('1'))).status).toBe(403);
 });
 
-test('verified suspension is forbidden on Zones while other authentication contracts and bad bearer stay unchanged', async () => {
+test('native suspension refuses the old Zone bearer while other authentication contracts and bad bearer stay unchanged', async () => {
   const input = createBody();
   input.configuration.scope = [];
   const zone = await f.create(input);
-  expect((await f.call('suspended', 'GET', path(zone.id))).status).toBe(403);
-  expect((await f.call('suspended', 'POST', '/v1/zones', input)).status).toBe(403);
+  expect((await f.call('suspended', 'GET', path(zone.id))).status).toBe(401);
+  expect((await f.call('suspended', 'POST', '/v1/zones', input)).status).toBe(401);
   expect((await f.call('suspended', 'GET', `/v1/collections/${zone.id}`)).status).toBe(401);
   expect((await f.call('suspended', 'GET', path(zone.id), undefined, { authorization: 'Bearer invalid' })).status).toBe(
     401,

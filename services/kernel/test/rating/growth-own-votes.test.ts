@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
 import { readOwnVotes } from '../../src/rating/own-votes.ts';
@@ -70,10 +71,12 @@ test('own vote batch admits empty input and rejects invalid callers and routed k
   await expect(readOwnVotes(database.admin, await account('organization'), STANDARD_QUESTION_ID, [])).rejects.toThrow();
   for (const change of ["state='suspended'", 'authn_fenced=true', 'minimum_authn_epoch=2']) {
     const actor = await account();
-    await database.admin.query(`UPDATE access.account SET ${change} WHERE route=$1 AND account_id=$2`, [
-      route,
-      actor.accountId,
-    ]);
+    if (change === "state='suspended'") await suspendAccount(database.admin, actor.accountId);
+    else
+      await database.admin.query(`UPDATE access.account SET ${change} WHERE route=$1 AND account_id=$2`, [
+        route,
+        actor.accountId,
+      ]);
     await expect(readOwnVotes(database.admin, actor, STANDARD_QUESTION_ID, [])).rejects.toThrow();
   }
   const target = newId(0x7b20);
@@ -101,10 +104,7 @@ test('own vote batch shares the caller snapshot and keeps original target keys',
         route,
         actor.accountId,
       ]);
-      await database.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-        route,
-        actor.accountId,
-      ]);
+      await suspendAccount(database.admin, actor.accountId);
       const result = await readOwnVotes(client, actor, STANDARD_QUESTION_ID, [survivor, target]);
       expect([...result]).toEqual([[target, { units: 0, revision: 1, at }]]);
     } finally {

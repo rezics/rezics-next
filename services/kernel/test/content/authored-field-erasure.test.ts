@@ -1,3 +1,5 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
@@ -207,17 +209,26 @@ test('another account, an anonymous caller and a suspended author cannot change 
 
   await expect(erase(field.id, other)).rejects.toBeInstanceOf(ContentNotFoundError);
   await expect(erase(field.id, { kind: 'anonymous' })).rejects.toBeInstanceOf(ContentNotFoundError);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await suspendAccount(db.admin, authorId);
   try {
-    await expect(erase(field.id, author)).rejects.toBeInstanceOf(ContentNotFoundError);
+    await expect(erase(field.id, author)).rejects.toBeInstanceOf(AuthenticationError);
   } finally {
-    await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(authorId),
-      authorId,
-    ]);
+    await reinstateAccount(db.admin, authorId);
+    const row = await db.admin.query(
+      'SELECT minimum_authn_epoch FROM access.account WHERE route=$1 AND account_id=$2',
+      [routeOf(authorId), authorId],
+    );
+    author = await authenticateAccount(
+      access,
+      { pool: db.pool, deadline: Date.now() + 10000 },
+      {
+        accountId: authorId,
+        clientId: 'web',
+        scopes: actionNames,
+        authnEpoch: Number(row.rows[0].minimum_authn_epoch),
+        requestedBy: null,
+      },
+    );
   }
   const after = await db.admin.query(
     "SELECT availability,body,encode(body_sha256,'hex') AS digest FROM content.authored_field WHERE route=$1 AND id=$2",

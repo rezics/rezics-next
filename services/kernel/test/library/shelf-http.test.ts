@@ -20,7 +20,7 @@ let app: ReturnType<typeof personalLibraryRoutes>;
 let withoutPort: typeof app;
 let access: ReturnType<typeof admittedAccess>;
 const clock = () => new Date();
-const accounts = { owner: newId(0x2200), other: newId(0x2201), suspended: newId(0x2200) };
+const accounts = { owner: newId(0x2200), other: newId(0x2201), fenced: newId(0x2200) };
 const bearer = new Map<string, string>();
 const fullType = `schema:${'A'.repeat(8192)}`;
 const subjectId = newId(0x2200);
@@ -148,8 +148,9 @@ beforeAll(async () => {
   access = composition.resolveAccess({ actions: productionActions() });
   for (const [name, id] of Object.entries(accounts)) {
     await db.admin.query(
-      `INSERT INTO access.account(route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor',$3,$2)`,
-      [routeOf(id), id, name === 'suspended' ? 'suspended' : 'active'],
+      `INSERT INTO access.account(route, account_id, kind, state, authn_fenced, minimum_authn_epoch, transaction_id)
+       VALUES ($1,$2,'actor','active',$3,$4,$2)`,
+      [routeOf(id), id, name === 'fenced', name === 'fenced' ? 2 : 1],
     );
   }
   for (const [name, id, scopes] of [
@@ -157,7 +158,7 @@ beforeAll(async () => {
     ['other', accounts.other, ['library_entry:list', 'progress_session:list']],
     ['libraryOnly', accounts.owner, ['library_entry:list']],
     ['progressOnly', accounts.owner, ['progress_session:list']],
-    ['suspended', accounts.suspended, ['library_entry:list', 'progress_session:list']],
+    ['fenced', accounts.fenced, ['library_entry:list', 'progress_session:list']],
   ] as const)
     bearer.set(name, await accountToken({ accountId: id, clientId: 'shelf-http', scopes }));
   await db.admin.query(
@@ -301,9 +302,9 @@ test('shelf port transport keeps old entries and rejects closed queries and unau
     await json(await get(path), 400, 'invalid_request');
   for (const path of ['/v1/libraryEntries?orderBy=createdAt', '/v1/libraryShelfSummary', '/v1/libraryShelfTypes']) {
     await json(await get(path, 'anonymous'), 401, 'authentication_required');
-    const suspended = await get(path, 'suspended');
-    expect(suspended.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
-    await json(suspended, 401, 'invalid_credentials');
+    const fenced = await get(path, 'fenced');
+    expect(fenced.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+    await json(fenced, 401, 'invalid_credentials');
     await json(await get(path, 'progressOnly'), 403, 'forbidden');
   }
   expect(calls).toHaveLength(before);

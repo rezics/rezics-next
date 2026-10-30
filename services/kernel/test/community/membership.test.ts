@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -881,7 +882,7 @@ test('a revoked, suspended or fenced initiator is denied at the workflow step wi
     {
       name: 'suspended',
       change: async (installed) => {
-        await admin.query("UPDATE access.account SET state = 'suspended' WHERE account_id = $1", [installed.memberId]);
+        await suspendAccount(admin, installed.memberId);
       },
     },
     {

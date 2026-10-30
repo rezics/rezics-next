@@ -1,3 +1,5 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
@@ -405,15 +407,12 @@ test('publishing grants nothing on the subject or the Global Context, and a non-
       publication.withdraw(deps(), f.actor, { realmId, subjectId, expectedHead: newId(route) }, context()),
     ),
   ).toBeInstanceOf(publication.PublicationConflictError);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(f.actor.accountId),
-    f.actor.accountId,
-  ]);
+  await suspendAccount(admin, f.actor.accountId);
   expect(
     await untouched(() =>
       publication.reject(deps(), f.actor, { realmId, subjectId, expectedHead: adopted.value.publicationId }, context()),
     ),
-  ).toBeInstanceOf(GrantDeniedError);
+  ).toBeInstanceOf(AuthenticationError);
   expect(await slot(realmId, subjectId)).toMatchObject({
     publication_id: adopted.value.publicationId,
     verdict: 'adopt',

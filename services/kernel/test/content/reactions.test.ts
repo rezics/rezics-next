@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService } from '@rezics/auth';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -94,20 +95,7 @@ export async function reactionFixture() {
     },
   });
   const tokens = new Map<string, string>();
-  for (const id of [accountId, managerId]) {
-    await db.admin.query(
-      `INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)`,
-      [routeOf(id), id],
-    );
-    await auth.internal.provisionPassword({
-      authorization: id,
-      email: `${id}@example.test`,
-      password: 'reactions-password',
-    });
-    await db.admin.query(`UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2`, [
-      routeOf(id),
-      id,
-    ]);
+  async function renew(id: string) {
     const post = (path: string, body: unknown, cookie = '') =>
       auth.handler(
         new Request(`${issuer}${path}`, {
@@ -133,6 +121,22 @@ export async function reactionFixture() {
     );
     expect(issued.status).toBe(200);
     tokens.set(id, ((await issued.json()) as { access_token: string }).access_token);
+  }
+  for (const id of [accountId, managerId]) {
+    await db.admin.query(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)`,
+      [routeOf(id), id],
+    );
+    await auth.internal.provisionPassword({
+      authorization: id,
+      email: `${id}@example.test`,
+      password: 'reactions-password',
+    });
+    await db.admin.query(`UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2`, [
+      routeOf(id),
+      id,
+    ]);
+    await renew(id);
   }
   const verified = (id = accountId) =>
     access.authenticate(tokens.get(id)!, { pool: db.pool, deadline: Date.now() + 180_000 });
@@ -210,6 +214,7 @@ export async function reactionFixture() {
     db,
     access,
     verified,
+    renew,
     bearer(id = accountId) {
       const token = tokens.get(id);
       if (!token) throw new Error(`No bearer token for ${id}`);
@@ -308,15 +313,6 @@ if (Bun.main === import.meta.path) {
       expect(await f.effects()).toEqual(before);
     }
     await denied({ kind: 'anonymous' });
-    await f.db.admin.query(`UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2`, [
-      f.home,
-      f.accountId,
-    ]);
-    await denied();
-    await f.db.admin.query(`UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2`, [
-      f.home,
-      f.accountId,
-    ]);
     await denied(actor, { ...input, targetId: newId(f.targetRoute) });
     for (const [table, idColumn, id] of [
       ['board', 'board_id', target.board],
@@ -341,6 +337,10 @@ if (Bun.main === import.meta.path) {
     );
     await denied();
     await denied(actor, { ...input, targetKind: 'thread' as 'post', targetId: target.thread });
+    await suspendAccount(f.db.admin, f.accountId);
+    await denied();
+    await reinstateAccount(f.db.admin, f.accountId);
+    await f.renew(f.accountId);
   });
   test('private read grants use production Access; receipts and concurrent writes preserve one slot and ordered previous kinds', async () => {
     const target = await f.target();

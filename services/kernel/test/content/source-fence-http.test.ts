@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -32,6 +33,7 @@ let observer: ReturnType<typeof observeSql>;
 let app: ReturnType<typeof createKernel>;
 let authPool: Pool;
 let bulk: string;
+let renewBulk: () => Promise<void>;
 let governance: string;
 let noScope: string;
 let ordinary: string;
@@ -122,6 +124,10 @@ beforeAll(async () => {
     expect(issued.status).toBe(200);
     return ((await issued.json()) as { access_token: string }).access_token;
   }
+  renewBulk = async () => {
+    bulk = await issue(bulkId, 'bulk-import');
+    noScope = await issue(bulkId, 'bulk-import', []);
+  };
   bulk = await issue(bulkId, 'bulk-import');
   governance = await issue(governanceId, 'governance');
   noScope = await issue(bulkId, 'bulk-import', []);
@@ -280,17 +286,12 @@ test('anonymous and revoked callers receive no fence facts', async () => {
   } finally {
     await grant(bulkId);
   }
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(bulkId),
-    bulkId,
-  ]);
+  await suspendAccount(db.admin, bulkId);
   try {
     refused(await call(), 401);
   } finally {
-    await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(bulkId),
-      bulkId,
-    ]);
+    await reinstateAccount(db.admin, bulkId);
+    await renewBulk();
   }
   for (const reason of ['resource', 'suspension', 'realm_ban']) {
     await db.admin.query(

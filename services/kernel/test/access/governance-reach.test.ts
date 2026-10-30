@@ -1,3 +1,5 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
+import { AuthenticationError } from '../../src/request/access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
@@ -317,10 +319,12 @@ test.serial(
       { fenced: true, state: 'active' },
       { fenced: false, state: 'suspended' },
     ]) {
-      await fixture.reader.query(
-        'UPDATE access.account SET authn_fenced=$3,state=$4 WHERE route=$1 AND account_id=$2',
-        [accountRoute, staff.accountId, change.fenced, change.state],
-      );
+      if (change.state === 'suspended') await suspendAccount(fixture.pool, staff.accountId);
+      else
+        await fixture.reader.query(
+          'UPDATE access.account SET authn_fenced=$3,state=$4 WHERE route=$1 AND account_id=$2',
+          [accountRoute, staff.accountId, change.fenced, change.state],
+        );
       await expect(
         takedown(
           context,
@@ -328,11 +332,16 @@ test.serial(
           { target: { kind: 'post', id: firstPostId }, reason: 'Platform policy' },
           commandContext(),
         ),
-      ).rejects.toBeInstanceOf(GrantDeniedError);
-      await fixture.reader.query(
-        "UPDATE access.account SET authn_fenced=false,state='active' WHERE route=$1 AND account_id=$2",
-        [accountRoute, staff.accountId],
-      );
+      ).rejects.toBeInstanceOf(change.state === 'suspended' ? AuthenticationError : GrantDeniedError);
+      if (change.state === 'suspended') {
+        await reinstateAccount(fixture.pool, staff.accountId);
+        staff = (await fixture.context(staff.accountId)).actor;
+        delegatedAgain = await fixture.context(fixture.actor, undefined, requestedBy);
+      } else
+        await fixture.reader.query(
+          "UPDATE access.account SET authn_fenced=false,state='active' WHERE route=$1 AND account_id=$2",
+          [accountRoute, staff.accountId],
+        );
       expect(await reachRows()).toEqual(recordsBeforeFloors);
     }
     const narrowStaff = (await fixture.context(staff.accountId, [])).actor;

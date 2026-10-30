@@ -2,7 +2,13 @@ import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts'
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
-import type { Access, AccessContext, AccountActor, Actor } from '../request/access.ts';
+import {
+  AuthenticationError,
+  type Access,
+  type AccessContext,
+  type AccountActor,
+  type Actor,
+} from '../request/access.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { accessRoot } from './derived-access.ts';
@@ -154,6 +160,7 @@ export function createCommandAdmission(
       const account = within(deadline, async () => {
         const original = snapshot.account;
         const current = await readAccount(deadlineClient(context.pool, deadline), original.route, actor.accountId);
+        if (current?.state === 'suspended') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
         return current &&
           current.accountId === original.accountId &&
           current.route === original.route &&
@@ -166,6 +173,7 @@ export function createCommandAdmission(
           : null;
       }).catch((error: unknown) => {
         throwAccessUnavailable(error, deadline);
+        if (error instanceof AuthenticationError) throw error;
         return null;
       });
       observation = { deadline, account };

@@ -13,6 +13,7 @@ import {
 } from '../../src/access/lifecycle.ts';
 import { createOrganizationCloseRunner } from '../../src/access/organization-close-work.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 // Separate pools bypass the process-local command gate: the race must reach PostgreSQL's row lock.
@@ -198,11 +199,11 @@ test('shareAccount returns active and refuses pending, suspended, fenced, delete
     ['active', true],
     ['deleted', true],
   ] as const) {
-    await pool.query('UPDATE access.account SET state=$3, authn_fenced=$4 WHERE route=$1 AND account_id=$2', [
+    await setFixtureAccountState(pool, accountId, state);
+    await pool.query('UPDATE access.account SET authn_fenced=$3 WHERE route=$1 AND account_id=$2', [
       routeOf(accountId),
       accountId,
-      state,
-      fenced,
+      state === 'suspended' || fenced,
     ]);
     await expect(
       ownerCommand(accountId, async (tx) => {

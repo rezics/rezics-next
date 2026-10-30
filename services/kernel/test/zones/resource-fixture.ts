@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { PROFILE_FORMAT, type CompositionDocument, type ZoneStarter } from '@rezics/composition';
@@ -86,7 +87,7 @@ export async function resourceFixture(options: { scopes?: readonly string[] } = 
       bases: [],
       routes: [],
     });
-    await db.admin.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [accounts.suspended]);
+    await suspendAccount(db.admin, accounts.suspended);
     const global = { route: 0, id: GLOBAL_CONTEXT };
     await access.grant(global, 'owner', 'subject:create');
 

@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { createLifecycleInternals, type RecoveryEvidence } from '../../src/access/lifecycle.ts';
@@ -92,6 +93,7 @@ test('exact cleared receipt replays once, but current authority is checked befor
       }),
     ).rejects.toThrow();
     if (change === 'floor') await f.lifecycle.raiseFence({ accountId: f.accountId, key: `${f.accountId}:later` });
+    else if (change === 'suspended') await suspendAccount(pool, f.accountId);
     else if (change === 'missing') f.setWitness(null);
     else if (change === 'changed') f.setWitness({ ...f.witness, establishmentId: 'substituted' });
     else if (change === 'expired')
@@ -101,7 +103,7 @@ test('exact cleared receipt replays once, but current authority is checked befor
         `UPDATE access.account SET state=$2,kind=$3,operator_account_id=$4 WHERE account_id=$1 AND route=$5`,
         [
           f.accountId,
-          change === 'suspended' || change === 'deleted' ? change : 'active',
+          change === 'deleted' ? change : 'active',
           'actor',
           change === 'operator' ? newId(183) : null,
           routeOf(f.accountId),
@@ -141,10 +143,11 @@ test('native retry re-resolves Auth before checkout and denies later floor, stat
       else if (change === 'expired') f.setWitness({ ...f.witness, expiresAt: new Date(0).toISOString() });
       else if (change === 'floor')
         await f.lifecycle.raiseFence({ accountId: f.accountId, key: `${f.accountId}:retry-later` });
+      else if (change === 'suspended') await suspendAccount(pool, f.accountId);
       else
         await pool.query(`UPDATE access.account SET state=$2,operator_account_id=$3 WHERE route=$4 AND account_id=$1`, [
           f.accountId,
-          change === 'suspended' ? 'suspended' : 'active',
+          'active',
           change === 'operator' ? newId(183) : null,
           routeOf(f.accountId),
         ]);

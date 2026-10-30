@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   admittedCommandAccount,
@@ -81,21 +82,14 @@ test.serial('derived accesses use the root command admission and preserve its ob
   }
 
   const denied = system.actors.other.actor;
-  const route = routeOf(denied.accountId)!;
   try {
     await expect(
       runAdmission(twiceDerived, system.actors.other, async () => {
-        await system.database.pool.query(
-          "UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2",
-          [route, denied.accountId],
-        );
+        await suspendAccount(system.database.pool, denied.accountId);
       }),
-    ).rejects.toThrow('Command admission denied');
+    ).rejects.toThrow('Authentication failed');
   } finally {
-    await system.database.pool.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      route,
-      denied.accountId,
-    ]);
+    await reinstateAccount(system.database.pool, denied.accountId);
   }
 });
 

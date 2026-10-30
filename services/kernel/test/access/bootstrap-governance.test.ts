@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -407,11 +408,7 @@ test('missing or nonhuman, inactive or fenced accounts refuse without marker, gr
   await invoke(newId(0x7777), false);
   await invoke(automated, false);
   for (const state of ['pending', 'suspended', 'deleted']) {
-    await reader.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(other),
-      other,
-      state,
-    ]);
+    await setFixtureAccountState(reader, other, state);
     await invoke(other, false);
   }
   await reader.query("UPDATE access.account SET state='active',authn_fenced=true WHERE route=$1 AND account_id=$2", [

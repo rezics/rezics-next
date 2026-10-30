@@ -1,6 +1,5 @@
 import { Elysia, t, ValidationError } from 'elysia';
 import { throwAccessUnavailable } from '../access/unavailable.ts';
-import { isSuspendedAccountAuthenticationError } from '../access/authenticate.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -178,15 +177,6 @@ export function createApp({
         mounted = undefined;
         action = undefined;
       }
-      if (isSuspendedAccountAuthenticationError(error) && action?.startsWith('zone:')) {
-        // Zone's direct-public-read contract distinguishes a verified suspended actor from bad auth.
-        // Other resources retain their native authentication response; no suspended actor is admitted.
-        return problemResponse(new ProblemError('forbidden'), {
-          method: request.method,
-          id: idFor(request),
-          action,
-        });
-      }
       if (error instanceof PlatformClosedError) {
         const read = action?.endsWith(':read') === true;
         const effectStatus =
@@ -259,7 +249,7 @@ export function createApp({
                 return await actorOf(accessForApp(), request, { pool, deadline: job.deadline });
               } catch (error) {
                 throwAccessUnavailable(error, job.deadline);
-                if (error instanceof AuthenticationError) throw error;
+                if (error instanceof AuthenticationError || error instanceof ProblemError) throw error;
                 throw new AuthenticationError(401, 'Bearer error="invalid_token"');
               }
             });

@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { createPool } from '../../src/database/pool.ts';
@@ -60,8 +61,9 @@ async function insert(
   await pool.query(
     `INSERT INTO access.account(route, account_id, kind, state, authn_fenced, handle, transaction_id, created_at)
      VALUES ($1,$2,$3,$4,$5,$6,$2,$7)`,
-    [route, id, kind, state, fenced, handle, created],
+    [route, id, kind, state === 'suspended' ? 'active' : state, fenced, handle, created],
   );
+  if (state === 'suspended') await suspendAccount(pool, id);
   return id;
 }
 beforeAll(async () => {

@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { compileCatalogue } from '@rezics/definitions/compile';
@@ -110,8 +111,9 @@ beforeAll(async () => {
       `INSERT INTO access.account
          (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
        VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-      [route, actor.accountId, actor === suspended ? 'suspended' : 'active', newId(route)],
+      [route, actor.accountId, 'active', newId(route)],
     );
+    if (actor === suspended) await suspendAccount(database.admin, actor.accountId);
   }
   const access = native.access;
   const context = { pool: database.pool, deadline: deadlineFor(30_000) };

@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import '../support/fixture-event-types.ts';
@@ -82,10 +83,7 @@ test('read-only Library preparation uses native attempt T before owner checkout 
     [partitionOf(route), base.kind],
   );
   expect(receipts.rows[0]!.count).toBe(1);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    route,
-    accountId,
-  ]);
+  await suspendAccount(db.admin, accountId);
   await expect(runner.ownAccountPrepared(actor, request(), body)).rejects.toBeInstanceOf(GrantDeniedError);
   expect(bodies).toBe(1);
 });

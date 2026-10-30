@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
 import { derivedId, newId, routeOf } from '../../src/route/route.ts';
@@ -292,10 +293,7 @@ test('one fanout page completion stays bounded as unrelated continuations and op
       for (let repetition = 0; repetition < 3; repetition++) {
         const operator = newId(route);
         await insertAccount(operator);
-        await database.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-          route,
-          operator,
-        ]);
+        await suspendAccount(database.admin, operator);
         for (let index = 0; index < 2; index++) {
           const subject = newId(route);
           const reservation = newId(route);
@@ -333,7 +331,7 @@ test('one fanout page completion stays bounded as unrelated continuations and op
               reservationId: null,
               binding: { operationKey: operator, operationDigest: 'a'.repeat(64), commandKeyPrefix },
               barrierReceiptId: newId(route),
-              minimumAuthnEpoch: '1',
+              minimumAuthnEpoch: '2',
               transactionId,
               allowlist: [{ ...item, digest: continuationEntryDigest(item) }],
             });

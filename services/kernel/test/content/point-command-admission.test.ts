@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -12,7 +13,7 @@ import { beginAuthorErasure } from '../../src/content/operations.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
-import type { Access, AccountActor } from '../../src/request/access.ts';
+import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
@@ -249,13 +250,17 @@ for (const mode of modes) {
       expect(await f.execute(mode, key)).toEqual({ ...initial, replayed: true });
       const before = await effects(f);
       const jwksReads = fetches;
-      await db.admin.query(
-        `UPDATE access.account SET ${mutation} WHERE route=$1 AND account_id=$2`,
-        mutation.includes('$3') ? [actorRoute, f.accountId, other.accountId] : [actorRoute, f.accountId],
-      );
+      if (mutation === "state='suspended'") await suspendAccount(db.admin, f.accountId);
+      else
+        await db.admin.query(
+          `UPDATE access.account SET ${mutation} WHERE route=$1 AND account_id=$2`,
+          mutation.includes('$3') ? [actorRoute, f.accountId, other.accountId] : [actorRoute, f.accountId],
+        );
       for (const deniedKey of [crypto.randomUUID(), key]) {
         statements.length = 0;
-        await expect(f.execute(mode, deniedKey)).rejects.toBeInstanceOf(GrantDeniedError);
+        await expect(f.execute(mode, deniedKey)).rejects.toBeInstanceOf(
+          mutation === "state='suspended'" ? AuthenticationError : GrantDeniedError,
+        );
         expect(statements.filter(({ text }) => actorRead(text))).toHaveLength(1);
         expect(
           statements.some(

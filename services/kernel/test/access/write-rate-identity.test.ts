@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool, type QueryConfig } from 'pg';
@@ -123,7 +124,8 @@ test('forged, copied, cross-pool and expired actor evidence cannot spend', async
   expect((await pool.query('SELECT * FROM access.write_rate_counter')).rows).toHaveLength(0);
   for (const update of ["state='suspended'", 'authn_fenced=true', 'minimum_authn_epoch=2']) {
     await account();
-    await pool.query(`UPDATE access.account SET ${update} WHERE route=$1 AND account_id=$2`, [route, id]);
+    if (update === "state='suspended'") await suspendAccount(pool, id);
+    else await pool.query(`UPDATE access.account SET ${update} WHERE route=$1 AND account_id=$2`, [route, id]);
     await expect(access.authenticate(await sign(), context())).rejects.toThrow();
   }
 });

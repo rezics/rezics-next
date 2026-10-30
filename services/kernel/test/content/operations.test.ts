@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, type AuthService } from '@rezics/auth';
@@ -78,6 +79,36 @@ const context = (key = crypto.randomUUID()) => ({
 const input = { threadId, authorId };
 let native: NativeWorkflowStatus | null = null;
 const statusIds: string[] = [];
+async function renew(accountId: string) {
+  for (const scopes of [actions, ['account:read'], ['post:erase']]) {
+    const response = await auth.handler(
+      new Request(`${issuer}/signin`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          account_id: accountId,
+          password: 'correct horse battery staple',
+          client_id: 'operations-test',
+          scope: scopes,
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    const cookie = response.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    const issued = await auth.handler(
+      new Request(`${issuer}/token`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie },
+        body: '{}',
+      }),
+    );
+    expect(issued.status).toBe(200);
+    tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
+  }
+}
 async function verified(accountId: string, scopes = actions) {
   return access.authenticate(tokens.get(`${accountId}:${scopes.join(' ')}`)!, {
     pool: db.pool,
@@ -185,29 +216,7 @@ beforeAll(async () => {
       accountId,
     ]);
     await grant(accountId, 'account:read', accountId);
-    for (const scopes of [actions, ['account:read'], ['post:erase']]) {
-      const response = await auth.handler(
-        new Request(`${issuer}/signin`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json' },
-          body: JSON.stringify({ account_id: accountId, password, client_id: 'operations-test', scope: scopes }),
-        }),
-      );
-      expect(response.status).toBe(200);
-      const cookie = response.headers
-        .getSetCookie()
-        .map((value) => value.split(';')[0])
-        .join('; ');
-      const issued = await auth.handler(
-        new Request(`${issuer}/token`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json', cookie },
-          body: '{}',
-        }),
-      );
-      expect(issued.status).toBe(200);
-      tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
-    }
+    await renew(accountId);
   }
   await db.admin.query(
     `INSERT INTO content.thread
@@ -363,10 +372,7 @@ test('status conceals noninitiators and current account denials before exact nat
   for (const denied of [{ kind: 'anonymous' } as const, other, await verified(authorId, ['post:erase'])])
     expect(await readOperation(deps, denied, outcome.value.operationId, context())).toBeNull();
   expect(await readOperation(deps, actor, newId(route), context())).toBeNull();
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await suspendAccount(db.admin, authorId);
   // A still-live authenticated read retains its approved account snapshot.
   expect((await readOperation(deps, actor, outcome.value.operationId, context()))?.done).toBe(false);
   expect(statusIds).toEqual([workflowId]);
@@ -378,10 +384,8 @@ test('status conceals noninitiators and current account denials before exact nat
   await expect(newRequest).rejects.toBeInstanceOf(AuthenticationError);
   await expect(newRequest).rejects.toMatchObject({ status: 401 });
   expect(statusIds).toEqual([]);
-  await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await reinstateAccount(db.admin, authorId);
+  await renew(authorId);
   await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action=$3', [
     routeOf(authorId),
     authorId,
@@ -566,15 +570,10 @@ test('explicit legal grants, concurrent retries and current named status denials
     routeOf(other.accountId),
     other.accountId,
   ]);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(other.accountId),
-    other.accountId,
-  ]);
+  await suspendAccount(db.admin, other.accountId);
   await expect(beginAuthorErasure(legalDeps, other, input, ctx)).rejects.toThrow();
-  await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-    routeOf(other.accountId),
-    other.accountId,
-  ]);
+  await reinstateAccount(db.admin, other.accountId);
+  await renew(other.accountId);
   await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
     route,
     postId,

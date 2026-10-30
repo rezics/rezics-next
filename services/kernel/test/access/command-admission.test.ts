@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -195,10 +196,7 @@ for (const local of [false, true]) {
     statements.length = 0;
     expect((await execute(f, key, local)).replayed).toBe(false);
     assertOneRead(f);
-    await admin.query(`UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2`, [
-      routeOf(f.id),
-      f.id,
-    ]);
+    await suspendAccount(admin, f.id);
     for (const attemptKey of [Bun.randomUUIDv7(), key]) {
       statements.length = 0;
       await denied(execute(f, attemptKey, local));
@@ -324,10 +322,7 @@ test('parent creation forwards trusted attempt admission without duplicate refre
     return { value: 'created', events: [{ type: 'com.rezics.test.admission-created.v1', data: {} }] };
   });
   assertOneRead(f);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(f.id),
-    f.id,
-  ]);
+  await suspendAccount(admin, f.id);
   await denied(run({ ...f, resource: child }, authorization, Bun.randomUUIDv7()));
 });
 test('operator opening refreshes admission per attempt through the same Access evaluator', async () => {

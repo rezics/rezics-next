@@ -1,3 +1,5 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { QueryConfig } from 'pg';
@@ -39,10 +41,14 @@ const input = () => ({
   taxCode: 'txcd_10302000',
 });
 async function actor(id: string): Promise<Actor> {
+  const current = await pool.query(
+    'SELECT minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
+    [routeOf(id), id],
+  );
   const token = await new SignJWT({
     client_id: 'web',
     scope: actions.join(' '),
-    authn_epoch: 1,
+    authn_epoch: Number(current.rows[0].epoch),
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
   })
@@ -218,9 +224,9 @@ test('offers are created by approved sellers and orders by any active account on
     });
   }
   const suspendedActor = await actor(suspended);
-  await pool.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [suspended]);
+  await suspendAccount(pool, suspended);
   const before = await footprint();
-  await expect(commands.createOrder(suspendedActor, o.id, key())).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(commands.createOrder(suspendedActor, o.id, key())).rejects.toBeInstanceOf(AuthenticationError);
   await expect(commands.createOrder({ kind: 'anonymous' }, o.id, key())).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(commands.createOrder(await actor(buyer), newId(0x2200), key())).rejects.toBeInstanceOf(GrantDeniedError);
   expect(await footprint()).toEqual(before);
@@ -241,9 +247,9 @@ test('order creation and checkout recording are idempotent and authorized before
   await expect(commands.createOrder(a, (await offer()).id, requestKey)).rejects.toBeInstanceOf(
     IdempotencyConflictError,
   );
-  await pool.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [buyer]);
-  await expect(commands.createOrder(a, o.id, requestKey)).rejects.toBeInstanceOf(GrantDeniedError);
-  await pool.query("UPDATE access.account SET state='active' WHERE account_id=$1", [buyer]);
+  await suspendAccount(pool, buyer);
+  await expect(commands.createOrder(a, o.id, requestKey)).rejects.toBeInstanceOf(AuthenticationError);
+  await reinstateAccount(pool, buyer);
   const delisted = await commands.delistOffer(await actor(seller), o.id, key());
   expect(delisted.value).toMatchObject({ state: 'delisted', revision: 2 });
   expect(await events(delisted.transactionId)).toEqual([event('offer.delisted', { offerId: o.id })]);

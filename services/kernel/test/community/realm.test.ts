@@ -1,3 +1,5 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
@@ -270,11 +272,7 @@ test('missing Global permission, a non-owner, a missing Space or Context and sus
   for (const mode of ['missing-grant', 'non-owner', 'missing-space', 'missing-context', 'suspended']) {
     if (mode !== 'missing-grant') await f.grant(f.actor.accountId, root, 'realm:create');
     if (mode === 'non-owner') await f.grant(f.other.accountId, root, 'realm:create');
-    if (mode === 'suspended')
-      await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-        routeOf(f.actor.accountId),
-        f.actor.accountId,
-      ]);
+    if (mode === 'suspended') await suspendAccount(admin, f.actor.accountId);
     const before = await snapshot();
     expect(
       await realm
@@ -289,7 +287,7 @@ test('missing Global permission, a non-owner, a missing Space or Context and sus
           context(),
         )
         .catch((e) => e),
-    ).toBeInstanceOf(GrantDeniedError);
+    ).toBeInstanceOf(mode === 'suspended' ? AuthenticationError : GrantDeniedError);
     expect(await snapshot()).toEqual(before);
   }
 });
@@ -431,16 +429,13 @@ test('protected reads hide existence from non-members; public eligibility tracks
     context(),
   );
   expect(await check(pool)).toBe(false);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(f.actor.accountId),
-    f.actor.accountId,
-  ]);
+  await suspendAccount(admin, f.actor.accountId);
   const before = await snapshot();
   expect(
     await realm
       .updateRealm(deps(), f.actor, { realmId, expectedHead: second.value.revisionId, title: 'Denied' }, context())
       .catch((e) => e),
-  ).toBeInstanceOf(GrantDeniedError);
+  ).toBeInstanceOf(AuthenticationError);
   expect(await snapshot()).toEqual(before);
 });
 

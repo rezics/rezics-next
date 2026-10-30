@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { createAuthService, type AuthService, type SessionProof } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import type { Pool, PoolClient } from 'pg';
@@ -316,14 +317,21 @@ test('current account barriers, native expiry/epochs/relation and revoked manage
   ]) {
     const opening = await f.opening(headers, human, subject);
     const before = await counts();
-    await authPool.query(`UPDATE access.account SET ${sql} WHERE account_id=$1`, [id]);
+    if (sql === "state='suspended'") await suspendAccount(authPool, id!);
+    else await authPool.query(`UPDATE access.account SET ${sql} WHERE account_id=$1`, [id]);
     try {
       await expect(f.open(opening.reference, subject, headers)).rejects.toThrow();
     } finally {
-      await authPool.query(`UPDATE access.account SET ${restore} WHERE account_id=$1`, [id]);
+      if (sql === "state='suspended'") {
+        await reinstateAccount(authPool, id!);
+        if (id === human) headers = await f.login(human);
+      } else await authPool.query(`UPDATE access.account SET ${restore} WHERE account_id=$1`, [id]);
     }
     expect(await counts()).toEqual(before);
   }
+  human = await f.person();
+  subject = await f.automate(human);
+  headers = await f.login(human);
   for (const sql of [
     "expires_at=clock_timestamp()-interval '1 second'",
     'subject_epoch_floor=2',

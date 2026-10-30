@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
 import type { PoolClient } from 'pg';
@@ -281,10 +282,7 @@ test('every formula operand independently denies on the general path', async () 
     if (operand === 'scope') changed = { ...input, actor: { ...f.delegated, scopes: [] } };
     if (operand === 'state') changed = { ...input, access: f.permissions({ accountEvidence: () => null }) };
     if (operand === 'actor-state') {
-      await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-        routeOf(f.actorId),
-        f.actorId,
-      ]);
+      await suspendAccount(admin, f.actorId);
       const account = await readAccount(admin, routeOf(f.actorId)!, f.actorId);
       changed = { ...input, access: f.permissions({ accountEvidence: () => account }) };
     }

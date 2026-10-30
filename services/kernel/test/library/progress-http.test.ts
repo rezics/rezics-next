@@ -1,9 +1,12 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
+import { createAccess } from '../../src/access/index.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { generateKeyPair, jwtVerify, SignJWT, type JWTPayload } from 'jose';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { AuthenticationError, type Access } from '../../src/request/access.ts';
+import { type Access } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
@@ -126,34 +129,16 @@ beforeAll(async () => {
   await bootstrapRelease(db.pool, bundledRelease);
 
   const signing = await generateKeyPair('ES256', { extractable: true });
-  const access: Access = {
-    async authenticate(token) {
-      let payload: JWTPayload;
-      try {
-        ({ payload } = await jwtVerify(token, signing.publicKey, { issuer, audience, algorithms: ['ES256'] }));
-      } catch {
-        throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-      }
-      if (
-        typeof payload.sub !== 'string' ||
-        typeof payload.client_id !== 'string' ||
-        typeof payload.scope !== 'string' ||
-        typeof payload.authn_epoch !== 'number'
-      )
-        throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-      return {
-        kind: 'account',
-        accountId: payload.sub,
-        clientId: payload.client_id,
-        scopes: payload.scope.split(' '),
-        requestedBy: null,
-        authnEpoch: payload.authn_epoch,
-      };
-    },
+  const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'progress-http', alg: 'ES256' };
+  const native = createAccess({
+    actions: new Map(scopes.map((action) => [action, { anonymous: false }])),
+    auth: { issuer, audience, jwksUrl: `${issuer}/jwks`, fetch: async () => Response.json({ keys: [jwk] }) },
+  });
+  const access: Access = deriveAccess(native, {
     async authorize(_client, actor, action) {
       return actor.kind === 'account' && actor.scopes.includes(action);
     },
-  };
+  });
   app = createKernel({
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(23),
@@ -169,7 +154,7 @@ beforeAll(async () => {
   for (const [accountId, state] of [
     [owner, 'active'],
     [other, 'active'],
-    [suspended, 'suspended'],
+    [suspended, 'active'],
   ] as const) {
     await db.admin.query(
       `INSERT INTO access.account(route, account_id, kind, state, transaction_id, membership_inverse_complete)
@@ -196,6 +181,7 @@ beforeAll(async () => {
         .sign(signing.privateKey),
     );
   }
+  await suspendAccount(db.admin, suspended);
   await db.admin.query(
     `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
      VALUES ('reading_progress', tstzrange('2020-01-01T00:00:00Z', NULL, '[)'), $1)`,
@@ -383,13 +369,19 @@ test('hidden private session ids are concealed and suspended writes leave data u
   expect(anonymous.response.status).toBe(404);
   expect(stableProblem(anonymous.body)).toEqual(stableProblem(unknown.body));
   const suspendedRead = await request('suspended', 'GET', `/v1/progressSessions/${current.id}`);
-  expect(suspendedRead.response.status).toBe(404);
-  expect(stableProblem(suspendedRead.body)).toEqual(stableProblem(unknown.body));
+  expect(suspendedRead.response.status).toBe(401);
+  expect(stableProblem(suspendedRead.body)).toEqual({
+    ...stableProblem(unknown.body),
+    status: 401,
+    code: 'invalid_credentials',
+    title: 'Invalid Credentials',
+    type: 'https://rezics.com/problems/invalid_credentials',
+  });
   expect(
     await progressPage<Record<string, any>>(`/v1/progressSessions?subjectId=${subjectId}`, 'progressSessions', 'other'),
   ).toEqual([]);
   expect((await request('anonymous', 'GET', `/v1/progressSessions?subjectId=${subjectId}`)).response.status).toBe(401);
-  expect((await request('suspended', 'GET', `/v1/progressSessions?subjectId=${subjectId}`)).response.status).toBe(403);
+  expect((await request('suspended', 'GET', `/v1/progressSessions?subjectId=${subjectId}`)).response.status).toBe(401);
 
   const logResponse = await request('owner', 'POST', '/v1/publishedLogs', { sessionId: current.id });
   expect(logResponse.response.status).toBe(201);

@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -240,7 +241,7 @@ beforeAll(async () => {
   } finally {
     pg.Pool = NativePool;
   }
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [suspended]);
+  await suspendAccount(db.admin, suspended);
 });
 afterAll(async () => {
   await db?.close();

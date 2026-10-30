@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -454,21 +455,14 @@ test('principal changes and assignment revocation invalidate the next request wi
   const bearer = await token(actorCookie, current.reference);
   expect((await operation(bearer)).value).toBe('updated');
   for (const state of ['pending', 'suspended', 'deleted']) {
-    await reader.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(principalId),
-      principalId,
-      state,
-    ]);
+    await setFixtureAccountState(reader, principalId, state);
     try {
       await invalid(operation(bearer));
       expect((await request('/token', { requested_by: current.reference }, actorCookie)).status).toBeGreaterThanOrEqual(
         400,
       );
     } finally {
-      await reader.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-        routeOf(principalId),
-        principalId,
-      ]);
+      await setFixtureAccountState(reader, principalId, 'active');
     }
   }
   await reader.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [

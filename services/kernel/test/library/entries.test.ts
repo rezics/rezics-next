@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
@@ -80,8 +81,9 @@ async function installAccount(accountId: string, state: 'active' | 'suspended'):
     `INSERT INTO access.account
        (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
      VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-    [route, accountId, state, newId(route)],
+    [route, accountId, 'active', newId(route)],
   );
+  if (state === 'suspended') await suspendAccount(database.admin, accountId);
   const current = await readAccount(database.admin, route, accountId);
   if (!current) throw new Error('Test account was not created');
   return current;

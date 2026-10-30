@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -249,7 +250,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         );
       }
       for (const state of ['suspended', 'deleted']) {
-        await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [route, person, state]);
+        await setFixtureAccountState(pool, person, state);
         await invalid(access.authenticate(token, context()));
       }
       await pool.query("UPDATE access.account SET state='active', authn_fenced=true WHERE route=$1 AND account_id=$2", [

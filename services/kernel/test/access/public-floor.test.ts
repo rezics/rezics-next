@@ -1,3 +1,4 @@
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createAuthService, type AuthService } from '@rezics/auth';
@@ -252,7 +253,7 @@ test('unknown actions, invalid bearer and inactive or fenced accounts cannot acq
   await expect(
     actorOf(access, new Request(audience, { headers: { authorization: 'Bearer invalid' } }), context()),
   ).rejects.toBeInstanceOf(AuthenticationError);
-  for (const update of ["state='suspended'", 'authn_fenced=true', 'minimum_authn_epoch=2']) {
+  for (const update of ['authn_fenced=true', 'minimum_authn_epoch=2']) {
     await pool.query('BEGIN');
     try {
       await pool.query(`UPDATE access.account SET ${update} WHERE route=$1 AND account_id=$2`, [
@@ -263,6 +264,15 @@ test('unknown actions, invalid bearer and inactive or fenced accounts cannot acq
     } finally {
       await pool.query('ROLLBACK');
     }
+  }
+  await suspendAccount(pool, person);
+  try {
+    await expect(access.authenticate(personToken, context())).rejects.toBeInstanceOf(AuthenticationError);
+  } finally {
+    await reinstateAccount(pool, person);
+    personToken = await token(person, []);
+    scopedToken = await token(person, [read, report, protectedAction]);
+    mixedToken = await token(person, ['openid', 'offline_access', 'other:read', read]);
   }
 });
 

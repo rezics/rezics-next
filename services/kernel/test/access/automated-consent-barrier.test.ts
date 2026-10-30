@@ -1,3 +1,4 @@
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
@@ -336,7 +337,7 @@ const denial = (insert: boolean) =>
 for (const [name, apply, undo] of [
   ['a denial of account:manage on the operator', () => denial(true), () => denial(false)],
   ['a gated operator', () => operator('authn_fenced=true'), () => operator('authn_fenced=false')],
-  ['a suspended operator', () => operator("state='suspended'"), () => operator("state='active'")],
+  ['a suspended operator', () => suspendAccount(pool, organizationId), () => reinstateAccount(pool, organizationId)],
 ] as const)
   test(`${name} refuses the reduction with nothing advanced, and lifting it restores the reduction`, async () => {
     const subject = await automated();

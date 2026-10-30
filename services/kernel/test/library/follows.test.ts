@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -79,8 +80,9 @@ async function installAccount(accountId: string, state: 'active' | 'suspended'):
   await admin.query(
     `INSERT INTO access.account(route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
      VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-    [ownerRoute, accountId, state, newId(ownerRoute)],
+    [ownerRoute, accountId, 'active', newId(ownerRoute)],
   );
+  if (state === 'suspended') await suspendAccount(admin, accountId);
   const current = await readAccount(admin, ownerRoute, accountId);
   if (!current) throw new Error('Test account was not created');
   return current;
@@ -525,7 +527,7 @@ test('unknown, unreadable and private targets are refused alike and change nothi
   expect(await followCommands.readFollow(owner, privateShelf.id)).toBeNull();
 });
 
-test('suspended, anonymous and unauthorized personas change nothing and cannot be told apart', async () => {
+test('suspended, anonymous and unauthorized actors change nothing at the module boundary', async () => {
   const subjectId = await createReadableSubject('Persona book');
   const privateShelf = await insertCollection('private', foreignCurator);
   const before = await activity();

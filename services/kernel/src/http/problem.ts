@@ -20,6 +20,7 @@ export const PROBLEMS = {
   unsupported_library_profile: { status: 422, title: 'Unsupported Library Profile', retryable: false },
   authentication_required: { status: 401, title: 'Authentication Required', retryable: false },
   invalid_credentials: { status: 401, title: 'Invalid Credentials', retryable: false },
+  account_suspended: { status: 403, title: 'Account Suspended', retryable: false },
   forbidden: { status: 403, title: 'Forbidden', retryable: false },
   platform_closed: { status: 403, title: 'Platform Closed', retryable: false },
   stale_editorial_head: { status: 409, title: 'Stale Editorial Head', retryable: false },
@@ -241,8 +242,9 @@ function safeFieldErrors(errors: readonly FieldError[] | undefined): FieldError[
   return result.length ? result : undefined;
 }
 
-function effectStatus(method: string, action?: string): 'not_applicable' | 'not_applied' {
-  if (action && /:read(?:_|$)/.test(action)) return 'not_applicable';
+function effectStatus(method: string, action?: string, code?: ProblemCode): 'not_applicable' | 'not_applied' {
+  if (action && (code === 'account_suspended' ? action.endsWith(':read') : /:read(?:_|$)/.test(action)))
+    return 'not_applicable';
   return ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) ? 'not_applicable' : 'not_applied';
 }
 
@@ -349,7 +351,7 @@ export function problemResponse(
     effect_status:
       error instanceof ProblemError && error.effectStatus
         ? error.effectStatus
-        : effectStatus(context.method, context.action),
+        : effectStatus(context.method, context.action, code),
     request_id: context.id,
     ...(detail === undefined ? {} : { detail: truncateDetail(detail) }),
     ...(safeErrors ? { errors: safeErrors } : {}),

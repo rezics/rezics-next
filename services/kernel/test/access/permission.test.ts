@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import pg from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -264,11 +265,7 @@ test('resource, actor and action must match; operators and first-party preconsen
 test('the already-read actor state and epoch fail closed without an actor reread', async () => {
   expect(await run()).toBe(true);
   for (const state of ['pending', 'suspended', 'deleted']) {
-    await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(actorId),
-      actorId,
-      state,
-    ]);
+    await setFixtureAccountState(pool, actorId, state);
     expect(await run()).toBe(false);
   }
   await pool.query("UPDATE access.account SET state='active',minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2", [
@@ -428,7 +425,7 @@ test('principal-created assignments bind canonical requestedBy, principal state 
     actorId,
   ]);
   for (const state of ['suspended', 'deleted']) {
-    await pool.query('UPDATE access.account SET state=$2 WHERE route=$1', [routeOf(principalId), state]);
+    await setFixtureAccountState(pool, principalId, state);
     expect(await run()).toBe(false);
   }
 });

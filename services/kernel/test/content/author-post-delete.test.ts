@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { createAuthService } from '@rezics/auth';
@@ -339,10 +340,7 @@ test('an author deletes their own post: removed slots preserve replies and clean
 test('another account, a moderator without post:erase, anonymous and suspended accounts delete nothing; replay returns the stored outcome', async () => {
   const f = await fixture();
   const s = await fixture(suspended);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(suspended),
-    suspended,
-  ]);
+  await suspendAccount(db.admin, suspended);
   for (const [account, target, status] of [
     [other, f.post, 403],
     [moderator, f.post, 403],

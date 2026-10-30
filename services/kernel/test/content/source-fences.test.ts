@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
@@ -427,11 +428,7 @@ test('real governance role grants work; missing grant, scope, suspended account 
       );
     if (mode === 'wrong-root') await f.grant(f.actorId, f.resource);
     if (mode === 'no-scope') actor = { ...f.actor, scopes: [] };
-    if (mode === 'suspended')
-      await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-        routeOf(f.actorId),
-        f.actorId,
-      ]);
+    if (mode === 'suspended') await suspendAccount(admin, f.actorId);
     if (mode === 'anonymous') actor = { kind: 'anonymous' };
     if (mode === 'missing-root')
       await admin.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [platform.id]);

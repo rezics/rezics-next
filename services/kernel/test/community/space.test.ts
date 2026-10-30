@@ -1,3 +1,5 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { productionActions } from '../support/production-actions.ts';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
@@ -229,13 +231,12 @@ test('missing Global grant, a grant on another resource, and a suspended actor d
     if (mode === 'other-resource') await f.grant(f.other.accountId, { route: 7, id: newId(7) });
     if (mode === 'suspended') {
       await f.grant(f.other.accountId);
-      await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-        routeOf(f.other.accountId),
-        f.other.accountId,
-      ]);
+      await suspendAccount(admin, f.other.accountId);
     }
     const before = await snapshot();
-    expect(await space.createSpace(deps(), f.other, input, context()).catch((e) => e)).toBeInstanceOf(GrantDeniedError);
+    expect(await space.createSpace(deps(), f.other, input, context()).catch((e) => e)).toBeInstanceOf(
+      mode === 'suspended' ? AuthenticationError : GrantDeniedError,
+    );
     expect(await snapshot()).toEqual(before);
     expect((await admin.query('SELECT count(*)::integer AS n FROM community.space')).rows[0].n).toBe(0);
   }
@@ -286,15 +287,14 @@ test('unrelated and suspended accounts cannot manage a Space, including receipt 
   let before = await snapshot();
   expect(await space.updateSpace(deps(), f.other, update, context()).catch((e) => e)).toBeInstanceOf(GrantDeniedError);
   expect(await snapshot()).toEqual(before);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(f.actor.accountId),
-    f.actor.accountId,
-  ]);
+  await suspendAccount(admin, f.actor.accountId);
   before = await snapshot();
-  expect(await space.updateSpace(deps(), f.actor, update, context()).catch((e) => e)).toBeInstanceOf(GrantDeniedError);
+  expect(await space.updateSpace(deps(), f.actor, update, context()).catch((e) => e)).toBeInstanceOf(
+    AuthenticationError,
+  );
   expect(
     await space.createSpace(deps(), f.actor, input, context(request.idempotencyKey)).catch((e) => e),
-  ).toBeInstanceOf(GrantDeniedError);
+  ).toBeInstanceOf(AuthenticationError);
   expect(await snapshot()).toEqual(before);
 });
 

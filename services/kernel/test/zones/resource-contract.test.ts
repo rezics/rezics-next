@@ -49,7 +49,7 @@ test('a Zone is an owner-controlled routed site copied from inert starter data',
   const input = createBody();
   for (const who of ['editor', 'other', 'suspended'] as const) {
     const denied = await f.call(who, 'POST', '/v1/zones', input);
-    expect(denied.status).toBe(403);
+    expect(denied.status).toBe(who === 'suspended' ? 401 : 403);
   }
   const headers = key();
   const before = await f.receipts();
@@ -274,7 +274,7 @@ test('Zone pages use closed shared appearance and current viewer access', async 
   await f.revoke(mount, 'editor', 'collection:read');
   expect((await f.read(zone.id, 'editor', { subject: subjectId })).status).toBe(404);
   expect(f.access.readChecks.some((c) => c.action === 'collection:read' && c.resource.id === mount)).toBe(true);
-  expect((await f.read(zone.id, 'suspended', { route: '' })).status).toBe(403);
+  expect((await f.read(zone.id, 'suspended', { route: '' })).status).toBe(401);
 
   // Real unrelated resource/page/history growth; no manufactured Zone rows or modified accounting.
   await checkGrowth(f.db, {

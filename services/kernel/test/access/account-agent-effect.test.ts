@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import pg, { type Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -122,9 +123,10 @@ beforeAll(async () => {
     { id: renameId, handle: 'agent_rename', displayName: 'Before Rename' },
     { id: crashId, handle: 'agent_crash', displayName: 'Crash Recovery' },
     { id: fencedId, handle: 'agent_fenced', displayName: 'Fenced', fenced: true },
-    { id: suspendedId, handle: 'agent_suspended', displayName: 'Suspended', state: 'suspended' },
+    { id: suspendedId, handle: 'agent_suspended', displayName: 'Suspended' },
     { id: deletedId, handle: 'agent_deleted', displayName: 'Deleted', state: 'deleted' },
   ]);
+  await suspendAccount(admin, suspendedId);
   await admin.query(
     `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
      VALUES ($1, $2, $2, 'account:update', '(,)', $2)`,

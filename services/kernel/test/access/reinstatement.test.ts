@@ -299,7 +299,7 @@ test('platform governance reinstates a suspended account and the person signs in
     suspension_reason: 'mistaken suspension',
     minimum_authn_epoch: String(Number(active.minimum_authn_epoch) + 1),
   });
-  expect((await establish('restored_person@reinstatement.test')).status).toBe(401);
+  expect((await establish('restored_person@reinstatement.test')).status).toBe(403);
   const suspendedCall = await call(session.bearer, '/v1/contexts', { labels: { en: 'While suspended' } });
   expect(suspendedCall.response.status, JSON.stringify(suspendedCall.value)).toBe(401);
   const reason = 'complaint justified';

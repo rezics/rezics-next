@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -195,10 +196,7 @@ test('cleanup is bounded, replayable and restartable and preserves accounts, gra
     [routeOf(other), other],
   );
   // Inverse cleanup must also work for an independently suspended member.
-  await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(members[1]!),
-    members[1],
-  ]);
+  await suspendAccount(pool, members[1]!);
   const accountsBefore = await pool.query('SELECT * FROM access.account WHERE route=$1 ORDER BY account_id', [0x1351]);
   const grantsBefore = await pool.query(
     'SELECT * FROM access.resource_grant WHERE route=$1 ORDER BY resource_id,subject_id,action',

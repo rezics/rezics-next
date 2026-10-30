@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -579,7 +580,6 @@ test('suspended authentication cannot establish a point-command actor even with 
   const value = await fixture();
   await permit(value.itemId, 'moderation:takedown');
   const before = await stored('post', value.itemId);
-  const committed = await effects();
   // Capture the genuine issuer token, then exercise native authentication again
   // after current account suspension. No synthetic Actor or policy is supplied.
   const authenticate = f.access.authenticate;
@@ -593,10 +593,8 @@ test('suspended authentication cannot establish a point-command actor even with 
   } finally {
     f.access.authenticate = authenticate;
   }
-  await f.reader.query(`UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2`, [
-    routeOf(actor.accountId),
-    actor.accountId,
-  ]);
+  await suspendAccount(f.reader, actor.accountId);
+  const committed = await effects();
   try {
     await expect(
       (async () => {
@@ -612,9 +610,6 @@ test('suspended authentication cannot establish a point-command actor even with 
     expect(await stored('post', value.itemId)).toEqual(before);
     expect(await effects()).toEqual(committed);
   } finally {
-    await f.reader.query(`UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2`, [
-      routeOf(actor.accountId),
-      actor.accountId,
-    ]);
+    await reinstateAccount(f.reader, actor.accountId);
   }
 });

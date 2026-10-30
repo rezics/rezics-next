@@ -1,3 +1,4 @@
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { checkBatchWrite } from '@rezics/definitions/bulk';
@@ -137,7 +138,7 @@ test('concurrent native fills and CAS corrections serialize without lost metadat
   expect(final.record).toEqual({ ...bare, licence: a.licence!, attribution: 'Registered contributors' });
 });
 
-test('real Global bulk grants are required before replay and suspended accounts get account_suspended', async () => {
+test('real Global bulk grants are required before replay and natively suspended accounts get invalid_credentials', async () => {
   const origin = source();
   const metadata = registeredBangumi(origin.external_id);
   const body: MetadataCommand = {
@@ -160,18 +161,13 @@ test('real Global bulk grants are required before replay and suspended accounts 
   } finally {
     await f.real.grant(global, 'importer', 'subject:batch_write');
   }
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(f.accounts.importer),
-    f.accounts.importer,
-  ]);
+  await suspendAccount(db.admin, f.accounts.importer);
   try {
-    const denied = status(await f.metadata(origin, metadata, null, key), 403);
-    expect(denied.type).toEndWith('/account_suspended');
+    const denied = status(await f.metadata(origin, metadata, null, key), 401);
+    expect(denied.type).toEndWith('/invalid_credentials');
   } finally {
-    await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(f.accounts.importer),
-      f.accounts.importer,
-    ]);
+    await reinstateAccount(db.admin, f.accounts.importer);
+    await f.real.renew('importer');
   }
   expect(
     f.real.checks.some((check) => check.action === 'subject:batch_write' && check.resource.id === GLOBAL_CONTEXT),

@@ -18,6 +18,7 @@ export type RealAccessFixture<Persona extends string> = {
   access(config: AccessConfig): Access;
   writeRate: ReturnType<typeof createWriteRateLimiter>;
   bearer(persona: Persona): string;
+  renew(persona: Persona): Promise<void>;
   grant(resource: Resource, persona: Persona, action: string): Promise<void>;
   revoke(resource: Resource, persona: Persona, action: string): Promise<void>;
   checks: RealAccessCheck[];
@@ -42,12 +43,19 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   };
   const bearers = new Map<Persona, string>();
 
-  for (const [persona, accountId] of Object.entries(accounts) as [Persona, string][]) {
+  async function renew(persona: Persona): Promise<void> {
+    const accountId = accounts[persona];
+    if (!accountId) throw new Error(`Unknown fixture persona ${persona}`);
+    const result = await admin.query(
+      'SELECT state, minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
+      [routeOf(accountId), accountId],
+    );
+    if (result.rows[0]?.state !== 'active') throw new Error('Fixture issuer requires an active account');
     const issuedAt = Math.floor((options.clock?.() ?? new Date()).getTime() / 1000);
     const bearer = await new SignJWT({
       client_id: 'web',
       scope: actions.join(' '),
-      authn_epoch: 1,
+      authn_epoch: Number(result.rows[0].epoch),
       auth_time: issuedAt,
       amr: ['pwd'],
     })
@@ -58,13 +66,17 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
       .setIssuedAt(issuedAt)
       .setExpirationTime(issuedAt + 5 * 60)
       .sign(signing.privateKey);
+    bearers.set(persona, bearer);
+  }
+
+  for (const [persona, accountId] of Object.entries(accounts) as [Persona, string][]) {
     const route = routeOf(accountId);
     if (route === null) throw new Error(`Invalid account id for persona ${persona}`);
     await admin.query(
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
       [route, accountId],
     );
-    bearers.set(persona, bearer);
+    await renew(persona);
   }
 
   const checks: RealAccessCheck[] = [];
@@ -113,6 +125,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
     },
     grant,
     revoke,
+    renew,
     checks,
     readChecks,
   };

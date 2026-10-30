@@ -1,3 +1,5 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -104,10 +106,14 @@ async function insertAccount(target: Pool, id: string): Promise<void> {
 }
 
 async function authenticate(id: string, scopes: readonly string[], target: Pool = pool): Promise<AccountActor> {
+  const current = await target.query(
+    'SELECT minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
+    [routeOf(id), id],
+  );
   const token = await new SignJWT({
     client_id: 'web',
     scope: scopes.join(' '),
-    authn_epoch: 1,
+    authn_epoch: Number(current.rows[0].epoch),
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
   })
@@ -479,6 +485,7 @@ test('refused personas and another account change nothing, and private collectio
   const unlisted = await commands.createCollection(owner, { title: 'Gone', visibility: 'unlisted' }, key());
   await commands.deleteCollection(owner, unlisted.value.id, 1, key());
   const unknown = newId(route);
+  await suspendAccount(pool, suspendedId);
   const before = await footprint();
   const stored = await read(id);
 
@@ -512,8 +519,7 @@ test('refused personas and another account change nothing, and private collectio
     if (refusal.code === 'not_found') expect(refusal).toEqual(unknownRefusal);
   }
 
-  await pool.query(`UPDATE access.account SET state = 'suspended' WHERE account_id = $1`, [suspendedId]);
-  try {
+  {
     const ownHidden = await caught(
       commands.updateCollection(suspendedActor, id, { revision: 1, title: 'Nope' }, key()),
     );
@@ -523,11 +529,7 @@ test('refused personas and another account change nothing, and private collectio
     expect(ownHidden).toEqual(ownUnknown);
     await expect(
       commands.createCollection(suspendedActor, { title: 'Later', visibility: 'private' }, key()),
-    ).rejects.toBeInstanceOf(GrantDeniedError);
-  } finally {
-    await pool.query(`UPDATE access.account SET state = 'active' WHERE account_id = ANY($1::uuid[])`, [
-      [suspendedId, owner.accountId],
-    ]);
+    ).rejects.toBeInstanceOf(AuthenticationError);
   }
 
   await expect(
@@ -544,17 +546,18 @@ test('refused personas and another account change nothing, and private collectio
   expect(await read(published.value.id)).toMatchObject({ title: 'Shown', revision: 1 });
   expect(await read(quiet.value.id)).toMatchObject({ title: 'Quiet', revision: 1, visibility: 'unlisted' });
   expect(await footprint()).toEqual(before);
+  await reinstateAccount(pool, suspendedId);
 
   const replayKey = key();
   const replayed = await commands.createCollection(owner, { title: 'Replay me', visibility: 'private' }, replayKey);
-  await pool.query(`UPDATE access.account SET state = 'suspended' WHERE account_id = $1`, [owner.accountId]);
+  await suspendAccount(pool, owner.accountId);
   try {
     await expect(
       commands.createCollection(owner, { title: 'Replay me', visibility: 'private' }, replayKey),
-    ).rejects.toBeInstanceOf(GrantDeniedError);
+    ).rejects.toBeInstanceOf(AuthenticationError);
     expect(await read(replayed.value.id)).toMatchObject({ title: 'Replay me', revision: 1 });
   } finally {
-    await pool.query(`UPDATE access.account SET state = 'active' WHERE account_id = $1`, [owner.accountId]);
+    await reinstateAccount(pool, owner.accountId);
   }
 });
 

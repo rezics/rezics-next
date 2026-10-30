@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
 import { credentialWorkflowApprovals, createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import {
@@ -388,7 +389,9 @@ test('every consume rechecks formula state fence floor and operator relation', a
     const binding = f.stage(s, h);
     const opening = await f.approve(cookie, binding);
     const id = target === 'human' ? h : s;
-    await db.admin.query(`UPDATE access.account SET ${change} WHERE route=$1 AND account_id=$2`, [routeOf(id)!, id]);
+    if (change === "state='suspended'") await suspendAccount(db.admin, id);
+    else
+      await db.admin.query(`UPDATE access.account SET ${change} WHERE route=$1 AND account_id=$2`, [routeOf(id)!, id]);
     await expect(f.consume(opening.reference, binding, cookie)).rejects.toThrow();
   }
   {

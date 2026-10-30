@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   authoritativeTimeValue,
@@ -297,7 +298,8 @@ test('missing permission, mismatched principal, receipt-only and expired request
 test('terminally fenced, inactive and missing accounts refuse before either mode body; inactive partitions are typed unavailable', async () => {
   const account = native.accounts[1]!; // The actor remains active, so Access itself does not obscure this fence.
   for (const state of ['authn_fenced=true', "state='suspended'", "state='deleted'"]) {
-    await native.db.admin.query(`UPDATE access.account SET ${state} WHERE account_id=$1`, [account]);
+    if (state === "state='suspended'") await suspendAccount(native.db.admin, account);
+    else await native.db.admin.query(`UPDATE access.account SET ${state} WHERE account_id=$1`, [account]);
     try {
       for (const options of [await native.request(), native.step]) {
         const id = key();
@@ -312,9 +314,11 @@ test('terminally fenced, inactive and missing accounts refuse before either mode
         await absent(id);
       }
     } finally {
-      await native.db.admin.query("UPDATE access.account SET state='active',authn_fenced=false WHERE account_id=$1", [
-        account,
-      ]);
+      if (state === "state='suspended'") await reinstateAccount(native.db.admin, account);
+      else
+        await native.db.admin.query("UPDATE access.account SET state='active',authn_fenced=false WHERE account_id=$1", [
+          account,
+        ]);
     }
   }
   await native.db.admin.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [partition]);

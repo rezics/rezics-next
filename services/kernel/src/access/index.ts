@@ -30,7 +30,7 @@ import {
   createCommandAdmission,
   installCommandAdmission,
 } from './command-admission.ts';
-import { validReadDecisionActions, resourcePage, type ResourcePage } from '../request/access.ts';
+import { AuthenticationError, validReadDecisionActions, resourcePage, type ResourcePage } from '../request/access.ts';
 import type {
   Access,
   AccessConfig as KernelAccessConfig,
@@ -242,6 +242,7 @@ export function createAccess(config: AccessConfig): Access {
     } catch (error) {
       throwAccessUnavailable(error, context.deadline);
       throwEvidenceFailure(error);
+      if (error instanceof AuthenticationError) throw error;
       return null;
     }
   }

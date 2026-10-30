@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
@@ -74,6 +75,37 @@ const context = (key = crypto.randomUUID()) => ({
   requestId: newId(route),
 });
 const input = { threadId, authorId };
+async function renew(accountId: string) {
+  for (const scopes of [actions, ['account:read']]) {
+    const response = await auth.handler(
+      new Request(`${issuer}/signin`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          account_id: accountId,
+          password: 'correct horse battery staple',
+          client_id: 'operations-test',
+          scope: scopes,
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    const cookie = response.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    if (scopes === actions) cookies.set(accountId, cookie);
+    const issued = await auth.handler(
+      new Request(`${issuer}/token`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie },
+        body: '{}',
+      }),
+    );
+    expect(issued.status).toBe(200);
+    tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
+  }
+}
 async function verified(accountId: string, scopes = actions) {
   return access.authenticate(tokens.get(`${accountId}:${scopes.join(' ')}`)!, {
     pool: db.pool,
@@ -179,30 +211,7 @@ beforeAll(async () => {
       accountId,
     ]);
     await grant(accountId, 'account:read', accountId);
-    for (const scopes of [actions, ['account:read']]) {
-      const response = await auth.handler(
-        new Request(`${issuer}/signin`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json' },
-          body: JSON.stringify({ account_id: accountId, password, client_id: 'operations-test', scope: scopes }),
-        }),
-      );
-      expect(response.status).toBe(200);
-      const cookie = response.headers
-        .getSetCookie()
-        .map((value) => value.split(';')[0])
-        .join('; ');
-      if (scopes === actions) cookies.set(accountId, cookie);
-      const issued = await auth.handler(
-        new Request(`${issuer}/token`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json', cookie },
-          body: '{}',
-        }),
-      );
-      expect(issued.status).toBe(200);
-      tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
-    }
+    await renew(accountId);
   }
   await db.admin.query(
     `INSERT INTO content.thread
@@ -684,15 +693,11 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
   await expect(beginAuthorErasure(deps, restricted, input, context())).rejects.toThrow();
   const key = context();
   await beginAuthorErasure(deps, actor, input, key);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await suspendAccount(db.admin, authorId);
   await expect(beginAuthorErasure(deps, actor, input, key)).rejects.toThrow();
-  await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await reinstateAccount(db.admin, authorId);
+  await renew(authorId);
+  actor = await verified(authorId);
   const population: Population = {
     name: 'erasure-provenance-history',
     hotPartition: partitionOf(route),

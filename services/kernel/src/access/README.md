@@ -174,6 +174,24 @@ and transfer, deletion, and every other coordinated lifecycle step that reads `l
 account row and require `state = 'active'` under that lock. Once the account is suspended, that step fails closed
 and writes nothing. An account that is already suspended or deleted is still refused.
 
+The native suspended persona holds a bearer issued before suspension: every route answers `401
+invalid_credentials` with `WWW-Authenticate: Bearer error="invalid_token"`, because the floor and fence invalidate
+that bearer before Auth revokes sessions. Auth mints only for active accounts; correct-password sign-in for a
+suspended person answers `403 ACCOUNT_SUSPENDED` without a session.
+
+An otherwise verified bearer at or above the floor for an unfenced suspended account is a defensive case only.
+Authentication throws `ProblemError('account_suspended')`; the shared problem mapper returns `403`, title
+"Account Suspended", `retryable: false`, and no `WWW-Authenticate` header on every route. Its effect status is
+`not_applicable` for `GET`, `HEAD`, `OPTIONS` or actions ending in `:read`, and `not_applied` otherwise. No native
+manifest case or per-operation OpenAPI response advertises this unreachable persona. The existing authentication
+check order stays: malformed or invalid tokens, below-floor tokens, fenced, deleted and unknown accounts retain
+their 401 answers, as do missing credentials (`authentication_required`).
+
+If the acting account becomes suspended between authentication and command preparation's anchored re-read, the
+command answers the native `401 invalid_credentials` with the invalid-token challenge, with no effect and no
+receipt. Other changed account facts keep their existing denial. These checks add no statement: authentication
+still reads one anchored account; command admission uses its existing independent re-read.
+
 Reinstatement is the separate governance reversal, `account:reinstate` on the Global Context, held by
 `platform.governance`. `POST /v1/accounts/{accountId}:reinstate` locks that account while it is `suspended`, sets it
 `active`, clears `suspension_reason`, and lowers the authentication fence the suspension raised. `minimum_authn_epoch`

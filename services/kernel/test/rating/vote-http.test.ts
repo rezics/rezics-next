@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -116,7 +117,7 @@ beforeAll(async () => {
     await database.admin.query(
       `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
        VALUES ($1, $2, 'actor', $3, $2)`,
-      [routeOf(accountId), accountId, persona === 'suspended' ? 'suspended' : 'active'],
+      [routeOf(accountId), accountId, 'active'],
     );
     const tokenScopes = persona === 'unscoped' ? ['subject:read'] : scopes;
     tokens.set(
@@ -137,6 +138,7 @@ beforeAll(async () => {
         .sign(signing.privateKey),
     );
   }
+  await suspendAccount(database.admin, accountIds.suspended);
   await database.admin.query(
     `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
      VALUES ('personal_library', tstzrange('2020-01-01T00:00:00Z', NULL, '[)'), $1)`,

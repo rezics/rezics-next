@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
@@ -91,7 +92,7 @@ async function seed(): Promise<void> {
       kind: 'actor',
       handle: 'suspended',
       displayName: 'Suspended Person',
-      state: 'suspended',
+      state: 'active',
       operator: null,
     },
     {
@@ -147,10 +148,12 @@ async function seed(): Promise<void> {
       rows.map(({ kind }) => kind),
       rows.map(({ handle }) => handle),
       rows.map(({ displayName }) => displayName),
-      rows.map(({ state }) => state),
+      rows.map(({ state }) => (state === 'suspended' ? 'active' : state)),
       rows.map(({ operator }) => operator),
     ],
   );
+  await suspendAccount(admin, identity.suspended);
+  await suspendAccount(admin, identity.suspended);
   await admin.query(
     `UPDATE access.account SET state = 'deleted', handle = NULL, display_name = NULL
      WHERE route = $1 AND account_id = $2`,

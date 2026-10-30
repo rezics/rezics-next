@@ -1,3 +1,4 @@
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -127,10 +128,14 @@ async function insertAccount(id: string): Promise<void> {
 }
 
 async function authenticate(id: string, scopes: readonly string[]): Promise<AccountActor> {
+  const current = await pool.query(
+    'SELECT minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
+    [routeOf(id), id],
+  );
   const token = await new SignJWT({
     client_id: 'web',
     scope: scopes.join(' '),
-    authn_epoch: 1,
+    authn_epoch: Number(current.rows[0].epoch),
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
   })
@@ -159,7 +164,8 @@ async function makeSubject(actor: AccountActor, label: string): Promise<string> 
 }
 
 async function setState(id: string, state: 'active' | 'suspended'): Promise<void> {
-  await pool.query(`UPDATE access.account SET state = $2 WHERE account_id = $1`, [id, state]);
+  if (state === 'suspended') await suspendAccount(pool, id);
+  else await reinstateAccount(pool, id);
 }
 
 async function denySubjectRead(subjectId: string, accountId: string): Promise<void> {

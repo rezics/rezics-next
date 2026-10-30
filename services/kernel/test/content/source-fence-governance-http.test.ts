@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { createAuthService, createProvisioningEvidenceVerifier } from '@rezics/auth';
@@ -86,6 +87,7 @@ async function grantContext() {
 let observer: ReturnType<typeof observeSql>;
 let app: ReturnType<typeof createKernel>;
 let actor: AccountActor;
+let permissions: ReturnType<typeof createAccess>;
 const checks: { resource: unknown; action: string; at: string; allowed: boolean }[] = [];
 let spends = 0;
 let refuseRate = false;
@@ -215,7 +217,7 @@ beforeAll(async () => {
     actions: new Map([...catalogue, ['access:grant', { anonymous: false }]]),
     auth: authentication,
   });
-  const permissions = createAccess({ actions: catalogue, auth: authentication });
+  permissions = createAccess({ actions: catalogue, auth: authentication });
   const access: Access = {
     ...permissions,
     async authorize(client, identity, verb, resource, evidence, time) {
@@ -385,7 +387,7 @@ test('revoked replay discloses no receipt or new effect', async () => {
 
 test('no grant, no scope, suspended and anonymous cannot mutate or disclose', async () => {
   const body = input();
-  const before = await effects();
+  let before = await effects();
   await revoke();
   try {
     denied(await call(body), 403);
@@ -393,17 +395,18 @@ test('no grant, no scope, suspended and anonymous cannot mutate or disclose', as
     await grant();
   }
   denied(await call(body, undefined, { bearer: noScopeBearer }), 403);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(actor.accountId),
-    actor.accountId,
-  ]);
+  expect(await effects()).toEqual(before);
+  await suspendAccount(db.admin, actor.accountId);
+  before = await effects();
   try {
     denied(await call(body), 401);
+    expect(await effects()).toEqual(before);
   } finally {
-    await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(actor.accountId),
-      actor.accountId,
-    ]);
+    await reinstateAccount(db.admin, actor.accountId);
+    bearer = await issue(actor.accountId, [action]);
+    noScopeBearer = await issue(actor.accountId, ['access:grant']);
+    actor = await permissions.authenticate(bearer, { pool: db.pool, deadline: Date.now() + 10000 });
+    before = await effects();
   }
   denied(await call(body, undefined, { authenticated: false }), 401);
   expect(await effects()).toEqual(before);

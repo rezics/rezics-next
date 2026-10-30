@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
@@ -158,14 +159,14 @@ test('unavailable curator freezes all member and Collection mutations while publ
     db.admin
       .query('SELECT (SELECT count(*) FROM core.receipt) receipts, (SELECT count(*) FROM core.outbox) events')
       .then(({ rows }) => rows);
-  const before = await effects();
   for (const state of ['pending', 'suspended', 'fenced', 'deleted'] as const) {
-    await db.admin.query('UPDATE access.account SET state=$3, authn_fenced=$4 WHERE route=$1 AND account_id=$2', [
+    await setFixtureAccountState(db.admin, f.ownerId, state === 'fenced' ? 'active' : state);
+    await db.admin.query('UPDATE access.account SET authn_fenced=$3 WHERE route=$1 AND account_id=$2', [
       f.route,
       f.ownerId,
-      state === 'fenced' ? 'active' : state,
-      state === 'fenced',
+      state === 'fenced' || state === 'suspended',
     ]);
+    const before = await effects();
     const actor = () => f.auth('collaborator');
     const mutations = [
       async () => f.commands.updateCollection(await actor(), f.id, patch, replayKey),

@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { createPool, withConnection } from '../../src/database/pool.ts';
@@ -197,11 +198,7 @@ test('only eligible operators with management authority can approve an automated
   for (const state of ['suspended', 'deleted']) {
     // These lifecycle fixtures have no outstanding operator or owner holds.
     const other = await person();
-    await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(other),
-      other,
-      state,
-    ]);
+    await setFixtureAccountState(pool, other, state);
     await grant(human, other);
     await deny(approval(other, human, subjectId));
     await revoke(human, other);

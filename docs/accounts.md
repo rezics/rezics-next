@@ -161,6 +161,25 @@ identities. There is no request-path Auth introspection or consent lookup. Addit
 freshness checks are authorization evidence, not a second authentication service. See
 [authenticate.ts][authenticate] and [command-admission.ts][command-admission].
 
+Suspension advances the authentication floor and fences the account before Auth revokes its sessions (section 11).
+Auth issues tokens only for active accounts. The bearer held before suspension therefore receives `401
+invalid_credentials` and `WWW-Authenticate: Bearer error="invalid_token"` on every route. Correct-password sign-in
+receives `403 ACCOUNT_SUSPENDED` without a session. After reinstatement, a new sign-in bearer is admitted; earlier
+credentials remain revoked.
+
+Defensively, an otherwise verified bearer at or above the floor for an unfenced suspended account receives
+`403 account_suspended`, titled "Account Suspended", with `retryable: false` and no `WWW-Authenticate` header.
+This state cannot arise through native suspension or token issuance. Its effect status is `not_applicable` for
+`GET`, `HEAD`, `OPTIONS` and read actions ending in `:read`, and `not_applied` otherwise. It has no per-operation
+OpenAPI response or native persona. Other authentication failures retain their existing 401 answers: missing
+credentials use `authentication_required`; invalid tokens, below-floor tokens, fenced, deleted and unknown
+accounts use `invalid_credentials` with the invalid-token challenge.
+
+If command preparation re-reads the acting account and finds it suspended after authentication, it returns that
+same native `401 invalid_credentials` with the invalid-token challenge, before any effect or receipt. Other
+account changes retain their current denial. Authentication's check order and single anchored account read are
+unchanged.
+
 Delegation never impersonates another account. `requested_by` is a verified assignment reference; `act` is
 reserved for RFC 8693 exchange, not attribution of the delegator. Own-key sign-in produces short-lived tokens,
 not personal access tokens. Device authorization and CIBA are the contract's cross-device approval mechanisms;

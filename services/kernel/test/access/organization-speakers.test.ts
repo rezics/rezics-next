@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -35,8 +36,9 @@ async function account(id: string, kind = 'actor', state = 'active', fenced = fa
     `INSERT INTO access.account
     (route,account_id,kind,state,authn_fenced,speakers_listed,display_name,transaction_id)
     VALUES ($1,$2,$3,$4,$5,$6,'Public name',$2)`,
-    [routeOf(id), id, kind, state, fenced, listed],
+    [routeOf(id), id, kind, state === 'suspended' ? 'active' : state, fenced, listed],
   );
+  if (state === 'suspended') await suspendAccount(pool, id);
 }
 async function assignment(actorId: string, principalId = organization, valid = '(,)') {
   const requestId = newId(route);

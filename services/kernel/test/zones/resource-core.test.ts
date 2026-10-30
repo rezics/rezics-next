@@ -87,7 +87,7 @@ test('Zone metadata and own listing disclose only current allowed resources and 
     'revision',
     'visibility',
   ]);
-  expect((await f.call('suspended', 'GET', path(zone.id))).status).toBe(403);
+  expect((await f.call('suspended', 'GET', path(zone.id))).status).toBe(401);
   expect((await f.call('other', 'GET', `${path(zone.id)}/configuration`)).status).toBe(403);
   expect((await f.call('anonymous', 'GET', '/v1/zones')).status).toBe(401);
   const listed = await f.call('owner', 'GET', '/v1/zones?limit=100');

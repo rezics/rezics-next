@@ -1,3 +1,4 @@
+import { suspendAccount } from '../../support/native-suspension-driver.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -238,10 +239,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     if (issued.status !== 200) throw new Error(`Fixture token issuance failed: ${issued.status}`);
     tokens.set(person.id, ((await issued.json()) as { access_token: string }).access_token);
   }
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    accounts.suspended.route,
-    accounts.suspended.id,
-  ]);
+  await suspendAccount(db.admin, accounts.suspended.id);
   // Resolve the same mounted Access catalogue used by the HTTP boundary for trusted commands.
   await app.handle(
     new Request('http://kernel.test/v1/entitlements', {

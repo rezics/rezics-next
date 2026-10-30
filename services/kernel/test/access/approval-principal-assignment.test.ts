@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -293,10 +294,12 @@ for (const fact of ['principal suspended', 'principal fenced'] as const) {
   test(`a ${fact} denies the protected step`, async () => {
     const f = await actingFor();
     const approved = await h.approve(f.token);
-    await h.db.admin.query(
-      `UPDATE access.account SET ${fact === 'principal fenced' ? 'authn_fenced=true' : "state='suspended'"} WHERE route=$1 AND account_id=$2`,
-      [routeOf(f.principal.accountId), f.principal.accountId],
-    );
+    if (fact === 'principal suspended') await suspendAccount(h.db.admin, f.principal.accountId);
+    else
+      await h.db.admin.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
+        routeOf(f.principal.accountId),
+        f.principal.accountId,
+      ]);
     const before = await snapshot();
     await expect(h.create(approved)).rejects.toThrow();
     expect(await snapshot()).toEqual(before);

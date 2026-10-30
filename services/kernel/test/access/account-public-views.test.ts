@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
@@ -48,7 +49,7 @@ async function account(
   } else {
     await pool.query(
       'INSERT INTO access.account(route,account_id,kind,state,authn_fenced,handle,transaction_id) VALUES ($1,$2,$3,$4,$5,$6,$2)',
-      [route, id, kind, state, fenced, handle],
+      [route, id, kind, state === 'suspended' ? 'active' : state, fenced, handle],
     );
     await pool.query(
       "INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$2,'account:update','(,)',$2)",
@@ -59,6 +60,7 @@ async function account(
     "INSERT INTO access.handle_claim(route,normalized_handle,account_id,state,transaction_id) VALUES ($1,$2,$3,'active',$3)",
     [createHash('sha256').update(handle).digest().readUInt16BE(0), handle, id],
   );
+  if (state === 'suspended') await suspendAccount(pool, id);
   return { id, handle };
 }
 async function patch(id: string, value: unknown, actorId = owners.get(id) ?? id) {
