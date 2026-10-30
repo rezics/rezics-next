@@ -66,7 +66,9 @@ export function registerAuthMaintenance(
     { name: 'auth.maintenance.tick' },
   );
 
-  const retainWorkflows = step('retainWorkflows', () => runWorkflowRetentionSweep(retention.retentionDays));
+  const retainWorkflows = step('retainWorkflows', () =>
+    runWorkflowRetentionSweep(retention.retentionDays, DBOS, new Date(), auth.internal?.retireWorkflowCopy),
+  );
   const retentionTick = DBOS.registerWorkflow(
     async (_scheduledAt: Date, _context: unknown): Promise<void> => {
       await retainWorkflows();

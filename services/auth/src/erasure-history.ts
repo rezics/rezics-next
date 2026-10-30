@@ -1,6 +1,7 @@
 import type { AuthErasureBarrier, AuthErasureSource, TrustedAccessPorts } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
-import { copyTransaction, eraseCopy } from './erasure-copy.ts';
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import { copyTransaction, completeCopy, eraseCopy } from './erasure-copy.ts';
 
 type Progress = {
   id: string;
@@ -38,36 +39,6 @@ export async function bindErasureBarrier(database: Pool, id: string, value: Auth
     ]);
   });
 }
-/** Accepted only by the real deletion consumer, after its exact continuation has
- * been authorized. This commit alone NEVER supplies a consumption witness. */
-export async function acceptErasureSource(database: Pool, id: string, value: AuthErasureSource, workflowId: string) {
-  await copyTransaction(database, async (client) => {
-    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-erasure:${value.accountId}`]);
-    const source = await client.query(
-      `SELECT 1 FROM auth_workflow_request r JOIN auth_copy_work w USING(workflow_id)
-      WHERE r.workflow_id=$1 AND r.erasure_subject_id=$2 AND r.request->>'kind'='delete'
-      AND r.terminal_at IS NULL AND w.name='accounts.operation' AND NOT w.retired
-      AND EXISTS(SELECT 1 FROM auth_copy_role s WHERE s.workflow_id=$1 AND s.account_id=$2 AND s.role='subject')`,
-      [workflowId, value.accountId],
-    );
-    if (!source.rowCount) throw new Error('Auth native source consumer missing');
-    const row = (await client.query<Progress>('SELECT * FROM auth_erasure WHERE id=$1 FOR UPDATE', [id])).rows[0];
-    if (
-      !row ||
-      row.account_id !== value.accountId ||
-      row.kernel_at !== value.at ||
-      row.kernel_version !== value.version ||
-      (row.source_continuation_id &&
-        (row.source_continuation_id !== value.continuationId || row.source_receipt_id !== value.receiptId))
-    )
-      throw new Error('Auth erasure source mismatch');
-    await client.query(
-      `UPDATE auth_erasure SET source_continuation_id=$2,source_receipt_id=$3,
-      source_workflow_id=$4,source_accepted_at=COALESCE(source_accepted_at,clock_timestamp()) WHERE id=$1`,
-      [id, value.continuationId, value.receiptId, workflowId],
-    );
-  });
-}
 /** The fixed erase-auth-owner consumer transfers its COMPLETE remaining work to
  * the existing native obligation under its producer fence. Native pages need
  * only that obligation: never the continuation, approval, receipt body or caller.
@@ -78,8 +49,8 @@ export async function dischargeErasureSource(database: Pool, id: string, value: 
     const changed = await client.query(
       `UPDATE auth_erasure SET source_discharged_at=COALESCE(source_discharged_at,clock_timestamp())
       WHERE id=$1 AND account_id=$2 AND kernel_version=$3 AND kernel_at=$4
-      AND source_continuation_id=$5 AND source_receipt_id=$6 AND source_accepted_at IS NOT NULL RETURNING id`,
-      [id, value.accountId, value.version, value.at, value.continuationId, value.receiptId],
+      AND source_workflow_id=$7 AND source_continuation_id=$5 AND source_receipt_id=$6 AND source_accepted_at IS NOT NULL RETURNING id`,
+      [id, value.accountId, value.version, value.at, value.continuationId, value.receiptId, DBOS.workflowID ?? null],
     );
     if (!changed.rowCount) throw new Error('Auth erasure source missing');
   });
@@ -106,6 +77,9 @@ export async function erasureHistoryPage(database: Pool, id: string): Promise<bo
   ).rows;
   const work = page[0];
   if (work) {
+    // Recover the actual result consumer from its native commitment. No HTTP
+    // retry, old approval or resurrected session participates.
+    await completeCopy(database, work.workflow_id);
     if (!(await eraseCopy(database, work.workflow_id))) return false;
     await database.query('DELETE FROM auth_copy_role WHERE account_id=$1 AND workflow_id=$2', [
       row.account_id,
@@ -157,6 +131,9 @@ export async function redriveErasureHistory(database: Pool, ports: TrustedAccess
   ).rows[0];
   if (!row) return 0;
   await database.query('UPDATE auth_erasure SET revision=revision+1 WHERE id=$1', [row.id]);
-  await erasureHistoryPage(database, row.id);
-  return publishErasureProofs(database, ports, row.id);
+  // Publish the discharged source before any later copy/consumer work. Neither
+  // a live copy nor a failed final submission holds this phase hostage.
+  const published = await publishErasureProofs(database, ports, row.id);
+  if (await erasureHistoryPage(database, row.id)) return publishErasureProofs(database, ports, row.id);
+  return published;
 }

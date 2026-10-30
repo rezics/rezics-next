@@ -21,13 +21,13 @@ import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionU
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
 import {
   bindErasureBarrier,
-  acceptErasureSource,
   dischargeErasureSource,
   publishErasureProofs,
   redriveErasureHistory,
 } from './erasure-history.ts';
 import { startNativeErasure, nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
 import { recordRecoveryCompletion } from './erasure-consumers.ts';
+import { completeCopy, eraseCopy } from './erasure-copy.ts';
 import { chargeAccountAttempt } from './rate-limit.ts';
 import { eraseDueConsents, hasDueConsentErasure } from './consent-erasure.ts';
 import { clientAuthority } from './account-workflows.ts';
@@ -1136,17 +1136,34 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (!trustedAccess.readAuthErasureSource) throw new Denied(503);
         const source = await trustedAccess.readAuthErasureSource({ accountId, receiptId });
         if (!source || source.accountId !== accountId || source.receiptId !== receiptId) throw new Denied();
-        const id = await service.internal.startAccountErasure(accountId);
-        await acceptErasureSource(database, id, source, workflowId);
+        const account = trustedAccess.readErasureAccount
+          ? await trustedAccess.readErasureAccount(accountId)
+          : await trustedAccess.readAccount(accountId);
+        if (!account || account.accountId !== accountId || account.state !== 'deleted' || !account.fenced)
+          throw new Denied();
+        const id = await startNativeErasure(database, accountId, account.authnEpoch, source, {
+          identity: source,
+          workflowId,
+        });
         // No consumer resumes against Kernel evidence after this transfer. The
         // local obligation has everything required by its fixed native pages.
         const verified = await trustedAccess.readAuthErasureSource({ accountId, receiptId });
         if (!verified || JSON.stringify(verified) !== JSON.stringify(source)) throw new Denied();
         await dischargeErasureSource(database, id, source);
-        await publishErasureProofs(database, trustedAccess, id);
+        try {
+          await publishErasureProofs(database, trustedAccess, id);
+        } catch {
+          // Publication is independently redriven from the committed native
+          // transfer. A lost reply must not strand other authorized releases.
+          await database.query("UPDATE auth_erasure SET pending_code='source-submission' WHERE id=$1", [id]);
+        }
         return id;
       },
       redriveErasureHistory: () => redriveErasureHistory(database, trustedAccess),
+      async retireWorkflowCopy(id) {
+        await completeCopy(database, id);
+        return eraseCopy(database, id);
+      },
       nativeErasurePage: (id) => nativeErasurePage(database, id),
       redriveNativeErasure: () => redriveNativeErasure(database),
       async eraseAccount(accountId) {

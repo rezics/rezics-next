@@ -228,6 +228,8 @@ export interface AuthService {
     /** Actual fixed erase-auth-owner consumer; original committed source only. */
     consumeAccountErasure(accountId: string, receiptId: string, workflowId: string): Promise<string>;
     redriveErasureHistory(): Promise<number>;
+    /** Retention shares the exact native result/readiness/absence protocol. */
+    retireWorkflowCopy(workflowId: string): Promise<boolean>;
     nativeErasurePage(id: string): Promise<import('./erasure-native.ts').ErasurePage>;
     redriveNativeErasure(): Promise<number>;
     openAutomatedSession(input: {

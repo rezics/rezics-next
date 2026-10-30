@@ -2063,7 +2063,10 @@ The fixed methods `recordAuthNativeConsumption(source)` and
 principal, participant, phase selector, locator, payload or authorization flag.
 Missing capability, original continuation, target, barrier or terminal/fenced
 account fails closed. The same immutable proof is idempotent after a lost reply;
-a different tuple is refused. Kernel keeps no Auth database handle or credential
+a different tuple is refused. Every redrive rechecks the permanent erasure and
+terminal/fenced account. A copies-erased submission requires the matching earlier
+native-consumed phase; one fact cannot stand in for the other. Kernel keeps no
+Auth database handle or credential
 and makes no maintenance call into Auth.
 
 `readAuthNativeConsumption(pool, source)` lets Access consume only the exact

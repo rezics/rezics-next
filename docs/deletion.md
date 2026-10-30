@@ -220,7 +220,8 @@ the original committed erase-auth-owner continuation and its authorized target.
 are distinct fixed Auth-only capabilities. No caller chooses a participant,
 principal, locator, phase, payload or authorization flag.
 
-Acceptance of the native obligation does **not** discharge its source. The real
+Source acceptance commits atomically with the native Auth obligation under its
+producer fence. Acceptance of the native obligation does **not** discharge its source. The real
 Auth deletion step validates the exact source again, then commits transfer of its
 complete remaining erase-auth-owner need to the existing native obligation under
 the producer fence. This records the original source workflow, continuation,
@@ -233,7 +234,13 @@ from this witness.
 
 The later `copies-erased` fact requires native/consent closure, known creation
 coverage, completed actual result consumers, retired exact work, supported SDK
-cancellation/deletion and raw-key absence probes. Completion survives DBOS history
+cancellation/deletion and raw-key absence probes. The final native producer
+persists a bounded result commitment outside DBOS; caller and default recovery
+consume the actual exact SDK return against it before recording readiness.
+Disclosure refusal cannot prevent this native result retirement. Live, failed,
+unmapped or mismatched results remain pending, regardless of workflow status.
+Kernel refuses completion before its matching native-consumed phase.
+Completion survives DBOS history
 loss in `auth_erasure` and publication redrives idempotently after a lost reply.
 Auth releases its connection before every kernel call. Kernel verifies its own
 permanent erasure and terminal/fenced account, stores each immutable fact in that

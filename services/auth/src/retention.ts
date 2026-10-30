@@ -65,6 +65,7 @@ export async function runWorkflowRetentionBatch(
   retentionDays: number,
   sdk: WorkflowRetentionSdk = DBOS,
   now = new Date(),
+  retireCopy?: (id: string) => Promise<boolean>,
 ): Promise<number> {
   if (
     !Number.isSafeInteger(retentionDays) ||
@@ -75,17 +76,23 @@ export async function runWorkflowRetentionBatch(
   const cutoff = now.getTime() - retentionDays * DAY_MS;
   const strictCutoff = new Date(cutoff - 1).toISOString();
   const statuses = await sdk.listWorkflows(listInput(strictCutoff));
-  const ids = statuses
+  const selected = statuses
     .filter(
       (status) =>
         (TERMINAL_WORKFLOW_STATUSES as readonly string[]).includes(status.status) &&
         typeof status.completedAt === 'number' &&
         status.completedAt < cutoff,
     )
-    .slice(0, WORKFLOW_RETENTION_BATCH_SIZE)
-    .map((status) => status.workflowID);
+    .slice(0, WORKFLOW_RETENTION_BATCH_SIZE);
+  let retired = 0;
+  const ids: string[] = [];
+  for (const status of selected) {
+    if (!retireCopy || ['auth.maintenance.tick', WORKFLOW_RETENTION_WORKFLOW].includes(status.workflowName))
+      ids.push(status.workflowID);
+    else if (await retireCopy(status.workflowID)) retired++;
+  }
   if (ids.length > 0) await sdk.deleteWorkflows(ids, false);
-  return ids.length;
+  return ids.length + retired;
 }
 
 /** One scheduled run uses one fixed cutoff and commits at most sixty SDK deletion transactions. */
@@ -93,10 +100,11 @@ export async function runWorkflowRetentionSweep(
   retentionDays: number,
   sdk: WorkflowRetentionSdk = DBOS,
   now = new Date(),
+  retireCopy?: (id: string) => Promise<boolean>,
 ): Promise<number> {
   let deleted = 0;
   for (let batch = 0; batch < WORKFLOW_RETENTION_MAX_BATCHES; batch++) {
-    const removed = await runWorkflowRetentionBatch(retentionDays, sdk, now);
+    const removed = await runWorkflowRetentionBatch(retentionDays, sdk, now, retireCopy);
     deleted += removed;
     if (removed < WORKFLOW_RETENTION_BATCH_SIZE) break;
   }

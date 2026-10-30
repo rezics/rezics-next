@@ -38,7 +38,13 @@ export type AccountOperation = (
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
-import { installCopyRecorder, createCopyWriter, completeCopy, type CopyRole } from './erasure-copy.ts';
+import {
+  installCopyRecorder,
+  createCopyWriter,
+  completeCopy,
+  finishCopyResult,
+  type CopyRole,
+} from './erasure-copy.ts';
 import { AUTH_WORKFLOW_APPLICATION, installWorkflowRequestRetention } from './retention.ts';
 import { coordinateMembership } from './membership-workflows.ts';
 import { completeDeletedClientReductionOwner } from './account-workflows.ts';
@@ -679,9 +685,13 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       await expired(input.registrationId);
       return { accountId: row.account_id, expired: true as const };
     };
+    const registrationResult = step('native-registration-result', (id: string, result: unknown) =>
+      finishCopyResult(database, required(DBOS.workflowID), result, id),
+    );
     registration = DBOS.registerWorkflow(
       async (input: RegistrationInput) => {
         const result = await executeRegistration(input);
+        await registrationResult(input.registrationId, result);
         return result;
       },
       { name: 'accounts.registration' },
@@ -1065,6 +1075,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         [operationId],
       );
     });
+    const reductionResult = step('native-reduction-result', (operationId: string, result: ReductionResult) =>
+      finishCopyResult(database, required(DBOS.workflowID), result, operationId),
+    );
     clientReduction = DBOS.registerWorkflow(
       async (input: ReductionInput): Promise<ReductionResult> => {
         // Refuse recovered account-id pages before replaying cached owner lists or fences.
@@ -1090,22 +1103,20 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             roles,
             required(DBOS.workflowID),
           );
-          return { clientId: input.clientId, nextWorkflowId };
+          const result = { clientId: input.clientId, nextWorkflowId };
+          await reductionResult(operationId, result);
+          return result;
         }
         await finishReduction(input, operationId);
-        return { clientId: input.clientId };
+        const result = { clientId: input.clientId };
+        await reductionResult(operationId, result);
+        return result;
       },
       { name: 'accounts.client-reduction' },
     );
-    const terminalRequest = step('native-operation-terminal', async (id: string) => {
-      // The executor owns this proof after its last native release consumer.
-      // An HTTP disconnect between workflow completion and getResult cannot
-      // strand the witness, and DBOS history loss alone never supplies it.
-      await database.query(
-        'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
-        [id],
-      );
-    });
+    const terminalRequest = step('native-operation-terminal', (id: string, result: unknown) =>
+      finishCopyResult(database, id, result),
+    );
     const executeOperation = async (input: AccountOperation) => {
       if (input.kind === 'membership') {
         if (input.role === null && !input.reservationId) denied();
@@ -1154,19 +1165,13 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           // Finish the already authorized source consumers while the exact
           // continuation is live; native erasure may wait for a registration's
           // thirty-minute deadline beyond that continuation's authority.
-          const releaseBeforeWait = await DBOS.patch('deletion-source-consumers-before-native-wait');
-          let id: string | undefined;
-          if (releaseBeforeWait)
-            id =
-              (await acceptErasure(input.accountId, undefined, operationKey)) ??
-              (await recoverErasure(input.accountId));
-          else await erase(input.accountId, undefined, operationKey);
+          await DBOS.patch('deletion-source-consumers-before-native-wait');
+          await erase(input.accountId, undefined, operationKey);
           if (input.responsibility) {
             await retireOperator(input.responsibility, undefined, operationKey);
             await releaseOperator(input.responsibility, undefined, operationKey);
           }
           if (account.handle) await redirectDeleted(account.accountId, account.handle, undefined, operationKey);
-
           return { accountId: input.accountId };
         }
         await erase(input.accountId, input);
@@ -1273,7 +1278,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     operation = DBOS.registerWorkflow(
       async (input: AccountOperation) => {
         const result = await executeOperation(input);
-        await terminalRequest(required(DBOS.workflowID));
+        await terminalRequest(required(DBOS.workflowID), result);
         return result;
       },
       { name: 'accounts.operation' },
@@ -1320,8 +1325,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const ref = reference(row);
     await writer().send(ref.workflowId, 'activate', 'activation', `${ref.workflowId}:activate`);
     const result = await DBOS.retrieveWorkflow<{ accountId: string; expired?: true }>(ref.workflowId).getResult();
+    await completeCopy(database, ref.workflowId, result);
     if (result.expired) denied();
-    await completeCopy(database, ref.workflowId);
     return { accountId: result.accountId };
   }
   async function runOperation(key: string, input: AccountOperation) {
@@ -1383,13 +1388,15 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
       [id],
     );
+    // Retire the native result dependency before current disclosure can refuse.
+    // The caller still holds the actual result; no authority is restored here.
+    await completeCopy(database, id, result);
     if (input.kind === 'delete') await auth.internal.eraseAccount(input.accountId);
     // The approval above was resolved once, before any effect. An operation that
     // removes the actor's own standing answers with the workflow's outcome: the
     // actor is not re-authorized against state the operation itself changed.
     // Every other result is disclosed only under current authority.
     if (!(context && removesOwnStanding(input, context))) await discloseUnderCurrentAuthority(input);
-    await completeCopy(database, id);
     return result;
   }
   /** Auth's failure to delete the sessions of a committed revocation is its own answer. */
@@ -1459,7 +1466,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         );
         result = await (await DBOS.rewindWorkflow<ReductionResult>(id, { startStep: failed.functionID })).getResult();
       } else result = await DBOS.retrieveWorkflow<ReductionResult>(id).getResult();
-      await completeCopy(database, id);
+      await completeCopy(database, id, result);
       if (!result.nextWorkflowId) return { clientId: result.clientId };
       id = result.nextWorkflowId;
     }
@@ -1492,13 +1499,13 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       const result = await answerOperation(input, async () =>
         (await DBOS.rewindWorkflow(id, { startStep: failed.functionID })).getResult(),
       );
+      await completeCopy(database, id, result);
       await disclose();
-      await completeCopy(database, id);
       return result;
     }
     const result = await answerOperation(input, async () => (await DBOS.resumeWorkflow(id)).getResult());
+    await completeCopy(database, id, result);
     await disclose();
-    await completeCopy(database, id);
     return result;
   }
   const close = async () => {

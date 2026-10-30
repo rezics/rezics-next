@@ -991,6 +991,12 @@ unconsumed recovery bindings have no scheduled retention; anchored operations re
 logarithmic in their totals. Barrier-proof expiry/cleanup and Auth workflow/request
 retention are separate purposes.
 
+The default host routes personal workflow retention through the same native
+result consumer and exact copy retirement as account erasure. An expired or
+terminal workflow with unknown custody, a live native consumer or no committed
+result stays pending; retention time never supplies that missing proof. Only the
+fixed technical maintenance workflows use direct SDK retention.
+
 `Missing:` identifies implemented I/O with no matching native growth capture, and
 is restricted to the explicit operation list in `test/cost-table.test.ts`.
 Existing cascade-test statement assertions predate
@@ -1649,8 +1655,18 @@ include operating-human, initiator, operator, member, previous operator, delegat
 and client-owner roles supplied by native inputs/approval context. Client-reduction
 pages keep transient owner IDs inside their native step and carry independent
 ordinal boundaries; child creation records its exact parent and native progress
-locator. SDK result consumers settle before `ready` is recorded. Failed/live or
-unconsumed results remain pending; terminal status alone does not establish it.
+locator. The last actual native consumer records an exact, bounded result
+commitment in `auth_copy_work` outside DBOS, atomically with the native operation
+terminal marker. Registration and reduction verify their original native source
+keys, bound atomically with the actual SDK copy at creation, before recording it.
+Native source cleanup cannot remove that exact handoff identity.
+`completeCopy(database, workflowId, result?)` consumes the actual SDK return and
+compares it with that commitment. Caller consumption precedes private disclosure,
+so a lawful disclosure denial cannot strand native retirement. Default history
+recovery invokes the same consumer for a lost caller, without a caller retry or
+reopening an approval/session. SDK SUCCESS only guards a nonblocking result read;
+a missing commitment, failed/live return, mismatch or unmapped copy stays pending.
+No private result or exception is retained in the native commitment.
 
 An execution has at most 139 native rows and 10 MiB: three status/input/output
 rows, 60 operation rows, eight event keys, 64 event-history rows and four messages.
@@ -1665,8 +1681,9 @@ creation cut remain pending; no scan attempts to infer their account roles.
 
 `AuthService.internal.consumeAccountErasure(accountId, receiptId, workflowId)` is
 called by the actual `erase-auth-owner` step, in its SDK context, after the real
-committed continuation authorization. It commits source acceptance separately
-from the final validated native transfer. Acceptance alone emits no witness and
+committed continuation authorization. The native obligation writer commits source acceptance atomically with its
+obligation/progress under the producer fence, separately from the final validated
+native transfer. Acceptance alone emits no witness and
 blocks native cleanup. The native transfer preserves the original kernel
 version/T and continuation/receipt identity in the existing `auth_erasure` root;
 exact replays do not reopen the discharged source dependency.
@@ -1675,7 +1692,10 @@ The default maintenance host independently redrives the early native-consumed
 witness and later local-copy completion through `TrustedAccessPorts`:
 `readAuthErasureBarrier`, `readAuthErasureSource`,
 `recordAuthNativeConsumption`, `recordAuthHistoryCompletion`. A missing capability
-is unavailable/pending. Pending-registration expiry retains separate native
+is unavailable/pending. Publication failure leaves the permanent phase pending
+for default redrive and does not abort the other already-authorized source
+releases. Final completion additionally requires the kernel's matching earlier
+native-consumed fact. Pending-registration expiry retains separate native
 cleanup semantics and emits no active-account barrier proof. Explicit older
 separate-store workflow hosts retain their SDK behavior but have no Auth-local
 coverage cut or completion proof.

@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
-import type { AuthErasureBarrier } from '@rezics/auth-contract';
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import type { AuthErasureBarrier, AuthErasureSource } from '@rezics/auth-contract';
 import { requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
 import {
   closeCredentialConsumer,
@@ -187,6 +188,44 @@ async function transaction<T>(pool: Pool, action: (connection: PoolClient) => Pr
   }
 }
 
+/** Accepted only by the real deletion consumer, after its exact continuation has
+ * been authorized. This commit alone NEVER supplies a consumption witness. */
+async function acceptErasureSource(client: PoolClient, id: string, value: AuthErasureSource, workflowId: string) {
+  if (DBOS.workflowID !== workflowId) throw new Error('Auth native source consumer missing');
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-erasure:${value.accountId}`]);
+  const source = await client.query(
+    `SELECT 1 FROM auth_workflow_request r JOIN auth_copy_work w USING(workflow_id)
+      WHERE r.workflow_id=$1 AND r.erasure_subject_id=$2 AND r.request->>'kind'='delete'
+      AND r.terminal_at IS NULL AND w.name='accounts.operation' AND NOT w.retired
+      AND EXISTS(SELECT 1 FROM auth_copy_role s WHERE s.workflow_id=$1 AND s.account_id=$2 AND s.role='subject')`,
+    [workflowId, value.accountId],
+  );
+  if (!source.rowCount) throw new Error('Auth native source consumer missing');
+  const row = (
+    await client.query<{
+      account_id: string;
+      kernel_at: string | null;
+      kernel_version: number | null;
+      source_continuation_id: string | null;
+      source_receipt_id: string | null;
+    }>('SELECT * FROM auth_erasure WHERE id=$1 FOR UPDATE', [id])
+  ).rows[0];
+  if (
+    !row ||
+    row.account_id !== value.accountId ||
+    row.kernel_at !== value.at ||
+    row.kernel_version !== value.version ||
+    (row.source_continuation_id &&
+      (row.source_continuation_id !== value.continuationId || row.source_receipt_id !== value.receiptId))
+  )
+    throw new Error('Auth erasure source mismatch');
+  await client.query(
+    `UPDATE auth_erasure SET source_continuation_id=$2,source_receipt_id=$3,
+      source_workflow_id=$4,source_accepted_at=COALESCE(source_accepted_at,clock_timestamp()) WHERE id=$1`,
+    [id, value.continuationId, value.receiptId, workflowId],
+  );
+}
+
 /** Called only after the existing trusted deleted/fenced read. The native floor
  * and actual immutable kernel version/T are distinct; replay cannot replace either.
  * The account lock also fences every native producer transaction.
@@ -196,7 +235,16 @@ export async function startNativeErasure(
   accountId: string,
   barrier: number,
   identity?: AuthErasureBarrier,
+  source?: { identity: AuthErasureSource; workflowId: string },
 ): Promise<string> {
+  if (
+    source &&
+    (source.identity.accountId !== accountId ||
+      identity?.accountId !== accountId ||
+      source.identity.version !== identity.version ||
+      source.identity.at !== identity.at)
+  )
+    throw new Error('Auth erasure source mismatch');
   return transaction(pool, async (connection) => {
     await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-erasure:${accountId}`]);
     const row = (
@@ -206,6 +254,7 @@ export async function startNativeErasure(
         [accountId, barrier, ERASURE_VERSION, identity?.version ?? null, identity?.at ?? null],
       )
     ).rows[0]!;
+    if (source) await acceptErasureSource(connection, row.id, source.identity, source.workflowId);
     return row.id;
   });
 }

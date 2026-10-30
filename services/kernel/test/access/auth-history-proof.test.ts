@@ -156,3 +156,77 @@ test('the default Auth-only boundary stores only its exact discharged native sou
     await db.close();
   }
 }, 180000);
+
+test('the fixed kernel completion verifier refuses the phase before genuine native discharge, then independently exposes only the exact consumed dependency', async () => {
+  const db = await openGrowthDatabase();
+  const f = await nativeFixture(db.pool);
+  const ports = f.bindings.trustedAccess;
+  const read = ports.readAuthErasureSource!;
+  let release = () => {};
+  const paused = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let reads = 0;
+  let original: AuthErasureSource | null = null;
+  ports.readAuthErasureSource = async (input) => {
+    const source = await read(input);
+    original = source;
+    if (++reads === 2) await paused;
+    return source;
+  };
+  try {
+    const person = await f.person('history_phase_guard');
+    await f.host.service.internal.registerClient({
+      clientId: 'history-phase-delete',
+      firstParty: true,
+      scopes: [...scopes, 'account:delete'],
+    });
+    const signin = await f.request('/signin', {
+      email: 'history_phase_guard@ordinary.test',
+      password,
+      client_id: 'history-phase-delete',
+      scope: [...scopes, 'account:delete'],
+    });
+    expect(signin.status).toBe(200);
+    const headers = cookies(signin);
+    const operation = { kind: 'delete', accountId: person.accountId };
+    const operationKey = 'phase-guard-delete';
+    const approval = await f.request('/account-operations/approve', { operationKey, operation }, headers);
+    expect(approval.status).toBe(200);
+    const { reference } = (await approval.json()) as { reference: string };
+    const deletion = f.request('/account-operations/execute', { operationKey, operation, reference }, headers);
+    await eventually(async () => reads === 2);
+    const source = original!;
+    const root = { accountId: source.accountId, version: source.version, at: source.at };
+    const fixed = createAuthHistoryProofBindings(db.pool);
+    expect(await readAuthNativeConsumption(db.pool, source)).toBe(false);
+    await expect(fixed.recordAuthHistoryCompletion(root)).rejects.toThrow('denied');
+    expect(
+      (
+        await f.authPool.query('SELECT source_accepted_at,source_discharged_at FROM auth_erasure WHERE account_id=$1', [
+          person.accountId,
+        ])
+      ).rows[0],
+    ).toMatchObject({ source_accepted_at: expect.any(Date), source_discharged_at: null });
+    const foreign = createAuthBindings({ pool: db.pool });
+    await expect(foreign.recordAuthNativeConsumption!(source)).rejects.toThrow('unavailable');
+    release();
+    expect((await deletion).status).toBe(200);
+    expect(await readAuthNativeConsumption(db.pool, source)).toBe(true);
+    expect(await readAuthHistoryCompletion(db.pool, root)).toBe(false);
+    await fixed.recordAuthNativeConsumption(source);
+    expect(
+      (
+        await db.admin.query('SELECT phase FROM access.auth_history_proof WHERE route=$1 AND account_id=$2', [
+          routeOf(person.accountId),
+          person.accountId,
+        ])
+      ).rows,
+    ).toEqual([{ phase: 'native-consumed' }]);
+  } finally {
+    release();
+    ports.readAuthErasureSource = read;
+    await f.close();
+    await db.close();
+  }
+}, 180000);

@@ -5,6 +5,10 @@ import { nativeFixture, password, scopes } from './support/erasure-native.ts';
 import { COPY_TABLES, copiesAbsent, createCopyWriter, eraseCopy } from '../src/erasure-copy.ts';
 import { erasureHistoryPage, publishErasureProofs } from '../src/erasure-history.ts';
 import { nativeErasurePage, startNativeErasure } from '../src/erasure-native.ts';
+import { randomUUID } from 'node:crypto';
+import { failNativeQueries } from './support/erasure-native.ts';
+import { completeCopy, finishCopyResult } from '../src/erasure-copy.ts';
+import { DBOS } from '@dbos-inc/dbos-sdk';
 
 async function eventually(probe: () => Promise<boolean>, timeout = 30_000) {
   const until = Date.now() + timeout;
@@ -248,3 +252,252 @@ test('real default deletion transfers only its discharged native source, then er
     await f.close();
   }
 }, 450_000);
+
+test('default recovery consumes an ordinary committed native result after caller loss and restart, without a caller retry', async () => {
+  const f = await nativeFixture();
+  let restore = () => {};
+  try {
+    const person = await f.person('lost-result');
+    const survivor = await f.person('lost-result-survivor');
+    const current = await f.bindings.workflowPorts.readAccount(person.accountId);
+    const key = randomUUID();
+    const operation = {
+      kind: 'rename' as const,
+      accountId: person.accountId,
+      handle: `lost_${key.replaceAll('-', '')}`,
+      expectedHandle: current!.handle,
+    };
+    const approval = await f.approvals.approve(person.bearer, { operationKey: key, operation }, f.context());
+    let interrupted = false;
+    restore = failNativeQueries(f.pool, (sql) => {
+      if (interrupted || !sql.includes('UPDATE auth_copy_work SET ready=true')) return false;
+      interrupted = true;
+      return true;
+    });
+    await expect(
+      f.host.workflows.renameHandle({ key, ...operation, authorization: approval.reference }),
+    ).rejects.toThrow();
+    restore();
+    const copy = (
+      await f.pool.query<{ workflow_id: string; ready: boolean; result_finished_at: Date }>(
+        `SELECT w.workflow_id,w.ready,w.result_finished_at FROM auth_copy_work w JOIN auth_copy_role r USING(workflow_id)
+       WHERE r.account_id=$1 AND w.name='accounts.operation' AND r.role='subject'`,
+        [person.accountId],
+      )
+    ).rows[0]!;
+    expect(interrupted).toBe(true);
+    expect(copy.ready).toBe(false);
+    expect(copy.result_finished_at).toBeInstanceOf(Date);
+    expect((await f.bindings.workflowPorts.readAccount(person.accountId))!.handle).toBe(operation.handle);
+    await f.host.workflows.close();
+    await f.host.workflows.start();
+    // No resumeOperation or caller retry repairs the native result consumer.
+    expect((await f.delete(person)).status).toBe(200);
+    await eventually(
+      async () =>
+        !!(
+          await f.pool.query('SELECT 1 FROM auth_erasure WHERE account_id=$1 AND copies_published_at IS NOT NULL', [
+            person.accountId,
+          ])
+        ).rowCount,
+      370_000,
+    );
+    expect(await copiesAbsent(f.pool, copy.workflow_id)).toBe(true);
+    expect(
+      (
+        await f.call('/signin', {
+          email: survivor.email,
+          password,
+          client_id: 'erasure-web',
+          scope: scopes,
+        })
+      ).status,
+    ).toBe(200);
+  } finally {
+    restore();
+    await f.close();
+  }
+}, 450_000);
+
+test('activated registration lost after native result consumption retires through default maintenance after restart', async () => {
+  const f = await nativeFixture();
+  let restore = () => {};
+  try {
+    const key = randomUUID();
+    const email = `${key}@lost-registration.test`;
+    let interrupted = false;
+    restore = failNativeQueries(f.pool, (sql) => {
+      if (interrupted || !sql.includes('UPDATE auth_copy_work SET ready=true')) return false;
+      interrupted = true;
+      return true;
+    });
+    await expect(
+      f.host.workflows.register({
+        key,
+        email,
+        password,
+        handle: `lostreg_${key.replaceAll('-', '')}`,
+      }),
+    ).rejects.toThrow();
+    restore();
+    const source = (
+      await f.pool.query<{ account_id: string; consumer_workflow_id: string; completed_at: Date }>(
+        'SELECT account_id,consumer_workflow_id,completed_at FROM auth_registration_stage WHERE request_key=$1',
+        [key],
+      )
+    ).rows[0]!;
+    expect(source.completed_at).toBeInstanceOf(Date);
+    expect(interrupted).toBe(true);
+    expect(
+      (
+        await f.pool.query('SELECT ready,result_finished_at FROM auth_copy_work WHERE workflow_id=$1', [
+          source.consumer_workflow_id,
+        ])
+      ).rows[0],
+    ).toMatchObject({ ready: false, result_finished_at: expect.any(Date) });
+    await f.host.workflows.close();
+    await f.host.workflows.start();
+    const person = await f.login({ accountId: source.account_id, email });
+    expect((await f.delete(person)).status).toBe(200);
+    await eventually(
+      async () =>
+        !!(
+          await f.pool.query('SELECT 1 FROM auth_erasure WHERE account_id=$1 AND copies_published_at IS NOT NULL', [
+            source.account_id,
+          ])
+        ).rowCount,
+      370_000,
+    );
+    expect(await copiesAbsent(f.pool, source.consumer_workflow_id)).toBe(true);
+  } finally {
+    restore();
+    await f.close();
+  }
+}, 450_000);
+
+test('a live native result consumer stays pending; lawful disclosure refusal after its committed effect cannot strand retirement', async () => {
+  const f = await nativeFixture();
+  const ports = f.bindings.workflowPorts;
+  const finish = ports.completeHandleTransition!;
+  let release = () => {};
+  const paused = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let reached = false;
+  try {
+    const person = await f.person('denied-result');
+    const current = await ports.readAccount(person.accountId);
+    const key = randomUUID();
+    const operation = {
+      kind: 'rename' as const,
+      accountId: person.accountId,
+      handle: `denied_${key.replaceAll('-', '')}`,
+      expectedHandle: current!.handle,
+    };
+    const approval = await f.approvals.approve(person.bearer, { operationKey: key, operation }, f.context());
+    ports.completeHandleTransition = async (input) => {
+      const result = await finish(input);
+      reached = true;
+      await paused;
+      return result;
+    };
+    const result = f.host.workflows.renameHandle({ key, ...operation, authorization: approval.reference });
+    // Observe rejection immediately so the deliberate native denial is handled.
+    const answer = result.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await eventually(async () => reached);
+    const id = (
+      await f.pool.query<{ workflow_id: string }>(
+        `SELECT w.workflow_id FROM auth_copy_work w JOIN auth_copy_role r USING(workflow_id)
+       WHERE r.account_id=$1 AND r.role='subject' AND w.name='accounts.operation'`,
+        [person.accountId],
+      )
+    ).rows[0]!.workflow_id;
+    expect(await completeCopy(f.pool, id)).toBe(false);
+    expect(await eraseCopy(f.pool, id)).toBe(false);
+    await expect(finishCopyResult(f.pool, id, { accountId: person.accountId })).rejects.toThrow('source missing');
+    // This is the genuine Access fence, so the subsequent native disclosure
+    // check must deny under current authority despite the committed rename.
+    await f.bindings.internalLifecycle.raiseFence({ accountId: person.accountId, key: randomUUID() });
+    release();
+    expect(await answer).toMatchObject({ status: 403 });
+    expect((await ports.readAccount(person.accountId))!.handle).toBe(operation.handle);
+    expect(
+      (await f.pool.query('SELECT ready,result_finished_at FROM auth_copy_work WHERE workflow_id=$1', [id])).rows[0],
+    ).toMatchObject({ ready: true, result_finished_at: expect.any(Date) });
+
+    // A separate actual registration remains live until its own native result;
+    // neither a guessed return nor retirement of the denied caller completes it.
+    const pending = await f.host.workflows.beginRegistration({
+      key: randomUUID(),
+      handle: `living_${randomUUID().replaceAll('-', '')}`,
+    });
+    expect(await completeCopy(f.pool, pending.workflowId, { accountId: pending.accountId })).toBe(false);
+    expect(await eraseCopy(f.pool, pending.workflowId)).toBe(false);
+    await f.host.workflows.installRegistrationCredential({
+      registrationId: pending.registrationId,
+      email: `${randomUUID()}@living-result.test`,
+      password,
+    });
+    expect(await f.host.workflows.activateRegistration(pending.registrationId)).toEqual({
+      accountId: pending.accountId,
+    });
+    expect(
+      (await f.pool.query('SELECT ready FROM auth_copy_work WHERE workflow_id=$1', [pending.workflowId])).rows[0],
+    ).toEqual({ ready: true });
+  } finally {
+    release();
+    ports.completeHandleTransition = finish;
+    await f.close();
+  }
+}, 180_000);
+
+test('a lost native-consumed reply redrives from the committed source after restart and DBOS history deletion, independently of copy completion', async () => {
+  const f = await nativeFixture();
+  const ports = f.bindings.trustedAccess;
+  const submit = ports.recordAuthNativeConsumption!;
+  let attempts = 0;
+  ports.recordAuthNativeConsumption = async (source) => {
+    await submit(source);
+    if (++attempts === 1) throw new Error('Lost native source reply');
+  };
+  try {
+    const person = await f.person('lost-source-reply');
+    expect((await f.delete(person)).status).toBe(200);
+    const source = (
+      await f.pool.query<{
+        id: string;
+        source_workflow_id: string;
+        source_discharged_at: Date;
+        copies_completed_at: Date | null;
+      }>(
+        'SELECT id,source_workflow_id,source_discharged_at,copies_completed_at FROM auth_erasure WHERE account_id=$1',
+        [person.accountId],
+      )
+    ).rows[0]!;
+    expect(source.source_discharged_at).toBeInstanceOf(Date);
+    expect(source.copies_completed_at).toBeNull();
+    await DBOS.deleteWorkflows([source.source_workflow_id], false);
+    await f.host.workflows.close();
+    await f.host.workflows.start();
+    await eventually(
+      async () =>
+        !!(
+          await f.pool.query('SELECT 1 FROM auth_erasure WHERE id=$1 AND source_published_at IS NOT NULL', [source.id])
+        ).rowCount,
+    );
+    expect(attempts).toBeGreaterThanOrEqual(2);
+    expect(
+      (
+        await f.kernel.query('SELECT phase FROM access.auth_history_proof WHERE account_id=$1 ORDER BY phase', [
+          person.accountId,
+        ])
+      ).rows,
+    ).toEqual([{ phase: 'native-consumed' }]);
+  } finally {
+    ports.recordAuthNativeConsumption = submit;
+    await f.close();
+  }
+}, 180_000);

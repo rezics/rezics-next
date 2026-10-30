@@ -1445,6 +1445,12 @@ CREATE TABLE public.auth_copy_work (
     rows integer DEFAULT 0 NOT NULL,
     bytes integer DEFAULT 0 NOT NULL,
     parent_workflow_id text,
+    source_key text,
+    CONSTRAINT auth_copy_work_source_key_check CHECK ((octet_length(source_key) <= 256)),
+    result_digest bytea,
+    result_finished_at timestamp with time zone,
+    CONSTRAINT auth_copy_work_result_digest_check CHECK ((octet_length(result_digest) = 32)),
+    CONSTRAINT auth_copy_result_source CHECK (((result_digest IS NULL) = (result_finished_at IS NULL))),
     CONSTRAINT auth_copy_work_bytes_check CHECK (((bytes >= 0) AND (bytes <= 10485760))),
     CONSTRAINT auth_copy_work_check CHECK (((NOT absent) OR retired)),
     CONSTRAINT auth_copy_work_digest_check CHECK ((octet_length(digest) = 32)),
@@ -1455,6 +1461,22 @@ CREATE TABLE public.auth_copy_work (
     CONSTRAINT auth_copy_work_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
 );
 
+
+
+-- The native result commitment survives removal of all workflow artifacts.
+CREATE FUNCTION public.auth_copy_result_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.retired AND NEW.absent AND NEW.source_key IS NULL AND
+    (NEW.result_digest IS NULL OR NEW.result_digest=decode(repeat('00',32),'hex')) AND
+    NEW.result_finished_at IS NOT DISTINCT FROM OLD.result_finished_at THEN RETURN NEW; END IF;
+  IF NEW.source_key IS DISTINCT FROM OLD.source_key OR (OLD.result_finished_at IS NOT NULL AND
+    (NEW.result_finished_at IS DISTINCT FROM OLD.result_finished_at OR NEW.result_digest IS DISTINCT FROM OLD.result_digest)) THEN
+    RAISE EXCEPTION 'Auth native result commitment is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER auth_copy_result_immutable BEFORE UPDATE ON public.auth_copy_work
+  FOR EACH ROW EXECUTE FUNCTION public.auth_copy_result_immutable();
 
 --
 -- Name: auth_effect_receipt; Type: TABLE; Schema: public; Owner: -

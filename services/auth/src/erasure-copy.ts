@@ -70,6 +70,14 @@ export function createCopyWriter(database: Pool, sdk: DBOSClient) {
     ): Promise<WorkflowHandle<R>> {
       if (!names.includes(name) || roles.length > 16 || !roles.length || Buffer.byteLength(id) > 256)
         throw new Error('Auth copy scope refused');
+      const sourceKey =
+        name === 'accounts.registration'
+          ? (input as { registrationId?: unknown })?.registrationId
+          : name === 'accounts.client-reduction'
+            ? ((input as { operationId?: unknown })?.operationId ?? id)
+            : id;
+      if (typeof sourceKey !== 'string' || !sourceKey || Buffer.byteLength(sourceKey) > 256)
+        throw new Error('Auth native source identity refused');
       const digest = createHash('sha256')
         .update(JSON.stringify([name, input, roles]))
         .digest();
@@ -99,9 +107,9 @@ export function createCopyWriter(database: Pool, sdk: DBOSClient) {
         }
         const existing = (
           await client.query<{ digest: Buffer; retired: boolean }>(
-            `INSERT INTO auth_copy_work(workflow_id,name,digest,parent_workflow_id,scope_count) VALUES($1,$2,$3,$4,$5)
+            `INSERT INTO auth_copy_work(workflow_id,name,digest,parent_workflow_id,scope_count,source_key) VALUES($1,$2,$3,$4,$5,$6)
            ON CONFLICT(workflow_id) DO UPDATE SET workflow_id=EXCLUDED.workflow_id RETURNING digest,retired`,
-            [id, name, digest, parent ?? null, new Set(roles.map((r) => `${r.accountId}:${r.role}`)).size],
+            [id, name, digest, parent ?? null, new Set(roles.map((r) => `${r.accountId}:${r.role}`)).size, sourceKey],
           )
         ).rows[0]!;
         if (existing.retired || !existing.digest.equals(digest)) throw new Error('Auth copy identity refused');
@@ -154,9 +162,102 @@ export function createCopyWriter(database: Pool, sdk: DBOSClient) {
     },
   };
 }
-/** Call only after the workflow's last real native consumer. This result contains no private value. */
-export const completeCopy = (database: Pool, id: string) =>
-  database.query('UPDATE auth_copy_work SET ready=true WHERE workflow_id=$1 AND NOT retired', [id]);
+/** A native return has one closed shape. No exception, credential, approval or
+ * arbitrary JSON becomes a retirement record. Field order is not significant. */
+function resultDigest(value: unknown): Buffer {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Auth native result refused');
+  const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
+  const fields = entries.map(([key]) => key).join(',');
+  if (
+    ![
+      'accountId',
+      'accountId,expired',
+      'accountId,error',
+      'accountId,minimumAuthnEpoch,receiptId,state',
+      'clientId',
+      'clientId,nextWorkflowId',
+    ].includes(fields) ||
+    entries.some(([key, item]) =>
+      key === 'expired'
+        ? item !== true
+        : typeof item !== 'string' || !item || Buffer.byteLength(item) > (key === 'clientId' ? 1024 : 256),
+    ) ||
+    ('error' in value && !['handle_unavailable', 'registration_denied'].includes(String(value.error))) ||
+    ('state' in value && value.state !== 'suspended')
+  )
+    throw new Error('Auth native result refused');
+  return createHash('sha256').update(JSON.stringify(entries)).digest();
+}
+
+/** The executor calls this AFTER its last actual native consumer. Its native
+ * terminal marker and exact result commitment commit together, outside DBOS.
+ * An HTTP result/disclosure is never used to establish producer completion. */
+export async function finishCopyResult(database: Pool, id: string, value: unknown, sourceKey?: string): Promise<void> {
+  if (DBOS.workflowID !== id) throw new Error('Auth native result source missing');
+  const digest = resultDigest(value);
+  await copyTransaction(database, async (client) => {
+    const work = (
+      await client.query<{ name: Name; source_key: string | null; result_digest: Buffer | null }>(
+        'SELECT name,source_key,result_digest FROM auth_copy_work WHERE workflow_id=$1 AND NOT retired FOR UPDATE',
+        [id],
+      )
+    ).rows[0];
+    // Explicit historical hosts in a different store have no local coverage.
+    if (!work) return;
+    if (work.result_digest) {
+      if (!work.result_digest.equals(digest)) throw new Error('Auth native result mismatch');
+      return;
+    }
+    if (!work.source_key || work.source_key !== (sourceKey ?? id)) throw new Error('Auth native result source missing');
+    // Identity is anchored at actual transactional SDK creation. This read is
+    // an identity check, never terminal-status evidence. Only the final native
+    // producer step can transfer its exact remaining return to this consumer.
+    const native = await client.query('SELECT 1 FROM auth_dbos.workflow_status WHERE workflow_uuid=$1 AND name=$2', [
+      id,
+      work.name,
+    ]);
+    if (!native.rowCount) throw new Error('Auth native result source missing');
+    if (work.name === 'accounts.operation')
+      await client.query(
+        'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
+        [id],
+      );
+    await client.query(
+      'UPDATE auth_copy_work SET result_digest=$2,result_finished_at=clock_timestamp() WHERE workflow_id=$1',
+      [id, digest],
+    );
+  });
+}
+
+/** The same bounded native result consumer serves the caller and default
+ * recovery. It consumes the real return, checked against its native producer's
+ * committed result. SUCCESS is only a nonblocking SDK-read guard, never proof.
+ * Unknown/failed/live producers and missing returns remain pending. */
+export async function completeCopy(database: Pool, id: string, value?: unknown): Promise<boolean> {
+  const work = (
+    await database.query<{ ready: boolean; retired: boolean; source_key: string | null; result_digest: Buffer | null }>(
+      'SELECT ready,retired,source_key,result_digest FROM auth_copy_work WHERE workflow_id=$1',
+      [id],
+    )
+  ).rows[0];
+  if (!work || work.retired) return false;
+  if (!work.source_key || !work.result_digest) return false;
+  if (work.ready) return true;
+  if (value === undefined) {
+    const status = await DBOS.getWorkflowStatus(id);
+    if (status?.status !== 'SUCCESS') return false;
+    value = await DBOS.retrieveWorkflow(id).getResult();
+  }
+  const digest = resultDigest(value);
+  if (!work.result_digest.equals(digest)) return false;
+  return !!(
+    await database.query(
+      `UPDATE auth_copy_work SET ready=true WHERE workflow_id=$1 AND NOT retired
+     AND result_digest=$2 AND result_finished_at IS NOT NULL RETURNING workflow_id`,
+      [id, digest],
+    )
+  ).rowCount;
+}
 /** Raw-key probes use the deployed native schema. No payloads or history listing. */
 export async function copiesAbsent(database: Pool, id: string): Promise<boolean> {
   for (const table of COPY_TABLES)
@@ -177,12 +278,29 @@ export async function copiesAbsent(database: Pool, id: string): Promise<boolean>
 export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
   const ready = await copyTransaction(database, async (client) => {
     const row = (
-      await client.query<{ ready: boolean; absent: boolean; rows: number; bytes: number; version: number }>(
-        'SELECT ready,absent,rows,bytes,version FROM auth_copy_work WHERE workflow_id=$1 FOR UPDATE',
+      await client.query<{
+        ready: boolean;
+        absent: boolean;
+        source_key: string | null;
+        result_finished_at: Date | null;
+        rows: number;
+        bytes: number;
+        version: number;
+      }>(
+        'SELECT ready,absent,source_key,result_finished_at,rows,bytes,version FROM auth_copy_work WHERE workflow_id=$1 FOR UPDATE',
         [id],
       )
     ).rows[0];
-    if (!row || !row.ready || row.version !== 1 || row.rows > 139 || row.bytes > 10485760) return false;
+    if (
+      !row ||
+      !row.ready ||
+      !row.result_finished_at ||
+      (!row.source_key && !row.absent) ||
+      row.version !== 1 ||
+      row.rows > 139 ||
+      row.bytes > 10485760
+    )
+      return false;
     const ledger = (
       await client.query<{ kind: string; key: string; bytes: number }>(
         'SELECT kind,key,bytes FROM auth_copy_artifact WHERE workflow_id=$1 ORDER BY kind,key LIMIT 140',
@@ -227,7 +345,7 @@ export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
   await DBOS.deleteWorkflows([id], false);
   if (!(await copiesAbsent(database, id))) return false;
   await database.query(
-    "UPDATE auth_copy_work SET absent=true,digest=decode(repeat('00',32),'hex') WHERE workflow_id=$1 AND retired",
+    "UPDATE auth_copy_work SET absent=true,digest=decode(repeat('00',32),'hex'),source_key=NULL,result_digest=CASE WHEN result_digest IS NOT NULL THEN decode(repeat('00',32),'hex') END WHERE workflow_id=$1 AND retired",
     [id],
   );
   return true;

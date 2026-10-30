@@ -74,6 +74,10 @@ export function createAuthHistoryProofBindings(pool: Pool): Required<AuthErasure
         routeOf(value.accountId),
         value.accountId,
       ]);
+      // Even a lost-reply redrive is anchored to the permanent committed
+      // erasure and terminal account, never solely to a previously stored proof.
+      const root = await barrier(client, value.accountId);
+      if (!root || root.version !== value.version || root.at !== value.at) throw deny();
       const previous = (
         await client.query<{ version: number; at: string; continuation_id: string | null; receipt_id: string | null }>(
           'SELECT version,at::text,continuation_id,receipt_id FROM access.auth_history_proof WHERE route=$1 AND account_id=$2 AND phase=$3',
@@ -102,6 +106,14 @@ export function createAuthHistoryProofBindings(pool: Pool): Required<AuthErasure
         (native && (expected as AuthErasureSource).continuationId !== (value as AuthErasureSource).continuationId)
       )
         throw deny();
+      if (!native) {
+        const consumed = await client.query(
+          `SELECT 1 FROM access.auth_history_proof WHERE route=$1 AND account_id=$2
+           AND phase='native-consumed' AND version=$3 AND at=$4::timestamptz`,
+          [routeOf(value.accountId), value.accountId, value.version, value.at],
+        );
+        if (!consumed.rowCount) throw deny();
+      }
       const phase = native ? 'native-consumed' : 'copies-erased';
       const proof = native ? (value as AuthErasureSource) : null;
       await client.query(
