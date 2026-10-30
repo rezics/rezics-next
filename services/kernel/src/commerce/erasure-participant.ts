@@ -86,8 +86,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
     // Even complete shared coverage would not discharge Commerce's foreign
     // financial-role inventory or its undecided lawful field/expiry policy.
     const blocker =
-      COMMERCE_CUSTODY_BLOCKER +
-      (coverage.state === 'pending' ? `; shared-history: ${coverage.gaps.join(',')}` : '');
+      COMMERCE_CUSTODY_BLOCKER + (coverage.state === 'pending' ? `; shared-history: ${coverage.gaps.join(',')}` : '');
     await runCommand(
       pool,
       {

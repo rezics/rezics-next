@@ -263,9 +263,8 @@ test('the default financial commerce terminal effect acknowledges only native no
   await finish(await event('checkout.session.completed', firstNative.checkoutSessionId!));
   await drainEffects(pool, partitionOf(routeOf(buyer.accountId)!));
   const entitlement = (await entitlementRows(buyer.accountId))[0]!.entitlement_id as string;
-  const second = (
-    await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision })
-  ).order as { id: string };
+  const second = (await accepted(buyer, '/v1/orders', { offerId: offer.id, expectedOfferRevision: offer.revision }))
+    .order as { id: string };
   const secondNative = (await commands.readOrderForAccount(buyer.accountId, second.id))!;
   provider.fake.pay(secondNative.checkoutSessionId!);
   const held = provider.delayRead();

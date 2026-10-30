@@ -28,8 +28,7 @@ export async function declareCommerceCommandHistory(
     return { accountRoute, accountId, roles };
   }
   const accounts = [reference(source.creatorAccountId, ACCOUNT_ROLE_BITS.creator)];
-  if (source.buyerAccountId !== undefined)
-    accounts.push(reference(source.buyerAccountId, ACCOUNT_ROLE_BITS.buyer));
+  if (source.buyerAccountId !== undefined) accounts.push(reference(source.buyerAccountId, ACCOUNT_ROLE_BITS.buyer));
   // Access supplies this physical attempt's actor/principal/human/delegate evidence.
   // Native seller/buyer associations also cover copies on another account's home.
   await declareCommandHistory(tx, kind, {
