@@ -12,10 +12,16 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork, type WorkModule } from '../../src/work/registry.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
+import {
+  createNativeContentSystemWithWriteRateOverrides,
+  type NativeContentSystem,
+} from './support/native-system.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 
 const idempotencyKey = () => randomUUID();
+const writeRateOverrides = JSON.stringify({
+  'new-account': { write: { maximum: 100_000, seconds: 86_400 } },
+});
 const asString = (value: unknown, label: string): string => {
   if (typeof value !== 'string' || value.length === 0) throw new TypeError(`${label} was not returned`);
   return value;
@@ -93,7 +99,7 @@ export type ReactionEventCapture = Readonly<{
  */
 export async function createReactionRelayBase(databaseUrl = process.env.DATABASE_URL): Promise<ReactionRelayBase> {
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  const system = await createNativeContentSystem({ databaseUrl });
+  const system = await createNativeContentSystemWithWriteRateOverrides({ databaseUrl }, writeRateOverrides);
   try {
     const pool = system.database.pool;
     await bootstrapRelease(pool, bundledRelease);
