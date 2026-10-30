@@ -2,10 +2,11 @@ import type { Pool } from 'pg';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { type Access, type AccessFactory } from '../../request/access.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
-export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, { pool, access, tokens }: {
+export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, { pool, access, tokens, routeKey, }: {
     pool: Pool;
     access?: Access | AccessFactory;
     tokens: KeyRing;
+    routeKey: Uint8Array;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{
@@ -67,6 +68,20 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         200: import("typebox").TObject<{
             subject: import("typebox").TOptional<import("typebox").TString>;
             account: import("typebox").TOptional<import("typebox").TString>;
+            context: import("typebox").TOptional<import("typebox").TObject<{
+                id: import("typebox").TString;
+                population: import("typebox").TUnion<[import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"global">;
+                }>, import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"realm">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TString;
+                }>]>;
+            }>>;
+            continuation: import("typebox").TOptional<import("typebox").TObject<{
+                node: import("typebox").TString;
+                cursor: import("typebox").TString;
+            }>>;
             profile: import("typebox").TString;
             template: import("typebox").TObject<{
                 scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
@@ -160,7 +175,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             bearerAuth?: never;
         })[];
     };
-}, {}, "/v1/pages/$read">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ body, request, authorize, admission, job, actor }: {
+}, {}, "/v1/pages/$read">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ body, request, authorize, admission, job, actor, session: requestSession }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -173,6 +188,20 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         200: {
             subject?: string;
             account?: string;
+            context?: {
+                id: string;
+                population: {
+                    kind: "global";
+                } | {
+                    kind: "realm";
+                    id: string;
+                    title: string;
+                };
+            };
+            continuation?: {
+                node: string;
+                cursor: string;
+            };
             profile: string;
             template: {
                 scope: "base" | "generic" | "route" | "type";
@@ -252,6 +281,20 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         200: {
             subject?: string;
             account?: string;
+            context?: {
+                id: string;
+                population: {
+                    kind: "global";
+                } | {
+                    kind: "realm";
+                    id: string;
+                    title: string;
+                };
+            };
+            continuation?: {
+                node: string;
+                cursor: string;
+            };
             profile: string;
             template: {
                 scope: "base" | "generic" | "route" | "type";
@@ -336,6 +379,20 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             200: import("typebox").TObject<{
                 subject: import("typebox").TOptional<import("typebox").TString>;
                 account: import("typebox").TOptional<import("typebox").TString>;
+                context: import("typebox").TOptional<import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    population: import("typebox").TUnion<[import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"global">;
+                    }>, import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"realm">;
+                        id: import("typebox").TString;
+                        title: import("typebox").TString;
+                    }>]>;
+                }>>;
+                continuation: import("typebox").TOptional<import("typebox").TObject<{
+                    node: import("typebox").TString;
+                    cursor: import("typebox").TString;
+                }>>;
                 profile: import("typebox").TString;
                 template: import("typebox").TObject<{
                     scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;
@@ -482,6 +539,20 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
         200: import("typebox").TObject<{
             subject: import("typebox").TOptional<import("typebox").TString>;
             account: import("typebox").TOptional<import("typebox").TString>;
+            context: import("typebox").TOptional<import("typebox").TObject<{
+                id: import("typebox").TString;
+                population: import("typebox").TUnion<[import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"global">;
+                }>, import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"realm">;
+                    id: import("typebox").TString;
+                    title: import("typebox").TString;
+                }>]>;
+            }>>;
+            continuation: import("typebox").TOptional<import("typebox").TObject<{
+                node: import("typebox").TString;
+                cursor: import("typebox").TString;
+            }>>;
             profile: import("typebox").TString;
             template: import("typebox").TObject<{
                 scope: import("typebox").TUnion<[import("typebox").TLiteral<"route">, import("typebox").TLiteral<"type">, import("typebox").TLiteral<"base">, import("typebox").TLiteral<"generic">]>;

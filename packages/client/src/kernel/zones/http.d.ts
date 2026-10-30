@@ -4515,6 +4515,20 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             200: {
                                 subject?: string;
                                 account?: string;
+                                context?: {
+                                    id: string;
+                                    population: {
+                                        kind: "global";
+                                    } | {
+                                        kind: "realm";
+                                        id: string;
+                                        title: string;
+                                    };
+                                };
+                                continuation?: {
+                                    node: string;
+                                    cursor: string;
+                                };
                                 profile: string;
                                 template: {
                                     scope: "base" | "generic" | "route" | "type";

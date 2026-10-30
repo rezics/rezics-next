@@ -84788,6 +84788,73 @@
                     "account": {
                       "type": "string"
                     },
+                    "context": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "global",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "realm",
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "id",
+                                "title"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "population"
+                      ],
+                      "type": "object"
+                    },
+                    "continuation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cursor": {
+                          "type": "string"
+                        },
+                        "node": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "node",
+                        "cursor"
+                      ],
+                      "type": "object"
+                    },
                     "document": {},
                     "profile": {
                       "type": "string"
@@ -85180,6 +85247,7 @@
                     "code": {
                       "enum": [
                         "presentation_not_ready",
+                        "dependency_unavailable",
                         "overloaded",
                         "deadline_exceeded"
                       ],
@@ -85232,6 +85300,7 @@
                       "enum": [
                         true,
                         true,
+                        true,
                         true
                       ],
                       "type": "string"
@@ -85243,6 +85312,7 @@
                     "title": {
                       "enum": [
                         "Presentation Not Ready",
+                        "Dependency Unavailable",
                         "Service Overloaded",
                         "Deadline Exceeded"
                       ],
@@ -85251,6 +85321,7 @@
                     "type": {
                       "enum": [
                         "https://rezics.com/problems/presentation_not_ready",
+                        "https://rezics.com/problems/dependency_unavailable",
                         "https://rezics.com/problems/overloaded",
                         "https://rezics.com/problems/deadline_exceeded"
                       ],
@@ -85270,7 +85341,7 @@
                 }
               }
             },
-            "description": "Presentation not ready; Overloaded; Deadline exceeded"
+            "description": "Presentation not ready; Dependency unavailable; Overloaded; Deadline exceeded"
           }
         },
         "security": [
@@ -196405,6 +196476,73 @@
                   "properties": {
                     "account": {
                       "type": "string"
+                    },
+                    "context": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "population": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "global",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "realm",
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "id",
+                                "title"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "population"
+                      ],
+                      "type": "object"
+                    },
+                    "continuation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cursor": {
+                          "type": "string"
+                        },
+                        "node": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "node",
+                        "cursor"
+                      ],
+                      "type": "object"
                     },
                     "document": {},
                     "profile": {

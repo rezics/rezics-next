@@ -327,7 +327,7 @@ const readSubject: ComponentRead = (_props, page) =>
 
 /**
  * The inverse links of the page subject for one property. Appearances and credits share it with `RelationGroups`; a
- * component that reads `direction: 'forward'` takes the statements the subject itself holds from the subject read.
+ * component with `direction: 'forward'` uses the separate native outbound relation stream.
  */
 const linkProps = {
   property: curie(),
