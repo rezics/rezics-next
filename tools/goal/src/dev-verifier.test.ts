@@ -23,6 +23,8 @@ function repo() {
   git(root, 'config', 'user.name', 'Test');
   mkdirSync(join(root, 'services', 'kernel'), { recursive: true });
   writeFileSync(join(root, 'services', 'kernel', 'base.ts'), 'export const base = true;\n');
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  writeFileSync(join(root, 'scripts', 'typecheck.ts'), 'process.exit(0);\n');
   git(root, 'add', '.');
   git(root, 'commit', '-m', 'base');
   git(root, 'branch', 'dev');
@@ -40,8 +42,8 @@ function commit(root: string, path: string, content: string, message: string): s
 function setup(root: string, tasks: Task[] = []) {
   const stateDirectory = join(root, '.state'),
     worktreeRoot = join(root, '.trees');
-  mkdirSync(stateDirectory);
-  mkdirSync(worktreeRoot);
+  mkdirSync(stateDirectory, { recursive: true });
+  mkdirSync(worktreeRoot, { recursive: true });
   const updates: string[] = [];
   const store = {
     tasks: () => tasks,
@@ -113,6 +115,8 @@ test('passes all work since dev-verified once and advances the ref to the captur
   expect(commands).toContain('acceptance task-two');
   expect(devVerificationState(root).behind).toBe(0);
 });
+
+import './dev-verifier-ownership.test.ts';
 
 test('failure bisects workspace suspects, reverts only the culprit, returns its task with the log, and advances verified', async () => {
   const root = repo(),

@@ -13,6 +13,7 @@ import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { IntegrationTarget, Task } from './types.ts';
 import { WorkerStore } from './store.ts';
+import { assertManagerLandingEvidence } from './manager-landing.ts';
 import {
   WorkspaceController,
   isAncestor as workspaceAncestor,
@@ -1220,6 +1221,7 @@ export class MergeTrain {
 
   private canBatch(entry: LandingEntry): boolean {
     const o = this.options;
+    if (entry.request.managerLanding) return false;
     if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
     if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
     const recorded = taskIntegrationTarget(o.stateDirectory, entry.request.taskId);
@@ -1949,6 +1951,18 @@ export class MergeTrain {
     let added = false;
     const runGate = o.runGate ?? gateRunner();
     const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
+    const refreshManagerLanding = () => {
+      if (request.managerLanding) return;
+      const row = o.queue.db.query('SELECT request FROM landing_queue WHERE id=?').get(entry.id) as
+        | { request: string }
+        | null;
+      if (!row) return;
+      const latest = JSON.parse(row.request) as LandingRequest;
+      if (!latest.managerLanding) return;
+      if (!(o.fence instanceof WorkerStore)) throw new Error('Manager landing requires the worker outcome store');
+      Object.assign(request, latest);
+      assertManagerLandingEvidence(request, o.fence);
+    };
     const recoverAlreadyIntegrated = async (): Promise<boolean> => {
       if (!entry.candidate) return false;
       try {
@@ -1978,6 +1992,10 @@ export class MergeTrain {
     };
     try {
       o.fence.assertCurrent(request);
+      if (request.managerLanding) {
+        if (!(o.fence instanceof WorkerStore)) throw new Error('Manager landing requires the worker outcome store');
+        assertManagerLandingEvidence(request, o.fence, { allowIntegrated: true });
+      }
       if (git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
       if (await recoverAlreadyIntegrated()) return finish();
@@ -2326,6 +2344,7 @@ export class MergeTrain {
           result.stage = 'gate';
           return finish();
         }
+        refreshManagerLanding();
         if (controlPlane) {
           stage = 'gate';
           appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${base}\n`);
@@ -2512,6 +2531,14 @@ export class MergeTrain {
           stage = 'gate';
           let failed = false;
           for (const task of sharedTasks) {
+            refreshManagerLanding();
+            if (request.managerLanding && task.id === request.taskId) {
+              appendFileSync(
+                logPath,
+                `Retained worker acceptance for ${task.id} attempt ${request.attempt} at ${request.managerLanding.acceptedCommit}: ${request.managerLanding.acceptanceCommand.join(' ')}\n`,
+              );
+              continue;
+            }
             appendFileSync(
               logPath,
               `Shared workspace acceptance for ${task.id}: ${task.brief.acceptance.command.join(' ')}\n`,
@@ -2537,39 +2564,47 @@ export class MergeTrain {
         }
         if ((!controlPlane || integratesIntoDev) && !workspace && !skipDevChecks) {
           stage = 'gate';
-          appendFileSync(
-            logPath,
-            `\nAcceptance on ${candidate}, ${integratesIntoDev ? 'dev' : 'main'} ${base}: ${request.gate.join(' ')}\n`,
-          );
-          const gated = await runGate(request.gate, trainTree, logPath);
-          assertCandidate(trainTree, candidate, 'acceptance', logPath);
-          // A gate on an old target is never authoritative, including a red gate.
-          o.fence.assertCurrent(request);
-          if (target() !== base) continue;
-          if (!gated.passed) {
-            result.timedOut = gated.timedOut;
-            result.firstFailure = firstFailure(gated.output);
-            result.failedCommand = [...request.gate];
-            const key = `acceptance:${JSON.stringify([o.gateIdentity ?? '', request.gate])}`;
-            let baseline = o.queue.baseline(base, key);
-            if (!baseline) {
-              git(trainTree, 'reset', '--hard', base);
-              git(trainTree, 'clean', '-fdx');
-              baseline = await runGate(request.gate, trainTree, logPath);
-              assertCandidate(trainTree, base, 'acceptance baseline', logPath);
-              o.queue.saveBaseline(base, key, baseline);
-            }
+          refreshManagerLanding();
+          if (request.managerLanding) {
+            appendFileSync(
+              logPath,
+              `Retained worker acceptance for ${request.taskId} attempt ${request.attempt} at ${request.managerLanding.acceptedCommit}: ${request.managerLanding.acceptanceCommand.join(' ')}\n`,
+            );
+          } else {
+            appendFileSync(
+              logPath,
+              `\nAcceptance on ${candidate}, ${integratesIntoDev ? 'dev' : 'main'} ${base}: ${request.gate.join(' ')}\n`,
+            );
+            const gated = await runGate(request.gate, trainTree, logPath);
+            assertCandidate(trainTree, candidate, 'acceptance', logPath);
+            // A gate on an old target is never authoritative, including a red gate.
             o.fence.assertCurrent(request);
             if (target() !== base) continue;
-            result.failsOnMain =
-              !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
-            if (result.failsOnMain)
-              appendFileSync(
-                logPath,
-                `${integratesIntoDev ? 'Acceptance failure is pre-existing on dev' : 'Acceptance failure is pre-existing on main'}\n`,
-              );
-            result.stage = stage;
-            return finish();
+            if (!gated.passed) {
+              result.timedOut = gated.timedOut;
+              result.firstFailure = firstFailure(gated.output);
+              result.failedCommand = [...request.gate];
+              const key = `acceptance:${JSON.stringify([o.gateIdentity ?? '', request.gate])}`;
+              let baseline = o.queue.baseline(base, key);
+              if (!baseline) {
+                git(trainTree, 'reset', '--hard', base);
+                git(trainTree, 'clean', '-fdx');
+                baseline = await runGate(request.gate, trainTree, logPath);
+                assertCandidate(trainTree, base, 'acceptance baseline', logPath);
+                o.queue.saveBaseline(base, key, baseline);
+              }
+              o.fence.assertCurrent(request);
+              if (target() !== base) continue;
+              result.failsOnMain =
+                !baseline.passed && firstFailure(baseline.output).fingerprint === result.firstFailure.fingerprint;
+              if (result.failsOnMain)
+                appendFileSync(
+                  logPath,
+                  `${integratesIntoDev ? 'Acceptance failure is pre-existing on dev' : 'Acceptance failure is pre-existing on main'}\n`,
+                );
+              result.stage = stage;
+              return finish();
+            }
           }
         }
         stage = 'merge';

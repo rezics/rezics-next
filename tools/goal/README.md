@@ -676,6 +676,24 @@ The host listens before it resumes persisted managers, and recovers managers ind
 cannot prevent another manager from using the socket. Commands from a recorded manager session store a deduplicated
 decision against its active turn in local SQLite; turn accounting uses that durable record without a manager socket
 round trip.
+An authenticated Goal manager can run `land <task>` for a task it owns once the current worker attempt has settled as
+`landing`. This readiness state requires the current attempt to have exited successfully, reported success without a
+blocker, and retained its `pending-gate` record; the branch must contain committed work and have a clean worktree.
+`ready` means work is available to start or retry, not that it has passed worker acceptance. The command records the
+accepted branch commit and the exact acceptance command from the task brief, upgrades that attempt's existing durable
+queue request, then hands the ordinary train to the controller. A foreign manager, a worker process, an old attempt,
+or caller-supplied evidence is refused. Repeating the command after authorization or integration does not enqueue or
+handoff again. In manager context, worker settlement records the ordinary queue request without starting the train; the
+manager's `land` command authorizes that same request and hands it to the controller. The manager does not run gates or
+merge Git refs itself.
+
+The train keeps its current-attempt fence, source ref and commit checks, scope and protected-path validation, candidate
+attribution, lineage checks, target compare-and-swap, and durable outcome record. It retains the original worker
+acceptance evidence instead of scheduling that same task acceptance again before integration. The post-integration
+development verifier still runs acceptance on its captured `dev` head, alongside typecheck and affected checks; that
+verification is recorded separately from the worker's original acceptance. A control-plane task still runs the full
+mandatory control-plane lifecycle checks on its `main` candidate before the controller advances `main`; promotion
+continues to consume its verified input through the existing promotion gate.
 
 ### Development verification
 
@@ -687,10 +705,14 @@ verified ref as their base, and promotion cuts stabilize candidates from it. `st
 how many landings `dev` is ahead, and whether verification is pending, running or current.
 
 When a check fails, the verifier narrows suspects by the failing command's workspace closure and bisects only those
-landings. It reverts each culprit's changes in one commit, returns the task to its manager with the failing log, and
-advances the verified ref past the culprits. The worker can retry from that verified base. Infrastructure failures
-rerun only the failed command, up to twice, and do not revert a landing. This moves expensive checks after integration
-and lets a batch share them while keeping unstable `dev` separate from promotion's verified input.
+landings. For an affected-check failure after a conflict resolution, it attributes the failing integrated resolution
+commit to that resolution task's original manager, even if an earlier owner's source commit passes the check. It reverts
+only the culprit's integrated changes in one commit, returns the task to its manager with the exact failing log, and
+keeps the worker's source branch available for the owner's fix. It then advances the verified ref past the culprit so
+the fix can start from that verified base. A transport or other recognized infrastructure failure during a culprit
+probe is retried up to twice and remains unassigned if it still cannot run; it is not treated as an assertion. This
+moves expensive checks after integration and lets a batch share them while keeping unstable `dev` separate from
+promotion's verified input.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to write
 `.temp/goal/<manager>/CONTINUATION.md` with live task IDs and states, current decisions, pending cross-owner agreements

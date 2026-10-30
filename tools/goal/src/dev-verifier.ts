@@ -10,6 +10,7 @@ import { gateRunner, git, type GateRunner } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { recordFlow } from './flow.ts';
 import type { Database } from 'bun:sqlite';
+import { CHECK_HOST_TRANSPORT } from './records.ts';
 
 const ref = (branch: string) => `refs/heads/${branch}`;
 const verifiedBranch = 'dev-verified';
@@ -96,6 +97,7 @@ function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, bas
 function infraFailure(output: string, timedOut: boolean): boolean {
   return (
     timedOut ||
+    CHECK_HOST_TRANSPORT.test(output) ||
     /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(
       output,
     )
@@ -226,7 +228,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
       let low = 0,
         high = boundaries.length - 1;
       const cache = new Map<number, boolean>();
-      const probe = async (index: number) => {
+      const probe = async (index: number): Promise<boolean | null> => {
         if (cache.has(index)) return cache.get(index)!;
         const prefix = boundaries[index]!.commit;
         const probeTree = join(settings.worktreeRoot, `dev-verify-probe-${randomUUID()}`);
@@ -235,7 +237,10 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
           if (!installDependencies(probeTree, settings.stateDirectory))
             throw new Error('Could not install verifier dependencies for a culprit probe');
           const log = join(settings.stateDirectory, `dev-verify-probe-${randomUUID()}.log`);
-          const outcome = await run(failed!.check.command, probeTree, log);
+          let outcome = await run(failed!.check.command, probeTree, log);
+          for (let retry = 0; retry < 2 && !outcome.passed && infraFailure(outcome.output, outcome.timedOut); retry++)
+            outcome = await run(failed!.check.command, probeTree, log);
+          if (!outcome.passed && infraFailure(outcome.output, outcome.timedOut)) return null;
           cache.set(index, outcome.passed);
           return outcome.passed;
         } finally {
@@ -244,7 +249,9 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
       };
       while (low < high) {
         const mid = Math.floor((low + high) / 2);
-        if (await probe(mid)) low = mid + 1;
+        const passed = await probe(mid);
+        if (passed === null) return;
+        if (passed) low = mid + 1;
         else high = mid;
       }
       const culprit = boundaries[high]!.task;
