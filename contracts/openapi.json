@@ -1946,7 +1946,10 @@
                             ]
                           },
                           "curatorAccountId": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "description": {
                             "type": [
@@ -22259,7 +22262,10 @@
             "name": "curatorAccountId",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -22493,7 +22499,10 @@
                             ]
                           },
                           "curatorAccountId": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "description": {
                             "type": [
@@ -23469,7 +23478,10 @@
                           "type": "string"
                         },
                         "curatorAccountId": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "description": {
                           "type": [
@@ -25153,7 +25165,10 @@
                           ]
                         },
                         "curatorAccountId": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "description": {
                           "type": [
@@ -26132,7 +26147,10 @@
                           "type": "string"
                         },
                         "curatorAccountId": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "description": {
                           "type": [
@@ -56609,7 +56627,10 @@
                                 "type": "string"
                               },
                               "curatorAccountId": {
-                                "type": "string"
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "description": {
                                 "type": [
@@ -144609,7 +144630,10 @@
                             ]
                           },
                           "curatorAccountId": {
-                            "type": "string"
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "id": {
                             "type": "string"

@@ -1028,6 +1028,11 @@ declare const productEventTypes: {
     readonly 'com.rezics.content.report.evidence-erased.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
+    readonly 'com.rezics.library.account-graph.purged.v1': Type.TObject<{
+        accountId: Type.TString;
+        kind: Type.TString;
+        removed: Type.TInteger;
+    }>;
     readonly 'com.rezics.library.pin.updated.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;

@@ -13,7 +13,7 @@ type Dependencies = {
 };
 export declare const collectionSchema: import("typebox").TObject<{
     id: import("typebox").TString;
-    curatorAccountId: import("typebox").TString;
+    curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     title: import("typebox").TString;
     description: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     visibility: import("typebox").TUnion<[import("typebox").TLiteral<"private">, import("typebox").TLiteral<"unlisted">, import("typebox").TLiteral<"public">]>;
@@ -4031,7 +4031,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             cover: import("../semantic/summaries.ts").CoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
-                            curatorAccountId: string;
+                            curatorAccountId: string | null;
                             title: string;
                             description: string | null;
                             visibility: import("./collection-model.ts").CollectionVisibility;
@@ -4045,7 +4045,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             cover: import("../semantic/summaries.ts").CoverSummary | null;
                             coverSource: 'owner' | 'member' | 'none' | 'pending';
                             id: string;
-                            curatorAccountId: string;
+                            curatorAccountId: string | null;
                             title: string;
                             description: string | null;
                             visibility: import("./collection-model.ts").CollectionVisibility;
@@ -4059,7 +4059,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     201: {
                         collection: {
                             id: string;
-                            curatorAccountId: string;
+                            curatorAccountId: string | null;
                             title: string;
                             description: string | null;
                             visibility: "private" | "public" | "unlisted";
@@ -4212,7 +4212,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     view?: "BASIC" | "FULL";
                     cursor?: string;
                     limit?: string | number;
-                    curatorAccountId: string;
+                    curatorAccountId: string | null;
                 };
                 headers: unknown;
                 response: {
@@ -4224,7 +4224,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 displayName: string | null;
                             } | null;
                             id: string;
-                            curatorAccountId: string;
+                            curatorAccountId: string | null;
                             title: string;
                             description: string | null;
                             visibility: "private" | "public" | "unlisted";
@@ -4393,7 +4393,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                         displayName: string | null;
                                     } | null;
                                     id: string;
-                                    curatorAccountId: string;
+                                    curatorAccountId: string | null;
                                     title: string;
                                     description: string | null;
                                     visibility: "private" | "public" | "unlisted";
@@ -4561,7 +4561,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     displayName: string | null;
                                 } | null;
                                 id: string;
-                                curatorAccountId: string;
+                                curatorAccountId: string | null;
                                 title: string;
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
@@ -4729,7 +4729,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         200: {
                             collection: {
                                 id: string;
-                                curatorAccountId: string;
+                                curatorAccountId: string | null;
                                 title: string;
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
@@ -5972,7 +5972,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             collections: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
-                curatorAccountId: import("typebox").TString;
+                curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 title: import("typebox").TString;
                 multiplicity: import("typebox").TInteger;
             } & {
@@ -6128,7 +6128,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     displayName: string | null;
                 } | null;
                 id: string;
-                curatorAccountId: string;
+                curatorAccountId: string | null;
                 title: string;
                 multiplicity: number;
             }[];
@@ -6246,7 +6246,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                     displayName: string | null;
                 } | null;
                 id: string;
-                curatorAccountId: string;
+                curatorAccountId: string | null;
                 title: string;
                 multiplicity: number;
             }[];
@@ -6368,7 +6368,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                 next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 collections: import("typebox").TArray<import("typebox").TObject<{
                     id: import("typebox").TString;
-                    curatorAccountId: import("typebox").TString;
+                    curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     title: import("typebox").TString;
                     multiplicity: import("typebox").TInteger;
                 } & {
@@ -6454,16 +6454,10 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
 }) => Promise<{
     collections: ({
         id: string;
-        curatorAccountId: string;
+        curatorAccountId: string | null;
         title: string;
         multiplicity: number;
-    } & object & {
-        curator?: {
-            id: string;
-            handle: string | null;
-            displayName: string | null;
-        } | null;
-    })[];
+    } & object)[];
     count: {
         value: number;
         exact: true;
@@ -6585,7 +6579,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
             collections: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
-                curatorAccountId: import("typebox").TString;
+                curatorAccountId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 title: import("typebox").TString;
                 multiplicity: import("typebox").TInteger;
             } & {

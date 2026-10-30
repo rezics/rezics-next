@@ -3832,7 +3832,7 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                             collectionId: string;
                             target: {
                                 id: string;
-                                curatorAccountId: string;
+                                curatorAccountId: string | null;
                                 title: string;
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";

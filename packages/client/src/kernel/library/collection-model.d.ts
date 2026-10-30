@@ -4,7 +4,7 @@ export type CollectionState = 'active' | 'deleted';
 export type CollectionRow = {
     route: number;
     collectionId: string;
-    curatorAccountId: string;
+    curatorAccountId: string | null;
     title: string;
     description: string | null;
     visibility: CollectionVisibility;
