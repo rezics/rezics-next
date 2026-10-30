@@ -153,6 +153,7 @@ export async function readAuthNativeConsumption(pool: Pool, expected: AuthErasur
   return (
     (
       await proofRead.run(
+        pool,
         {
           route: routeOf(expected.accountId)!,
           account_id: expected.accountId,
@@ -162,9 +163,8 @@ export async function readAuthNativeConsumption(pool: Pool, expected: AuthErasur
           continuation_id: expected.continuationId,
           receipt_id: expected.receiptId,
         },
-        pool,
       )
-    ).length === 1
+    ) !== null
   );
 }
 
@@ -174,6 +174,7 @@ export async function readAuthHistoryCompletion(pool: Pool, expected: AuthErasur
   return (
     (
       await proofRead.run(
+        pool,
         {
           route: routeOf(expected.accountId)!,
           account_id: expected.accountId,
@@ -183,8 +184,7 @@ export async function readAuthHistoryCompletion(pool: Pool, expected: AuthErasur
           continuation_id: null,
           receipt_id: null,
         },
-        pool,
       )
-    ).length === 1
+    ) !== null
   );
 }

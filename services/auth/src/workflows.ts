@@ -1554,7 +1554,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         // Older explicit isolated-store hosts retain their original SDK API.
         // They have no Auth-local custody cut and can never publish this proof.
         copyWriter = {
-          async enqueue<R>(name, id, input) {
+          async enqueue<R>(name: Parameters<ReturnType<typeof createCopyWriter>['enqueue']>[0], id: string, input: unknown) {
             const definition =
               name === 'accounts.registration'
                 ? registration
