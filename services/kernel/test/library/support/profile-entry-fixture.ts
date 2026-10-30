@@ -138,9 +138,16 @@ export async function createProfileEntryFixture(
         typeof proof === 'object' && proof !== null ? (proofs.get(proof) ?? null) : null,
       recoveryEvidence: async () => null,
     });
-    async function identity(scopes: readonly string[]) {
-      const key = entryKey();
-      const accountId = lifecycle.registrationTarget(key);
+    async function identity(scopes: readonly string[], partition?: number) {
+      if (partition !== undefined && (!Number.isInteger(partition) || partition < 0 || partition >= 4096))
+        throw new RangeError('Identity partition must be between 0 and 4095');
+      // Select the registration request key, never forge or rewrite the producer's account ID.
+      let key = entryKey();
+      let accountId = lifecycle.registrationTarget(key);
+      while (partition !== undefined && partitionOf(routeOf(accountId)!) !== partition) {
+        key = entryKey();
+        accountId = lifecycle.registrationTarget(key);
+      }
       partitions.add(partitionOf(routeOf(accountId)!));
       const handle = `profile_${key.replaceAll('-', '')}`;
       const reservation = await lifecycle.reserveHandle({ accountId, handle, key });

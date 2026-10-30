@@ -7,7 +7,7 @@ import type { Entry } from '../../../src/library/entry-model.ts';
 import { prepareEntryRestoration } from '../../../src/library/entry-restore-preparation.ts';
 import type { Actor } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
-import { routeOf } from '../../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import {
   capture,
   catalogStatementBound,
@@ -88,6 +88,16 @@ export async function runEntryUndoGrowth(
         },
         key,
       );
+    const ownerPartition = partitionOf(routeOf(owner().accountId)!);
+    // These narrow, partition-local relations need a realistic native floor before plan assertions.
+    // Uniformly random registrations leave each of 4096 partitions nearly empty, even at the largest scale.
+    const ownerNoiseSubject = await native.createSubject('game', 'Unrelated owner population');
+    for (let n = 0; n < 1024; n++) {
+      if (n % 16 === 0) await renew();
+      const unrelated = await native.identity(scopes, ownerPartition);
+      await put(ownerNoiseSubject, unrelated.actor);
+    }
+    await renew();
     const target = await native.createSubject('game');
     let fresh = await put(target);
     let deletion = await clear(fresh);
@@ -269,13 +279,18 @@ export async function runEntryUndoGrowth(
           });
           expect(created.status).toBe(201);
           const subjectId = (await created.json()).subject.id as string;
-          const unrelated = await native.identity(scopes);
+          const unrelated = await native.identity(scopes, ownerPartition);
           await put(subjectId, unrelated.actor);
           await clear(await put(subjectId));
           await put(subjectId);
           const release = structuredClone(native.original);
           release.catalogue.version = `undo-${slice}-${n}`;
           expect((await native.send('steward', 'POST', '/v1/definitions/releases', { release })).status).toBe(201);
+          // Real unrelated openings keep the temporal-index population independent of the three target windows.
+          let suffix = '';
+          for (let value = n + 1; value > 0; value = Math.floor((value - 1) / 26))
+            suffix = String.fromCharCode(97 + ((value - 1) % 26)) + suffix;
+          expect((await native.send('steward', 'POST', `/v1/platform/exposure/undo_${suffix}:open`)).status).toBe(200);
         }
         await native.activate(native.replacementDigest);
         await native.setLibraryOpen(false);
@@ -312,7 +327,7 @@ export async function runEntryUndoGrowth(
         'library.owner_write_counter',
         'library.fact_source_head',
       ])
-        expect(sample.cost.relations[relation]?.sequentialScans ?? 0).toBe(0);
+        expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at scale ${sample.scale}`).toBe(0);
     }
     // Native capture includes physical rows*loops/removals and all instrumented pools, not just returned DTOs.
     const proof = await capture(
