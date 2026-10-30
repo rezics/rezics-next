@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -46,9 +46,6 @@ function member(path: string, bytes: Uint8Array) {
 }
 function archive(successor = false, extra?: string) {
   const parts: Uint8Array[] = [];
-  // Ignored zero bytes move the title table across a real descriptor read boundary.
-  // They contain neither post text nor executable SQL.
-  parts.push(member('padding', new Uint8Array(DEFAULT_DUMP_CHUNK_BYTES - 2048)));
   for (const name of ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.header', 'entry_meta']) {
     let text = fixture(`vndb-tables/db/${name}`);
     if (successor && name === 'vn_titles') text = text.replace('Sentinel Harbor', 'Successor Harbor');
@@ -241,7 +238,26 @@ export async function runCliFileAdmissionJourney() {
     }
     async function invoke(source: SourceId, label: string, bytes: Uint8Array) {
       const dump = join(directory!, `${source}.dump`);
-      await writeFile(dump, bytes, { mode: 0o600 });
+      // Schedule real short descriptor reads by extending the owned tmpfs file
+      // only after its current prefix has actually been read. No filesystem or
+      // parser implementation is replaced; the CLI still opens and reads once.
+      const boundaries =
+        source === 'vndb'
+          ? [
+              ...new Set(
+                [
+                  511,
+                  514,
+                  Buffer.from(bytes).indexOf(encoder.encode('港')) + 1,
+                  bytes.length - 513,
+                  bytes.length,
+                ].filter((end) => end > 0 && end <= bytes.length),
+              ),
+            ].sort((a, b) => a - b)
+          : [bytes.length];
+      let written = boundaries.shift()!;
+      let consumed = 0;
+      await writeFile(dump, bytes.subarray(0, written), { mode: 0o600 });
       const start = exchanges.length,
         authStart = authRequests.length;
       const seals: { complete: boolean; result: Seal }[] = [];
@@ -280,9 +296,15 @@ export async function runCliFileAdmissionJourney() {
               expect(kind).toBe('dump');
               passes++;
             },
-            onInputChunk(_kind, bytes, backing) {
-              chunks.push({ bytes, backing });
-              expect(backing).toBe(bytes);
+            onInputChunk(_kind, size, backing) {
+              chunks.push({ bytes: size, backing });
+              expect(backing).toBe(size);
+              consumed += size;
+              if (consumed === written && boundaries.length) {
+                const end = boundaries.shift()!;
+                appendFileSync(dump, bytes.subarray(written, end));
+                written = end;
+              }
             },
             onAccountKey(path, observation) {
               expect(path).toBe(keyPath);
@@ -487,6 +509,22 @@ export async function runCliFileAdmissionJourney() {
         null,
         2,
       ),
+    );
+    console.info(
+      'Native file admission evidence',
+      JSON.stringify({
+        path: evidencePath,
+        bundle: { release: bundledRelease.catalogue, digest: bundledDigest },
+        sources: results.map((result) => ({
+          source: result.source,
+          initial: result.initial.code,
+          rejected: result.rejected.map((rejected) => rejected.code),
+          successor: result.acceptedSuccessor.code,
+          registrations: result.initial.registrations,
+          receipts: result.nativeReceiptRows.map((receipt) => receipt.anchor),
+        })),
+        worker: await runtime.mediaBoundary.capture(),
+      }),
     );
     return { sources: results, userPostOrDumpSqlEffects, close };
   } catch (error) {

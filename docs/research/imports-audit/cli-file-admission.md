@@ -13,11 +13,14 @@ same state, then imports a changed valid successor. Scalar controls cover
 malformed syntax, truncation, duplicate record identities and an oversized
 record using the exported default cap. VNDB uses real ustar bytes and pinned
 native table headers, with truncated framing, an unsafe member path and a
-duplicate table member. Ignored archive padding is synthetic zero data, with
-no post bodies or SQL. Scalar whitespace positions a four-byte UTF-8 scalar
-across the actual descriptor chunk boundary without another read or pre-parser.
-Archive payloads cross descriptor boundaries; ustar's 512-byte framing remains
-naturally aligned with the production 256 KiB descriptor reads.
+duplicate table member. No post bodies or SQL are supplied. Scalar whitespace
+positions a four-byte UTF-8 scalar across the actual descriptor chunk boundary.
+For VNDB, the observer schedules appending the next supplied prefix to the owned
+tmpfs file after the prior prefix has actually been read. These real short reads
+split a ustar header after byte 511, the native column header after `id`, a
+multibyte title scalar and the zero terminators. The source is fully acquired,
+validated and sealed before Auth or public effects. There is no filesystem shim,
+pre-parser, injected entry iterator or second input pass.
 
 Observations include actual CLI exit/handle counts, input passes and chunk
 sizes, seal outcomes, converter/decoder module paths, persisted source records
@@ -41,7 +44,9 @@ The focused native command is:
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-file-admission.test.ts
 ```
 
-The managed log owns the check result. The fixture writes credential-free raw
+The managed log owns the check result and contains a bounded index of actual
+source/converter/bundle revisions, receipt anchors and worker observations.
+The fixture writes credential-free raw
 observations to `.temp/cli-file-admission.json` on the check host, including bundle
 identity/digest, exact command/receipt keys, source/converter revisions and the
 scheduled input hashes. It writes after every returned CLI call, including a
