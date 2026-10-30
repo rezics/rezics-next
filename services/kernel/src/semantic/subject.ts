@@ -25,7 +25,9 @@ import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
-import { fencedIds } from './fences.ts';
+import { fencedIds, readAnchoredFences } from './fences.ts';
+import { checkMediaObject } from '../content/cover-reference.ts';
+import { tupleRoute } from '../content/imported-contract.ts';
 import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';
 import { rejectBulkContent, rejectContent } from './rules.ts';
@@ -579,22 +581,36 @@ export async function readSubject(
   if (!snapshot) return null;
   const { rows, component, release, layerDigest, statementFacts, resolution, relationCounts } = snapshot;
   const dataTypes = factDataTypes(release, [...asFacts(rows), ...statementFacts]);
+  const summary = active
+    ? ((
+        await readSubjectSummaries(
+          {
+            client: { query: pool.query.bind(pool) },
+            pool,
+            release: active.release,
+            authorize: summaries.authorize ?? (async (_connection, subject) => subject === id),
+          },
+          [id],
+          { languages: summaries.languages ?? [] },
+        )
+      ).get(id) ?? null)
+    : null;
+  // The display projection is independent of the fenced statement view. Recheck
+  // its selected media's exact source home before disclosing the cover metadata.
+  if (summary?.cover && routeKey) {
+    const media = await checkMediaObject({ query: pool.query.bind(pool) }, summary.cover.media, 'cover');
+    if (!media) summary.cover = null;
+    else {
+      const { source, external_id, field_group } = media.source;
+      const tuple = { route: tupleRoute(routeKey, source, external_id), source, external_id, field_group };
+      const [fence] = await readAnchoredFences(pool, partitionOf(tuple.route), [tuple]);
+      if (!fence || fence.takenDown) summary.cover = null;
+    }
+    requireAccessDeadline(deadline);
+  }
   return {
     account: rows[0]!.account === null ? null : { id: rows[0]!.account },
-    summary: active
-      ? ((
-          await readSubjectSummaries(
-            {
-              client: { query: pool.query.bind(pool) },
-              pool,
-              release: active.release,
-              authorize: summaries.authorize ?? (async (_connection, subject) => subject === id),
-            },
-            [id],
-            { languages: summaries.languages ?? [] },
-          )
-        ).get(id) ?? null)
-      : null,
+    summary,
     subject: resolveItem(id, [...asFacts(rows), ...statementFacts], rows[0]!.type, dataTypes, {
       revision: rows[0]!.revision,
       release: layerDigest,
