@@ -722,7 +722,8 @@ export class WorkerStore implements AttemptFence {
         throw new Error('task identity cannot be updated');
       // A held contract is its own delivery generation. A worker or check that was already in flight may settle,
       // but its old contract cannot move the task out of held and publish a landing request.
-      if (previousState === 'held' && task.state !== 'held') throw new StaleAttemptError(ref, task.currentAttempt);
+      if (ref.attempt > 0 && previousState === 'held' && task.state !== 'held')
+        throw new StaleAttemptError(ref, task.currentAttempt);
       this.saveTask(task);
       if (previousState !== task.state && task.state === 'running')
         recordFlow(this.db, {
@@ -809,10 +810,7 @@ export class WorkerStore implements AttemptFence {
           ['ready', 'stopped', 'held'].includes(task.state) ||
           (['running', 'landing'].includes(task.state) && attempt?.state === 'exited');
         if (
-          (attempt &&
-            !reshapingHeld &&
-            !['stopped', 'exited'].includes(attempt.state) &&
-            !abandonAttempt) ||
+          (attempt && !reshapingHeld && !['stopped', 'exited'].includes(attempt.state) && !abandonAttempt) ||
           !holdableTaskState
         )
           throw new Error(

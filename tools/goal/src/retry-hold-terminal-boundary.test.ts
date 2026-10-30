@@ -247,18 +247,16 @@ test('CLI reshape of a held task preserves every attempt and retry-intent state 
           .run(JSON.stringify(attempt), ref.taskId, ref.attempt);
         fixtureDb.query('DELETE FROM worker_retry_intents WHERE task_id=? AND attempt=?').run(ref.taskId, ref.attempt);
         if (intentState) {
-          fixtureDb
-            .query('INSERT INTO worker_retry_intents VALUES (?,?,?)')
-            .run(
-              ref.taskId,
-              ref.attempt,
-              JSON.stringify({
-                ...ref,
-                options: { evidence: 'preserved-evidence', escalation: 'environment' },
-                status: intentState,
-                nextAttempt: 8,
-              }),
-            );
+          fixtureDb.query('INSERT INTO worker_retry_intents VALUES (?,?,?)').run(
+            ref.taskId,
+            ref.attempt,
+            JSON.stringify({
+              ...ref,
+              options: { evidence: 'preserved-evidence', escalation: 'environment' },
+              status: intentState,
+              nextAttempt: 8,
+            }),
+          );
         }
 
         const amendedText = `${markdown
@@ -404,7 +402,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     });
     const amendedText = target.brief.markdown
       .replace('after: []', `after: [${dependency.id}]`)
-      .replace('Write the requested result and commit it.', 'Use the integrated dependency before completing this task.')
+      .replace(
+        'Write the requested result and commit it.',
+        'Use the integrated dependency before completing this task.',
+      )
       .concat('\nAmended while the old worker is active.\n');
     expect(amendedText.match(/^after:/gm)).toHaveLength(1);
     expect(parseBrief(amendedText, readRiskOwnership(h.settings.riskAreasFile)).after).toEqual([dependency.id]);
@@ -419,7 +420,11 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         print() {},
       }),
     ).toBe(0);
-    expect(h.store.task(target.id)).toMatchObject({ state: 'held', currentAttempt: 1, brief: { markdown: amendedText } });
+    expect(h.store.task(target.id)).toMatchObject({
+      state: 'held',
+      currentAttempt: 1,
+      brief: { markdown: amendedText },
+    });
     expect(h.store.attempt(ref).state).toBe('running');
     expect(h.store.attempts(target.id)).toHaveLength(1);
     expect(h.store.retryIntent(ref)).toBeUndefined();
@@ -469,6 +474,132 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     await h.train();
     expect(h.store.task(target.id).state).toBe('integrated');
     expect(backgroundErrors(h.inbox)).toHaveLength(0);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a dependency-held task with no old writer releases once through the real train and host', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const dependency = h.dispatch('dependency.txt');
+    const target = h.dispatch('target.txt', [dependency.id]);
+    expect(h.store.task(target.id)).toMatchObject({ state: 'held', currentAttempt: 0 });
+
+    await h.start(dependency);
+    await h.train();
+    const integratedBase = h.store.task(dependency.id).integratedCommit;
+    expect(integratedBase).toBeString();
+    expect(h.store.task(target.id)).toMatchObject({ currentAttempt: 1, base: integratedBase });
+    expect(h.store.task(target.id).state).toMatch(/^(landing|integrated|merged)$/);
+    expect(readFileSync(join(target.worktree, 'dependency.txt'), 'utf8')).toBe('dependency.txt');
+
+    await h.job.recoverOrphans();
+    await h.job.drain();
+    expect(h.store.attempts(target.id)).toHaveLength(1);
+    expect(backgroundErrors(h.inbox)).toHaveLength(0);
+    expect(() => h.store.assertCurrent({ taskId: target.id, attempt: 0 })).toThrow();
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a terminal held amendment joins capacity without its lease and honors a newer dependency contract', async () => {
+  const h = harness();
+  const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+  const capacity = join(h.settings.stateDirectory, 'capacity.json');
+  let starting: Promise<void> | undefined;
+  try {
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.briefFile);
+    await job.start(task.id);
+    const ref = { taskId: task.id, attempt: 1 };
+    expect(h.store.attempt(ref).state).toBe('exited');
+    h.store.updateTask(ref, (current) => {
+      current.state = 'held';
+      current.brief.after = [dependency.id];
+    });
+    const branchHead = git(task.worktree, 'rev-parse', 'HEAD');
+    const amended = join(h.settings.stateDirectory, 'capacity-amended.md');
+    const readyText = `${markdown}\nReady after removing the dependency.\n`;
+    writeFileSync(amended, readyText);
+    writeFileSync(capacity, JSON.stringify({ maxWorkers: 0 }));
+
+    starting = job.start(task.id, { brief: amended });
+    const queue = join(h.settings.stateDirectory, 'capacity-queue');
+    const deadline = Date.now() + 5_000;
+    while (!existsSync(queue) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(existsSync(queue)).toBe(true);
+    expect(h.store.task(task.id)).toMatchObject({ state: 'ready', currentAttempt: 1, brief: { markdown: readyText } });
+    expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(git(task.worktree, 'rev-parse', 'HEAD')).toBe(branchHead);
+
+    const heldText = markdown
+      .replace('waiting: []', `waiting: []\nafter: [${dependency.id}]`)
+      .concat('\nWait for the dependency again.\n');
+    writeFileSync(amended, heldText);
+    await job.start(task.id, { brief: amended });
+    expect(h.store.task(task.id)).toMatchObject({ state: 'held', currentAttempt: 1, brief: { markdown: heldText } });
+    writeFileSync(capacity, JSON.stringify({ maxWorkers: 1 }));
+    await starting;
+    expect(h.store.task(task.id)).toMatchObject({ state: 'held', currentAttempt: 1, brief: { markdown: heldText } });
+    expect(h.store.attempts(task.id)).toHaveLength(1);
+
+    writeFileSync(amended, `${readyText}\nStart the amended contract now.\n`);
+    await job.start(task.id, { brief: amended });
+    expect(h.store.task(task.id)).toMatchObject({ state: 'landing', currentAttempt: 2, brief: { after: [] } });
+    const runStarted = h.store.events(task.id, 2).find((event) => event.kind === 'worker-run-started');
+    expect(runStarted && JSON.parse(runStarted.body).resuming).toBe(false);
+  } finally {
+    writeFileSync(capacity, JSON.stringify({ maxWorkers: 1 }));
+    await starting?.catch(() => {});
+    await job.drain();
+    h.dispose();
+  }
+}, 30_000);
+
+test('CLI removal of the last dependency retains a host retry without starting an attempt during reshape', async () => {
+  const h = harness();
+  const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+  try {
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const task = h.tasks.dispatch(h.briefFile);
+    await job.start(task.id);
+    const ref = { taskId: task.id, attempt: 1 };
+    h.store.updateTask(ref, (current) => {
+      current.state = 'held';
+      current.brief.after = [dependency.id];
+    });
+    const amended = join(h.settings.stateDirectory, 'last-dependency-removed.md');
+    const amendedText = `${markdown}\nRun without the discarded dependency.\n`;
+    writeFileSync(amended, amendedText);
+    expect(
+      await runWorkerCommand('retry', [task.id, '--brief', amended], {
+        settings: h.settings,
+        store: h.store,
+        tasks: h.tasks,
+        env: {},
+        print() {},
+      }),
+    ).toBe(0);
+    expect(h.store.task(task.id)).toMatchObject({
+      state: 'held',
+      currentAttempt: 1,
+      brief: { after: [], markdown: amendedText },
+    });
+    expect(h.store.attempts(task.id)).toHaveLength(1);
+    expect(h.store.retryIntent(ref)?.status).toBe('pending');
+
+    await job.recoverOrphans();
+    await job.drain();
+    expect(h.store.task(task.id)).toMatchObject({ state: 'landing', currentAttempt: 2 });
+    expect(h.store.retryIntent(ref)).toMatchObject({ status: 'started', nextAttempt: 2 });
+    const runStarted = h.store.events(task.id, 2).find((event) => event.kind === 'worker-run-started');
+    expect(runStarted && JSON.parse(runStarted.body).resuming).toBe(false);
+    await job.recoverOrphans();
+    await job.drain();
+    expect(h.store.attempts(task.id)).toHaveLength(2);
   } finally {
     h.dispose();
   }
