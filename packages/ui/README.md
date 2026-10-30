@@ -220,9 +220,21 @@ legacy Cover fallback. A Collection kind may guide composition; it never rewrite
 two-line attached title. Standalone `Cover` opts into list presentation only when explicitly passed that object.
 
 The complete behavior folder is `Components/List Presentation`, with attached docs, keyboard focus, actual menu
-interaction and suitability reveal. Review the same IDs `components-list-presentation--book`, `--video`, `--anime`,
-`--music`, `--recipe`, `--mixed`, `--missing-image`, `--withheld`, `--key-facts` and `--unknown-type` at 390 and 1280,
-using locale and theme globals. Width, locale and theme are not separate behavior states.
+interaction and suitability reveal. Hand off every same ID below for **both phone 390 and desktop 1280**, with
+`en`/`zh-Hans` locale globals and light/dark theme globals. Width, locale and theme are not separate behavior states.
+
+| State         | Story ID                                      |
+| ------------- | --------------------------------------------- |
+| Book          | `components-list-presentation--book`          |
+| Video         | `components-list-presentation--video`         |
+| Anime         | `components-list-presentation--anime`         |
+| Music         | `components-list-presentation--music`         |
+| Recipe        | `components-list-presentation--recipe`        |
+| Mixed         | `components-list-presentation--mixed`         |
+| Missing image | `components-list-presentation--missing-image` |
+| Withheld      | `components-list-presentation--withheld`      |
+| Key facts     | `components-list-presentation--key-facts`     |
+| Unknown Type  | `components-list-presentation--unknown-type`  |
 
 ## Metadata lines
 
