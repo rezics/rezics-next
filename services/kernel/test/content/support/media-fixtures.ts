@@ -572,10 +572,19 @@ export async function mediaGrowthFixture(
   };
 }
 
+/** Native pg_index definition read from the caller's migrated growth database. */
+export type GrowthGlobalGrantIndexDefinition = {
+  readonly schema: string;
+  readonly relation: string;
+  readonly index: string;
+  readonly predicate: string | null;
+};
+
 /** Check the actual warm-up plans without adding a second measured operation. */
 export function assertGrowthPointPlans(
   captured: import('../../support/growth.ts').Capture,
   keys: Readonly<Record<string, readonly string[]>>,
+  globalGrantIndex?: GrowthGlobalGrantIndexDefinition,
 ): void {
   const seen = new Set<string>();
   function visit(value: unknown): void {
@@ -589,7 +598,20 @@ export function assertGrowthPointPlans(
     const columns = keys[relation];
     if (columns && Number(node['Actual Loops']) > 0 && node['Node Type'] !== 'ModifyTable') {
       const condition = String(node['Index Cond'] ?? '');
-      if (!String(node['Node Type']).includes('Index') || columns.some((column) => !condition.includes(column)))
+      // This one partial index fixes the Global resource key in its native predicate, not in Index Cond.
+      // Every variable key must still occur in the executed probe's actual index condition.
+      const globalGrantPredicate =
+        relation === 'access.resource_grant' &&
+        node['Index Name'] === 'resource_grant_pkey_lookup' &&
+        globalGrantIndex?.schema === 'access' &&
+        globalGrantIndex.relation === 'resource_grant' &&
+        globalGrantIndex.index === 'resource_grant_pkey_lookup' &&
+        globalGrantIndex.predicate === "((route = 0) AND (resource_id = '00000000-0000-8000-8000-000000000000'::uuid))";
+      const missingKey = columns.some(
+        (column) =>
+          !condition.includes(column) && !(globalGrantPredicate && (column === 'route' || column === 'resource_id')),
+      );
+      if (!String(node['Node Type']).includes('Index') || missingKey)
         throw new Error(`Expected exact ${relation} probe on ${columns.join(', ')}: ${JSON.stringify(node)}`);
       seen.add(relation);
     }

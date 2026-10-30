@@ -29,6 +29,7 @@ const editor = newId(31_000);
 const access = await createRealAccess(admin, { editor }, [
   'definitions:publish',
   'definitions:activate',
+  'gate:definition_publication',
   'subject:create',
   'subject:read',
 ]);
@@ -185,10 +186,12 @@ async function catchUp(ids: Iterable<string>) {
 }
 
 beforeAll(async () => {
+  await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:definition_publication');
   await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'definitions:publish');
   await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'definitions:activate');
   await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
   const published = await call('POST', '/v1/definitions/releases', { release });
+  expect(published.digest).toBe(digest);
   await call('POST', `/v1/definitions/releases/${published.digest}:activate`, { expected_head: null });
 
   growth = await openGrowthDatabase(databaseUrl);

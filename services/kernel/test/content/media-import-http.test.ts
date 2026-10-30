@@ -19,7 +19,11 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 
 import { tupleRoute } from '../../src/content/imported-contract.ts';
-import { assertGrowthPointPlans, seedMediaCommandHistory } from './support/media-fixtures.ts';
+import {
+  assertGrowthPointPlans,
+  seedMediaCommandHistory,
+  type GrowthGlobalGrantIndexDefinition,
+} from './support/media-fixtures.ts';
 
 const platformId = '00000000-0000-8000-8000-000000000000';
 const route = 42000;
@@ -62,6 +66,7 @@ const input: MediaImportRequest = {
   },
 };
 let db: GrowthDatabase;
+let globalGrantIndex: GrowthGlobalGrantIndexDefinition;
 let app: ReturnType<typeof contentRoutes>;
 let root: ReturnType<typeof createKernel>;
 let bearer: string;
@@ -71,6 +76,23 @@ let charges: { family: string; units: number }[] = [];
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  const nativeIndex = await db.admin.query<GrowthGlobalGrantIndexDefinition>(
+    `SELECT n.nspname AS schema,t.relname AS relation,c.relname AS "index",
+            pg_get_expr(i.indpred,i.indrelid) AS predicate
+       FROM pg_index i JOIN pg_class t ON t.oid=i.indrelid
+       JOIN pg_namespace n ON n.oid=t.relnamespace
+       JOIN pg_class c ON c.oid=i.indexrelid
+      WHERE i.indexrelid='access.resource_grant_pkey_lookup'::regclass`,
+  );
+  expect(nativeIndex.rows).toEqual([
+    {
+      schema: 'access',
+      relation: 'resource_grant',
+      index: 'resource_grant_pkey_lookup',
+      predicate: "((route = 0) AND (resource_id = '00000000-0000-8000-8000-000000000000'::uuid))",
+    },
+  ]);
+  globalGrantIndex = nativeIndex.rows[0]!;
   const keys = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(keys.publicKey)), alg: 'ES256', kid: 'media-import-http' };
   const issuer = 'https://auth.example.test';
@@ -352,6 +374,64 @@ test('production root forwards trusted import configuration to the actual native
   expect(result.body.media.containerId).toBe(containerId);
 });
 
+test('point probe proof accepts only the verified Global predicate and retains every variable index key', () => {
+  const variableKeys = ['subject_kind', 'subject_id', 'subject_role', 'action', 'valid'];
+  const keys = { 'access.resource_grant': ['route', 'resource_id', ...variableKeys] };
+  const condition =
+    "ROW(g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid) >= ROW(k.subject_kind, k.subject_id, k.subject_role, 'source_fence:read', 'empty'::tstzrange)";
+  const node = {
+    Schema: 'access',
+    'Relation Name': 'resource_grant',
+    'Node Type': 'Index Only Scan',
+    'Index Name': 'resource_grant_pkey_lookup',
+    'Actual Loops': 2,
+    'Actual Rows': 0.5,
+    'Shared Hit Blocks': 5,
+    'Index Cond': condition,
+  };
+  const captured = { statements: [], plans: [node] };
+  expect(() => assertGrowthPointPlans(captured, keys, globalGrantIndex)).not.toThrow();
+  expect(() => assertGrowthPointPlans(captured, keys)).toThrow('Expected exact');
+  for (const invalid of [
+    { ...globalGrantIndex, predicate: null },
+    { ...globalGrantIndex, predicate: '(route = 0)' },
+    { ...globalGrantIndex, predicate: `(resource_id = '${platformId}'::uuid)` },
+    { ...globalGrantIndex, predicate: `((route = 1) AND (resource_id = '${platformId}'::uuid))` },
+    {
+      ...globalGrantIndex,
+      predicate: "((route = 0) AND (resource_id = '00000000-0000-8000-8000-000000000001'::uuid))",
+    },
+    { ...globalGrantIndex, schema: 'content' },
+    { ...globalGrantIndex, relation: 'resource_role_grant' },
+    { ...globalGrantIndex, index: 'another_index' },
+  ])
+    expect(() => assertGrowthPointPlans(captured, keys, invalid)).toThrow('Expected exact');
+  for (const column of variableKeys) {
+    const missing = { ...node, 'Index Cond': condition.replaceAll(column, 'omitted'), Filter: condition };
+    expect(() => assertGrowthPointPlans({ ...captured, plans: [missing] }, keys, globalGrantIndex)).toThrow(
+      'Expected exact',
+    );
+  }
+  for (const invalid of [
+    { ...node, 'Index Name': 'another_index' },
+    { ...node, 'Node Type': 'Seq Scan' },
+    { ...node, 'Index Cond': undefined, Filter: condition },
+  ])
+    expect(() => assertGrowthPointPlans({ ...captured, plans: [node, invalid] }, keys, globalGrantIndex)).toThrow(
+      'Expected exact',
+    );
+  expect(() =>
+    assertGrowthPointPlans(
+      { ...captured, plans: [{ ...node, Schema: 'other' }] },
+      { 'other.resource_grant': keys['access.resource_grant'] },
+      globalGrantIndex,
+    ),
+  ).toThrow('Expected exact');
+  expect(() =>
+    assertGrowthPointPlans({ ...captured, plans: [{ ...node, 'Actual Loops': 0 }] }, keys, globalGrantIndex),
+  ).toThrow('Missing executed point probe');
+});
+
 test('checkGrowth proves rows statements and buffers match declared cost', async () => {
   const sourceRoute = tupleRoute(routeKey, input.provenance.source, input.provenance.external_id);
   const operation = async () => {
@@ -469,31 +549,35 @@ test('checkGrowth proves rows statements and buffers match declared cost', async
     operation,
     async warmup(database) {
       const measured = await capture(database, operation);
-      assertGrowthPointPlans(measured.capture, {
-        'content.media': ['route', 'media_id'],
-        'content.media_variant': ['route', 'media_id'],
-        'content.source_fences': ['route', 'source', 'external_id', 'field_group'],
-        'access.resource_role_grant': [
-          'route',
-          'resource_id',
-          'subject_id',
-          'subject_kind',
-          'subject_role',
-          'grant_role',
-          'valid',
-        ],
-        'semantic.subject': ['route', 'subject_id'],
-        'semantic.context': ['route', 'context_id'],
-        'access.resource_grant': [
-          'route',
-          'resource_id',
-          'subject_id',
-          'subject_kind',
-          'subject_role',
-          'action',
-          'valid',
-        ],
-      });
+      assertGrowthPointPlans(
+        measured.capture,
+        {
+          'content.media': ['route', 'media_id'],
+          'content.media_variant': ['route', 'media_id'],
+          'content.source_fences': ['route', 'source', 'external_id', 'field_group'],
+          'access.resource_role_grant': [
+            'route',
+            'resource_id',
+            'subject_id',
+            'subject_kind',
+            'subject_role',
+            'grant_role',
+            'valid',
+          ],
+          'semantic.subject': ['route', 'subject_id'],
+          'semantic.context': ['route', 'context_id'],
+          'access.resource_grant': [
+            'route',
+            'resource_id',
+            'subject_id',
+            'subject_kind',
+            'subject_role',
+            'action',
+            'valid',
+          ],
+        },
+        globalGrantIndex,
+      );
     },
   });
   expect(report.samples).toHaveLength(3);
