@@ -10,6 +10,13 @@ export type Suitability = 'blur' | 'show';
 export type ReadingPreferences = { spoilerLevel: SpoilerLevel; suitability: Suitability; version: number };
 export type NotificationPreferences = Record<string, boolean>;
 export type NotificationPatch = Record<string, boolean | null> | null;
+export type NativePreferenceFailure = {
+  status: number | null;
+  code?: string;
+  retryable?: boolean;
+  requestId?: string;
+  retryAfter?: string;
+};
 
 export type SettingsPage =
   | { signedIn: false }
@@ -17,6 +24,13 @@ export type SettingsPage =
       signedIn: true;
       preferences: ReadingPreferences;
       notifications?: NotificationPreferences;
+      csrfToken?: string | null;
+      securityHref: string | null;
+    }
+  | {
+      signedIn: true;
+      state: 'closed' | 'preparing' | 'unavailable';
+      failure: NativePreferenceFailure;
       csrfToken?: string | null;
       securityHref: string | null;
     };
@@ -30,7 +44,11 @@ export type PreferenceChange = {
 
 export type PreferenceWriteResult =
   | { ok: true; preferences: ReadingPreferences }
-  | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
+  | {
+      ok: false;
+      reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'preparing' | 'unavailable';
+      failure?: NativePreferenceFailure;
+    };
 
 export type OwnedCollection = { id: string; title: string; visibility: CollectionVisibility; revision: number };
 export type OwnedCollectionsPage = { collections: OwnedCollection[]; next: string | null };
@@ -116,12 +134,44 @@ export type NotificationChange = {
 
 export type NotificationWriteResult =
   | { ok: true; notifications: NotificationPreferences; version: number }
-  | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
+  | {
+      ok: false;
+      reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'preparing' | 'unavailable';
+      failure?: NativePreferenceFailure;
+    };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function failureDetails(value: unknown, status?: number): NativePreferenceFailure {
+  const root = isRecord(value) ? value : undefined;
+  const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
+  const nativeStatus = status ?? (root && typeof root.status === 'number' ? root.status : null);
+  return {
+    status: nativeStatus,
+    ...(problem && typeof problem.code === 'string' ? { code: problem.code } : {}),
+    ...(problem && typeof problem.retryable === 'boolean' ? { retryable: problem.retryable } : {}),
+    ...(problem && typeof problem.request_id === 'string'
+      ? { requestId: problem.request_id }
+      : problem && typeof problem.requestId === 'string'
+        ? { requestId: problem.requestId }
+        : {}),
+    ...(root && typeof root.retryAfter === 'string' ? { retryAfter: root.retryAfter } : {}),
+  };
+}
+
+function failureState(failure: NativePreferenceFailure): 'closed' | 'preparing' | 'unavailable' {
+  if (failure.code === 'platform_closed') return 'closed';
+  if (failure.status === 503) return 'preparing';
+  return 'unavailable';
+}
+
+function statusOf(result: { status?: number; error?: unknown }): number | undefined {
+  if (typeof result.status === 'number') return result.status;
+  return isRecord(result.error) && typeof result.error.status === 'number' ? result.error.status : undefined;
 }
 
 /** The write a request asks for, or `undefined` when it names no setting or carries a value the kernel would refuse. */
@@ -171,6 +221,11 @@ function present(preferences: ReadingPreferences): ReadingPreferences {
   };
 }
 
+function presentNotifications(value: unknown): NotificationPreferences | undefined {
+  if (!isRecord(value) || Object.values(value).some((enabled) => typeof enabled !== 'boolean')) return undefined;
+  return { ...value } as NotificationPreferences;
+}
+
 /** The Auth site owns password, passkeys and sessions; the settings page only links to them. */
 function securityHref(sessionEnv: Partial<SessionEnv>): string | null {
   if (!sessionEnv.AUTH_ISSUER) return null;
@@ -187,18 +242,38 @@ export async function loadSettingsPage(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
 ): Promise<SettingsPage> {
-  await prepareSession(request, sessionEnv);
-  const authorization = viewerCredential(request);
-  const accountId = sessionSubject(request);
-  if (!authorization || !accountId) return { signedIn: false };
-  const result = await client.accounts({ accountId }).preferences.get({ headers: { authorization } });
-  const data = readLibraryResult(result);
-  return {
-    signedIn: true,
-    preferences: present(data),
-    ...(isRecord(data.notifications) ? { notifications: data.notifications as NotificationPreferences } : {}),
-    securityHref: securityHref(sessionEnv),
-  };
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId) return { signedIn: false };
+    const result = await client.accounts({ accountId }).preferences.get({ headers: { authorization } });
+    if (result.error || !result.data) {
+      const failure = failureDetails(result.error, statusOf(result));
+      return {
+        signedIn: true,
+        state: failureState(failure),
+        failure,
+        securityHref: securityHref(sessionEnv),
+      };
+    }
+    const data = result.data as ReadingPreferences & { notifications?: unknown };
+    const notifications = presentNotifications(data.notifications);
+    return {
+      signedIn: true,
+      preferences: present(data),
+      ...(notifications ? { notifications } : {}),
+      securityHref: securityHref(sessionEnv),
+    };
+  } catch (error) {
+    const failure = failureDetails(error);
+    return {
+      signedIn: true,
+      state: isPlatformClosedError(error) || failure.code === 'platform_closed' ? 'closed' : failureState(failure),
+      failure,
+      securityHref: securityHref(sessionEnv),
+    };
+  }
 }
 
 function problemCode(error: unknown): unknown {
@@ -222,14 +297,18 @@ export async function changePreferences(
       headers: { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string },
     });
     if (!result.error && result.data) return { ok: true, preferences: present(result.data) };
-    const status = result.status;
-    if (status === 409 && problemCode(result.error) === 'conflict') return { ok: false, reason: 'conflict' };
-    if (status === 400 || status === 422) return { ok: false, reason: 'invalid' };
-    if (status === 401 || status === 403) return { ok: false, reason: 'forbidden' };
-    return { ok: false, reason: 'unavailable' };
+    const status = statusOf(result);
+    const failure = failureDetails(result.error, status);
+    if (status === 409 && problemCode(result.error) === 'conflict') return { ok: false, reason: 'conflict', failure };
+    if (status === 400 || status === 422) return { ok: false, reason: 'invalid', failure };
+    if (failure.code === 'platform_closed') return { ok: false, reason: 'closed', failure };
+    if (status === 401 || status === 403) return { ok: false, reason: 'forbidden', failure };
+    return { ok: false, reason: failure.status === 503 ? 'preparing' : 'unavailable', failure };
   } catch (error) {
-    if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
-    return { ok: false, reason: 'unavailable' };
+    const failure = failureDetails(error);
+    if (isPlatformClosedError(error) || failure.code === 'platform_closed')
+      return { ok: false, reason: 'closed', failure };
+    return { ok: false, reason: failure.status === 503 ? 'preparing' : 'unavailable', failure };
   }
 }
 
@@ -254,20 +333,26 @@ export async function changeNotifications(
         'content-type': 'application/merge-patch+json',
       } as { 'idempotency-key': string; 'content-type': string },
     });
-    if (!result.error && result.data)
-      return {
-        ok: true,
-        notifications: { ...result.data.notifications } as NotificationPreferences,
-        version: result.data.version,
-      };
-    const status = result.status;
-    if (status === 409 && problemCode(result.error) === 'conflict') return { ok: false, reason: 'conflict' };
-    if (status === 400 || status === 422) return { ok: false, reason: 'invalid' };
-    if (status === 401 || status === 403) return { ok: false, reason: 'forbidden' };
-    return { ok: false, reason: 'unavailable' };
+    if (!result.error && result.data) {
+      const data = result.data as ReadingPreferences & { notifications?: unknown };
+      const notifications = presentNotifications(data.notifications);
+      if (!notifications)
+        return { ok: false, reason: 'unavailable', failure: failureDetails(undefined, result.status) };
+      return { ok: true, notifications, version: data.version };
+    }
+    const status = statusOf(result);
+    const failure = failureDetails(result.error, status);
+    if (status === 409 && problemCode(result.error) === 'conflict') return { ok: false, reason: 'conflict', failure };
+    if (status === 400 || status === 422) return { ok: false, reason: 'invalid', failure };
+    if (failure.code === 'platform_closed') return { ok: false, reason: 'closed', failure };
+    if (status === 401 || status === 403) return { ok: false, reason: 'forbidden', failure };
+    return { ok: false, reason: failure.status === 503 ? 'preparing' : 'unavailable', failure };
   } catch (error) {
-    if (error instanceof MediaProblem && error.problem.code === 'forbidden') return { ok: false, reason: 'forbidden' };
-    if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
-    return { ok: false, reason: 'unavailable' };
+    const failure = failureDetails(error);
+    if (error instanceof MediaProblem && error.problem.code === 'forbidden')
+      return { ok: false, reason: 'forbidden', failure };
+    if (isPlatformClosedError(error) || failure.code === 'platform_closed')
+      return { ok: false, reason: 'closed', failure };
+    return { ok: false, reason: failure.status === 503 ? 'preparing' : 'unavailable', failure };
   }
 }

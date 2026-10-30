@@ -1,6 +1,6 @@
 import { useSession } from '../session/query';
-import { useId, useLayoutEffect, useState } from 'react';
-import { useLocation } from '@tanstack/react-router';
+import { useId, useLayoutEffect, useState, useEffect } from 'react';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -14,12 +14,82 @@ import { csrfHeaders } from '../threads/composer';
 import { readSettingsPage, saveNotifications, savePreferences } from './actions';
 import { ProfileSection } from './profile';
 import { PublicViewsSection } from './public-views';
-import type { NotificationPreferences, ReadingPreferences, SettingsPage, SpoilerLevel } from './preferences';
+import type {
+  NativePreferenceFailure,
+  NotificationPreferences,
+  ReadingPreferences,
+  SettingsPage,
+  SpoilerLevel,
+} from './preferences';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { useOperation } from '../kernel/exposure';
 
-type Signal = 'idle' | 'saving' | 'saved' | 'conflict' | 'reloading' | 'failed';
+type Signal =
+  | 'idle'
+  | 'saving'
+  | 'saved'
+  | 'conflict'
+  | 'reloading'
+  | 'failed'
+  | 'closed'
+  | 'preparing'
+  | 'unavailable';
+
+function failureSignal(reason: string): Signal {
+  if (reason === 'closed') return 'closed';
+  if (reason === 'preparing') return 'preparing';
+  if (reason === 'unavailable') return 'unavailable';
+  return 'failed';
+}
+
+function SettingsFailure({
+  state,
+  failure,
+  onRetry,
+}: {
+  state: 'closed' | 'preparing' | 'unavailable';
+  failure: NativePreferenceFailure;
+  onRetry: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
+        </CardTitle>
+        <CardDescription>{m.settings_reading_text()}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Alert
+          variant={state === 'preparing' ? 'default' : 'destructive'}
+          data-response-status={failure.status ?? ''}
+          data-response-code={failure.code ?? ''}
+        >
+          <AlertTitle>
+            {state === 'closed'
+              ? m.settings_closed_title()
+              : state === 'preparing'
+                ? m.settings_preparing_title()
+                : m.settings_unavailable_title()}
+          </AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>
+              {state === 'closed'
+                ? m.settings_closed_text()
+                : state === 'preparing'
+                  ? m.settings_preparing_text()
+                  : m.settings_unavailable_text()}
+            </p>
+            <Button type="button" variant="outline" onClick={onRetry}>
+              {m.settings_retry()}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </CardContent>
+    </Card>
+  );
+}
 
 const levels: { value: SpoilerLevel; title: () => string; text: () => string }[] = [
   { value: 0, title: () => m.settings_spoiler_0_title(), text: () => m.settings_spoiler_0_text() },
@@ -43,6 +113,7 @@ function ReadingCard({
   const [known, setKnown] = useState(initial);
   const [choice, setChoice] = useState(initial);
   const [signal, setSignal] = useState<Signal>('idle');
+  const [responseFailure, setResponseFailure] = useState<NativePreferenceFailure | null>(null);
   // Set in the same commit that marks the document hydrated, so the controls enable with it.
   useLayoutEffect(() => setHydrated(true), []);
   const busy = signal === 'saving' || signal === 'reloading';
@@ -61,10 +132,13 @@ function ReadingCard({
         setChoice(result.preferences);
         onVersionChange(result.preferences.version);
         setSignal('saved');
+        setResponseFailure(null);
       } else {
-        setSignal(result.reason === 'conflict' ? 'conflict' : 'failed');
+        setResponseFailure(result.failure ?? null);
+        setSignal(result.reason === 'conflict' ? 'conflict' : failureSignal(result.reason));
       }
     } catch {
+      setResponseFailure(null);
       setSignal('failed');
     }
   }
@@ -74,12 +148,18 @@ function ReadingCard({
     setSignal('reloading');
     try {
       const page = await readSettingsPage();
-      if (!('preferences' in page)) throw new Error('Preferences unavailable');
+      if (!('preferences' in page)) {
+        setResponseFailure(page.signedIn ? page.failure : null);
+        setSignal(page.signedIn ? page.state : 'failed');
+        return;
+      }
       setKnown(page.preferences);
       setChoice(page.preferences);
       onVersionChange(page.preferences.version);
+      setResponseFailure(null);
       setSignal('idle');
     } catch {
+      setResponseFailure(null);
       setSignal('failed');
     }
   }
@@ -157,10 +237,35 @@ function ReadingCard({
             </AlertDescription>
           </Alert>
         ) : null}
-        {signal === 'failed' ? (
-          <Alert variant="destructive">
-            <AlertTitle>{m.settings_failed_title()}</AlertTitle>
-            <AlertDescription>{m.settings_failed_text()}</AlertDescription>
+        {signal === 'failed' || signal === 'closed' || signal === 'preparing' || signal === 'unavailable' ? (
+          <Alert
+            variant="destructive"
+            data-response-status={responseFailure?.status ?? ''}
+            data-response-code={responseFailure?.code ?? ''}
+          >
+            <AlertTitle>
+              {signal === 'closed'
+                ? m.settings_closed_title()
+                : signal === 'preparing'
+                  ? m.settings_preparing_title()
+                  : signal === 'unavailable'
+                    ? m.settings_unavailable_title()
+                    : m.settings_failed_title()}
+            </AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p>
+                {signal === 'closed'
+                  ? m.settings_closed_text()
+                  : signal === 'preparing'
+                    ? m.settings_preparing_text()
+                    : signal === 'unavailable'
+                      ? m.settings_unavailable_text()
+                      : m.settings_failed_text()}
+              </p>
+              <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void reload()}>
+                {m.settings_reload()}
+              </Button>
+            </AlertDescription>
           </Alert>
         ) : null}
       </CardContent>
@@ -201,6 +306,7 @@ function NotificationsCard({
   const [hydrated, setHydrated] = useState(false);
   const [choice, setChoice] = useState(initial);
   const [signal, setSignal] = useState<Signal>(initialFailed ? 'failed' : 'idle');
+  const [responseFailure, setResponseFailure] = useState<NativePreferenceFailure | null>(null);
   useLayoutEffect(() => setHydrated(true), []);
   const busy = signal === 'saving' || signal === 'reloading';
 
@@ -216,10 +322,13 @@ function NotificationsCard({
         setChoice(result.notifications);
         onVersionChange(result.version);
         setSignal('saved');
+        setResponseFailure(null);
       } else {
-        setSignal(result.reason === 'conflict' ? 'conflict' : 'failed');
+        setResponseFailure(result.failure ?? null);
+        setSignal(result.reason === 'conflict' ? 'conflict' : failureSignal(result.reason));
       }
     } catch {
+      setResponseFailure(null);
       setSignal('failed');
     }
   }
@@ -230,10 +339,22 @@ function NotificationsCard({
     try {
       const page = await readSettingsPage();
       if (!page.signedIn) throw new Error('signed out');
-      setChoice(page.notifications ?? {});
+      if (!('preferences' in page)) {
+        setResponseFailure(page.failure);
+        setSignal(page.state);
+        return;
+      }
+      if (!page.notifications) {
+        setResponseFailure(null);
+        setSignal('unavailable');
+        return;
+      }
+      setChoice(page.notifications);
       onVersionChange(page.preferences.version);
+      setResponseFailure(null);
       setSignal('idle');
     } catch {
+      setResponseFailure(null);
       setSignal('failed');
     }
   }
@@ -324,10 +445,35 @@ function NotificationsCard({
               </AlertDescription>
             </Alert>
           ) : null}
-          {signal === 'failed' ? (
-            <Alert variant="destructive">
-              <AlertTitle>{m.settings_failed_title()}</AlertTitle>
-              <AlertDescription>{m.settings_failed_text()}</AlertDescription>
+          {signal === 'failed' || signal === 'closed' || signal === 'preparing' || signal === 'unavailable' ? (
+            <Alert
+              variant="destructive"
+              data-response-status={responseFailure?.status ?? ''}
+              data-response-code={responseFailure?.code ?? ''}
+            >
+              <AlertTitle>
+                {signal === 'closed'
+                  ? m.settings_closed_title()
+                  : signal === 'preparing'
+                    ? m.settings_preparing_title()
+                    : signal === 'unavailable'
+                      ? m.settings_unavailable_title()
+                      : m.settings_failed_title()}
+              </AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>
+                  {signal === 'closed'
+                    ? m.settings_closed_text()
+                    : signal === 'preparing'
+                      ? m.settings_preparing_text()
+                      : signal === 'unavailable'
+                        ? m.settings_unavailable_text()
+                        : m.settings_failed_text()}
+                </p>
+                <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void reload()}>
+                  {m.settings_reload()}
+                </Button>
+              </AlertDescription>
             </Alert>
           ) : null}
           <p className="text-sm text-muted-foreground">{m.settings_notifications_mandatory()}</p>
@@ -372,9 +518,13 @@ export function SettingsPageView({
 }) {
   const collectionsAdmitted = useOperation('account.collections');
   const location = useLocation();
-  const [version, setVersion] = useState(page.preferences.version);
+  const router = useRouter();
+  const [version, setVersion] = useState('preferences' in page ? page.preferences.version : 0);
   const formCsrfToken = page.csrfToken ?? csrfToken;
   const notificationError = new URL(location.publicHref, 'https://rezics.local').searchParams.has('notificationError');
+  useEffect(() => {
+    if ('preferences' in page) setVersion(page.preferences.version);
+  }, [page]);
   return (
     <article className="mx-auto w-full max-w-6xl space-y-8 px-4 text-foreground sm:px-6">
       <header>
@@ -388,11 +538,13 @@ export function SettingsPageView({
                 {m.settings_reading_heading()}
               </a>
             </li>
-            <li>
-              <a className="text-muted-foreground hover:text-foreground" href="#notifications">
-                {m.settings_notifications_heading()}
-              </a>
-            </li>
+            {'preferences' in page ? (
+              <li>
+                <a className="text-muted-foreground hover:text-foreground" href="#notifications">
+                  {m.settings_notifications_heading()}
+                </a>
+              </li>
+            ) : null}
             {collectionsAdmitted ? (
               <li>
                 <a className="text-muted-foreground hover:text-foreground" href="#privacy">
@@ -419,24 +571,51 @@ export function SettingsPageView({
         </nav>
         <div className="min-w-0 space-y-8">
           <section id="reading" aria-labelledby="settings-reading-heading" className="scroll-mt-6">
-            <ReadingCard
-              key={page.preferences.version}
-              initial={page.preferences}
-              version={version}
-              onVersionChange={setVersion}
-            />
+            {'preferences' in page ? (
+              <ReadingCard
+                key={page.preferences.version}
+                initial={page.preferences}
+                version={version}
+                onVersionChange={setVersion}
+              />
+            ) : (
+              <SettingsFailure state={page.state} failure={page.failure} onRetry={() => void router.invalidate()} />
+            )}
           </section>
-          <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
-            <NotificationsCard
-              key={`${page.preferences.version}-notifications`}
-              initial={page.notifications ?? {}}
-              version={version}
-              csrfToken={formCsrfToken}
-              action={location.publicHref.split(/[?#]/, 1)[0]!}
-              initialFailed={notificationError}
-              onVersionChange={setVersion}
-            />
-          </section>
+          {'preferences' in page ? (
+            <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
+              {page.notifications ? (
+                <NotificationsCard
+                  key={`${page.preferences.version}-notifications`}
+                  initial={page.notifications}
+                  version={version}
+                  csrfToken={formCsrfToken}
+                  action={location.publicHref.split(/[?#]/, 1)[0]!}
+                  initialFailed={notificationError}
+                  onVersionChange={setVersion}
+                />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Alert variant="destructive">
+                      <AlertTitle>{m.settings_unavailable_title()}</AlertTitle>
+                      <AlertDescription>
+                        <p>{m.settings_unavailable_text()}</p>
+                        <Button type="button" variant="outline" onClick={() => void router.invalidate()}>
+                          {m.settings_retry()}
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  </CardContent>
+                </Card>
+              )}
+            </section>
+          ) : null}
           <CollectionPrivacySection />
           <VerificationSection />
           <section id="profile" aria-label={m.settings_profile_heading()} className="scroll-mt-6">

@@ -1,7 +1,11 @@
+import type { KernelClient } from '@rezics/client';
+import { documentText, type DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
+import { readPageAuthors } from '../identity/read';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 
@@ -23,6 +27,7 @@ type ResolvedNotice = InboxNotice & {
   href?: string;
   text: string;
   unavailable: boolean;
+  actorName?: string;
 };
 export type ResolvedInboxPage = { items: ResolvedNotice[]; next: string | null };
 export type InboxReads = {
@@ -31,13 +36,65 @@ export type InboxReads = {
   report: (id: string) => Promise<{ outcome: string; href?: string } | null>;
 };
 
+export type NativeInboxFailure = {
+  status: number | null;
+  code?: string;
+  retryable?: boolean;
+  requestId?: string;
+  retryAfter?: string;
+};
+
+export type InboxPage =
+  | { signedIn: false }
+  | { signedIn: true; state: 'ready'; items: ResolvedNotice[]; next: string | null }
+  | {
+      signedIn: true;
+      state: 'closed' | 'preparing' | 'unavailable';
+      failure: NativeInboxFailure;
+    };
+
+class InboxReadError extends Error {
+  constructor(readonly failure: NativeInboxFailure) {
+    super('Native inbox read failed');
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function nativeFailure(value: unknown, status?: number): NativeInboxFailure {
+  const root = isRecord(value) ? value : undefined;
+  const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
+  return {
+    status: status ?? (root && typeof root.status === 'number' ? root.status : null),
+    ...(problem && typeof problem.code === 'string' ? { code: problem.code } : {}),
+    ...(problem && typeof problem.retryable === 'boolean' ? { retryable: problem.retryable } : {}),
+    ...(problem && typeof problem.request_id === 'string'
+      ? { requestId: problem.request_id }
+      : problem && typeof problem.requestId === 'string'
+        ? { requestId: problem.requestId }
+        : {}),
+    ...(root && typeof root.retryAfter === 'string' ? { retryAfter: root.retryAfter } : {}),
+  };
+}
+
+function failureState(failure: NativeInboxFailure): 'closed' | 'preparing' | 'unavailable' {
+  if (failure.code === 'platform_closed') return 'closed';
+  if (failure.status === 503) return 'preparing';
+  return 'unavailable';
+}
+
 /** Resolves thin notice identities through their existing owner reads, once per distinct target. */
 export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Promise<ResolvedInboxPage> {
   const cache = new Map<string, Promise<{ href?: string; text: string } | null>>();
   const resolve = (key: string, read: () => Promise<{ href?: string; text: string } | null>) => {
     let result = cache.get(key);
     if (!result) {
-      result = read().catch(() => null);
+      result = read().catch((error: unknown) => {
+        if (error instanceof InboxReadError) throw error;
+        throw new InboxReadError(nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined));
+      });
       cache.set(key, result);
     }
     return result;
@@ -84,7 +141,7 @@ export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Pr
   return { items, next: page.next };
 }
 
-type ReadResult = { data?: unknown; error?: unknown };
+type ReadResult = { data?: unknown; error?: unknown; status?: number };
 type InboxKernelClient = {
   accounts: (params: { accountId: string }) => {
     notifications: {
@@ -101,12 +158,20 @@ function authHeaders(authorization: string) {
   return { authorization };
 }
 
+function failTargetRead(result: ReadResult): boolean {
+  if (!result.error) return false;
+  const failure = nativeFailure(result.error, result.status);
+  if (failure.code === 'platform_closed' || failure.status === 503 || failure.status === null || failure.status >= 500)
+    throw new InboxReadError(failure);
+  return true;
+}
+
 async function readNoticePage(client: InboxKernelClient, accountId: string, authorization: string, cursor?: string) {
   const result = await client.accounts({ accountId }).notifications.get({
     query: { limit: INBOX_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
     headers: authHeaders(authorization),
   });
-  if (result.error || !result.data) throw new Error('Kernel notification read failed');
+  if (result.error || !result.data) throw new InboxReadError(nativeFailure(result.error, result.status));
   return result.data as NoticePage;
 }
 
@@ -114,6 +179,7 @@ async function currentInboxReads(client: InboxKernelClient, authorization: strin
   return {
     post: async (threadId, postId) => {
       const result = await client.posts({ id: postId }).get({ headers: authHeaders(authorization) });
+      if (failTargetRead(result)) return null;
       const data = result.data as
         | { post?: { threadId?: string; availability?: string; removed?: boolean; body?: unknown } }
         | undefined;
@@ -129,12 +195,14 @@ async function currentInboxReads(client: InboxKernelClient, authorization: strin
     },
     decision: async (id) => {
       const result = await client['moderation-decisions']({ id }).get({ headers: authHeaders(authorization) });
+      if (failTargetRead(result)) return null;
       const data = result.data as { statement?: string } | undefined;
       if (result.error || !data?.statement) return null;
       return { statement: data.statement, href: `/moderation/decisions/${id}` };
     },
     report: async (id) => {
       const result = await client.reports({ id }).get({ headers: authHeaders(authorization) });
+      if (failTargetRead(result)) return null;
       const data = result.data as { report?: { outcome?: string } } | undefined;
       const outcome = data?.report?.outcome;
       return result.error || !outcome ? null : { outcome, href: `/moderation/reports/${id}` };
@@ -149,6 +217,7 @@ function postText(post: unknown): string {
     record.revision && typeof record.revision === 'object' ? (record.revision as Record<string, unknown>) : record;
   const document = record.body ?? revision.body ?? revision.document;
   if (!document || typeof document !== 'object') return '';
+  if ('doc' in document) return documentText(document as DocumentSnapshot);
   const text: string[] = [];
   const visit = (node: unknown) => {
     if (!node || typeof node !== 'object') return;
@@ -160,7 +229,26 @@ function postText(post: unknown): string {
   return text.join('');
 }
 
-export type InboxPage = { signedIn: boolean; items: ResolvedNotice[]; next: string | null };
+/** One native page, its distinct targets and one batched public identity read. */
+export async function loadInboxPage(
+  client: KernelClient,
+  accountId: string,
+  authorization: string,
+  cursor?: string,
+): Promise<ResolvedInboxPage> {
+  const typedClient = client as unknown as InboxKernelClient;
+  const page = await readNoticePage(typedClient, accountId, authorization, cursor);
+  const resolved = await resolveInboxItems(page, await currentInboxReads(typedClient, authorization));
+  const authorIds = resolved.items.flatMap((item) => (item.actorId ? [item.actorId] : []));
+  const authors = await readPageAuthors(client, authorIds);
+  const items = resolved.items.map((item) => {
+    const author = authors?.[item.actorId ?? ''] as { displayName?: string | null; handle?: string | null } | undefined;
+    const actorName = author?.displayName?.trim() || author?.handle?.trim();
+    return actorName ? { ...item, actorName } : item;
+  });
+  return { items, next: resolved.next };
+}
+
 export const setInboxResponsePolicy = createServerFn({ method: 'GET' }).handler(() => {
   setResponseHeader('cache-control', 'private, no-store');
   return null;
@@ -175,15 +263,28 @@ export const readInboxPage = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<InboxPage> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
-    const authorization = viewerCredential(request);
-    const accountId = sessionSubject(request);
-    if (!authorization || !accountId) return { signedIn: false, items: [], next: null };
-    const client = kernelClient() as unknown as InboxKernelClient;
-    const page = await readNoticePage(client, accountId, authorization, data.cursor);
-    const resolved = await resolveInboxItems(page, await currentInboxReads(client, authorization));
-    return { signedIn: true, ...resolved };
+    try {
+      const request = getRequest();
+      await prepareSession(request, env as Partial<SessionEnv>);
+      const authorization = viewerCredential(request);
+      const accountId = sessionSubject(request);
+      if (!authorization || !accountId) return { signedIn: false };
+      return {
+        signedIn: true,
+        state: 'ready',
+        ...(await loadInboxPage(kernelClient(), accountId, authorization, data.cursor)),
+      };
+    } catch (error) {
+      const failure =
+        error instanceof InboxReadError
+          ? error.failure
+          : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
+      return {
+        signedIn: true,
+        state: failureState(failure),
+        failure,
+      };
+    }
   });
 
 export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async () => {

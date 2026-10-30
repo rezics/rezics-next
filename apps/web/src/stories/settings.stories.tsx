@@ -3,6 +3,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import settingsPreferencesRecording from '../kernel/recorded/settings-preferences.json';
 import { setFakeVerificationState } from '../kernel/fake/verification';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from '../shell/page-heading';
+import { SignInPrompt } from '../threads/composer';
 import { PageStory, pageReady } from './page';
 
 const meta = {
@@ -15,6 +17,24 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const levelTitles = [m.settings_spoiler_0_title, m.settings_spoiler_1_title, m.settings_spoiler_2_title] as const;
+
+function SignedOutSettingsPreview() {
+  return (
+    <main id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
+      <div className="mx-auto w-full max-w-5xl">
+        <article className="max-w-2xl space-y-8 text-foreground">
+          <header>
+            <PageHeading>{m.settings_heading()}</PageHeading>
+          </header>
+          <div className="space-y-3">
+            <p className="text-muted-foreground">{m.settings_signed_out()}</p>
+            <SignInPrompt returnTo="/settings" />
+          </div>
+        </article>
+      </div>
+    </main>
+  );
+}
 
 function notificationName(kind: string): string {
   if (kind === 'reply') return m.settings_notification_reply();
@@ -184,6 +204,49 @@ export const CollectionsClosed: Story = {
     await expect(view.queryByRole('link', { name: m.settings_privacy_heading() })).toBeNull();
   },
   render: () => <PageStory visitor="Signed In" path="/settings" />,
+};
+
+async function settingsFailureReady(context: { canvasElement: HTMLElement }, status: string, message: () => string) {
+  await pageReady(context);
+  const view = within(within(context.canvasElement).getByRole('main'));
+  const alert = await view.findByRole('alert');
+  await expect(alert).toHaveAttribute('data-response-status', status);
+  await view.findByText(message());
+  await view.findByRole('button', { name: m.settings_retry() });
+}
+
+export const NotificationSettingsPreparing: Story = {
+  name: 'Notification settings preparing',
+  play: (context) => settingsFailureReady(context, '503', m.settings_preparing_text),
+  render: () => <PageStory visitor="Signed In" path="/settings?notification-state=preparing" />,
+};
+
+export const NotificationSettingsClosed: Story = {
+  name: 'Notification settings closed',
+  play: async (context) => {
+    await settingsFailureReady(context, '403', m.settings_closed_text);
+    const alert = within(within(context.canvasElement).getByRole('main')).getByRole('alert');
+    await expect(alert).toHaveAttribute('data-response-code', 'platform_closed');
+  },
+  render: () => <PageStory visitor="Signed In" path="/settings?notification-state=closed" />,
+};
+
+export const NotificationSettingsUnavailable: Story = {
+  name: 'Notification settings unavailable',
+  play: (context) => settingsFailureReady(context, '500', m.settings_unavailable_text),
+  render: () => <PageStory visitor="Signed In" path="/settings?notification-state=unavailable" />,
+};
+
+export const SignedOut: Story = {
+  name: 'Signed Out',
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await view.findByRole('heading', { level: 1, name: m.settings_heading() });
+    await view.findByRole('link', { name: m.account_sign_in() });
+    await expect(view.queryByRole('radio')).toBeNull();
+  },
+  render: () => <SignedOutSettingsPreview />,
 };
 
 export const PersonProfileWithAvatarAndFiveLinks: Story = {

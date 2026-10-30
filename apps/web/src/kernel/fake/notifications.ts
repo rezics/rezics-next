@@ -1,3 +1,4 @@
+import { fromPlainText } from '@rezics/document';
 import type { FakeRoute } from '../fake-modules.ts';
 
 function storyFixture(): string | null {
@@ -111,6 +112,30 @@ const list: FakeRoute = {
         : (recordings['notifications-count'] ?? { status: 200, count: 0, capped: false });
     }
     const fixture = url.searchParams.get('fixture') ?? storyFixture();
+    if (fixture === 'preparing')
+      return {
+        status: 503,
+        type: 'https://rezics.com/problems/dependency_unavailable',
+        code: 'dependency_unavailable',
+        retryable: true,
+        request_id: 'story-inbox-preparing',
+      };
+    if (fixture === 'closed')
+      return {
+        status: 403,
+        type: 'https://rezics.com/problems/platform_closed',
+        code: 'platform_closed',
+        retryable: false,
+        request_id: 'story-inbox-closed',
+      };
+    if (fixture === 'unavailable-operation')
+      return {
+        status: 500,
+        type: 'https://rezics.com/problems/internal_error',
+        code: 'internal_error',
+        retryable: true,
+        request_id: 'story-inbox-unavailable',
+      };
     return fixture === 'empty' || !fixture
       ? (recordings['notifications-inbox-empty'] ?? { status: 200, items: [], next: null })
       : { status: 200, items: fixtures[fixture as keyof typeof fixtures] ?? [], next: null };
@@ -129,7 +154,7 @@ const storyTargets: FakeRoute[] = [
       status: 200,
       post: {
         threadId: storyThread,
-        body: { type: 'doc', content: [{ type: 'text', text: 'The last train leaves at midnight.' }] },
+        body: fromPlainText('The last train leaves at midnight.'),
       },
     }),
   },

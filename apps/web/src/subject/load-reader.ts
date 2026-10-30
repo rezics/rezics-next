@@ -11,7 +11,7 @@ export async function loadReader(
 ): Promise<Reader> {
   try {
     const page = await loadSettingsPage(client, request, sessionEnv);
-    if (!page.signedIn) return defaultReader;
+    if (!page.signedIn || !('preferences' in page)) return defaultReader;
     return { spoilerLevel: page.preferences.spoilerLevel, suitability: page.preferences.suitability };
   } catch {
     return defaultReader;

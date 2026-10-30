@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { within } from 'storybook/test';
+import { expect, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory } from './page';
 
@@ -29,6 +29,36 @@ export const Unavailable: Story = {
   name: 'Unavailable item',
   render: () => <InboxStory fixture="unavailable" />,
   play: rowsReady,
+};
+export const Preparing: Story = {
+  name: 'Inbox preparing',
+  render: () => <InboxStory fixture="preparing" />,
+  play: async ({ canvasElement }) => {
+    const status = await within(canvasElement).findByRole('status');
+    await expect(status).toHaveAttribute('data-response-status', '503');
+    await within(status).findByRole('button', { name: m.inbox_retry() });
+    await expect(within(canvasElement).queryByText(m.inbox_empty())).toBeNull();
+  },
+};
+export const Closed: Story = {
+  name: 'Inbox closed',
+  render: () => <InboxStory fixture="closed" />,
+  play: async ({ canvasElement }) => {
+    const status = await within(canvasElement).findByRole('status');
+    await expect(status).toHaveAttribute('data-response-status', '403');
+    await expect(status).toHaveAttribute('data-response-code', 'platform_closed');
+    await within(status).findByRole('button', { name: m.inbox_retry() });
+  },
+};
+export const UnavailableOperation: Story = {
+  name: 'Inbox unavailable',
+  render: () => <InboxStory fixture="unavailable-operation" />,
+  play: async ({ canvasElement }) => {
+    const status = await within(canvasElement).findByRole('status');
+    await expect(status).toHaveAttribute('data-response-status', '500');
+    await within(status).findByRole('button', { name: m.inbox_retry() });
+    await expect(within(canvasElement).queryByText(m.inbox_empty())).toBeNull();
+  },
 };
 export const MoreThanNinetyNine: Story = {
   name: 'More than 99 unread',

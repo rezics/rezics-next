@@ -12,6 +12,11 @@ import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
 import { markInboxSeen, readInboxPage, type InboxPage, type ResolvedInboxPage } from './inbox-read';
 
+function kindLabel(item: ResolvedInboxPage['items'][number]) {
+  if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
+  return item.kind === 'mention' ? m.inbox_kind_mention() : m.inbox_kind_reply();
+}
+
 const queryKey = readQueryKey(['notifications', 'inbox'], 'session');
 
 export function InboxRows({
@@ -29,8 +34,10 @@ export function InboxRows({
         {page.items.map((item) => (
           <ListRow
             key={item.id}
+            data-notice-id={item.id}
             data-unread={item.unread}
             data-kind={item.reportId ? 'report_outcome' : item.kind}
+            data-actor-id={item.actorId ?? undefined}
             className={`flex items-start gap-3 py-4 ${item.unread ? 'bg-muted/50' : ''}`}
           >
             {item.actorId ? (
@@ -67,6 +74,12 @@ export function InboxRows({
               )}
               <span className="sr-only">{item.unread ? 'Unread notification' : 'Read notification'}</span>
               <span className="mt-1 block text-xs text-muted-foreground">
+                <span data-notice-byline="true">
+                  {item.actorName || (item.actorId ? m.inbox_actor_unknown() : m.inbox_actor_moderation())}
+                  <span aria-hidden="true"> · </span>
+                  {kindLabel(item)}
+                </span>
+                <span aria-hidden="true"> · </span>
                 <RelativeTime value={item.createdAt} locale={getLocale()} timeZone="UTC" />
                 <span className="sr-only">
                   {new Intl.DateTimeFormat(getLocale(), {
@@ -102,7 +115,9 @@ export function InboxPageView() {
     ...personalRead,
     enabled: personalRead.enabled && state === 'signed-in',
   });
-  const page = pageQuery.data?.signedIn ? pageQuery.data : null;
+  const page = pageQuery.data?.signedIn && pageQuery.data.state === 'ready' ? pageQuery.data : null;
+  const operationState = pageQuery.data?.signedIn && pageQuery.data.state !== 'ready' ? pageQuery.data : null;
+  const pageSignedOut = pageQuery.data !== undefined && !pageQuery.data.signedIn;
 
   useEffect(() => {
     if (!cursor || !page || accumulatedCursor.current === cursor) return;
@@ -131,12 +146,33 @@ export function InboxPageView() {
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
-      {state !== 'signed-in' ? (
+      {state !== 'signed-in' || pageSignedOut ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_sign_in()}</p>
       ) : pageQuery.isPending ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_loading()}</p>
-      ) : pageQuery.isError ? (
-        <p className="mt-6 text-muted-foreground">{m.inbox_unavailable()}</p>
+      ) : pageQuery.isError || operationState ? (
+        <section
+          role="status"
+          data-response-status={operationState?.failure.status ?? ''}
+          data-response-code={operationState?.failure.code ?? ''}
+          className="mt-6 rounded-lg border border-border p-5"
+        >
+          <p className="text-muted-foreground">
+            {operationState?.state === 'closed'
+              ? m.inbox_closed()
+              : operationState?.state === 'preparing'
+                ? m.inbox_preparing()
+                : m.inbox_unavailable()}
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => void pageQuery.refetch()}
+            disabled={pageQuery.isFetching}
+          >
+            {m.inbox_retry()}
+          </Button>
+        </section>
       ) : items.length === 0 && !next ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_empty()}</p>
       ) : (

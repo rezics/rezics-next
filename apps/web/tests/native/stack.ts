@@ -89,6 +89,7 @@ export type NativeWebStack = {
   injectKernelFailureOnce(failure: NativeKernelFailureInjection): Promise<void>;
   webOutput(): string;
   flushKernelRequests(): Promise<void>;
+  workerLogs(): Promise<string>;
   peakMemoryBytes(): number;
   restartWeb(options: { publicOrigin: string; authIssuer?: string }): Promise<void>;
   stop(): Promise<void>;
@@ -308,7 +309,9 @@ function errorDetails(error: unknown): string {
   return details.join('\n');
 }
 
-async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{ pid?: number; stop(): Promise<void> }> {
+async function startDurableWorker(
+  environment: NodeJS.ProcessEnv,
+): Promise<{ pid?: number; logs(): string; stop(): Promise<void> }> {
   const child = spawn(
     process.execPath,
     [
@@ -368,7 +371,7 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{ pid
     })());
   try {
     await ready;
-    return { pid: child.pid, stop };
+    return { pid: child.pid, logs: () => output, stop };
   } catch (error) {
     await stop();
     throw error;
@@ -386,7 +389,7 @@ async function startStack(): Promise<
   let authServer: ReturnType<typeof Bun.serve> | undefined;
   const activeKernelRequests = new Set<Promise<Response>>();
   const injectedKernelFailures: NativeKernelFailureInjection[] = [];
-  let durableWorker: { pid?: number; stop(): Promise<void> } | undefined;
+  let durableWorker: { pid?: number; logs(): string; stop(): Promise<void> } | undefined;
   let webProcess: WebProcess | undefined;
   let driver: SemanticOutcomeDriver | undefined;
   let postgresContainer: string | undefined;
@@ -1003,6 +1006,9 @@ async function startStack(): Promise<
       webOutput() {
         return webProcess?.output() ?? '';
       },
+      workerLogs() {
+        return Promise.resolve(durableWorker?.logs() ?? '');
+      },
       peakMemoryBytes() {
         sampleMemory();
         return peakMemory;
@@ -1064,6 +1070,7 @@ type HostCall = {
     | 'restartWeb'
     | 'injectKernelFailureOnce'
     | 'observe'
+    | 'workerLogs'
     | 'stop';
   argument?: string;
   options?: { publicOrigin: string; authIssuer?: string };
@@ -1461,6 +1468,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
           host.send({ id, method: 'restartWeb', options } satisfies HostCall);
         });
       },
+      workerLogs() {
+        return call('workerLogs') as Promise<string>;
+      },
       stop() {
         return (closed ??= (async () => {
           for (const owner of [hostOwnership, ...ownedGroups.values()]) owner.capture();
@@ -1561,6 +1571,7 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
           stack.injectKernelFailureOnce(JSON.parse(argument!) as NativeKernelFailureInjection);
         else if (method === 'observe') await stack.syncKernelRequests();
         else if (method === 'restartWeb') await stack.restartWeb(options!);
+        else if (method === 'workerLogs') value = await stack.workerLogs();
         else if (method === 'stop') await stack.stop();
         send({ id, value, observation: observation() } satisfies HostReply, method === 'stop' ? 0 : undefined);
       } catch (error) {
