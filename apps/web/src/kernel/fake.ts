@@ -837,8 +837,10 @@ function searchHit(fixtures: Fixtures, subject: FixtureSubject) {
 /** Subjects with a statement of that property naming one of the filter's subjects. */
 function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search' }>) {
   const filter = read.body.filter;
+  // This fixture has no native evaluator or cursor producer for configured FilterDocuments.
+  if (read.cursor || (!('type' in filter) && !('statement' in filter && 'in' in filter.statement))) return undefined;
   if (fixtures.searchWithoutTotal) {
-    const named = 'statement' in filter ? filter.statement : undefined;
+    const named = 'statement' in filter && 'in' in filter.statement ? filter.statement : undefined;
     const ids = new Set(named?.in ?? []);
     const matched = fixtures.subjects.filter((subject) =>
       'type' in filter
@@ -869,7 +871,7 @@ function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search'
       as_of: '2026-10-26T00:00:00.000Z',
     };
   }
-  const named = 'statement' in filter ? filter.statement : undefined;
+  const named = 'statement' in filter && 'in' in filter.statement ? filter.statement : undefined;
   const ids = new Set(named?.in ?? []);
   const matched = named
     ? fixtures.subjects.filter((subject) =>
@@ -889,6 +891,11 @@ function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search'
     next: null,
     as_of: '2026-10-26T00:00:00.000Z',
   };
+}
+
+function fixtureSearchResult(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search' }>) {
+  const body = searchRead(fixtures, read);
+  return body ? { status: 200, body } : { status: 503, body: { code: 'dependency_unavailable' } };
 }
 
 /** Subjects holding a statement of the property that names the subject, as the kernel's `links` read returns them. */
@@ -1037,7 +1044,7 @@ async function pageRead(fixtures: Fixtures, request: Request): Promise<Response>
       descriptor.kind === 'subject' && descriptor.id === payload?.subject.id && payload
         ? { status: 200, body: payload }
         : descriptor.kind === 'search'
-          ? { status: 200, body: searchRead(fixtures, descriptor) }
+          ? fixtureSearchResult(fixtures, descriptor)
           : descriptor.kind === 'links'
             ? { status: 200, body: linksRead(fixtures, descriptor) }
             : descriptor.kind === 'collections'

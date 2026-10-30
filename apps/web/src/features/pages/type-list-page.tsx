@@ -27,7 +27,7 @@ export function TypeListPage({
         reads={page.reads}
         context={page.context}
         continuation={page.continuation}
-        account={page.account}
+        {...(page.account ? { account: page.account } : {})}
         listTarget={target}
         fullList={node}
         messages={subjectPageMessages()}

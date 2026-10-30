@@ -7,6 +7,7 @@ import {
   readCost,
   MAX_PAGE_COST,
   PageContinuationError,
+  PageReadLimitError,
   type PageContinuation,
   type SelectedContext,
   platformRegistry,
@@ -533,6 +534,7 @@ async function pageAnswer(input: {
     } catch (error) {
       if (error instanceof PageContinuationError)
         reject([{ pointer: `/continuation/${error.field}`, code: 'invalid_format' }]);
+      if (error instanceof PageReadLimitError) reject([{ pointer: '/reads', code: 'out_of_range' }]);
       throw error;
     }
   })();

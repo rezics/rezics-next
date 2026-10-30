@@ -9,17 +9,26 @@ import { isRecord } from './shared';
 import type { SubjectPageData } from './subject';
 
 const readTypeList = createServerFn({ method: 'GET', strict: false })
-  .validator((value: { locale: string; node: string; page: string; cursor?: string }) => {
+  .validator((input: unknown) => {
+    const value = isRecord(input) ? input : {};
     if (
+      typeof value.locale !== 'string' ||
       !value.locale ||
       value.locale.length > 35 ||
+      typeof value.node !== 'string' ||
       !/^[A-Za-z0-9_-]{1,64}$/.test(value.node) ||
+      typeof value.page !== 'string' ||
       value.page.length > 2048 ||
-      (value.cursor !== undefined && (!value.cursor || value.cursor.length > 4864))
+      (value.cursor !== undefined && (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 4864))
     )
       throw notFound();
     try {
-      return { ...value, target: typeListTarget(JSON.parse(value.page)) };
+      return {
+        locale: value.locale,
+        node: value.node,
+        target: typeListTarget(JSON.parse(value.page)),
+        cursor: value.cursor,
+      };
     } catch {
       throw notFound();
     }
@@ -43,7 +52,7 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
     );
     if (result.status === 404) throw notFound();
     if (result.status === 308) {
-      const body = result.data ?? result.error?.value;
+      const body: unknown = result.data ?? result.error?.value;
       if (isRecord(body) && isRecord(body.redirect) && typeof body.redirect.to === 'string')
         throw redirect({
           href: typeListHref(
