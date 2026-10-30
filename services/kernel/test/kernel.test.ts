@@ -117,6 +117,7 @@ const typed = [
   'GET /v1/realms/:realmId/publications/:subjectId',
   'GET /v1/realms/:realmId/publications',
   'GET /v1/realms/:realmId',
+  'GET /v1/realms/:realmId/presentation',
   'GET /v1/realms/:realmId/participation',
   'POST /v1/realms/:realmId/membership',
   'DELETE /v1/realms/:realmId/membership',

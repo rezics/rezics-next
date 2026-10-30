@@ -74,6 +74,7 @@ import { listOwnRealms } from './own-realms.ts';
 import { RealmPresentationSchema } from './presentation.ts';
 import { CommunityPresentationSchema, communityPresentationResponse } from '../content/community-presentation-model.ts';
 import { readCommunityPresentations } from '../content/community-presentation.ts';
+import { readRealmHomePresentation } from './realm-home-presentation.ts';
 import { ownRealmsQuerySchema, ownRealmsResponseSchema } from './schemas.ts';
 import {
   listPublications,
@@ -1166,6 +1167,27 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         const representation = publishedRealm(current);
         set.headers.etag = JSON.stringify(representation.headRevisionId);
         return { realm: representation };
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/presentation',
+      {
+        params: realmParams,
+        response: { 200: strict(t.Object({ community: CommunityPresentationSchema }, closed)), ...readFailures },
+        detail: {
+          operationId: 'realm.presentation',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, actor, admission, job }) => {
+        const community = await admission.run('normal', job, () =>
+          readRealmHomePresentation(realmDependencies(), realmId, { actor, deadline: job.deadline }),
+        );
+        if (!community) throw new ProblemError('not_found');
+        return { community: communityPresentationResponse(community) };
       },
     )
     .get(

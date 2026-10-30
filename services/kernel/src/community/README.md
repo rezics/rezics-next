@@ -732,6 +732,26 @@ for a currently readable carried Realm. Space-only homes retain their own native
 Membership, setup and publication remain separate regions. The final Space head and carried-Realm binding must
 still match. The independent `contextId` pointer is preserved; it grants no editorial permission.
 
+`readRealmHomePresentation({pool, access, clock?}, realmId, {actor, deadline})` in
+`realm-home-presentation.ts` composes that same native reader for exactly one Realm. The public
+`GET /v1/realms/:realmId/presentation` returns the closed `{community: CommunityPresentation}` envelope under
+ordinary `realm:read` and independent host `space:read`. Public anonymous and authorized protected readers use
+the same source protocol; no management or independent Context grant is required or conferred. Missing, denied,
+removed or changed Realm/Space bindings yield the same 404. Required source failures yield typed 503 problems;
+optional source failures keep the native unavailable/unknown states and never reuse a cached positive value.
+
+### Cost: Realm home presentation read
+
+- Touches: one full routed Realm key and its one host Space key, their exact heads, lifecycle and placement
+  anchors, native Access decisions, at most one current self-membership interval and two protected-ban identities.
+- Bound: one invocation of `readCommunityPresentations` with one Realm, two fixed REPEATABLE READ rounds,
+  one native member-count point helper per round, at most one exact rules revision (at most 33 post keys and
+  65,536 canonical bytes), and two selected media keys with at most twelve derivatives each. Each row-kind batch
+  has constant statements and logarithmic indexed work; no scan, refill, recount or extra source round is added.
+- Growth check: later reuse `test/community/growth-realm.test.ts` and the Content rules/media growth harnesses.
+  Focused source and privacy outcomes live in `test/community/home-presentation.test.ts`; compiler typing alone
+  establishes no native or physical cost proof.
+
 Accounts owns `member-count.ts` and its `RealmMemberCount = Readonly<{count:number, version:string}>` export.
 `readRealmMemberCount(client: AccessClient, {realmId, at: AuthoritativeTime})` returns that native current result
 or null when unknown. Content binds this original module at the reader's existing before/final Realm anchors;
