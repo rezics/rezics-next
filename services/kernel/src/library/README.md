@@ -1731,3 +1731,11 @@ rows, statements, blocks and bytes remain independent inclusive bounds; no nativ
 `collection-list-facts.test.ts` supplies native API/persona, configuration, concealment, tuple/identity/source-race and
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
 64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
+
+Native shelf maintenance is exported by `shelf-maintenance-ops-contract.ts` and installed by the existing
+Library WorkModule. Its default initialization, operator request, page/CAS, complete-generation swap and bounded
+recovery are implemented in `shelf-maintenance-runtime.ts`. The derived allocator guard accepts only that runner's
+same live transaction/run/epoch/build capability. Nonempty type repair remains pending when the real allocator or
+scoped identity-only source adapters are absent. Shelf purge verifies native tombstone envelopes and observes the
+existing Library erasure participant's local disposition; it does not add a participant or acknowledge shared custody.
+See [the operational contract](shelf-maintenance-ops-contract.md).

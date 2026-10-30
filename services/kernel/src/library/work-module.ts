@@ -8,7 +8,9 @@ export const libraryWorkModule: WorkModule = {
   name: 'library',
   async register(context) {
     const { registerLibraryWork } = await import('./work.ts');
-    registerLibraryWork(context);
+    const { registerShelfMaintenanceWork } = await import('./shelf-maintenance-runtime.ts');
+    const maintenance = await registerShelfMaintenanceWork(context);
+    registerLibraryWork(context, maintenance);
     const { registerFollowCountWork } = await import('./follow-count-work.ts');
     await registerFollowCountWork(context);
     const { registerLibraryEntryRetentionWork } = await import('./entry-due-work.ts');

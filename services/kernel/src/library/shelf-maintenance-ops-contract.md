@@ -1,12 +1,30 @@
 # Bounded shelf maintenance operations
 
 This is the operational refinement of [shelf-contract.md](shelf-contract.md), Migration, backfill and cutover.
-[The ports](shelf-maintenance-ops-contract.ts) specify future native behavior; effectful exports throw.
-Only `initialShelfReadiness` and `counterWriteMode` implement pure rules. No migration, runtime guard, counter,
-HTTP route, effect registration or composition is implemented here. Adopt the Proposed protocol in
-[account-local maintenance](../../../../docs/research/library-shelf-maintenance.md) and the Recommendation and
-Transaction and lifecycle implications in [native staging](../../../../docs/research/native-long-value-staging.md).
-The research's suggestion that Accounts await consumers is superseded by the adopted asynchronous deletion policy.
+[The ports](shelf-maintenance-ops-contract.ts) export the native factories from
+[shelf-maintenance-runtime.ts](shelf-maintenance-runtime.ts). The existing Library WorkModule installs bounded page
+segments and indexed recovery. Initialization, operator requests, native phase/checkpoint CAS, Core receipts,
+generation publication and retirement are callable defaults. Every ordinary Library command runner and Collection
+resource writer takes the account/gate barrier before its input effects. Existing incarnation cutover and explicit
+profile-pin repair also share the same gate through their live operational transactions; they do not gain command
+or derived-page authority.
+
+The allocator and source owners compose their already published `ShelfTypeKeys` and preparation observation ports
+through `derivedKeys` and `sources`. These are trusted service dependencies, never locator fields or permission
+booleans. This checkout has no delivered native allocator or identity-only source factory; a nonempty type phase
+keeps its exact native frontier pending until that real composition is available. Empty native owners still finish
+all phases and publish. No stub observer or allocator is called, no missing evidence becomes a type or ready claim. Backfill validation
+rechecks each stored source/origin identity through released identity-only observations. A changed identity cancels
+its exact private reservation and refreshes that frontier; a changed validation input abandons the private count
+build and recounts into a fresh generation. Missing identity leaves the exact checkpoint pending.
+
+Purge uses the existing fixed Library erasure participant as its sole deletion engine and default custody.
+Shelf purge pages inspect its bounded indexed native roots and retire only maintenance scratch. Their terminal
+receipt means that exact shelf domain is exhausted; public history, shared receipts and DBOS history remain the
+existing participant's separate obligations. Recovery durably enqueues the existing erasure workflow before shelf
+verification, then conditionally acknowledges its exact observed intent. Incomplete native runs remain indexed
+recovery candidates even after enqueue acknowledgement; each acknowledged delivery advances a native attempt so a
+failed workflow cannot permanently consume the only runnable intent.
 
 ## Initial readiness and writer amendments
 
@@ -125,7 +143,7 @@ starting over. Cleanup cannot delete an active/build generation. No dual writes 
 
 Normal reserve/stage factories currently enter the ordinary writer guard; that guard MUST continue refusing rebuilding.
 Add an internal allocator core shared by `createShelfTypeReserver` and `createShelfTypeStager`, with a private native
-maintenance guard closure. `createShelfMaintenanceDerivedPorts` describes that seam; it deliberately throws today.
+maintenance guard closure. `createShelfMaintenanceDerivedPorts` implements that seam with a private live-page WeakMap.
 Only the installed maintenance runner mints `ShelfDerivedPage`, after loading/locking the matching native run and
 revalidating currentCommand, live transaction identity, partition/owner, active account share, gate mode, epoch, run
 and build generation. Bind provenance using a module-private WeakMap keyed by the capability and live transaction,
@@ -239,8 +257,8 @@ separately outstanding retention evidence; `sharedEvidence='separate-contract'` 
 ## Implementation and executable evidence
 
 Implement each row below in <=400 changed implementation lines / <=8 files; split again when necessary. Depend on
-concrete code/DDL ports, not research reports or other workers' unfinished runtime files. Only final wiring edits shared
-stubs, kernel composition and work registration; this specification does not claim these are installed.
+concrete code/DDL ports, not research reports or other workers' unfinished runtime files. The existing Library WorkModule now installs the native runtime. Allocator and scoped source composition still
+require their concrete owners; source typing does not establish native outcome or cost proof.
 
 | Slice                 | Concrete prerequisites                                                  | Required evidence                                                                |
 | --------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------- |

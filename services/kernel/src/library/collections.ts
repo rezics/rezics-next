@@ -54,6 +54,7 @@ import {
   updateCollection as updateCollectionRow,
   updateMemberNote as updateMemberNoteRow,
 } from './collection-store.ts';
+import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
 import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createCollectionBatchCommands } from './collection-batch.ts';
 import batchParents from './collection-batch-parents.sql';
@@ -520,6 +521,9 @@ export function createCollectionCommands(config: {
         authorization,
       },
       async (tx, command) => {
+        const current = await visibleCollection(tx, owner, route, collectionId, command.time);
+        if (current.curatorAccountId === null) throw new GrantDeniedError();
+        await enterShelfWrite(tx, { route, accountId: current.curatorAccountId });
         const failure = failures.get(command.time);
         if (failure) throw failure;
         return body(

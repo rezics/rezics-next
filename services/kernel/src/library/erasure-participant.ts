@@ -14,6 +14,8 @@ import probe from './erasure-probe.sql';
 import { purgeOwnedGraphPage } from './erasure-owned-graph.ts';
 import { initialGraphCheckpoint, runOwnedGraphSegment, type GraphCheckpoint } from './erasure-owned-work.ts';
 
+import type { ShelfMaintenanceOps } from './shelf-maintenance-ops-contract.ts';
+
 const TOMBSTONED = 'com.rezics.access.account-tombstoned.v1';
 const WORKFLOW = 'library.accountErasure';
 
@@ -38,7 +40,7 @@ export const libraryErasureWorkflowId = (accountId: string) => {
  * Shared/foreign custody still has no complete-proof path; this module cannot ACK.
  * See erasure-participant.md for every remaining producer and cleanup obligation.
  */
-export function registerLibraryErasure({ pool, client, addEffects }: WorkContext): void {
+export function registerLibraryErasure({ pool, client, addEffects }: WorkContext, maintenance?: ShelfMaintenanceOps): void {
   const inspect = DBOS.registerStep(
     async (accountId: string) => {
       const route = requireRoute(accountId);
@@ -171,6 +173,7 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
         if (!Value.Check(ACCESS_EVENTS[TOMBSTONED], event.data)) throw new TypeError('Invalid Library erasure event');
         const { accountId } = event.data as { accountId: string };
         if (event.subject !== accountId) throw new TypeError('Invalid Library erasure event address');
+        if (maintenance) await maintenance.requestPurge(event);
         await client.enqueue(
           {
             workflowName: WORKFLOW,

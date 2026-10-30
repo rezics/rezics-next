@@ -6,6 +6,7 @@ const id = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 export const LIBRARY_EVENTS = {
   'com.rezics.library.follow-count.applied.v1': Type.Object({ targetId: id }, { additionalProperties: false }),
   'com.rezics.library.follow-count.withdrawn.v1': Type.Object({}, { additionalProperties: false }),
+  'com.rezics.library.shelf-maintenance.advanced.v1': Type.Object({ accountId: id }, { additionalProperties: false }),
   'com.rezics.library.account-graph.purged.v1': Type.Object(
     {
       accountId: id,

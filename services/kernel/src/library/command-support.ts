@@ -20,6 +20,8 @@ import { accessCommandAuthorization, type Access, type AccountActor, type Actor 
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 
+import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
+
 export const WORK_STEP_DEADLINE_MS = 5_000;
 
 /** Shared deadline policy for native Library work steps outside actor commands. */
@@ -167,7 +169,10 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
         },
         authorization,
       },
-      body,
+      async (tx, command) => {
+        await enterShelfWrite(tx, { route, accountId: owner.accountId });
+        return body(tx, command);
+      },
     );
   }
 
@@ -236,7 +241,10 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
         },
         authorization: activeAccountAuthorization(accountId, route),
       },
-      body,
+      async (tx, command) => {
+        await enterShelfWrite(tx, { route, accountId });
+        return body(tx, command);
+      },
     );
   }
 

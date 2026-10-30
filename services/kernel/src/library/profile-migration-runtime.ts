@@ -1,3 +1,4 @@
+import { fenceShelfTechnicalWrite } from './shelf-maintenance-runtime.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
@@ -113,7 +114,10 @@ function transaction<T>(deps: Dependencies, accountId: string, body: (tx: Operat
       deadline: workStepDeadline(),
       ...(deps.clock === undefined ? {} : { clock: deps.clock }),
     },
-    body,
+    async tx => {
+      await fenceShelfTechnicalWrite(tx,{route:key.route,accountId});
+      return body(tx);
+    },
   );
 }
 

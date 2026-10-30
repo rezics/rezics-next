@@ -11,6 +11,7 @@ import { workStepDeadline } from './command-support.ts';
 import page from './entry-incarnation-cutover-page.sql';
 import lock from './entry-incarnation-cutover-lock.sql';
 import stamp from './entry-legacy-incarnation-stamp.sql';
+import { fenceShelfTechnicalWrite } from './shelf-maintenance-runtime.ts';
 
 type Key = { route: number; accountId: string; subjectId: string };
 type Cursor = Key & { v: 1; partition: number };
@@ -125,6 +126,7 @@ export async function cutoverEntryIncarnationsPage(
             ...(clock === undefined ? {} : { clock }),
           },
           async (tx) => {
+            await fenceShelfTechnicalWrite(tx,{route:source.route,accountId:source.accountId});
             // Lock only the exact captured row. xmin is ephemeral CAS evidence and is never checkpointed.
             const exact = await lock.run(tx, {
               route: source.route,
