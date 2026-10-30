@@ -316,3 +316,32 @@ test('native keyed custody growth includes unrelated definitions observations an
     await registry.closeObservation(n.queried, search, context());
   }
 }, 600_000);
+
+test('full expanded negative AST text keyset and configuration are copied before native I/O; compiler keys and immutable rebinding reject tampering', async () => {
+  const physical = await target();
+  const d = definition();
+  const property = (id: string, qualifiers: string[] = []) => ({ iri: `https://example.test/${id}`, labels: {en:id}, mappings: [], datatype: 'wikibase-item' as const, multivalued: true, qualifiers, value: {} });
+  Object.assign(d.meaning.release, { types: { 'schema:Book': { iri:'https://schema.org/Book',labels:{en:'Book'},mappings:[],bases:[],properties:['schema:author'],facets:['schema:author'] } }, properties: { 'schema:author':property('author',['rezics:role']), 'rezics:role':property('role') } });
+  Object.assign(d.meaning, { digest: releaseDigest(d.meaning.release) });
+  const id = crypto.randomUUID();
+  const ast = { or: [{ type: {in:['schema:Book']} }, { not: {statement:{property:'schema:author',in:[id],qualifiers:[{property:'rezics:role',in:[id]}]}} }] };
+  const text = { kind:'term' as const,value:'original text' };
+  Object.assign(d.capture,{filterDocument:ast,text});
+  Object.assign(d,{dependencyKeys:[{kind:'type'},{kind:'property',property:'schema:author'},{kind:'property',property:'rezics:role'},{kind:'order',order:'id'}]});
+  const expected = structuredClone(d);
+  const input = {definition:d,physicalTarget:physical.index,consumerGeneration:'1',projectionGeneration:'1'};
+  const pending = registry.register(input,search,context());
+  ast.or[0]!.type!.in[0]='schema:Person'; text.value='mutated';
+  const registered = await pending;
+  if (registered.status !== 'registered') throw new Error(registered.reason);
+  const opened = await registry.openPit({registration:registered.registration,covered:cut(),keepAliveMs:60000},search,context());
+  if (opened.status !== 'retained') throw new Error(opened.reason);
+  const found = await registry.read({queried:opened.queried},context());
+  expect(found.status === 'found' && found.definition).toEqual(expected);
+  expect((await registry.register({...input,definition:{...expected,capture:{...expected.capture,size:1}}},search,context())).status).toBe('unready');
+  expect(() => registry.register({...input,definition:{...expected,dependencyKeys:[{kind:'order',order:'id'}]}},search,context())).toThrow();
+  expect((await registry.read({queried:opened.queried}, {deadline:Date.now()-1}))).toMatchObject({status:'unavailable',reason:'deadline',cost:{statements:0,engineRequests:0}});
+  expect((await registry.closeObservation({...opened.queried,consumer:{...opened.queried.consumer,readDefinition:'other'}},search,context())).status).toBe('unready');
+  expect((await registry.read({queried:opened.queried},context())).status).toBe('found');
+  await registry.closeObservation(opened.queried,search,context());
+});
