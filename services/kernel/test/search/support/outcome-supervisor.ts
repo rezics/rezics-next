@@ -10,7 +10,7 @@ import { createKernel } from '../../../src/http/kernel.ts';
 import { createOpenSearch, OpenSearchError } from '../../../src/search/opensearch.ts';
 import { SEARCH_TEMPLATE, SUGGEST_TEMPLATE, FACET_TEMPLATE } from '../../../src/search/query.ts';
 import { createSearchService } from '../../../src/search/service.ts';
-import { subjectSource } from '../../../src/semantic/search-source.ts';
+import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
 import { closeOwnedSemanticAuth, type OwnedSemanticResource } from '../../semantic/outcome-auth.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from '../../semantic/outcome-driver.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
@@ -239,13 +239,21 @@ function supervise(parent: OutcomeRpc) {
       return snapshot();
     })());
   }
-  function close() {
+  function close(admittedControlFailed = false) {
     sealed = true;
+    // The caller drains its admitted RPCs before close; their replies can already have
+    // left operations here. Preserve that failure in the owned process exit status.
+    if (admittedControlFailed) process.exitCode = 1;
     return (closing ??= (async () => {
       await starting?.catch(() => {}); // init preserves and reports its own original error.
       const admitted = await Promise.allSettled([...operations]);
       for (const result of admitted) if (result.status === 'rejected') failures.push(result.reason);
-      return dispose();
+      try {
+        return await dispose();
+      } catch (error) {
+        process.exitCode = 1;
+        throw error;
+      }
     })());
   }
   async function init(endpoint: string): Promise<SupervisorReady> {
@@ -257,13 +265,15 @@ function supervise(parent: OutcomeRpc) {
       semantic = await createSemanticDriver(
         (config) => {
           if (!config.tokens) throw new Error('Semantic fixtures did not supply session keys');
+          const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey);
           return createKernel({
             ...config,
             search: createSearchService({
               pool: config.pool,
               client,
               prefix,
-              source: subjectSource(config.pool, config.routeKey),
+              source,
+              ratings,
               cursors: config.tokens,
             }),
           });
@@ -271,6 +281,7 @@ function supervise(parent: OutcomeRpc) {
         { linkProjection: 'external', strictCleanup: true, onOwnedResource: own, beforeClose },
       );
       const fixtures = semantic.fixtures;
+      await fixtures.openFeatures(['personal_library']);
       observation.authIssuer = fixtures.runtime.authIssuer;
       operator = await fixtures.person('search_operator');
       await fixtures.grantAccount(operator, ['moderation:hide', 'moderation:takedown']);
@@ -378,10 +389,7 @@ function supervise(parent: OutcomeRpc) {
         const account = await fixtures.person(`nv_${randomBytes(8).toString('hex')}`, {
           scopes: ['rating:vote', 'subject:read'],
         });
-        // Own-account vote authorization uses the current account and rating:vote scope.
-        // A closed personal_library gate borrows that scope and checks this Global grant.
-        await fixtures.grantAccount(account, ['rating:vote'], account.accountId);
-        await fixtures.grantAccount(account, ['gate:personal_library']);
+        // Own votes use the authenticated account and rating:vote scope without an account grant.
         const voter = randomUUID();
         voters.set(voter, { account });
         return { voter, accountId: account.accountId };
@@ -500,8 +508,11 @@ function supervise(parent: OutcomeRpc) {
     close,
     control(method: string, params: unknown): unknown {
       if (method === 'close') {
-        empty(params);
-        return close();
+        if (params !== undefined) {
+          exact(params, ['admittedControlFailed']);
+          if (params.admittedControlFailed !== true) throw new Error('Invalid close parameters');
+        }
+        return close(params !== undefined);
       }
       if (sealed) throw new Error('Search supervisor is closing');
       if (method === 'init') {

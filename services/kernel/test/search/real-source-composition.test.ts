@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { SearchDriver, HttpResponse } from '../../../../specs/search-driver.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { LINKS_CONSUMER } from '../../src/semantic/links.ts';
 import { createDriverClient, type DriverClient } from './support/driver-client.ts';
 
 const clients = new Set<DriverClient>();
@@ -267,25 +268,47 @@ test('Search pause drains its runner while real semantic relation events converg
       },
     });
   // A newly adopted value cannot enter the stale Search candidate while its runner is paused.
-  // Observe Semantic's published witness and its committed SOURCE event instead of running its factory here.
+  // The default Semantic worker must project the actual adopted link independently of Search.
+  const links = await eventually(
+    () => driver.request('anonymous', 'GET', `/v1/subjects/${author.id}/links?property=schema%3Aauthor&limit=20`),
+    (response) =>
+      response.status === 200 &&
+      (response.body.freshness as { caught_up?: boolean } | undefined)?.caught_up === true &&
+      (response.body.links as { subject: string; property: string; statement: string }[]).some(
+        (link) =>
+          link.subject === book.id && link.property === 'schema:author' && link.statement === candidate.body.candidate,
+      ),
+  );
+  expect(links.body.links).toEqual([
+    expect.objectContaining({ subject: book.id, property: 'schema:author', statement: candidate.body.candidate }),
+  ]);
+  expect(links.body.freshness).toMatchObject({ caught_up: true });
   await withKernelDatabase(client, async (pool) => {
-    await eventually(
+    const events = await eventually(
       async () => {
-        const result = await pool.query<{ witness_id: string; changed: boolean }>(
-          `SELECT value.witness_id, EXISTS (
-             SELECT 1 FROM core.outbox
-             WHERE partition_no = $1 AND position > $2::bigint AND position <= $2::bigint + 4096
-               AND subject = $3::uuid AND type = 'com.rezics.subject.relation_facet_changed.v1'
-             LIMIT 1
-           ) AS changed
-           FROM semantic.relation_facet_value AS value
-           WHERE route = $4 AND subject_id = $3::uuid AND property = $5 AND value.value = $6
-           LIMIT 1`,
-          [partition, position, book.id, route, 'schema:author', author.id],
+        const result = await pool.query<{ epoch: number; position: string }>(
+          `SELECT epoch, position::text FROM core.outbox
+           WHERE partition_no = $1 AND position > $2::bigint AND position <= $2::bigint + 4096
+             AND subject = $3 AND type = 'com.rezics.semantic.links.changed.v1'
+           ORDER BY position, event_seq LIMIT 1`,
+          [partition, position, book.id],
         );
         return result.rows;
       },
-      (rows) => rows.length === 1 && rows[0]!.witness_id === candidate.body.candidate && rows[0]!.changed,
+      (rows) => rows.length === 1,
+    );
+    const event = events[0]!;
+    await eventually(
+      async () => {
+        const result = await pool.query<{ epoch: number | null; position: string }>(
+          `SELECT epoch, position::text FROM core.consumer_checkpoint
+           WHERE partition_no = $1 AND consumer = $2 LIMIT 1`,
+          [partition, LINKS_CONSUMER],
+        );
+        return result.rows;
+      },
+      (rows) =>
+        rows.length === 1 && rows[0]!.epoch === event.epoch && BigInt(rows[0]!.position) >= BigInt(event.position),
     );
   });
   expect(ids(await related())).not.toContain(book.id);

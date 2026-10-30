@@ -16,7 +16,7 @@ import { systemClock } from './clock.ts';
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { setupPresentation } from './presentation/setup.ts';
-import { subjectSource } from './semantic/search-source.ts';
+import { createRatedSubjectSource } from './search/rated-source.ts';
 import { setupSemantic } from './semantic/setup.ts';
 import { setupContent } from './content/setup.ts';
 import { createOpenSearch } from './search/opensearch.ts';
@@ -226,6 +226,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     void workClient.catch(() => {});
     const client = workClient;
     await client;
+    const rated = searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey);
     app = createKernel({
       pool,
       routeKey: config.routeKey,
@@ -236,14 +237,15 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       access: defaults.access,
       content: { ...config.content, workflows: operationWorkflows },
       ratePeer: (request) => peers.get(request),
-      ...(openSearch === undefined || searchConfig === undefined
+      ...(openSearch === undefined || searchConfig === undefined || rated === undefined
         ? {}
         : {
             search: createSearchService({
               pool,
               client: openSearch,
               prefix: searchConfig.prefix,
-              source: subjectSource(pool, config.routeKey),
+              source: rated.source,
+              ratings: rated.ratings,
               cursors: config.tokens,
             }),
           }),

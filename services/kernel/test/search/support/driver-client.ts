@@ -278,7 +278,11 @@ export function createDriverClient(endpoint = process.env.OPENSEARCH_URL): Drive
       const admitted = await Promise.allSettled([...operations]);
       for (const result of admitted) if (result.status === 'rejected') failures.push(result.reason);
       try {
-        ledger.cleanup = await rpc.request<SupervisorObservation>('close', undefined, CLOSE_MS);
+        ledger.cleanup = await rpc.request<SupervisorObservation>(
+          'close',
+          failures.length ? { admittedControlFailed: true } : undefined,
+          CLOSE_MS,
+        );
       } catch (error) {
         failures.push(error);
       }

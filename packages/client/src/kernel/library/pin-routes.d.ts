@@ -3836,6 +3836,36 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                                 title: string;
                                 description: string | null;
                                 visibility: "private" | "public" | "unlisted";
+                                presentationKind: string | null;
+                                presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                                coverSource: "member" | "none" | "owner" | "pending";
+                                coverMediaId?: string | null;
                                 revision: number;
                                 memberCount: number;
                                 createdAt: string;

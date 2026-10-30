@@ -161,13 +161,13 @@ async function rebuild(): Promise<void> {
   const { createPool } = await import('../src/database/pool.ts');
   const { createOpenSearch } = await import('../src/search/opensearch.ts');
   const { RebuildError, rebuildSubjects } = await import('../src/search/generations.ts');
-  const { subjectSource } = await import('../src/semantic/search-source.ts');
+  const { createRatedSubjectSource } = await import('../src/search/rated-source.ts');
   const pool = createPool(databaseUrl);
   try {
     const result = await rebuildSubjects({
       pool,
       search: createOpenSearch(config.url),
-      source: subjectSource(pool, routeKey),
+      source: createRatedSubjectSource(pool, routeKey).source,
       prefix: config.prefix,
       // The worker's runner discovers the new generation on its own.
       runner: { async refresh() {} },

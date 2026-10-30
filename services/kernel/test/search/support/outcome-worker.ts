@@ -4,7 +4,8 @@ import type { WorkContext, WorkModule } from '../../../src/work/registry.ts';
 import { rebuildSubjects } from '../../../src/search/generations.ts';
 import { createOpenSearch } from '../../../src/search/opensearch.ts';
 import { readSearchConfig } from '../../../src/search/work.ts';
-import { subjectSource } from '../../../src/semantic/search-source.ts';
+import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
+import { readMembershipRouteKey } from '../../../src/access/membership-work-config.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { createOutcomeRpc } from './outcome-rpc.ts';
 import { createSearchRunnerSlot } from './runner-slot.ts';
@@ -159,13 +160,12 @@ if (import.meta.main) {
       const context = searchContext!;
       const config = readSearchConfig(context.env);
       if (!config) throw new Error('Default search configuration is missing');
-      const key = context.env.KERNEL_ROUTE_KEY;
-      if (!key) throw new Error('KERNEL_ROUTE_KEY is required');
+      const routeKey = readMembershipRouteKey(context.env);
       const { generation } = await rebuildSubjects({
         pool: context.pool,
         search: createOpenSearch(config.url),
         prefix: config.prefix,
-        source: subjectSource(context.pool, Buffer.from(key, 'base64url')),
+        source: createRatedSubjectSource(context.pool, routeKey).source,
         runner,
       });
       return { generation };
