@@ -163,6 +163,27 @@ be read. A `realm_ban` denial applies to `realm:participate` even when the Realm
 current command to target that exact Realm. `updateRealm` calls it after moving the head
 when the new visibility is protected, in the same transaction as `realm.updated`.
 
+The native membership `roleReader.work` and `roleReader.batchWork` implement Access's
+optional six-axis work producer contract at the existing role SQL dispatches. They
+support routed pairs at finite ISO instants; batch supports unique pairs for at most
+two human accounts, each within the existing membership inverse limit. Other shapes
+return an unknown bound, so metered Access refuses before invoking the callback.
+An empty batch has no native dispatch; a missing Realm still charges the dispatched
+plan and its empty seek. The adjacent derivation in `membership-access-work.ts` bounds
+native anchor probes, finite relational intermediates and the closed parameter/range
+projection. Native rows retain their dispatch charge even when no proof is returned;
+completed receipts use the actual native projection bytes and empty-seek evidence.
+
+Receipts belong to one exact callback context and returned object, are consumed once,
+and contain no permission or retained client. Each metered invocation needs a fresh
+context object, including calls at the same T; reuse is unknown before dispatch.
+Ordinary callers retain their existing input and result behavior. The content worker's
+existing lazy wrapper forwards the original producers by identity after Access is
+constructed, without a pool read or an eager membership factory. Absent configuration
+provides no producer. Focused accounting and forwarding cases live in
+`test/community/membership-access-work.test.ts`; native physical growth proof remains
+with the existing membership acceptance.
+
 When Accounts reuses the current live membership reservation for another join or
 owner add, publication confirms the exact current membership by its open-key index
 and records the fresh transition proof without changing the interval or emitting

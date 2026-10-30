@@ -31,6 +31,15 @@ import type { LifecycleRequest } from '../access/lifecycle.ts';
 import type { MembershipBootstrapStep, MembershipReservation } from '../access/membership-inverse.ts';
 import type { RealmMembershipCommands } from '../access/membership-work.ts';
 import type { MembershipRoleProof, RealmRoleReader } from '../access/permission.ts';
+import type { AccessWork } from '../access/work.ts';
+import {
+  roleWorkBound,
+  roleBatchWorkBound,
+  roleWorkReceipt,
+  roleBatchWorkReceipt,
+  type RoleProjection,
+  type BatchRoleProjection,
+} from './membership-access-work.ts';
 import {
   authoritativeTimeValue,
   mintReadTime,
@@ -413,43 +422,89 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     };
   }
 
+  type RoleInput = Parameters<RealmRoleReader>[1];
+  type RoleResult = Awaited<ReturnType<RealmRoleReader>>;
+  type BatchInput = Parameters<NonNullable<RealmRoleReader['batch']>>[1];
+  type BatchResult = Awaited<ReturnType<NonNullable<RealmRoleReader['batch']>>>;
+  type Receipt<R> = { result?: R; work?: AccessWork };
+  // Invocation-local observations only: no permission, account state or client
+  // is retained. actual consumes the exact context/result identity once.
+  const roleReceipts = new WeakMap<RoleInput, Receipt<RoleResult>>();
+  const batchReceipts = new WeakMap<BatchInput, Receipt<BatchResult>>();
+  const roleContexts = new WeakSet<RoleInput>();
+  const batchContexts = new WeakSet<BatchInput>();
   const roleReader: RealmRoleReader = async (client, input) => {
+    const receipt: Receipt<RoleResult> | undefined = roleContexts.has(input) ? undefined : {};
+    roleReceipts.delete(input);
+    roleContexts.add(input);
+    if (receipt) roleReceipts.set(input, receipt);
+    const complete = (result: RoleResult) => {
+      if (receipt) receipt.result = result;
+      return result;
+    };
     const route = routeOf(input.realmId);
-    if (route === null || routeOf(input.accountId) === null) return null;
+    if (route === null || routeOf(input.accountId) === null) return complete(null);
+    const parameters = { route, realm_id: input.realmId, account_id: input.accountId, at: input.at };
+    const bound = receipt ? roleWorkBound(input) : undefined;
     let value: unknown;
     try {
-      value = await readRoles.run(client, {
-        route,
-        realm_id: input.realmId,
-        account_id: input.accountId,
-        at: input.at,
-      });
+      value = await readRoles.run(client, parameters);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Expected exactly one row, got 0')) return null;
+      if (error instanceof Error && error.message.includes('Expected exactly one row, got 0')) {
+        if (receipt) receipt.work = roleWorkReceipt(bound, parameters, []);
+        return complete(null);
+      }
       throw error;
     }
+    if (receipt) receipt.work = roleWorkReceipt(bound, parameters, asRows(value) as RoleProjection[]);
     const proofs: MembershipRoleProof[] = [];
     for (const row of asRows(value)) {
       const role = row.role === 'owner' || row.role === 'member' ? row.role : null;
       const member = flag(row, 'member');
       const valid = text(row, 'valid');
-      if (!role || member === null || !valid) return null;
+      if (!role || member === null || !valid) return complete(null);
       proofs.push({ role, member, valid });
     }
     proofs.sort((left, right) => (left.role === right.role ? 0 : left.role === 'owner' ? -1 : 1));
-    if (proofs.length !== 2 || proofs[0]?.role !== 'owner' || proofs[1]?.role !== 'member') return null;
-    return proofs;
+    if (proofs.length !== 2 || proofs[0]?.role !== 'owner' || proofs[1]?.role !== 'member') return complete(null);
+    return complete(proofs);
   };
 
+  roleReader.work = Object.freeze({
+    bound(input: RoleInput) {
+      return roleContexts.has(input) ? undefined : roleWorkBound(input);
+    },
+    actual(input: RoleInput, result: RoleResult) {
+      const receipt = roleReceipts.get(input);
+      roleReceipts.delete(input);
+      return receipt?.result === result ? receipt.work : undefined;
+    },
+  });
+
   roleReader.batch = async (client, input) => {
+    const receipt: Receipt<BatchResult> | undefined = batchContexts.has(input) ? undefined : {};
+    batchReceipts.delete(input);
+    batchContexts.add(input);
+    if (receipt) batchReceipts.set(input, receipt);
+    const complete = (result: BatchResult) => {
+      if (receipt) receipt.result = result;
+      return result;
+    };
     const pairs = input.pairs.map(({ realmId, accountId }) => ({
       route: routeOf(realmId),
       realm_id: realmId,
       account_id: accountId,
     }));
-    if (pairs.some((pair) => pair.route === null || routeOf(pair.account_id) === null)) return null;
-    if (!pairs.length) return [];
-    const rows = await readRoleBatch.run(client, { at: input.at, pairs });
+    if (pairs.some((pair) => pair.route === null || routeOf(pair.account_id) === null)) return complete(null);
+    const bound = receipt ? roleBatchWorkBound(input) : undefined;
+    if (!pairs.length) {
+      if (receipt) receipt.work = bound;
+      return complete([]);
+    }
+    const parameters = { at: input.at, pairs };
+    const rows = await readRoleBatch.run(client, parameters);
+    if (receipt)
+      receipt.work = roleBatchWorkReceipt(bound, parameters, asRows(rows) as BatchRoleProjection[], pairs.length);
     const proofs: (MembershipRoleProof & { realmId: string; accountId: string })[] = [];
     for (const row of asRows(rows)) {
       const role = row.role === 'owner' || row.role === 'member' ? row.role : null;
@@ -457,12 +512,22 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       const valid = text(row, 'valid');
       const realmId = text(row, 'realmId');
       const accountId = text(row, 'accountId');
-      if (!role || member === null || !valid || !realmId || !accountId) return null;
+      if (!role || member === null || !valid || !realmId || !accountId) return complete(null);
       proofs.push({ realmId, accountId, role, member, valid });
     }
-    if (proofs.length !== pairs.length * 2) return null;
-    return proofs;
+    if (proofs.length !== pairs.length * 2) return complete(null);
+    return complete(proofs);
   };
+  roleReader.batchWork = Object.freeze({
+    bound(input: BatchInput) {
+      return batchContexts.has(input) ? undefined : roleBatchWorkBound(input);
+    },
+    actual(input: BatchInput, result: BatchResult) {
+      const receipt = batchReceipts.get(input);
+      batchReceipts.delete(input);
+      return receipt?.result === result ? receipt.work : undefined;
+    },
+  });
 
   /** A sealed reference names a committed operation. Nothing in it is an actor: the
    * returned request is only a carrier, and publish restores the initiator itself.

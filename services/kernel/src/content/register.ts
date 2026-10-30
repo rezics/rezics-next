@@ -24,14 +24,23 @@ import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts'
  * worker Access instance restores native initiators, never HTTP credentials.
  * Reads outside a command bind this kernel clock. */
 export function createContentWorkAccess(clock: KernelClock, pool?: Pool) {
+  let access: ReturnType<typeof createAccess> | undefined;
   let membership: ReturnType<typeof createRealmMembership> | undefined;
-  const roles = () => (membership ??= createRealmMembership({ pool: pool!, access, clock })).roleReader;
+  const roles = () =>
+    access && pool ? (membership ??= createRealmMembership({ pool, access, clock })).roleReader : undefined;
   const realmRoleReader: AccessRealmRoleReader = Object.assign(
-    ((client, input) => roles()(client, input)) as AccessRealmRoleReader,
-    { batch: ((client, input) => roles().batch!(client, input)) as NonNullable<AccessRealmRoleReader['batch']> },
+    ((client, input) => roles()!(client, input)) as AccessRealmRoleReader,
+    { batch: ((client, input) => roles()!.batch!(client, input)) as NonNullable<AccessRealmRoleReader['batch']> },
   );
+  // Resolve the original producers only when Access asks for them, after its
+  // own factory returned. Forwarding the producer itself preserves callback
+  // context/result identity and never constructs another role mirror.
+  Object.defineProperties(realmRoleReader, {
+    work: { get: () => roles()?.work },
+    batchWork: { get: () => roles()?.batchWork },
+  });
   const publicReads = new Set(['subject:read', 'board:read', 'thread:read', 'post:read', 'realm:read', 'space:read']);
-  const access = createAccess({
+  access = createAccess({
     actions: new Map(
       Object.values(resourceRoles.roles)
         .flat()
