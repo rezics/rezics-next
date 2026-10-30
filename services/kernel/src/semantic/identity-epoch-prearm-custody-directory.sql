@@ -1,3 +1,4 @@
+WITH input AS (SELECT $9::text AS state)
 SELECT d.partition_no,d.job_id,d.job_epoch,d.generation,d.terminal,d.basis_version,d.owner_epoch,d.scope_digest,
  d.attempt_transaction_id,d.sequence,d.sealed_transaction_id,d.cancel_sequence,d.cancelled_transaction_id,
  d.release_transaction_id,r.epoch AS release_epoch,r.position AS release_position,
@@ -39,6 +40,6 @@ WHERE d.partition_no=$1 AND d.job_id=$2 AND d.job_epoch=$3 AND d.generation=$4
  AND EXISTS(SELECT 1 FROM jsonb_to_recordset(h.inputs)
   i(terminal uuid,generation uuid,basis_version bigint,owner_epoch integer)
   WHERE i.terminal=d.terminal AND i.generation=d.generation AND i.basis_version=d.basis_version AND i.owner_epoch=d.owner_epoch)
- AND (($9='published' AND t.state='acquired') OR
- ($9 IN ('cancelling','cancelled') AND t.state='closed' AND d.cancel_sequence=d.sequence
+ AND (((SELECT state FROM input)='published' AND t.state='acquired') OR
+ ((SELECT state FROM input) IN ('cancelling','cancelled') AND t.state='closed' AND d.cancel_sequence=d.sequence
   AND k.epoch=o.epoch AND k.position<=r.position));

@@ -107,7 +107,9 @@ class ReadWork {
   }
   async snapshot<T>(pool: Pool, read: (tx: PoolClient) => Promise<T>): Promise<T> {
     // Reserve BEGIN, timeout, COMMIT and possible ROLLBACK, including failed checkout work.
-    this.charge(0, 0, 4, 512);
+    const frameworkBytes = Buffer.byteLength('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY') +
+      Buffer.byteLength("SET LOCAL statement_timeout = '5000ms'") + Buffer.byteLength('COMMITROLLBACK');
+    this.charge(0, 0, 4, frameworkBytes);
     return withReadTransaction(pool, read);
   }
   async query<T extends QueryResultRow>(tx: PoolClient, sql: string, values: unknown[], touches: number): Promise<T[]> {
