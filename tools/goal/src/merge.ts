@@ -75,7 +75,10 @@ function compilerContainerCleanup(pid: number): string | undefined {
   let listed = query();
   if (listed.error || listed.status !== 0)
     return `Compiler database cleanup could not be proven for PID ${pid}: ${describeFailure(listed)}`;
-  let containers = (listed.stdout ?? '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  let containers = (listed.stdout ?? '')
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
   if (containers.length > 1)
     return `Compiler database cleanup could not be proven for PID ${pid}: expected one owned container, found ${containers.join(', ')}`;
   if (containers.length) {
@@ -85,7 +88,10 @@ function compilerContainerCleanup(pid: number): string | undefined {
     listed = query();
     if (listed.error || listed.status !== 0)
       return `Compiler database cleanup could not be proven for PID ${pid}: ${describeFailure(listed)}`;
-    containers = (listed.stdout ?? '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    containers = (listed.stdout ?? '')
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
   return containers.length
     ? `Compiler database cleanup could not be proven for PID ${pid}: owned containers remain: ${containers.join(', ')}`

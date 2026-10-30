@@ -1928,18 +1928,13 @@ export class MergeTrain {
       result.stage = 'merge';
       result.mergedCommit = entry.candidate;
       if (workspace) workspace.integrated(recorded.workspace!.module, target());
-      if (controlPlane) await this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
+      if (controlPlane)
+        await this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
       else if (stabilize) {
         mkdirSync(resolve(o.worktreeRoot), { recursive: true });
         git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, entry.candidate);
         added = true;
-        await this.mergeStabilizedCommitIntoDev(
-          entry.candidate,
-          trainTree,
-          request.taskId,
-          recorded.manager,
-          logPath,
-        );
+        await this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
       }
       return true;
     };
@@ -2168,12 +2163,7 @@ export class MergeTrain {
             existsSync(join(trainTree, 'package.json'))
           )
             installShared(trainTree);
-          const { command, result: checked } = await this.checkDevCandidate(
-            trainTree,
-            base,
-            candidate,
-            logPath,
-          );
+          const { command, result: checked } = await this.checkDevCandidate(trainTree, base, candidate, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
           if (!checked.passed) {
@@ -2185,7 +2175,7 @@ export class MergeTrain {
             appendFileSync(logPath, `\nRequired root typecheck failed:\n${output}\n`);
             if (workspace) {
               const owners = sharedTasks.filter((task) =>
-              taskChangedPaths(task, tip).some((path) => compilerOutputMatchesPath(output, trainTree, path)),
+                taskChangedPaths(task, tip).some((path) => compilerOutputMatchesPath(output, trainTree, path)),
               );
               attributeFailure(result, owners.length ? owners : undefined);
             }
@@ -2684,13 +2674,7 @@ export class MergeTrain {
         );
         if (controlPlane) await this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
         else if (stabilize)
-          await this.mergeStabilizedCommitIntoDev(
-            candidate,
-            trainTree,
-            request.taskId,
-            recorded.manager,
-            logPath,
-          );
+          await this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
         return finish();
       }
     } catch (error) {
@@ -2870,8 +2854,7 @@ export class MergeTrain {
           if (!result.passed) {
             const output = result.output || 'Root typecheck failed without compiler output';
             appendFileSync(logPath, `Required root typecheck failed before advancing ${targetBranch}:\n${output}\n`);
-            if (owner)
-              this.notifyDevTypecheckFailure(owner.taskId, owner.managerId, command, output, commit, logPath);
+            if (owner) this.notifyDevTypecheckFailure(owner.taskId, owner.managerId, command, output, commit, logPath);
             return { error: `Root typecheck failed before advancing ${targetBranch}: ${output}` };
           }
         }
@@ -3014,7 +2997,14 @@ export class MergeTrain {
           }
         } catch (error) {
           const output = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-          this.notifyDevTypecheckFailure(taskId, managerId, rootTypecheckCommand(changedFiles(trainTree, expected)), output, merged, logPath);
+          this.notifyDevTypecheckFailure(
+            taskId,
+            managerId,
+            rootTypecheckCommand(changedFiles(trainTree, expected)),
+            output,
+            merged,
+            logPath,
+          );
           appendFileSync(logPath, `Required root typecheck could not validate ${merged}: ${output}\n`);
           return;
         }

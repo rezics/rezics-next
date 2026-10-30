@@ -125,11 +125,12 @@ function verifierChecksFromLegacy(
   const retainedDefaults = affectedWasOverridden
     ? defaultsChecks.filter((check) => !replacedAffected.has(JSON.stringify(check)))
     : [...defaultsChecks];
-  const additional = legacyIntegration?.filter(
-    (check) =>
-      !check.command.some((part) => part === 'install') &&
-      !check.command.some((part) => part.includes('scripts/typecheck.ts')),
-  ) ?? [];
+  const additional =
+    legacyIntegration?.filter(
+      (check) =>
+        !check.command.some((part) => part === 'install') &&
+        !check.command.some((part) => part.includes('scripts/typecheck.ts')),
+    ) ?? [];
   return uniqueChecks([...retainedDefaults, ...legacyAffected, ...additional]);
 }
 const packageDerivedFiles = readDerivedFiles();
@@ -263,9 +264,7 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
           local.affectedTests !== undefined,
         )
       : readIntegrationChecks(local.verifierChecks, 'verifierChecks');
-  const siblingTests = readSiblingTests(
-    local.siblingTests === undefined ? defaults.siblingTests : local.siblingTests,
-  );
+  const siblingTests = readSiblingTests(local.siblingTests === undefined ? defaults.siblingTests : local.siblingTests);
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -376,12 +375,7 @@ export type RuntimeOptions = {
   managerServices?: Partial<ManagerServices>;
   train?: Pick<
     TrainOptions,
-    | 'merge'
-    | 'beforeRelease'
-    | 'beforeIntegrationAdvance'
-    | 'beforePromotionAdvance'
-    | 'promote'
-    | 'derivedFiles'
+    'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote' | 'derivedFiles'
   >;
 };
 

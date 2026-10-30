@@ -501,7 +501,12 @@ fi
     process.env.PATH = `${bin}:${previousPath ?? '/usr/bin:/bin'}`;
     process.env.REZICS_TEST_DOCKER_LOG = dockerLog;
     const pidFile = join(directory, 'pid');
-    const result = await processGroupRunner(50, undefined, process.env, false)(
+    const result = await processGroupRunner(
+      50,
+      undefined,
+      process.env,
+      false,
+    )(
       [
         'sh',
         '-c',

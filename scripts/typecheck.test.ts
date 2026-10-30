@@ -182,8 +182,14 @@ await Bun.write('database-url', url);
 `;
     // Kernel and Auth type .sql imports through content mappers, which read the compiler database.
     const mapped = '{ "contentMappers": [{ "package": "reylo", "extensions": [".sql"] }] }\n';
-    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun record.ts', { 'record.ts': recordDatabase, 'tsconfig.json': mapped });
-    writeWorkspace(root, 'services/auth', '@fixture/auth', 'bun record.ts', { 'record.ts': recordDatabase, 'tsconfig.json': mapped });
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun record.ts', {
+      'record.ts': recordDatabase,
+      'tsconfig.json': mapped,
+    });
+    writeWorkspace(root, 'services/auth', '@fixture/auth', 'bun record.ts', {
+      'record.ts': recordDatabase,
+      'tsconfig.json': mapped,
+    });
     writeWorkspace(root, 'packages/client', '@fixture/client', undefined, { 'tsconfig.json': '{ "files": [] }\n' });
     const output = collector();
 

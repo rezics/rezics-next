@@ -16,7 +16,16 @@
       "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
     },
     {
-      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "scripts/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "paths": [
+        "apps/**",
+        "services/**",
+        "packages/**",
+        "specs/**",
+        "scripts/**",
+        "package.json",
+        "bun.lock",
+        "tsconfig*.json"
+      ],
       "command": ["bun", "scripts/workspace-imports.ts"]
     },
     {

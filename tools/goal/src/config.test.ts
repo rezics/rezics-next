@@ -138,7 +138,10 @@ test('an explicit verifierChecks setting is strict and replaces legacy validatio
     const settings = loadSettings({ cwd: h.root, env: {} });
     expect(settings.verifierChecks).toEqual(local.verifierChecks);
     expect(() => {
-      writeFileSync(h.settings.localFile, JSON.stringify({ ...local, verifierChecks: [{ paths: [], command: ['true'] }] }));
+      writeFileSync(
+        h.settings.localFile,
+        JSON.stringify({ ...local, verifierChecks: [{ paths: [], command: ['true'] }] }),
+      );
       loadSettings({ cwd: h.root, env: {} });
     }).toThrow('paths must be a path list');
     expect(() => {

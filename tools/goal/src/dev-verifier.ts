@@ -29,7 +29,11 @@ function siblingTestFilesAtCommit(changedPaths: readonly string[], cwd: string, 
   const tracked = new Set(git(cwd, 'ls-tree', '-r', '--name-only', commit).split('\n').filter(Boolean));
   const tests = new Set<string>();
   for (const source of changedPaths) {
-    if (source.startsWith('services/kernel/') || !/\.(?:[cm]?[jt]sx?)$/i.test(source) || /\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(source))
+    if (
+      source.startsWith('services/kernel/') ||
+      !/\.(?:[cm]?[jt]sx?)$/i.test(source) ||
+      /\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(source)
+    )
       continue;
     const extension = parse(source).ext;
     const sameDirectory = join(dirname(source), `${parse(source).name}.test.ts`);
