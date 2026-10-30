@@ -5,9 +5,7 @@ import { UUID } from './price';
 import type { SubjectCoverData } from './subject-cover';
 
 export type Settlement = 'failed' | 'paid' | 'pending' | 'unknown';
-export type CurrentEntitlement =
-  | { kind: 'current'; active: boolean }
-  | { kind: 'none' | 'unavailable' | 'refresh' };
+export type CurrentEntitlement = { kind: 'current'; active: boolean } | { kind: 'none' | 'unavailable' | 'refresh' };
 export type OrderPageData = {
   id: string;
   offerId: string;

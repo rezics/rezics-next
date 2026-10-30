@@ -192,7 +192,11 @@ test('selected order current access uses one associated point read and keeps fai
     revokeReason: null,
     active: true,
   };
-  async function load(nativeId: string | null, response: Response | Error, settlement: OrderPageData['settlement'] = 'paid') {
+  async function load(
+    nativeId: string | null,
+    response: Response | Error,
+    settlement: OrderPageData['settlement'] = 'paid',
+  ) {
     request = new Request(`https://site.test/en/orders/${orderId}?entitlementId=${otherId}&checkout=success`, {
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
     });
@@ -229,9 +233,17 @@ test('selected order current access uses one associated point read and keeps fai
     expect(active.entitlement).toEqual({ kind: 'current', active: true });
     expect(render(active)).toContain('Current access Active');
 
-    const refunded = await load(entitlementId, Response.json({ entitlement: {
-      ...current, active: false, revokedAt: '2026-10-30T00:00:00Z', revokeReason: 'refund',
-    } }));
+    const refunded = await load(
+      entitlementId,
+      Response.json({
+        entitlement: {
+          ...current,
+          active: false,
+          revokedAt: '2026-10-30T00:00:00Z',
+          revokeReason: 'refund',
+        },
+      }),
+    );
     expect(refunded.entitlement).toEqual({ kind: 'current', active: false });
     expect(render(refunded)).toContain('Current access Revoked');
     expect(render(refunded)).toContain('Payment received');
