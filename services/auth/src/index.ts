@@ -61,6 +61,15 @@ import { buildAuthService } from './service.ts';
 export { WEBSITE_CLIENT_ID } from './website.ts';
 import type { JWK } from 'jose';
 import type { SessionTrim } from './session-limits.ts';
+import type { SecurityInventory } from './security-inventory.ts';
+export type {
+  SecurityInventory,
+  SecurityInventoryInput,
+  OwnedSecurityClient,
+  SecurityConsent,
+  OwnedSecurityClientsPage,
+  SecurityConsentsPage,
+} from './security-inventory.ts';
 export { createAuthHost, AuthHostConfigurationError } from './host.ts';
 export type { AuthHostOptions } from './host.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';
@@ -179,6 +188,8 @@ export interface WebsiteClientRegistration {
 
 export interface AuthService {
   handler(request: Request): Promise<Response>;
+  /** Current native human session only, with the same origin guard as HTTP. */
+  security: SecurityInventory;
   verifier: VerifierConfiguration;
   internal: {
     /** Auth-owned read closure; composition receives no database or credential material. */

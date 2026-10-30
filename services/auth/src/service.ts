@@ -16,6 +16,13 @@ import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { signSessionAccessToken } from './session-proof-capability.ts';
 import { issuerOrigin } from './issuer.ts';
+import { securityInventory, type SecurityInventoryInput } from './security-inventory.ts';
+import {
+  securityPageInput,
+  securityPageQuery,
+  type SecurityPageInput,
+  type SecurityCursorBinding,
+} from './security-cursor.ts';
 import { nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
@@ -184,6 +191,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     scopes,
   );
   const { database, withIssuance, withConsent, materialize } = authority;
+  const inventory = securityInventory(database, options.secret, options.issuer, trustedNowSeconds);
   issuerOrigin(options.issuer);
   const audience = new URL(options.audience);
   if (audience.protocol !== 'https:') throw new Error('The API audience must be an HTTPS URL');
@@ -578,6 +586,39 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const human = await sessionProof(headers);
     if ((await activeActor(human.account_id)).automated || human.amr.includes('operator')) throw new Denied();
     return human;
+  }
+  async function readSecurityInventory<T>(
+    input: SecurityInventoryInput,
+    read: (binding: SecurityCursorBinding, page: SecurityPageInput) => Promise<T>,
+  ): Promise<T> {
+    if (!input || typeof input !== 'object' || !(input.headers instanceof Headers)) throw new Denied(400);
+    fields(input, ['headers', 'cursor', 'limit']);
+    const { headers, ...query } = input;
+    const page = securityPageInput(query);
+    if (headers.get('origin') !== options.issuer || headers.get('sec-fetch-site') === 'cross-site')
+      throw new Denied(403);
+    const initial = await humanProof(headers);
+    return withIssuance(initial.client_id, async () => {
+      const human = await humanProof(headers);
+      const binding: SecurityCursorBinding = {
+        accountId: human.account_id,
+        sessionId: proofSources.get(human)!.id,
+        clientId: human.client_id,
+        epoch: human.authn_epoch,
+        scopes: human.scope,
+      };
+      const result = await read(binding, page);
+      const current = await humanProof(headers);
+      if (
+        current.account_id !== binding.accountId ||
+        current.authn_epoch !== binding.epoch ||
+        proofSources.get(current)!.id !== binding.sessionId ||
+        current.client_id !== binding.clientId ||
+        JSON.stringify(current.scope) !== JSON.stringify(binding.scopes)
+      )
+        throw new Denied();
+      return result;
+    });
   }
   async function operatorOpening(session: { id: string; userId: string; authMethods: string }) {
     if (session.authMethods !== 'operator') throw new Denied();
@@ -1621,13 +1662,31 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
       },
     },
+    security: {
+      listClients: (input) => readSecurityInventory(input, inventory.clients),
+      listConsents: (input) => readSecurityInventory(input, inventory.consents),
+    },
     async handler(request) {
       const url = new URL(request.url);
+      const inventoryRead = request.method === 'GET' && (url.pathname === '/clients' || url.pathname === '/consents');
+      const respond = (data: unknown, status = 200) => {
+        const response = json(data, status);
+        if (inventoryRead) response.headers.set('cache-control', 'private, no-store');
+        return response;
+      };
       const deadline = Date.now() + 3000;
       try {
         const protocol = await website.handler(request);
         if (protocol) return protocol;
-        if (url.origin !== options.issuer || url.search) throw new Denied(400);
+        if (url.origin !== options.issuer || (url.search && !inventoryRead)) throw new Denied(400);
+        if (inventoryRead) {
+          const input = { ...securityPageQuery(url.searchParams), headers: request.headers };
+          return respond(
+            await (url.pathname === '/clients'
+              ? service.security.listClients(input)
+              : service.security.listConsents(input)),
+          );
+        }
         if (url.pathname === '/.well-known/jwks.json' && request.method === 'GET') return json(await signer.getJwks());
         if (url.pathname === '/session' && request.method === 'GET') return json(await sessionProof(request.headers));
         if (url.pathname === '/passkeys' && request.method === 'GET') {
@@ -2325,7 +2384,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               ? error.statusCode
               : 503;
         const credentialRoute = new URL(request.url).pathname.startsWith('/passkeys/');
-        return json(
+        return respond(
           credentialRoute
             ? { error: 'credential_effect_denied', effect_status: 'not_applied' }
             : { error: 'authentication_denied' },

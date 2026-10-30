@@ -176,6 +176,81 @@ Only trusted application code may call the internal effects:
   Invalid modes are refused. Omitting the mode retains the ordinary upsert behavior.
 
 These are in-process methods, with no internal HTTP authorization endpoint.
+
+### Security and deletion preflight inventory
+
+The configured issuer's same Auth handler serves `GET /clients` and `GET /consents`.
+Both require the current native human session cookie, exact issuer `Origin` and
+no cross-site fetch. Account, session, epoch, consent and issuance fences are
+revalidated; an unavailable dependency returns 503, denied authentication 401 and
+an invalid origin 403. Neither route accepts a selected account, client, bearer
+body, organization/operator authority or administrative fallback.
+
+Only these two exact GET paths accept `cursor?` and `limit?` query parameters.
+Limit defaults to 20 and must be an integer from 1 through 100; unknown, duplicate,
+empty or malformed parameters return 400. Other routes retain their query guards.
+Responses, including inventory errors, use `Cache-Control: private, no-store`.
+The closed response shapes are:
+
+```ts
+type ClientsPage = {
+  clients: Array<{
+    client_id: string;
+    display_name: string | null;
+    disabled: boolean;
+    scopes: string[];
+  }>;
+  next: string | null;
+};
+type ConsentsPage = {
+  consents: Array<{
+    client_id: string;
+    display_name: string | null;
+    granted: string[];
+    status: 'current' | 'inactive' | 'unavailable';
+    reducible: boolean;
+    pending_reduction: boolean;
+  }>;
+  next: string | null;
+};
+```
+
+`AuthService.security.listClients({headers,cursor?,limit?})` and
+`listConsents({headers,cursor?,limit?})` expose these same native reads for the
+existing `/security` and `/account/delete` consumers. Their inputs have no
+account selector and apply the same origin/session guards. DTOs and port types
+are exported from `@rezics/auth`.
+
+Clients come only from native `auth_client."userId"` ownership. The existing
+`erasure_auth_client_0(userId,client_id)` index supplies the ordered page; a
+configured first-party client, reference pointer, managed account or organization
+membership supplies no personal ownership. Returned labels are only the native
+configured `display_name`; scopes are the registered allowed ceiling, never a
+grant. A disabled or fenced owned record remains visible for responsibility
+remedies; fenced records suppress their label/scopes and report disabled. Listing
+does not waive the existing transfer/deletion responsibility guards. No arbitrary
+resource JSON or related-party metadata is exposed.
+
+Consents page actual `auth_consent(account_id,client_id)` primary-key rows, then
+read at most 100 exact native client keys in the same read-only REPEATABLE READ
+snapshot. `granted` intersects stored scopes, the current registered ceiling and
+`pending_scopes` when present, including an empty pending set. Disabled, fenced,
+uncovered, reducing, missing or invalid client authority yields `unavailable`
+with no effective grant; its consent row remains visible. A valid empty grant is
+`inactive`. `pending_reduction` preserves both consent and client reduction state.
+`reducible` is true only for a usable third-party binding; first-party standing
+consent gets no invented revocation control. The existing consent/mutation policy
+and permanent erasure rules are unchanged.
+
+Each list uses one native keyset page with one-row lookahead and exact bounded
+authority reads, without totals/history scans. `next` is an authenticated opaque
+AES-GCM cursor, using purpose-separated HKDF keys from the persistent Auth secret,
+bound to issuer, account, native session, client, epoch, session scopes, view and
+limit. It expires after 15 minutes. Modified, foreign, expired or changed-binding
+cursors fail with 400 before the page read and return no partial list. Consumers
+pass the same limit on subsequent pages. Concurrent changes are read at the next
+page's current snapshot; keys already passed are not repeated. No inventory cache,
+new key store, index or retained private record is introduced.
 Registration command durability, retries and Access activation remain the
 registration workflow's responsibility.
 
