@@ -164,24 +164,24 @@ test('own status conceals unrelated, denied and removed native points while know
     scopes: ['realm:read', 'space:read'],
   });
   for (const path of [exact, mine]) expect((await request('GET', path, readOnly.bearer)).status).toBe(404);
-  await system.database.pool.query(
-    `UPDATE community.realm SET visibility='protected' WHERE route=$1 AND realm_id=$2`,
-    [routeOf(realm.realmId), realm.realmId],
-  );
+  await system.database.pool.query(`UPDATE community.realm SET visibility='protected' WHERE route=$1 AND realm_id=$2`, [
+    routeOf(realm.realmId),
+    realm.realmId,
+  ]);
   for (const path of [exact, mine]) expect((await request('GET', path)).status).toBe(404);
   await system.database.pool.query(
     `UPDATE community.realm SET visibility='public', state='removed' WHERE route=$1 AND realm_id=$2`,
     [routeOf(realm.realmId), realm.realmId],
   );
   for (const path of [exact, mine]) expect((await request('GET', path)).status).toBe(404);
-  await system.database.pool.query(
-    `UPDATE community.realm SET state='active' WHERE route=$1 AND realm_id=$2`,
-    [routeOf(realm.realmId), realm.realmId],
-  );
-  await system.database.pool.query(
-    `UPDATE community.space SET state='removed' WHERE route=$1 AND space_id=$2`,
-    [routeOf(realm.spaceId), realm.spaceId],
-  );
+  await system.database.pool.query(`UPDATE community.realm SET state='active' WHERE route=$1 AND realm_id=$2`, [
+    routeOf(realm.realmId),
+    realm.realmId,
+  ]);
+  await system.database.pool.query(`UPDATE community.space SET state='removed' WHERE route=$1 AND space_id=$2`, [
+    routeOf(realm.spaceId),
+    realm.spaceId,
+  ]);
   for (const path of [exact, mine]) expect((await request('GET', path)).status).toBe(404);
 });
 
@@ -205,7 +205,10 @@ test('obsolete pending and approved receipts preserve original facts across nati
     [routeOf(realm.realmId), realm.realmId, first.value.orphanedAt],
   );
   expect(await status(`${base(realm.realmId)}/mine`)).toBeNull();
-  expect(await status(`${base(realm.realmId)}/${first.value.requestId}`)).toEqual({ ...original, currentEpisode: false });
+  expect(await status(`${base(realm.realmId)}/${first.value.requestId}`)).toEqual({
+    ...original,
+    currentEpisode: false,
+  });
   const second = await requestRealmClaim(deps(), claimant().actor, realm.realmId, context());
   expect(second.value.requestId).not.toBe(first.value.requestId);
   const current = await status(`${base(realm.realmId)}/mine`);
@@ -241,9 +244,15 @@ test('obsolete pending and approved receipts preserve original facts across nati
     [routeOf(realm.realmId), realm.realmId, claimant().actor.accountId],
   );
   expect(await status(`${base(realm.realmId)}/${second.value.requestId}`)).toEqual(result);
-  const governance = await request('PATCH', `/v1/realms/${realm.realmId}`, claimant().bearer, {
-    title: 'Historical approval cannot edit',
-  }, { 'if-match': JSON.stringify(realm.headRevisionId) });
+  const governance = await request(
+    'PATCH',
+    `/v1/realms/${realm.realmId}`,
+    claimant().bearer,
+    {
+      title: 'Historical approval cannot edit',
+    },
+    { 'if-match': JSON.stringify(realm.headRevisionId) },
+  );
   expect(governance.status).toBe(403);
 });
 

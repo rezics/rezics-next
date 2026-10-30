@@ -1301,7 +1301,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/claimRequests/mine',
       {
         params: realmParams,
-        response: { 200: strict(t.Object({ claimRequest: t.Union([realmClaimStatus, t.Null()]) }, closed)), ...readFailures },
+        response: {
+          200: strict(t.Object({ claimRequest: t.Union([realmClaimStatus, t.Null()]) }, closed)),
+          ...readFailures,
+        },
         detail: {
           operationId: 'realm.own_claim_request',
           'x-exposure': 'public',

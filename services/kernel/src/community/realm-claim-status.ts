@@ -41,11 +41,11 @@ export const readOwnRealmClaim: ReadOwnRealmClaim = async (deps, actor, input, c
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   const { realmId, requestId } = input;
   const route = routeOf(realmId);
-  if (route === null || (requestId !== undefined && routeOf(requestId) !== route))
-    throw new ProblemError('not_found');
+  if (route === null || (requestId !== undefined && routeOf(requestId) !== route)) throw new ProblemError('not_found');
   const resource = { route, id: realmId };
   const partitionNo = partitionOf(route);
-  const unavailable = () => new ProblemError('dependency_unavailable', { detail: 'Native Realm claim source changed.' });
+  const unavailable = () =>
+    new ProblemError('dependency_unavailable', { detail: 'Native Realm claim source changed.' });
 
   const snapshot = <T>(read: (client: AccessClient, time: AuthoritativeTime) => Promise<T>) =>
     within(context.deadline, () =>
@@ -71,8 +71,7 @@ export const readOwnRealmClaim: ReadOwnRealmClaim = async (deps, actor, input, c
   const source = async (client: AccessClient, time: AuthoritativeTime) => {
     const partition = await readPartition(client, partitionNo);
     if (!partition) throw new ProblemError('partition_unavailable');
-    if (partition.writeState === 'moved')
-      throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+    if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
     const at = authoritativeTimeValue(time);
     const binding = await bindingRead.run(client, { ...resource, subject: null, at });
     const continuity = await continuityRead.run(client, { ...resource, at });
