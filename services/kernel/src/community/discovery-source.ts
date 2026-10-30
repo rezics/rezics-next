@@ -214,7 +214,7 @@ export async function commitDiscoveryFence(pool: Pool, ref: DiscoveryOperationRe
           transaction_id: null,
         })
       )[0];
-      if (!installed) throw new Error('Discovery Realm fence unavailable');
+      if (!installed || installed.fence_generation === null) throw new Error('Discovery Realm fence unavailable');
       if (!installed.changed) return noEffect(installed.fence_generation);
       bindRealmDiscoveryCommand(tx);
       return { value: installed.fence_generation, events: [sourceEvent(source.realm_id, source.realm_epoch)] };
@@ -248,14 +248,14 @@ export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperatio
           contributing: contribution.contributing,
         });
       else if (source.target_kind === 'board')
-        changed = (await projectBoard.run(tx, {
+        changed = !!(await projectBoard.run(tx, {
           route,
           realm_id: source.realm_id,
           realm_epoch: source.realm_epoch,
           board_id: source.board_id,
           source_version: current.native_version,
           published: current.visibility === 'published',
-        })).length > 0;
+        }));
       else throw new Error('Discovery contribution unavailable');
     }
     const resolved = (
