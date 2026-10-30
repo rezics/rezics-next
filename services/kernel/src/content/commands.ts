@@ -1,5 +1,6 @@
 import { prepareRealmDiscoverySource, type RealmDiscoveryBinding } from '../community/discovery-source.ts';
 import { appendDiscoveryStart } from './discovery.ts';
+import readDiscoveryBoard from './discovery-board.sql';
 import { createHash, createHmac } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -681,13 +682,13 @@ export async function createThread(
       }
       if (threadKind === 'discussion' && body.visibility === 'published') {
         const original = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, (client) =>
-          readBoard.run(client, { route: board.route, id: board.id }),
+          readDiscoveryBoard.run(client, {
+            route: board.route,
+            board_id: board.id,
+            at: authoritativeTimeValue(attempt.time),
+          }),
         );
-        if (
-          original?.visibility === 'published' &&
-          original.realm_id !== null &&
-          Date.parse(original.created_at) <= Date.parse(authoritativeTimeValue(attempt.time))
-        ) {
+        if (original && original.realm_id !== null) {
           const binding = await prepareRealmDiscoverySource(
             dependencies,
             original.realm_id,
