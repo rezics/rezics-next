@@ -187,6 +187,10 @@ export declare class IdempotencyConflictError extends Error {
     readonly partition: number;
     constructor(partition: number);
 }
+/** Carries no receipt identity, removed value or scope provenance. */
+export declare class CommandResultErasedError extends Error {
+    constructor();
+}
 export declare class TooManyEventsError extends Error {
     readonly partition: number;
     readonly count: number;

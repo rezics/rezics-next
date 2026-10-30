@@ -192,7 +192,8 @@ test('codec rejects oversized, corrupt, truncated, unknown and mismatched key pa
     { principalId: '00000000-0000-0000-0000-000000000000' },
     { commandKindId: 0 },
     { commandKindId: 2 ** 32 },
-    { keyVersion: 0 },
+    { keyVersion: -1 },
+    { keyVersion: 0.5 },
     { keyVersion: 65536 },
     { keyToken: 'raw caller key' },
     { keyToken: 'a'.repeat(65) },
@@ -229,6 +230,20 @@ test('codec rejects oversized, corrupt, truncated, unknown and mismatched key pa
   highByte[2] = 0xb0;
   expect(() => decodeLocator(work.artifactType, highByte)).toThrow();
   expect(() => decodeLocator('unknown/v1' as HistoryArtifactType, encodeLocator(work))).toThrow();
+});
+
+test('receipt key version zero round-trips without changing its stored version or token bytes', () => {
+  const locator = { ...receipt, keyVersion: 0 };
+  const bytes = Buffer.from(encodeLocator(locator));
+  expect(bytes).toHaveLength(59);
+  expect(bytes.readUInt16BE(25)).toBe(0);
+  expect(bytes.subarray(27).toString('hex')).toBe(receipt.keyToken);
+  expect(decodeLocator('command-receipt/v1', bytes)).toEqual(locator);
+  expect(encodeLocator(decodeLocator('command-receipt/v1', bytes))).toEqual(bytes);
+  const versionOne = Buffer.from(encodeLocator({ ...locator, keyVersion: 1 }));
+  expect(bytes.subarray(0, 25)).toEqual(versionOne.subarray(0, 25));
+  expect(bytes.subarray(27)).toEqual(versionOne.subarray(27));
+  expect(versionOne.readUInt16BE(25)).toBe(1);
 });
 
 test('scope accepts at most 64 distinct routed accounts with artifact-valid roles and no extra payload', () => {

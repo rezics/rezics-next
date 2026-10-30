@@ -979,6 +979,7 @@ export function accessRoutes(
           200: withHeaders(preferences, { [SESSION_HEADER]: t.String() }),
           ...failures,
           409: problemSchema('conflict'),
+          410: problemSchema('command_result_erased'),
         },
         detail: {
           ...detail('account.set_preferences'),

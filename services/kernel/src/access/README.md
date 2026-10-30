@@ -2061,10 +2061,11 @@ and a versioned keyed-hash replay token; the raw idempotency key and response pa
 retain stable partition, position and event sequence plus type and schema version, with personal payload and subject
 removed. Durable-work history is canceled and deleted through supported DBOS APIs after native obligations are
 settled or transferred. Locator discovery is sealed to the committed `access.erasure` obligation and visits the
-fixed 4,096 partitions one at a time, seeking only the account prefix. These are required dispositions, not current
-runtime behavior: producer coverage, minimization, removal and the final shared-history acknowledgement remain open
-gaps. Semantic provenance has its own owner and retention rules; content and delivery custody, including media and
-caches, remain separate obligations.
+fixed 4,096 partitions one at a time, seeking only the account prefix. These are required dispositions. Current
+runtime coverage delivers preference receipt/outbox custody and preference receipt response minimization in its
+known owner partition, as described below. Every other producer, outbox payload minimizer, durable-copy minimizer
+and the final shared-history acknowledgement remain open gaps. Semantic provenance has its own owner and retention
+rules; content and delivery custody, including media and caches, remain separate obligations.
 
 This inventory describes current storage and implemented cleanup, including account-linked ids, digests and
 payloads that remain personal data. A retention purpose describes the store's operational use, not a new legal
@@ -2244,7 +2245,9 @@ as required by the participant contract, while subject/account-resource grants a
   [schema guard](../../db/access/schema.sql) preserve immutable outcomes and bounded retention/resolution evidence;
   the primitive does not establish that Access's own residue phases have run.
 - `core.receipt`, subject/actor/delegate/granter/operator/reviewer/member: [the core schema](../../db/schema.sql) retains
-  command key, digest, principal, response JSON and transaction/time for replay, with no account-erasure trigger.
+  the native keyed replay token, digest, principal and transaction/time. The default preference history worker
+  replaces this producer's response JSON with a marked tombstone after its committed erasure barrier; all other
+  receipt kinds retain their response JSON pending their owners' native result dispositions and minimizers.
 - `core.outbox`, subject/actor/delegate/granter/operator/reviewer/member: [the core schema](../../db/schema.sql) retains
   event payload and transaction/time, including non-actor event subjects, without account-erasure minimization.
 - `editorial.write_basis`, actor/delegated principal/granter/operator/member: [the core schema](../../db/schema.sql)
@@ -2261,7 +2264,8 @@ Required protocol metadata is not implemented in [the current schema](../../db/a
 phase/progress/coverage and immutable outcome state (terminal subject); `operator_opening_account` (requested-by
 principal/delegate plus opening roles); `workflow_approval_account` (actor, subject, operator, member and delegate);
 `continuation_account` and full-key page associations (owner, prior operator and allowlist targets); rate digest
-bindings by secret generation (authenticated account); atomic copy locators (all producer roles); and independent
+bindings by secret generation (authenticated account); atomic copy locators beyond the delivered preference
+producer; and independent
 traversal ordinals with removable id bindings (organization members and operator-page subjects). Their disposition
 must follow the participant contract: temporary locators/progress are removed after consumption, minimal native
 completion/refusal survives outside DBOS, and cursor boundaries never retain account ids. These requirements do
@@ -2354,3 +2358,26 @@ reuse `operator-page.sql`. Each scanned responsibility has one subject-anchor re
 operator and exact reservation still match, while `reconciling` means the hold remains without that match. Neither
 state asserts a workflow's completion or cancellation. Responses are allowlisted and `private, no-store`, with no
 credentials, approval references, private profile or suspension reason. These read endpoints add no write capability.
+
+## Delivered preference history coverage
+
+`createPreferenceCommands.setPreferences` is the first converted command producer. Before reading or changing
+preferences it calls `declareCommandHistory` with its native subject, separately from automatic identity evidence.
+The real Access permission preparation projects its verified actor, principal, human actor and delegated assignment
+into the current transaction. It never derives a human from an automated account's current operator. Reconstructed
+Actors, request JSON and a previous retry's proof cannot supply custody identity. The ownership, scope, version and
+conflict rules stay in the existing command and Access formula.
+
+The default `preference_history` work registration consumes the committed account tombstone. Its admission creates
+`core.preference_history_job` from the exact permanent `access.erasure` obligation in the known preference owner
+partition. Workflow `history.preferences` and step `history.preferences.advance` take only an opaque job UUID and
+return fixed `more` / `covered-pending` codes. The native job and `core.history_progress` retain applicability and
+restart cursors outside DBOS. Each step commits one exact receipt response mutation with its locator proof, after
+locking the local guard exclusively and sealing it. No downstream workflow consumes this preference response;
+that owner disposition plus the committed barrier and exact source/scope proof permits its removal. No other
+receipt kind has inferred readiness. A living account's other role association stays pending until its own barrier.
+
+This delivers preference receipt/outbox custody and physical preference receipt response minimization only.
+Every other command producer, effect/workflow producer, outbox payload minimizer and durable-copy minimizer remains
+an actual runtime gap. The local job ends `covered-pending`; progress remains pending, and this registration never
+acknowledges the shared-history participant, including an empty prefix. Full account erasure remains unproved.

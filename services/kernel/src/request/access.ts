@@ -13,6 +13,9 @@ import {
 } from '../command/command.ts';
 import type { ResourceEligibility } from '../access/eligibility.ts';
 import { routeOf } from '../route/route.ts';
+import { permissionHistoryAccounts } from '../access/permission.ts';
+import { bindCommandHistoryEvidence } from '../history/record.ts';
+import type { AccountReference } from '../history/locator.ts';
 
 export type AccountActor = {
   kind: 'account';
@@ -250,7 +253,12 @@ export async function accessCommandAuthorization(
   denied: () => Error,
 ): Promise<AccessCommandAuthorization> {
   const target = Object.freeze({ ...resource });
-  type Prepared = { attempt: CommandAttempt; check: AccessCheck; selfRead?: AccessCheck };
+  type Prepared = {
+    attempt: CommandAttempt;
+    check: AccessCheck;
+    selfRead?: AccessCheck;
+    historyAccounts: readonly AccountReference[] | undefined;
+  };
   const proofs = new WeakMap<object, Prepared>();
   let current: Prepared | undefined;
   const check: AccessCheck = async (client, time = commandTime(client)) => {
@@ -268,7 +276,12 @@ export async function accessCommandAuthorization(
       try {
         const preparation = commandAccessContext(context, attempt);
         await requireCommandAdmission(access, actor, preparation);
-        const prepared: Prepared = { attempt, check: await accessCheck(access, actor, action, target, preparation) };
+        const evidence = access.prepare ? await access.prepare(actor, action, target, preparation) : null;
+        const prepared: Prepared = {
+          attempt,
+          check: (client, time) => access.authorize(client, actor, action, target, evidence, time),
+          historyAccounts: permissionHistoryAccounts(evidence, actor, action, target),
+        };
         if (actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read') {
           prepared.selfRead = await accessCheck(
             access,
@@ -312,7 +325,10 @@ export async function accessCommandAuthorization(
       )
         throw denied();
       current = prepared;
-      if (await check(tx, attempt.time)) return 'execute';
+      if (await check(tx, attempt.time)) {
+        if (prepared.historyAccounts) bindCommandHistoryEvidence(tx, prepared.historyAccounts);
+        return 'execute';
+      }
       if (prepared.selfRead && (await prepared.selfRead(tx, attempt.time))) return 'receipt-only';
       throw denied();
     },

@@ -61,7 +61,7 @@ export function validateLocator(type: HistoryArtifactType, value: unknown): Hist
     if (key.principalKind !== 'account' && key.principalKind !== 'anonymous') invalid();
     if ((key.principalKind === 'anonymous') !== (key.principalId === ZERO_UUID)) invalid();
     integer(key.commandKindId, 1, 0xffffffff);
-    integer(key.keyVersion, 1, 0xffff);
+    integer(key.keyVersion, 0, 0xffff);
     if (typeof key.keyToken !== 'string' || key.keyToken.length !== 64 || !/^[0-9a-f]{64}$/.test(key.keyToken))
       invalid();
   } else if (type === 'outbox-event/v1') {

@@ -10,15 +10,41 @@ admission remains an adopted contract with implementation and native schedule ga
 
 ### Shared-history erasure
 
-Every command result declares a typed account scope covering every account copied into the result or its events,
-including actor, human, delegate, operator and subject roles. Actor, human and delegate references are captured
-automatically from the command context. No-effect receipts declare and capture the same scope even when no domain
-write or event occurs. Receipt persistence stores a versioned keyed-hash token of the caller's idempotency key;
-callers continue to send the raw key, but raw keys are never persisted. The key ring stays available while receipts
-using it can be replayed. If a receipt has been minimized for erasure, a matching retry still returns the erased
-result from the retained receipt skeleton and never reconstructs the removed response. Typed scope capture,
-no-effect capture and erased-result replay remain open runtime gaps.
+The supported native sink is `declareCommandHistory(tx, kind, { response, events })`. Owners declare typed
+`HistoryScope` / `AccountReference` subjects and related parties before their first write, independently of identity.
+The executor unions the genuine actor/principal/human/delegate evidence supplied by that attempt's verified Access
+proof. Scope validation caps the whole production unit at 64 distinct accounts, 1000 events, 256 locator bytes and
+64 KiB per copied payload. No JSON search or account-looking string inference occurs. A registered producer without
+its declaration or verified identity evidence fails closed. HTTP input cannot provide either declaration or proof.
 
+`access.account.preferences` has permanent command-kind ID 1, explicitly registered in `history/record.ts`.
+IDs never follow runtime registration order. Receipt locators encode the actual persisted `rk1` version/token:
+`(partition, principal kind/id, command-kind ID, key version, HMAC token)`. Version zero retains its exact native
+meaning. Outbox locators encode `(partition, position, event sequence)`. Raw caller keys and private payload values
+never enter locator keys. No-effect receipt locators use the same identity, even at position zero.
+
+Guard materialization and SHARE locking precede owner writes and last until commit. The source fence and every
+receipt/event association commit in that same serializable artifact-partition transaction. Foreign account roles
+are recorded locally with their real route/id, without opening the account's home partition. An eraser seals the
+same guard exclusively using the committed permanent erasure obligation, including an empty locator prefix.
+A covered late producer commits no source, receipt, event or locator. Receipt hits create no new associations;
+rollback and every serialization retry discard the declaration and acquire fresh verified evidence.
+
+The default preference minimizer clears the physical response to JSON null and marks `payload_state=minimized`.
+A matching authorized retry raises HTTP 410 `command_result_erased`, `retryable=false`, `effect_status=applied`,
+without invoking the body or returning response/scope provenance. Authentication and current authorization still
+precede receipt lookup. Metadata-only own completion remains a boolean/digest port, including position zero.
+Other receipt kinds stay pending until their owners register actual result completion/transfer dispositions.
+
+The delivered coverage is preference receipt/outbox custody and preference receipt response minimization.
+All other command/effect/workflow producers, outbox payload minimizers and durable-copy minimizers remain runtime
+gaps. An empty covered prefix is not a global none proof. No shared-history ACK or full erasure completion is made.
+
+Custody costs O(declared accounts × artifacts × log H) local index work at the existing envelope/payload bounds.
+Minimization touches one exact receipt and its at most 64 associations via `history_locator_artifact`, one committed
+barrier and a native progress anchor. No receipt enumeration, account-prefix inverse scan or global ACK lookup occurs.
+The native acceptance is `test/history/command-custody.test.ts`; `growth-command-custody.test.ts` uses the shared
+harness/catalog classifier with unrelated same-partition receipts, locators and history at 64/512/4096.
 `runCommand` validates native identity, partition, key and digest, prepares separately anchored authorization
 without holding the resource connection, and runs the final authorization inside each serializable attempt.
 Authorization precedes own-receipt lookup and body execution. A matching receipt replays before the body;

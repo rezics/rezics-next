@@ -14,6 +14,7 @@ import {
 import allowed from './preferences-notification-allowed.sql';
 import read from './preferences-read.sql';
 import set from './preferences-set.sql';
+import { declareCommandHistory, preferenceSubjectScope } from '../history/record.ts';
 
 export const SHELF_LAYOUTS = ['grid', 'list', 'table'] as const;
 export const SHELF_TABS = ['in_progress', 'planned', 'completed', 'paused', 'dropped', 'all'] as const;
@@ -300,6 +301,7 @@ export function createPreferenceCommands(config: { pool: Pool; access: Access; c
           },
         },
         async (tx) => {
+          await declareCommandHistory(tx, 'access.account.preferences', preferenceSubjectScope(route, input.accountId));
           const current = await readAccountPreferences(tx, input.accountId);
           if (current.version !== input.expectedVersion) throw new ProblemError('conflict');
           const shelf = input.shelf === undefined ? current.shelf : mergeShelf(current.shelf, input.shelf);

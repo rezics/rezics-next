@@ -1,6 +1,6 @@
 import { type Account } from './account-data.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
-import { type AccessRealmRoleReader, type ReadDecisions, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from '../request/access.ts';
+import { type ResourcePage, type AccessRealmRoleReader, type ReadDecisions, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from '../request/access.ts';
 import { type ResourceRoleCatalogue } from './resource-roles.ts';
 /** Kernel-owned request evidence, populated by the one authoritative actor point read.
  * Identity and this record must come from verified Auth/Access, never request JSON.
@@ -38,6 +38,12 @@ export declare function authorizePreparedReadGate(handle: ReadDecisions, client:
  * read from the opaque registry, never from caller-supplied authorization JSON.
  */
 export declare function permissionEvidenceDeadline(evidence: unknown): number | undefined;
+/** Exact native identity projection; reconstructed Actors and JSON have no entry. */
+export declare function permissionHistoryAccounts(evidence: unknown, actor: Actor, action: string, resource: Resource, page?: ResourcePage): readonly Readonly<{
+    accountRoute: number;
+    accountId: string;
+    roles: number;
+}>[] | undefined;
 /** Runs only the final resource-anchored statement on the command's own client.
  * Reuse through accessCheck so every actual command attempt checks current rows/time.
  */

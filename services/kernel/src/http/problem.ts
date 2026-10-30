@@ -4,7 +4,7 @@ import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError, t } from 'elysia';
 import type { TSchema } from 'typebox';
-import { IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
+import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
 import { AuthenticationError } from '../request/access.ts';
 
 export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
@@ -16,6 +16,7 @@ export const PROBLEMS = {
   content_too_large: { status: 413, title: 'Content Too Large', retryable: false },
   invalid_signature: { status: 400, title: 'Invalid Signature', retryable: false },
   idempotency_conflict: { status: 422, title: 'Idempotency Key Reused', retryable: false },
+  command_result_erased: { status: 410, title: 'Command Result Erased', retryable: false },
   too_many_events: { status: 422, title: 'Too Many Events', retryable: false },
   unsupported_library_profile: { status: 422, title: 'Unsupported Library Profile', retryable: false },
   authentication_required: { status: 401, title: 'Authentication Required', retryable: false },
@@ -199,6 +200,12 @@ function extendedSchema<Extensions extends Record<string, TSchema>>(
   );
 }
 
+function erasedResultSchema() {
+  const base = schemaFor(['command_result_erased'], 410);
+  return t.Object({ ...base.properties, effect_status: t.Literal('applied') }, { additionalProperties: false });
+}
+
+export function problemSchema(code: 'command_result_erased'): ReturnType<typeof erasedResultSchema>;
 export function problemSchema<const Codes extends readonly [ProblemCode, ...ProblemCode[]]>(
   ...codes: Codes
 ): ReturnType<typeof schemaFor>;
@@ -213,6 +220,8 @@ export function problemSchema(...codesAndExtensions: (ProblemCode | Record<strin
   const statuses = new Set(codes.map((code) => PROBLEMS[code].status));
   if (statuses.size !== 1) throw new TypeError('Problem response alternatives must share one status');
   const status = statuses.values().next().value!;
+  if (codes.length === 1 && codes[0] === 'command_result_erased' && typeof last !== 'object')
+    return erasedResultSchema();
   return typeof last === 'object' ? extendedSchema(codes, status, last) : schemaFor(codes, status);
 }
 
@@ -246,7 +255,12 @@ function safeFieldErrors(errors: readonly FieldError[] | undefined): FieldError[
   return result.length ? result : undefined;
 }
 
-function effectStatus(method: string, action?: string, code?: ProblemCode): 'not_applicable' | 'not_applied' {
+function effectStatus(
+  method: string,
+  action?: string,
+  code?: ProblemCode,
+): 'not_applicable' | 'not_applied' | 'applied' {
+  if (code === 'command_result_erased') return 'applied';
   if (action && (code === 'account_suspended' ? action.endsWith(':read') : /:read(?:_|$)/.test(action)))
     return 'not_applicable';
   return ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase()) ? 'not_applicable' : 'not_applied';
@@ -320,6 +334,8 @@ export function problemResponse(
     headers.set('www-authenticate', error.challenge);
   } else if (error instanceof IdempotencyConflictError) {
     code = 'idempotency_conflict';
+  } else if (error instanceof CommandResultErasedError) {
+    code = 'command_result_erased';
   } else if (error instanceof TooManyEventsError) {
     code = 'too_many_events';
     detail = error.message;
@@ -353,9 +369,11 @@ export function problemResponse(
     code,
     retryable: definition.retryable,
     effect_status:
-      error instanceof ProblemError && error.effectStatus
-        ? error.effectStatus
-        : effectStatus(context.method, context.action, code),
+      error instanceof CommandResultErasedError
+        ? 'applied'
+        : error instanceof ProblemError && error.effectStatus
+          ? error.effectStatus
+          : effectStatus(context.method, context.action, code),
     request_id: context.id,
     ...(detail === undefined ? {} : { detail: truncateDetail(detail) }),
     ...(safeErrors ? { errors: safeErrors } : {}),

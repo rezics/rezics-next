@@ -154,7 +154,7 @@ CREATE TABLE core.history_locator (
     CONSTRAINT history_locator_locator_check CHECK (((octet_length(locator) >= 1) AND (octet_length(locator) <= 256))),
     CONSTRAINT history_locator_minimizer_version_check CHECK ((minimizer_version = 1)),
     CONSTRAINT history_locator_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT history_locator_roles_check CHECK (((roles >= 1) AND (roles <= 63))),
+    CONSTRAINT history_locator_roles_check CHECK (((roles >= 1) AND (roles <= 262143))),
     CONSTRAINT history_locator_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'minimized'::text])))
 );
 
@@ -279,6 +279,9 @@ CREATE TABLE core.receipt (
     "position" bigint NOT NULL,
     transaction_id uuid NOT NULL,
     response jsonb NOT NULL,
+    payload_state text DEFAULT 'present'::text NOT NULL,
+    CONSTRAINT receipt_payload_state_check CHECK (payload_state IN ('present','minimized')),
+    CONSTRAINT receipt_minimized_response CHECK (payload_state <> 'minimized' OR response = 'null'::jsonb),
     created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     principal_kind text NOT NULL,
     actor_account_id uuid GENERATED ALWAYS AS (
@@ -547,3 +550,19 @@ ALTER TABLE ONLY editorial.write_basis
 --
 
 
+
+-- Native preference receipt applicability, independent of DBOS.
+CREATE TABLE core.preference_history_job (
+  job_id uuid PRIMARY KEY,
+  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
+  account_route integer NOT NULL,
+  account_id uuid NOT NULL,
+  barrier_id uuid NOT NULL,
+  state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','covered-pending')),
+  cursor bytea CHECK (octet_length(cursor) BETWEEN 1 AND 256),
+  CHECK (barrier_id = account_id),
+  CHECK (partition_no = (account_route >> 4)),
+  FOREIGN KEY (account_route,barrier_id) REFERENCES access.erasure(route,account_id)
+);
+CREATE INDEX history_locator_artifact ON core.history_locator
+  (partition_no,artifact_type,locator,account_route,account_id);

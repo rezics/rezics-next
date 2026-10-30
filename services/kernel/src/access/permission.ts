@@ -1,3 +1,4 @@
+import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contracts.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
@@ -90,6 +91,7 @@ type RoleEvidence = {
 };
 
 type Prepared = {
+  historyAccounts: readonly import('../history/locator.ts').AccountReference[];
   ownAccount: boolean;
   binding: string;
   deadline: number;
@@ -136,6 +138,19 @@ export function authorizePreparedReadGate(
  */
 export function permissionEvidenceDeadline(evidence: unknown): number | undefined {
   return typeof evidence === 'object' && evidence !== null ? prepared.get(evidence)?.deadline : undefined;
+}
+
+/** Exact native identity projection; reconstructed Actors and JSON have no entry. */
+export function permissionHistoryAccounts(
+  evidence: unknown,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  page?: ResourcePage,
+) {
+  const proof = typeof evidence === 'object' && evidence !== null ? prepared.get(evidence) : undefined;
+  if (!proof || proof.binding !== bind(actor, action, resource, page) || Date.now() >= proof.deadline) return undefined;
+  return structuredClone(proof.historyAccounts);
 }
 // NUL is outside OAuth VSCHAR and cannot be persisted in PostgreSQL text.
 const STANDING_CLIENT_ID = '\u0000account-standing';
@@ -527,6 +542,24 @@ export function createAccess(config: PermissionConfig): Access {
       requireAccessDeadline(deadline);
       if (binding !== bind(actor, action, resource, page)) return evidence;
       prepared.set(evidence, {
+        historyAccounts:
+          actor.kind === 'anonymous'
+            ? []
+            : [
+                {
+                  accountRoute: routeOf(actor.accountId)!,
+                  accountId: actor.accountId,
+                  roles:
+                    HISTORY_ROLE.actor |
+                    (principalId === null || principalId === actor.accountId
+                      ? HISTORY_ROLE.principal
+                      : HISTORY_ROLE.delegate) |
+                    (account?.operatorAccountId === null ? HISTORY_ROLE['acting-human'] : 0),
+                },
+                ...(principalId !== null && principalId !== actor.accountId
+                  ? [{ accountRoute: routeOf(principalId)!, accountId: principalId, roles: HISTORY_ROLE.principal }]
+                  : []),
+              ],
         ownAccount,
         binding,
         deadline,

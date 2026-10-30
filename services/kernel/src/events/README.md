@@ -36,9 +36,9 @@ registration order inside one short transaction from the native relay pool. It c
 before `enqueue` starts any workflow. Effects without the hook keep the existing enqueue path.
 
 Each owner uses the hook for one idempotent keyed insert per event in its own work table, with conflicts as no-ops so
-existing processed state is retained. Admission uses the supplied client only: it does not read, call the network or
-hold a connection while a workflow is enqueued. A hook failure rolls back every admission in the batch, skips enqueue
-and leaves the checkpoint unchanged for a normal retry. After admission commits, enqueue and the existing checkpoint
+existing processed state is retained. Admission uses bounded exact native keys on the supplied client only, including a committed obligation
+when needed for applicability; it does not call the network or hold a connection while a workflow is enqueued.
+A hook failure rolls back every admission in the batch, skips enqueue and leaves the checkpoint unchanged for a normal retry. After admission commits, enqueue and the existing checkpoint
 compare-and-set proceed as before. A failed enqueue or lost compare-and-set can replay the batch, so workflow identity
 remains deterministic and owner admission must remain idempotent. The owner `run` path tolerates a processed item and
 inserts that same item if it is missing; the work change time comes from the original event's `time`.
@@ -47,11 +47,14 @@ Queued, pending and failed jobs keep an unprocessed owner item independently of 
 covers delay before admission. Admission and enqueue are not an owner cleanup acknowledgement or proof of global
 erasure closure.
 
-A task that emits a new event type registers its schema in that same task.
-Test-only types are registered by the kernel test preload; production code never
-imports those fixtures.
-
 ## Shared-history erasure
+
+The native preference producer records exact receipt and outbox locators through `declareCommandHistory` in its
+serializable source transaction. Each event's typed subject/related-party scope is unioned with the verified native
+identity roles. Event locators use the actual `(partition_no, position, event_seq)`, and a local shared guard orders
+them against the erasure seal. This delivers preference copy custody and the default preference receipt response
+minimizer only. Other command/effect/workflow producers, outbox payload minimizers and durable-copy minimizers remain
+actual runtime gaps; the shared-history participant stays pending, including for an empty covered prefix.
 
 An outbox event locator identifies `(partition_no, position, event_seq)`. Its minimized storage form retains that
 stable identity, event type and schema version while removing payload and subject fields that carry account data.

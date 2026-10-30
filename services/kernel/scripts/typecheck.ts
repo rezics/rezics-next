@@ -20,7 +20,10 @@ async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> 
 async function typecheck(env: NodeJS.ProcessEnv): Promise<number> {
   const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
   if (tsc !== 0) return tsc;
-  return command(['bun', 'run', 'construct'], env);
+  const constructed = await command(['bun', 'run', 'construct'], env);
+  if (constructed !== 0) return constructed;
+  // Declaration emission shares this compiler database; it never starts a native check.
+  return process.argv.includes('--emit-client') ? command(['bun', 'scripts/client.ts'], env) : 0;
 }
 
 export async function runKernelTypecheck(
@@ -36,8 +39,10 @@ export async function runKernelTypecheck(
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
   if (env.DATABASE_URL) return runCommands(env);
 
+  // An unset receipt-check host setting selects the local compiler database;
+  // the shared explicit placement opt-out also remains authoritative here.
   const placed =
-    env.REZICS_STACK_REMOTE === 'off'
+    env.REZICS_STACK_REMOTE === 'off' || !env.KERNEL_CHECK_REMOTE
       ? null
       : await runPlaced(
           {

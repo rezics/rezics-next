@@ -17,6 +17,7 @@ import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { bindReceiptKeys, encodeReceiptKey, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { recordCommandHistory, releaseCommandHistory, validateCommandHistory } from '../history/record.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
@@ -321,6 +322,14 @@ export class IdempotencyConflictError extends Error {
   }
 }
 
+/** Carries no receipt identity, removed value or scope provenance. */
+export class CommandResultErasedError extends Error {
+  constructor() {
+    super('Command result erased');
+    this.name = 'CommandResultErasedError';
+  }
+}
+
 export class TooManyEventsError extends Error {
   readonly partition: number;
   readonly count: number;
@@ -564,6 +573,7 @@ async function executeCommand<T>(
             });
             if (row) {
               if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
+              if (row.payloadState === 'minimized') throw new CommandResultErasedError();
               receiptOwners.delete(tx);
               await measureCommandPhase('commit', () => client.query('COMMIT'));
               sealEventTypes();
@@ -603,6 +613,7 @@ async function executeCommand<T>(
                 }
                 return { type, subject, data, id: Bun.randomUUIDv7() };
               });
+          validateCommandHistory(tx, options.receipt?.kind, response.value, events);
           await authorization?.finalize?.(tx, attempt, evidence);
           if (noEffect && callbackState.callbacks.length > 0)
             throw new TypeError('A no-effect command registers no work');
@@ -659,6 +670,13 @@ async function executeCommand<T>(
             throw new CommandUnavailableError('deadline', partition);
           }
           receiptOwners.delete(tx);
+          if (options.receipt && receipt)
+            await recordCommandHistory(tx, {
+              principal: options.receipt.principal,
+              kind: options.receipt.kind,
+              storageKey: receipt.key as string,
+              position: BigInt(row[0]!.position),
+            });
           await measureCommandPhase('commit', () => client.query('COMMIT'));
           sealEventTypes();
           return {
@@ -687,6 +705,7 @@ async function executeCommand<T>(
           }
           throw error;
         } finally {
+          releaseCommandHistory(tx);
           receiptOwners.delete(tx);
           callbackState.active = false;
           callbackState.callbacks.length = 0;

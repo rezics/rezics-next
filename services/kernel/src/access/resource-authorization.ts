@@ -13,7 +13,9 @@ import { withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { validResource } from './grant-command.ts';
 import { GrantDeniedError } from './grant-commands.ts';
-import { permissionEvidenceDeadline } from './permission.ts';
+import { permissionEvidenceDeadline, permissionHistoryAccounts } from './permission.ts';
+import { bindCommandHistoryEvidence } from '../history/record.ts';
+import type { AccountReference } from '../history/locator.ts';
 import type { ResourceEligibility } from './eligibility.ts';
 import {
   resourcePage,
@@ -143,7 +145,12 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
       : null;
   const proofs = new WeakMap<
     object,
-    { attempt: CommandAttempt; deadline: number; governanceReach: GovernanceReachUse | undefined }
+    {
+      attempt: CommandAttempt;
+      deadline: number;
+      governanceReach: GovernanceReachUse | undefined;
+      historyAccounts: readonly AccountReference[] | undefined;
+    }
   >();
   const denied = () => new GrantDeniedError();
   function bound(attempt: CommandAttempt): boolean {
@@ -205,7 +212,12 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
         requireAccessDeadline(proofDeadline);
         if (!bound(attempt)) throw denied();
         const proof = Object.freeze({});
-        proofs.set(proof, { attempt, deadline: proofDeadline, governanceReach });
+        proofs.set(proof, {
+          attempt,
+          deadline: proofDeadline,
+          governanceReach,
+          historyAccounts: permissionHistoryAccounts(evidence, actor, action, resource, page),
+        });
         return proof;
       } catch (error) {
         throwAccessUnavailable(error, deadline);
@@ -231,6 +243,7 @@ function authorizeResource(input: ResourceAuthorizationInput, page?: ResourcePag
       )
         throw denied();
       if (prepared.governanceReach && !recordGovernanceReachUse(tx, prepared.governanceReach)) throw denied();
+      if (prepared.historyAccounts) bindCommandHistoryEvidence(tx, prepared.historyAccounts);
       return 'execute';
     },
   });
