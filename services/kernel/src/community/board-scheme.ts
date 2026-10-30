@@ -126,13 +126,16 @@ export async function setBoardScheme(
             .update(canonicalize([identity, kind, body])!)
             .digest(),
         },
-        authorization: realmGovernanceAuthorization({
-          ...authorization,
-          async authorize(tx, attempt, proof) {
-            if (Date.now() >= (checked.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
-            return authorization.authorize(tx, attempt, proof);
+        authorization: realmGovernanceAuthorization(
+          {
+            ...authorization,
+            async authorize(tx, attempt, proof) {
+              if (Date.now() >= (checked.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
+              return authorization.authorize(tx, attempt, proof);
+            },
           },
-        }, { route, id: body.realmId }),
+          { route, id: body.realmId },
+        ),
       },
       async (tx, command) => {
         const previous = current.get(command.time)!;

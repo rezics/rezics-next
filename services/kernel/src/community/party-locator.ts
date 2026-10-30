@@ -56,11 +56,24 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
         !event.source.startsWith(`urn:rezics:log:${partitionOf(route)}.`)
       )
         throw new TypeError('Invalid community party locator envelope');
-      const kind = data.operationId ? 'membership_operation' : data.publicationId ? 'verdict' : data.requestId ? 'claim_request' : 'ban';
+      const kind = data.operationId
+        ? 'membership_operation'
+        : data.publicationId
+          ? 'verdict'
+          : data.requestId
+            ? 'claim_request'
+            : 'ban';
       const keys = await withConnection(pool, async (client) => {
         const partition = await readPartition(client, partitionOf(route));
         if (!partition || partition.writeState === 'moved') throw new Error('Community partition is unavailable');
-        return source.run(client, { route, id, realm: data.realmId, kind, target: data.accountId ?? null, at: data.at ?? null });
+        return source.run(client, {
+          route,
+          id,
+          realm: data.realmId,
+          kind,
+          target: data.accountId ?? null,
+          at: data.at ?? null,
+        });
       });
       for (const row of keys) {
         const accountRoute = routeOf(row.account_id);

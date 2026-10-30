@@ -351,8 +351,10 @@ export async function createBoard(
             .update(canonicalize([identity, kind, body])!)
             .digest(),
         },
-        authorization: input.realmId === null ? preparedAuthorization
-          : realmGovernanceAuthorization(preparedAuthorization, { route: boardRoute, id: input.realmId }),
+        authorization:
+          input.realmId === null
+            ? preparedAuthorization
+            : realmGovernanceAuthorization(preparedAuthorization, { route: boardRoute, id: input.realmId }),
       },
       async (tx, { transactionId, time }) => {
         await insertBoard.run(tx, {

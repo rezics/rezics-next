@@ -75,7 +75,8 @@ export type Realm = Readonly<{
   author: string;
 }>;
 /** Head read used by HTTP. The scheme and vote weights travel on the same row. */
-export type RealmView = Realm & RealmContinuity &
+export type RealmView = Realm &
+  RealmContinuity &
   Readonly<{
     boardSchemeId: string | null;
     votes: RealmVotes;

@@ -153,8 +153,13 @@ export async function eraseAccountCommunityRecordItem(
         kept = changed.rows[0]?.kept_until ?? null;
       } else {
         const statement =
-          row.kind === 'ban_target' ? eraseTarget : row.kind === 'verdict' ? eraseVerdict :
-            row.kind === 'claim_request' ? eraseClaim : eraseOperation;
+          row.kind === 'ban_target'
+            ? eraseTarget
+            : row.kind === 'verdict'
+              ? eraseVerdict
+              : row.kind === 'claim_request'
+                ? eraseClaim
+                : eraseOperation;
         const changed = await tx.query(
           statement.sql,
           statement.params.map((name) => params[name as keyof typeof params]),

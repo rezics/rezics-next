@@ -71,8 +71,14 @@ export const COMMUNITY_EVENTS = {
   'com.rezics.community.space.address-reservation-skipped.v1': addressOnly,
   'com.rezics.community.space.address-reserved.v1': addressOnly,
   'com.rezics.community.realm.claim-requested.v1': Type.Object(
-    { realmId: id, requestId: id, state: Type.Literal('pending'), orphanedAt: instant,
-      claimEligibleAt: instant, requestedAt: instant },
+    {
+      realmId: id,
+      requestId: id,
+      state: Type.Literal('pending'),
+      orphanedAt: instant,
+      claimEligibleAt: instant,
+      requestedAt: instant,
+    },
     { additionalProperties: false },
   ),
   'com.rezics.community.realm.created.v1': realmRevision,
