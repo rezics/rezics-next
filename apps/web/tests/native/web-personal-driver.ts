@@ -466,13 +466,11 @@ export async function createWebPersonalDriver(): Promise<WebPersonalDriver> {
                 case 'upload-and-attach':
                   await page.locator('[contenteditable="true"]').last().fill(action.text);
                   await page.getByRole('button', { name: 'Image', exact: true }).click();
-                  await page
-                    .locator('input[type="file"]')
-                    .setInputFiles({
-                      name: action.image.name,
-                      mimeType: action.image.mimeType,
-                      buffer: Buffer.from(action.image.bytes),
-                    });
+                  await page.locator('input[type="file"]').setInputFiles({
+                    name: action.image.name,
+                    mimeType: action.image.mimeType,
+                    buffer: Buffer.from(action.image.bytes),
+                  });
                   await page.getByRole('button', { name: 'Insert image', exact: true }).click();
                   // The actual composer disables Send until reserve/stream/complete finishes.
                   return await submit(page, () =>
