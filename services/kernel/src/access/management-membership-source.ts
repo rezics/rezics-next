@@ -8,6 +8,7 @@ import { routeOf } from '../route/route.ts';
 import { accessClock } from './access-clock.ts';
 import { AccessUnavailableError, requireAccessDeadline } from './unavailable.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
+import actorSource from './management-membership-source-actor.sql';
 import accountSource from './management-membership-source-account.sql';
 import organizationSource from './management-membership-source.sql';
 
@@ -45,6 +46,16 @@ export async function readOrganizationMembershipCommandState(
     requireAccessDeadline(context.deadline);
     const time = await withConnection(pool, (client) => mintReadTime(client, deps.clock ?? accessClock(access)));
     try {
+      const human = await actorSource.run(pool, { route: routeOf(actor.accountId)!, account_id: actor.accountId });
+      if (
+        !human ||
+        human.kind !== 'actor' ||
+        human.state !== 'active' ||
+        human.fenced ||
+        human.operatorAccountId !== null ||
+        BigInt(actor.authnEpoch) < BigInt(human.floor)
+      )
+        throw new AuthBindingDeniedError();
       const check = await accessCheck(
         access,
         actor,
@@ -93,7 +104,7 @@ export async function readOrganizationMembershipCommandState(
           throw new AccessUnavailableError('overloaded');
         if (!(await check(client, time))) throw new AuthBindingDeniedError();
         requireAccessDeadline(context.deadline);
-        return { org, member };
+        return { org, member, human };
       });
     } finally {
       releaseOperationalTime(time);

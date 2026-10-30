@@ -71,8 +71,8 @@ export function isMembershipOperation(value: unknown): value is MembershipOperat
 
 /** The management client is supplied by the shared Auth owner. Absent exports
  * remain unavailable; never substitute the login or account-operation client.
- * Required exports: AUTH_PAGE_MANAGEMENT_CLIENT_ID and
- * AUTH_PAGE_MANAGEMENT_SCOPES.membership = ['organization:membership'].
+ * The default adapter consumes AUTH_MANAGEMENT_CLIENT_ID and
+ * AUTH_MANAGEMENT_SCOPES.membership from the installed shared contract.
  */
 export function membershipProfile(
   source: unknown = {
@@ -148,7 +148,7 @@ export function parseMembershipPage(body: unknown, organizationId: string): Memb
   }
   return { kind: 'ready', organizationId, role: body.role, holders, next: body.members.next as string | null };
 }
-function readFailure(status: number): MembershipPage {
+function readFailure(status: number): Exclude<MembershipPage, { kind: 'ready' }> {
   if (status === 401) return { kind: 'signed-out' };
   if (status === 403) return { kind: 'denied' };
   if (status === 404) return { kind: 'missing' };
