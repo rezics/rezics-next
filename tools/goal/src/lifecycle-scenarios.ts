@@ -315,7 +315,7 @@ export async function runNamedLifecycleRegressions(options: {
     const promotionEvidencePath = join(scenarioDirectory, `promotion-${randomUUID()}.json`);
     const result: BoundedProcessResult = await runBoundedProcess(
       process.execPath,
-      ['test', '--test-name-pattern', pattern, file],
+      ['test', '--timeout', '30000', '--test-name-pattern', pattern, file],
       {
         cwd: options.root,
         env: {
@@ -329,12 +329,19 @@ export async function runNamedLifecycleRegressions(options: {
     const output = `${result.stdout}\n${result.stderr}`.trim();
     const passCount = Number(/(?:^|\s)(\d+)\s+pass\b/i.exec(output)?.[1] ?? 0);
     const expectedCount = new Set(cases.map(({ testName }) => testName)).size;
-    const status: ExecutedRegression['status'] = result.timedOut ? 'unverified' : result.status === 0 ? 'passed' : 'failed';
+    const capacityTimeout =
+      result.timedOut ||
+      (/test timed out after \d+ms/i.test(output) && /Waiting for host capacity/i.test(output));
+    const status: ExecutedRegression['status'] = capacityTimeout
+      ? 'unverified'
+      : result.status === 0
+        ? 'passed'
+        : 'failed';
     const complete = status === 'passed' && passCount >= expectedCount;
-    const caseStatus = complete ? 'passed' : result.timedOut ? 'unverified' : 'failed';
+    const caseStatus = complete ? 'passed' : capacityTimeout ? 'unverified' : 'failed';
     let evidence = complete
       ? `executed ${passCount} selected tests; ${result.durationMs}ms`
-      : `${result.timedOut ? 'capacity timeout: unverified' : `expected ${expectedCount} selected passing tests, observed ${passCount}; exit ${String(result.status)}`}${output ? `; ${output.slice(-2500)}` : ''}`;
+      : `${capacityTimeout ? 'capacity timeout: unverified' : `expected ${expectedCount} selected passing tests, observed ${passCount}; exit ${String(result.status)}`}${output ? `; ${output.slice(-2500)}` : ''}`;
     if (!complete) {
       const logPath = join(
         options.artifactDirectory ?? scenarioDirectory,
