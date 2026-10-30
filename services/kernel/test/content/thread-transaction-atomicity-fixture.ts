@@ -7,7 +7,7 @@ import { createImageJob } from '../../src/content/image-job.ts';
 import { threadTarget } from '../../src/content/commands.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
-import { newId } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import type { Resource } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -309,7 +309,10 @@ export async function reserveAvailableImage(
     sha256: source.sha256,
   });
   requireStatus(reserved, 201, 'reserve fixture image');
-  const media = reserved.body.media;
+  const reservedMedia = reserved.body.media;
+  const route = routeOf(reservedMedia.id);
+  if (route === null) throw new Error('Production media reservation returned a non-routable media ID');
+  const media: StoredMedia = { ...reservedMedia, route };
   await storage.storage.put(media.key, source.bytes, { mediaType: source.type });
   const completed = await call<CompletionResponse>(kernel, completer, 'POST', `/v1/media/${media.id}:complete`, {
     containerId,
@@ -336,7 +339,7 @@ export async function reserveAvailableImage(
   return media;
 }
 
-type MediaResponse = { readonly media: StoredMedia };
+type MediaResponse = { readonly media: Omit<StoredMedia, 'route'> };
 type CompletionResponse = { readonly media: { readonly id: string; readonly state: string } };
 
 export function documentBytes(body: DocumentSnapshot): {
