@@ -727,7 +727,9 @@ export class WorkerStore implements AttemptFence {
       .transaction(() => {
         const task = this.task(ref.taskId);
         const attempt = ref.attempt > 0 ? this.attempt(ref) : undefined;
-        const abandonPending = options.abandonPending === true && attempt?.state === 'pending';
+        // A held task's pending or waiting attempt is ended by the reshape; the next retry resumes its session from the log.
+        const abandonPending =
+          options.abandonPending === true && (attempt?.state === 'pending' || attempt?.state === 'waiting');
         if (
           task.currentAttempt !== ref.attempt ||
           (attempt && !['stopped', 'exited'].includes(attempt.state) && !abandonPending) ||

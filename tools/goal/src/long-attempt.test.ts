@@ -70,6 +70,13 @@ test('an attempt over the default two hour limit reports its duration, commits, 
     expect(delivered[0]!.summary).toContain(commands.slice(-10).join(' | '));
     expect(delivered[0]!.summary).not.toContain(commands[0]!);
     expect(runWatch(store, state, delivered, now + 5 * 60_000)).toBe(0);
+    // A new last command without a new commit is not news within the hour.
+    appendFileSync(
+      logPath,
+      '\n' +
+        JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'tail -n 20 x.log' } }),
+    );
+    expect(runWatch(store, state, delivered, now + 10 * 60_000)).toBe(0);
     expect(runWatch(store, state, delivered, now + 60 * 60_000)).toBe(1);
     expect(runWatch(store, state, delivered, now + 3 * 60 * 60_000)).toBe(1);
     expect(delivered).toHaveLength(3);

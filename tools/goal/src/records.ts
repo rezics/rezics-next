@@ -227,13 +227,18 @@ export function measureLog(
       result.failureKind = exit.blocker.kind as AttemptFailure;
       result.blocker = exit.blocker.detail;
     }
-    if (
-      exit?.status === 'waiting' &&
-      Array.isArray(exit.checks) &&
-      exit.checks.length > 0 &&
-      exit.checks.every((id: unknown) => typeof id === 'string' && /^[\w-]+$/.test(id))
-    )
-      result.waitingChecks = [...new Set(exit.checks as string[])];
+    if (exit?.status === 'waiting' && Array.isArray(exit.checks) && exit.checks.length > 0) {
+      // Workers sometimes label an id ("Focused acceptance check: <uuid>"); rejecting the label superseded the attempt
+      // and started its checks again (three times for one task on 2026-10-29), so the id is taken from the label.
+      const ids = (exit.checks as unknown[]).map((entry) =>
+        typeof entry !== 'string'
+          ? null
+          : /^[\w-]+$/.test(entry)
+            ? entry
+            : (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(entry)?.[0] ?? null),
+      );
+      if (ids.every((id): id is string => id !== null)) result.waitingChecks = [...new Set(ids)];
+    }
   } catch {
     /* Historical human-readable handoffs remain importable. */
   }

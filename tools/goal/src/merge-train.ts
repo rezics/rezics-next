@@ -2019,6 +2019,9 @@ export class MergeTrain {
         const matchingIntegrationChecks = configuredIntegrationChecks.filter((check) =>
           result.changedFiles.some((path) => matchesPath(path, check.paths)),
         );
+        // `clean -fdx` above removed node_modules; remote checks resolve the pinned Bun from it, so every stabilize
+        // landing's first check failed before running (2026-10-29). Control-plane landings install their own.
+        if (!skipDevChecks && !controlPlane && !existsSync(join(trainTree, 'node_modules'))) installShared(trainTree);
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const affectedChecks = skipDevChecks
@@ -2720,6 +2723,9 @@ export class MergeTrain {
           }
         }
         const merged = git(trainTree, 'rev-parse', 'HEAD');
+        // `clean -fdx` above removed node_modules; remote checks need the pinned Bun from it, so every stabilize
+        // acceptance on the merge failed before its tests and stabilize never reached dev (2026-10-29).
+        if (!existsSync(join(trainTree, 'node_modules'))) installShared(trainTree);
         const introduced = new Set(git(this.options.mainCheckout, 'rev-list', `${expected}..${candidate}`).split('\n'));
         const store = this.options.fence as AttemptFence & { tasks?: () => Task[] };
         const tasks =

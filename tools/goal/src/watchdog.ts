@@ -466,10 +466,9 @@ export function watch(
     if (isLongAttempt && attemptAlert) {
       const reports = (state.longAttemptReports ??= {});
       const previous = reports[violation.key];
-      const unchanged =
-        previous !== undefined &&
-        previous.command === attemptAlert.command &&
-        previous.commits === attemptAlert.commits;
+      // Only new commits are news: a worker alternating wait and tail commands changed the last command every minute
+      // and woke its manager 15 times for one attempt (2026-10-29).
+      const unchanged = previous !== undefined && previous.commits === attemptAlert.commits;
       const lastReportAt = previous ? Date.parse(previous.at) : Number.NaN;
       if (unchanged && Number.isFinite(lastReportAt) && now - lastReportAt < 60 * 60_000) continue;
       reports[violation.key] = {

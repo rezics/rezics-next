@@ -226,7 +226,14 @@ export async function runWorkerCommand(
       );
     } else throw new Error(`unknown worker command: ${command}`);
     await job.drain();
-    if (runtime && ['dispatch', 'retry', 'consult'].includes(command)) await runtime.drain();
+    // The command's own change is committed; work drained after it can belong to other tasks, whose failure must not
+    // turn this command's exit into an error (a retry exited 1 over an unrelated held task on 2026-10-29).
+    if (runtime && ['dispatch', 'retry', 'consult'].includes(command))
+      await runtime
+        .drain()
+        .catch((error) =>
+          console.error(`work drained after ${command} failed; this command's change is kept: ${String(error)}`),
+        );
     return 0;
   } finally {
     if (!options.runtime && runtime) runtime.close();

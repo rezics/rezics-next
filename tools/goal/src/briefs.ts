@@ -99,7 +99,17 @@ export function withStabilizeTarget(markdown: string): string {
   const end = (match.index ?? 0) + match[0].length;
   return `${markdown.slice(0, match.index)}---${newline}${body}${newline}---${markdown.slice(end)}`;
 }
+/**
+ * A worker's prompt is one argument, which Linux limits to 128 KiB: a 127 KB brief failed every launch with E2BIG
+ * (2026-10-29). Briefs link evidence files instead of pasting them.
+ */
+export const MAX_BRIEF_BYTES = 64 * 1024;
 export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
+  const bytes = Buffer.byteLength(markdown, 'utf8');
+  if (bytes > MAX_BRIEF_BYTES)
+    throw new Error(
+      `brief is ${bytes} bytes; keep it under ${MAX_BRIEF_BYTES} bytes and link evidence files instead of pasting them`,
+    );
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) throw new Error('brief needs Markdown front matter');
   const raw = object(Bun.YAML.parse(match[1]!), 'front matter');
