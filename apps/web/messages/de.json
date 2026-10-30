@@ -1994,5 +1994,15 @@
   "context_suppress": "Übernommene Werte unterdrücken",
   "context_empty_selection": "Dieser Modus sendet eine leere Auswahl. Ihr Ersatzentwurf bleibt erhalten.",
   "context_saved": "Context-Auswahl gespeichert. Laden Sie die aktuelle Ansicht neu. Dies veröffentlicht nicht den gesamten Context.",
-  "context_read_unavailable": "Der Befehl wurde gespeichert, aber die aktuelle Context-Ansicht ist nicht verfügbar. Laden Sie vor einer weiteren Aktion neu."
+  "context_read_unavailable": "Der Befehl wurde gespeichert, aber die aktuelle Context-Ansicht ist nicht verfügbar. Laden Sie vor einer weiteren Aktion neu.",
+  "context_adopt": "Auf diesen Context anwenden",
+  "context_selected": "In der aktuellen Context-Ansicht ausgewählt.",
+  "context_pending": "Die Context-Auswahl ist durch die Ansicht noch nicht bestätigt. Laden Sie zum Vergleich neu.",
+  "context_draft": "Context-Auswahlentwurf",
+  "context_no_values": "Kein offengelegter Wert in dieser Ansicht.",
+  "context_accepted": "Vorschlag in diesem Context angenommen. Die Auswahl bleibt eine getrennte Entscheidung.",
+  "context_rejected": "Vorschlag in diesem Context abgelehnt. Die Aussage bleibt erhalten.",
+  "context_replace_hint": "Wählen Sie alle Werte und Ränge für diesen Slot. Der gesamte Entwurf ersetzt die Auswahl; Änderungen bleiben beim Blättern und Neuladen erhalten.",
+  "context_confirm_accept": "Diesen Vorschlag in diesem Context annehmen, ohne ihn auszuwählen. Der Server prüft Ihre aktuelle Berechtigung.",
+  "context_confirm_replace": "Die gesamte Auswahl dieses Context-Slots durch die gezeigten Werte und Ränge ersetzen. Nicht markierte Werte werden aus dieser Auswahl entfernt. Der Server prüft Ihre aktuelle Berechtigung."
 }

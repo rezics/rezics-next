@@ -86,7 +86,9 @@ export function CandidateReview({
     confirmation === 'reject'
       ? m.candidate_reject({}, options)
       : confirmation === 'adopt'
-        ? m.candidate_adopt({}, options)
+        ? context
+          ? m.context_adopt({}, options)
+          : m.candidate_adopt({}, options)
         : m.candidate_accept({}, options);
 
   async function load(field = property, cursor?: string) {
@@ -202,6 +204,10 @@ export function CandidateReview({
       } else {
         session.current = next.session ?? session.current;
         setResult(next);
+        if (context && next.contextRefreshFailed) {
+          setRead(undefined);
+          setCandidate(undefined);
+        }
         setConfirmation(null);
         request.current = null;
         setRequiresReload(true);
@@ -222,8 +228,10 @@ export function CandidateReview({
   function state(item: Candidate) {
     if (item.retracted !== null) return m.candidate_retracted({}, options);
     if (item.decision === 'rejected') return m.candidate_rejected_state({}, options);
-    if (publicStatements.some((statement) => statement.id === item.id)) return m.candidate_selected({}, options);
-    if (item.rank === 'normal' || item.rank === 'preferred') return m.candidate_pending({}, options);
+    if (publicStatements.some((statement) => statement.id === item.id))
+      return context ? m.context_selected({}, options) : m.candidate_selected({}, options);
+    if (item.rank === 'normal' || item.rank === 'preferred')
+      return context ? m.context_pending({}, options) : m.candidate_pending({}, options);
     return item.decision === 'accepted' ? m.candidate_unselected({}, options) : m.candidate_unresolved({}, options);
   }
 
@@ -235,7 +243,9 @@ export function CandidateReview({
     >
       <div className="space-y-1">
         <h2 className="text-xl font-semibold">{m.candidate_title({}, options)}</h2>
-        <p className="text-sm text-muted-foreground">{m.candidate_intro({}, options)}</p>
+        <p className="text-sm text-muted-foreground">
+          {context ? m.context_authority({}, options) : m.candidate_intro({}, options)}
+        </p>
       </div>
       {!opened ? (
         <Button variant="outline" className="min-h-11" onClick={() => void load()}>
@@ -274,9 +284,13 @@ export function CandidateReview({
                   : result.kind === 'selected'
                     ? m.candidate_selection_confirmed({}, options)
                     : result.kind === 'accepted'
-                      ? m.candidate_accepted({}, options)
+                      ? context
+                        ? m.context_accepted({}, options)
+                        : m.candidate_accepted({}, options)
                       : result.kind === 'rejected'
-                        ? m.candidate_rejected({}, options)
+                        ? context
+                          ? m.context_rejected({}, options)
+                          : m.candidate_rejected({}, options)
                         : m.candidate_pending({}, options)}
               </p>
               {!context && result.kind === 'selected' && result.public && (
@@ -329,7 +343,9 @@ export function CandidateReview({
               {current.page && (
                 <>
                   <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">{m.candidate_compare_hint({}, options)}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {context ? m.context_authority({}, options) : m.candidate_compare_hint({}, options)}
+                    </p>
                     {(!current.page.candidates.length ||
                       (exactCandidate && !current.page.candidates.some((item) => item.id === exactCandidate))) && (
                       <p>{exactCandidate ? m.correction_exact_missing({}, options) : m.candidate_empty({}, options)}</p>
@@ -375,7 +391,9 @@ export function CandidateReview({
                       <h3 className="font-semibold">{current.fields.find((field) => field.id === property)?.label}</h3>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="min-w-0 space-y-2 rounded-lg bg-muted/40 p-3">
-                          <h4 className="text-sm font-semibold">{m.candidate_current({}, options)}</h4>
+                          <h4 className="text-sm font-semibold">
+                            {context ? m.context_selected_values({}, options) : m.candidate_current({}, options)}
+                          </h4>
                           {!publicRead ? (
                             <p>{m.candidate_public_unconfirmed({}, options)}</p>
                           ) : publicStatements.length ? (
@@ -385,7 +403,7 @@ export function CandidateReview({
                               </div>
                             ))
                           ) : (
-                            <p>{m.candidate_no_current({}, options)}</p>
+                            <p>{context ? m.context_no_values({}, options) : m.candidate_no_current({}, options)}</p>
                           )}
                         </div>
                         <div className="min-w-0 space-y-2 rounded-lg border border-primary/40 p-3">
@@ -447,10 +465,12 @@ export function CandidateReview({
                   )}
                   {draft && (
                     <section
-                      aria-label={m.candidate_selection_draft({}, options)}
+                      aria-label={context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
                       className="space-y-3 rounded-lg border border-border p-3"
                     >
-                      <h3 className="font-semibold">{m.candidate_selection_draft({}, options)}</h3>
+                      <h3 className="font-semibold">
+                        {context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
+                      </h3>
                       {context && current.contextReview && (
                         <Field>
                           <FieldLabel htmlFor="context-mode">{m.context_mode({}, options)}</FieldLabel>
@@ -479,7 +499,9 @@ export function CandidateReview({
                       <p className="text-sm text-muted-foreground">
                         {context && mode !== 'replace'
                           ? m.context_empty_selection({}, options)
-                          : m.candidate_replace_hint({}, options)}
+                          : context
+                            ? m.context_replace_hint({}, options)
+                            : m.candidate_replace_hint({}, options)}
                       </p>
                       <p className="text-sm">{m.candidate_selection_limit({ limit: String(maximum) }, options)}</p>
                       {(!context || mode === 'replace') && (
@@ -547,7 +569,7 @@ export function CandidateReview({
                         disabled={locked || requiresReload || !valid}
                         onClick={() => setConfirmation('adopt')}
                       >
-                        {m.candidate_adopt({}, options)}
+                        {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
                       </Button>
                     </section>
                   )}
@@ -560,12 +582,16 @@ export function CandidateReview({
               <h4 className="font-semibold">{m.candidate_confirm_title({ action }, options)}</h4>
               <p className="text-sm">
                 {confirmation === 'accept'
-                  ? m.candidate_confirm_accept({}, options)
+                  ? context
+                    ? m.context_confirm_accept({}, options)
+                    : m.candidate_confirm_accept({}, options)
                   : confirmation === 'reject'
                     ? m.candidate_confirm_reject({}, options)
                     : context && mode !== 'replace'
                       ? m.context_empty_selection({}, options)
-                      : m.candidate_confirm_replace({}, options)}
+                      : context
+                        ? m.context_confirm_replace({}, options)
+                        : m.candidate_confirm_replace({}, options)}
               </p>
               {context && confirmation === 'adopt' && (
                 <p>
@@ -583,7 +609,11 @@ export function CandidateReview({
                     return (
                       <li key={entry.candidate}>
                         {value && (
-                          <CandidateValue snak={value.statement} related={current!.public.related} locale={locale} />
+                          <CandidateValue
+                            snak={value.statement}
+                            related={(current!.contextReview?.reading ?? current!.public).related}
+                            locale={locale}
+                          />
                         )}
                         <span className="ml-2 text-sm">
                           {entry.rank === 'preferred'

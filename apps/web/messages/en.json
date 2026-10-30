@@ -1995,5 +1995,15 @@
   "context_suppress": "Suppress inherited values",
   "context_empty_selection": "This mode submits an empty selection. Your replacement draft is retained.",
   "context_saved": "Context selection saved. Reload to review the current reading. This does not publish the whole Context.",
-  "context_read_unavailable": "The command was saved, but the current Context reading is unavailable. Reload before another action."
+  "context_read_unavailable": "The command was saved, but the current Context reading is unavailable. Reload before another action.",
+  "context_adopt": "Apply to this Context",
+  "context_selected": "Selected in the current Context reading.",
+  "context_pending": "The Context selection is not yet confirmed by its reading. Reload to compare again.",
+  "context_draft": "Context selection draft",
+  "context_no_values": "No disclosed value in this reading.",
+  "context_accepted": "Suggestion accepted in this Context. Selection remains a separate decision.",
+  "context_rejected": "Suggestion rejected in this Context. The assertion is retained.",
+  "context_replace_hint": "Choose every value and rank to keep in this slot. Replacement uses this complete draft; edits survive paging and reload.",
+  "context_confirm_accept": "Accept this suggestion in this Context without selecting it. The server checks your current permission.",
+  "context_confirm_replace": "Replace this Context slot’s entire selection with the values and ranks shown. Unchecked values are removed from this selection. The server checks your current permission."
 }

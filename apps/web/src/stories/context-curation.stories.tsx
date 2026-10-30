@@ -21,13 +21,13 @@ async function replace(canvasElement: HTMLElement) {
   for (const choice of canvas.getAllByRole('checkbox'))
     if (choice.getAttribute('aria-checked') === 'true') await userEvent.click(choice);
   await userEvent.click(canvas.getAllByRole('checkbox').at(-1)!);
-  await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
+  await userEvent.click(canvas.getByRole('button', { name: m.context_adopt() }));
   return canvas;
 }
 async function confirm(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  const heading = canvas.getByRole('heading', { name: m.candidate_confirm_title({ action: m.candidate_adopt() }) });
-  await userEvent.click(within(heading.parentElement!).getByRole('button', { name: m.candidate_adopt() }));
+  const heading = canvas.getByRole('heading', { name: m.candidate_confirm_title({ action: m.context_adopt() }) });
+  await userEvent.click(within(heading.parentElement!).getByRole('button', { name: m.context_adopt() }));
   return canvas;
 }
 export const Inherited: Story = {
@@ -73,11 +73,11 @@ export const Conflict: Story = {
     await replace(canvasElement);
     const canvas = await confirm(canvasElement);
     await canvas.findByText(m.candidate_draft_stale());
-    expect(canvas.getByRole('button', { name: m.candidate_adopt() })).toBeDisabled();
+    expect(canvas.getByRole('button', { name: m.context_adopt() })).toBeDisabled();
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_reload() }));
     await canvas.findByRole('combobox', { name: m.context_mode() });
     expect(canvas.getAllByRole('checkbox').at(-1)!).toBeChecked();
-    await userEvent.click(canvas.getByRole('button', { name: m.candidate_adopt() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.context_adopt() }));
     await confirm(canvasElement);
     await canvas.findByText(m.context_saved());
   },

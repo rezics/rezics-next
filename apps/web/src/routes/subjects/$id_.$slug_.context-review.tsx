@@ -101,7 +101,7 @@ function ContextReviewRoute() {
       />
       <h1 className="text-2xl font-semibold">{m.context_title()}</h1>
       <ContextCurationSession
-        key={`${frame.id}:${context}:${JSON.stringify(slot)}`}
+        key={`${frame.id}:${context}:${property ?? ''}:${JSON.stringify(slot)}`}
         id={frame.id}
         context={context}
         property={property}

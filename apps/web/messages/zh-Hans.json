@@ -1995,5 +1995,15 @@
   "context_suppress": "抑制继承值",
   "context_empty_selection": "此模式提交空选择，替换草稿会保留。",
   "context_saved": "Context 选择已保存。请重新读取当前结果。这不会发布整个 Context。",
-  "context_read_unavailable": "命令已保存，但当前 Context 读取不可用。请在下次操作前重新读取。"
+  "context_read_unavailable": "命令已保存，但当前 Context 读取不可用。请在下次操作前重新读取。",
+  "context_adopt": "应用到此 Context",
+  "context_selected": "已在当前 Context 读取结果中选用。",
+  "context_pending": "Context 选择尚未得到读取结果确认。请重新读取后比较。",
+  "context_draft": "Context 选择草稿",
+  "context_no_values": "此读取结果没有已披露的值。",
+  "context_accepted": "候选已在此 Context 中接受。选择读值仍是独立决定。",
+  "context_rejected": "候选已在此 Context 中拒绝，原陈述会保留。",
+  "context_replace_hint": "选择此槽位要保留的所有值和等级。替换会使用完整草稿；翻页和重新读取后仍保留编辑。",
+  "context_confirm_accept": "在此 Context 中接受候选，但不选择其作为读值。服务器会检查当前权限。",
+  "context_confirm_replace": "以所示的值和等级替换此 Context 槽位的整个选择。未勾选的值会从本次选择移除。服务器会检查当前权限。"
 }

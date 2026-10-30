@@ -1994,5 +1994,15 @@
   "context_suppress": "Suprimir valores heredados",
   "context_empty_selection": "Este modo envía una selección vacía. Se conserva el borrador de reemplazo.",
   "context_saved": "Selección del Context guardada. Recarga la lectura actual. Esto no publica todo el Context.",
-  "context_read_unavailable": "La orden se guardó, pero la lectura actual del Context no está disponible. Recarga antes de otra acción."
+  "context_read_unavailable": "La orden se guardó, pero la lectura actual del Context no está disponible. Recarga antes de otra acción.",
+  "context_adopt": "Aplicar a este Context",
+  "context_selected": "Seleccionado en la lectura actual del Context.",
+  "context_pending": "La lectura aún no ha confirmado la selección del Context. Recarga para comparar.",
+  "context_draft": "Borrador de selección del Context",
+  "context_no_values": "No hay valores divulgados en esta lectura.",
+  "context_accepted": "Sugerencia aceptada en este Context. La selección sigue siendo una decisión independiente.",
+  "context_rejected": "Sugerencia rechazada en este Context. Se conserva la afirmación.",
+  "context_replace_hint": "Elige todos los valores y rangos que conservar en este espacio. El borrador completo reemplaza la selección; los cambios se conservan al paginar y recargar.",
+  "context_confirm_accept": "Aceptar esta sugerencia en este Context sin seleccionarla. El servidor comprueba tu permiso actual.",
+  "context_confirm_replace": "Reemplazar toda la selección de este espacio del Context con los valores y rangos mostrados. Los valores sin marcar se retiran de esta selección. El servidor comprueba tu permiso actual."
 }

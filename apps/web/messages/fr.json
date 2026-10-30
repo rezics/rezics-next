@@ -1994,5 +1994,15 @@
   "context_suppress": "Masquer les valeurs héritées",
   "context_empty_selection": "Ce mode envoie une sélection vide. Votre brouillon de remplacement est conservé.",
   "context_saved": "Sélection du Context enregistrée. Rechargez la lecture actuelle. Cela ne publie pas tout le Context.",
-  "context_read_unavailable": "La commande a été enregistrée, mais la lecture actuelle du Context est indisponible. Rechargez avant toute autre action."
+  "context_read_unavailable": "La commande a été enregistrée, mais la lecture actuelle du Context est indisponible. Rechargez avant toute autre action.",
+  "context_adopt": "Appliquer à ce Context",
+  "context_selected": "Sélectionné dans la lecture actuelle du Context.",
+  "context_pending": "La lecture n’a pas encore confirmé la sélection du Context. Rechargez pour comparer.",
+  "context_draft": "Brouillon de sélection du Context",
+  "context_no_values": "Aucune valeur divulguée dans cette lecture.",
+  "context_accepted": "Suggestion acceptée dans ce Context. La sélection reste une décision distincte.",
+  "context_rejected": "Suggestion rejetée dans ce Context. L’assertion est conservée.",
+  "context_replace_hint": "Choisissez toutes les valeurs et tous les rangs à conserver dans cet emplacement. Ce brouillon remplace toute la sélection ; les modifications persistent après pagination et rechargement.",
+  "context_confirm_accept": "Accepter cette suggestion dans ce Context sans la sélectionner. Le serveur vérifie votre autorisation actuelle.",
+  "context_confirm_replace": "Remplacer toute la sélection de cet emplacement du Context par les valeurs et les rangs affichés. Les valeurs non cochées sont retirées de cette sélection. Le serveur vérifie votre autorisation actuelle."
 }

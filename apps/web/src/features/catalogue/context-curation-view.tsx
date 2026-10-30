@@ -74,7 +74,7 @@ export function ContextComparisonView({
                     </div>
                   ))
                 ) : (
-                  <p>{m.candidate_no_current({}, options)}</p>
+                  <p>{m.context_no_values({}, options)}</p>
                 )}
               </section>
             ))}

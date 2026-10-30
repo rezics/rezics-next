@@ -1994,5 +1994,15 @@
   "context_suppress": "継承値を抑制",
   "context_empty_selection": "このモードは空の選択を送信します。置換用の下書きは保持されます。",
   "context_saved": "Context の選択を保存しました。再読み込みして現在の結果を確認してください。Context 全体の公開ではありません。",
-  "context_read_unavailable": "操作は保存されましたが、現在の Context を読み取れません。次の操作の前に再読み込みしてください。"
+  "context_read_unavailable": "操作は保存されましたが、現在の Context を読み取れません。次の操作の前に再読み込みしてください。",
+  "context_adopt": "この Context に適用",
+  "context_selected": "現在の Context の読み取り結果で選択されています。",
+  "context_pending": "Context の選択は読み取り結果でまだ確認できません。再読み込みして比較してください。",
+  "context_draft": "Context の選択下書き",
+  "context_no_values": "この読み取り結果に開示された値はありません。",
+  "context_accepted": "この Context で候補を承認しました。選択は別の操作です。",
+  "context_rejected": "この Context で候補を却下しました。記述は保持されます。",
+  "context_replace_hint": "このスロットに残す値とランクをすべて選んでください。下書き全体で選択を置換します。ページ移動や再読み込みでも編集は保持されます。",
+  "context_confirm_accept": "この Context で候補を選択せずに承認します。サーバーが現在の権限を確認します。",
+  "context_confirm_replace": "この Context のスロットの選択全体を、表示された値とランクで置換します。未選択の値はこの選択から外れます。サーバーが現在の権限を確認します。"
 }
