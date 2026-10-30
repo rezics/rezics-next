@@ -1,8 +1,14 @@
 import { listRealmDiscovery } from './discovery.ts';
+import { requestRealmClaim } from './realm-continuity.ts';
 import { exactRealmPresentationImage } from '../content/realm-media.ts';
 import { approveRealmClaim } from '../access/realm-claim.ts';
 import { realmClaimApprovalResponseSchema } from './schemas.ts';
-import { discoveryQuerySchema, discoveryResponseSchema } from './schemas.ts';
+import {
+  discoveryQuerySchema,
+  discoveryResponseSchema,
+  RealmClaimRequestInputSchema,
+  RealmClaimRequestSchema,
+} from './schemas.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -1204,6 +1210,47 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           throw new ProblemError('forbidden');
         }
         set.status = 204;
+      },
+    )
+    .post(
+      '/v1/realms/:realmId/claimRequests',
+      {
+        params: realmParams,
+        headers: commandHeaders,
+        body: strict(RealmClaimRequestInputSchema),
+        response: {
+          202: withHeaders(strict(RealmClaimRequestSchema), sessionHeader),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'realm.claim_request',
+          'x-exposure': 'public',
+          'x-action': 'realm:participate',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await requestRealmClaim(realmDependencies(), actor, realmId, {
+              idempotencyKey: key,
+              deadline: job.deadline,
+            });
+            session.record(result);
+            set.status = 202;
+            return {
+              ...result.value,
+              orphanedAt: new Date(result.value.orphanedAt).toISOString(),
+              claimEligibleAt: new Date(result.value.claimEligibleAt).toISOString(),
+              requestedAt: new Date(result.value.requestedAt).toISOString(),
+            };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
       },
     )
     .post(

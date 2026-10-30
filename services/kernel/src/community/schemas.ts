@@ -22,6 +22,19 @@ export const realmClaimApprovalResponseSchema = t.Object(
   closed,
 );
 
+export const RealmClaimRequestInputSchema = t.Object({}, closed);
+export const RealmClaimRequestSchema = t.Object(
+  {
+    realmId: id,
+    requestId: id,
+    state: t.Literal('pending'),
+    orphanedAt: t.String({ format: 'date-time' }),
+    claimEligibleAt: t.String({ format: 'date-time' }),
+    requestedAt: t.String({ format: 'date-time' }),
+  },
+  closed,
+);
+
 export const SitemapCanonicalDestinationSchema = t.Union([
   t.Object({ kind: t.Literal('space'), spaceId: ContentIdSchema, address: t.String() }, closed),
   t.Object({ kind: t.Literal('realm'), realmId: ContentIdSchema }, closed),

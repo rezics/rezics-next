@@ -1055,6 +1055,44 @@ language through the client's `accept-language`.
   also adds 1 D. Boards and publications are single pages, never walked.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `the Realm page reads its fixed set once, however many boards, publications and memberships there are` at 1, 10 and 100
 
+### Realm claim review
+
+The existing Space/Realm home mounts `community/realm-claim-controls.tsx` in its management area. The native Realm
+GET continuity is retained in `RealmHome.continuity`, so an orphan's settings, board creation, publication and
+management stay frozen from the first render while readable boards remain available. A later current owned read
+releases that freeze without claiming that this viewer is the owner or granting an action. Native container
+removal remains separate; denied Realm reads conceal its old shelves and request reference, without selecting
+Global or changing its Space or Context pointer.
+
+The default panel uses the first-party BFF/session/CSRF transport. Current admission comes from the existing
+`GET /v1/realms/{realmId}/participation`, which checks both participation and read eligibility, bracketed by native
+Realm reads with matching head, carrying Space, Context and continuity. Missing continuity or admission offers
+only unavailable request status. Signed-out readers use the existing sign-in return route. No role label,
+creator, membership, Global authority or browser clock grants the request action.
+
+`POST /v1/realms/{realmId}/claimRequests` sends `{}` with the exact retained `Idempotency-Key` and displays only the
+returned pending request reference. The original 720-hour date is informational; native command time decides
+eligibility. Pending means submission awaiting a platform decision, never approval, queue priority or ownership.
+A lost reply retains the same intent and key for explicit retry. Current denial preserves the intent but removes
+the retry action; conflict requires a fresh native read and explicit review before a new intent. Refresh does not
+rebase a saved intent or replace its key. Request references are selectable and copyable when current admission
+still permits their display. No claimant list, approval control, staff flag or second ownership source is added.
+An updated native page payload replaces the displayed source while preserving its saved intent and requiring
+current personal admission again.
+
+One read runs after hydration, then only explicit manual refreshes. Each signed-in refresh makes exactly two
+Realm point reads and one participation check, independent of board, member or request count; an anonymous refresh
+uses one Realm read. Each request or explicit retry makes one native POST. No list, per-row admission, refill or
+repeated polling is added. `tests/realm-claim.test.ts` covers the native client boundary, retained page source,
+refusal, missing metadata, closure, uncertain retry and before/final binding; integration runs its acceptance.
+
+Review IDs are `patterns-community-realm-claim--journey`, `--uncertain-retry`, `--refused` and
+`pages-community-realm-claim--journey`, with the existing phone390/desktop1280 and light/dark globals. The Pages
+story reuses AppShell and the same Space page and controls. Explicit transport fixtures augment an existing Realm
+recording; they do not prove native approval or visual acceptance. New messages use English base-locale fallback.
+No external reference-project source was needed. Native, browser, regression and visual proof remain integration
+work under the minimal verification policy.
+
 ### Space and Realm lifecycle controls
 
 `community/container-lifecycle-controls.tsx` composes one lifecycle region per container on the existing Space page.

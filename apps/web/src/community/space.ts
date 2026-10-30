@@ -5,6 +5,7 @@ import { isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, viewerCredential } from '../session/request';
+import { realmClaimSnapshot, type RealmClaimSnapshot } from './realm-claim';
 
 /** Boards listed on a Realm page. The kernel allows at most 100. */
 export const BOARD_ROW_LIMIT = 20;
@@ -38,6 +39,8 @@ export type RealmHome = {
   title: string;
   summary?: string;
   visibility: 'public' | 'protected';
+  /** Current native ownership continuity; absence never admits a claim request. */
+  continuity?: RealmClaimSnapshot | null;
   boards: RealmBoard[];
   /** Boards the native page reports as unavailable, rather than the genuinely empty list. */
   unavailableBoards?: number;
@@ -168,7 +171,7 @@ async function readViewer(
 /** The public Realm content. Personal membership is loaded separately after hydration. */
 async function readHome(
   client: KernelClient,
-  realm: { realmId: string; visibility: 'public' | 'protected'; title?: string },
+  realm: NonNullable<Awaited<ReturnType<ReturnType<KernelClient['realms']>['get']>>['data']>['realm'],
   auth: Auth,
   credentialMode: ReadCredentialMode,
 ): Promise<RealmHome> {
@@ -190,6 +193,7 @@ async function readHome(
     id: realmId,
     title: realm.title ?? '',
     visibility: realm.visibility,
+    continuity: realmClaimSnapshot(realm),
     boards: boardItems
       .filter((board) => board.availability === 'available' && board.visibility !== 'taken_down')
       .map((board) => ({

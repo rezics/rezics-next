@@ -1,5 +1,5 @@
 import { ResourceAccessLink } from '../accounts/resource-access/link';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
@@ -28,6 +28,8 @@ import type { ReadCredentialMode } from '../kernel/credential';
 import { ContainerLifecyclePanel } from './container-lifecycle-controls';
 import type { ContainerLifecycleAdapter } from './container-lifecycle';
 import { RealmAppearancePanel } from './realm-presentation-panel';
+import { RealmClaimPanel } from './realm-claim-panel';
+import type { RealmClaimAdapter, RealmClaimRead, RealmClaimSnapshot } from './realm-claim';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -271,12 +273,25 @@ export function RealmShelf({
   );
 }
 
-function Home({ realm, management, frozen }: { realm: RealmHome; management: ReactNode; frozen: boolean }) {
+function Home({
+  realm,
+  management,
+  claim,
+  frozen,
+  readable,
+}: {
+  realm: RealmHome;
+  management: ReactNode;
+  claim: ReactNode;
+  frozen: boolean;
+  readable: boolean;
+}) {
   return (
     <>
-      <CarriedRealm realm={realm} />
-      <RealmShelf key={realm.id} realm={realm} frozen={frozen} />
-      {frozen ? null : management}
+      {readable ? <CarriedRealm realm={realm} /> : null}
+      {readable ? <RealmShelf key={realm.id} realm={realm} frozen={frozen} /> : null}
+      {claim}
+      {frozen || !readable ? null : management}
     </>
   );
 }
@@ -287,19 +302,54 @@ export function SpacePage({
   realmManagement,
   realmAppearance,
   lifecycleAdapter,
+  realmClaimAdapter,
 }: {
   page: SpacePageData;
   realmManagement?: ReactNode;
   realmAppearance?: ReactNode;
   lifecycleAdapter?: ContainerLifecycleAdapter;
+  realmClaimAdapter?: RealmClaimAdapter;
 }) {
   const location = useLocation();
   const [spaceRestriction, restrictSpace] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
   const [realmRestriction, restrictRealm] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
+  const [claim, setClaim] = useState<{
+    realmId: string;
+    read: RealmClaimRead;
+    pageSource: RealmClaimSnapshot | null | undefined;
+  } | null>(null);
+  const realmId = page.realm?.id;
+  const pageSource = page.realm?.continuity;
+  const claimRead = claim?.realmId === realmId && claim?.pageSource === pageSource ? claim?.read : null;
+  const onClaimRead = useCallback(
+    (read: RealmClaimRead) => {
+      if (realmId) setClaim({ realmId, read, pageSource });
+      if (read.kind === 'ready' && read.snapshot.ownershipState === 'owned') {
+        restrictRealm((previous) =>
+          previous?.state === 'orphaned' && previous.id === realmId ? null : previous,
+        );
+      }
+    },
+    [realmId, pageSource],
+  );
+  const onRealmRestriction = useCallback(
+    (state: 'removed' | 'orphaned') => {
+      if (!realmId) return;
+      restrictRealm((previous) =>
+        previous?.id === realmId && previous.state === state ? previous : { id: realmId, state },
+      );
+    },
+    [realmId],
+  );
   const spaceRemoved = spaceRestriction?.id === page.space.id && spaceRestriction.state === 'removed';
   const realmRestricted = realmRestriction?.id === page.realm?.id ? realmRestriction?.state : null;
   const realmRemoved = spaceRemoved || realmRestricted === 'removed';
-  const frozen = realmRestricted === 'orphaned';
+  const readable = claimRead?.kind !== 'denied' && claimRead?.kind !== 'closed';
+  const frozen =
+    realmRestricted === 'orphaned' ||
+    (claimRead
+      ? claimRead.kind !== 'ready' || claimRead.snapshot.governanceReadOnly
+      : page.realm?.continuity?.governanceReadOnly === true);
   const colors = placeholderColors({ id: page.space.id, types: [] });
   const banner = page.space.banner;
   const bannerVariant = banner?.variants.find((variant) => variant.format === 'webp') ?? banner?.variants.at(-1);
@@ -333,7 +383,7 @@ export function SpacePage({
         ) : null}
         <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
           <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
-          {page.realm && !realmRemoved ? (
+          {page.realm && !realmRemoved && readable ? (
             <div className="shrink-0">
               <RealmMembership
                 realm={page.realm}
@@ -352,7 +402,9 @@ export function SpacePage({
         <>
           <section aria-label={m.space_follow_label()}>
             <FollowTargetControl targetId={page.space.id} />
-            {!realmRemoved ? <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} /> : null}
+            {!realmRemoved && readable && !frozen ? (
+              <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
+            ) : null}
           </section>
         </>
       ) : null}
@@ -360,6 +412,16 @@ export function SpacePage({
         <Home
           realm={page.realm}
           frozen={frozen}
+          readable={readable}
+          claim={
+            <RealmClaimPanel
+              realmId={page.realm.id}
+              initial={page.realm.continuity ?? null}
+              returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
+              onRead={onClaimRead}
+              {...(realmClaimAdapter ? { adapter: realmClaimAdapter } : {})}
+            />
+          }
           management={
             <>
               {realmAppearance ?? <RealmAppearancePanel realmId={page.realm.id} />}
@@ -385,11 +447,7 @@ export function SpacePage({
           target={{ kind: 'realm', id: page.realm.id }}
           title={page.realm.title}
           {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
-          onRestriction={(state) => {
-            if (!page.realm) return;
-            const id = page.realm.id;
-            restrictRealm((previous) => (previous?.id === id && previous.state === state ? previous : { id, state }));
-          }}
+          onRestriction={onRealmRestriction}
         />
       ) : null}
     </article>

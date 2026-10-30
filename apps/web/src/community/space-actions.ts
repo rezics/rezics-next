@@ -41,6 +41,8 @@ import {
   lifecycleCommandSchema,
   lifecycleDestinationSchema,
 } from './container-lifecycle-native';
+import { readRealmClaim, writeRealmClaim } from './realm-claim-native';
+import { validateRealmClaimInput, type RealmClaimInput } from './realm-claim';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -142,6 +144,20 @@ export const changeRealmMembership = createServerFn({ method: 'POST' })
     } catch {
       return { outcome: 'refused' };
     }
+  });
+
+export const readRealmClaimState = createServerFn({ method: 'GET' })
+  .validator(validateRealm)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return readRealmClaim(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const submitRealmClaim = createServerFn({ method: 'POST' })
+  .validator((input: RealmClaimInput) => validateRealmClaimInput(input))
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return writeRealmClaim(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
 async function setupCredential() {

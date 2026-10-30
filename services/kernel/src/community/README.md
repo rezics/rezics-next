@@ -240,6 +240,14 @@ same pending request without another event. The result is always `pending`; neit
 ownership. Approval requires a genuine platform decision establishing a native Access owner. The native command exposes no
 approval operation without that authority.
 
+`POST /v1/realms/{realmId}/claimRequests` mounts this command as `realm.claim_request`, using the existing
+`realm:participate` action and its independent read admission. It requires an account, `Idempotency-Key` and a
+strictly empty JSON object. A 202 response is the native `RealmClaimRequest` directly: `realmId`, `requestId`,
+`state: 'pending'`, `orphanedAt`, `claimEligibleAt` and `requestedAt`, with UTC date-time strings. The ordinary
+command deadline, receipt/session transport and problem responses apply. This operational route introduces no
+resource-grant declaration. A 409 requires a current-source refresh; it does not shorten or restart the original
+waiting period. Approval remains a separate platform authority and is not exposed by this request route.
+
 The approval source is `lockRealmClaimApprovalSource(tx, {realmId, requestId})`. It locks the actual current
 Realm/head and exact routed `realm_claim_request`, retaining the original `orphaned_at`, `claim_eligible_at`,
 `account_id` and `requested_at`. Only an active, pending, same-episode request after the original 720-hour deadline
