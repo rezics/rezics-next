@@ -33,11 +33,7 @@ test('raw ordinal progress retains duplicate occurrences and settles deleted row
   const parent = await f.send(f.owner.bearer, 'GET', path);
   expect(parent.status).toBe(200);
   const revision = (await parent.json()).collection.revision;
-  const deleted = await f.send(
-    f.owner.bearer,
-    'DELETE',
-    `${path}/members/${memberIds[0]}?revision=${revision}`,
-  );
+  const deleted = await f.send(f.owner.bearer, 'DELETE', `${path}/members/${memberIds[0]}?revision=${revision}`);
   expect(deleted.status).toBe(204);
   const deadline = Date.now() + 30000;
   const { metadata } = await readNativeCollectionMetadata(f.pool, source, {

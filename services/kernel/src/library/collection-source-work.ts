@@ -286,14 +286,17 @@ export async function instrumentNativeCollectionWork<T>(
 /** One physical Source reservation shared by metadata, native drivers, scope and derived work. */
 export class CollectionSourceLedger {
   private readonly used = zero();
-  constructor(readonly initial: WorkAllowance, readonly deadline: number) {
+  constructor(
+    readonly initial: WorkAllowance,
+    readonly deadline: number,
+  ) {
     // Validate once with the same native accounting rules.
     new NativeCollectionWork(initial, deadline);
   }
   allowance(): WorkAllowance {
     const remaining = zero();
     for (const axis of axes) remaining[axis] = this.initial.remaining[axis] - this.used[axis];
-    return { reservationId: this.initial.reservationId,remaining };
+    return { reservationId: this.initial.reservationId, remaining };
   }
   receipt(): WorkReceipt {
     return { reservationId: this.initial.reservationId, used: { ...this.used } };
@@ -301,8 +304,11 @@ export class CollectionSourceLedger {
   take(receipt: WorkReceipt): void {
     if (receipt.reservationId !== this.initial.reservationId) throw new TypeError('Foreign Source reservation');
     for (const axis of axes)
-      if (!Number.isSafeInteger(receipt.used[axis]) || receipt.used[axis] < 0 ||
-          receipt.used[axis] > this.initial.remaining[axis] - this.used[axis])
+      if (
+        !Number.isSafeInteger(receipt.used[axis]) ||
+        receipt.used[axis] < 0 ||
+        receipt.used[axis] > this.initial.remaining[axis] - this.used[axis]
+      )
         throw new TypeError('Source receipt exceeds shared allowance');
     for (const axis of axes) this.used[axis] += receipt.used[axis];
   }
@@ -319,19 +325,36 @@ export class CollectionSourceLedger {
       throw error;
     }
   }
-  async bounded<T>(cost: Partial<WorkDimensions>, operation: () => Promise<T>, actual?: (result: T) => Partial<WorkDimensions>): Promise<T> {
+  async bounded<T>(
+    cost: Partial<WorkDimensions>,
+    operation: () => Promise<T>,
+    actual?: (result: T) => Partial<WorkDimensions>,
+  ): Promise<T> {
     const work = new NativeCollectionWork(this.allowance(), this.deadline);
     const reservation = work.reserve({ ...zero(), ...cost });
     reservation.dispatch();
     let settled: Partial<WorkDimensions> = {};
-    try { const result = await operation(); settled = actual?.(result) ?? {}; return result; }
-    finally { reservation.settle(settled); this.take(work.receipt()); }
+    try {
+      const result = await operation();
+      settled = actual?.(result) ?? {};
+      return result;
+    } finally {
+      reservation.settle(settled);
+      this.take(work.receipt());
+    }
   }
 }
 function isReceipt(value: unknown): value is WorkReceipt {
-  return typeof value === 'object' && value !== null && 'reservationId' in value && 'used' in value &&
-    typeof value.reservationId === 'string' && typeof value.used === 'object' && value.used !== null &&
-    axes.every((axis) => typeof Reflect.get(Object(value.used), axis) === 'number');
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'reservationId' in value &&
+    'used' in value &&
+    typeof value.reservationId === 'string' &&
+    typeof value.used === 'object' &&
+    value.used !== null &&
+    axes.every((axis) => typeof Reflect.get(Object(value.used), axis) === 'number')
+  );
 }
 
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -340,67 +363,137 @@ import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { bindCanonicalSourceWork, advanceCanonicalSourceCapture, readCanonicalSourceState, beginCanonicalSourceRepair, repairCanonicalSourceStep,
-  publishCanonicalSourceRepair, CANONICAL_SOURCE_WORKFLOW, type CanonicalAllowance, type CanonicalWork } from './canonical-source-store.ts';
+import {
+  bindCanonicalSourceWork,
+  advanceCanonicalSourceCapture,
+  readCanonicalSourceState,
+  beginCanonicalSourceRepair,
+  repairCanonicalSourceStep,
+  publishCanonicalSourceRepair,
+  CANONICAL_SOURCE_WORKFLOW,
+  type CanonicalAllowance,
+  type CanonicalWork,
+} from './canonical-source-store.ts';
 
-const sourceStepAllowance = (): CanonicalAllowance => ({ reservationId: randomUUID(),rawKeys: 100,
-  nativeRows: 1000000,nativePoints: 10000,emptySeeks: 1000,statements: 10000,bytes: 16*1024*1024,identityMetadataRows: 0 });
+const sourceStepAllowance = (): CanonicalAllowance => ({
+  reservationId: randomUUID(),
+  rawKeys: 100,
+  nativeRows: 1000000,
+  nativePoints: 10000,
+  emptySeeks: 1000,
+  statements: 10000,
+  bytes: 16 * 1024 * 1024,
+  identityMetadataRows: 0,
+});
 type SourceLocator = { accounts: [string]; collectionId: string };
-type SourceSweep = { root: string; sequence: number; partition: number; route: number | null; collection: string | null };
+type SourceSweep = {
+  root: string;
+  sequence: number;
+  partition: number;
+  route: number | null;
+  collection: string | null;
+};
 /** The existing Library worker owns native checkpoints. No Source GET writes, scheduler or new participant. */
 export async function registerCollectionSourceWork(context: WorkContext): Promise<void> {
   bindCanonicalSourceWork(context);
   async function page(input: SourceLocator): Promise<void> {
     const route = routeOf(input.collectionId);
-    if (route === null || input.accounts.length !== 1 || routeOf(input.accounts[0]) === null ||
-        partitionOf(routeOf(input.accounts[0])!) !== partitionOf(route) || Buffer.byteLength(JSON.stringify(input))>4096)
+    if (
+      route === null ||
+      input.accounts.length !== 1 ||
+      routeOf(input.accounts[0]) === null ||
+      partitionOf(routeOf(input.accounts[0])!) !== partitionOf(route) ||
+      Buffer.byteLength(JSON.stringify(input)) > 4096
+    )
       throw new TypeError('Invalid native Source work locator');
-    const call = { route,collectionId: input.collectionId,deadline: Date.now()+30000,allowance: sourceStepAllowance() };
+    const call = {
+      route,
+      collectionId: input.collectionId,
+      deadline: Date.now() + 30000,
+      allowance: sourceStepAllowance(),
+    };
     function consume(w: CanonicalWork) {
       const a = call.allowance;
-      call.allowance = { reservationId: a.reservationId,rawKeys: a.rawKeys-w.candidateKeys-w.aliasKeys-w.duplicateKeys-w.lookaheadKeys-w.internalDriverKeys,
-        nativeRows: a.nativeRows-w.nativeRows,nativePoints: a.nativePoints-w.nativePoints,emptySeeks: a.emptySeeks-w.emptySeeks,
-        statements: a.statements-w.statements,bytes: a.bytes-w.bytes,identityMetadataRows: a.identityMetadataRows-w.identityMetadataRows };
+      call.allowance = {
+        reservationId: a.reservationId,
+        rawKeys: a.rawKeys - w.candidateKeys - w.aliasKeys - w.duplicateKeys - w.lookaheadKeys - w.internalDriverKeys,
+        nativeRows: a.nativeRows - w.nativeRows,
+        nativePoints: a.nativePoints - w.nativePoints,
+        emptySeeks: a.emptySeeks - w.emptySeeks,
+        statements: a.statements - w.statements,
+        bytes: a.bytes - w.bytes,
+        identityMetadataRows: a.identityMetadataRows - w.identityMetadataRows,
+      };
     }
-    const observed = await advanceCanonicalSourceCapture(context.pool,call);
+    const observed = await advanceCanonicalSourceCapture(context.pool, call);
     consume(observed.work);
     if (observed.state !== 'admitted') return;
-    const ready = await readCanonicalSourceState(context.pool,call);
+    const ready = await readCanonicalSourceState(context.pool, call);
     consume(ready.work);
     if (ready.state === 'ready') return;
-    const started = await beginCanonicalSourceRepair(context.pool,{ ...call,basis: observed.basis });
+    const started = await beginCanonicalSourceRepair(context.pool, { ...call, basis: observed.basis });
     consume(started.work);
     if (started.state !== 'working') return;
-    const next = await repairCanonicalSourceStep(context.pool,{ ...call,basis: observed.basis,repair: started.repair });
+    const next = await repairCanonicalSourceStep(context.pool, {
+      ...call,
+      basis: observed.basis,
+      repair: started.repair,
+    });
     consume(next.work);
-    if (next.state === 'complete') await publishCanonicalSourceRepair(context.pool,
-      { ...call,basis: observed.basis,repair: next.repair });
+    if (next.state === 'complete')
+      await publishCanonicalSourceRepair(context.pool, { ...call, basis: observed.basis, repair: next.repair });
   }
-  const step = DBOS.registerStep(page,{ name: 'library.canonicalSourcePage',...COMMAND_STEP_RETRIES });
-  DBOS.registerWorkflow((input: SourceLocator) => step(input),{ name: CANONICAL_SOURCE_WORKFLOW });
-  const sweepPage = DBOS.registerStep(async (input: SourceSweep): Promise<SourceSweep> => {
-    const { rows } = await withConnection(context.pool,(client) => client.query<{ route: number; collection: string; owner: string | null }>(
-      `SELECT route,collection_id::text AS collection,curator_account_id::text AS owner FROM library.collection
+  const step = DBOS.registerStep(page, { name: 'library.canonicalSourcePage', ...COMMAND_STEP_RETRIES });
+  DBOS.registerWorkflow((input: SourceLocator) => step(input), { name: CANONICAL_SOURCE_WORKFLOW });
+  const sweepPage = DBOS.registerStep(
+    async (input: SourceSweep): Promise<SourceSweep> => {
+      const { rows } = await withConnection(context.pool, (client) =>
+        client.query<{ route: number; collection: string; owner: string | null }>(
+          `SELECT route,collection_id::text AS collection,curator_account_id::text AS owner FROM library.collection
        WHERE route BETWEEN $1 AND $2 AND ($3::integer IS NULL OR (route,collection_id)>($3,$4::uuid))
        ORDER BY route,collection_id LIMIT 1`,
-      [input.partition*16,input.partition*16+15,input.route,input.collection]));
-    const row = rows[0];
-    if (!row) return { ...input,partition: input.partition+1,route: null,collection: null };
-    if (row.owner) await page({ accounts: [row.owner],collectionId: row.collection });
-    return { ...input,route: row.route,collection: row.collection };
-  },{ name: 'library.canonicalSourceSweepPage',...COMMAND_STEP_RETRIES });
-  const continuation = DBOS.registerStep(async (input: SourceSweep) => {
-    await context.client.enqueue({ workflowName: 'library.canonicalSourceSweepSegment',queueName: 'maintenance',
-      workflowID: `library.canonicalSourceSweep:${input.root}:${input.sequence}`,workflowIDReusePolicy: 'return-existing' },input);
-  },{ name: 'library.canonicalSourceSweepContinue',...COMMAND_STEP_RETRIES });
+          [input.partition * 16, input.partition * 16 + 15, input.route, input.collection],
+        ),
+      );
+      const row = rows[0];
+      if (!row) return { ...input, partition: input.partition + 1, route: null, collection: null };
+      if (row.owner) await page({ accounts: [row.owner], collectionId: row.collection });
+      return { ...input, route: row.route, collection: row.collection };
+    },
+    { name: 'library.canonicalSourceSweepPage', ...COMMAND_STEP_RETRIES },
+  );
+  const continuation = DBOS.registerStep(
+    async (input: SourceSweep) => {
+      await context.client.enqueue(
+        {
+          workflowName: 'library.canonicalSourceSweepSegment',
+          queueName: 'maintenance',
+          workflowID: `library.canonicalSourceSweep:${input.root}:${input.sequence}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        input,
+      );
+    },
+    { name: 'library.canonicalSourceSweepContinue', ...COMMAND_STEP_RETRIES },
+  );
   async function segment(input: SourceSweep) {
     let next = input;
-    for (let n=0;n<100 && next.partition<4096;n++) next = await sweepPage(next);
-    if (next.partition<4096) await continuation({ ...next,sequence: next.sequence+1 });
+    for (let n = 0; n < 100 && next.partition < 4096; n++) next = await sweepPage(next);
+    if (next.partition < 4096) await continuation({ ...next, sequence: next.sequence + 1 });
   }
-  DBOS.registerWorkflow(segment,{ name: 'library.canonicalSourceSweepSegment' });
-  DBOS.registerWorkflow(() => segment({ root: DBOS.workflowID!,sequence: 0,partition: 0,route: null,collection: null }),
-    { name: 'library.canonicalSourceSweep' });
-  await context.client.applySchedules([{ scheduleName: 'library.canonicalSource.every-10-minutes',workflowName: 'library.canonicalSourceSweep',
-    schedule: '*/10 * * * *',cronTimezone: 'UTC',automaticBackfill: false,queueName: 'maintenance' }]);
+  DBOS.registerWorkflow(segment, { name: 'library.canonicalSourceSweepSegment' });
+  DBOS.registerWorkflow(
+    () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, route: null, collection: null }),
+    { name: 'library.canonicalSourceSweep' },
+  );
+  await context.client.applySchedules([
+    {
+      scheduleName: 'library.canonicalSource.every-10-minutes',
+      workflowName: 'library.canonicalSourceSweep',
+      schedule: '*/10 * * * *',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+      queueName: 'maintenance',
+    },
+  ]);
 }

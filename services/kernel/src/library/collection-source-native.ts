@@ -415,27 +415,20 @@ export function readNativeCollectionRawOrdinalPage(
 ) {
   if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100)
     throw new RangeError('Native source limit must be 1..100');
-  if (
-    input.after &&
-    (routeOf(input.after.memberId) === null ||
-      !/^[\x21-\x7e]{1,48}$/.test(input.after.ordinalKey))
-  )
+  if (input.after && (routeOf(input.after.memberId) === null || !/^[\x21-\x7e]{1,48}$/.test(input.after.ordinalKey)))
     throw new ProblemError('invalid_cursor');
   return call(pool, input, async (work) =>
     readOnly(pool, input.deadline, async (client) => {
       const current = await currentSource(client, metadata, work);
       if (current.authority !== 'curated') throw new ProblemError('dependency_unavailable');
       const raw = (
-        await client.query<Omit<NativeOrdinalRow, 'memberRevision'> & { memberRevision: string }>(
-          ordinalPage.sql,
-          [
-            current.route,
-            current.collectionId,
-            input.after?.ordinalKey ?? '',
-            input.after?.memberId ?? '00000000-0000-0000-0000-000000000000',
-            input.limit,
-          ],
-        )
+        await client.query<Omit<NativeOrdinalRow, 'memberRevision'> & { memberRevision: string }>(ordinalPage.sql, [
+          current.route,
+          current.collectionId,
+          input.after?.ordinalKey ?? '',
+          input.after?.memberId ?? '00000000-0000-0000-0000-000000000000',
+          input.limit,
+        ])
       ).rows;
       const rows: NativeOrdinalRow[] = raw.map((row) => {
         const memberRevision = Number(row.memberRevision);
