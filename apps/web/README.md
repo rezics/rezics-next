@@ -2480,9 +2480,17 @@ the count nor presentation join metadata supplies an action. Its status uses a c
 and outline controls explicitly own their background and ink in both themes. Space identity text uses the shared
 placeholder pair and a uniform cover scrim, independent of arbitrary image placeholder colours.
 
-Existing lifecycle/claim restrictions immediately hide the presentation and participation region. Previously mounted
-management stays hidden and inert through those restrictions so appearance drafts survive; `RealmAppearancePanel`
-remains the sole editor. No appearance native, panel or fixture source is changed here.
+An active orphan's `governanceReadOnly` freezes writes without revoking its independent read authority. The same
+native presentation read and final Realm/Space checks may disclose its current title, description, selected images,
+count and rules. Native missing, denied or removed responses (including presentation 404) hide the region; source
+errors remain unavailable. Neither an original owner nor an account avatar/profile supplies fallback data.
+
+`SpacePage` keeps that current presentation visible while its existing setup, publication, appearance, bans,
+grant-write and participation controls remain frozen. A lifecycle observation that newly orphans an owned page
+cannot expose its old presentation. A changed claim source, approval or orphan episode also discards the old region
+until a matching current page arrives; the existing personal claim admission and original 720-hour wait are
+unchanged. Previously mounted management stays hidden and inert through restrictions so appearance drafts survive;
+`RealmAppearancePanel` remains the sole editor. No appearance native, panel or fixture source is changed here.
 
 Web's ordinary 390/1280 light/dark review inputs use these exact CSF sources and IDs:
 
@@ -2490,19 +2498,24 @@ Web's ordinary 390/1280 light/dark review inputs use these exact CSF sources and
   `--space-home-member`, `--space-home-source-unavailable`, `--space-home-membership-unavailable`.
 - `src/stories/realm-home-presentation.stories.tsx`: `patterns-community-realm-home-presentation--available`,
   `--without-images`, `--optional-unavailable`, `--source-unavailable`, `--current-denied`.
+- The same Pattern source adds `patterns-community-realm-home-presentation--orphan-readable`,
+  `--orphan-protected-denied`, `--orphan-removed`, `--orphan-optional-unavailable`. These anonymous cases load the
+  existing native-shaped responses through the same adapter and render the actual `SpacePage` region. Its existing
+  claim reader consumes the same responses; the stories supply no claim admission or successful command.
 - The existing management composition remains `pages-community-realm-appearance--management` from
   `src/stories/realm-presentation-page.stories.tsx`.
 
-These reuse the existing page main and Pattern. The appearance recording currently omits some native ownership
-continuity fields; such a response remains unavailable rather than being upgraded to owned/ready by this consumer.
-The declared available/optional state stories become effective only with complete current producer responses.
-No screenshot, browser, native or visual approval is claimed. `tests/space-home-presentation.test.ts` supplies the
-named acceptance case plus focused optional-source and final-binding cases for integration; this delivery runs
-only the local Web type check.
+These reuse the existing page main and Pattern. Incomplete native ownership responses remain unavailable rather
+than being upgraded to owned/ready by the consumer. No screenshot, browser, native or visual approval is claimed.
+`tests/space-home-presentation.test.ts` retains its original cases and adds the orphan read/write separation
+acceptance, actual denial/removal/source-change and optional availability cases for integration. Verification for
+this slice is limited to the local Web type check; acceptance execution remains with integration.
 
 Source reading for this connection: the original Content presentation reader/model, Community Realm/Space routes,
 Board parser/shared presentation parts, native claim/lifecycle binders, and the adopted research's read-only Lemmy
-`crates/db_schema/src/source/community.rs` plus Discourse `app/models/category.rb` and `app/models/group.rb`.
+`crates/db_schema/src/source/community.rs` plus Discourse `app/models/category.rb`, `app/models/group.rb` and
+`lib/guardian/category_guardian.rb` (separate read and post admission). Reference sources were read under the main
+checkout's `.reference/` directory without modification. No external implementation was copied.
 
 #### Appearance management
 

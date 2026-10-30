@@ -228,3 +228,166 @@ test('current denial, removal and changed carried bindings discard presentation 
   expect(denied.page.realm).toBeNull();
   expect(denied.calls.some((path) => path.endsWith('/presentation'))).toBe(false);
 });
+
+const orphanedRealm = {
+  ...realm,
+  ownershipState: 'orphaned',
+  orphanedAt: '2026-09-01T00:00:00.000Z',
+  claimEligibleAt: '2026-10-01T00:00:00.000Z',
+  governanceReadOnly: true,
+};
+
+/** Explicit HTTP boundary cases, with no owner/profile, Context or member-count enrichment. */
+async function loadOrphaned(
+  options: {
+    community?: CommunityPresentation;
+    status?: number;
+    initialRealm?: Partial<typeof realm>;
+    finalRealm?: Partial<typeof realm>;
+    finalSpace?: Partial<typeof space>;
+    realmStatus?: number;
+    finalRealmStatus?: number;
+    spaceStatus?: number;
+    finalSpaceStatus?: number;
+  } = {},
+) {
+  const calls: Request[] = [];
+  let realmReads = 0;
+  let spaceReads = 0;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      calls.push(request);
+      if (path.startsWith('/v1/spaceAddresses/')) return Response.json({ spaceId: space.spaceId });
+      if (path === `/v1/spaces/${space.spaceId}`) {
+        const final = spaceReads++ > 0;
+        const status = (final ? options.finalSpaceStatus : options.spaceStatus) ?? 200;
+        return Response.json(
+          status === 200 ? { space: { ...space, ...(final ? options.finalSpace : {}) } } : { code: 'not_found' },
+          { status },
+        );
+      }
+      if (path === `/v1/realms/${realm.realmId}`) {
+        const final = realmReads++ > 0;
+        const status = (final ? options.finalRealmStatus : options.realmStatus) ?? 200;
+        return Response.json(
+          status === 200
+            ? { realm: { ...orphanedRealm, ...options.initialRealm, ...(final ? options.finalRealm : {}) } }
+            : { code: 'not_found' },
+          { status },
+        );
+      }
+      if (path === `/v1/realms/${realm.realmId}/presentation`)
+        return Response.json({ community: options.community ?? community }, { status: options.status ?? 200 });
+      if (path.endsWith('/boards') || path.endsWith('/publications')) return Response.json({ items: [], next: null });
+      throw new Error(`Unexpected orphan enrichment request: ${request.method} ${path}`);
+    },
+  });
+  const page = await loadSpacePage(
+    client,
+    new Request('https://site.test/en/spaces/quiet-novel-club'),
+    {},
+    { address: 'quiet-novel-club' },
+    'anonymous',
+  );
+  return { page, calls };
+}
+
+test('Keep genuinely readable orphaned Realm presentation separate from governance write freeze', async () => {
+  setLocale('en', { reload: false });
+  const { page, calls } = await loadOrphaned();
+  expect(page.realm?.continuity?.governanceReadOnly).toBe(true);
+  expect(page.realm?.presentation).toEqual({ state: 'available', value: community });
+  for (const member of [null, 'member'] as const) {
+    const html = await render(page, member);
+    expect(html).toContain('data-slot="realm-home-presentation"');
+    expect(html).toContain(realm.title);
+    expect(html).toContain(realm.summary);
+    expect(html).toContain('data-slot="avatar"');
+    expect(html).toContain(available.presentation.bannerMediaId!);
+    expect(html).toContain(m.board_community_members({ count: 23 }));
+    expect(html).toContain('Discuss the work, respect other readers, and mark spoilers.');
+    expect(html).toContain('CC-BY-4.0');
+    expect(html).not.toContain('data-member-state=');
+    expect(html).not.toContain(`>${m.realm_join()}<`);
+    expect(html).not.toContain(`>${m.realm_leave()}<`);
+    expect(html).not.toContain(m.space_setup_entry());
+    expect(html).not.toContain(m.realm_publication_curate());
+    expect(html).not.toContain(m.realm_appearance_heading());
+    expect(html).not.toContain('/access/');
+    expect(html).not.toContain(m.realm_bans_heading());
+    expect(html).not.toContain(`>${m.realm_claim_request()}<`);
+  }
+  const paths = calls.map((request) => new URL(request.url).pathname);
+  expect(paths.filter((path) => path.endsWith('/presentation'))).toHaveLength(1);
+  expect(paths.filter((path) => path === `/v1/realms/${realm.realmId}`)).toHaveLength(2);
+  expect(paths.filter((path) => path === `/v1/spaces/${space.spaceId}`)).toHaveLength(2);
+  expect(calls.every((request) => request.method === 'GET')).toBe(true);
+});
+
+test('orphan presentation conceals actual protected denials, removal and changed native sources', async () => {
+  for (const options of [
+    { status: 401 },
+    { status: 403 },
+    { status: 404 },
+    { finalRealmStatus: 404 },
+    { finalSpaceStatus: 403 },
+    { finalRealm: { state: 'removed' } },
+    { finalSpace: { state: 'removed' } },
+    { finalRealm: { headRevisionId: crypto.randomUUID() } },
+    { finalRealm: { contextId: crypto.randomUUID() } },
+    { finalRealm: { visibility: 'protected' } },
+    { finalSpace: { realmId: crypto.randomUUID() } },
+    { finalSpace: { headRevisionId: crypto.randomUUID() } },
+    {
+      finalRealm: {
+        ownershipState: 'owned',
+        orphanedAt: null,
+        claimEligibleAt: null,
+        governanceReadOnly: false,
+      },
+    },
+    { finalRealm: { orphanedAt: '2026-09-02T00:00:00.000Z', claimEligibleAt: '2026-10-02T00:00:00.000Z' } },
+  ]) {
+    const { page } = await loadOrphaned(options);
+    expect(page.realm?.presentation).toEqual({ state: 'hidden', value: null });
+    const html = await render(page);
+    expect(html).not.toContain('data-slot="realm-home-presentation"');
+    expect(html).not.toContain('/media/');
+    expect(html).not.toContain('Discuss the work, respect other readers, and mark spoilers.');
+  }
+  const denied = await loadOrphaned({ initialRealm: { visibility: 'protected' }, realmStatus: 404 });
+  expect(denied.page.realm).toBeNull();
+  expect(denied.calls.some((request) => new URL(request.url).pathname.endsWith('/presentation'))).toBe(false);
+  await expect(loadOrphaned({ spaceStatus: 404 })).rejects.toMatchObject({ isNotFound: true });
+});
+
+test('orphan native concealment and optional unavailability do not retain images, rules or a positive count', async () => {
+  const { page } = await loadOrphaned({
+    community: {
+      ...community,
+      avatar: { state: 'none', value: null },
+      banner: { state: 'unavailable', value: null },
+      rules: { state: 'none', value: null },
+      members: { state: 'unknown', count: null, version: null },
+    },
+  });
+  expect(page.realm?.presentation?.state).toBe('available');
+  const html = await render(page);
+  expect(html).toContain(m.realm_appearance_no_image());
+  expect(html).toContain(m.realm_appearance_image_unavailable());
+  expect(html).toContain(m.board_community_rules_none());
+  expect(html).toContain(m.board_community_members_unknown());
+  expect(html).not.toContain('/media/');
+  expect(html).not.toContain(m.board_community_members({ count: 0 }));
+  expect(html).not.toContain(m.board_community_members({ count: 23 }));
+  for (const options of [{ status: 503 }, { finalRealmStatus: 503 }, { finalSpaceStatus: 503 }]) {
+    const failure = await loadOrphaned(options);
+    expect(failure.page.realm?.presentation).toEqual({ state: 'unavailable', value: null });
+    const unavailable = await render(failure.page);
+    expect(unavailable).toContain(m.board_community_source_unavailable());
+    expect(unavailable).not.toContain('/media/');
+    expect(unavailable).not.toContain('Discuss the work, respect other readers, and mark spoilers.');
+  }
+});

@@ -44,12 +44,12 @@ export async function readRealmHomePresentation(
     return hidden;
   // Older responses cannot establish the current lifecycle or selected-reference binding.
   if (!before || !realm.presentation) return unavailable;
-  if (before.governanceReadOnly) return hidden;
+  // Governance freezes writes; the native presentation read still decides disclosure for an active orphan.
   try {
     const route = client.realms({ realmId: realm.realmId }) as RealmRoute & { presentation?: PresentationRoute };
     const result = await route.presentation?.get(auth);
     if (!result) return unavailable;
-    if (result.status === 401 || result.status === 403) return hidden;
+    if (result.status === 401 || result.status === 403 || result.status === 404) return hidden;
     const source =
       !result.error && result.status === 200 && result.data
         ? boardCommunitySource({ realmId: realm.realmId, ...{ community: result.data.community } })

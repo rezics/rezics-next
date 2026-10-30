@@ -285,8 +285,8 @@ function Home({
   if (managementVisible) managementMounted.current = true;
   return (
     <>
-      {!removed && readable && !frozen && presentationCurrent ? (
-        <RealmHomeHeader realm={realm} participation={participation} />
+      {!removed && readable && presentationCurrent ? (
+        <RealmHomeHeader realm={realm} participation={frozen ? null : participation} />
       ) : null}
       {!removed && readable ? <RealmShelf key={realm.id} realm={realm} frozen={frozen} /> : null}
       {!removed ? claim : null}
@@ -405,8 +405,9 @@ export function SpacePage({
           frozen={frozen}
           readable={readable}
           presentationCurrent={
-            !claimRead ||
-            (claimRead.kind === 'ready' && !!pageSource && sameRealmClaimSource(pageSource, claimRead.snapshot))
+            (realmRestricted !== 'orphaned' || pageSource?.governanceReadOnly === true) &&
+            (!claimRead ||
+              (claimRead.kind === 'ready' && !!pageSource && sameRealmClaimSource(pageSource, claimRead.snapshot)))
           }
           participation={
             <RealmMembership
