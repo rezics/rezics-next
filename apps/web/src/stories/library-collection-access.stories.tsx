@@ -4,7 +4,17 @@ import { CollectionAccessState } from '../library/collection-access';
 import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
 
-const meta = { title: 'Patterns/Library/Collection access' } satisfies Meta;
+const meta = {
+  title: 'Patterns/Library/Collection access',
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'The Collection route uses these access states while private navigation resolves after hydration. Review the same story IDs at phone390 and desktop1280 with locale and theme globals. Screenshot review is pending integration.',
+      },
+    },
+  },
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

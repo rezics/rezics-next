@@ -15,7 +15,7 @@ import { readCollectionFilterParams } from './collection-filter-params';
 import { facetProperties } from '@rezics/filter';
 import { requestLocale } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
-import { isPublicCacheRender, recordPublicPageCachePolicy } from '../security/page-cache';
+import { isPublicCacheRender, publicPageCacheControl, recordPublicPageCachePolicy } from '../security/page-cache';
 
 function validatePageInput(input: unknown): {
   id: string;
@@ -162,7 +162,6 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
       listPresentations,
       ...(!('preparing' in page)
         ? {
-            listPresentations,
             ...(page.visibility !== null
               ? { presentationTypes: release ? readCollectionTypeOptions(release) : null }
               : {}),
@@ -173,8 +172,14 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
         : {}),
     };
     if (data.credentialMode === 'anonymous') {
-      recordPublicPageCachePolicy(request, collectionRenderPolicy(result).cache);
-      const notReady = 'preparing' in result ? result.preparing || result.unavailable : result.memberState !== undefined && result.memberState !== 'ready';
+      const policy = collectionRenderPolicy(result);
+      recordPublicPageCachePolicy(request, policy.cache);
+      if (isPublicCacheRender(request) && policy.cache === 'public')
+        setResponseHeader('cache-control', publicPageCacheControl);
+      const notReady =
+        'preparing' in result
+          ? result.preparing || result.unavailable
+          : result.memberState !== undefined && result.memberState !== 'ready';
       if (notReady && isPublicCacheRender(request)) {
         setResponseStatus(503, 'Service Unavailable');
         setResponseHeader('retry-after', '1');

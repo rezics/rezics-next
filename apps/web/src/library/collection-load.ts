@@ -214,7 +214,7 @@ export type CollectionPolicyPage = Partial<
 export function collectionRenderPolicy(page: CollectionPolicyPage, laterPage = false) {
   const indexable =
     !('preparing' in page) &&
-    (page.memberState === undefined || page.memberState === 'ready') &&
+    page.memberState === 'ready' &&
     page.visibility === null &&
     page.disclosedVisibility === 'public' &&
     !laterPage &&
@@ -241,8 +241,8 @@ function accountOf(account: { handle: string | null; displayName: string | null 
 
 /**
  * Reads one collection and one members page, with the viewer's credential when there is one so a curator sees their
- * private collection. A cursor the kernel no longer accepts restarts at the first page. A signed-in person who is not
- * the curator of a public collection also gets the follow state, in one more kernel read.
+ * private collection. Public membership always uses the anonymous population outside the explicit editor read.
+ * A stale cursor restarts once. Signed-in reads also load native resource actions and, for non-curators, follow state.
  */
 export async function loadEditableCollectionPage(
   client: KernelClient,
@@ -309,15 +309,17 @@ export async function loadEditableCollectionPage(
     if (filter && status === 202) filterState.status = 'preparing';
     return result;
   };
-  const viewerActions = authorization ? await readCollectionViewerActions(client, input.id, authorization) : undefined;
-  const first = await readMembers(input.cursor).then(
-    (page) => (isStaleCursorResult(page) ? { stale: true as const } : { stale: false as const, page }),
-    (error: unknown) => {
-      if (error instanceof StaleCursorError) return { stale: true as const };
-      if (resultStatus(error) === 202 || resultStatus(error) === 503) return { stale: false as const, page: error };
-      throw error;
-    },
-  );
+  const [first, viewerActions] = await Promise.all([
+    readMembers(input.cursor).then(
+      (page) => (isStaleCursorResult(page) ? { stale: true as const } : { stale: false as const, page }),
+      (error: unknown) => {
+        if (error instanceof StaleCursorError) return { stale: true as const };
+        if (resultStatus(error) === 202 || resultStatus(error) === 503) return { stale: false as const, page: error };
+        throw error;
+      },
+    ),
+    authorization ? readCollectionViewerActions(client, input.id, authorization) : undefined,
+  ]);
   const membersResult = first.stale ? await readMembers() : first.page;
   const filterStatus = filterState.status;
   if (collection.membershipKind === 'dynamic') {
@@ -404,17 +406,18 @@ export async function loadEditableCollectionPage(
     owner && (!publicMembership || editor)
       ? members.members
       : members.members.filter((member) => member.subject != null);
-  const memberCount = memberState !== 'ready' || filterStatus
-    ? null
-    : owner && (!publicMembership || editor)
-      ? curatedCollection.memberCount
-      : !input.filter &&
-          !filterStatus &&
-          !input.filterIgnored?.length &&
-          (first.stale || input.cursor === undefined) &&
-          members.next === null
-        ? visibleMembers.length
-        : null;
+  const memberCount =
+    memberState !== 'ready' || filterStatus
+      ? null
+      : owner && (!publicMembership || editor)
+        ? curatedCollection.memberCount
+        : !input.filter &&
+            !filterStatus &&
+            !input.filterIgnored?.length &&
+            (first.stale || input.cursor === undefined) &&
+            members.next === null
+          ? visibleMembers.length
+          : null;
   return {
     ...collectionPresentationOf(collectionEnvelope.collection),
     ...(owner && collectionEnvelope.collection.coverMediaId !== undefined

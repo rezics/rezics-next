@@ -47,6 +47,16 @@ function clientFor(respond: (call: Call) => Response) {
 }
 function source(visibility: 'public' | 'unlisted' | 'private' = 'public', status = 200, next: string | null = null) {
   return clientFor((call) => {
+    if (call.path.endsWith('/viewerActions'))
+      return Response.json({
+        resources: [
+          {
+            type: 'library.collection',
+            id: header.id,
+            viewerActions: [{ action: 'collection:update', operations: ['collection.update'] }],
+          },
+        ],
+      });
     if (call.path.endsWith('/members')) {
       if (status !== 200) return Response.json({ preparing: true }, { status, headers: { 'retry-after': '2' } });
       return Response.json({
@@ -109,7 +119,11 @@ test('signed-in public browsing still uses anonymous membership; private navigat
   for (const visibility of ['public', 'private'] as const) {
     const { client, calls } = source(visibility);
     const page = await loadEditableCollectionPage(client, privateRequest(), sessionEnv(), { id: header.id }, 'session');
-    expect(calls).toHaveLength(2);
+    // Two data reads plus the landed exact-resource native action projection; no per-member requests.
+    expect(calls).toHaveLength(3);
+    expect(calls.filter((call) => call.path.includes('/collections/'))).toHaveLength(2);
+    expect(calls[2]!.path).toBe('/v1/viewerActions');
+    expect(calls[2]!.authorization).toBe('Bearer private-token');
     expect(calls[0]!.authorization).toBe('Bearer private-token');
     expect(calls[1]!.authorization).toBe(visibility === 'private' ? 'Bearer private-token' : null);
     expect('visibility' in page && page.visibility).toBe(visibility);
@@ -123,7 +137,8 @@ test('signed-in public browsing still uses anonymous membership; private navigat
     { id: header.id, editor: true },
     'session',
   );
-  expect(editing.calls).toHaveLength(2);
+  expect(editing.calls).toHaveLength(3);
+  expect(editing.calls.filter((call) => call.path.includes('/collections/'))).toHaveLength(2);
   expect(editing.calls.every((call) => call.authorization === 'Bearer private-token')).toBe(true);
   expect(editor.members).toHaveLength(2);
   expect(collectionRenderPolicy(editor).completeItemList).toBe(false);
@@ -135,6 +150,24 @@ test('signed-in public browsing still uses anonymous membership; private navigat
     (error) => expect(isNotFound(error)).toBe(true),
   );
   expect(hidden.calls).toHaveLength(1);
+});
+
+test('current native membership replaces removed public rows without an extra detail read', async () => {
+  let currentMembers = [member];
+  const { client, calls } = clientFor((call) =>
+    Response.json(call.path.endsWith('/members') ? { members: currentMembers, next: null } : { collection: header }),
+  );
+  const read = () =>
+    loadEditableCollectionPage(client, new Request('https://rezics.com'), {}, { id: header.id }, 'anonymous');
+  const before = await read();
+  expect(before.members).toHaveLength(1);
+  currentMembers = [];
+  const after = await read();
+  expect(after.members).toHaveLength(0);
+  expect('memberCount' in after && after.memberCount).toBe(0);
+  expect(JSON.stringify(collectionPageHead(after, context))).not.toContain('subject-a');
+  expect(calls).toHaveLength(4);
+  expect(calls.every((call) => call.authorization === null)).toBe(true);
 });
 
 test('unlisted, later, filtered, preparing and unavailable results cannot export a full list or claim a pending zero', async () => {

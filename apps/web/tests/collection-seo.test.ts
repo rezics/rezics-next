@@ -17,6 +17,10 @@ test('public collection head describes its locale, card, members and breadcrumb 
       memberCount: 2,
       updatedAt: '',
       visibility: null,
+      disclosedVisibility: 'public',
+      memberState: 'ready',
+      firstPage: true,
+      publicExport: true,
       next: null,
       curator: { handle: 'ada', displayName: 'Ada' },
       members: [
@@ -73,6 +77,39 @@ test('public collection head describes its locale, card, members and breadcrumb 
     { '@type': 'ListItem', position: 2, name: 'Ada', item: 'https://rezics.com/en/@ada' },
     { '@type': 'ListItem', position: 3, name: 'Night reading', item: 'https://rezics.com/en/collections/collection-1' },
   ]);
+});
+
+test('ItemList requires disclosed public membership and complete first-page evidence', () => {
+  const page = {
+    id: 'collection-1',
+    title: 'Night reading',
+    description: null,
+    curator: null,
+    members: [],
+    visibility: null,
+    disclosedVisibility: 'public' as const,
+    memberState: 'ready' as const,
+    firstPage: true,
+    publicExport: true,
+    next: null,
+  };
+  const context = { origin: 'https://rezics.com', locale: 'en', path: '/collections/collection-1' };
+  for (const variant of [
+    { ...page, disclosedVisibility: undefined },
+    { ...page, disclosedVisibility: 'unlisted' as const },
+    { ...page, visibility: 'public' as const },
+    { ...page, publicExport: false },
+    { ...page, firstPage: false },
+    { ...page, next: 'more-members' },
+    { ...page, cursor: 'later-page' },
+    { ...page, memberState: 'preparing' as const },
+    { ...page, memberState: 'unavailable' as const },
+    { ...page, filterActive: true },
+    { ...page, filterIgnored: ['invalid-filter'] },
+  ]) {
+    const head = collectionPageHead(variant, context);
+    expect(JSON.stringify(head.scripts)).not.toContain('ItemList');
+  }
 });
 
 test('cursor search is validated and passed to an anonymous collection loader', async () => {

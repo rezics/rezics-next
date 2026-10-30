@@ -86,7 +86,7 @@ export const Route = createFileRoute('/collections/$id')({
           }
         : undefined;
     const scripts = itemList === undefined ? [] : pageHead({ title, jsonLd: itemList }, context).scripts;
-    return { ...base, scripts };
+    return { ...base, scripts: [...(scripts ?? []), ...(base.scripts ?? [])] };
   },
   component: CollectionRoute,
   notFoundComponent: PrivateCollectionRoute,

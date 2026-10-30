@@ -104,7 +104,8 @@ test('collections feed is loaded from its module and fallback list, with existin
 
   const collectionPage = await collections.read(null);
   expect(calls.at(-1)).toEqual({ feed: 'collections', query: { limit: 1_000 } });
-  expect(collections.family(collectionPage.items[0]!)).toEqual(expectedFamily(`/collections/${id}`, lastModified));
+  // The current Collection feed time is a header update, not an all-shown-public-change clock.
+  expect(collections.family(collectionPage.items[0]!)).toEqual(expectedFamily(`/collections/${id}`));
   expect(collections.family({ id })).toEqual(expectedFamily(`/collections/${id}`));
 });
 

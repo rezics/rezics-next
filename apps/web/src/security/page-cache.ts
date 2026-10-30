@@ -139,6 +139,7 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
       }
       if (
         cached &&
+        !(isCollectionPage(request) && cached.status !== 200) &&
         !isSubjectFailure(request, cached) &&
         isPublicCacheableResponse(cached) &&
         cached.headers.get('cache-control') === publicPageCacheControl
@@ -153,8 +154,7 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
       if (failureStatus !== undefined)
         return privateNoStore(response, failureStatus === 403 || response.status === 200 ? failureStatus : undefined);
       if (!eligible) return privateNoStore(response);
-      if (isSubjectFailure(request, response))
-        return privateNoStore(response);
+      if (isSubjectFailure(request, response)) return privateNoStore(response);
       if (isCollectionPage(request) && (response.status !== 200 || publicPagePolicies.get(request) !== 'public'))
         return privateNoStore(response);
       if (!isPublicCacheableResponse(response)) return privateNoStore(response);
