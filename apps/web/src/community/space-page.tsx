@@ -1,5 +1,5 @@
 import { ResourceAccessLink } from '../accounts/resource-access/link';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
@@ -25,6 +25,8 @@ import {
 } from './publication-controls-view';
 import type { ShelfPage } from './space';
 import type { ReadCredentialMode } from '../kernel/credential';
+import { ContainerLifecyclePanel } from './container-lifecycle-controls';
+import type { ContainerLifecycleAdapter } from './container-lifecycle';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -198,7 +200,15 @@ export type RealmShelfTransport = {
 };
 
 /** One reusable shelf region; its stories exercise the same controls used on Space and Realm pages. */
-export function RealmShelf({ realm, transport }: { realm: RealmHome; transport?: RealmShelfTransport }) {
+export function RealmShelf({
+  realm,
+  transport,
+  frozen = false,
+}: {
+  realm: RealmHome;
+  transport?: RealmShelfTransport;
+  frozen?: boolean;
+}) {
   const { state, csrfToken } = useSession();
   const boards = useShelfList(
     {
@@ -251,7 +261,7 @@ export function RealmShelf({ realm, transport }: { realm: RealmHome; transport?:
           unavailablePublished: publications.unavailable,
         }}
         control={control}
-        editable={state === 'signed-in' && Boolean(csrfToken)}
+        editable={!frozen && state === 'signed-in' && Boolean(csrfToken)}
         complete={!publications.next && !publications.failure}
         refresh={() => publications.load(true)}
         continuation={<ShelfContinuation {...publications} label={m.realm_publications_more()} />}
@@ -260,19 +270,33 @@ export function RealmShelf({ realm, transport }: { realm: RealmHome; transport?:
   );
 }
 
-function Home({ realm, management }: { realm: RealmHome; management: ReactNode }) {
+function Home({ realm, management, frozen }: { realm: RealmHome; management: ReactNode; frozen: boolean }) {
   return (
     <>
       <CarriedRealm realm={realm} />
-      <RealmShelf key={realm.id} realm={realm} />
-      {management}
+      <RealmShelf key={realm.id} realm={realm} frozen={frozen} />
+      {frozen ? null : management}
     </>
   );
 }
 
 /** A Space's page: its title and summary as the brand surface, and the Realm it carries as that Realm's home. */
-export function SpacePage({ page, realmManagement }: { page: SpacePageData; realmManagement?: ReactNode }) {
+export function SpacePage({
+  page,
+  realmManagement,
+  lifecycleAdapter,
+}: {
+  page: SpacePageData;
+  realmManagement?: ReactNode;
+  lifecycleAdapter?: ContainerLifecycleAdapter;
+}) {
   const location = useLocation();
+  const [spaceRestriction, restrictSpace] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
+  const [realmRestriction, restrictRealm] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
+  const spaceRemoved = spaceRestriction?.id === page.space.id && spaceRestriction.state === 'removed';
+  const realmRestricted = realmRestriction?.id === page.realm?.id ? realmRestriction?.state : null;
+  const realmRemoved = spaceRemoved || realmRestricted === 'removed';
+  const frozen = realmRestricted === 'orphaned';
   const colors = placeholderColors({ id: page.space.id, types: [] });
   const banner = page.space.banner;
   const bannerVariant = banner?.variants.find((variant) => variant.format === 'webp') ?? banner?.variants.at(-1);
@@ -287,7 +311,7 @@ export function SpacePage({ page, realmManagement }: { page: SpacePageData; real
         className="relative isolate flex flex-col gap-4 overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10"
         style={{ backgroundColor: banner?.placeholder.color ?? colors.background, color: colors.foreground }}
       >
-        {bannerSrc ? (
+        {bannerSrc && !spaceRemoved ? (
           <>
             <img
               src={bannerSrc}
@@ -306,7 +330,7 @@ export function SpacePage({ page, realmManagement }: { page: SpacePageData; real
         ) : null}
         <div className="relative z-10 flex w-full flex-wrap items-center justify-between gap-4">
           <PageHeading className="min-w-0 flex-1 basis-64">{page.space.title}</PageHeading>
-          {page.realm ? (
+          {page.realm && !realmRemoved ? (
             <div className="shrink-0">
               <RealmMembership
                 realm={page.realm}
@@ -316,17 +340,49 @@ export function SpacePage({ page, realmManagement }: { page: SpacePageData; real
             </div>
           ) : null}
         </div>
-        {page.space.summary ? (
+        {page.space.summary && !spaceRemoved ? (
           <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
         ) : null}
       </header>
-      <SpaceSetupEntry spaceId={page.space.id} />
-      <section aria-label={m.space_follow_label()}>
-        <FollowTargetControl targetId={page.space.id} />
-        <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
-      </section>
+      {!realmRemoved && !frozen ? <SpaceSetupEntry spaceId={page.space.id} /> : null}
+      {!spaceRemoved ? (
+        <>
+          <section aria-label={m.space_follow_label()}>
+            <FollowTargetControl targetId={page.space.id} />
+            {!realmRemoved ? <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} /> : null}
+          </section>
+        </>
+      ) : null}
+      {page.realm && !realmRemoved ? (
+        <Home
+          realm={page.realm}
+          frozen={frozen}
+          management={realmManagement ?? <RealmBansPanel realmId={page.realm.id} />}
+        />
+      ) : null}
+      <ContainerLifecyclePanel
+        key={`space:${page.space.id}`}
+        target={{ kind: 'space', id: page.space.id }}
+        title={page.space.title}
+        {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
+        onRestriction={(state) =>
+          restrictSpace((previous) =>
+            previous?.id === page.space.id && previous.state === state ? previous : { id: page.space.id, state },
+          )
+        }
+      />
       {page.realm ? (
-        <Home realm={page.realm} management={realmManagement ?? <RealmBansPanel realmId={page.realm.id} />} />
+        <ContainerLifecyclePanel
+          key={`realm:${page.realm.id}`}
+          target={{ kind: 'realm', id: page.realm.id }}
+          title={page.realm.title}
+          {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
+          onRestriction={(state) => {
+            if (!page.realm) return;
+            const id = page.realm.id;
+            restrictRealm((previous) => (previous?.id === id && previous.state === state ? previous : { id, state }));
+          }}
+        />
       ) : null}
     </article>
   );

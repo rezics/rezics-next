@@ -1,0 +1,26 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as Stories from './community-lifecycle.stories';
+
+<Meta of={Stories} />
+
+# Container lifecycle
+
+`ContainerLifecycleControls` is the Space and Realm lifecycle region. It uses current admitted actions supplied by
+an isolated adapter; it never calculates authority from membership, creator identity, role names or a browser clock.
+Removal requires a recorded reason and explicit confirmation. Restoration uses the current native admission,
+including the native restore window. Orphaned Realms remain ordinarily readable with governance frozen.
+
+An uncertain response keeps the exact target, key, reason and expected head. Refresh cannot turn uncertainty into
+success or rebase that request. A refused request preserves the native status/code and the draft. After a fresh read,
+reviewing a new intent explicitly accepts the new head and generates a new key only on submission.
+
+Confirmed removal hides the page's previous container content. Restoration keeps the Context pointer and requires a
+fresh container read plus an independently authorized live Context destination before offering a link. The old page
+payload stays hidden until navigation reloads it. Missing Context authority never links to Global.
+
+These are presentation fixtures, not recordings of the missing native lifecycle API. The served default adapter is
+unavailable and exposes no commands. The native read/command/refusal mapping and Semantic destination integration
+remain producer seams. No role grants, platform claim decisions or erasure acknowledgements are implemented here.
+
+Use the same story IDs with phone390 and desktop1280 viewport globals, locale and theme globals. The page story reuses
+this component inside AppShell. Web visual review and Root screenshots remain required before page completion.

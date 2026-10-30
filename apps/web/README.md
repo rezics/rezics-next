@@ -866,6 +866,35 @@ language through the client's `accept-language`.
   also adds 1 D. Boards and publications are single pages, never walked.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `the Realm page reads its fixed set once, however many boards, publications and memberships there are` at 1, 10 and 100
 
+### Space and Realm lifecycle controls
+
+`community/container-lifecycle-controls.tsx` composes one lifecycle region per container on the existing Space page.
+The isolated presentation adapter in `community/container-lifecycle.ts` consumes current native admission; it defines
+no native endpoint or role authority. Its served default is unavailable and offers no commands. Integration must map
+the producer's actual closed-state read, head, removal/restore results and exact refusal status/code, using the
+existing session/CSRF and request-deadline boundary. Presentation fixtures do not establish native authority.
+
+Removal records the entered reason and confirms the named target. The native producer decides moderator removal and
+the 30-day restore window, including current remover/higher-role/platform and author self-deletion eligibility.
+Membership, creator identity and browser time never substitute for that decision. Each intent retains its target,
+Context pointer, reason, exact expected head and request key across uncertain retries. A conflict retains the draft;
+a fresh read and explicit review are required before a new request accepts a different head. Native refusals stay
+visible. No platform claim action is offered without its actual endpoint. Orphaned Realms keep ordinary reading while
+publication, setup and management controls are frozen.
+
+Confirmed removal hides the old container content without changing routes or selecting Global. A restored link
+requires a fresh current container read and the adapter's independently authorized live Context destination, including
+current publication where applicable. Failure keeps the link unavailable and the entered work intact. Navigation
+reloads the page rather than redisplaying the previous payload. Context identity and independent Global identity stay
+separate. Work is constant per container: one lifecycle read, one command per intent and, after restore, one bounded
+destination preparation. There is no per-card authority fanout or scan.
+
+The complete pattern folder is `stories/patterns/community-lifecycle/`; its `Patterns/Community/Container lifecycle`
+states include confirmation, removed, uncertain retry, native refusal, conflict, orphaned, read-only, loading and
+unavailable. `pages-community-container-lifecycle--management-journey` reuses that region inside AppShell. Review the
+same story IDs with phone390/desktop1280 viewport globals and locale/theme globals. Native acceptance and Web/Root
+visual review remain required after producer integration.
+
 ### Community page head
 
 - **Touches:** Builds title, description, the first available published cover (or default share card), robots and one JSON-LD graph from the Space and
