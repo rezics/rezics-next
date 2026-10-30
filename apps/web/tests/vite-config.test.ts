@@ -80,20 +80,33 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
 });
 
 test('Workers resolve both share-card public Wasm exports through the installed dependency links', async () => {
-  const [{ resolveConfig }, { default: webConfig }] = await Promise.all([import('vite'), import('../vite.config')]);
-  const context = { command: 'build', mode: 'development' } as const;
-  const config = await resolveConfig(
-    { ...webConfig(context), root: appRoot, configFile: false, logLevel: 'silent' },
-    context.command,
-    context.mode,
-  );
-  expect(config.environments.ssr?.resolve.noExternal).toBe(true);
-  const resolveId = config.createResolver();
-  const importer = join(appRoot, 'src/media/share-card.worker.ts');
-  for (const exported of ['satori/yoga.wasm', '@resvg/resvg-wasm/index_bg.wasm']) {
-    const local = realpathSync(join(appRoot, 'node_modules', exported));
-    for (const query of ['', '?module'])
-      expect(await resolveId(`${exported}${query}`, importer, false, true)).toBe(`${local}${query}`);
-    expect(WebAssembly.validate(await Bun.file(local).arrayBuffer())).toBe(true);
-  }
+  // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
+  const result = Bun.spawnSync({
+    cmd: [
+      'node',
+      '--input-type=module',
+      '-e',
+      `
+        import assert from 'node:assert/strict';
+        import { readFileSync, realpathSync } from 'node:fs';
+        import { resolve } from 'node:path';
+        import { resolveConfig } from 'vite';
+        const config = await resolveConfig({ logLevel: 'silent' }, 'build', 'development');
+        assert.equal(config.environments.ssr.resolve.noExternal, true);
+        const resolveId = config.createResolver();
+        const importer = resolve('src/media/share-card.worker.ts');
+        for (const exported of ['satori/yoga.wasm', '@resvg/resvg-wasm/index_bg.wasm']) {
+          const local = realpathSync(resolve('node_modules', exported));
+          for (const query of ['', '?module'])
+            assert.equal(await resolveId(exported + query, importer, false, true), local + query);
+          assert.equal(WebAssembly.validate(readFileSync(local)), true);
+        }
+      `,
+    ],
+    cwd: appRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  if (result.exitCode !== 0) throw new Error(result.stdout.toString() + result.stderr.toString());
+  expect(result.exitCode).toBe(0);
 });
