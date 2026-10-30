@@ -4,6 +4,7 @@ import {
   MAX_PAGE_COST,
   MAX_PAGE_DOCUMENTS,
   pageDocumentReferences,
+  parsePublicPageFilter,
   readCost,
   type PageDocumentRead,
 } from '@rezics/composition';
@@ -21,7 +22,7 @@ export { MAX_PAGE_READS } from '@rezics/composition';
 
 export type PageRead =
   | Exclude<import('@rezics/composition').PageRead, { kind: 'search' }>
-  | { kind: 'search'; body: object };
+  | { kind: 'search'; body: object; cursor?: string };
 
 export class PageReadError extends Error {
   readonly errors: FieldError[];
@@ -276,11 +277,19 @@ function validateReads(reads: unknown): PreparedRead[] {
         };
       }
     } else if (descriptor.kind === 'search') {
-      unknownFields(descriptor, ['kind', 'body'], pointer, errors);
+      unknownFields(descriptor, ['kind', 'body', 'cursor'], pointer, errors);
       if (!isObject(descriptor.body)) {
         addError(errors, `${pointer}/body`, 'invalid_type');
       } else {
         if (Object.hasOwn(descriptor.body, 'cursor')) addError(errors, `${pointer}/body/cursor`, 'unknown_field');
+        // Reject public owner leaves before any descriptor in the aggregate can dispatch.
+        if (descriptor.body.filter !== undefined) {
+          try {
+            parsePublicPageFilter(descriptor.body.filter);
+          } catch {
+            addError(errors, `${pointer}/body/filter`, 'invalid_format');
+          }
+        }
         try {
           validateSearchLimit(descriptor.body.limit);
         } catch {
@@ -307,7 +316,8 @@ function validateReads(reads: unknown): PreparedRead[] {
     if (
       canonicalDescriptor.kind === 'links' ||
       canonicalDescriptor.kind === 'relations' ||
-      canonicalDescriptor.kind === 'subjectThreads'
+      canonicalDescriptor.kind === 'subjectThreads' ||
+      canonicalDescriptor.kind === 'search'
     ) {
       if (descriptor.cursor !== undefined) {
         if (
@@ -362,7 +372,7 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
   const init: RequestInit = { method: descriptor.kind === 'search' ? 'POST' : 'GET', headers, redirect: 'manual' };
   if (descriptor.kind === 'search') {
     headers.set('content-type', 'application/json');
-    init.body = JSON.stringify(descriptor.body);
+    init.body = JSON.stringify({ ...descriptor.body, ...(descriptor.cursor ? { cursor: descriptor.cursor } : {}) });
   } else if (descriptor.kind === 'links' || descriptor.kind === 'relations') {
     url.pathname = `/v1/subjects/${descriptor.id}/${descriptor.kind}`;
     url.searchParams.set('property', descriptor.property);
@@ -475,6 +485,7 @@ export async function readPage(options: {
   const reads = validateReads(options.reads).map((read) => {
     if (read.descriptor.kind !== 'search') return read;
     const descriptor: PageRead = {
+      ...read.descriptor,
       kind: 'search',
       body: {
         ...read.descriptor.body,

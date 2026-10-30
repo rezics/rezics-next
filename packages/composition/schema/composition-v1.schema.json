@@ -1405,6 +1405,542 @@
               "maxItems": 8,
               "uniqueItems": true
             },
+            "filter": {
+              "$id": "https://rezics.com/presentation/filter/1",
+              "$defs": {
+                "leaf": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "type": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "in": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                                "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+                              }
+                            }
+                          },
+                          "required": ["in"]
+                        }
+                      },
+                      "required": ["type"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "statement": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "property": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+                            },
+                            "in": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+                              }
+                            },
+                            "qualifiers": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 4,
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "property": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+                                  },
+                                  "in": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "maxItems": 64,
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 256,
+                                      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+                                    }
+                                  }
+                                },
+                                "required": ["property", "in"]
+                              }
+                            }
+                          },
+                          "required": ["property", "in"]
+                        }
+                      },
+                      "required": ["statement"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "statement": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "property": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128,
+                              "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+                            },
+                            "range": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "gte": {
+                                  "type": "number"
+                                },
+                                "lte": {
+                                  "type": "number"
+                                },
+                                "unit": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+                                }
+                              },
+                              "required": [],
+                              "anyOf": [
+                                {
+                                  "required": ["gte"]
+                                },
+                                {
+                                  "required": ["lte"]
+                                }
+                              ]
+                            },
+                            "qualifiers": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 4,
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "property": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 128,
+                                    "pattern": "^[a-z][a-z0-9]*:[A-Za-z][A-Za-z0-9_]*(?![\\s\\S])"
+                                  },
+                                  "in": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "maxItems": 64,
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 256,
+                                      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+                                    }
+                                  }
+                                },
+                                "required": ["property", "in"]
+                              }
+                            }
+                          },
+                          "required": ["property", "range"]
+                        }
+                      },
+                      "required": ["statement"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "saved": {
+                          "type": "string",
+                          "maxLength": 96,
+                          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*(?![\\s\\S])"
+                        }
+                      },
+                      "required": ["saved"]
+                    }
+                  ]
+                },
+                "node4": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    }
+                  ]
+                },
+                "node4Not": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    }
+                  ]
+                },
+                "node3": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "and": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "items": {
+                            "$ref": "#/$defs/node4"
+                          }
+                        }
+                      },
+                      "required": ["and"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "or": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "items": {
+                            "$ref": "#/$defs/node4"
+                          }
+                        }
+                      },
+                      "required": ["or"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "not": {
+                          "$ref": "#/$defs/node4Not"
+                        }
+                      },
+                      "required": ["not"]
+                    }
+                  ]
+                },
+                "node3Not": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "and": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "items": {
+                            "$ref": "#/$defs/node4"
+                          }
+                        }
+                      },
+                      "required": ["and"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "or": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "items": {
+                            "$ref": "#/$defs/node4"
+                          }
+                        }
+                      },
+                      "required": ["or"]
+                    }
+                  ]
+                },
+                "node2": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "and": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "items": {
+                            "$ref": "#/$defs/node3"
+                          }
+                        }
+                      },
+                      "required": ["and"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "or": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "items": {
+                            "$ref": "#/$defs/node3"
+                          }
+                        }
+                      },
+                      "required": ["or"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "not": {
+                          "$ref": "#/$defs/node3Not"
+                        }
+                      },
+                      "required": ["not"]
+                    }
+                  ]
+                },
+                "node2Not": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "and": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "items": {
+                            "$ref": "#/$defs/node3"
+                          }
+                        }
+                      },
+                      "required": ["and"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "or": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "items": {
+                            "$ref": "#/$defs/node3"
+                          }
+                        }
+                      },
+                      "required": ["or"]
+                    }
+                  ]
+                },
+                "node1": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "and": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "items": {
+                            "$ref": "#/$defs/node2"
+                          }
+                        }
+                      },
+                      "required": ["and"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "or": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "items": {
+                            "$ref": "#/$defs/node2"
+                          }
+                        }
+                      },
+                      "required": ["or"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "not": {
+                          "$ref": "#/$defs/node2Not"
+                        }
+                      },
+                      "required": ["not"]
+                    }
+                  ]
+                },
+                "node1Not": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "and": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "items": {
+                            "$ref": "#/$defs/node2"
+                          }
+                        }
+                      },
+                      "required": ["and"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "or": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "items": {
+                            "$ref": "#/$defs/node2"
+                          }
+                        }
+                      },
+                      "required": ["or"]
+                    }
+                  ]
+                },
+                "node0": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "and": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "items": {
+                            "$ref": "#/$defs/node1"
+                          }
+                        }
+                      },
+                      "required": ["and"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "or": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "items": {
+                            "$ref": "#/$defs/node1"
+                          }
+                        }
+                      },
+                      "required": ["or"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "not": {
+                          "$ref": "#/$defs/node1Not"
+                        }
+                      },
+                      "required": ["not"]
+                    }
+                  ]
+                },
+                "node0Not": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/leaf"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "and": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "items": {
+                            "$ref": "#/$defs/node1"
+                          }
+                        }
+                      },
+                      "required": ["and"]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "or": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "items": {
+                            "$ref": "#/$defs/node1"
+                          }
+                        }
+                      },
+                      "required": ["or"]
+                    }
+                  ]
+                }
+              },
+              "$ref": "#/$defs/node0"
+            },
+            "paged": {
+              "type": "boolean"
+            },
             "sort": {
               "anyOf": [
                 {

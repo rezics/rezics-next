@@ -59,6 +59,7 @@ export {
   resolveView,
   templateViews,
   validateProfile,
+  validateProfileFilters,
 } from './profile.ts';
 
 export { documentRead } from './reads.ts';
@@ -68,3 +69,5 @@ export {
   type PageDocumentRead,
   type PageDocumentReference,
 } from './documents.ts';
+
+export { typeListFilter, parsePublicPageFilter, validateDocumentFilters } from './filter.ts';

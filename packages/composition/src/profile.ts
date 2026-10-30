@@ -2,6 +2,8 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import canonicalize from 'canonicalize';
+import type { FilterRelease } from '@rezics/filter';
+import { validateDocumentFilters } from './filter.ts';
 import type {
   CompositionDocument,
   CompositionRegistry,
@@ -365,4 +367,28 @@ export function resolveTemplate(profile: PresentationProfile, target: TemplateTa
   const resolved = resolveView(profile, target, 'overview');
   if (!resolved) throw new Error('A profile always defines the generic overview');
   return resolved;
+}
+
+/** Structural validation precedes this release-dependent publication check. */
+export function validateProfileFilters(
+  registry: CompositionRegistry,
+  profile: PresentationProfile,
+  release: FilterRelease,
+): CompositionViolation[] {
+  const errors: CompositionViolation[] = [];
+  const templates: [string, TemplateBody | GenericTemplate][] = [
+    ['/generic', profile.generic],
+    ...profile.bases.map((entry, index): [string, TemplateBody] => [`/bases/${index}`, entry]),
+    ...profile.types.map((entry, index): [string, TemplateBody] => [`/types/${index}`, entry]),
+    ...profile.routes.map((entry, index): [string, TemplateBody] => [`/routes/${index}`, entry]),
+  ];
+  for (const [pointer, template] of templates) {
+    for (const [view, document] of Object.entries(templateViews(template))) {
+      const path =
+        'views' in template ? `${pointer}/views/${view}` : 'document' in template ? `${pointer}/document` : pointer;
+      for (const violation of validateDocumentFilters(registry, document!, release))
+        errors.push({ ...violation, pointer: path + violation.pointer });
+    }
+  }
+  return errors.sort((a, b) => (a.pointer < b.pointer ? -1 : a.pointer > b.pointer ? 1 : 0)).slice(0, 64);
 }

@@ -449,6 +449,17 @@ export function SubjectPage({
         <PageData
           locale={locale}
           subject={page.subject}
+          listTarget={
+            page.account
+              ? { account: page.account.handle, ...(view ? { view } : {}) }
+              : page.subject
+                ? {
+                    subject: page.subject,
+                    ...(view ? { view } : {}),
+                    ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
+                  }
+                : undefined
+          }
           {...(subjectLabel !== undefined ? { subjectLabel } : {})}
           {...(read ? { subjectLabel: subjectPageTitle(page, locale) } : {})}
           {...(page.account ? { account: page.account } : {})}

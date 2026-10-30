@@ -8,13 +8,13 @@ import {
   type SelectedContext,
   type PageContinuation,
 } from '@rezics/composition';
-import { sharedRatio, type CoverRatio } from '@rezics/ui/cover';
+import { type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
-import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
-import { SectionHeading } from '../../library/section-heading';
+import { TypeList, TypeListContext } from './type-list';
+import type { TypeListTarget } from './type-list-model';
 import { createContext, useContext, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
-import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
+import { coverOf, coverSubject } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
 import { languageName, LANGUAGE_PROPERTY, originalLanguage, originalTitle } from '../../subject/language';
 import { defaultReader, type Reader } from '../../subject/reader';
@@ -101,22 +101,12 @@ type SubjectRead = {
   documents?: unknown;
   summary?: Summary | null;
 };
-type SearchHit = Pick<Subject, 'id' | 'labels'> & {
-  type?: string;
-  typeLabel?: string;
-  summary?: SubjectSummary;
-};
-type SearchRead = {
-  subjects: SearchHit[];
-};
 type PreparedRead = {
   header?: ReactNode;
   groups?: Map<string, ReactNode>;
   more?: ReactNode[];
   /** The subject's tags, as chips; a tag above the reader's spoiler level waits behind a reveal. */
   tags?: ReactNode;
-  /** The hits of a search read with their cover summaries. */
-  hits?: SearchHit[];
   sources?: Sources;
 };
 
@@ -668,6 +658,8 @@ export function PageData({
   subjectLabel,
   context,
   continuation,
+  listTarget,
+  fullList,
   account,
   operator,
   base,
@@ -687,6 +679,8 @@ export function PageData({
   subjectLabel?: string;
   context?: SelectedContext | undefined;
   continuation?: PageContinuation | undefined;
+  listTarget?: TypeListTarget | undefined;
+  fullList?: string | undefined;
   /** The account of an agent page, and the address of its overview. */
   account?: { id: string; handle: string };
   operator?: { id: string; handle: string | null; displayName: string | null };
@@ -751,9 +745,6 @@ export function PageData({
             pageText(body.subject.labels, locale, originalLanguage(body.subject)).text || resolved.unlabelled;
         }
       }
-    } else if (planned.kind === 'search' && Array.isArray(result.body.subjects)) {
-      const subjects = (result.body as SearchRead).subjects.slice(0, planned.body.limit);
-      prepared.set(key, { hits: subjects });
     }
   }
   const nodes = new Map<string, PreparedRead>();
@@ -825,20 +816,24 @@ export function PageData({
   };
   return (
     <overview.OverviewContext.Provider value={overviewValue}>
-      <PageContext.Provider
-        value={{
-          locale,
-          messages: resolved,
-          nodes,
-          subject,
-          agentHeader: profile !== undefined,
-          sources,
-          link,
-          ...(zoneRatio ? { ratio: zoneRatio } : {}),
-        }}
+      <TypeListContext.Provider
+        value={{ ...(listTarget ? { target: listTarget } : {}), ...(fullList ? { full: fullList } : {}) }}
       >
-        {children}
-      </PageContext.Provider>
+        <PageContext.Provider
+          value={{
+            locale,
+            messages: resolved,
+            nodes,
+            subject,
+            agentHeader: profile !== undefined,
+            sources,
+            link,
+            ...(zoneRatio ? { ratio: zoneRatio } : {}),
+          }}
+        >
+          {children}
+        </PageContext.Provider>
+      </TypeListContext.Provider>
     </overview.OverviewContext.Provider>
   );
 }
@@ -899,71 +894,6 @@ function Statements(props: Record<string, unknown>) {
 function MoreStatements(props: Record<string, unknown>) {
   const groups = useNodeRead(props.id)?.more;
   return groups?.length ? <dl className={listClass}>{groups}</dl> : null;
-}
-
-/**
- * One vertical of the home: a row of cover cards and a link to the whole search. The row
- * shares one frame ratio, so a mixed row stays aligned; the heading names the type for every card in the row.
- */
-function TypeList(props: Record<string, unknown>) {
-  const read = useNodeRead(props.id);
-  const { locale, messages, ratio: zoneRatio } = useContext(PageContext);
-  const title = pageText(props.title, locale);
-  if (!read?.hits?.length) return null;
-  const hitsBySubject = new Map<string, SearchHit>();
-  for (const hit of read.hits) {
-    const previous = hitsBySubject.get(hit.id);
-    // Search only supplied the subject id here. Keep the richer response when one duplicate has its cover summary.
-    if (!previous || (!previous.summary && hit.summary)) hitsBySubject.set(hit.id, hit);
-  }
-  const hits = [...hitsBySubject.values()];
-  const id = typeof props.id === 'string' ? props.id : 'type-list';
-  const type = Array.isArray(props.types) && typeof props.types[0] === 'string' ? props.types[0] : undefined;
-  const subjects = hits.map((hit) => {
-    const text = pageText(hit.labels, locale);
-    return {
-      hit,
-      text,
-      subject: coverSubject(hit.id, text.text, hit.summary, hit.type),
-    };
-  });
-  const ratio = zoneRatio ?? sharedRatio(subjects.map((item) => item.subject));
-  return (
-    <section
-      data-slot="type-list"
-      aria-labelledby={`${id}-title`}
-      className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <SectionHeading id={`${id}-title`} lang={title.lang}>
-            {title.text}
-          </SectionHeading>
-        </div>
-        {type && (
-          <a
-            data-slot="see-all"
-            href={`/${encodeURIComponent(locale)}/search?type=${encodeURIComponent(type)}`}
-            aria-describedby={`${id}-title`}
-            className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}
-          >
-            {m.home_see_all({}, { locale: locale as never })}
-          </a>
-        )}
-      </div>
-      <CoverRow ratio={ratio} label={m.home_section_row({ title: title.text }, { locale: locale as never })}>
-        {subjects.map(({ hit, text, subject }) => (
-          <CoverCard
-            key={hit.id}
-            href={subjectHref({ id: hit.id, label: text.text || messages.unlabelled }, locale).href}
-            cover={{ subject, cover: coverOf(hit.summary), src: coverSrc }}
-            title={text.text || messages.unlabelled}
-            {...(text.lang ? { titleLang: text.lang } : {})}
-          />
-        ))}
-      </CoverRow>
-    </section>
-  );
 }
 
 export const dataComponents = {

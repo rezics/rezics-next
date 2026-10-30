@@ -2,6 +2,7 @@ import { withHeaders } from '@elysia/openapi';
 import canonicalize from 'canonicalize';
 import {
   planReads,
+  validateDocumentFilters,
   documentRead,
   readCost,
   MAX_PAGE_COST,
@@ -147,10 +148,8 @@ function targetOf(body: unknown): PageTarget {
   reject(errors);
 }
 
-function continuationOf(body: unknown, target: PageTarget): PageContinuation | undefined {
+function continuationOf(body: unknown, _target: PageTarget): PageContinuation | undefined {
   if (!isRecord(body) || !Object.hasOwn(body, 'continuation')) return;
-  if (!('subject' in target) || !target.view || target.view === 'overview')
-    reject([{ pointer: '/continuation', code: 'unsupported' }]);
   const value = body.continuation;
   if (!isRecord(value)) reject([{ pointer: '/continuation', code: 'invalid_type' }]);
   const errors: FieldError[] = [];
@@ -431,6 +430,8 @@ export function pageRoutes<App>(
         encodeSession(tokens, scope, requestSession.components),
       );
       return pageAnswer({
+        release: (await activeRelease(pool))?.release,
+        continuationOnlyTypeList: !('subject' in target) || !target.view || target.view === 'overview',
         ...(selected
           ? {
               context: selected.context,
@@ -490,6 +491,8 @@ export function pageRoutes<App>(
 }
 
 async function pageAnswer(input: {
+  release: import('@rezics/filter').FilterRelease | undefined;
+  continuationOnlyTypeList: boolean;
   dispatch: (request: Request) => Promise<Response>;
   request: Request;
   session: { ring: KeyRing; scope: string };
@@ -506,6 +509,18 @@ async function pageAnswer(input: {
   continuation?: PageContinuation;
   finalGuard?: (session: string | null) => Promise<string | null>;
 }): Promise<Response> {
+  const violations = validateDocumentFilters(
+    platformRegistry,
+    input.resolved.document,
+    input.release ?? { types: {}, properties: {} },
+  );
+  if (violations.length)
+    throw new ProblemError('invalid_request', {
+      errors: violations.map(({ pointer, code }) => ({
+        pointer,
+        code: code === 'limit' ? 'out_of_range' : 'unsupported',
+      })),
+    });
   // The probes already ran; plan once and run what they did not answer in one call.
   const plan = (() => {
     try {
@@ -521,13 +536,23 @@ async function pageAnswer(input: {
       throw error;
     }
   })();
+  if (
+    input.continuation &&
+    input.continuationOnlyTypeList &&
+    plan.reads[plan.nodes[input.continuation.node]!]?.kind !== 'search'
+  )
+    reject([{ pointer: '/continuation', code: 'unsupported' }]);
   if (Object.values(plan.reads).reduce((cost, read) => cost + readCost(read), 0) > MAX_PAGE_COST)
     reject([{ pointer: '/reads', code: 'out_of_range' }]);
   const observed = new Map(input.probes);
   const continuedKey = input.continuation ? plan.nodes[input.continuation.node] : undefined;
   for (const [readKey, descriptor] of Object.entries(plan.reads)) {
     const key = canonicalize(descriptor)!;
-    if (continuedKey && readKey !== continuedKey && (descriptor.kind === 'links' || descriptor.kind === 'relations')) {
+    if (
+      continuedKey &&
+      readKey !== continuedKey &&
+      (descriptor.kind === 'links' || descriptor.kind === 'relations' || descriptor.kind === 'search')
+    ) {
       observed.set(key, { status: 204, body: {} });
       continue;
     }

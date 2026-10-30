@@ -15,7 +15,8 @@
   "dependencies": {
     "@noble/hashes": "2.4.0",
     "typebox": "1.4.3",
-    "canonicalize": "5.1.0"
+    "canonicalize": "5.1.0",
+    "@rezics/filter": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",

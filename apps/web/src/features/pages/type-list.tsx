@@ -1,0 +1,87 @@
+import { createContext, useContext } from 'react';
+import { m } from '../../paraglide/messages.js';
+import { PageHeading } from '../../shell/page-heading';
+import { SectionHeading } from '../../library/section-heading';
+import { CoverList } from './cover-list';
+import { OverviewContext, type Item } from './overview';
+import { isRecord, pageText, linkClass, linkColor } from './shared';
+import { typeListHref, type TypeListTarget } from './type-list-model';
+import type { SubjectSummary } from '../../media/summary';
+
+export const TypeListContext = createContext<{ target?: TypeListTarget; full?: string }>({});
+
+/** Render only native search hits and its explicit terminal/continuation outcome, never a detail object's facts. */
+export function TypeList(props: Record<string, unknown>) {
+  const value = useContext(OverviewContext);
+  const { target, full } = useContext(TypeListContext);
+  if (!value) return null;
+  const id = String(props.id);
+  const section = value.sections.get(id);
+  if (section && !section.ok && section.status === 204) return null;
+  const title = pageText(props.title, value.locale);
+  const options = { locale: value.locale as never };
+  const body = section?.ok ? section.body : undefined;
+  const ready =
+    body &&
+    Array.isArray(body.subjects) &&
+    (body.next === null || (typeof body.next === 'string' && body.next.length > 0 && body.subjects.length > 0));
+  const items: Item[] = [];
+  const seen = new Set<string>();
+  if (ready)
+    for (const hit of body.subjects as unknown[]) {
+      if (!isRecord(hit) || typeof hit.id !== 'string' || seen.has(hit.id)) continue;
+      seen.add(hit.id);
+      items.push({
+        id: hit.id,
+        label: pageText(hit.labels, value.locale),
+        notes: [],
+        gated: false,
+        ...(typeof hit.type === 'string' ? { type: hit.type } : {}),
+        ...(isRecord(hit.summary) ? { summary: hit.summary as SubjectSummary } : {}),
+      });
+    }
+  const href = target ? typeListHref(value.locale, target, id) : undefined;
+  const next =
+    ready && typeof body.next === 'string' && target ? typeListHref(value.locale, target, id, body.next) : undefined;
+  return (
+    <section data-slot="type-list" aria-labelledby={`${id}-title`} className="min-w-0 space-y-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-4">
+        <ListHeading full={full === id} id={`${id}-title`} lang={title.lang}>
+          {title.text}
+        </ListHeading>
+        {full !== id && href && (
+          <a data-slot="see-all" href={href} className={`${linkClass} ${linkColor}`}>
+            {m.home_see_all({}, options)}
+          </a>
+        )}
+      </div>
+      {!ready ? (
+        <p role="alert">
+          {m.subject_section_failed({}, options)}{' '}
+          {href && (
+            <a href={href} className={`${linkClass} ${linkColor}`}>
+              {m.subject_section_retry({}, options)}
+            </a>
+          )}
+        </p>
+      ) : (
+        <>
+          {items.length ? (
+            <CoverList items={items} value={value} label={title.text} preview={full !== id} />
+          ) : (
+            <p role="status">{m.search_no_results({}, options)}</p>
+          )}
+          {next && (
+            <a data-slot="next-page" href={next} className={`${linkClass} ${linkColor}`}>
+              {m.library_more({}, options)}
+            </a>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function ListHeading({ full, ...props }: import('react').ComponentProps<typeof SectionHeading> & { full: boolean }) {
+  return full ? <PageHeading {...props} /> : <SectionHeading {...props} />;
+}

@@ -138,6 +138,7 @@
       "name": "@rezics/composition",
       "dependencies": {
         "@noble/hashes": "2.4.0",
+        "@rezics/filter": "workspace:*",
         "canonicalize": "5.1.0",
         "typebox": "1.4.3",
       },

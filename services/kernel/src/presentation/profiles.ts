@@ -1,5 +1,7 @@
-import { profileDigest, type PresentationProfile } from '@rezics/composition';
+import { profileDigest, platformRegistry, validateProfileFilters, type PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
+import { activeRelease } from '../semantic/definitions.ts';
+import { ProfileInputError } from './profile-cache.ts';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { AccessCheck, AccountActor } from '../request/access.ts';
 import { ProfileCache, profileSnapshot } from './profile-cache.ts';
@@ -85,6 +87,13 @@ export async function publishProfile(pool: Pool, options: WriteOptions & { profi
     pool,
     commandOptions(options, 'presentation.publish', 'presentation:publish'),
     async (tx, { transactionId }) => {
+      const release = await activeRelease(tx);
+      const violations = validateProfileFilters(
+        platformRegistry,
+        profile,
+        release?.release ?? { types: {}, properties: {} },
+      );
+      if (violations.length) throw new ProfileInputError(violations);
       const rows = await publish.run(tx, {
         route: resource.route,
         digest,
@@ -155,6 +164,13 @@ export async function bootstrapProfile(pool: Pool, profile: PresentationProfile)
     const command = await runCommand(pool, { partition: 0 }, async (tx, { transactionId }) => {
       const active = await pointer.run(tx, { route: resource.route });
       if (active) throw new AlreadyActive(active.digest);
+      const release = await activeRelease(tx);
+      const violations = validateProfileFilters(
+        platformRegistry,
+        body,
+        release?.release ?? { types: {}, properties: {} },
+      );
+      if (violations.length) throw new ProfileInputError(violations);
       await publish.run(tx, { route: resource.route, digest, body, transaction_id: transactionId });
       const rows = await activate.run(tx, {
         route: resource.route,

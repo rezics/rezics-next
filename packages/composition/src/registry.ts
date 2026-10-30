@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Type, { type TSchema } from 'typebox';
+import type { FilterDocument } from '@rezics/filter';
+import { publicFilterProp, typeListFilter } from './filter.ts';
 
 import {
   CURIE_PATTERN,
@@ -31,7 +33,7 @@ export interface PageContext {
   account?: { id: string; handle: string } | null;
 }
 
-export type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
+export type PageFilter = FilterDocument;
 
 type InferredStatementRead = {
   kind: 'search';
@@ -80,6 +82,7 @@ export type PageRead =
   | { kind: 'accountCollections'; id: string; limit: number }
   | {
       kind: 'search';
+      cursor?: string;
       body: {
         filter: PageFilter;
         sort: 'name' | 'collections';
@@ -217,6 +220,7 @@ function isSafeString(schema: SchemaNode): boolean {
 
 /** Every string this schema can accept is a safety string or a literal. `label` is `<Type>.<prop>`. */
 function assertAdmitted(schema: SchemaNode, label: string): void {
+  if (schema === publicFilterProp) return;
   if (safetyKind(schema) === 'localizedText') {
     if (!isLocalizedText(schema)) refuse(label);
     return;
@@ -561,6 +565,8 @@ export const platformRegistry = defineRegistry({
         {
           title: localizedText({ maxLength: 120 }),
           types: Type.Array(curie(), { minItems: 1, maxItems: 8, uniqueItems: true }),
+          filter: publicFilterProp,
+          paged: Type.Optional(Type.Boolean()),
           sort: enumeration(['name', 'collections']),
           limit: Type.Integer({ minimum: 1, maximum: 24 }),
         },
@@ -569,7 +575,7 @@ export const platformRegistry = defineRegistry({
       read: (props) => ({
         kind: 'search',
         body: {
-          filter: { type: { in: props.types as string[] } },
+          filter: typeListFilter(props.types as string[], props.filter),
           sort: props.sort as 'name' | 'collections',
           limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
         },

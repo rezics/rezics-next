@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import canonicalize from 'canonicalize';
+import { FilterError } from '@rezics/filter';
+import { publicFilterProp, parsePublicPageFilter, typeListFilter } from './filter.ts';
 import {
   MAX_COMPOSITION_BYTES,
   MAX_COMPOSITION_DEPTH,
@@ -140,6 +142,16 @@ function walkLocalized(schema: SchemaNode, value: unknown, pointer: string, add:
 }
 
 function walkSchema(schema: SchemaNode, value: unknown, pointer: string, add: Add): void {
+  if (schema === publicFilterProp) {
+    try {
+      parsePublicPageFilter(value);
+    } catch (error) {
+      if (!(error instanceof FilterError)) throw error;
+      for (const violation of error.errors)
+        add(pointer + violation.pointer, violation.code === 'out_of_range' ? 'limit' : 'invalid');
+    }
+    return;
+  }
   if (safetyKind(schema) === 'localizedText') {
     walkLocalized(schema, value, pointer, add);
     return;
@@ -279,6 +291,14 @@ function validateProps(
       continue;
     }
     walkSchema(property, props[key], join(pointer, key), add);
+  }
+  if (component.type === 'TypeList' && Array.isArray(props.types)) {
+    try {
+      typeListFilter(props.types as string[], props.filter);
+    } catch (error) {
+      if (!(error instanceof FilterError)) throw error;
+      add(join(pointer, 'filter'), error.errors.some((item) => item.code === 'out_of_range') ? 'limit' : 'invalid');
+    }
   }
   if (component.type === 'SubjectHeader') page.subjectHeaders += 1;
   if (component.type === 'Heading' && props.level === 1) page.headings.push(join(pointer, 'level'));

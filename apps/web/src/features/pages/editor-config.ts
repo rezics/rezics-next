@@ -88,6 +88,7 @@ function displayName(locale: string): string {
 }
 
 function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'): Record<string, unknown> {
+  if (schema['~kind'] === 'PublicFilter') return { type: 'textarea' };
   const values = enumeration(schema);
   if (values !== null) {
     return {
@@ -221,6 +222,16 @@ function transformValue(
   scalarPaths: string[],
   sourceScalarPaths: Set<string>,
 ): unknown {
+  if (schema['~kind'] === 'PublicFilter') {
+    if (direction === 'from') return JSON.stringify(value, null, 2);
+    if (value === '') return undefined;
+    if (typeof value !== 'string') return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
   if (localized(schema)) {
     if (direction === 'from' && typeof value === 'string') {
       scalarPaths.push(JSON.stringify(path));
@@ -292,6 +303,7 @@ function transformNode(
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
       if (Object.hasOwn(props, prop)) {
         props[prop] = transformValue(props[prop], propSchema, direction, [prop], localizedScalars, sourceScalarPaths);
+        if (propSchema['~kind'] === 'PublicFilter' && props[prop] === undefined) delete props[prop];
       }
     }
   }

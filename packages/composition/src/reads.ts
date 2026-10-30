@@ -68,9 +68,12 @@ export function planReads(
     let read = components.get(node.type)!.read?.(node.props, page);
     if (page.continuation?.node === node.props.id) {
       if (
-        node.props.paged !== true ||
+        (node.type !== 'TypeList' && node.props.paged !== true) ||
         !read ||
-        (read.kind !== 'links' && read.kind !== 'relations' && read.kind !== 'subjectThreads')
+        (read.kind !== 'links' &&
+          read.kind !== 'relations' &&
+          read.kind !== 'subjectThreads' &&
+          node.type !== 'TypeList')
       )
         throw new PageContinuationError('node');
       if (!page.continuation.cursor || (read.kind === 'subjectThreads' && page.continuation.cursor.length > 4096))

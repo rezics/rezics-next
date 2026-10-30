@@ -71,8 +71,9 @@ The Cost qualifications below remain scoped to their named operations.
 data; inherited inputs, accessors, serialization hooks, cycles, non-finite numbers and values JSON would discard
 are refused. Validation precedes deduplication, so an invalid alias cannot hide behind a valid read. Errors use
 sorted, escaped `/reads/...` pointers. The raw descriptor count remains at most `MAX_PAGE_READS` (16), including
-aliases. Search continuation cursors are unavailable in page descriptors; other Search grammar and authorization
-remain with the standalone route and its per-read result.
+aliases. Search descriptors accept an opaque top-level `cursor`, which the adapter forwards to the standalone Search body.
+`body.cursor` remains closed to callers; other Search grammar and authorization remain with the standalone route
+and its per-read result. Public OwnerLeaf filters reject the entire aggregate before dispatch.
 
 Search limits use the standalone positive integer range 1–100 and default 20. Page languages override descriptor
 languages when supplied; without them each descriptor keeps its language choice, and an omitted chain keeps every
@@ -211,3 +212,23 @@ A subject page continuation resolves its current template and Context before pla
 node's native links/relations read and retains ordinary subject/control reads. Other links/relations descriptors
 return 204 with an empty body; they are unrequested, not empty lists. Clients retain independent group state or
 offer a fresh-start link when opening a continued document directly. Full-document planning bounds still apply.
+
+## Configured catalogue lists
+
+`TypeList` accepts an optional public `FilterDocument` in `props.filter`. The shared Filter parser owns its grammar
+and limits; planning intersects it with `props.types` without replacing the configured type restriction. The closed
+composition schema and editor expose this same document, including saved catalogue filters. Publication admits
+TypeList filters against the active semantic release, including saved expansion, and refuses private OwnerLeaf
+operands. Runtime resolution admits the selected document again against the current release.
+
+A TypeList on a route, subject overview, account page or full view may continue by node ID. Its native Search cursor
+is attached before deduplication, so identical sibling lists remain independent after one advances. Other Search,
+links and relation descriptors are unrequested (204) on that continued response. Full-document admission still uses
+16 distinct reads and 128 slots; each configured list retains its published limit of at most 24. `paged:true` is an
+optional preview limit of at most 12, and is not needed to reach later pages.
+
+The Web renderer uses only native hit pages and their explicit `next`. More and See all open `/search/list` with the
+page target, node and opaque cursor. Each request resolves the current server-owned filter, types, sort, languages
+and selected Context through `pages.read`; URLs cannot supply an account override or a replacement filter. The full
+list uses the shared cover grid, and unavailable pages offer retry instead of claiming empty or complete results.
+Realm populations keep the existing unavailable Search adapter until their native producer supports that scope.
