@@ -250,6 +250,53 @@ test('native plans follow dispatched occurrences across queued promise, callback
   ]);
 });
 
+test('name-only prepared reuse reserves its own occurrence before the first queued Parse completes', async () => {
+  const database = db!;
+  const query = 'SELECT id FROM growth_capture_test.binding_rows WHERE id <= $1::integer ORDER BY id';
+  const name = `growth_capture_name_only_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const result = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      // Hold dispatch so all three occurrences are recorded before the first named Parse reaches the server.
+      const holding = client.query('SELECT pg_sleep(0.01)');
+      const first = client.query<{ id: number }>({ name, text: query, values: [1] });
+      const second = client.query<{ id: number }>({ name, values: [2] });
+      const third = new Promise<number[]>((resolve, reject) => {
+        client.query<{ id: number }>({ name, values: [1] }, (error, response) => {
+          if (error) reject(error);
+          else resolve(response!.rows.map(({ id }) => id));
+        });
+      });
+      const [, one, two, three] = await Promise.all([holding, first, second, third]);
+      const later = await client.query<{ id: number }>({ name, values: [2] });
+      return [one.rows.map(({ id }) => id), two.rows.map(({ id }) => id), three, later.rows.map(({ id }) => id)];
+    }),
+  );
+  expect(result.value).toEqual([[1], [1, 2], [1], [1, 2]]);
+  expect(result.capture.statements).toEqual(['SELECT pg_sleep(0.01)', query, query, query, query]);
+  expect(result.capture.statementErrors).toEqual([null, null, null, null, null]);
+  expect(result.capture.planStatements).toEqual([0, 1, 2, 3, 4]);
+  expect(result.capture.plans).toHaveLength(5);
+  expect(
+    nativePlanEntries(result.capture)
+      .slice(1)
+      .map(({ owner, queryText, plan }) => [owner, queryText, plan['Actual Rows']]),
+  ).toEqual([
+    [1, query, 1],
+    [2, query, 2],
+    [3, query, 1],
+    [4, query, 2],
+  ]);
+  expect(result.capture.requestBytes).toEqual([
+    Buffer.byteLength('SELECT pg_sleep(0.01)'),
+    Buffer.byteLength(query) + 1,
+    1,
+    1,
+    1,
+  ]);
+  expect(result.capture.responseBytes?.slice(1)).toEqual([1, 2, 1, 2]);
+  expect(statementOccurrences(result.capture).statements.map(({ plans }) => plans)).toEqual([[0], [1], [2], [3], [4]]);
+});
+
 test('nested plans from failed and successful same-SQL producers keep their own occurrence custody', async () => {
   const database = db!;
   await database.admin.query('ALTER SEQUENCE growth_capture_test.failure_sequence RESTART WITH 1');

@@ -38,7 +38,7 @@ type ActiveCapture = {
   error?: Error;
 };
 type StatementRecord = {
-  readonly text: string;
+  text: string;
   readonly background: boolean;
   readonly backend: number | undefined;
   readonly index: number;
@@ -145,6 +145,20 @@ function statementText(query: unknown): string | undefined {
   if (typeof query === 'string') return query;
   if (typeof query !== 'object' || query === null || !('text' in query)) return undefined;
   return typeof query.text === 'string' ? query.text : undefined;
+}
+
+function preparedStatementName(query: unknown): string | undefined {
+  if (typeof query !== 'object' || query === null || !('name' in query)) return undefined;
+  return typeof query.name === 'string' && query.name.length > 0 ? query.name : undefined;
+}
+
+function preparedStatementText(client: PoolClient, name: string): string | undefined {
+  // pg records successful ParseComplete names here and uses this same registry to skip Parse on named reuse.
+  // This is protocol identity by prepared name, not a search for a plan with matching SQL.
+  const connection = client.connection as typeof client.connection & {
+    readonly parsedStatements: Readonly<Record<string, string | undefined>>;
+  };
+  return connection.parsedStatements[name];
 }
 
 function nextWireStatement(client: PoolClient): WireStatement | undefined {
@@ -272,6 +286,12 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
     if (!wireStatement?.parsed || wireStatement.bound) wireStatement = nextWireStatement(client);
     if (wireStatement) wireStatement.bound = true;
     const record = wireStatement?.record;
+    // A name-only request can be queued before its predecessor's ParseComplete. Resolve its text at Bind, when pg
+    // has selected the actual prepared statement, without changing the occurrence reserved when it was enqueued.
+    if (record && record.text.length === 0 && config?.statement) {
+      const text = preparedStatementText(client, config.statement);
+      if (text !== undefined) record.text = text;
+    }
     if (config?.values && config.valueMapper) {
       const valueMapper = config.valueMapper;
       let requestBytes = 0;
@@ -436,15 +456,16 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
   };
 
   client.query = ((...args: Parameters<PoolClient['query']>) => {
-    const text = statementText(args[0]);
+    const name = preparedStatementName(args[0]);
+    const text = statementText(args[0]) ?? (name === undefined ? undefined : preparedStatementText(client, name));
     let attribution = suppressAttribution ? undefined : currentAttribution(state);
     if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
     let record: StatementRecord | undefined;
-    if (explain && !suppressAttribution && text !== undefined && attribution) {
+    if (explain && !suppressAttribution && (text !== undefined || name !== undefined) && attribution) {
       const capture = attribution.capture;
       const index = attribution.background ? capture.backgroundStatementCount++ : capture.foregroundStatementCount++;
       record = {
-        text,
+        text: text ?? '',
         background: attribution.background,
         backend: capture.includeBackends ? backendPid(client) : undefined,
         index,
