@@ -301,17 +301,18 @@ export async function listBoardThreads(
   );
   if (!candidateSnapshot) throw new ContentNotFoundError();
   const board = candidateSnapshot.board;
+  const boardAnchor = candidateSnapshot.anchor.anchor;
   const selected = candidateSnapshot.candidate;
   if (selected.invalidCursor) throw new TypeError('Invalid content cursor');
-  if (selected.epoch !== board.anchor.epoch) throw new TypeError('Invalid content cursor');
+  if (selected.epoch !== boardAnchor.epoch) throw new TypeError('Invalid content cursor');
   const candidates: readonly ListedBoardCandidate[] = selected.candidates;
   const rankFreshness = new Map<string, string>();
   for (const candidate of candidates) {
     if ('rankRefreshedAt' in candidate) rankFreshness.set(candidate.id, candidate.rankRefreshedAt);
   }
   const anchors: AnchoredPosition[] = [
-    board.anchor,
-    { partition: board.anchor.partition, epoch: selected.epoch, position: selected.position },
+    boardAnchor,
+    { partition: boardAnchor.partition, epoch: selected.epoch, position: selected.position },
   ];
   const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   const entries: string[] = [];
@@ -352,7 +353,7 @@ export async function listBoardThreads(
   let finalState: { boardAnchor: AnchoredPosition; parentAllowed: boolean } | undefined;
   const finalItems = await withBoardDisclosure(
     boardId,
-    board.board,
+    board,
     () => discloseThreads(dependencies, entries.slice(0, limit + 1), context),
     decisions,
     { query, expectedRevisions, onFinal: (value) => (finalState = value) },
@@ -369,7 +370,7 @@ export async function listBoardThreads(
     currentPositions.push(entryPositions[index]!);
   }
   const pageEntries = current.slice(0, limit);
-  if (finalState.boardAnchor.epoch !== board.anchor.epoch) throw new TypeError('Invalid content cursor');
+  if (finalState.boardAnchor.epoch !== boardAnchor.epoch) throw new TypeError('Invalid content cursor');
   const hasVisibleMore = current.length > limit;
   const more = hasVisibleMore || scanned < candidates.length || selected.hasMore;
   const cursorAfter =

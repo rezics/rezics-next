@@ -368,13 +368,27 @@ export async function prepareBoardPageDecisions(
   dependencies: ContentReadDependencies,
   context: ReadContext,
 ): Promise<ReadDecisions> {
-  return prepareReadDecisions(dependencies.access, {
+  const input = {
     actor: context.actor,
-    // Realm ownership is discovered inside the candidate snapshot, so prepare
-    // the one superset once before it; the port charges its preparation once.
-    actions: new Set(['thread:read', 'post:read', 'board:read', 'realm:read']),
     context: { pool: dependencies.pool, deadline: context.deadline },
-  });
+  };
+  try {
+    // Realm ownership is discovered inside the candidate snapshot, so prepare
+    // the one superset before it whenever the installed catalogue has realm:read.
+    return await prepareReadDecisions(dependencies.access, {
+      ...input,
+      actions: new Set(['thread:read', 'post:read', 'board:read', 'realm:read']),
+    });
+  } catch (error) {
+    // A non-Realm board does not need realm:read. Some direct test/embedded
+    // Access catalogues intentionally omit it, and the port rejects that
+    // unconfigured action before doing any preparation I/O.
+    if (!(error instanceof RangeError) || error.message !== 'Invalid read decision actions') throw error;
+    return prepareReadDecisions(dependencies.access, {
+      ...input,
+      actions: new Set(['thread:read', 'post:read', 'board:read']),
+    });
+  }
 }
 
 async function point(client: AccessClient, kind: Kind, id: string, threadId = id, bytes = false): Promise<Row | null> {
@@ -1640,7 +1654,7 @@ export async function discloseThreads(
   context: ReadContext,
 ): Promise<readonly Anchored<ThreadView | null>[]> {
   if (threadIds.length > 200) throw new RangeError('At most 200 disclosure candidates');
-  const hint = boardDisclosureHint.get();
+  const hint = boardDisclosureHint.getStore();
   if (threadIds.length === 0 && !hint) return [];
   const decisions = hint?.decisions ?? (await prepareBoardPageDecisions(dependencies, context));
   if (hint) {
