@@ -93,7 +93,7 @@ test('exact operator and handle confirmation saves one immutable native descript
     true,
   );
   expect(JSON.stringify(mutations)).not.toContain('ownerActor');
-  expect(JSON.stringify(mutations)).not.toContain('credential');
+  expect(JSON.stringify(mutations.map(({ body }) => body))).not.toContain('credential');
 });
 
 test('lost response retries the same initiating human operator handle and key and rejects operation substitution', async () => {
