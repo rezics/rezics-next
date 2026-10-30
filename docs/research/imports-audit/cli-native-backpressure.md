@@ -55,3 +55,34 @@ reader, transport, coordinator and media limits remain in force. No native growt
 are supplied. The managed check log contains the raw public exchanges, actual scheduled waits, logical and
 physical sends, baseline rows, pending bytes, native receipt anchors, public selection and worker evidence.
 Validation results belong to the managed receipt for the committed implementation revision.
+
+The native acceptance passed at code revision `84a092c6a0cb3650b7b3bb93ab438e33e0309a10`:
+one child, `Real public rate refusal and bounded operator resume`, with 3,777 assertions. The raw receipt is
+`.temp/goal/checks/worker-check-2026-10-30T07-12-24.878Z-442f29de.log`, under
+`CLI native backpressure evidence`. The selected kernel compiler and quality phases also passed; this does
+not claim a root or all-workspace gate. Edited-file formatting, the importer compiler and both local tests
+passed: `CLI construction preserves the real coordinator, durable completion and shared retry clock` and
+`a construction failure closes the opened dump and keeps private diagnostics out of CLI output` (18 assertions).
+
+The captured registration was `bangumi@3` with native record revision `unversioned`, using bundle
+`sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd`. The seventeen-record baseline
+completed after 54 actual CLI rate refusals. Exhaustion retained one exact two-command pending envelope while
+fifteen changed neighbors succeeded; the selected operation used five logical invocations and fifteen physical
+sends. The fresh invocation sent that pending envelope once and completed. There were 71 CLI and 15 competing
+rate refusals during exhaustion, all native refusals carried Retry-After of one or two seconds, and 104 actual
+waits were scheduled. Width-one termination occurred before the eight-call ceiling; this run does not independently
+exercise the exact ceiling branch covered by the existing logical-write budget tests.
+
+All 52 original receipt rows and 52 original immutable command journals remained equal. One actual receipt
+anchor is transaction `01a18ba9-3c31-771c-ab85-9ff43ed8f41f`, bootstrap key
+`bangumi:920001:333c04dd151a2a6831c039cb9a651df29198be8a04e16ce861d4b6a34a11c954`.
+Native media `01a18ba9-4330-71f3-a30a-7ef9153a383f` remained available with source digest
+`1474917101a84c44e276774c43f05327e6f05475a3e209899c0749a4ba0594be`; the registered worker executed two
+jobs, `content.importFromUrl` and `content.image`. Independent accepted candidate
+`90c99e98-6cc4-87ac-b85c-548fafc0f1ab` remained selected. The raw receipt retains the remaining keys, bodies,
+source digests, transactions, media events and public reads.
+
+The first managed attempt exposed two fixture type errors and the incorrect fresh-stdin EOF precondition at
+resume. These were corrected while retaining every frozen assertion. Review also found and verified the repair
+of prompt cancellation for the newly connected optional clock. No production retry-policy defect was invented,
+and no files outside the declared paths were changed.
