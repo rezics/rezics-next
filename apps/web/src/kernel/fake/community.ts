@@ -1,5 +1,6 @@
 import type { FakeRoute } from '../fake-modules';
 import type { KernelRecording } from '../fake';
+import type { KernelClient } from '@rezics/client';
 import type { RealmAppearanceSnapshot, RealmPresentationImage } from '../../community/realm-presentation';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import realm from '../recorded/realm.json';
@@ -12,6 +13,7 @@ export const appearanceAddress = 'quiet-novel-club-appearance';
 export const appearancePath = `/spaces/${appearanceAddress}`;
 // This session credential represents the fixture's recorded Realm owner.
 const ownerCredential = 'Bearer recorded-story-token';
+type NativeRealm = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['realms']>['get']>>['data']>['realm'];
 
 export const imageId = '0192f3a0-6c1e-7b2a-9d4e-9a2b3c4d0001';
 export const revisionId = '01a1a000-0000-7000-8000-000000000014';
@@ -85,6 +87,8 @@ export async function appearanceRecording(
       status: 200,
       realm: {
         ...realm.realm,
+        state: 'active',
+        visibility: 'public',
         realmId: snapshot.realmId,
         spaceId: appearanceSpaceId,
         title: snapshot.title,
@@ -92,9 +96,15 @@ export async function appearanceRecording(
         presentation: snapshot.presentation,
         headRevisionId: snapshot.head,
         ownershipState: 'owned',
+        orphanedAt: null,
+        claimEligibleAt: null,
         governanceReadOnly: false,
-      },
+      } satisfies NativeRealm,
     };
+  if (path === `/v1/realms/${snapshot.realmId}/participation`)
+    return request.headers.get('authorization') === ownerCredential
+      ? { status: 204 }
+      : { status: 403, code: 'forbidden' };
   if (path === `/v1/realms/${snapshot.realmId}/boards` || path === `/v1/realms/${snapshot.realmId}/publications`)
     return { status: 200, items: [], next: null };
   const presentation = path === `/v1/realms/${snapshot.realmId}/presentation`;

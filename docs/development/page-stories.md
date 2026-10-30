@@ -538,6 +538,12 @@ snapshots therefore use the Space stories below.
 
 ## apps/web/src/routes/spaces/$address.tsx
 
+Appearance management uses `apps/web/src/stories/realm-presentation-page.stories.tsx#Management` and
+`apps/web/src/stories/realm-presentation-page.stories.tsx#ManagementInteractions`. Both enter the production route
+with the configured native owner responses. The latter covers keyboard rules selection, canceling a clear and
+refreshing current ownership. Browser interactions and phone/desktop visual review in both themes remain pending;
+these exports do not establish those coverage cells or native authorization acceptance.
+
 | Route                                   | State                                        | Viewer                          | Desktop                                                  | Phone                                                    |
 | --------------------------------------- | -------------------------------------------- | ------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
 | apps/web/src/routes/spaces/$address.tsx | populated                                    | anonymous                       | apps/web/src/stories/space.stories.tsx#SignedOut         | missing                                                  |

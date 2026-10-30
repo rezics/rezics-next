@@ -9,7 +9,9 @@ import {
   resolveRealmAppearanceChoice,
 } from './space-actions';
 import { RealmAppearanceSettings } from './realm-presentation-settings';
-import type { RealmAppearanceAdapter } from './realm-presentation';
+import type { RealmAppearanceAdapter, RealmAppearanceRead } from './realm-presentation';
+
+const unavailable: RealmAppearanceRead = { kind: 'unavailable' };
 
 export function RealmAppearancePanel({ realmId }: { realmId: string }) {
   const { state, csrfToken } = useSession();
@@ -27,13 +29,14 @@ export function RealmAppearancePanel({ realmId }: { realmId: string }) {
     }),
     [csrfToken],
   );
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ['realm-appearance', realmId],
     queryFn: () => adapter.read(realmId),
     enabled: personalRead.enabled && state === 'signed-in',
     staleTime: 0,
     retry: false,
   });
-  if (state !== 'signed-in' || !data || data.kind === 'hidden') return null;
-  return <RealmAppearanceSettings key={realmId} realmId={realmId} initial={data} adapter={adapter} />;
+  const initial = isError ? unavailable : data;
+  if (state !== 'signed-in' || !initial || initial.kind === 'hidden') return null;
+  return <RealmAppearanceSettings key={realmId} realmId={realmId} initial={initial} adapter={adapter} />;
 }

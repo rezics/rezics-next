@@ -97,8 +97,8 @@ export async function readRealmAppearance(
     if (before.error) return { kind: concealed(before.status) ? 'hidden' : 'unavailable' };
     if (!active(before.data.realm, realmId)) return { kind: 'hidden' };
     const actions = await client.viewerActions.post({ resources: [{ type: 'community.realm', id: realmId }] }, auth);
+    if (actions.error) return { kind: concealed(actions.status) ? 'hidden' : 'unavailable' };
     if (
-      actions.error ||
       !actions.data.resources.some(
         (resource) =>
           resource.type === 'community.realm' &&

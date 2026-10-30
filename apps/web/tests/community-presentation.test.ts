@@ -562,3 +562,112 @@ test('actual Realm appearance management Page uses current route/native admissio
     expect(await Bun.file(new URL(`../.storybook${src}`, import.meta.url)).exists()).toBe(true);
   }
 });
+
+test('management host ownership read admits the configured native owner without bypassing current page continuity', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { available, appearancePath, appearanceAddress, appearanceSpaceId } =
+    await import('../src/kernel/fake/community');
+  const { loadSpacePage } = await import('../src/community/space');
+  const { readRealmClaim } = await import('../src/community/realm-claim-native');
+  const { nativeContainerLifecycleAdapter } = await import('../src/community/container-lifecycle-native');
+  const requests: Request[] = [];
+  const recorded = createStoryRecordedKernelFetch();
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      return recorded(request);
+    },
+  });
+  const url = `https://site.test/en${appearancePath}`;
+  const owner = 'Bearer recorded-story-token';
+  const page = await loadSpacePage(client, new Request(url), {}, { address: appearanceAddress }, 'anonymous');
+  const continuity = {
+    realmId: available.realmId,
+    spaceId: appearanceSpaceId,
+    contextId: available.contextId,
+    headRevisionId: available.head,
+    ownershipState: 'owned',
+    orphanedAt: null,
+    claimEligibleAt: null,
+    governanceReadOnly: false,
+  };
+  expect(page.realm?.continuity).toEqual(continuity);
+  requests.length = 0;
+  expect(
+    await readRealmClaim(client, new Request(url, { headers: { authorization: owner } }), {}, {
+      realmId: available.realmId,
+      credentialMode: 'session',
+    }),
+  ).toEqual({ kind: 'ready', snapshot: continuity, admission: 'allowed' });
+  expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual([
+    `GET /v1/realms/${available.realmId}`,
+    `GET /v1/realms/${available.realmId}/participation`,
+    `GET /v1/realms/${available.realmId}`,
+  ]);
+  expect(requests.every((request) => request.headers.get('authorization') === owner)).toBe(true);
+  expect(await readRealmAppearance(client, owner, available.realmId)).toEqual({ kind: 'ready', snapshot: available });
+  expect(
+    await readRealmClaim(
+      client,
+      new Request(url, { headers: { authorization: 'Bearer another-viewer' } }),
+      {},
+      { realmId: available.realmId, credentialMode: 'session' },
+    ),
+  ).toEqual({ kind: 'ready', snapshot: continuity, admission: 'denied' });
+  // The older ordinary recording and absent lifecycle sources do not acquire fixture authority.
+  expect(await readRealmClaim(client, new Request(url), {}, { realmId, credentialMode: 'anonymous' })).toEqual({
+    kind: 'unavailable',
+  });
+  const lifecycle = nativeContainerLifecycleAdapter(client, owner, 'en');
+  expect(await lifecycle.read({ kind: 'realm', id: available.realmId })).toEqual({ kind: 'unavailable' });
+  expect(await lifecycle.read({ kind: 'space', id: appearanceSpaceId })).toEqual({ kind: 'unavailable' });
+});
+
+test('appearance action source failures offer an unavailable read retry while native denials remain hidden', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { available } = await import('../src/kernel/fake/community');
+  const { RealmAppearanceSettings } = await import('../src/community/realm-presentation-settings');
+  const { createElement } = await import('react');
+  const { renderToString } = await import('react-dom/server');
+  const { m } = await import('../src/paraglide/messages.js');
+  const recorded = createStoryRecordedKernelFetch();
+  let status = 503;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname === '/v1/viewerActions' && status !== 200)
+        return Response.json({ code: status >= 500 ? 'dependency_unavailable' : 'forbidden' }, { status });
+      return recorded(request);
+    },
+  });
+  const read = () => readRealmAppearance(client, 'Bearer recorded-story-token', available.realmId);
+  const adapter: RealmAppearanceAdapter = {
+    read,
+    change: async () => ({ kind: 'unavailable' }),
+    select: async () => ({ kind: 'unavailable' }),
+    upload: async () => {
+      throw new Error('No upload in an unavailable read');
+    },
+    resume: async () => {
+      throw new Error('No upload in an unavailable read');
+    },
+  };
+  for (status of [401, 403, 404]) expect(await read()).toEqual({ kind: 'hidden' });
+  for (status of [500, 503]) {
+    const initial = await read();
+    expect(initial).toEqual({ kind: 'unavailable' });
+    const html = renderToString(
+      createElement(RealmAppearanceSettings, { realmId: available.realmId, initial, adapter }),
+    );
+    expect(html).toContain(m.realm_appearance_unavailable());
+    expect(html).toContain(m.realm_appearance_refresh());
+    expect(html).not.toContain(m.realm_appearance_save());
+    expect(html).not.toContain('A thoughtful reading room');
+    const control = createRealmAppearance(available.realmId, initial, adapter);
+    status = 200;
+    await control.refresh();
+    expect(control.getSnapshot().read).toEqual({ kind: 'ready', snapshot: available });
+    expect(control.editable()).toBe(true);
+  }
+});
