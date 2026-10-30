@@ -8,7 +8,6 @@ import { nativeErasurePage, startNativeErasure } from '../src/erasure-native.ts'
 import { randomUUID } from 'node:crypto';
 import { failNativeQueries } from './support/erasure-native.ts';
 import { completeCopy, finishCopyResult } from '../src/erasure-copy.ts';
-import { DBOS } from '@dbos-inc/dbos-sdk';
 
 async function eventually(probe: () => Promise<boolean>, timeout = 30_000) {
   const until = Date.now() + timeout;
