@@ -48,6 +48,8 @@ import {
   writeSync,
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
+import { stageCheckGit } from './check-git.ts';
+import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
 
 export type Host = {
   name: string;
@@ -3791,22 +3793,103 @@ async function baseState(
 }
 
 function assertReturnPath(path: string): void {
-  if (path === '' || path.startsWith('/') || path.split('/').includes('..') || /[\0\n]/.test(path)) {
+  if (
+    path === '' ||
+    Buffer.byteLength(path) > 1024 ||
+    path.startsWith('/') ||
+    /^[A-Za-z]:/.test(path) ||
+    path.split('/').some((part) => part === '' || part === '.' || part === '..') ||
+    /[\0\r\n]/.test(path)
+  ) {
     throw new Error(`return path must stay inside the workspace: ${path}`);
   }
 }
 
-/** One remote script lists which declared outputs exist, so a missing path is skipped instead of failing the copy. */
-export function returnsProbe(directory: string, paths: string[]): string {
-  const body = paths
-    .map((path) => {
-      const full = `${directory}/${path}`;
-      return `# PATH ${path}
-if [ -e ${quote(full)} ] || [ -L ${quote(full)} ]; then printf 'PRESENT %s\\n' ${quote(path)}; else printf 'ABSENT %s\\n' ${quote(path)}; fi`;
-    })
-    .join('\n');
+/** Validate the whole return set; copy mode lists only admitted files and empty directory leaves. */
+export function returnsProbe(directory: string, paths: string[], inventory = false): string {
+  if (paths.length > CHECK_ARTIFACTS_MAX_FILES) throw new Error('remote-check: too many return paths');
+  for (const path of paths) assertReturnPath(path);
   return `# REMOTE_CHECK_RETURNS
-${body}`;
+${paths.map((path) => `# PATH ${path}`).join('\n')}
+python3 - ${quote(directory)} ${quote(JSON.stringify(paths))} ${inventory ? '1' : '0'} <<'REMOTE_CHECK_RETURNS_PY'
+import json, os, stat, sys
+
+root = os.path.abspath(sys.argv[1])
+paths = json.loads(sys.argv[2])
+inventory = sys.argv[3] == '1'
+max_files = ${CHECK_ARTIFACTS_MAX_FILES}
+max_bytes = ${CHECK_ARTIFACTS_MAX_BYTES}
+entries = {}
+total = 0
+examined = 0
+
+class Oversize(Exception):
+    pass
+
+def validate(path):
+    if (len(path.encode('utf-8')) > 1024 or any(c in path for c in '\\0\\r\\n')
+            or any(part in ('', '.', '..') for part in path.split('/'))):
+        raise ValueError('unsafe path')
+
+def visit(full, path, info, selected):
+    global total, examined
+    validate(path)
+    examined += 1
+    # Bounded leaves with 1024-byte paths can require at most this many ancestor entries.
+    # Empty directory fanout consumes the same finite traversal budget.
+    if examined > max_files * 1024:
+        raise Oversize()
+    if stat.S_ISDIR(info.st_mode):
+        empty = True
+        with os.scandir(full) as children:
+            for child in children:
+                empty = False
+                visit(child.path, path + '/' + child.name, child.stat(follow_symlinks=False), selected)
+        if not empty:
+            return
+        size = 0
+    elif stat.S_ISREG(info.st_mode):
+        size = info.st_size
+    else:
+        raise ValueError('symlink or special file')
+    if path not in entries:
+        entries[path] = size
+        total += size
+        if len(entries) > max_files or total > max_bytes:
+            raise Oversize()
+    selected.append(path)
+
+for path in paths:
+    selected = []
+    try:
+        if os.path.realpath(root) != root or not stat.S_ISDIR(os.lstat(root).st_mode):
+            raise ValueError('unsafe workspace')
+        full = root
+        for part in path.split('/'):
+            full = os.path.join(full, part)
+            info = os.lstat(full)
+            if stat.S_ISLNK(info.st_mode):
+                raise ValueError('symlink in return path')
+        # A missing declaration is distinct from an entry disappearing during inventory.
+    except FileNotFoundError:
+        print('ABSENT ' + path)
+        continue
+    except (OSError, ValueError):
+        print('UNSAFE ' + path)
+        break
+    try:
+        visit(full, path, info, selected)
+    except Oversize:
+        print('OVERSIZE ' + path + ' ' + str(len(entries)) + ' ' + str(total))
+        print('OVERSIZE_RETURN_SET')
+        break
+    except (OSError, ValueError):
+        print('UNSAFE ' + path)
+        break
+    else:
+        for present in selected if inventory else [path]:
+            print('PRESENT ' + present)
+REMOTE_CHECK_RETURNS_PY`;
 }
 
 /** Copies declared outputs back in one rsync. Missing paths log one stderr line and are left out of that rsync. */
@@ -3820,11 +3903,10 @@ async function copyReturns(
   const paths = options.returns ?? [];
   if (paths.length === 0) return;
   for (const path of paths) assertReturnPath(path);
-  const probe = Bun.spawn(['ssh', ...sshOptions(host, connectionId), host.address, returnsProbe(directory, paths)], {
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+  const probe = Bun.spawn(
+    ['ssh', ...sshOptions(host, connectionId), host.address, returnsProbe(directory, paths, true)],
+    { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+  );
   const transferLimit = transferTimeout(options);
   const [probed, output] = await boundedTextChild(probe, signal, transferLimit, host, 'returns probe', false);
   if (signal.aborted) throw new Aborted();
@@ -3832,25 +3914,38 @@ async function copyReturns(
   const present: string[] = [];
   const seen = new Set<string>();
   for (const line of output.split('\n')) {
+    if (/^(UNSAFE |OVERSIZE |OVERSIZE_RETURN_SET$)/.test(line)) {
+      throw new Error(`remote-check: refused returned output from ${host.name}: ${line}`);
+    }
     const found = line.match(/^PRESENT (.*)$/);
     const missing = line.match(/^ABSENT (.*)$/);
     if (found) {
-      seen.add(found[1]!);
-      present.push(found[1]!);
+      const file = found[1]!;
+      assertReturnPath(file);
+      const declarations = paths.filter((path) => file === path || file.startsWith(`${path}/`));
+      if (declarations.length === 0) throw new Error(`remote-check: undeclared returned output from ${host.name}`);
+      for (const path of declarations) seen.add(path);
+      if (!present.includes(file)) present.push(file);
+      if (present.length > CHECK_ARTIFACTS_MAX_FILES) throw new Error('remote-check: too many returned files');
     } else if (missing) {
+      if (!paths.includes(missing[1]!)) throw new Error(`remote-check: undeclared missing output from ${host.name}`);
       seen.add(missing[1]!);
       console.error(`remote-check: ${missing[1]} is not on ${host.name}, skipping`);
+    } else if (line !== '') {
+      throw new Error(`remote-check: invalid returns probe from ${host.name}`);
     }
   }
   for (const path of paths) {
-    if (!seen.has(path)) console.error(`remote-check: ${path} is not on ${host.name}, skipping`);
+    if (!seen.has(path)) throw new Error(`remote-check: returns probe omitted declared output on ${host.name}`);
   }
   if (present.length === 0) return;
   const started = performance.now();
   const sync = Bun.spawn(
     [
       'rsync',
-      '-rlpt',
+      '-dpt',
+      '--no-recursive',
+      '--no-links',
       '--info=progress2',
       '--mkpath',
       '--from0',

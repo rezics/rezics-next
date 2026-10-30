@@ -22,7 +22,7 @@ import { dirname, join, resolve } from 'node:path';
 import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
 import { onCheckHost } from './stack-run.ts';
 import { remoteLifetimeInfrastructureCause } from './worker-check.ts';
-import { CHECK_ARTIFACTS_MAX_BYTES } from './check-artifacts.ts';
+import { CHECK_ARTIFACTS_MAX_BYTES, CHECK_ARTIFACTS_MAX_FILES } from './check-artifacts.ts';
 import {
   DEFAULT_PREPARATION_TIMEOUT_MS,
   dependencyPreparationProgram,
@@ -5134,6 +5134,75 @@ test('the returns probe rejects symlinked or oversized bounded output trees befo
     expect(oversized.status).toBe(0);
     expect(oversized.stdout).toContain(`OVERSIZE ${path} `);
     expect(oversized.stdout).toContain('OVERSIZE_RETURN_SET');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('bounded return inventory retains output, status and receipts at the unchanged aggregate limits', () => {
+  const temporaryDirectory = join(root, '.temp');
+  mkdirSync(temporaryDirectory, { recursive: true });
+  const directory = mkdtempSync(join(temporaryDirectory, 'return-inventory-'));
+  const path = "output's $(touch injected)";
+  const stage = join(directory, path);
+  mkdirSync(stage);
+  writeFileSync(join(stage, 'output.log'), 'genuine command output\n');
+  writeFileSync(join(stage, 'exit-status'), '7\n');
+  writeFileSync(join(stage, 'receipt.json'), '{"exitCode":7}\n');
+  try {
+    const inventory = spawnSync('bash', ['-c', returnsProbe(directory, [path], true)], {
+      encoding: 'utf8',
+      cwd: directory,
+    });
+    expect(inventory.status).toBe(0);
+    expect(inventory.stderr).toBe('');
+    expect(inventory.stdout.trimEnd().split('\n').sort()).toEqual(
+      ['exit-status', 'output.log', 'receipt.json'].map((file) => `PRESENT ${path}/${file}`).sort(),
+    );
+    expect(existsSync(join(directory, 'injected'))).toBe(false);
+
+    for (let index = 3; index < CHECK_ARTIFACTS_MAX_FILES; index++) {
+      writeFileSync(join(stage, `file-${index}`), '');
+    }
+    // Include all metadata in the existing file/byte limits, including overlapping declarations only once.
+    const atLimit = spawnSync('bash', ['-c', returnsProbe(directory, [path, `${path}/exit-status`], true)], {
+      encoding: 'utf8',
+    });
+    expect(atLimit.status).toBe(0);
+    expect(atLimit.stderr).toBe('');
+    expect(new Set(atLimit.stdout.trimEnd().split('\n')).size).toBe(CHECK_ARTIFACTS_MAX_FILES);
+    expect(atLimit.stdout).not.toContain('OVERSIZE');
+
+    const overflow = join(stage, 'one-too-many');
+    writeFileSync(overflow, '');
+    const tooMany = spawnSync('bash', ['-c', returnsProbe(directory, [path], true)], { encoding: 'utf8' });
+    expect(tooMany.status).toBe(0);
+    expect(tooMany.stderr).toBe('');
+    expect(tooMany.stdout).toContain(`OVERSIZE ${path} ${CHECK_ARTIFACTS_MAX_FILES + 1} `);
+    expect(tooMany.stdout).toContain('OVERSIZE_RETURN_SET');
+    expect(tooMany.stdout).not.toContain('PRESENT ');
+    rmSync(overflow);
+
+    const bytes = CHECK_ARTIFACTS_MAX_BYTES - statSync(join(stage, 'exit-status')).size;
+    truncateSync(join(stage, 'output.log'), bytes);
+    truncateSync(join(stage, 'receipt.json'), 0);
+    const atByteLimit = spawnSync('bash', ['-c', returnsProbe(directory, [path], true)], { encoding: 'utf8' });
+    expect(atByteLimit.status).toBe(0);
+    expect(atByteLimit.stdout).not.toContain('OVERSIZE');
+    truncateSync(join(stage, 'receipt.json'), 1);
+    const tooLarge = spawnSync('bash', ['-c', returnsProbe(directory, [path], true)], { encoding: 'utf8' });
+    expect(tooLarge.status).toBe(0);
+    expect(tooLarge.stdout).toContain('OVERSIZE_RETURN_SET');
+    expect(tooLarge.stdout).not.toContain('PRESENT ');
+
+    symlinkSync(stage, join(directory, 'linked'));
+    const parentLink = spawnSync('bash', ['-c', returnsProbe(directory, ['linked/exit-status'], true)], {
+      encoding: 'utf8',
+    });
+    expect(parentLink.status).toBe(0);
+    expect(parentLink.stdout).toBe('UNSAFE linked/exit-status\n');
+    expect(() => returnsProbe(directory, ['../outside'], true)).toThrow('return path must stay inside');
+    expect(() => returnsProbe(directory, ['bad\npath'], true)).toThrow('return path must stay inside');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
