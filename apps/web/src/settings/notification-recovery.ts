@@ -14,7 +14,7 @@ export type NotificationEditorState = {
   draft: NotificationPreferences;
   pending: Attempt | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'review' | 'reloading' | 'failed';
-  failure?: NativePreferenceFailure;
+  failure?: NativePreferenceFailure | undefined;
 };
 export type NotificationEditorIO = {
   save: (input: NotificationChange) => Promise<NotificationWriteResult>;
