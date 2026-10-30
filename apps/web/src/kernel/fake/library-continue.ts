@@ -3,6 +3,7 @@ import sessionsRecording from '../recorded/library-continue-progress-sessions.js
 import homePageRecording from '../recorded/home-page.json';
 import definitionsRecording from '../recorded/definitions-release.json';
 import { progressSessionProfile } from '../../library/progress-profile';
+import type { ProgressMode } from '../../library/progress-reads';
 import type { Release } from '../../subject/definitions';
 import { recordedBookState } from './library-entry-states.ts';
 import type { KernelRecording } from '../fake.ts';
@@ -20,7 +21,7 @@ export function recordedContinueSessions(locale: string) {
       throw new Error('Unrecognized recorded progress mode');
     return {
       ...session,
-      mode,
+      mode: mode as ProgressMode,
       ...progressSessionProfile(definitionsRecording.release as unknown as Release, '', mode, session.unit, locale),
     };
   });
