@@ -87,6 +87,10 @@ function displayName(locale: string): string {
   return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
 }
 
+function objectChoices(schema: Schema): boolean {
+  return schema['~kind'] === 'Union' && !!schema.anyOf?.length && schema.anyOf.every(closedObject);
+}
+
 function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'): Record<string, unknown> {
   if (schema['~kind'] === 'PublicFilter') return { type: 'textarea' };
   const values = enumeration(schema);
@@ -114,6 +118,7 @@ function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'
     };
   }
 
+  if (objectChoices(schema) || schema['~safety'] === 'plainText') return { type: 'textarea' };
   if (curie(schema) || href(schema) || subjectId(schema)) return { type: 'text' };
 
   if (curieArray(schema)) {
@@ -174,6 +179,8 @@ function defaultFor(schema: Schema, component: string, prop: string, locale: str
   if (values !== null) return values[0];
   if (localized(schema)) return { [UI_LOCALES.includes(locale as (typeof UI_LOCALES)[number]) ? locale : 'en']: '' };
   if (schema['~kind'] === 'Integer') return integerDefault(schema);
+  if (objectChoices(schema)) return JSON.stringify(defaultFor(schema.anyOf![0]!, component, prop, locale));
+  if (schema['~safety'] === 'plainText') return '';
   if (href(schema)) return '/';
   if (curie(schema)) return 'schema:name';
   if (subjectId(schema)) return '00000000-0000-8000-8000-000000000000';
@@ -222,9 +229,9 @@ function transformValue(
   scalarPaths: string[],
   sourceScalarPaths: Set<string>,
 ): unknown {
-  if (schema['~kind'] === 'PublicFilter') {
-    if (direction === 'from') return JSON.stringify(value, null, 2);
-    if (value === '') return undefined;
+  if (schema['~kind'] === 'PublicFilter' || objectChoices(schema)) {
+    if (direction === 'from') return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    if (schema['~kind'] === 'PublicFilter' && value === '') return undefined;
     if (typeof value !== 'string') return value;
     try {
       return JSON.parse(value);

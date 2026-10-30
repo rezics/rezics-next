@@ -2,7 +2,10 @@ import { t } from 'elysia';
 import type { TProperties } from 'typebox';
 
 const closed = { additionalProperties: false } as const;
-const readResult = t.Object({ status: t.Integer(), body: t.Any() }, closed);
+const readResult = t.Object(
+  { status: t.Integer(), body: t.Any(), headers: t.Optional(t.Record(t.String(), t.String())) },
+  closed,
+);
 
 /** The common page body shared by public presentation reads and their extensions. */
 export const PageResponseSchema = t.Object(

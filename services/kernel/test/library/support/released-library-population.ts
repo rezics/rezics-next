@@ -68,11 +68,13 @@ function required<T>(value: T | undefined, field: string, digest: string): T {
  * No caller transport, registry, policy, resource IDs, released data or membership callback is accepted.
  */
 export async function createReleasedLibraryPopulation(
-  options: { version: 1 } = { version: releasedLibraryPopulationVersion },
+  options: NonNullable<Parameters<typeof createReleasedDiscoveryFixture>[0]> = {
+    version: releasedLibraryPopulationVersion,
+  },
 ) {
   if (options.version !== releasedLibraryPopulationVersion)
     throw new Error('Unsupported released Library population version');
-  const base = await createReleasedDiscoveryFixture({ version: 1 });
+  const base = await createReleasedDiscoveryFixture(options);
   const calls: NativeCall[] = [];
   let closed = false;
   const close = async () => {

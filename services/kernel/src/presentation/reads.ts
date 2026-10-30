@@ -12,6 +12,7 @@ import { checkDocument, serializeDocument } from '@rezics/document';
 import { createHash } from 'node:crypto';
 import { MAX_DOCUMENT_BYTES } from '../content/document.ts';
 import { SESSION_HEADER } from '../http/request.ts';
+import { ProblemError, problemResponse } from '../http/problem.ts';
 import type { FieldError } from '../http/problem.ts';
 import { validateSearchLimit } from '../search/service.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
@@ -64,7 +65,7 @@ export class PageReadBudget {
 
 type SessionKeys = { ring: KeyRing; scope: string };
 type ForwardedCredentials = { authorization: string | null; session: string | null; language: string | null };
-type PageResult = { status: number; body: unknown };
+type PageResult = { status: number; body: unknown; headers?: Record<string, string> };
 type PreparedRead = {
   key: string;
   descriptor: PageRead;
@@ -276,6 +277,32 @@ function validateReads(reads: unknown): PreparedRead[] {
           limit: descriptor.limit as number,
         };
       }
+    } else if (descriptor.kind === 'members') {
+      unknownFields(descriptor, ['kind', 'source', 'filter', 'sort', 'limit', 'cursor'], pointer, errors);
+      const source = descriptor.source;
+      let valid = isObject(source);
+      if (isObject(source)) {
+        const fields =
+          source.kind === 'collection'
+            ? ['kind', 'id']
+            : source.kind === 'everything'
+              ? ['kind']
+              : ['kind', 'profileId', 'stateSetId', 'stateId'];
+        unknownFields(source, fields, `${pointer}/source`, errors);
+        if (source.kind === 'collection') valid = typeof source.id === 'string' && UUID_PATTERN.test(source.id);
+        else if (source.kind === 'state')
+          valid = ['profileId', 'stateSetId', 'stateId'].every(
+            (key) => typeof source[key] === 'string' && /^[a-z][a-z0-9_.-]{0,63}(?![\s\S])/.test(source[key] as string),
+          );
+        else valid = source.kind === 'everything';
+      }
+      if (!valid) addError(errors, `${pointer}/source`, 'invalid_format');
+      if (descriptor.sort !== 'id') addError(errors, `${pointer}/sort`, 'invalid_format');
+      if (!Number.isInteger(descriptor.limit) || (descriptor.limit as number) < 1 || (descriptor.limit as number) > 24)
+        addError(errors, `${pointer}/limit`, 'out_of_range');
+      if (descriptor.filter !== undefined && (typeof descriptor.filter !== 'string' || descriptor.filter.length > 8192))
+        addError(errors, `${pointer}/filter`, 'invalid_type');
+      if (valid) canonicalDescriptor = descriptor as PageRead;
     } else if (descriptor.kind === 'search') {
       unknownFields(descriptor, ['kind', 'body', 'cursor'], pointer, errors);
       if (!isObject(descriptor.body)) {
@@ -317,7 +344,8 @@ function validateReads(reads: unknown): PreparedRead[] {
       canonicalDescriptor.kind === 'links' ||
       canonicalDescriptor.kind === 'relations' ||
       canonicalDescriptor.kind === 'subjectThreads' ||
-      canonicalDescriptor.kind === 'search'
+      canonicalDescriptor.kind === 'search' ||
+      canonicalDescriptor.kind === 'members'
     ) {
       if (descriptor.cursor !== undefined) {
         if (
@@ -379,6 +407,13 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
     if (descriptor.filter !== undefined) url.searchParams.set('filter', descriptor.filter);
     if (descriptor.type !== undefined) url.searchParams.set('type', descriptor.type);
     url.searchParams.set('limit', String(descriptor.limit));
+  } else if (descriptor.kind === 'members') {
+    if (descriptor.source.kind !== 'collection') throw new Error('Unbound viewer-self member source');
+    url.pathname = `/v1/collections/${descriptor.source.id}/members`;
+    url.searchParams.set('sort', descriptor.sort);
+    url.searchParams.set('view', 'FULL');
+    url.searchParams.set('limit', String(descriptor.limit));
+    if (descriptor.filter !== undefined) url.searchParams.set('filter', descriptor.filter);
   } else if (descriptor.kind === 'collections') {
     url.pathname = `/v1/subjects/${descriptor.id}/collections`;
     url.searchParams.set('limit', String(descriptor.limit));
@@ -406,7 +441,10 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
   )
     url.searchParams.set('context', descriptor.context);
   if (
-    (descriptor.kind === 'links' || descriptor.kind === 'relations' || descriptor.kind === 'subjectThreads') &&
+    (descriptor.kind === 'links' ||
+      descriptor.kind === 'relations' ||
+      descriptor.kind === 'subjectThreads' ||
+      descriptor.kind === 'members') &&
     descriptor.cursor
   )
     url.searchParams.set('cursor', descriptor.cursor);
@@ -420,7 +458,12 @@ function readToken(response: Response, tokens: string[]): void {
 
 async function responseResult(response: Response): Promise<PageResult> {
   const text = await response.text();
-  return { status: response.status, body: text === '' ? null : (JSON.parse(text) as unknown) };
+  const retry = response.headers.get('retry-after');
+  return {
+    status: response.status,
+    body: text === '' ? null : (JSON.parse(text) as unknown),
+    ...(retry ? { headers: { 'retry-after': retry } } : {}),
+  };
 }
 
 async function executeRead(
@@ -439,7 +482,9 @@ async function executeRead(
             descriptor.kind === 'accountPosts' ||
             descriptor.kind === 'accountCollections'
           ? `/v1/accounts/${descriptor.id}`
-          : `/v1/subjects/${descriptor.id}`;
+          : descriptor.kind === 'members'
+            ? '/v1/collections'
+            : `/v1/subjects/${descriptor.id}`;
   const tokens: string[] = [];
   let response = await dispatch(requestFor(new URL(initialPath, origin), read.descriptor, credentials));
   readToken(response, tokens);
@@ -481,6 +526,10 @@ export async function readPage(options: {
   documents?: PageDocumentRead;
   observed?: ReadonlyMap<string, PageResult>;
   budget?: PageReadBudget;
+  /** Native owner discovery. The HTTP owner binds the current principal; clients supply no account ID. */
+  resolveBuiltin?: (
+    source: Exclude<Extract<PageRead, { kind: 'members' }>['source'], { kind: 'collection' }>,
+  ) => Promise<{ id: string } | null>;
 }): Promise<{ results: Record<string, PageResult>; session: string | null; documents: Record<string, unknown> }> {
   const reads = validateReads(options.reads).map((read) => {
     if (read.descriptor.kind !== 'search') return read;
@@ -544,7 +593,54 @@ export async function readPage(options: {
       components = mergeSession(components, component);
     credentials.session = encodeSession(options.session.ring, options.session.scope, components);
   };
+  const guards: Array<() => Promise<void>> = [];
   const execute = async (read: PreparedRead): Promise<DispatchResult> => {
+    const descriptor = read.descriptor;
+    if (descriptor.kind === 'members' && descriptor.source.kind !== 'collection') {
+      const concealed = (): DispatchResult => ({ result: { status: 404, body: { code: 'not_found' } }, tokens: [] });
+      if (!options.resolveBuiltin)
+        return {
+          result: await responseResult(
+            problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' }),
+          ),
+          tokens: [],
+        };
+      const resolve = async () => {
+        budget.charge(1);
+        return options.resolveBuiltin!(descriptor.source as Exclude<typeof descriptor.source, { kind: 'collection' }>);
+      };
+      try {
+        const source = await resolve();
+        if (!source) return concealed();
+        let result: DispatchResult;
+        {
+          const bound: PageRead = { ...descriptor, source: { kind: 'collection', id: source.id } };
+          result = await executeRead({ ...read, descriptor: bound }, origin, credentials, async (request) => {
+            budget.charge(descriptor.limit);
+            const response = await options.dispatch(new Request(request, { signal: options.incoming.signal }));
+            forwardToken(response.headers.get(SESSION_HEADER));
+            return response;
+          });
+        }
+        guards.push(async () => {
+          try {
+            const current = await resolve();
+            if (!current) result.result = concealed().result;
+            else if (current.id !== source.id)
+              result.result = await responseResult(
+                problemResponse(new ProblemError('dependency_unavailable'), { method: 'GET', id: 'page' }),
+              );
+          } catch (error) {
+            if (!(error instanceof ProblemError)) throw error;
+            result.result = await responseResult(problemResponse(error, { method: 'GET', id: 'page' }));
+          }
+        });
+        return result;
+      } catch (error) {
+        if (!(error instanceof ProblemError)) throw error;
+        return { result: await responseResult(problemResponse(error, { method: 'GET', id: 'page' })), tokens: [] };
+      }
+    }
     return executeRead(read, origin, credentials, async (request) => {
       budget.charge(nativeCost(read));
       const response = await options.dispatch(new Request(request, { signal: options.incoming.signal }));
@@ -584,8 +680,18 @@ export async function readPage(options: {
   // This is the effective dependent plan. Reject it as a whole before any body/list execution; never truncate values.
   if (documentIds.length > MAX_PAGE_DOCUMENTS) throw new PageReadError([{ pointer: '/reads', code: 'out_of_range' }]);
   budget.admit(
-    distinctReads.length + documentIds.length,
-    distinctReads.reduce((sum, read) => sum + nativeCost(read), 0) + documentIds.length,
+    distinctReads.length +
+      documentIds.length +
+      distinctReads.filter((read) => read.descriptor.kind === 'members' && read.descriptor.source.kind !== 'collection')
+        .length *
+        2,
+    distinctReads.reduce(
+      (sum, read) =>
+        sum +
+        nativeCost(read) +
+        (read.descriptor.kind === 'members' && read.descriptor.source.kind !== 'collection' ? 2 : 0),
+      0,
+    ) + documentIds.length,
   );
   const completed = new Array<DispatchResult | undefined>(distinctReads.length);
   const failures = new Array<{ error: unknown } | undefined>(distinctReads.length);
@@ -656,6 +762,12 @@ export async function readPage(options: {
       )
         documents[reference.candidate] = document;
     }
+  }
+
+  for (const guard of guards) await guard();
+  for (let index = 0; index < distinctReads.length; index++) {
+    if (distinctReads[index]!.descriptor.kind === 'members')
+      byCanonical.set(distinctReads[index]!.canonical, completed[index]!.result);
   }
 
   const resultEntries = reads.map(({ key, canonical }) => [key, byCanonical.get(canonical)!] as const);

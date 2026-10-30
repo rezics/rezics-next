@@ -4427,6 +4427,7 @@ export declare function zoneRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 reads: Record<string, {
                                     status: number;
                                     body: any;
+                                    headers?: Record<string, string>;
                                 }>;
                                 zone: {
                                     id: string;

@@ -223,6 +223,8 @@ and limits; planning intersects it with `props.types` without replacing the conf
 composition schema and editor expose this same document, including saved catalogue filters. Publication admits
 TypeList filters against the active semantic release, including saved expansion, and refuses private OwnerLeaf
 operands. Runtime resolution admits the selected document again against the current release.
+Serialized JSON configuration is also accepted through that same public parser and admission; it cannot introduce
+private operands or replace the configured Types.
 
 A TypeList on a route, subject overview, account page or full view may continue by node ID. Its native Search cursor
 is attached before deduplication, so identical sibling lists remain independent after one advances. Other Search,
@@ -235,3 +237,35 @@ page target, node and opaque cursor. Each request resolves the current server-ow
 and selected Context through `pages.read`; URLs cannot supply an account override or a replacement filter. The full
 list uses the shared cover grid, and unavailable pages offer retry instead of claiming empty or complete results.
 Realm populations keep the existing unavailable Search adapter until their native producer supports that scope.
+
+## Common Collection members in compositions
+
+`Members` configures one closed source: `{kind:"collection",id}`, `{kind:"everything"}`, or
+`{kind:"state",profileId,stateSetId,stateId}`. State identifiers come from an accepted Library profile.
+There is no account selector. `filter` is the ordinary serialized JSON filter from common-members GET;
+`sort` is always native `id`. The native owner admits the filter, including owner leaves and retained
+preparation. `TypeList` retains the public catalogue filter contract above. Members support `paged`
+and independent node continuations.
+
+Presentation binds viewer-self keys through Commerce's native logical-key resolver. This point-discovery
+method delegates to the existing built-in read and ID authority; it never scans the viewer's Collection
+population. An account target belonging to another viewer conceals these reads. Anonymous viewers also
+receive concealment. Bound member requests use the existing common GET with `view=FULL`, exact filter,
+limit and opaque cursor. Responses retain native status, body and Retry-After; 202 and unavailable are
+never converted into an empty successful list. No Source or owner-query execution is implemented here.
+
+Composed dispatches and viewer-self resolution points share the request's 16-read/128-slot ledger. Each distinct viewer-self descriptor
+also admits and charges two reads/slots for native discovery and its final current-owner recheck. The
+final rechecks run after leaf/document work, before output. Standalone member execution retains its own
+current source/disclosure and preparation guards. Scoped Realm member/search adapters remain explicitly
+unavailable until their native producers support the same selected Context.
+
+The Web renderer consumes embedded summaries without per-row hydration. More uses the existing session
+BFF. Concealed public-shell member reads hydrate only after the browser establishes a signed-in session,
+including private curated sources; their native disclosure still decides the result. More reloads the
+current composition with only that node's native continuation. Other member/search nodes return 204 and
+retain independent client state. Preparing, stale, invalid, unavailable, empty and concealed results have
+distinct behavior; private continuation queries use no browser cache retention.
+
+Relative Zone routes never become Global route continuation targets. Their source-dependent reads remain
+at the native Zone readiness boundary until its owner supplies node continuation support.

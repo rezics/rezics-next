@@ -163,7 +163,7 @@ export async function readStatementConsent(
     if (page.status !== 200 || !page.data) return consentFailure(page.status);
     const token = new Headers(page.headers).get('rezics-session-token') ?? session;
     const candidate = page.data.candidates.find((item) => item.id === address.candidate);
-    if (!candidate || !candidateHasPayload(candidate))
+    if (!candidate)
       return {
         ok: true,
         candidate: null,
@@ -174,9 +174,12 @@ export async function readStatementConsent(
         next: page.data.next,
         ...(token ? { session: token } : {}),
       };
-    if (candidate.statement.id !== address.candidate || candidate.statement.property.id !== address.property)
+    if (
+      candidateHasPayload(candidate) &&
+      (candidate.statement.id !== address.candidate || candidate.statement.property.id !== address.property)
+    )
       return consentFailure(409);
-    if (candidate.retracted !== null)
+    if (!candidateHasPayload(candidate) || candidate.retracted !== null)
       return {
         ok: true,
         candidate: null,

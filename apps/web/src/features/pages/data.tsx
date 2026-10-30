@@ -1,3 +1,5 @@
+import { Members } from './member-list';
+import type { MemberPageTarget } from './member-list-query';
 import {
   pickLanguage,
   pickText,
@@ -664,6 +666,7 @@ export function PageData({
   locale,
   subject = null,
   subjectLabel,
+  pageTarget,
   context,
   continuation,
   listTarget,
@@ -687,6 +690,7 @@ export function PageData({
   locale: string;
   subject?: string | null;
   subjectLabel?: string;
+  pageTarget?: MemberPageTarget | undefined;
   context?: SelectedContext | undefined;
   continuation?: PageContinuation | undefined;
   listTarget?: TypeListTarget | undefined;
@@ -802,6 +806,7 @@ export function PageData({
   const overviewValue: overview.OverviewValue = {
     locale,
     cacheReader,
+    pageTarget: pageTarget ?? listTarget,
     subject,
     ...(overviewSubjectLabel !== undefined ? { subjectLabel: overviewSubjectLabel } : {}),
     ...(account ? { account } : {}),
@@ -911,6 +916,7 @@ function MoreStatements(props: Record<string, unknown>) {
 }
 
 export const dataComponents = {
+  Members,
   Cover: overview.Cover,
   AccountIdentity: accounts.AccountIdentity,
   AccountPosts: accounts.AccountPosts,

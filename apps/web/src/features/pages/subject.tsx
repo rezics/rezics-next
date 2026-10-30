@@ -500,6 +500,17 @@ export function SubjectPage({
                   }
                 : undefined
           }
+          pageTarget={
+            page.account
+              ? { account: page.account.handle, ...(view ? { view } : {}) }
+              : page.subject
+                ? {
+                    subject: page.subject,
+                    ...(view ? { view } : {}),
+                    ...(realm ? { realm } : {}),
+                  }
+                : undefined
+          }
           {...(subjectLabel !== undefined ? { subjectLabel } : {})}
           {...(read ? { subjectLabel: subjectPageTitle(page, locale) } : {})}
           {...(page.account ? { account: page.account } : {})}

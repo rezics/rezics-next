@@ -12,6 +12,7 @@ export type {
   PageContinuation,
   PageFilter,
   PageRead,
+  MemberSource,
 } from './registry.ts';
 export {
   APPEARANCE,

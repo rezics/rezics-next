@@ -31,9 +31,8 @@ export type NativeProgressSession = NonNullable<
 type NativeField<T, K extends PropertyKey> = K extends keyof T ? T[K] : never;
 /** No parallel Web wire contract: this is never until the native declaration is delivered. */
 export type NativeProgressPresentation = NonNullable<NativeField<NativeProgressSession, 'presentation'>>;
-type ProgressInputRules =
-  | ProfileProgressInputRules
-  | Extract<NativeProgressPresentation['recording'], { state: 'supported' }>['inputRules'];
+type NativeProgressInputRules = Extract<NativeProgressPresentation['recording'], { state: 'supported' }>['inputRules'];
+type ProgressInputRules = ProfileProgressInputRules | NativeProgressInputRules;
 type NativeDetailOptions = NonNullable<Parameters<ReturnType<KernelClient['progressSessions']>['get']>[0]>;
 type NativeDetailQuery = NonNullable<NativeField<NativeDetailOptions, 'query'>>;
 type NativePresentationQuery = Extract<NativeField<NativeDetailQuery, 'presentation'>, 'FULL'>;
@@ -57,7 +56,7 @@ function presentationFields(
   presentation: Pick<ProgressLabelInput, 'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension'> & {
     meaning: string;
     structure: 'unverified';
-    recording: { state: string; inputRules?: ProgressInputRules };
+    recording: { state: string; inputRules?: NativeProgressInputRules };
   },
 ): Pick<
   ProgressSessionCore,
@@ -84,7 +83,18 @@ function presentationFields(
         }),
     ...(recordingState !== 'supported' || presentation.recording.inputRules === undefined
       ? {}
-      : { inputRules: presentation.recording.inputRules }),
+      : {
+          inputRules: {
+            ...(presentation.recording.inputRules.min === undefined
+              ? {}
+              : { min: presentation.recording.inputRules.min }),
+            ...(presentation.recording.inputRules.max === undefined
+              ? {}
+              : { max: presentation.recording.inputRules.max }),
+            step: presentation.recording.inputRules.step,
+            total: presentation.recording.inputRules.total,
+          },
+        }),
   };
 }
 

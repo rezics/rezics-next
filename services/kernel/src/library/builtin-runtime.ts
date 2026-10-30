@@ -322,7 +322,11 @@ export function createBuiltinRuntime(
       },
     );
   }
-  return { read, discover, members };
+  async function resolve(actor: Actor, key: Exclude<BuiltinCollectionKey, { kind: 'liked' }>, deadline?: number) {
+    if (actor.kind !== 'account') return null;
+    return read(actor, builtinCollectionId(actor.accountId, key), 'collection:read', deadline);
+  }
+  return { read, discover, resolve, members };
 }
 
 /** Internal native primitive for the real participant/retained plan integration. Never a successful member page. */

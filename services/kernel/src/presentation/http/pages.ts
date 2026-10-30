@@ -1,3 +1,4 @@
+import { createBuiltinRuntime } from '../../library/builtin-runtime.ts';
 import { withHeaders } from '@elysia/openapi';
 import canonicalize from 'canonicalize';
 import {
@@ -147,7 +148,7 @@ function targetOf(body: unknown): PageTarget {
   reject(errors);
 }
 
-function continuationOf(body: unknown, _target: PageTarget): PageContinuation | undefined {
+function continuationOf(body: unknown): PageContinuation | undefined {
   if (!isRecord(body) || !Object.hasOwn(body, 'continuation')) return;
   const value = body.continuation;
   if (!isRecord(value)) reject([{ pointer: '/continuation', code: 'invalid_type' }]);
@@ -280,7 +281,7 @@ export function pageRoutes<App>(
         encodedTarget === null ? body : { ...(isRecord(body) ? body : {}), target: redirectedTarget },
       );
       const languages = languagesOf(body);
-      const continuation = continuationOf(body, target);
+      const continuation = continuationOf(body);
       const check = await authorize({
         ...resource,
         ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
@@ -424,7 +425,7 @@ export function pageRoutes<App>(
       );
       return pageAnswer({
         release: (await activeRelease(pool))?.release,
-        continuationOnlyTypeList: !('subject' in target) || !target.view || target.view === 'overview',
+        continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
         ...(selected
           ? {
               context: selected.context,
@@ -465,6 +466,10 @@ export function pageRoutes<App>(
             }
           : {}),
         ...(continuation ? { continuation } : {}),
+        resolveBuiltin: async (key) => {
+          if (actor.kind !== 'account' || (account !== null && account.id !== actor.accountId)) return null;
+          return admission.run('normal', job, () => createBuiltinRuntime({ pool }).resolve(actor, key, job.deadline));
+        },
         dispatch,
         request,
         session,
@@ -485,7 +490,7 @@ export function pageRoutes<App>(
 
 async function pageAnswer(input: {
   release: import('@rezics/filter').FilterRelease | undefined;
-  continuationOnlyTypeList: boolean;
+  continuationOnlyLists: boolean;
   dispatch: (request: Request) => Promise<Response>;
   request: Request;
   session: { ring: KeyRing; scope: string };
@@ -501,6 +506,7 @@ async function pageAnswer(input: {
   context?: SelectedContext;
   continuation?: PageContinuation;
   finalGuard?: (session: string | null) => Promise<string | null>;
+  resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -532,8 +538,9 @@ async function pageAnswer(input: {
   })();
   if (
     input.continuation &&
-    input.continuationOnlyTypeList &&
-    plan.reads[plan.nodes[input.continuation.node]!]?.kind !== 'search'
+    input.continuationOnlyLists &&
+    plan.reads[plan.nodes[input.continuation.node]!]?.kind !== 'search' &&
+    plan.reads[plan.nodes[input.continuation.node]!]?.kind !== 'members'
   )
     reject([{ pointer: '/continuation', code: 'unsupported' }]);
   if (Object.values(plan.reads).reduce((cost, read) => cost + readCost(read), 0) > MAX_PAGE_COST)
@@ -547,6 +554,7 @@ async function pageAnswer(input: {
       readKey !== continuedKey &&
       (descriptor.kind === 'links' ||
         descriptor.kind === 'relations' ||
+        descriptor.kind === 'members' ||
         descriptor.kind === 'search' ||
         descriptor.kind === 'subjectThreads')
     ) {
@@ -555,7 +563,10 @@ async function pageAnswer(input: {
     }
     if (
       input.context?.population.kind === 'realm' &&
-      (descriptor.kind === 'collections' || descriptor.kind === 'reactions' || descriptor.kind === 'search')
+      (descriptor.kind === 'collections' ||
+        descriptor.kind === 'reactions' ||
+        descriptor.kind === 'search' ||
+        descriptor.kind === 'members')
     )
       observed.set(canonicalize(descriptor)!, { status: 503, body: { code: 'dependency_unavailable' } });
   }
@@ -579,6 +590,7 @@ async function pageAnswer(input: {
     releaseGuard = input.finalGuard ? input.budget.reserve(1, 1) : undefined;
     page = await readPage({
       dispatch: input.dispatch,
+      resolveBuiltin: input.resolveBuiltin,
       incoming,
       reads: plan.reads,
       session: input.session,

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import canonicalize from 'canonicalize';
 import { FilterError } from '@rezics/filter';
-import { publicFilterProp, parsePublicPageFilter, typeListFilter } from './filter.ts';
+import { publicFilterProp, parseConfiguredPageFilter, typeListFilter } from './filter.ts';
 import {
   MAX_COMPOSITION_BYTES,
   MAX_COMPOSITION_DEPTH,
@@ -144,7 +144,7 @@ function walkLocalized(schema: SchemaNode, value: unknown, pointer: string, add:
 function walkSchema(schema: SchemaNode, value: unknown, pointer: string, add: Add): void {
   if (schema === publicFilterProp) {
     try {
-      parsePublicPageFilter(value);
+      parseConfiguredPageFilter(value);
     } catch (error) {
       if (!(error instanceof FilterError)) throw error;
       for (const violation of error.errors)

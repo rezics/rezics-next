@@ -8,7 +8,7 @@ import {
 } from './provider-review-actions';
 import type { KernelClient } from '@rezics/client';
 import type { Release } from '../../subject/definitions';
-import { candidateFailure } from '../../subject/candidates';
+import { candidateFailure, candidateHasPayload, type Candidate } from '../../subject/candidates';
 
 /** Presentation props retained for the existing bounded decision-action component. */
 export type ProviderQueueRow = ProviderDecisionRow;
@@ -25,8 +25,9 @@ export type ProviderQueueRead = ProviderFailure | { ok: true; page: ProviderQueu
 export const globalReviewContext = '00000000-0000-8000-8000-000000000000';
 export type QueueScope = { source: string; context: string; status: 'pending' | 'accepted_unselected' };
 type QueueResponse = NonNullable<Awaited<ReturnType<KernelClient['review-candidates']['get']>>['data']>;
-export type QueuePage = Extract<QueueResponse, { candidates: unknown }>;
-export type QueueRow = QueuePage['candidates'][number];
+type NativeQueuePage = Extract<QueueResponse, { candidates: unknown }>;
+export type QueueRow = Omit<NativeQueuePage['candidates'][number], 'candidate'> & { candidate: Candidate };
+export type QueuePage = Omit<NativeQueuePage, 'candidates'> & { candidates: QueueRow[] };
 export type QueueState =
   | { state: 'idle' | 'loading' | 'denied' | 'missing' | 'invalid' | 'unavailable' }
   | { state: 'preparing'; next?: string }
@@ -134,7 +135,12 @@ export async function readProviderQueue(
     }
     return {
       state: 'ready',
-      page: result.data,
+      page: {
+        ...result.data,
+        candidates: result.data.candidates.flatMap((row) =>
+          candidateHasPayload(row.candidate) ? [{ ...row, candidate: row.candidate }] : [],
+        ),
+      },
       names,
       ...(token ? { session: token } : {}),
     };

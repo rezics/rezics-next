@@ -60,7 +60,7 @@ export const publicFilterProp = Type.Optional({
   '~kind': 'PublicFilter',
   $id: 'https://rezics.com/presentation/filter/1',
   $defs: definitions,
-  $ref: '#/$defs/node0',
+  anyOf: [{ $ref: '#/$defs/node0' }, { type: 'string', maxLength: 8192 }],
 } as unknown as TSchema);
 
 export function parsePublicPageFilter(value: unknown): FilterDocument {
@@ -70,11 +70,24 @@ export function parsePublicPageFilter(value: unknown): FilterDocument {
   return filter;
 }
 
+/** Serialized composition filters use the same public grammar and release admission as object configuration. */
+export function parseConfiguredPageFilter(value: unknown): FilterDocument {
+  if (typeof value !== 'string') return parsePublicPageFilter(value);
+  if (value.length > 8192) throw new FilterError('unsupported_query', '', 'out_of_range');
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(value);
+  } catch {
+    throw new FilterError('unsupported_query', '', 'unsupported');
+  }
+  return parsePublicPageFilter(decoded);
+}
+
 /** Configuration can narrow a TypeList, including multiple types, but cannot replace its type restriction. */
 export function typeListFilter(types: readonly string[], value?: unknown): FilterDocument {
   const type = { type: { in: types } };
   if (value === undefined) return parseFilter(type);
-  const filter = parsePublicPageFilter(value);
+  const filter = parseConfiguredPageFilter(value);
   return parsePublicPageFilter({ and: [type, ...('and' in filter ? filter.and : [filter])] });
 }
 

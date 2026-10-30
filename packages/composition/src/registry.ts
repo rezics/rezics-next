@@ -33,6 +33,11 @@ export interface PageContext {
   account?: { id: string; handle: string } | null;
 }
 
+export type MemberSource =
+  | { kind: 'collection'; id: string }
+  | { kind: 'everything' }
+  | { kind: 'state'; profileId: string; stateSetId: string; stateId: string };
+
 export type PageFilter = FilterDocument;
 
 type InferredStatementRead = {
@@ -45,6 +50,7 @@ type InferredStatementRead = {
 };
 
 export type PageRead =
+  | { kind: 'members'; source: MemberSource; filter?: string; sort: 'id'; limit: number; cursor?: string }
   | { kind: 'subject'; id: string; context?: string }
   | {
       kind: 'links';
@@ -565,6 +571,39 @@ export const platformRegistry = defineRegistry({
         },
         closed,
       ),
+    },
+    {
+      type: 'Members',
+      props: Type.Object(
+        {
+          title: localizedText({ maxLength: 120 }),
+          source: Type.Union([
+            Type.Object({ kind: Type.Literal('everything') }, closed),
+            Type.Object({ kind: Type.Literal('collection'), id: subjectId() }, closed),
+            Type.Object(
+              {
+                kind: Type.Literal('state'),
+                profileId: plainText({ maxLength: 64 }),
+                stateSetId: plainText({ maxLength: 64 }),
+                stateId: plainText({ maxLength: 64 }),
+              },
+              closed,
+            ),
+          ]),
+          // The ordinary common-members GET filter wire; its owner admits grammar and meaning.
+          filter: Type.Optional(plainText({ maxLength: 8192 })),
+          limit: Type.Integer({ minimum: 1, maximum: 24 }),
+          paged: Type.Optional(Type.Boolean()),
+        },
+        closed,
+      ),
+      read: (props) => ({
+        kind: 'members',
+        source: props.source as MemberSource,
+        ...(props.filter === undefined ? {} : { filter: props.filter as string }),
+        sort: 'id',
+        limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
+      }),
     },
     {
       type: 'TypeList',

@@ -92,6 +92,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                 status: import("typebox").TInteger;
                 body: import("typebox").TAny;
+                headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
             }>>;
         }> & {
             headers: {
@@ -212,6 +213,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             reads: Record<string, {
                 status: number;
                 body: any;
+                headers?: Record<string, string>;
             }>;
         };
         308: {
@@ -293,6 +295,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             reads: Record<string, {
                 status: number;
                 body: any;
+                headers?: Record<string, string>;
             }>;
         };
         308: {
@@ -379,6 +382,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
                 reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                     status: import("typebox").TInteger;
                     body: import("typebox").TAny;
+                    headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
                 }>>;
             }> & {
                 headers: {
@@ -539,6 +543,7 @@ export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, 
             reads: import("typebox").TRecord<"^.*$", import("typebox").TObject<{
                 status: import("typebox").TInteger;
                 body: import("typebox").TAny;
+                headers: import("typebox").TOptional<import("typebox").TRecord<"^.*$", import("typebox").TString>>;
             }>>;
         }> & {
             headers: {

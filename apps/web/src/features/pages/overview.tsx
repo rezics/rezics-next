@@ -1,3 +1,4 @@
+import type { MemberPageTarget } from './member-list-query';
 import type { SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
@@ -50,6 +51,7 @@ export type Section =
 
 export type OverviewValue = {
   locale: string;
+  pageTarget?: MemberPageTarget | undefined;
   context?: SelectedContext;
   realm?: string | undefined;
   cacheReader?: string | null | undefined;

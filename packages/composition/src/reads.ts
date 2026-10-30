@@ -73,6 +73,7 @@ export function planReads(
         (read.kind !== 'links' &&
           read.kind !== 'relations' &&
           read.kind !== 'subjectThreads' &&
+          read.kind !== 'members' &&
           read.kind !== 'search') ||
         (read.kind === 'search' && node.type !== 'TypeList')
       )

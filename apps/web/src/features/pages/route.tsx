@@ -102,7 +102,8 @@ export function RoutePage({
         {!hasPageHeading(page.document.content) && <h1 className="sr-only">{heading}</h1>}
         <PageData
           locale={locale}
-          listTarget={{ route: page.route }}
+          listTarget={page.route.startsWith('/') ? { route: page.route } : undefined}
+          pageTarget={page.route.startsWith('/') ? { route: page.route } : undefined}
           subject={page.subject ?? null}
           document={page.document}
           reads={page.reads}
