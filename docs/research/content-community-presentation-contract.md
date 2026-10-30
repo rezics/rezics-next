@@ -169,23 +169,47 @@ across partitions. Rules have one exact source chain, at most 33 posts, one thre
 - Bound: constant rows/statements and O(log R) index work, bounded document bytes; no revision-history walk.
 - Growth check: later reuse `test/community/growth-realm.test.ts` and `test/content/growth-threads.test.ts`.
 
-### Cost: asset reservation, completion, publication, download and collection
+### Cost: asset reservation
 
-- Touches: per reservation/completion, one media/reservation plus current Realm authorization and receipt;
-  publication uses the existing bounded job and at most twelve variants; each download adds current Realm/media
-  fences. Collection uses existing fixed-page media/object cleanup, retaining permanent claims until owner cleanup.
-- Bound: constant rows/statements per media operation, bounded image bytes/pixels; O(log R) indexed work, or
-  O(p log R) for the existing collection page p. No account-image search or new retention coordinator.
-- Growth check: later reuse `test/content/growth-media.test.ts`, `growth-media-realm-download.test.ts` and
-  `growth-media-native-collection.test.ts`, counting the added parent anchors in the existing shared harness.
+- Touches: current Realm parent authorization/head, one media/reservation insert, uploader initialization and receipt.
+- Bound: constant rows/statements, O(log R) index work; no account-image search.
+- Growth check: later reuse `test/content/growth-media.test.ts`, including the Realm parent in its shared harness.
 
-### Cost: committed membership change and derived application
+### Cost: asset completion
 
-- Touches: existing native transition/receipt, one source version/journal entry, one aggregate point and receipt;
-  application changes only the aggregate in that Realm home, never Accounts' transition proof.
-- Bound: O(changes log R), constant work per actual change; duplicates are point checks and gaps stay pending.
-- Growth check: later reuse `test/access/growth-realm-membership-transition.test.ts` and
-  `test/community/growth-membership.test.ts`, including source, relay, Access and transaction controls.
+- Touches: exact uploader reservation, existing completion authority, current Realm management and one receipt/update.
+- Bound: constant rows/statements, O(log R); existing byte/digest validation stays bounded by upload limits.
+- Growth check: later reuse `test/content/growth-media.test.ts` with the added current parent check.
+
+### Cost: asset image publication
+
+- Touches: one existing image job/media key, current container/fences and at most twelve derivative entries.
+- Bound: constant indexed rows/statements, O(log R); existing 20 MiB/40-million-pixel limits bound decoding.
+- Growth check: later reuse image publication in `test/content/growth-media.test.ts`.
+
+### Cost: asset download
+
+- Touches: one media/variant, current Realm/container and media fence decisions, including conditional requests.
+- Bound: constant rows/statements and O(log R), with fixed before/final disclosure anchors.
+- Growth check: later reuse `test/content/growth-media-realm-download.test.ts` through its shared harness.
+
+### Cost: asset collection page
+
+- Touches: existing fixed-page media/object selection and cleanup; permanent Realm claims retain owner cleanup.
+- Bound: O(p log R) for the existing fixed page p; no additional retention coordinator or unbounded sweep.
+- Growth check: later reuse `test/content/growth-media-native-collection.test.ts`.
+
+### Cost: committed membership source change
+
+- Touches: existing native transition/receipt plus one source version and journal entry in the Realm transaction.
+- Bound: O(changes log R), constant added work per actual change; no-change publication adds no count delta.
+- Growth check: later reuse `test/access/growth-realm-membership-transition.test.ts`, including source controls.
+
+### Cost: derived membership application
+
+- Touches: exact next committed source change, aggregate version/count and durable application receipt in that home.
+- Bound: O(changes log R); duplicates are point checks, gaps stay pending, Accounts' proofs are never rewritten.
+- Growth check: later reuse `test/community/growth-membership.test.ts`, including relay and transaction controls.
 
 ### Cost: initialization or reconciliation step
 
