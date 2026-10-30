@@ -4,6 +4,11 @@ import { AspectRatio } from '../shadcn/aspect-ratio.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { cn } from '../utils.ts';
 import {
+  listPresentationForCover,
+  listPresentationRatio,
+  type ListPresentation,
+} from './list-presentation-model.ts';
+import {
   coverFallback,
   coverFit,
   coverRatio,
@@ -25,6 +30,8 @@ import {
 
 export { coverRatio, parseCoverRatio, placeholderColors, sharedRatio } from './cover-model.ts';
 export type { CoverRatio, CoverSize, CoverSubject, CoverSummary } from './cover-model.ts';
+export { fallbackListFactProperties, fallbackListPresentation, parseListPresentation } from './list-presentation-model.ts';
+export type { ListImageAspect, ListPresentation } from './list-presentation-model.ts';
 
 /** The responsive preload source for the same format and size that the page cover's image uses. */
 export function coverImagePreload(
@@ -62,6 +69,8 @@ export interface CoverProps {
   frameClassName?: string;
   /** A row's shared ratio; otherwise the ratio of the subject's type. */
   ratio?: CoverRatio;
+  /** The list-specific aspect and ordered fact keys already resolved for this Type. */
+  listPresentation?: ListPresentation;
   /** An empty text alternative, for a repeat next to the visible title. */
   decorative?: boolean;
   /** The page's own cover: eager, with high fetch priority. */
@@ -90,6 +99,7 @@ export function Cover({
   src,
   frameClassName,
   ratio,
+  listPresentation,
   decorative = false,
   priority = false,
   suitability = 'blur',
@@ -98,7 +108,11 @@ export function Cover({
   className,
 }: CoverProps) {
   const text = { ...coverLabels, ...labels };
-  const frameRatio = (ratio === undefined ? undefined : parseCoverRatio(ratio)) ?? coverRatio(subject.types);
+  const memberPresentation = listPresentationForCover(subject, listPresentation);
+  const frameRatio =
+    (memberPresentation ? listPresentationRatio(memberPresentation) : undefined) ??
+    (ratio === undefined ? undefined : parseCoverRatio(ratio)) ??
+    coverRatio(subject.types);
   const image = cover && cover.variants.length > 0 ? cover : null;
   const [status, setStatus] = useState<Status | null>(null);
   const [backdrop, setBackdrop] = useState<{ media: string; src: string } | null>(null);

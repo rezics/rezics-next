@@ -9,7 +9,13 @@ import {
 } from 'react';
 import { Button } from '../shadcn/button.tsx';
 import { Menu, type MenuEntry } from './menu.tsx';
-import { Cover, coverRadius, type CoverProps, type CoverRatio } from './cover.tsx';
+import {
+  Cover,
+  coverRadius,
+  fallbackListPresentation,
+  type CoverProps,
+  type CoverRatio,
+} from './cover.tsx';
 import { ProgressRow } from './progress-row.tsx';
 
 export type CoverDensity = 'small' | 'medium' | 'large';
@@ -94,6 +100,7 @@ export function CoverCard({
   const contextDensity = useContext(DensityContext);
   const density = densityProp ?? contextDensity;
   const small = density === 'small';
+  const listPresentation = cover.listPresentation ?? fallbackListPresentation(cover.subject.types);
   const Link = link ?? 'a';
   const actions =
     menu != null || menuEntries != null || menuTrigger != null ? (
@@ -127,6 +134,7 @@ export function CoverCard({
       <Cover
         {...cover}
         size="fill"
+        {...(listPresentation ? { listPresentation } : {})}
         {...(ratio ? { ratio } : {})}
         decorative
         frameClassName="bg-transparent ring-0"

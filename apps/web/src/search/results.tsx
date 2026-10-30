@@ -1,8 +1,15 @@
 import { pickText } from '@rezics/composition';
-import { ListRow, ListRowLink } from '@rezics/ui/list-row';
-import { Cover, sharedRatio, type CoverRatio } from '@rezics/ui/cover';
+import {
+  fallbackListFactProperties,
+  fallbackListPresentation,
+  parseListPresentation,
+  sharedRatio,
+  type CoverRatio,
+  type ListPresentation,
+} from '@rezics/ui/cover';
+import { MemberListRow } from '@rezics/ui/list-presentation';
 import { MetaLine } from '@rezics/ui/meta-line';
-import { ItemDescription, ItemTitle } from '@rezics/ui/shadcn/item';
+import { ItemDescription } from '@rezics/ui/shadcn/item';
 import { m } from '../paraglide/messages.js';
 import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
@@ -20,6 +27,8 @@ export type SubjectHit = {
   labels: Record<string, string>;
   summary?: SubjectSummary;
   facts?: Record<string, Fact[]>;
+  /** An optional presentation already resolved from the release read by the caller. */
+  listPresentation?: ListPresentation;
 };
 export type ResultHit = SubjectHit & {
   descriptions?: Record<string, string>;
@@ -27,7 +36,8 @@ export type ResultHit = SubjectHit & {
   storyOverlay?: boolean;
 };
 
-const FACT_VALUES = 3;
+const FACT_VALUES_PER_PROPERTY = 3;
+const LIST_FACT_LIMIT = 4;
 
 export function localizedLabel(labels: Record<string, string>, locale: string): { text: string; lang?: string } {
   const picked = pickText(labels, locale);
@@ -83,16 +93,41 @@ export function listRatio(hits: readonly SubjectHit[]): CoverRatio {
   return sharedRatio(hits.map((hit) => coverSubject(hit.id, '', hit.summary, hit.type)));
 }
 
+function visibleFacts(
+  facts: SubjectHit['facts'],
+  properties: readonly string[] | undefined,
+  yearProperties: readonly string[],
+  locale: string,
+): { text: string; lang?: string }[] {
+  const entries = properties
+    ? properties.map((property) => [property, facts?.[property] ?? []] as const)
+    : Object.entries(facts ?? {});
+  const visible: { text: string; lang?: string }[] = [];
+  for (const [property, values] of entries) {
+    if (yearProperties.includes(property)) continue;
+    for (const value of values.slice(0, FACT_VALUES_PER_PROPERTY)) {
+      const formatted = factText(value, locale);
+      if (!formatted.text) continue;
+      visible.push(formatted);
+      if (visible.length >= LIST_FACT_LIMIT) return visible;
+    }
+  }
+  return visible;
+}
+
 export function ResultList({
   hits,
   locale,
   hitTypes,
   yearProperties,
+  listPresentationFor,
 }: {
   hits: readonly ResultHit[];
   locale: string;
   hitTypes: Record<string, Record<string, string>>;
   yearProperties: readonly string[];
+  /** Optional adapter for an already available release presentation; it performs no reads. */
+  listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
 }) {
   return (
     <ul role="list" className="space-y-2">
@@ -102,62 +137,50 @@ export function ResultList({
         const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
         const description = localizedLabel(hit.descriptions ?? {}, locale);
         const year = hitYear(hit.facts, yearProperties);
-        const facts = Object.entries(hit.facts ?? {}).flatMap(([property, values]) =>
-          yearProperties.includes(property)
-            ? []
-            : values
-                .slice(0, FACT_VALUES)
-                .map((value) => factText(value, locale))
-                .filter((value) => value.text),
-        );
+        const subject = coverSubject(hit.id, label.text, hit.summary, hit.type);
+        const releasedPresentation =
+          parseListPresentation(hit.listPresentation) ??
+          parseListPresentation(listPresentationFor?.(subject.types));
+        const listPresentation = releasedPresentation ?? fallbackListPresentation(subject.types);
+        const factProperties = releasedPresentation?.keyFacts ?? fallbackListFactProperties(subject.types);
+        const facts = visibleFacts(hit.facts, factProperties, yearProperties, locale);
         const score = hit.publicRating?.score;
         return (
-          <ListRow
+          <MemberListRow
             key={hit.id}
-            {...(hit.storyOverlay ? { forceOverlay: true } : {})}
-            className="flex min-w-0 items-start gap-4 py-2"
-          >
-            <ListRowLink href={subjectLink.href} lang={label.lang}>
-              {label.text}
-            </ListRowLink>
-            <div className="w-[72px] shrink-0 sm:w-24">
-              <Cover
-                subject={coverSubject(hit.id, label.text, hit.summary, hit.type)}
-                cover={coverOf(hit.summary)}
-                size="fill"
-                src={coverSrc}
-                decorative
-              />
-            </div>
-            <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-              <div data-slot="item-content" className="min-w-0 space-y-1">
-                <ItemTitle className="line-clamp-none text-base" lang={label.lang}>
-                  {label.text}
-                </ItemTitle>
-                <SubjectMeta type={typeName} year={year} locale={locale} className="text-sm text-muted-foreground" />
-                {facts.length > 0 && (
-                  <p className="text-sm">
-                    <MetaLine
-                      items={facts.map((fact, index) => (
-                        <span key={index} lang={fact.lang}>
-                          {fact.text}
-                        </span>
-                      ))}
-                    />
-                  </p>
-                )}
-                {description.text && <ItemDescription lang={description.lang}>{description.text}</ItemDescription>}
-              </div>
-              {score !== undefined && score !== null && (
+            href={subjectLink.href}
+            subject={subject}
+            cover={coverOf(hit.summary)}
+            src={coverSrc}
+            title={label.text}
+            {...(label.lang ? { titleLang: label.lang } : {})}
+            {...(listPresentation ? { listPresentation } : {})}
+            {...(hit.storyOverlay ? { storyOverlay: true } : {})}
+            trailing={
+              score !== undefined && score !== null ? (
                 <div className="shrink-0 text-right text-sm" data-slot="public-rating-figure">
                   <span className="block text-xs text-muted-foreground">{m.search_global_score()}</span>
                   <strong className="tabular-nums">
                     {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(score)}
                   </strong>
                 </div>
-              )}
-            </div>
-          </ListRow>
+              ) : undefined
+            }
+          >
+            <SubjectMeta type={typeName} year={year} locale={locale} className="text-sm text-muted-foreground" />
+            {facts.length > 0 && (
+              <p data-slot="member-list-row-facts" className="text-sm">
+                <MetaLine
+                  items={facts.map((fact, index) => (
+                    <span key={index} lang={fact.lang}>
+                      {fact.text}
+                    </span>
+                  ))}
+                />
+              </p>
+            )}
+            {description.text && <ItemDescription lang={description.lang}>{description.text}</ItemDescription>}
+          </MemberListRow>
         );
       })}
     </ul>

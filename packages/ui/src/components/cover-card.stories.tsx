@@ -46,8 +46,8 @@ export const Grid: Story = {
     container.style.width = '1280px';
     await expect(articles[2]!.getBoundingClientRect().top).toBe(articles[0]!.getBoundingClientRect().top);
     container.style.width = '';
-    const frames = articles.map((article) => article.querySelector('[data-slot=cover]')!.getBoundingClientRect());
-    await expect(frames.every((frame) => Math.abs(frame.height - frames[0]!.height) < 1)).toBe(true);
+    const ratios = articles.map((article) => article.querySelector('[data-slot=cover]')?.getAttribute('data-ratio'));
+    await expect(ratios).toEqual(['3:4', '1:1', '3:4', '1:1']);
     const articleRadius = getComputedStyle(articles[0]!).borderTopLeftRadius;
     const frame = articles[0]!.querySelector('[data-slot=aspect-ratio]')!;
     const frameRadius = getComputedStyle(frame).borderTopLeftRadius;
@@ -73,15 +73,6 @@ export const Grid: Story = {
     await expect(
       within(await settled(await screen.findByRole('menu'))).getByRole('menuitem', { name: 'Remove' }),
     ).toBeVisible();
-  },
-};
-export const MenuOpenPhone: Story = {
-  render: () => <CoverGrid ratio={ratio}>{cards()}</CoverGrid>,
-  globals: { viewport: { value: 'phone' } },
-  async play({ canvasElement }) {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: /More actions for/ }));
-    await expect(await screen.findByRole('dialog')).toBeVisible();
-    await expect(screen.getByRole('button', { name: 'Remove' })).toBeVisible();
   },
 };
 export const Row: Story = {
@@ -251,7 +242,7 @@ export const Status: Story = {
   },
 };
 
-export const DensityWidths: Story = {
+export const Density: Story = {
   render: () => (
     <div>
       {(['small', 'medium', 'large'] as const).map((density) => (

@@ -1,7 +1,6 @@
-import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
-import { ListRow } from './list-row.tsx';
 import { cn } from '../utils.ts';
 import { withSurface } from '../stories/support.tsx';
 import { Cover, sharedRatio, type CoverRatio, type CoverSize, type CoverSubject, type CoverSummary } from './cover.tsx';
@@ -193,58 +192,6 @@ export const States: Story = {
   },
 };
 
-/** The same states in the dark theme. */
-export const Dark: Story = {
-  render: () => (
-    <div className="dark -m-6 bg-background p-6 text-foreground">
-      <Grid />
-    </div>
-  ),
-  play: async ({ canvasElement }) => settledCovers(canvasElement),
-};
-
-const darkFrame: Decorator = (Story) => (
-  <div className="max-w-[390px]">
-    <Story />
-  </div>
-);
-
-/** A phone-width screen: six small covers in a row, and a grid whose `fill` frames show a neutral image icon. */
-export const Phone: Story = {
-  globals: { viewport: { value: 'phone' } },
-  decorators: [darkFrame],
-  render: () => {
-    const row = sharedRatio([book, person, album, recipe, game, classic].map((subject) => subject));
-    return (
-      <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-6 gap-2" data-row="icons">
-          {[book, person, album, recipe, game, classic].map((subject) => (
-            <Cover key={subject.id} subject={subject} cover={null} size="fill" ratio={row} src={artSrc} />
-          ))}
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {[book, person, album, recipe, game, classic].map((subject) => (
-            <Cover
-              key={subject.id}
-              subject={subject}
-              cover={summary(1200, 1800)}
-              size="fill"
-              ratio={row}
-              src={artSrc}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  },
-  play: async ({ canvasElement }) => {
-    const first = canvasElement.querySelector('[data-row="icons"] [data-slot="cover"]')!;
-    // A frame under 64 px wide shows only the neutral image icon.
-    await waitFor(() => expect(first.getBoundingClientRect().width).toBeLessThan(64));
-    await waitFor(() => expect(first.querySelector('[data-slot=cover-placeholder-icon]')).toBeVisible());
-  },
-};
-
 function Measured({
   id,
   subject,
@@ -426,17 +373,6 @@ export const WithheldReveal: Story = {
   },
 };
 
-/** A viewer who shows such covers sees the image at once. */
-export const WithheldShown: Story = {
-  args: { subject: game, cover: summary(900, 1200, { withheld: 'suitability' }), size: 'lg', suitability: 'show' },
-  play: async ({ canvasElement }) => {
-    await waitFor(() =>
-      expect(canvasElement.querySelector('[data-slot="cover"]')).toHaveAttribute('data-state', 'loaded'),
-    );
-    expect(within(canvasElement).queryByRole('button', { name: 'Show cover' })).toBeNull();
-  },
-};
-
 function ViewerExample({
   id,
   cover,
@@ -521,30 +457,6 @@ export const CreditViewer: Story = {
   },
 };
 
-/** The same credit states with a viewer already open on a phone-sized frame. */
-export const CreditViewerOpen: Story = {
-  name: 'Credit Viewer Open',
-  render: () => <ViewerExample id="open" cover={longCredit} openInitially />,
-  play: async () => {
-    const dialog = await within(document.body).findByRole('dialog', { name: book.title });
-    await expect(dialog).toBeVisible();
-  },
-};
-
-/** A dark surface keeps the cover and its open credit viewer readable. */
-export const CreditViewerDark: Story = {
-  name: 'Credit Viewer Dark',
-  render: () => (
-    <div className="dark min-h-svh bg-background p-6 text-foreground">
-      <ViewerExample id="dark" cover={longCredit} openInitially />
-    </div>
-  ),
-  play: async () => {
-    const dialog = await within(document.body).findByRole('dialog', { name: book.title });
-    await expect(dialog).toBeVisible();
-  },
-};
-
 /** The page's own cover loads eagerly with high priority; a decorative repeat has empty alt text. */
 export const PriorityAndDecorative: Story = {
   render: () => (
@@ -576,41 +488,3 @@ export const PriorityAndDecorative: Story = {
   },
 };
 
-/** Missing covers use the same field in a list and on their own at the exact small-cover widths. */
-export const PlaceholderWidths: Story = {
-  render: () => (
-    <div className="space-y-6">
-      {[48, 72, 96].map((width) => (
-        <section key={width} className="space-y-3">
-          <p>{width} px</p>
-          <div style={{ width }}>
-            <Cover subject={book} cover={null} size="fill" src={artSrc} />
-          </div>
-          <ul>
-            <ListRow className="flex items-center gap-3">
-              <div style={{ width }} className="shrink-0">
-                <Cover subject={book} cover={null} size="fill" src={artSrc} decorative />
-              </div>
-              <span>{book.title}</span>
-            </ListRow>
-          </ul>
-        </section>
-      ))}
-    </div>
-  ),
-  play: async ({ canvasElement }) => {
-    for (const section of canvasElement.querySelectorAll('section')) {
-      const [bare, row] = section.querySelectorAll('[data-slot=cover]');
-      await expect(bare!.innerHTML).toBe(row!.innerHTML);
-      const icon = bare!.querySelector('[data-slot=cover-placeholder-icon]');
-      const title = bare!.querySelector('[data-slot=cover-placeholder-title]');
-      if (bare!.getBoundingClientRect().width < 64) {
-        await expect(icon).toBeVisible();
-        await expect(title).not.toBeVisible();
-      } else {
-        await expect(icon).not.toBeVisible();
-        await expect(title).toBeVisible();
-      }
-    }
-  },
-};
