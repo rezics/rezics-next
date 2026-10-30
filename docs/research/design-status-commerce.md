@@ -80,8 +80,9 @@ proof remain pending. The positive current mapped-offer fixture now supplies its
 `$12.99` assertion. Its omitted tax convention remains unknown, preserving the no-before-tax assertion and all
 existing mapped/revoked, reader-denial, bounded-read and credential assertions. Historical recordings remain
 unchanged. Earlier buyer fixture proof above predates this reconciliation. The creator editor, owned-offer controls
-and exact-money presentation are source-complete for this interface slice; local typing of the zero-display
-correction is pending. Native combined-journey proof and promoted-main completion remain separate obligations.
+and exact-money presentation are source-complete for this interface slice. Local
+`bun run --cwd apps/web typecheck` passes with no type errors in 1,082 files; no other checks ran in this retry.
+Native combined-journey proof and promoted-main completion remain separate obligations.
 
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,
