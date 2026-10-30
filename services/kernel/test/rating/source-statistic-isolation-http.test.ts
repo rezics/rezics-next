@@ -327,10 +327,18 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   const priorSubjects: string[] = [];
   for (let index = 0; index < 10; index++)
     priorSubjects.push(await fixture.createSubject(`Native prior source isolation ${index + 1}`));
-  console.info('SOURCE_ISOLATION_PHASE prior-subjects-created');
   for (const priorSubject of priorSubjects)
     for (const voter of fixture.actors.voters) await castVote(priorSubject, voter, 4);
-  console.info('SOURCE_ISOLATION_PHASE prior-votes-committed');
+  const priorProgress = await fixture.database.admin.query(
+    `SELECT
+       (SELECT count(*)::integer FROM rating.vote WHERE target_id = ANY($1::uuid[])) AS votes,
+       (SELECT count(*)::integer FROM rating.population_vote WHERE target_id = ANY($1::uuid[])) AS applied_votes,
+       (SELECT coalesce(sum(count), 0)::integer FROM rating.population_total_component
+        WHERE question_id = $2 AND population_id = $3) AS population_count,
+       (SELECT count(*)::integer FROM core.consumer_checkpoint WHERE consumer = 'effects') AS effect_partitions`,
+    [priorSubjects, STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
+  );
+  console.info(`SOURCE_ISOLATION_PHASE prior-progress ${JSON.stringify(priorProgress.rows[0])} ${Date.now()}`);
 
   const priorEpoch = await until(
     async () => {
@@ -348,11 +356,9 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     (value) => value?.start_count === '50' && value.m === '2' && value.c === '5',
     'Native Global prior epoch at fifty votes',
   );
-  console.info('SOURCE_ISOLATION_PHASE prior-epoch-published');
   expect(priorEpoch).toEqual({ start_count: '50', m: '2.0000', c: '5' });
 
   for (const voter of fixture.actors.voters) await castVote(subjectId, voter, 20);
-  console.info('SOURCE_ISOLATION_PHASE target-votes-committed');
   const publishedFigure = await until(
     () => figure(subjectId),
     (value) =>
@@ -362,7 +368,6 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
       value.figure.score === 6,
     'Native figure after five actual votes',
   );
-  console.info('SOURCE_ISOLATION_PHASE target-figure-published');
   expect(publishedFigure.figure).toEqual({
     questionId: STANDARD_QUESTION_ID,
     populationId: GLOBAL_CONTEXT.id,
@@ -378,7 +383,6 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     (value) => value.figures[0]?.count === 5 && value.figures[0]?.mean === 20,
     'Native Global aggregate after five actual votes',
   );
-  console.info('SOURCE_ISOLATION_PHASE target-aggregate-published');
   expect(nativeAggregate.figures[0]).toMatchObject({
     population: GLOBAL_CONTEXT.id,
     count: 5,
