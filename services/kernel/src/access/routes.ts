@@ -1,3 +1,4 @@
+import { createManagementRead, managedAccountsSchema, accountManagementSchema } from './account-management.ts';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -1086,6 +1087,65 @@ export function accessRoutes(
         set.headers.etag = `"${createHash('sha256').update(JSON.stringify(body)).digest('base64url')}"`;
         set.headers['cache-control'] = 'no-cache';
         return body;
+      },
+    )
+    .get(
+      '/v1/me/managedAccounts',
+      {
+        query: strict(
+          t.Object(
+            {
+              organizationsCursor: t.Optional(t.String({ maxLength: 4096 })),
+              operatorsCursor: t.Optional(t.String({ maxLength: 4096 })),
+            },
+            closed,
+          ),
+        ),
+        response: { 200: managedAccountsSchema, ...failures, 400: problemSchema('invalid_request', 'invalid_cursor') },
+        detail: {
+          operationId: 'account.list_managed',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ query, actor, job, admission, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, async () =>
+          (await createManagementRead(dependencies, actor, job.deadline)).inventory(query),
+        );
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/management',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        query: strict(
+          t.Object(
+            {
+              membersCursor: t.Optional(t.String({ maxLength: 4096 })),
+              operatorsCursor: t.Optional(t.String({ maxLength: 4096 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: accountManagementSchema,
+          ...failures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'account.read_management',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, query, actor, job, admission, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, async () =>
+          (await createManagementRead(dependencies, actor, job.deadline)).detail(params.accountId, query),
+        );
       },
     )
     .get(

@@ -13,6 +13,7 @@ const signedInPaths = [
   /^\/creator\/statements(?:\/|$)/,
   /^\/entitlements(?:\/|$)/,
   /^\/(?:accounts(?:\/|$)|review\/account-verifications(?:\/|$))/,
+  /^\/organizations(?:\/|$)/,
   /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/|$)|moderation\/(?:decisions|reports)\/[^/]+(?:\/|$))/,
 ];
 

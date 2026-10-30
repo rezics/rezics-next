@@ -2192,3 +2192,25 @@ completion. Shared-history acknowledgement requires that fact and kernel's own
 producer/minimizer closure; this implementation emits no participant ACK and
 introduces no final-ACK dependency cycle. The global participant inventory and
 Search's explicitly undelivered cleanup are preserved.
+
+### Private account management reads
+
+`GET /v1/me/managedAccounts` (`account.list_managed`, `account:read`) reads the current human's own identity,
+organization memberships and personal operator responsibility holds. It accepts `organizationsCursor` and
+`operatorsCursor`. Incomplete native membership-inverse coverage returns an explicit `preparing` organization
+section, while independently available identity and responsibility sections remain readable.
+
+`GET /v1/accounts/{accountId}/management` (`account.read_management`, `account:read`) accepts `membersCursor` and
+`operatorsCursor`. Both routes require the installed formula's `account:read` on the human's own account, and
+reject operated identities. Organization details require current native membership. Private holders and operator
+responsibilities additionally require `account:manage` on that organization; an ordinary member receives a denied
+holders section. An automated target requires current management of its native current operator, including current
+organization membership where applicable. Attribution and coordination rows never confer management authority.
+
+Reads use one authoritative read time, 20 scanned candidates per section and viewer/target/feed-bound signed
+cursors. The inverse is bounded by its existing 1000-membership cap; every candidate is checked against current
+organization membership. Member candidates seek the native live-membership slot index and each verifies its authoritative temporal role; responsibility seeks
+reuse `operator-page.sql`. Each scanned responsibility has one subject-anchor relation read; `current` means the
+operator and exact reservation still match, while `reconciling` means the hold remains without that match. Neither
+state asserts a workflow's completion or cancellation. Responses are allowlisted and `private, no-store`, with no
+credentials, approval references, private profile or suspension reason. These read endpoints add no write capability.

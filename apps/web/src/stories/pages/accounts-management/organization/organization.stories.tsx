@@ -1,0 +1,33 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
+import { selectManagementStory, organization } from '../../../../accounts/management/story-api';
+import { m } from '../../../../paraglide/messages.js';
+import { PageStory } from '../../../page';
+import { ready, reviewParameters } from '../support';
+const meta = { title: 'Pages/Account/Management/Organization', parameters: reviewParameters } satisfies Meta;
+export default meta;
+type Story = StoryObj<typeof meta>;
+function render(mode: Parameters<typeof selectManagementStory>[0]) {
+  selectManagementStory(mode);
+  return <PageStory visitor="Signed In" path={`/organizations/${organization.id}`} />;
+}
+export const Owner: Story = {
+  render: () => render('populated'),
+  play: async (context) => {
+    await ready(context);
+    await expect(within(context.canvasElement).getByRole('heading', { name: m.managed_holders_title() })).toBeVisible();
+    await expect(within(context.canvasElement).getByText(m.managed_delete_organization_unavailable())).toBeVisible();
+  },
+};
+export const Member: Story = {
+  render: () => render('member'),
+  play: async (context) => {
+    await ready(context);
+    await expect(within(context.canvasElement).getByText(m.managed_holders_denied())).toBeVisible();
+    await expect(within(context.canvasElement).queryByRole('heading', { name: m.managed_operated_title() })).toBeNull();
+  },
+};
+export const LongNames: Story = { render: () => render('long'), play: ready };
+export const Empty: Story = { render: () => render('empty'), play: ready };
+export const Denied: Story = { render: () => render('denied'), play: ready };
+export const Unavailable: Story = { render: () => render('unavailable'), play: ready };
