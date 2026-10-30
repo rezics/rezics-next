@@ -33,8 +33,20 @@ import convention and expects the public create route's 201. No existing
 acceptance assertion or production implementation was changed.
 
 Raw log: `.temp/goal/checks/worker-check-2026-10-30T08-55-28.872Z-4ac3931e.log`.
-That run reached no provider bulk sends or all-source evidence line. Corrected
-native execution is pending; no native pass or main success is claimed.
+That run reached no provider bulk sends or all-source evidence line.
+
+The second managed execution at `197949f68f7ccf7d686d540d3856e883c54599fd`
+passed compilation, then failed the same native child: zero pass, one fail,
+129 assertions. Its first reached failure was the fixture's VNDB citation
+expectation: the real public converter cites the revision-specific
+`https://vndb.org/v123.7`, while the fixture expected the unversioned page.
+The fixture now checks that real native revision URL, preserving the assertion
+that every retrieved candidate carries the source citation. No converter or
+frozen acceptance assertion changed. Raw log:
+`.temp/goal/checks/worker-check-2026-10-30T10-04-59.420Z-59b34b9c.log`.
+That run reached actual bulk writes and candidate reads, but no all-source
+evidence line. Corrected native execution is pending; no native pass or main
+success is claimed.
 The managed check log retains the actual tested revision and first reached
 failure. On completion, its `community converter caller native evidence` JSON captures complete
 public batch bytes/responses, native receipt transaction IDs and responses,

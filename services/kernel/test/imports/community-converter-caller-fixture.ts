@@ -59,7 +59,7 @@ const feeds: { source: SourceId; input: ConversionInput; citation: string }[] = 
         extlinks: vndb.extlinks,
       },
     },
-    citation: `https://vndb.org/${vndb.vn.id}`,
+    citation: `https://vndb.org/${vndb.vn.id}.${vndb.entry_meta.revision}`,
   },
   {
     source: 'openlibrary',
