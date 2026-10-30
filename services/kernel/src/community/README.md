@@ -17,7 +17,7 @@ head has changed; the transaction rolls back without a revision, receipt or gran
 Authorized same-key replays return the stored outcome before checking the old expected head.
 `SpaceInputError` identifies invalid metadata. Titles contain 1–1024 Unicode characters and
 summaries at most 4096; PostgreSQL independently enforces these limits and revision immutability.
-The initial state is `active`; lifecycle transitions are outside this module's current commands.
+The initial state is `active`; removal and restoration use the lifecycle commands below.
 Creator and author accounts are external identities and can have different routes from the Space.
 
 `readSpace(client, spaceId, time)` joins the identity to its exact head on the supplied connection.
@@ -514,3 +514,49 @@ Source qualification, epoch changes and source invalidation touch exact routed k
 plus bounded native Access work. Later aggregation must use at most 31 day-bucket keys per affected board, durable
 bounded pages for multi-board changes, and O(changes log R) rank maintenance. Existing growth evidence remains for
 integration. Public aggregate/endpoint delivery is still a separate consumer task.
+## Container removal and binding fences
+
+`removeContainer` and `restoreContainer` use the ordinary command executor, fresh action/scopes and direct native
+resource-role facts from Access's installed `resourceRoleHeld` port, before receipt replay. Space commands require
+`space:manage` and its current direct owner role. Realm commands require `moderation:takedown` and its current direct
+owner or moderator role. No administrator role is installed. Native role data never supplies an Access allow decision.
+Removal requires a nonblank reason of at most 1024 characters. The identity retains its head, classification Context
+and publication pointers, recording authoritative removal time, remover and native role. Each transition increments
+a decimal-string lifecycle version; both the expected head and lifecycle version must match. Restoration includes
+the exact 30-day boundary, requires the original remover with a current native role or a current higher role
+(owner above moderator), and independently checks the live stored Context's availability and `context:read` before
+checking out the target. It never creates, deletes, grants or transfers a Context. Post erasure/author undo is unchanged.
+
+HTTP delivers `GET /v1/spaces/{spaceId}/lifecycle` and `GET /v1/realms/{realmId}/lifecycle` to the same native actors.
+The closed `{container}` response contains `kind`, `id`, `state`, `headRevisionId`, `version`, `removedAt`,
+`removerRole`, `reason`, `mayRemove` and `mayRestore`. Ordinary denied/missing reads remain 404.
+`POST` to each resource's `/removal` accepts `{expectedVersion, reason}`; `/restoration` accepts `{expectedVersion}`.
+Both require `If-Match` (the quoted head revision) and `Idempotency-Key`, and return
+`{container:{kind,id,state,headRevisionId,version}}` with the command's ordinary session component.
+These responses contain no removed title, summary, Context content or publication material.
+
+A removed Space also hides its carried Realm through direct Realm reads, participation and publication eligibility.
+A removed Realm or host never selects a Global fallback. Ordinary Realm eligibility binds preparation to the current
+Realm/Space heads and lifecycle versions and repeats that anchor at final validation, rejecting a remove/restore cycle
+while a reader is in flight. Space viewer reads repeat their own anchor after the separately authorized carried Realm read.
+
+`ContainerBindingSchema`, `ContainerBinding`, `readContainerBinding(client,{realmId,subjectId?,at})` and
+`revalidateContainerBinding(client,expected,at)` are the delivered Semantic data port. Its closed version-1 shape is
+`{schemaVersion:1,realmId,spaceId,contextId,realmHead,spaceHead,realmVersion,spaceVersion,subjectId,publicationId}`.
+Versions are decimal strings; the optional subject becomes null on the wire. A subject uses its one exact active
+publication-head key; absent/withdrawn publication yields null. Missing/removed Realm or Space returns null.
+Consumers must separately authorize the current container and live Context on released source anchors, retain these
+facts, and revalidate immediately before disclosure; null, false or a changed publication is unavailable, never Global
+fallback or empty success. The facts convey no permission or ownership. Community owns this producer; Semantic owns
+its source/page call sites and their integration remains separate.
+
+Cost: one identity/head/lifecycle key, at most two direct native role keys, one host key and optionally one exact
+publication key, all in the target home. Context preparation is independently anchored and released before checkout.
+No membership, history, descendant or graph scan is used. Four closed lifecycle events are registered. Removal events
+feed the existing account-party locator; account erasure clears the current remover and reason through one exact
+container key, including late-source replay, without deleting the tombstone or binding fence.
+
+Authority seams: Space has no installed moderator/higher-role mapping; only its actual owner journey is enabled.
+There is no exact platform container-restore action/port, so Global moderation reach alone cannot pass the required
+native role prerequisite. Platform restoration and Space moderation require Accounts policy/port adoption. This module
+does not provisionally implement `readRealmOwnershipRoles` or any succession, grant or transfer producer.

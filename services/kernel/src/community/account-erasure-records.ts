@@ -10,6 +10,8 @@ import page from './account-erasure-records-page.sql';
 import purgePage from './account-erasure-records-purge-page.sql';
 import nextDue from './account-erasure-records-next-due.sql';
 import removeLocator from './party-locator-delete.sql';
+import eraseSpaceRemover from './container-lifecycle-space-erase.sql';
+import eraseRealmRemover from './container-lifecycle-realm-erase.sql';
 import eraseBan from './account-erasure-records-ban.sql';
 import eraseTarget from './account-erasure-records-target.sql';
 import eraseVerdict from './account-erasure-records-verdict.sql';
@@ -18,7 +20,7 @@ import eraseClaim from './realm-continuity-request-erase.sql';
 import readOperation from './account-erasure-records-operation-read.sql';
 import readWorkflow from './account-erasure-records-workflow.sql';
 
-const kinds = ['ban_actor', 'ban_target', 'claim_request', 'membership_operation', 'verdict'] as const;
+const kinds = ['ban_actor', 'ban_target', 'claim_request', 'membership_operation', 'verdict', 'space_remover', 'realm_remover'] as const;
 type Kind = (typeof kinds)[number];
 export type CommunityRecordsCursor = { kind: Kind; dueAt: string; ownerRoute: number; ownerId: string; key: string };
 type Dependencies = { pool: Pool; clock?: () => Date };
@@ -153,13 +155,17 @@ export async function eraseAccountCommunityRecordItem(
         kept = changed.rows[0]?.kept_until ?? null;
       } else {
         const statement =
-          row.kind === 'ban_target'
-            ? eraseTarget
-            : row.kind === 'verdict'
-              ? eraseVerdict
-              : row.kind === 'claim_request'
-                ? eraseClaim
-                : eraseOperation;
+          row.kind === 'space_remover'
+            ? eraseSpaceRemover
+            : row.kind === 'realm_remover'
+              ? eraseRealmRemover
+              : row.kind === 'ban_target'
+                ? eraseTarget
+                : row.kind === 'verdict'
+                  ? eraseVerdict
+                  : row.kind === 'claim_request'
+                    ? eraseClaim
+                    : eraseOperation;
         const changed = await tx.query(
           statement.sql,
           statement.params.map((name) => params[name as keyof typeof params]),

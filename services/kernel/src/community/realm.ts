@@ -34,6 +34,7 @@ import { realmContinuityView, realmGovernanceAuthorization, type RealmContinuity
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
 import read from './realm-read.sql';
+import bindingRead from './container-lifecycle-binding.sql';
 import currentReadBan from './read-ban-current.sql';
 import insert from './realm-insert.sql';
 import append from './realm-revision.sql';
@@ -218,11 +219,16 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
   return createResourcePublicEligibility({
     resource,
     action: 'realm:read',
-    async prepare() {
-      return resource;
+    async prepare({ pool, deadline }) {
+      return {
+        binding: await bindingRead.run(deadlineClient(pool, deadline), { ...resource, at: 'infinity', subject: null }),
+      };
     },
-    async verify({ client, actor, at }) {
+    async verify({ client, actor, at, evidence }) {
       const row = await read.run(client, { route: resource.route, id: resource.id, at });
+      const current = await bindingRead.run(client, { ...resource, at, subject: null });
+      if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding))
+        throw new RealmReadDeniedError();
       if (row?.visibility === 'protected' && actor.kind === 'account') {
         // Auth/Access validates the assignment reference. Its principal is a
         // second fixed identity, never an expansion of grants or memberships.
@@ -517,7 +523,9 @@ export const realmViewerActionResource: import('../access/viewer-actions.ts').Vi
            WHERE r.route = h.route AND r.realm_id = h.realm_id AND r.revision_id = h.head_revision_id
            ORDER BY r.route, r.realm_id, r.revision_id LIMIT 1
          ) r
-         WHERE h.state = 'active' AND h.created_at <= $3::timestamptz AND r.created_at <= $3::timestamptz
+         WHERE h.state = 'active'
+           AND EXISTS (SELECT 1 FROM community.space s WHERE s.route=h.route AND s.space_id=h.space_id AND s.state='active')
+           AND h.created_at <= $3::timestamptz AND r.created_at <= $3::timestamptz
        ) row`,
       [ids.map((id) => routeOf(id)!), ids, at],
     );

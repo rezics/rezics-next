@@ -29,4 +29,13 @@ WHERE i.kind = 'verdict' AND p.route = i.route AND p.publication_id = i.id AND p
 UNION ALL
 SELECT q.account_id::text, 'claim_request', q.requested_at::text, q.route, q.realm_id::text, q.request_id::text
 FROM community.realm_claim_request q CROSS JOIN input i
-WHERE i.kind = 'claim_request' AND q.route = i.route AND q.realm_id = i.realm AND q.request_id = i.id;
+WHERE i.kind = 'claim_request' AND q.route = i.route AND q.realm_id = i.realm AND q.request_id = i.id
+UNION ALL
+SELECT h.removed_by::text, 'space_remover', h.removed_at::text, h.route, h.space_id::text, h.space_id::text
+FROM community.space h CROSS JOIN input i
+WHERE i.kind = 'space_remover' AND h.route = i.route AND h.space_id = i.id AND h.removed_by IS NOT NULL
+
+UNION ALL
+SELECT h.removed_by::text, 'realm_remover', h.removed_at::text, h.route, h.realm_id::text, h.realm_id::text
+FROM community.realm h CROSS JOIN input i
+WHERE i.kind = 'realm_remover' AND h.route = i.route AND h.realm_id = i.id AND h.removed_by IS NOT NULL;

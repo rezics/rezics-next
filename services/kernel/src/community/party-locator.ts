@@ -20,6 +20,8 @@ export const COMMUNITY_PLATFORM_BASIS: CommandBasis = {
   requestedBy: null,
 };
 export const PARTY_LOCATOR_TYPES = [
+  'com.rezics.community.space.removed.v1',
+  'com.rezics.community.realm.removed.v1',
   'com.rezics.community.realm.ban.v1',
   'com.rezics.community.realm.membership.requested.v1',
   'com.rezics.community.realm.claim-requested.v1',
@@ -40,29 +42,35 @@ export function createPartyLocatorEffect(pool: Pool): Effect {
       if (!PARTY_LOCATOR_TYPES.includes(type) || !Value.Check(COMMUNITY_EVENTS[type], event.data))
         throw new TypeError('Invalid community party locator source');
       const data = event.data as {
-        realmId: string;
+        realmId?: string;
+        id?: string;
+        kind?: 'space' | 'realm';
         accountId?: string;
         operationId?: string;
         publicationId?: string;
         requestId?: string;
         at?: string;
       };
-      const id = data.operationId ?? data.publicationId ?? data.requestId ?? data.realmId;
+      const ownerId = data.id ?? data.realmId;
+      if (!ownerId) throw new TypeError('Community party locator has no owner');
+      const id = data.operationId ?? data.publicationId ?? data.requestId ?? ownerId;
       const route = routeOf(id);
       if (
         route === null ||
-        routeOf(data.realmId) !== route ||
-        event.subject !== data.realmId ||
+        routeOf(ownerId) !== route ||
+        event.subject !== ownerId ||
         !event.source.startsWith(`urn:rezics:log:${partitionOf(route)}.`)
       )
         throw new TypeError('Invalid community party locator envelope');
-      const kind = data.operationId
-        ? 'membership_operation'
-        : data.publicationId
-          ? 'verdict'
-          : data.requestId
-            ? 'claim_request'
-            : 'ban';
+      const kind = data.id
+        ? `${data.kind}_remover`
+        : data.operationId
+          ? 'membership_operation'
+          : data.publicationId
+            ? 'verdict'
+            : data.requestId
+              ? 'claim_request'
+              : 'ban';
       const keys = await withConnection(pool, async (client) => {
         const partition = await readPartition(client, partitionOf(route));
         if (!partition || partition.writeState === 'moved') throw new Error('Community partition is unavailable');

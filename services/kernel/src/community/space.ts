@@ -18,11 +18,13 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { platformRootAnchor } from '../commerce/catalogue.ts';
+import { ProblemError } from '../http/problem.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Access, AccessCheck, AccessClient, Actor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { readRealm } from './realm.ts';
 import realmSpace from './realm-space.sql';
+import bindingRead from './container-lifecycle-binding.sql';
 import read from './space-read.sql';
 import insert from './space-insert.sql';
 import append from './space-revision.sql';
@@ -99,13 +101,18 @@ function options(
 }
 
 /** One routed point read joining only the current exact revision. No authorization is implied. */
-export async function readSpace(client: AccessClient, spaceId: string, time: string): Promise<Space | null> {
+export async function readSpace(
+  client: AccessClient,
+  spaceId: string,
+  time: string,
+): Promise<(Space & { lifecycleVersion: string }) | null> {
   const route = routeOf(spaceId);
   if (route === null) return null;
   const row = await read.run(client, { route, id: spaceId, at: time });
   if (!row) return null;
   return {
     spaceId: row.space_id,
+    lifecycleVersion: row.lifecycle_version,
     state: row.state,
     headRevisionId: row.head_revision_id,
     createdAt: new Date(row.created_at).toISOString(),
@@ -137,13 +144,29 @@ export async function readSpaceForViewer(
     const space = await readSpace(client, spaceId, time);
     if (!space) return null;
     const slot = await realmSpace.run(client, { route, space: spaceId, at: time });
-    return { space, realmId: slot?.realm_id ?? null };
+    const realmId = slot?.realm_id ?? null;
+    const binding = realmId ? await bindingRead.run(client, { route, id: realmId, at: time, subject: null }) : null;
+    return { space, realmId, binding };
   });
   if (!current) return null;
   // Release the Space connection before Access prepares separately anchored evidence.
   // In particular, a pool of one must never need a nested checkout.
   const realm = current.realmId ? await readRealm(deps, actor, current.realmId, context) : null;
-  return { ...current.space, realmId: realm?.realmId ?? null };
+  return withConnection(deps.pool, async (client) => {
+    if (check && !(await check(client))) return null;
+    const final = await readSpace(client, spaceId, time);
+    if (
+      !final ||
+      final.headRevisionId !== current.space.headRevisionId ||
+      final.lifecycleVersion !== current.space.lifecycleVersion
+    )
+      return null;
+    const binding = realm ? await bindingRead.run(client, { route, id: realm.realmId, at: time, subject: null }) : null;
+    return {
+      ...final,
+      realmId: binding && canonicalize(binding) === canonicalize(current.binding) ? (realm?.realmId ?? null) : null,
+    };
+  });
 }
 
 export function spaceReadEligibility(identity: Resource): ResourceEligibility {
@@ -155,8 +178,15 @@ export function spaceReadEligibility(identity: Resource): ResourceEligibility {
       const row = await read.run(pool, { route: identity.route, id: identity.id, at: new Date().toISOString() });
       return row ?? null;
     },
-    async verify({ client, at }) {
-      return (await readSpace(client, resource.id, at)) !== null;
+    async verify({ client, at, evidence }) {
+      const current = await read.run(client, { route: resource.route, id: resource.id, at });
+      if (
+        !current ||
+        current.head_revision_id !== evidence.head_revision_id ||
+        current.lifecycle_version !== evidence.lifecycle_version
+      )
+        throw new ProblemError('not_found');
+      return true;
     },
   });
 }

@@ -6,8 +6,10 @@ import { deadlineClient, within } from '../access/authenticate.ts';
 import { commandTime, mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import read from './realm-read.sql';
+import { realmReadEligibility } from './realm.ts';
 
 export type RealmParticipationReadDecision = { readable?: boolean };
 export type RealmParticipationCheck = (
@@ -56,6 +58,7 @@ export function realmParticipationAnchor(resource: Resource) {
     },
     async verify({ client, at }) {
       const row = await read.run(client, { route: resource.route, id: resource.id, at });
+      if (!row) throw new ProblemError('not_found');
       visibility = row?.visibility === 'public' || row?.visibility === 'protected' ? row.visibility : null;
       return visibility === 'public';
     },
@@ -96,21 +99,11 @@ export function createRealmParticipationCheck(input: {
     // to conceal an unreadable protected Realm before choosing 404 or 403.
     if (!participates && !time) return false;
 
-    const readEligibility = createResourcePublicEligibility({
-      resource,
-      action: 'realm:read',
-      async prepare() {
-        return visibility === 'protected' ? true : undefined;
-      },
-      async verify() {
-        return false;
-      },
-    });
     const readCheck = await accessCheck(
       input.access,
       actor,
       'realm:read',
-      { ...resource, eligibility: readEligibility },
+      { ...resource, eligibility: realmReadEligibility(resource) },
       context,
     );
     const readable = await readCheck(client, checkedTime);

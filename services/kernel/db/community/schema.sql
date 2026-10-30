@@ -307,7 +307,7 @@ CREATE TABLE community.party_locator (
     CONSTRAINT party_locator_check1 CHECK ((owner_route = ((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)))),
     CONSTRAINT party_locator_due_at_check CHECK (isfinite(due_at)),
     CONSTRAINT party_locator_key_check CHECK (((char_length(key) >= 1) AND (char_length(key) <= 100))),
-    CONSTRAINT party_locator_kind_check CHECK ((kind = ANY (ARRAY['ban_target'::text, 'ban_actor'::text, 'membership_operation'::text, 'verdict'::text, 'claim_request'::text]))),
+    CONSTRAINT party_locator_kind_check CHECK ((kind = ANY (ARRAY['ban_target'::text, 'ban_actor'::text, 'membership_operation'::text, 'verdict'::text, 'claim_request'::text, 'space_remover'::text, 'realm_remover'::text]))),
     CONSTRAINT party_locator_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
     CONSTRAINT party_locator_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
@@ -378,13 +378,22 @@ CREATE TABLE community.realm (
       OR (ownership_state = 'orphaned' AND orphaned_at IS NOT NULL AND claim_eligible_at IS NOT NULL
           AND isfinite(orphaned_at) AND claim_eligible_at = orphaned_at + interval '720 hours')
     ),
+    lifecycle_version bigint DEFAULT 0 NOT NULL,
+    removed_at timestamp with time zone,
+    removed_by uuid,
+    remover_role text,
+    removal_reason text,
     CONSTRAINT realm_board_scheme_id_check CHECK (((board_scheme_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
     CONSTRAINT realm_check CHECK ((realm_id <> space_id)),
     CONSTRAINT realm_check1 CHECK ((route = ((get_byte(uuid_send(space_id), 10) * 256) + get_byte(uuid_send(space_id), 11)))),
     CONSTRAINT realm_check2 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),
     CONSTRAINT realm_check3 CHECK ((route = ((get_byte(uuid_send(head_revision_id), 10) * 256) + get_byte(uuid_send(head_revision_id), 11)))),
+    CONSTRAINT realm_lifecycle_version_check CHECK ((lifecycle_version >= 0)),
+    CONSTRAINT realm_removal_check CHECK ((((removed_at IS NULL) AND (removed_by IS NULL) AND (remover_role IS NULL) AND (removal_reason IS NULL) AND (state = 'active'::text)) OR ((removed_at IS NOT NULL) AND (remover_role IS NOT NULL)))),
+    CONSTRAINT realm_removal_reason_check CHECK (((char_length(removal_reason) >= 1) AND (char_length(removal_reason) <= 1024))),
+    CONSTRAINT realm_remover_role_check CHECK ((remover_role = ANY (ARRAY['owner'::text, 'moderator'::text]))),
     CONSTRAINT realm_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT realm_state_check CHECK ((state = 'active'::text)),
+    CONSTRAINT realm_state_check CHECK ((state = ANY (ARRAY['active'::text, 'removed'::text]))),
     CONSTRAINT realm_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'protected'::text]))),
     CONSTRAINT realm_votes_check CHECK (community.realm_votes_allowed(votes))
 );
@@ -583,10 +592,19 @@ CREATE TABLE community.space (
     head_revision_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
     creator uuid NOT NULL,
+    lifecycle_version bigint DEFAULT 0 NOT NULL,
+    removed_at timestamp with time zone,
+    removed_by uuid,
+    remover_role text,
+    removal_reason text,
     CONSTRAINT space_check CHECK ((route = ((get_byte(uuid_send(space_id), 10) * 256) + get_byte(uuid_send(space_id), 11)))),
     CONSTRAINT space_check1 CHECK ((route = ((get_byte(uuid_send(head_revision_id), 10) * 256) + get_byte(uuid_send(head_revision_id), 11)))),
+    CONSTRAINT space_lifecycle_version_check CHECK ((lifecycle_version >= 0)),
+    CONSTRAINT space_removal_check CHECK ((((removed_at IS NULL) AND (removed_by IS NULL) AND (remover_role IS NULL) AND (removal_reason IS NULL) AND (state = 'active'::text)) OR ((removed_at IS NOT NULL) AND (remover_role IS NOT NULL)))),
+    CONSTRAINT space_removal_reason_check CHECK (((char_length(removal_reason) >= 1) AND (char_length(removal_reason) <= 1024))),
+    CONSTRAINT space_remover_role_check CHECK ((remover_role = ANY (ARRAY['owner'::text, 'moderator'::text]))),
     CONSTRAINT space_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT space_state_check CHECK ((state = 'active'::text))
+    CONSTRAINT space_state_check CHECK ((state = ANY (ARRAY['active'::text, 'removed'::text])))
 );
 
 

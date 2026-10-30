@@ -41,6 +41,12 @@ import {
   type RealmDependencies,
   type RealmView,
 } from './realm.ts';
+import {
+  ContainerLifecycleConflictError,
+  readContainerLifecycle,
+  removeContainer,
+  restoreContainer,
+} from './container-lifecycle.ts';
 import { setBoardScheme } from './board-scheme.ts';
 import { createRealmParticipationCheck } from './participation.ts';
 import {
@@ -166,6 +172,46 @@ const membershipState = t.Object(
 );
 const addMemberInput = t.Object({ accountId: id }, closed);
 const publicationParams = t.Object({ realmId: t.String(), subjectId: t.String() }, closed);
+
+const lifecycleVersion = t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' });
+const containerKind = t.Union([t.Literal('space'), t.Literal('realm')]);
+const lifecycleState = t.Union([t.Literal('active'), t.Literal('removed')]);
+const lifecycleResult = t.Object(
+  {
+    container: t.Object(
+      {
+        kind: containerKind,
+        id,
+        state: lifecycleState,
+        headRevisionId: id,
+        version: lifecycleVersion,
+      },
+      closed,
+    ),
+  },
+  closed,
+);
+const lifecycleResponse = t.Object(
+  {
+    container: t.Object(
+      {
+        ...lifecycleResult.properties.container.properties,
+        removedAt: t.Union([instant, t.Null()]),
+        reason: t.Union([t.String(), t.Null()]),
+        removerRole: t.Union([t.Literal('owner'), t.Literal('moderator'), t.Null()]),
+        mayRemove: t.Boolean(),
+        mayRestore: t.Boolean(),
+      },
+      closed,
+    ),
+  },
+  closed,
+);
+const removeContainerInput = t.Object(
+  { expectedVersion: lifecycleVersion, reason: t.String({ minLength: 1, maxLength: 1024 }) },
+  closed,
+);
+const restoreContainerInput = t.Object({ expectedVersion: lifecycleVersion }, closed);
 
 const createInput = t.Object({ title, summary: t.Optional(summary) }, closed);
 const updateInput = t.Object({ title: t.Optional(title), summary: t.Optional(summary) }, closed);
@@ -298,6 +344,7 @@ function communityProblem(error: unknown): never {
     throw new ProblemError(error.reason === 'stale' ? 'stale_cursor' : 'invalid_cursor');
   if (error instanceof PublicationOccupiedSlotError) throw new ProblemError('conflict');
   if (error instanceof PublicationConflictError) throw new ProblemError('not_found');
+  if (error instanceof ContainerLifecycleConflictError) throw new ProblemError('precondition_failed');
   if (error instanceof SpaceConflictError || error instanceof RealmConflictError)
     throw new ProblemError('precondition_failed');
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
@@ -410,6 +457,244 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
   });
 
   return app
+
+    .get(
+      '/v1/spaces/:spaceId/lifecycle',
+      {
+        params: t.Object({ spaceId: id }, closed),
+        response: { 200: strict(lifecycleResponse), ...readFailures, 403: problemSchema('forbidden') },
+        detail: {
+          operationId: 'space.lifecycle',
+          'x-exposure': 'public',
+          'x-action': 'space:manage',
+          'x-resource-types': ['community.space'],
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { spaceId }, actor, admission, job }) => {
+        try {
+          const container = await admission.run('normal', job, () =>
+            readContainerLifecycle(spaceDependencies(), actor, 'space', spaceId, { deadline: job.deadline }),
+          );
+          if (!container) throw new ProblemError('not_found');
+          return { container };
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+
+    .post(
+      '/v1/spaces/:spaceId/removal',
+      {
+        params: t.Object({ spaceId: id }, closed),
+        headers: updateHeaders,
+        body: strict(removeContainerInput),
+        response: {
+          200: withHeaders(strict(lifecycleResult), sessionHeader),
+          ...writeFailures,
+          412: problemSchema('precondition_failed'),
+        },
+        detail: {
+          operationId: 'space.remove',
+          'x-exposure': 'public',
+          'x-action': 'space:manage',
+          'x-resource-types': ['community.space'],
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { spaceId }, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await removeContainer(
+              spaceDependencies(),
+              actor,
+              {
+                kind: 'space',
+                id: spaceId,
+                expectedHead,
+                expectedVersion: body.expectedVersion,
+                reason: body.reason,
+              },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            session.record(result);
+            return { container: result.value };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+
+    .post(
+      '/v1/spaces/:spaceId/restoration',
+      {
+        params: t.Object({ spaceId: id }, closed),
+        headers: updateHeaders,
+        body: strict(restoreContainerInput),
+        response: {
+          200: withHeaders(strict(lifecycleResult), sessionHeader),
+          ...writeFailures,
+          412: problemSchema('precondition_failed'),
+        },
+        detail: {
+          operationId: 'space.restore',
+          'x-exposure': 'public',
+          'x-action': 'space:manage',
+          'x-resource-types': ['community.space'],
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { spaceId }, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await restoreContainer(
+              spaceDependencies(),
+              actor,
+              {
+                kind: 'space',
+                id: spaceId,
+                expectedHead,
+                expectedVersion: body.expectedVersion,
+              },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            session.record(result);
+            return { container: result.value };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+
+    .get(
+      '/v1/realms/:realmId/lifecycle',
+      {
+        params: t.Object({ realmId: id }, closed),
+        response: { 200: strict(lifecycleResponse), ...readFailures, 403: problemSchema('forbidden') },
+        detail: {
+          operationId: 'realm.lifecycle',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          'x-resource-types': ['community.realm'],
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, actor, admission, job }) => {
+        try {
+          const container = await admission.run('normal', job, () =>
+            readContainerLifecycle(spaceDependencies(), actor, 'realm', realmId, { deadline: job.deadline }),
+          );
+          if (!container) throw new ProblemError('not_found');
+          return { container };
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+
+    .post(
+      '/v1/realms/:realmId/removal',
+      {
+        params: t.Object({ realmId: id }, closed),
+        headers: updateHeaders,
+        body: strict(removeContainerInput),
+        response: {
+          200: withHeaders(strict(lifecycleResult), sessionHeader),
+          ...writeFailures,
+          412: problemSchema('precondition_failed'),
+        },
+        detail: {
+          operationId: 'realm.remove',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await removeContainer(
+              spaceDependencies(),
+              actor,
+              {
+                kind: 'realm',
+                id: realmId,
+                expectedHead,
+                expectedVersion: body.expectedVersion,
+                reason: body.reason,
+              },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            session.record(result);
+            return { container: result.value };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
+
+    .post(
+      '/v1/realms/:realmId/restoration',
+      {
+        params: t.Object({ realmId: id }, closed),
+        headers: updateHeaders,
+        body: strict(restoreContainerInput),
+        response: {
+          200: withHeaders(strict(lifecycleResult), sessionHeader),
+          ...writeFailures,
+          412: problemSchema('precondition_failed'),
+        },
+        detail: {
+          operationId: 'realm.restore',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await restoreContainer(
+              spaceDependencies(),
+              actor,
+              {
+                kind: 'realm',
+                id: realmId,
+                expectedHead,
+                expectedVersion: body.expectedVersion,
+              },
+              { idempotencyKey: key, deadline: job.deadline },
+            );
+            session.record(result);
+            return { container: result.value };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
+      },
+    )
     .get(
       '/v1/sitemap/realms',
       {

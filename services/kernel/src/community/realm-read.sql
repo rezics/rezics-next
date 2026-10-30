@@ -9,6 +9,7 @@ WITH input AS NOT MATERIALIZED (
          i.at
   FROM community.realm AS h CROSS JOIN input i
   WHERE h.route = i.route AND realm_id = i.id AND state = 'active'
+    AND EXISTS (SELECT 1 FROM community.space host WHERE host.route=h.route AND host.space_id=h.space_id AND host.state='active')
 )
 SELECT s.realm_id, s.space_id, s.visibility, s.context_id, s.board_scheme_id, s.state, s.head_revision_id,
        s.created_at::text, s.creator, s.ownership_state, s.orphaned_at::text, s.claim_eligible_at::text, r.predecessor, r.title, r.summary, r.votes,
