@@ -1594,6 +1594,8 @@ the normal phone390/desktop1280 and light/dark globals. Its DTO is constructed; 
 authorization nor visual approval. No external reference-project source was named for this connection. Source
 reads were the shared document wrapper/renderer, exact/history reads, native content schemas/routes/document
 contract, media import credit type and the existing Worker `coverSrc` route.
+Local verification: `bun run --cwd apps/web typecheck` passed with no type errors in 1,146 files. Acceptance,
+native, browser and screenshot checks were not run under the minimal verification contract.
 
 The reusable [Moderation report queue](src/stories/patterns/board-report-queue/board-report-queue.mdx) is the
 actual report review region. It separates submitted evidence, the exact ordinarily readable revision and the
