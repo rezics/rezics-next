@@ -20,7 +20,7 @@ export function verificationAttribution(data: Record<string, unknown>) {
   const subject = (value: unknown) =>
     typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 1024 ? value : null;
   if (typeof data.identifier === 'string' && data.identifier.startsWith('reset-password:'))
-    return { erasure_account_id: subject(data.value), erasure_client_id: null, erasure_session_id: null };
+    return { erasure_account_id: subject(data.value), erasure_client_id: null, erasure_session_id: null, erasure_format: 'reset-v1' };
   let value: TypedVerification;
   try {
     value = JSON.parse(String(data.value));
@@ -28,12 +28,20 @@ export function verificationAttribution(data: Record<string, unknown>) {
     return null;
   }
   if (value?.type === 'registration' || value?.type === 'authentication')
-    return { erasure_account_id: subject(value.userData?.id), erasure_client_id: null, erasure_session_id: null };
+    return {
+      erasure_account_id: subject(value.userData?.id), erasure_client_id: null, erasure_session_id: null,
+      // The pinned discoverable challenge explicitly contains an empty ID; a
+      // missing/null ID in any other shape remains unknown. Only this producer
+      // may declare that closed, account-free challenge shape at creation.
+      erasure_format: value.type === 'authentication' && value.userData?.id === ''
+        ? 'webauthn-anonymous-v1' : 'webauthn-v1',
+    };
   if (value?.type === 'authorization_code')
     return {
       erasure_account_id: subject(value.userId),
       erasure_client_id: subject(value.query?.client_id),
       erasure_session_id: subject(value.sessionId),
+      erasure_format: 'code-v1',
     };
   return null;
 }

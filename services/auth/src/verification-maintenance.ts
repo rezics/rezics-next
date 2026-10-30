@@ -61,7 +61,7 @@ function verificationPlugin(alreadyInTransaction = false) {
           const id = (result as unknown as { id: string }).id;
           if (model === 'verification') {
             const attribution = verificationAttribution(query.data);
-            if (attribution) await db.updateTable('verification').set(attribution).where('id', '=', id).execute();
+            await db.updateTable('verification').set(attribution ?? { erasure_format: 'unknown' }).where('id', '=', id).execute();
           } else if (model === 'oauthClientAssertion') {
             const client = nativeProtocolClient.getStore();
             if (!client) throw new Error('Auth assertion producer attribution missing');

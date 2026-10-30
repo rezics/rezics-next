@@ -1682,8 +1682,9 @@ remains pending, including after native work and the original consent cutoff:
   consuming the separate Auth-local completion fact described below. No shared
   global ACK is awaited by either Auth phase.
 - Historical opaque protocol rows and historical role fields lack a deployment
-  coverage proof. Null attribution remains unknown; it cannot establish genuine
-  all-role emptiness. The ordinal v2 proof covers cursors, not this missing proof.
+  proof when their original typed source custody is unavailable. The native role
+  deployment below classifies supported sources; opaque/null or ambiguous old
+  attribution stays unknown. Ordinal v2 completion alone is never role coverage.
 - Client contacts, arbitrary resource/client metadata and legacy request or encrypted creation bindings still
   lack runtime complete person attribution. The [metadata privacy contract](src/metadata-privacy-contract.md)
   adopts their exact field disposition and minimal native proposal: bounded typed contacts, source-projected
@@ -1726,6 +1727,65 @@ The native marker deliberately has no `erased`, `none` or acknowledged outcome.
 A missing native user cannot change persisted applicability to `none`. These gaps
 are implementation/integration findings, not a new specification or a claim that
 elapsed credential lifetime completes erasure.
+
+### Native role producer deployment
+
+The existing `auth_copy_coverage.native_covered` field is the native role coverage
+authority. `erasure-coverage.ts` inventories 27 native stores: user and client;
+opening, session, verification, refresh family/token, access token and assertion;
+recent OIDC session, barrier and recovery establishment; registration stage and
+provisioning receipt; credential account, passkey, recovery and effect receipt;
+workflow request, public key, key assertion, account-attempt association, consent,
+client reduction/progress/coverage and client resource. Signing keys, public
+resource definitions and anonymous transport buckets are system data; a verified
+account's counter uses its exact `auth_attempt_account` association. Permanent
+erasure/copy/consumer progress retains its existing technical replay contracts.
+
+The Auth-owned pool installs producer version 1 on each checked-out connection,
+before composing the signer, issuer or workflows. Release resets the version
+before making the socket reusable. Deployment locks the fixed native store set
+in one order, drains in-flight writers and commits a permanent armed fence. An
+old writer, including a transaction/lease queued before that cut, cannot insert,
+update or delete native records afterward. Migration and startup retain unknown
+custody for old rows removed before classification. Restart uses the committed
+deployment checkpoint; it does not infer coverage from a newly empty table.
+A fresh installation closes under that same drained and armed cut. SDK nested
+request cleanup is admitted only for its exact ready, retired native copy.
+
+Default native redrive reconciles one store per transaction, four tuple locators
+per page, reserving space for exact source/fence reads within the 48-key and
+64-KiB budget. Partial indexes select only unclassified rows. Classification and
+the store checkpoint commit together; retry does not retain a personal traversal
+cursor. Known direct typed account records and reset/WebAuthn verification
+attribution are resolvable without decoding old payloads. Session/opening,
+verification/family, proof/establishment and stage/receipt associations use only
+their existing exact native source keys. Missing sources and historical client
+ownership without a captured owner remain unknown: today's client owner cannot
+prove yesterday's owner. Historical stage/request bindings without the complete
+source actor projection also remain unknown. Store/reason markers persist after
+expiry or physical removal; there is no historical JSON or identity search.
+
+Producing transactions snapshot client-owner and source-client-owner separately
+from subject, acting human and operator. Copied source roles retain the source's
+snapshot when its client moves. Approved stage/request producers additionally
+commit initiator and delegated-principal roles from the actual `copyActors`
+projection; provisioning receipts inherit them from their exact stage. A foreign
+host without that projection, or provisioning without an original native stage,
+remains usable with unknown coverage. These paths do not gain a new authority
+capability. New native reset, WebAuthn and authorization-code formats are labelled
+at creation; only the pinned anonymous discoverable WebAuthn challenge's explicit
+empty account field has a known account-free shape. Historical null is unknown.
+
+The existing native erasure phases consume these role-first indexed columns;
+surviving subjects keep unrelated credentials and clients. Request roles drain
+after user deletion so the original deletion consumer can finish. Native phase
+completion means known native work drained; complete inventory/local-copy proof
+still requires the coverage authority. Known copy retirement proceeds even while
+unknown coverage or proof publication is pending. Default recovery needs neither
+the original caller nor final participant acknowledgement. Consent retains its
+original 310-second cutoff. Raw client/contact metadata, foreign committed-result
+recovery, external sinks and universal shared history retain the separate gaps
+and owner contracts above; this deployment does not claim a terminal Auth ACK.
 
 ### Native shared-copy custody and proof publication
 

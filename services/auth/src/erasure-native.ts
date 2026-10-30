@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { AuthErasureBarrier, AuthErasureSource } from '@rezics/auth-contract';
 import { requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
+import { nativeAdditionalRoles, nativeRoleCoverageComplete, reconcileNativeRoleCoveragePage } from './erasure-coverage.ts';
 import {
   closeCredentialConsumer,
   registrationTerminal,
@@ -32,7 +33,7 @@ type Obligation = {
 };
 type Store = { table: string; key: string; roles: string[]; client?: string; children?: string[] };
 // Order is the native foreign-key/consumer order. No payload is selected by this manifest.
-export const nativeErasureStores: readonly Store[] = [
+const baseErasureStores: readonly Store[] = [
   {
     table: 'oauthAccessToken',
     key: 'id',
@@ -131,6 +132,18 @@ export const nativeErasureStores: readonly Store[] = [
   { table: 'oauthClientResource', key: 'id', roles: [], client: 'clientId' },
   { table: 'auth_workflow_request', key: 'workflow_id', roles: [], client: 'erasure_client_id' },
 ];
+// Consume the producer inventory in the existing native engine, retaining its
+// consumer/child order. Requests drain after user deletion so the deletion's
+// own source consumer can finish without a caller/consumer dependency cycle.
+export const nativeErasureStores: readonly Store[] = baseErasureStores.map((store) => ({
+  ...store,
+  roles: store.table === 'auth_workflow_request' ? store.roles : [
+    ...store.roles,
+    ...nativeAdditionalRoles.filter((role) => role.table === store.table).map((role) => role.role),
+  ],
+})).concat([
+  { table: 'auth_consent', key: 'id', roles: ['erasure_client_owner_id', 'erasure_source_client_owner_id'] },
+]);
 const sourceClientStores = new Set([
   'oauthAccessToken',
   'verification',
@@ -160,6 +173,7 @@ const initialRoles = [
   { table: 'auth_attempt_account', role: 'account_id' },
   { table: 'auth_consent', role: 'account_id' },
   { table: 'auth_copy_role', role: 'account_id' },
+  ...nativeAdditionalRoles.filter(({ table }) => table === 'auth_workflow_request').map(({ table, role }) => ({ table, role })),
   ...[
     'erasure_subject_id',
     'erasure_human_id',
@@ -537,6 +551,7 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
       'erasure_operator_id',
       'erasure_member_id',
       'erasure_previous_operator_id',
+      ...nativeAdditionalRoles.filter(({ table }) => table === 'auth_workflow_request').map(({ role }) => role),
     ];
     const requestRole = requestRoles[tail - 3];
     if (requestRole) {
@@ -565,16 +580,18 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
       await checkpoint(connection, row, { phase: row.phase + (requests.length ? 0 : 1) });
       return answer('more', 'native-request');
     }
+    const covered = await nativeRoleCoverageComplete(connection);
     // Native closure is independent of local-copy closure and its trusted proof.
     // The permanent obligation remains the shared-copy continuation anchor.
     await connection.query(
       'UPDATE auth_erasure SET native_completed_at=COALESCE(native_completed_at,clock_timestamp()) WHERE id=$1',
       [id],
     );
-    await checkpoint(connection, row, { code: row.consent_completed_at ? 'shared-copy-custody' : 'consent' });
+    const code = !covered ? 'native-role-coverage' : row.consent_completed_at ? 'shared-copy-custody' : 'consent';
+    await checkpoint(connection, row, { code });
     return answer(
       row.consent_completed_at ? 'pending' : 'consent',
-      row.consent_completed_at ? 'shared-copy-custody' : 'consent',
+      code,
     );
   });
   // The source-local page transaction has committed and released its only slot.
@@ -588,6 +605,10 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
  * a pending owner cannot starve later owners because the revision rotates it.
  */
 export async function redriveNativeErasure(pool: Pool, runtime?: NativeConsumerRuntime): Promise<number> {
+  // The same default recovery tick completes deployment classification even
+  // before the first account deletion and after loss of its initiating caller.
+  const coverage = await reconcileNativeRoleCoveragePage(pool);
+  if (coverage) return coverage;
   const next = (
     await pool.query<{ id: string }>(
       `SELECT id FROM auth_erasure WHERE native_completed_at IS NULL

@@ -2,7 +2,9 @@ import type { Pool, PoolClient } from 'pg';
 import { copyTransaction } from './erasure-copy.ts';
 
 export const NATIVE_ROLE_VERSION = 1;
-export const NATIVE_COVERAGE_PAGE = 48;
+// Reserve the native source and fence neighborhoods inside the same raw-key
+// budget, including failed/unknown resolutions. This is a deployment page.
+export const NATIVE_COVERAGE_PAGE = 4;
 // Source order matters: exact native witnesses are reconciled before consumers.
 // Composite keys are selected as transaction-local tuple locators, never saved
 // as account-bearing traversal cursors.
@@ -52,6 +54,7 @@ export const nativeClientStores = [
   ['auth_client_reduction', 'client_id', 'client_id'],
   ['auth_client_coverage', 'client_id', 'client_id'],
   ['oauthClientResource', 'id', 'clientId'],
+  ['auth_consent', 'id', 'client_id'],
 ] as const;
 export const nativeAdditionalRoles = [
   ...nativeClientStores.flatMap(([table, key]) => [
@@ -112,7 +115,23 @@ export async function installNativeRoleCoverage(pool: Pool): Promise<void> {
   await copyTransaction(pool, async (client) => {
     // Same fixed lock order as the migration; no row lock held while acquiring it.
     await client.query(`LOCK TABLE ${nativeRoleStores.map(([table]) => quote(table)).sort().join(',')} IN SHARE ROW EXCLUSIVE MODE`);
-    await client.query('UPDATE auth_native_role_deployment SET armed=true WHERE singleton AND version=1');
+    const state = await client.query('UPDATE auth_native_role_deployment SET armed=true WHERE singleton AND version=1 RETURNING singleton');
+    if (!state.rowCount) throw new Error('Auth native role deployment unavailable');
+    // This empty-install fast path is under the drained writer cut, backed by
+    // permanent old-writer refusal and unknown-source custody, never a probe of
+    // an unlocked table. Existing covered producers cannot create version zero.
+    let pending = false;
+    for (const [table] of nativeRoleStores) {
+      if ((await client.query(`SELECT 1 FROM ${quote(table)} WHERE erasure_role_version=0 LIMIT 1`)).rowCount) {
+        pending = true;
+        break;
+      }
+    }
+    if (!pending) {
+      await client.query('UPDATE auth_native_role_deployment SET store_index=$1 WHERE singleton', [nativeRoleStores.length]);
+      await client.query(`UPDATE auth_copy_coverage SET native_covered=NOT EXISTS(
+        SELECT 1 FROM auth_native_role_unknown LIMIT 1) WHERE singleton AND version=1`);
+    }
   });
 }
 
@@ -132,10 +151,12 @@ export async function reconcileNativeRoleCoveragePage(pool: Pool): Promise<numbe
     await client.query('SET LOCAL enable_seqscan=off');
     const rows = (await client.query<{ locator: string }>(
       `SELECT ctid::text AS locator FROM ${quote(table)} WHERE erasure_role_version=0
-       ORDER BY ${columns.map(quote).join(',')} LIMIT 48 FOR UPDATE`,
+       ORDER BY ${columns.map(quote).join(',')} LIMIT ${NATIVE_COVERAGE_PAGE} FOR UPDATE`,
     )).rows;
     for (const row of rows)
-      await client.query(`UPDATE ${quote(table)} SET erasure_role_version=auth_native_role_resolve('${table}',to_jsonb(${quote(table)})) WHERE ctid=$1::tid`, [row.locator]);
+      // The native trigger resolves only declared typed columns and exact source
+      // keys. It never decodes a historical payload or returns one to this page.
+      await client.query(`UPDATE ${quote(table)} SET erasure_role_version=0 WHERE ctid=$1::tid`, [row.locator]);
     if (!rows.length) {
       await client.query('UPDATE auth_native_role_deployment SET store_index=store_index+1 WHERE singleton');
       if (state.store_index + 1 === nativeRoleStores.length)
@@ -144,6 +165,13 @@ export async function reconcileNativeRoleCoveragePage(pool: Pool): Promise<numbe
     }
     return rows.length || 1;
   });
+}
+
+/** Complete deployment coverage is necessary only for a coverage claim. Known
+ * role cleanup keeps making progress even when a historical store is unknown. */
+export async function nativeRoleCoverageComplete(client: PoolClient): Promise<boolean> {
+  return Boolean((await client.query(`SELECT 1 FROM auth_copy_coverage
+    WHERE singleton AND version=1 AND native_covered`)).rowCount);
 }
 
 export async function nativeRoleDeploymentComplete(client: PoolClient): Promise<boolean> {

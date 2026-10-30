@@ -33,6 +33,7 @@ import {
   redriveErasureHistory,
 } from './erasure-history.ts';
 import { startNativeErasure, nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
+import { installNativeRoleProducer, installNativeRoleCoverage } from './erasure-coverage.ts';
 import { recordRecoveryCompletion } from './erasure-consumers.ts';
 import { completeCopy, eraseCopy } from './erasure-copy.ts';
 import { chargeAccountAttempt } from './rate-limit.ts';
@@ -165,6 +166,8 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 }
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
+  installNativeRoleProducer(options.database);
+  await installNativeRoleCoverage(options.database);
   const { trustedAccess } = options;
   const trustedNowSeconds = () => {
     let now: Date;

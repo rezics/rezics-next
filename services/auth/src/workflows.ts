@@ -8,6 +8,7 @@ import type {
   WorkflowContext,
   WorkflowFence,
 } from '@rezics/auth-contract';
+import { installNativeRoleProducer } from './erasure-coverage.ts';
 export type {
   AccountWorkflowPorts,
   WorkflowMembership,
@@ -201,6 +202,7 @@ function businessOperation(input: AccountOperation) {
  * executor side effects. Do not create two workflow hosts in one process. */
 export function createAccountWorkflows<Context = WorkflowContext>(options: AccountWorkflowOptions<Context>) {
   const { database, auth, access } = options;
+  installNativeRoleProducer(database);
   const nativeConsumers: NativeConsumerRuntime = {
     access,
     auth,
@@ -236,10 +238,24 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
   let copyClient: DBOSClient | undefined;
   let copyWriter: ReturnType<typeof createCopyWriter> | undefined;
   const writer = () => required(copyWriter);
+  async function nativeActors(context?: Context, selfRegistration = false) {
+    const actors = context === undefined ? [] : await access.copyActors?.(context);
+    const one = (role: 'human' | 'initiator' | 'delegate') => {
+      const ids = [...new Set(actors?.filter((actor) => actor.role === role).map((actor) => actor.accountId))];
+      if (ids.length > 1) throw new Error('Auth native actor source is ambiguous');
+      return ids[0] ?? null;
+    };
+    return {
+      human: one('human'), initiator: one('initiator'), delegate: one('delegate'),
+      // Historical/foreign hosts without the real projection remain usable but
+      // cannot manufacture complete role coverage from an actor-only callback.
+      version: actors === undefined || (context === undefined && !selfRegistration) ? 0 : 1,
+    };
+  }
   async function requestScope(id: string, input: AccountOperation, context?: Context): Promise<CopyRole[]> {
     const row = (
       await database.query<Record<string, string | null>>(
-        'SELECT erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_member_id,erasure_previous_operator_id,erasure_client_id FROM auth_workflow_request WHERE workflow_id=$1',
+        'SELECT erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_member_id,erasure_previous_operator_id,erasure_client_id,erasure_initiator_id,erasure_delegate_id,erasure_client_owner_id FROM auth_workflow_request WHERE workflow_id=$1',
         [id],
       )
     ).rows[0];
@@ -254,6 +270,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       ['erasure_operator_id', 'operator'],
       ['erasure_member_id', 'member'],
       ['erasure_previous_operator_id', 'previous-operator'],
+      ['erasure_initiator_id', 'initiator'],
+      ['erasure_delegate_id', 'delegate'],
+      ['erasure_client_owner_id', 'client-owner'],
     ] as const)
       add(row?.[key], role);
     if (context && access.copyActors)
@@ -264,13 +283,17 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         account_id: string;
         erasure_creator_id: string | null;
         erasure_operator_id: string | null;
+        erasure_initiator_id: string | null;
+        erasure_delegate_id: string | null;
       }>(
-        'SELECT account_id,erasure_creator_id,erasure_operator_id FROM auth_registration_stage WHERE registration_id=$1',
+        'SELECT account_id,erasure_creator_id,erasure_operator_id,erasure_initiator_id,erasure_delegate_id FROM auth_registration_stage WHERE registration_id=$1',
         [input.registrationId],
       );
       add(stage.rows[0]?.account_id, 'subject');
       add(stage.rows[0]?.erasure_creator_id, 'initiator');
       add(stage.rows[0]?.erasure_operator_id, 'operator');
+      add(stage.rows[0]?.erasure_initiator_id, 'initiator');
+      add(stage.rows[0]?.erasure_delegate_id, 'delegate');
     }
     if (input.kind === 'organization' && context)
       add(access.registrationTarget(required(access.stableCommandKey)(context, 'organization-id')), 'subject');
@@ -339,10 +362,11 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const sealed = credential ? sealCredential(id, accountId, handle, credential) : null;
     const operation = binding as AccountOperation | undefined;
     const context = operation && 'authorization' in operation ? await approved(operation) : undefined;
-    const creator = context === undefined ? null : (access.actorAccountId?.(context) ?? null);
+    const actors = await nativeActors(context, creation === null);
+    const creator = actors.human ?? (context === undefined ? null : (access.actorAccountId?.(context) ?? null));
     const operator = operation?.kind === 'automated' ? operation.operatorAccountId : null;
     const result = await database.query<Stage & { request_digest: Buffer; credential_digest: Buffer | null }>(
-      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding,erasure_creator_id,erasure_operator_id,consumer_workflow_id,activation_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
+      'INSERT INTO auth_registration_stage (registration_id,request_key,handle,account_id,request_digest,ciphertext,credential_digest,creation_binding,erasure_creator_id,erasure_operator_id,consumer_workflow_id,activation_key,erasure_initiator_id,erasure_delegate_id,erasure_actor_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (request_key) DO UPDATE SET request_key=EXCLUDED.request_key RETURNING *',
       [
         id,
         request,
@@ -359,6 +383,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           ? `wf:${workflowId(`registration:${request}`)}:activate`
           : (access.stableCommandKey?.(context, 'activate') ??
             `wf:${workflowId(`operation:${operation?.operationKey}`)}:activate`),
+        actors.initiator,
+        actors.delegate,
+        actors.version,
       ],
     );
     const row = required(result.rows[0]);
@@ -1335,6 +1362,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     if (input.kind === 'transfer-acceptance') denied();
     const context = 'authorization' in input ? await approved(input) : undefined;
     if (!context) await access.authorizeUnprotectedOperation?.(input);
+    const actors = await nativeActors(context);
     const id = workflowId(`operation:${key}`);
     // The stored result is private to the caller whose approval started it. The
     // approval's binding names the actor and the logical operation, and the
@@ -1346,7 +1374,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     ]);
     const row = (
       await database.query<{ digest: Buffer }>(
-        'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
+        'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id,erasure_initiator_id,erasure_delegate_id,erasure_actor_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
         [
           id,
           digest,
@@ -1370,6 +1398,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
               ? (input.responsibility?.operatorAccountId ?? null)
               : null,
           input.kind === 'automated' ? input.registrationId : null,
+          actors.initiator,
+          actors.delegate,
+          actors.version,
         ],
       )
     ).rows[0]!;
@@ -1791,11 +1822,12 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         scopes: [...input.scopes],
       };
       const context = await approved(operation);
+      const actors = await nativeActors(context);
       const id = workflowId(`client-reduction:${key}`);
       const digest = hash(operation);
       const row = (
         await database.query<{ digest: Buffer }>(
-          'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
+          'INSERT INTO auth_workflow_request (workflow_id,digest,request,erasure_subject_id,erasure_human_id,erasure_operator_id,erasure_client_id,erasure_member_id,erasure_previous_operator_id,erasure_stage_id,erasure_initiator_id,erasure_delegate_id,erasure_actor_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (workflow_id) DO UPDATE SET request=CASE WHEN auth_workflow_request.digest=EXCLUDED.digest THEN EXCLUDED.request ELSE auth_workflow_request.request END RETURNING digest',
           [
             id,
             digest,
@@ -1807,6 +1839,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             null,
             null,
             null,
+            actors.initiator,
+            actors.delegate,
+            actors.version,
           ],
         )
       ).rows[0]!;

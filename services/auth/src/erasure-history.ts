@@ -61,12 +61,6 @@ export async function erasureHistoryPage(database: Pool, id: string): Promise<bo
   if (!row || !barrier(row) || !row.native_completed_at || !row.consent_completed_at || !row.source_discharged_at)
     return false;
   if (row.copies_completed_at) return true;
-  const covered = (
-    await database.query(
-      'SELECT 1 FROM auth_copy_coverage WHERE singleton AND version=1 AND covered AND native_covered',
-    )
-  ).rowCount;
-  if (!covered) return false;
   // One account prefix, eight raw exact keys. Multiple roles never duplicate an
   // artifact's cleanup; removed scopes are bounded independently of its history.
   const page = (
@@ -87,6 +81,12 @@ export async function erasureHistoryPage(database: Pool, id: string): Promise<bo
     ]);
     return false;
   }
+  const covered = (
+    await database.query(
+      'SELECT 1 FROM auth_copy_coverage WHERE singleton AND version=1 AND covered AND native_covered',
+    )
+  ).rowCount;
+  if (!covered) return false;
   await database.query(
     `UPDATE auth_erasure SET copies_completed_at=COALESCE(copies_completed_at,clock_timestamp()),
     inventory_coverage='covered',pending_code='proof-submission' WHERE id=$1`,
@@ -133,7 +133,19 @@ export async function redriveErasureHistory(database: Pool, ports: TrustedAccess
   await database.query('UPDATE auth_erasure SET revision=revision+1 WHERE id=$1', [row.id]);
   // Publish the discharged source before any later copy/consumer work. Neither
   // a live copy nor a failed final submission holds this phase hostage.
-  const published = await publishErasureProofs(database, ports, row.id);
-  if (await erasureHistoryPage(database, row.id)) return publishErasureProofs(database, ports, row.id);
+  let published = 0;
+  try {
+    published = await publishErasureProofs(database, ports, row.id);
+  } catch {
+    // Publication retains its permanent pending phase. It cannot hold already
+    // authorized local cleanup hostage to a participant reply or unavailable port.
+  }
+  if (await erasureHistoryPage(database, row.id)) {
+    try {
+      return await publishErasureProofs(database, ports, row.id);
+    } catch {
+      return published;
+    }
+  }
   return published;
 }
