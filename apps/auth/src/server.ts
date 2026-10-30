@@ -12,6 +12,7 @@ const pagePaths = new Set([
   '/account/delete',
   '/account/rename',
   '/organizations/new',
+  '/automated/new',
   '/organizations/delete',
   '/organizations/members',
   '/operators/transfer',
