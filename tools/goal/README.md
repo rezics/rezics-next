@@ -63,8 +63,9 @@ fixtures use no affected or sibling checks and never inherit the repository's li
 Derived files declare an `integration` or `promotion` stage in `defaults.json`. Rebase conflicts regenerate declared
 files from either stage, including on dev landings and retries. Promotion-stage files may declare `inputs`; a dev
 landing that changes one of those inputs runs the declared generator against the rebased candidate and includes changed
-outputs in its landing commit. Promotion runs promotion-stage generators on `dev-verified` before its final gates,
-falling back to `dev` before the verifier initializes that ref.
+outputs in its landing commit. Promotion runs promotion-stage generators on the captured integration head before its
+final gates. The verifier's `dev-verified` ref records verification progress and findings; it does not select or pass a
+release candidate.
 
 Briefs can carry frozen acceptance files in fenced blocks whose info string includes `path=<relative-path>`, such as
 ` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller runs the
@@ -121,8 +122,7 @@ Isolated worktrees remain the default. Local settings can name modules as path g
 ```
 
 A task whose declared paths all fit one configured module uses that module's single worktree at
-`<worktreeRoot>/modules/<module>`, on `ws/<module>`, created from `dev-verified` on first use (or `dev` before that
-ref exists). Matching includes exact paths,
+`<worktreeRoot>/modules/<module>`, on `ws/<module>`, created from the integration head on first use. Matching includes exact paths,
 identical globs and subtrees under a configured `/**` root; unproved glob containment, mixed-module and unmatched
 tasks keep isolated worktrees. Stabilize-target tasks also keep their existing isolated workflow. Module mappings
 cannot overlap. Explicit brief dependencies still apply; overlapping paths introduce no dependencies, reservations,
@@ -613,15 +613,16 @@ reverts the culprit and its `after:` dependents in the batch in one forward comm
 the normal fix-round handling, holds those dependents, and promotes the remaining tasks.
 
 When no stabilize branch exists, promotion first runs the root typecheck and compiles the bundled definitions
-catalogue against one detached `dev-verified` snapshot. It creates the initial stabilize branch only if both checks pass
-and `dev-verified` still points at that snapshot; a failed preflight leaves stabilize absent for a later retry. Once
-cut, that candidate is frozen while its long gate runs, even as `dev-verified` advances. While the stabilize branch exists, promotion gates its head
+catalogue against one detached integration-head snapshot. It creates the initial stabilize branch only if both checks
+pass and the integration ref still points at that snapshot; a failed preflight leaves stabilize absent for a later
+retry. Once cut, that candidate is frozen while its long gate runs, even as the integration branch advances. While the stabilize branch exists, promotion gates its head
 and does not bisect, because only fixes reach it. An
 infrastructure-only failure (process timeout, Docker setup/run failure, or SSH/rsync transport failure) reruns the
 failing workspace checks on the same candidate up to twice; each rerun is recorded in the promotion run. Assertion
 failures block immediately. A passing gate merges newer control-plane-only commits from main into the candidate,
 then fast-forwards main when possible; other main history changes still need a fresh gate. The branch moves to the
-`dev-verified` head, starting the next window. Deleting the branch starts a fresh preflight of `dev-verified`.
+captured integration head, starting the next window. Deleting the branch starts a fresh preflight of the latest
+integration head.
 
 `defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. This includes `bun.lock`: the train keeps the integration lockfile and runs `bun install` against the merged manifests, stages the regenerated lockfile and continues. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown, an already supported import-only conflict, or a configured flat JSON message catalog; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Configured `jsonMessageConflicts` patterns use a three-way key merge, retain the checked-out catalog's order and append keys introduced by the worker, and format the result with the repository formatter. A key changed to different values on both sides remains a conflict and the error names that key. Other non-generated conflicts stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
 
@@ -742,10 +743,10 @@ merge Git refs itself.
 The train keeps its current-attempt fence, source ref and commit checks, scope and protected-path validation, candidate
 attribution, lineage checks, target compare-and-swap, and durable outcome record. It retains the original worker
 acceptance evidence instead of scheduling that same task acceptance again before integration. The post-integration
-development verifier still runs acceptance on its captured `dev` head, alongside typecheck and affected checks; that
+development verifier runs acceptance on its captured `dev` head, alongside typecheck and affected checks; that
 verification is recorded separately from the worker's original acceptance. A control-plane task still runs the full
 mandatory control-plane lifecycle checks on its `main` candidate before the controller advances `main`; promotion
-continues to consume its verified input through the existing promotion gate.
+always gates its own frozen integration candidate.
 
 ### Development verification
 
@@ -851,3 +852,27 @@ format. `readSession` supplies optional session accounting, and `readAllowance` 
 quota-parser exports remain available for historical imports. Test an adapter through the real worker lifecycle with
 `withAgentAdapter`, whose binding stays local to that asynchronous lifecycle. Agents that cannot resume set
 `canResume` to false; retries then start a fresh session with the retry manifest.
+
+## Baseline findings and release gates
+
+This policy supersedes the earlier `Development verification` overview above. `dev-verified` records verifier progress
+and known findings; it is not a green release gate. For every captured `dev` head, the verifier compares every selected
+head check with the exact previous `dev-verified` commit under the same command selection, environment and concurrency
+limit. Selection uses `verifierChecks` (or legacy `affectedTests` when unset), the root typecheck with its exact
+`TYPECHECK_CHANGED` paths, candidate sibling tests for non-specification files, and landed task acceptance commands
+except for specification and research tasks.
+
+A stable assertion that fails at both revisions is durably recorded as an existing finding. It does not block the
+verification progress ref or earn a task a success receipt. A head assertion absent from the baseline is new and may
+be attributed only to a task whose integrated range can affect that check. The verifier reconciles every head result
+and its individual baseline comparison before advancing; a passing retry for one command cannot cover another
+unresolved failure. Stable assertion evidence distinguishes an existing failure from a different new failure in the
+same command. Unknown setup, absent commands, transport or other infrastructure errors, and incomplete output remain
+unknown rather than clean baseline results. Findings and exact run evidence are bounded and stored in SQLite so an
+unchanged finding does not start another sweep after restart. Baseline runs, probes and retries all share the ordinary
+three-check concurrency cap.
+
+Promotion selects the latest eligible integration head by its expected ref identity. It does not use an older
+`dev-verified` ref to pin a candidate. Each frozen promotion candidate still passes its full required gate, ancestry,
+quarantine, stabilization, ref-race and publication checks; known verifier findings do not turn a failed promotion
+command into a pass.
