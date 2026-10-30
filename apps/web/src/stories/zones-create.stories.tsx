@@ -86,7 +86,7 @@ export const Validation: Story = {
 export const Names: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(await canvas.findByRole('combobox'), 'book');
+    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: m.zones_create_starter() }), 'book');
     expect(canvas.getAllByRole('textbox')).toHaveLength(8);
   },
 };
