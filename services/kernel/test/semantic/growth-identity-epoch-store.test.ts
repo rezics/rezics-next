@@ -4,7 +4,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import type { Access } from '../../src/request/access.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject } from '../../src/semantic/subject.ts';
+import { createSubject, writeSubject } from '../../src/semantic/subject.ts';
 import { newId } from '../../src/route/route.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import {
@@ -42,7 +42,8 @@ beforeAll(async () => {
   });
   await real.grant(globalResource, 'editor', 'subject:create');
   await real.grant(globalResource, 'editor', 'subject:merge');
-});
+  await seedNativeHistory();
+}, 600_000);
 
 afterAll(async () => {
   await db?.close();
@@ -108,6 +109,58 @@ async function authorize(action: 'subject:create' | 'subject:merge') {
     () => new Error(`Fixture denied ${action}`),
   );
   return { actor, authorization };
+}
+
+/** Populate the relations used by native plans through their real writers, including receipt custody.
+ * A tiny job/receipt relation otherwise changes sequential-scan size merely as consumable trials run.
+ */
+async function seedNativeHistory() {
+  const route = 0x6e00;
+  const originals = Array.from({ length: 2048 }, () => newId(route));
+  for (let offset = 0; offset < originals.length; offset += 32) {
+    const { actor, authorization } = await authorize('subject:create');
+    await runCommand(
+      db.pool,
+      {
+        partition: home(originals[offset]!),
+        authorization,
+        basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      },
+      async (tx, { transactionId }) => {
+        const events = [];
+        for (const id of originals.slice(offset, offset + 32)) {
+          const result = await writeSubject(tx, transactionId, {
+            target: { route, id },
+            item: { type: 'schema:Person' },
+            release,
+          });
+          events.push(...result.events);
+        }
+        return { value: null, events };
+      },
+    );
+  }
+  for (let offset = 0; offset < originals.length; offset += 2) {
+    const { actor, authorization } = await authorize('subject:merge');
+    const key = randomUUID();
+    const job = await identityEpochStore.prepareAdmission(
+      db.pool,
+      {
+        authorization,
+        basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      },
+      {
+        intent: { kind: 'merge', survivor: originals[offset]!, redirected: originals[offset + 1]!, release: release.digest },
+        receipt: { kind: 'subject.merge', command: {
+          actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key),
+        } },
+      },
+    );
+    await cancelIdentityEpochAdmission(db.pool, job);
+    await stepIdentityEpochAdmission(db.pool, job);
+    expect((await stepIdentityEpochAdmission(db.pool, job)).state).toBe('cancelled');
+  }
+  await settle(db, { analyze: true });
 }
 
 async function createNative(targetRoute: number) {
