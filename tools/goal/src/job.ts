@@ -816,15 +816,23 @@ export class WorkerJob implements GateOutcomeSink {
         kind: 'instruction' as const,
         summary: `Held task ${task.id} has cancelled dependencies ${cancelled.join(', ')}; decide whether they are still needed.`,
       };
-      store.write({ taskId: task.id, attempt: task.currentAttempt }, () => {
-        const alreadyReported = store.events(task.id).some((record) => record.kind === 'cancelled-dependency-reported');
-        if (alreadyReported) return;
-        store.event({ taskId: task.id, attempt: task.currentAttempt }, 'cancelled-dependency-reported', {
-          cancelled,
-          event,
+      try {
+        store.write({ taskId: task.id, attempt: task.currentAttempt }, () => {
+          const alreadyReported = store
+            .events(task.id)
+            .some((record) => record.kind === 'cancelled-dependency-reported');
+          if (alreadyReported) return;
+          store.event({ taskId: task.id, attempt: task.currentAttempt }, 'cancelled-dependency-reported', {
+            cancelled,
+            event,
+          });
+          this.inbox.deliver(event);
         });
-        this.inbox.deliver(event);
-      });
+      } catch (error) {
+        // A task held after a stop keeps its stopped attempt current, which the attempt fence refuses; skipping its
+        // notice must not fail every command and host sweep (all of them stopped on one such task on 2026-10-30).
+        if (!(error instanceof StaleAttemptError)) throw error;
+      }
     }
   }
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
