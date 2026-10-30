@@ -43,16 +43,16 @@ No example is an imported test module or a successful executable port.
 
 The following distinctions are part of the implementation contract, not a source inventory.
 
-| Surface | Present callable or declaration | Composition decision |
-| --- | --- | --- |
-| Search custody | `search/public-filter-custody.ts:createPublicFilterCustody(pool)` and `readPublicFilterConsumerCustody(pool, request, context)` are callable | Reuse their native records and keyed join. |
-| Consumer mechanics | `PublicFilterConsumerOperationsFactory` is a declared type; `search/public-filter-consumer.ts:createPublicFilterConsumerOperations` is its selected future export | The existing mechanics writer implements it; the default wrapper supplies trusted inputs. |
-| Public Source | `PublicFilterSourceFactory` declares `{pool, routeKey, access}`; `semantic/public-filter-source.ts:publicFilterSource` is the selected future export | Instantiate it in trusted composition, once per runtime configuration. |
-| Native Source identity and population join | Reader-only `PublicFilterSource` does not declare these complete operations on this base | The Source-binding writer supplies the additive owner proposal below. |
-| Cold subject keys | `SubjectSourceKeyPages` is the required producer surface named by this plan; no such callable declaration is present on this base | Adopt the explicit bounded shape below with Semantic; never guess a factory export. |
-| Ordinary subject reads | `semantic/search-source.ts:subjectSource(pool, routeKey)` returns actual `SubjectSource` | Keep it for native disclosure and ordinary writer reads; never infer key paging from `read/count`. |
-| Default indexing | `search/work.ts:searchWorkModule.register` calls actual `startSearchIndexing` | Install population and repair through that real starter. |
-| Rebuild | `search/generations.ts:rebuildSubjects` is callable | Replace its count-only publication decision with the shared population/activation bridge. |
+| Surface                                    | Present callable or declaration                                                                                                                                   | Composition decision                                                                               |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Search custody                             | `search/public-filter-custody.ts:createPublicFilterCustody(pool)` and `readPublicFilterConsumerCustody(pool, request, context)` are callable                      | Reuse their native records and keyed join.                                                         |
+| Consumer mechanics                         | `PublicFilterConsumerOperationsFactory` is a declared type; `search/public-filter-consumer.ts:createPublicFilterConsumerOperations` is its selected future export | The existing mechanics writer implements it; the default wrapper supplies trusted inputs.          |
+| Public Source                              | `PublicFilterSourceFactory` declares `{pool, routeKey, access}`; `semantic/public-filter-source.ts:publicFilterSource` is the selected future export              | Instantiate it in trusted composition, once per runtime configuration.                             |
+| Native Source identity and population join | Reader-only `PublicFilterSource` does not declare these complete operations on this base                                                                          | The Source-binding writer supplies the additive owner proposal below.                              |
+| Cold subject keys                          | `SubjectSourceKeyPages` is the required producer surface named by this plan; no such callable declaration is present on this base                                 | Adopt the explicit bounded shape below with Semantic; never guess a factory export.                |
+| Ordinary subject reads                     | `semantic/search-source.ts:subjectSource(pool, routeKey)` returns actual `SubjectSource`                                                                          | Keep it for native disclosure and ordinary writer reads; never infer key paging from `read/count`. |
+| Default indexing                           | `search/work.ts:searchWorkModule.register` calls actual `startSearchIndexing`                                                                                     | Install population and repair through that real starter.                                           |
+| Rebuild                                    | `search/generations.ts:rebuildSubjects` is callable                                                                                                               | Replace its count-only publication decision with the shared population/activation bridge.          |
 
 The requested `public-filter-custody-contract.md` spelling is absent on this base.
 The actual adjacent authority is `public-filter-custody.md`, linked above; its TypeScript contract exists.
@@ -118,10 +118,12 @@ type DefaultPublicFilterRuntime = Readonly<{
       snapshot: 'pit' | 'prepared';
     }>,
     context: PublicFilterConsumerContext,
-  ): Promise<Readonly<{
-    operations: PublicFilterConsumerOperations;
-    capture: PublicFilterConsumerCapture;
-  }>>;
+  ): Promise<
+    Readonly<{
+      operations: PublicFilterConsumerOperations;
+      capture: PublicFilterConsumerCapture;
+    }>
+  >;
   close(): Promise<void>;
 }>;
 ```
@@ -237,12 +239,9 @@ Do not add a parallel head-observation function or a second queried-observation 
 
 ```ts
 type JoinedPopulationRequest =
-  | Readonly<{ kind: 'queried'; phase: 'start';
-      queried: PublicFilterQueriedObservation }>
-  | Readonly<{ kind: 'queried'; phase: 'final';
-      queried: PublicFilterQueriedObservation; execution: string }>
-  | Readonly<{ kind: 'queried'; phase: 'status';
-      queried: PublicFilterQueriedObservation }>;
+  | Readonly<{ kind: 'queried'; phase: 'start'; queried: PublicFilterQueriedObservation }>
+  | Readonly<{ kind: 'queried'; phase: 'final'; queried: PublicFilterQueriedObservation; execution: string }>
+  | Readonly<{ kind: 'queried'; phase: 'status'; queried: PublicFilterQueriedObservation }>;
 ```
 
 The joined branch receives the actual `PublicFilterConsumerContext` as its second argument.
@@ -363,15 +362,15 @@ An unsafe old request observation is abandoned; do not silently replace it mid-e
 
 ### Request state and cleanup
 
-| State | Entry evidence | Next transition | Public effect |
-| --- | --- | --- | --- |
-| Validated | Parsed request and authenticated route admission | Bound or rejected | No membership disclosed. |
-| Bound | Native accepted Source/meaning/physical target | Captured or preparing | No Source metadata exposed. |
-| Captured | Complete registration plus actual PIT/prepared observation | Started | Immutable request input retained. |
-| Started | Native joined start and acquired use | Executed or failed | No candidate response yet. |
-| Executed | Retained actual execution and own rows | Completed fields, then final | No unsafe partial response. |
-| Final | Joined current evidence plus current disclosure | Served or preparing | Filled page or proved exhaustion only. |
-| Closed | Uses drained and exact observation released | Terminal | Shared generation/build remains owned. |
+| State     | Entry evidence                                             | Next transition              | Public effect                          |
+| --------- | ---------------------------------------------------------- | ---------------------------- | -------------------------------------- |
+| Validated | Parsed request and authenticated route admission           | Bound or rejected            | No membership disclosed.               |
+| Bound     | Native accepted Source/meaning/physical target             | Captured or preparing        | No Source metadata exposed.            |
+| Captured  | Complete registration plus actual PIT/prepared observation | Started                      | Immutable request input retained.      |
+| Started   | Native joined start and acquired use                       | Executed or failed           | No candidate response yet.             |
+| Executed  | Retained actual execution and own rows                     | Completed fields, then final | No unsafe partial response.            |
+| Final     | Joined current evidence plus current disclosure            | Served or preparing          | Filled page or proved exhaustion only. |
+| Closed    | Uses drained and exact observation released                | Terminal                     | Shared generation/build remains owned. |
 
 Failures before registration leave no observation to close.
 Failures after PIT creation but before custody commit release the actually opened PIT.
@@ -449,9 +448,15 @@ interface SubjectSourceKeyPages {
     }>,
     context: PublicFilterConsumerContext,
   ): Promise<
-    | Readonly<{ status: 'progress' | 'complete'; partition: number;
-        epoch: number; through: bigint; keys: readonly string[];
-        after: string | null; cost: PublicFilterCost }>
+    | Readonly<{
+        status: 'progress' | 'complete';
+        partition: number;
+        epoch: number;
+        through: bigint;
+        keys: readonly string[];
+        after: string | null;
+        cost: PublicFilterCost;
+      }>
     | Readonly<{ status: 'changed' | 'gap'; cost: PublicFilterCost }>
     | PublicFilterConsumerUnavailable
   >;
@@ -853,18 +858,18 @@ It derives freshness from the same source/bridge/projection/publication lineage 
 Do not introduce a competing freshness store or infer complete coverage from `behind === 0`.
 Request and worker resolve the same persisted state after restart.
 
-| Condition | Retained action | Request result | Recovery end |
-| --- | --- | --- | --- |
-| Cold population incomplete | Resume actual phase/frontier | Index readiness | Identified activation. |
-| Direct page hits work bound | Join admitted prepared job | Explicit readiness | Useful prepared page. |
-| Current prepared output safely within ordinary lag | Keep current and repair building | Current disclosure still required | Replacement publishes. |
-| Actual ordinary lag exceeds five minutes | Retain targeted catch-up | Readiness | Searchable lineage catches up. |
-| Relevant privacy reduction | Block affected snapshot and repair | Readiness immediately | New covered immutable observation. |
-| Irrelevant reduction with complete routing | Continue scoped read | Useful page permitted | Repair proceeds independently. |
-| Engine PIT lost/expired | Close that tuple and recapture next request | Readiness/restart as applicable | New actual PIT. |
-| Prepared build expired or grant revoked | Retire exact generation | Readiness or admission rejection | Re-admission or bounded cleanup. |
-| Worker crash | Replay retained unfinished step | Honest persisted state | At most one step reread. |
-| Source gap/epoch change | Quarantine affected bridge | Readiness | Re-established native bridge. |
+| Condition                                          | Retained action                             | Request result                    | Recovery end                       |
+| -------------------------------------------------- | ------------------------------------------- | --------------------------------- | ---------------------------------- |
+| Cold population incomplete                         | Resume actual phase/frontier                | Index readiness                   | Identified activation.             |
+| Direct page hits work bound                        | Join admitted prepared job                  | Explicit readiness                | Useful prepared page.              |
+| Current prepared output safely within ordinary lag | Keep current and repair building            | Current disclosure still required | Replacement publishes.             |
+| Actual ordinary lag exceeds five minutes           | Retain targeted catch-up                    | Readiness                         | Searchable lineage catches up.     |
+| Relevant privacy reduction                         | Block affected snapshot and repair          | Readiness immediately             | New covered immutable observation. |
+| Irrelevant reduction with complete routing         | Continue scoped read                        | Useful page permitted             | Repair proceeds independently.     |
+| Engine PIT lost/expired                            | Close that tuple and recapture next request | Readiness/restart as applicable   | New actual PIT.                    |
+| Prepared build expired or grant revoked            | Retire exact generation                     | Readiness or admission rejection  | Re-admission or bounded cleanup.   |
+| Worker crash                                       | Replay retained unfinished step             | Honest persisted state            | At most one step reread.           |
+| Source gap/epoch change                            | Quarantine affected bridge                  | Readiness                         | Re-established native bridge.      |
 
 Prepared replacement uses atomic generation publication in the existing job/custody writer.
 The old current generation remains available only while disclosure, expiry and freshness all permit it.
