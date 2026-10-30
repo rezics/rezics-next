@@ -42,15 +42,15 @@ mentions across every claim path. Registry changes require a reason. An ordinary
 they currently manage. The [reservation command][lifecycle] checks both that action and management authority,
 including on replay; [Handles][access-handles] defines the registry and exception receipts.
 
-Renaming publishes the new claim and reserves the former spelling for 30 days; during that window the old name
+Renaming publishes the new claim and retires the former spelling to its owner; for 30 days the old name
 must redirect to the same account, without alias chains. [lifecycle.ts][lifecycle] provides that internal
 resolution. [Public profile lookup][account-data] also resolves a former claim while its `formerUntil` is in the
 future, to the same account only while it is active, and never to its current spelling; it returns `movedTo` with
 the current handle. The [website page loader][agent-page] still treats reserved handles as missing, so page
 forwarding remains an implementation gap.
-After the reservation expires, [reservation SQL][handle-reserve] permits another account to claim the spelling
-without waiting for cleanup. The research's permanent retirement, privacy unlinking and dispute/reassignment
-procedures remain proposals; the adopted validation and registry do not adopt those additional policies.
+After forwarding expires, [reservation SQL][handle-reserve] keeps the former spelling reserved to its owner.
+Another account cannot claim it through expiry or cleanup. The owner may reclaim it through the native handle
+transition. Privacy unlinking and dispute/reassignment procedures in the research remain proposals.
 
 ### Public identity
 
@@ -68,6 +68,19 @@ fence, including suspension, removes an account from discovery lists and counts.
 distinguishes which fence applied. Pending, deleted and erased accounts are never discovered; lifting a fence makes
 the account discoverable again. Attribution is unchanged: the `ids` read keeps presenting a suspended account as
 `active`, which keeps suspension undisclosed.
+
+The [Account discovery source contract](../services/kernel/src/access/account-discovery-contract.md) owns the
+native population keys, exact current handle claim, writer/version custody, all-copy erasure and executable
+handoff. Discovery text is current handle/displayName only. Catalogue people and Accounts remain independent
+hits. Handleless eligible accounts remain in the population; only an exact active claim may supply handle text
+or navigation. Current public avatar, profile and verified-agent guards apply at hydration.
+
+The shared source/document/summary/count boundary in that contract is a concrete Root/Search co-owner proposal,
+not a delivered API. Today's Search `SubjectSource`, `IndexedSubject`, `SubjectSummary`, count/read and facet
+paths remain Subject-only. Attribution ID reads, former-handle forwarding and sitemap enumeration do not deliver
+Account search. [Universal search](search-conditions.md) and [facet discovery](search-facets.md) remain the sole
+Search policy; the contract adds no second engine or permission cache. Native handoff cases remain future red
+until the proposed native assembly and production integration are adopted and delivered.
 
 The deleted identity contract is exactly `{ id, state, kind }`, with no person/automation label. The base's
 [account-data.ts][account-data] meets that shape for organizations but still returns extra null/false fields
