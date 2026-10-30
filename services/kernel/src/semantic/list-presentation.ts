@@ -138,6 +138,7 @@ async function observeSubjects(
         const visible = new Map<string, SubjectObservation>();
         for (const id of list) {
           const row = found.get(id);
+          if (facts && !row) unready();
           if (row?.visibility !== 'visible' || !(await checks.get(id)!(client))) continue;
           if (row.revision === null || row.release === null) unready();
           visible.set(id, { header: row, selected: [], basis: [] });

@@ -227,15 +227,19 @@ test('overflow including duplicates, invalid controls and expired deadlines perf
 test('lossy quantities are omitted and exactly representable decimal quantities retain their native units', async () => {
   const f = await createListPresentationFixture();
   try {
+    const release = structuredClone(bundledRelease);
+    release.types['wd:Q95074']!.listPresentation = { imageAspect: 'portrait', keyFacts: ['schema:height'] };
+    await f.publish(release);
     const unsafe = await f.create('schema:Book', { 'schema:wordCount': quantity('+9007199254740993') });
-    const rounded = await f.create('schema:Book', { 'schema:wordCount': quantity('+1.0000000000000001') });
-    const tiny = await f.create('schema:Book', { 'schema:wordCount': quantity('+0.0000001') });
+    const unit = 'http://www.wikidata.org/entity/Q11573';
+    const rounded = await f.create('wd:Q95074', { 'schema:height': { amount: '+1.0000000000000001', unit } });
+    const tiny = await f.create('wd:Q95074', { 'schema:height': { amount: '+0.0000001', unit } });
     const values = await readListPresentationFacts(await f.deps(), [unsafe, rounded, tiny]);
     for (const id of [unsafe, rounded]) expect(values.get(id)).toEqual({ id, facts: {} });
     expect(values.get(tiny)).toEqual({
       id: tiny,
       facts: {
-        'schema:wordCount': [{ kind: 'quantity', amount: 0.0000001, unit: '1' }],
+        'schema:height': [{ kind: 'quantity', amount: 0.0000001, unit }],
       },
     });
   } finally {

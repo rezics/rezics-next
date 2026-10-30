@@ -18,13 +18,16 @@ import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts
 export const listRouteKey = testRouteKey();
 export const citedValue = (property: string, content: unknown, references = true) => ({
   property: { id: property },
-  value: { type: 'value', content },
+  value: { type: 'value' as const, content },
   ...(references
     ? {
         references: [
           {
             parts: [
-              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/list-facts' } },
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value' as const, content: 'https://example.test/list-facts' },
+              },
             ],
           },
         ],
@@ -212,7 +215,10 @@ export async function createListPresentationFixture(options: { poolMax?: number;
         references: [
           {
             parts: [
-              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/list-facts' } },
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value' as const, content: 'https://example.test/list-facts' },
+              },
             ],
           },
         ],
