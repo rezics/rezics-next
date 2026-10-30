@@ -40,8 +40,8 @@ function replaceGlobal(key: string, value: unknown) {
 
 test('download creates only a local JSON-LD Blob with a bounded filename and releases its URL', async () => {
   const anchor = { href: '', download: '', click: mock(() => {}), remove: mock(() => {}) };
-  const append = mock(() => {});
-  replaceGlobal('document', { createElement: () => anchor, body: { append } });
+  const appendChild = mock(() => {});
+  replaceGlobal('document', { createElement: () => anchor, body: { appendChild } });
   let blob: Blob | undefined;
   const create = spyOn(URL, 'createObjectURL').mockImplementation((value) => {
     blob = value as Blob;
@@ -60,7 +60,7 @@ test('download creates only a local JSON-LD Blob with a bounded filename and rel
   expect(await blob?.text()).toBe(collectionPublicDocument(page, context)!.text);
   expect(anchor.href).toBe('blob:local-itemlist');
   expect(anchor.download).toBe('collection-public-list.jsonld');
-  expect(append).toHaveBeenCalledWith(anchor);
+  expect(appendChild).toHaveBeenCalledWith(anchor);
   expect(anchor.click).toHaveBeenCalledTimes(1);
   expect(anchor.remove).toHaveBeenCalledTimes(1);
   expect(revoke).not.toHaveBeenCalled();

@@ -19,7 +19,7 @@ export function downloadCollectionItemList(
   try {
     anchor.href = url;
     anchor.download = file.filename;
-    document.body.append(anchor);
+    document.body.appendChild(anchor);
     anchor.click();
   } finally {
     anchor.remove();
