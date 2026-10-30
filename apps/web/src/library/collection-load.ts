@@ -202,6 +202,7 @@ export async function loadEditableCollectionPage(
     filterType?: string;
     filterProperties?: CollectionFilterProperty[];
     filterParams?: CollectionFilterParams;
+    filterStatus?: EditableCollectionPage['filterStatus'];
   },
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<CollectionPageResult> {
