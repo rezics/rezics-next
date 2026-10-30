@@ -1,5 +1,4 @@
 import {
-  providerFailure,
   decideProviderCandidate as decideNativeProviderCandidate,
   type ProviderDecisionRow,
   type ProviderFailure,

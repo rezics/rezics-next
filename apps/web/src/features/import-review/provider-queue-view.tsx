@@ -94,6 +94,7 @@ export function ProviderQueue({
               ? 'invalid'
               : 'unavailable',
       };
+    const related = Object.fromEntries(Object.entries(state.names).map(([key, labels]) => [key, { labels }]));
     return {
       ok: true,
       page: {
@@ -107,7 +108,7 @@ export function ProviderQueue({
           label: m.prq_subject(),
           href: subjectHref({ id: subject, label: '' }, locale).href,
           propertyLabel: pageText(state.names[candidate.statement.property.id], locale).text || m.candidate_field(),
-          related: Object.fromEntries(Object.entries(state.names).map(([key, labels]) => [key, { labels }])),
+          related,
         })),
         ...(state.session ? { session: state.session } : {}),
       },
