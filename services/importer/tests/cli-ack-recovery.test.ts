@@ -16,7 +16,13 @@ for (const source of ['bangumi', 'openlibrary'] as const) {
     const sourceRecord =
       source === 'bangumi'
         ? { id: 424242, type: 2, name: 'Original title' }
-        : { key: '/books/OL900000002M', type: { key: '/type/edition' }, revision: 11, title: 'Original title' };
+        : {
+            key: '/books/OL900000002M',
+            type: { key: '/type/edition' },
+            revision: 11,
+            last_modified: { value: '2025-02-03T04:05:06.654321' },
+            title: 'Original title',
+          };
     const externalId = source === 'bangumi' ? '424242' : '/books/OL900000002M';
     const subject = randomUUID();
     const receipts = new Map<string, BatchWriteResult['results'][number]>();
