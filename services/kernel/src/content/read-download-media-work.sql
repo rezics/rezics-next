@@ -13,7 +13,8 @@ SELECT m.media_id, m.container_id, m.uploader_id, m.purpose, m.state, m.claimed_
        m.taken_down, m.security_revision::text, m.provenance,
        COALESCE(m.crop[3], m.width) AS width, COALESCE(m.crop[4], m.height) AS height,
        CASE WHEN octet_length(m.thumbhash) <= 32 THEN encode(m.thumbhash, 'base64') END AS thumbhash,
-       CASE WHEN m.average_color ~ '^#[0-9a-f]{6}$' THEN m.average_color END AS average_color, m.focal_x, m.focal_y, m.credit,
+       CASE WHEN octet_length(m.average_color) = 7 AND m.average_color ~ '^#[0-9a-f]{6}$'
+            THEN m.average_color END AS average_color, m.focal_x, m.focal_y, m.credit,
        v.key AS variant_key, v.sha256 AS variant_sha256, v.media_type AS variant_media_type,
        v.byte_count AS variant_byte_count, v.format AS variant_format,
        v.width AS variant_width, v.height AS variant_height
@@ -23,4 +24,4 @@ LEFT JOIN content.media_variant v
   AND v.format = i.format AND v.width = i.width
 WHERE (m.credit IS NULL OR octet_length(convert_to(m.credit::text, 'UTF8')) <= :credit_bytes::integer)
   AND (m.provenance IS NULL OR octet_length(convert_to(m.provenance::text, 'UTF8')) <= :provenance_bytes::integer)
-  AND (m.sha256 IS NULL OR m.sha256 ~ '^[0-9a-f]{64}$');
+  AND (m.sha256 IS NULL OR (octet_length(m.sha256) = 64 AND m.sha256 ~ '^[0-9a-f]{64}$'));

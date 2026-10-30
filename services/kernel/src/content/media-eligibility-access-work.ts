@@ -94,7 +94,7 @@ function authorWork(plan: ParentPlan): AccessWork {
   };
 }
 
-// All text in these projections is ASCII by schema or by the work-only SQL.
+// All fixed text in these projections is ASCII by schema or work-only SQL.
 // Int4/int8 use at most 11/19 characters; finite float4 values become JS numbers
 // whose JSON representation fits 32 bytes. PostgreSQL timestamps fit 64 bytes.
 // JSONB envelope text is bounded by SQL's uncompressed UTF-8 serialization;
@@ -277,7 +277,7 @@ export function mediaEligibilityCallbacks<E>(options: Readonly<{
           const node = ancestors[ancestorIndex];
           // Changed ancestry cannot expand this invocation into unadmitted IO.
           // The unchanged native walker still validates kind, routes and cycles.
-          if (bounded && (!node || JSON.stringify(input) !== JSON.stringify(node.input)))
+          if (bounded && (!node || (input.route !== node.input.route || input.id !== node.input.id || input.kind !== node.input.kind)))
             throw new TypeError('Media eligibility ancestry changed before dispatch');
           return read(`ancestor:${ancestorIndex++}`, node?.work, input, dispatch);
         },

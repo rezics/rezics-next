@@ -590,7 +590,9 @@ Metered avatar, post-image and Realm-image callbacks use separate `read-download
 at most twelve actual slots, bounded by the native unique slot index. Work-only optional ThumbHash and colour
 fields follow the generator's <=32-byte and `#rrggbb` formats. Malformed historical optional fields become null;
 a signature mismatch still fails closed. Whole credit/provenance must fit the existing import envelope's
-8192/65536 UTF-8 byte limits or the point returns unavailable. Required rights and binding facts are never clipped.
+8192/65536 UTF-8 byte limits or the point returns unavailable. A captured null uses a zero SQL limit, so changed
+nonnull metadata fails closed before projection; it is never treated as absent. Required rights and binding facts
+are never clipped.
 These are field projection contracts, not Source allowances or assumptions that historical rows passed a constraint.
 The cover-only `NOT VALID` display constraint supplies no historical proof.
 
