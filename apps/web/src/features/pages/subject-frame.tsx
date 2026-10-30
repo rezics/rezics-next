@@ -168,9 +168,16 @@ export async function loadViewPages(
   const key = primary ? currentPlan.nodes[primary[0]] : undefined;
   const body = key ? result.page.reads[key]?.body : undefined;
   const groupCount = Object.values(currentPlan.reads).filter(
-    (read) => read.kind === 'links' || read.kind === 'relations',
+    (read) => read.kind === 'links' || read.kind === 'relations' || read.kind === 'subjectThreads',
   ).length;
-  const next = groupCount <= 1 && isRecord(body) && typeof body.next === 'string' ? body.next : undefined;
+  const next =
+    key &&
+    currentPlan.reads[key]?.kind !== 'subjectThreads' &&
+    groupCount <= 1 &&
+    isRecord(body) &&
+    typeof body.next === 'string'
+      ? body.next
+      : undefined;
   return {
     kind: 'page',
     page: result.page,

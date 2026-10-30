@@ -205,26 +205,26 @@ when `page.subject` is `null`.
 
 ## Subject data components
 
-The registry's data components cover every overview section. Each reads a bounded preview,
-receives the total or an "at least" count, and renders a link to its full view when the count
-exceeds the preview.
+The registry's data components cover every overview section with bounded previews. Components use
+owner-supplied counts where available. Discussion and review lists have no count and preserve the
+owner's opaque continuation, including on an empty page.
 
-| Component         | Reads                                                                                    | Preview limit |
-| ----------------- | ---------------------------------------------------------------------------------------- | ------------- |
-| `SubjectHeader`   | The page subject, with its cover summary                                                 | —             |
-| `Cover`           | The page subject's cover summary; always renders, with the placeholder when it is `null` | —             |
-| `Summary`         | The subject's summary document in the reader's language, spoiler-safe                    | —             |
-| `Statements`      | The named properties                                                                     | 32 properties |
-| `RelationGroups`  | Inverse relations of one property, grouped with the page's other nodes by relation group | 12 per node   |
-| `Appearances`     | Character appearances with role and cast (on a work); works with role (on a character)   | 12            |
-| `Credits`         | Credits grouped by role in credit order (on a work); works by role (on a person)         | 12            |
-| `RatingSummary`   | The headline population's aggregate, the viewer's Realm aggregates, imported scores      | 3 Realms      |
-| `ReactionSummary` | The subject's public reaction totals                                                     | 1             |
-| `ThreadList`      | The most active threads about the subject in the page's population                       | 5             |
-| `ReviewList`      | The most helpful reviews in the page's population                                        | 5             |
-| `CollectionList`  | Public collections containing the subject                                                | 6             |
-| `Sources`         | Cover credits, fact sources and external identifiers                                     | —             |
-| `MoreStatements`  | Facts no other component on the page shows                                               | —             |
+| Component         | Reads                                                                                    | Preview limit     |
+| ----------------- | ---------------------------------------------------------------------------------------- | ----------------- |
+| `SubjectHeader`   | The page subject, with its cover summary                                                 | —                 |
+| `Cover`           | The page subject's cover summary; always renders, with the placeholder when it is `null` | —                 |
+| `Summary`         | The subject's summary document in the reader's language, spoiler-safe                    | —                 |
+| `Statements`      | The named properties                                                                     | 32 properties     |
+| `RelationGroups`  | Inverse relations of one property, grouped with the page's other nodes by relation group | 12 per node       |
+| `Appearances`     | Character appearances with role and cast (on a work); works with role (on a character)   | 12                |
+| `Credits`         | Credits grouped by role in credit order (on a work); works by role (on a person)         | 12                |
+| `RatingSummary`   | The headline population's aggregate, the viewer's Realm aggregates, imported scores      | 3 Realms          |
+| `ReactionSummary` | The subject's public reaction totals                                                     | 1                 |
+| `ThreadList`      | Current discussions in native last-activity order in the page's population               | 6 Global, 5 Realm |
+| `ReviewList`      | Current reviews in native last-activity order in the page's population                   | 6 Global, 5 Realm |
+| `CollectionList`  | Public collections containing the subject                                                | 6                 |
+| `Sources`         | Cover credits, fact sources and external identifiers                                     | —                 |
+| `MoreStatements`  | Facts no other component on the page shows                                               | —                 |
 
 `Cover`, `Summary` and `Sources` read the page subject. `Appearances` and `Credits` take the
 statements of one relation property in one of two directions. `inverse`, the default, is the
@@ -235,12 +235,19 @@ a work's cast and staff are found; `filter` and `type` apply to `inverse` only. 
 the subject's statements of that property in statement order, previewed to `limit` with their
 count.
 
-`RatingSummary` and `ReviewList` plan no composition read. `ThreadList` retains its population-aware composition
-read and native continuation. Web binds ratings separately and supplements placed Global review/discussion regions
-with Content's public subject-thread reader and native last-activity order. These public previews request five items
-and full views twenty, preserving each opaque continuation without draining it. One public account batch supplies
-bylines; no per-row subject or account read is needed. Existing Realm discussion bindings retain their selected
-Context and current native authority; the Global supplement never relabels its output as Realm content.
+`RatingSummary` plans no composition read. `ThreadList` and `ReviewList` bind the existing Content
+`subject_threads.list` operation with `kind: discussion` and `kind: review` respectively. The guarded
+population selects the native place: Global Context's ID for Global, the selected Realm's ID for Realm.
+Both request six Global entries; the existing selected-Realm five-entry window is retained. `paged`
+changes presentation and enables node continuation, without widening that window. No subject means no read.
+Content's current review kind and optional native vote citation remain authoritative; these lists do not
+invent question, helpfulness or rating ordering. Original status, body and opaque `next` pass unchanged
+through composition. All configured leaves share the existing 16-distinct-read/128-requested-slot budget.
+
+Web consumes those aggregate leaves for overview and full views, with one public account batch for bylines.
+It makes no supplemental Global thread request. A continuation addresses one current `paged:true` node,
+retains native cursor admission (4,096 characters), and leaves other list streams unrequested (204).
+Each group uses its own next/restart link and retains the selected Realm query parameter.
 Failures and platform closure remain distinct from a successful empty page. A zero-item page with a continuation
 invites continuation rather than claiming the subject has no posts. Creation uses a returned thread's actual board;
 no default board or Realm association is inferred for an empty list.
@@ -491,16 +498,19 @@ The page read answers one view: its target may name `view` beside a subject or a
 document is that view's, and the answer lists `views`, the views the page's templates define. The views a page
 _offers_ are those minus the ones whose data is empty. Every page read is meant to include one view-count read for the
 subject, answered from counts kept with the facts and content they count, so the tab bar never costs a read per view.
-Until that read exists, the host offers a view when its preview in the overview returned at least one item, and
-Reviews, Discussion and Details whenever a template defines them, except that a template whose overview previews an
-account's reviews offers Reviews only with data. The tab bar is rendered by the host from that list;
+Until that read exists, the host offers a view when its preview in the overview returned at least one item.
+Subject Reviews and Discussion require an actual successful native preview, including an empty one; Details
+requires its template. A template whose overview previews an account's reviews offers Reviews only with data. The tab bar is rendered by the host from that list;
 documents cannot name or reorder tabs.
 
 Each view document has its own read budget (16 reads, cost 128). A view's reads are planned only when that view is
 requested, so the overview never pays for a full credits list. The data components that preview a list
 (`RelationGroups`, `Appearances`, `Credits`, `SubjectList`, `CollectionList`, `ThreadList`, `ReviewList`,
 `AccountThreads`, `AccountPosts`, `AccountCollections`) take `paged`: a full view sets it to read one page at the component's own `limit` and renders no "See all" link. The page
-read has no continuation yet, so a full view shows its first page; the continuation link arrives with it.
+read accepts one `{node,cursor}` continuation for a current paged links, relations or subject-threads node;
+configured `TypeList` continuation follows its native Search contract.
+The native opaque cursor is substituted before deduplication; unrelated list streams return 204 and retain
+independent restart links. A component never infers a continuation or total from preview length.
 
 ## Platform profile
 

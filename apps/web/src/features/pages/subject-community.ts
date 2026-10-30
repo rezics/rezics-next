@@ -1,9 +1,10 @@
+import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { KernelClient } from '@rezics/client';
 import { documentText } from '@rezics/document';
 import { readPageAuthors, type PageAuthors } from '../../identity/read';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../../kernel/platform-closed';
 import { GLOBAL } from './subject-ratings';
-import type { SubjectPageData, SubjectPageLoad } from './subject';
+import { pageContext, type SubjectPageData, type SubjectPageLoad } from './subject';
 import { isRecord } from './shared';
 
 export type CommunityKind = 'review' | 'discussion';
@@ -17,6 +18,7 @@ export type CommunityRegion =
   | { state: 'ready'; threads: CommunityThread[]; next: string | null };
 export type SubjectCommunity = {
   regions: Partial<Record<CommunityKind, CommunityRegion>>;
+  nodes?: Record<string, CommunityRegion>;
   authors: PageAuthors;
   now: string;
 };
@@ -96,7 +98,52 @@ export async function readSubjectCommunity(
   };
 }
 
-/** Called only by the public page query boundary, keeping ordinary composition loaders compatible. */
+/** Decode only the existing native DTO. A failed/unrequested read cannot become an empty invitation. */
+export function composedCommunityRegion(read: { status: number; body: unknown } | undefined): CommunityRegion {
+  if (!read) return { state: 'unavailable' };
+  if (isPlatformClosedProblem(read.status, read.body)) return { state: 'closed' };
+  if (
+    read.status !== 200 ||
+    !isRecord(read.body) ||
+    !Array.isArray(read.body.threads) ||
+    (read.body.next !== null && typeof read.body.next !== 'string')
+  )
+    return { state: 'unavailable' };
+  const body = read.body as NativePage;
+  return { state: 'ready', threads: body.threads.map(project), next: body.next };
+}
+
+/** Use the guarded composition leaves and their exact cursor, with one shared public identity batch. */
+export async function withComposedCommunity(client: KernelClient, loaded: SubjectPageLoad): Promise<SubjectPageLoad> {
+  if (loaded.kind !== 'page' || !loaded.page.subject || loaded.page.account) return loaded;
+  const plan = planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page));
+  const nodes: Record<string, CommunityRegion> = {};
+  const regions: SubjectCommunity['regions'] = {};
+  for (const [node, key] of Object.entries(plan.nodes)) {
+    const descriptor = plan.reads[key];
+    if (descriptor?.kind !== 'subjectThreads') continue;
+    const region = composedCommunityRegion(loaded.page.reads[key]);
+    nodes[node] = region;
+    regions[descriptor.threadKind] ??= region;
+  }
+  const authorIds = Object.values(nodes).flatMap((region) =>
+    region.state === 'ready' ? region.threads.map((thread) => thread.authorId) : [],
+  );
+  return {
+    ...loaded,
+    page: {
+      ...loaded.page,
+      community: { nodes, regions, authors: await readPageAuthors(client, authorIds), now: new Date().toISOString() },
+    },
+  };
+}
+
+/** Tab availability comes exclusively from the native composition status. */
+export function communityOverview(overview: SubjectPageData): SubjectPageData {
+  return overview;
+}
+
+/** Standalone compatibility loader. The actual page query consumes composition leaves through withComposedCommunity. */
 export async function withSubjectCommunity(
   client: KernelClient,
   loaded: SubjectPageLoad,
@@ -109,19 +156,4 @@ export async function withSubjectCommunity(
   if (!kinds.length) return loaded;
   const community = await readSubjectCommunity(client, loaded.page.subject, kinds, view !== undefined, cursor);
   return { ...loaded, page: { ...loaded.page, community } };
-}
-
-/** Overview tab availability needs the supported bindings, not another pair of preview requests on a full view. */
-export function communityOverview(overview: SubjectPageData): SubjectPageData {
-  if (overview.context?.population.kind === 'realm') return overview;
-  return {
-    ...overview,
-    community: {
-      regions: Object.fromEntries(
-        communityKinds(overview.document.content).map((kind) => [kind, { state: 'loading' }]),
-      ),
-      authors: {},
-      now: new Date().toISOString(),
-    },
-  };
 }

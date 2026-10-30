@@ -545,7 +545,10 @@ async function pageAnswer(input: {
     if (
       continuedKey &&
       readKey !== continuedKey &&
-      (descriptor.kind === 'links' || descriptor.kind === 'relations' || descriptor.kind === 'search')
+      (descriptor.kind === 'links' ||
+        descriptor.kind === 'relations' ||
+        descriptor.kind === 'search' ||
+        descriptor.kind === 'subjectThreads')
     ) {
       observed.set(key, { status: 204, body: {} });
       continue;

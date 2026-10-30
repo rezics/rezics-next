@@ -1,3 +1,7 @@
+import { planReads, platformRegistry, type CompositionDocument, type PageContinuation } from '@rezics/composition';
+import demoFixtures from '../fixtures.json';
+import type { SubjectPageData } from '../../features/pages/subject';
+import type { Fixtures, KernelRecording } from '../fake';
 import { fromPlainText } from '@rezics/document';
 import type { KernelClient } from '@rezics/client';
 import type { NativeCommunityThread, CommunityKind } from '../../features/pages/subject-community';
@@ -99,7 +103,51 @@ const boardRead: FakeRoute['story'] = ({ match }) => {
     if (match?.[1] === board.id) return { status: 200, board };
   }
 };
+/** The shared page renderer receives the same existing story DTOs through composition leaves. */
+const composedPage: FakeRoute['story'] = async ({ request }) => {
+  const input = (await request.clone().json()) as {
+    target?: { subject?: string; realm?: string };
+    continuation?: PageContinuation;
+  };
+  if (input.target?.subject !== communitySubject.id || input.target.realm) return;
+  const { pageRead } = await import('../fake');
+  const response = await pageRead(demoFixtures as unknown as Fixtures, request.clone() as Request);
+  const page = (await response.json()) as SubjectPageData;
+  if (response.status !== 200) return { status: response.status, __responseBody: page };
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, {
+    subject: communitySubject.id,
+    ...(input.continuation ? { continuation: input.continuation } : {}),
+  });
+  const selected = input.continuation ? plan.nodes[input.continuation.node] : undefined;
+  for (const [key, read] of Object.entries(plan.reads)) {
+    if (
+      selected &&
+      key !== selected &&
+      (read.kind === 'links' || read.kind === 'relations' || read.kind === 'subjectThreads')
+    ) {
+      page.reads[key] = { status: 204, body: {} };
+    } else if (read.kind === 'subjectThreads') {
+      page.reads[key] =
+        read.cursor && read.cursor !== 'community-next'
+          ? { status: 400, body: { code: 'invalid_cursor' } }
+          : {
+              status: 200,
+              body: {
+                threads: [communityThread(read.threadKind, !!read.cursor)],
+                next: read.cursor ? null : 'community-next',
+              },
+            };
+    }
+  }
+  return {
+    status: 200,
+    ...page,
+    ...(input.continuation ? { continuation: input.continuation } : {}),
+  } as KernelRecording;
+};
+
 export const routes: FakeRoute[] = [
+  { method: 'POST', path: '/v1/pages:read', story: composedPage, fixture: composedPage },
   { method: 'GET', path: /^\/v1\/subjects\/([^/]+)\/threads$/, story: subjectThreads, fixture: subjectThreads },
   { method: 'GET', path: /^\/v1\/boards\/([^/]+)$/, story: boardRead, fixture: boardRead },
 ];

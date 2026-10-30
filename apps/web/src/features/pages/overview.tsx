@@ -1,8 +1,8 @@
-import { threadLocation } from '../../threads/thread-href';
 import type { SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
+import { composedCommunityRegion } from './subject-community';
 import { pickLanguage, type PageRead } from '@rezics/composition';
 import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
@@ -910,93 +910,27 @@ export function RatingSummary(props: Record<string, unknown>) {
   );
 }
 
-function ContextThreadList(props: Record<string, unknown>) {
-  const state = useOverview(props.id);
-  if (!state) return null;
-  const { value, section } = state;
-  const title = 'Active discussions';
-  if (!section?.ok || section.read.kind !== 'subjectThreads' || !Array.isArray(section.body.threads))
-    return (
-      <>
-        <Failed slot="thread-list" id={String(props.id)} title={title} locale={value.locale} />
-        {props.paged === true && <StreamLink value={value} view="discussion" node={String(props.id)} />}
-      </>
-    );
-  const threads = section.body.threads.filter(isRecord);
-  const href = viewHref(value, 'discussion');
-  return (
-    <Preview
-      slot="thread-list"
-      id={String(props.id)}
-      title={title}
-      more={props.paged !== true && section.body.next !== null}
-      href={href}
-      locale={value.locale}
-    >
-      {threads.length === 0 ? (
-        <p>
-          {typeof section.body.next === 'string'
-            ? 'No visible entries on this page.'
-            : m.subject_threads_empty({}, { locale: value.locale as never })}
-        </p>
-      ) : (
-        <ol className="divide-y">
-          {threads.map((thread) => {
-            if (typeof thread.id !== 'string') return null;
-            const removed = thread.availability !== 'available';
-            const heading = !removed && typeof thread.title === 'string' ? thread.title : 'Removed discussion';
-            const first = isRecord(thread.firstPost) ? thread.firstPost : undefined;
-            const body = first?.availability === 'available' ? readableDocument(first.body) : undefined;
-            return (
-              <li key={thread.id} className="space-y-2 py-3">
-                <a
-                  className={linkClass}
-                  href={threadLocation(value.locale, { id: thread.id, title: removed ? null : heading })}
-                >
-                  {heading}
-                </a>
-                {body && (
-                  <div className="max-h-40 overflow-hidden">
-                    <DocumentValue document={body} lang={undefined} labels={value.labels} />
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      )}
-      {props.paged === true && typeof section.body.next === 'string' && (
-        <StreamLink value={value} view="discussion" node={String(props.id)} cursor={section.body.next} />
-      )}
-    </Preview>
-  );
-}
-
 function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 'review' | 'discussion' }) {
-  const value = useContext(OverviewContext);
-  const data = useSubjectCommunity(kind);
-  if (!value?.subject) return null;
-  if (value.context?.population.kind === 'realm') {
-    return kind === 'discussion' ? (
-      <ContextThreadList {...props} />
-    ) : (
-      <Failed
-        slot="review-list"
-        id={String(props.id)}
-        title={m.subject_reviews({}, { locale: value.locale as never })}
-        locale={value.locale}
-      />
-    );
-  }
-  if (!data) return kind === 'discussion' ? <ContextThreadList {...props} /> : null;
-  const href = viewHref(value, kind === 'review' ? 'reviews' : 'discussion');
+  const state = useOverview(props.id);
+  const node = String(props.id);
+  const data = useSubjectCommunity(kind, node);
+  const subject = state?.value.subject;
+  if (!state || !subject) return null;
+  const { value, section } = state;
+  const view = kind === 'review' ? 'reviews' : 'discussion';
+  const href = viewHref(value, view);
   if (!href) return null;
+  // A continued document deliberately leaves unrelated groups unrequested.
+  if (section && !section.ok && section.status === 204) return <StreamLink value={value} view={view} node={node} />;
   return (
     <SubjectCommunityRegion
-      id={typeof props.id === 'string' ? props.id : kind}
+      id={node}
+      node={node}
       kind={kind}
-      {...data}
-      subject={{ id: value.subject, label: value.subjectLabel ?? value.unlabelled }}
+      region={data?.region ?? composedCommunityRegion(section?.ok ? { status: 200, body: section.body } : undefined)}
+      authors={data?.authors ?? {}}
+      now={data?.now ?? new Date().toISOString()}
+      subject={{ id: subject, label: value.subjectLabel ?? value.unlabelled }}
       locale={value.locale}
       href={href}
       paged={props.paged === true}

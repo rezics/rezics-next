@@ -249,12 +249,6 @@ export function subjectTabs(page: {
     const planned = key === undefined ? undefined : plan.reads[key];
     if (planned && (planned.kind !== 'subjectThreads' || (key !== undefined && page.reads[key]?.status === 200)))
       openReads.add(view);
-    if (
-      page.context?.population.kind !== 'realm' &&
-      ((node.type === 'ReviewList' && page.community?.regions.review) ||
-        (node.type === 'ThreadList' && page.community?.regions.discussion))
-    )
-      openReads.add(view);
     const counted = previewCount(node, planned, key === undefined ? undefined : page.reads[key]);
     if (counted) {
       sum.counted += 1;

@@ -196,9 +196,12 @@ Global population metadata. Unknown, denied or banned Realms never become a Glob
 After leaves, fresh subject, Context, Realm, publication and protected-ban guards discard
 changed output: concealment is 404, changed selection is retryable `dependency_unavailable`.
 
-`ThreadList` reads the existing `subject_threads.list` operation at limit five, using the Realm
-population ID as place (Global uses the Global Context ID). The unmodified `{threads,next}`
-body retains native board/place disclosure. Scoped producers without a native adapter return
+`ThreadList` and `ReviewList` read the existing `subject_threads.list` operation with the native
+`discussion` and `review` kinds. Both use limit six for Global and retain limit five for selected
+Realms, using the Realm population ID as place (Global uses the Global Context ID). The unmodified
+`{threads,next}` body, original status and merged native session retain current board/post/place disclosure.
+No alternate review store, question default, grant, count or order is inferred. Web renders the aggregate
+leaves and does not supplement them with Global reads. Scoped producers without a native adapter return
 unavailable rather than Global or empty data.
 
 A subject full view may continue one current `paged:true` node with top-level
@@ -209,8 +212,8 @@ share the existing 16-read/128-slot budget and four dispatch workers. Authority 
 fixed anchored native reads under the original admission and deadline, with no new retry.
 
 A subject page continuation resolves its current template and Context before planning. It dispatches the selected
-node's native links/relations read and retains ordinary subject/control reads. Other links/relations descriptors
-return 204 with an empty body; they are unrequested, not empty lists. Clients retain independent group state or
+node's native links/relations/subject-threads read and retains ordinary subject/control reads. Other links, relations,
+Search and subject-thread descriptors return 204 with an empty body; they are unrequested, not empty lists. Clients retain independent group state or
 offer a fresh-start link when opening a continued document directly. Full-document planning bounds still apply.
 
 ## Configured catalogue lists

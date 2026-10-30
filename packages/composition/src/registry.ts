@@ -359,6 +359,21 @@ const readDirected: ComponentRead = (props, page) => {
   return props.direction === 'forward' && read?.kind === 'links' ? { ...read, kind: 'relations' } : read;
 };
 
+/** The native Content place follows the guarded page population, independently of the factual Context ID. */
+const readSubjectThreads =
+  (threadKind: 'discussion' | 'review'): ComponentRead =>
+  (_props, page) =>
+    page.subject === null
+      ? null
+      : {
+          kind: 'subjectThreads',
+          id: page.subject,
+          place: page.context?.population.kind === 'realm' ? page.context.population.id : PAGE_GLOBAL_CONTEXT,
+          threadKind,
+          // Preserve the selected-Realm window; Global previews use the adopted six-entry window.
+          limit: page.context?.population.kind === 'realm' ? 5 : 6,
+        };
+
 export const platformRegistry = defineRegistry({
   root: Type.Object({ appearance: Type.Optional(appearance) }, closed),
   components: [
@@ -462,20 +477,12 @@ export const platformRegistry = defineRegistry({
     {
       type: 'ThreadList',
       props: Type.Object({ paged: Type.Optional(Type.Boolean()) }, closed),
-      read: (_props, page) =>
-        page.subject === null
-          ? null
-          : {
-              kind: 'subjectThreads',
-              id: page.subject,
-              place: page.context?.population.kind === 'realm' ? page.context.population.id : PAGE_GLOBAL_CONTEXT,
-              threadKind: 'discussion',
-              limit: 5,
-            },
+      read: readSubjectThreads('discussion'),
     },
     {
       type: 'ReviewList',
       props: Type.Object({ paged: Type.Optional(Type.Boolean()) }, closed),
+      read: readSubjectThreads('review'),
     },
     {
       type: 'Sources',

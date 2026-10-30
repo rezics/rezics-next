@@ -22,6 +22,7 @@ export function SubjectCommunityRegion({
   locale,
   href,
   paged = false,
+  node,
 }: {
   id: string;
   kind: CommunityKind;
@@ -32,6 +33,7 @@ export function SubjectCommunityRegion({
   locale: string;
   href: string;
   paged?: boolean;
+  node?: string;
 }) {
   const options = { locale: locale as never };
   const review = kind === 'review';
@@ -40,6 +42,16 @@ export function SubjectCommunityRegion({
   const empty = region.state === 'ready' && threads.length === 0;
   const next = region.state === 'ready' ? region.next : null;
   const state = empty ? (next ? 'continuation' : 'empty') : region.state === 'ready' ? 'populated' : region.state;
+  const [path, search = ''] = href.split('?');
+  const retryHref = paged ? href : `?${search}`;
+
+  const nextHref = (() => {
+    if (!paged || !next) return href;
+    const query = new URLSearchParams(search);
+    query.set('cursor', next);
+    if (node) query.set('node', node);
+    return `${path}?${query}`;
+  })();
 
   return (
     <section
@@ -73,7 +85,7 @@ export function SubjectCommunityRegion({
           <p role="status" className="text-sm text-muted-foreground">
             {m.subject_section_failed({}, options)}
           </p>
-          <a data-slot="retry" className={actionClass} href={paged ? href : '?'}>
+          <a data-slot="retry" className={actionClass} href={retryHref}>
             {m.subject_section_retry({}, options)}
           </a>
         </div>
@@ -123,11 +135,7 @@ export function SubjectCommunityRegion({
         </ul>
       )}
       {next && (
-        <a
-          data-slot="community-next"
-          className={actionClass}
-          href={paged ? `${href}?cursor=${encodeURIComponent(next)}` : href}
-        >
+        <a data-slot="community-next" className={actionClass} href={nextHref}>
           {m.subject_community_more({}, options)}
         </a>
       )}
@@ -135,8 +143,8 @@ export function SubjectCommunityRegion({
   );
 }
 
-export function useSubjectCommunity(kind: CommunityKind) {
+export function useSubjectCommunity(kind: CommunityKind, node?: string) {
   const data = useContext(SubjectCommunityContext);
-  const region = data?.regions[kind];
+  const region = node && data?.nodes ? data.nodes[node] : data?.regions[kind];
   return data && region ? { region, authors: data.authors, now: data.now } : undefined;
 }

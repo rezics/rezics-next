@@ -13,7 +13,7 @@ import { loadSubjectPage, PageReadError } from './subject';
 import { loadContextSubject } from './context-subject';
 import { readRatings, readOwnRating } from './subject-ratings';
 import { readReactionCounts, readOwnReaction } from './subject-reactions';
-import { communityOverview, withSubjectCommunity } from './subject-community';
+import { communityOverview, withComposedCommunity } from './subject-community';
 import { projectShareCardPage } from '../../media/share-card-page';
 import { locales } from '../../paraglide/runtime.js';
 
@@ -86,7 +86,7 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
       data.realm === undefined && authorization === undefined && cardLocale !== undefined
         ? projectShareCardPage(loaded, { id: data.id, locale: cardLocale })
         : undefined;
-    return { ...(await withSubjectCommunity(client, loaded, data.view)), shareCard };
+    return { ...(await withComposedCommunity(client, loaded)), shareCard };
   });
 
 const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
@@ -116,20 +116,11 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
     setResponseHeader('cache-control', 'private, no-store');
     const { loadViewPages } = await import('./subject-frame');
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
-    // Public community cursors belong to their anonymous Content reads, not another composition stream.
-    const communityView = data.realm === undefined && (data.view === 'reviews' || data.view === 'discussion');
-    const loaded = await loadViewPages(
-      client,
-      data.id,
-      data.view,
-      data.locale,
-      communityView ? undefined : data.cursor,
-      {
-        realm: data.realm,
-        node: communityView ? undefined : data.node,
-        authorization,
-      },
-    );
+    const loaded = await loadViewPages(client, data.id, data.view, data.locale, data.cursor, {
+      realm: data.realm,
+      node: data.node,
+      authorization,
+    });
     if (loaded.kind !== 'page') return loaded;
     const cardLocale = locales.find((locale) => locale === data.locale);
     const shareCard =
@@ -138,14 +129,13 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
         : undefined;
     loaded.page.requestedReader = data.reader;
     loaded.overview.requestedReader = data.reader;
-    const result = await withSubjectCommunity(client, { kind: 'page', page: loaded.page }, data.view, data.cursor);
+    const result = await withComposedCommunity(client, { kind: 'page', page: loaded.page });
     if (result.kind !== 'page') return result;
     return {
       ...loaded,
       shareCard,
       page: result.page,
       overview: communityOverview(loaded.overview),
-      ...(communityView ? { next: undefined, node: undefined } : {}),
     };
   });
 
