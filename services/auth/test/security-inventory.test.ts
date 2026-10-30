@@ -19,6 +19,7 @@ let service: AuthService;
 let cookie: string;
 let otherCookie: string;
 let unavailable = false;
+let clockOffset = 0;
 const owned = Array.from({ length: 23 }, (_, i) => `${prefix}-owned-${String(i).padStart(2, '0')}`);
 const foreign = `${prefix}-foreign`;
 
@@ -53,6 +54,7 @@ beforeAll(async () => {
     issuer,
     audience: 'https://inventory.api.test',
     secret: 'inventory-fixture-persistent-secret-at-least-32-bytes',
+    clock: () => new Date(Date.now() + clockOffset),
     signing: { activeKid: prefix, privateKeys: [key] },
     trustedAccess: trustedAccessPorts({
       async readAccount(id) {
@@ -130,7 +132,7 @@ test('the live authenticated account can page its actual owned OAuth clients and
   const consents = await service.security.listConsents({ headers: headers(), limit: 1 });
   expect(consents.consents).toEqual([
     {
-      client_id: owned[0],
+      client_id: owned[0]!,
       display_name: 'Application',
       granted: ['read', 'write'],
       status: 'current',
@@ -185,6 +187,12 @@ test('cursor account session view limit integrity and exact route/query isolatio
   }
   const replacement = await signin(person);
   expect((await request(`/clients?limit=1&cursor=${token}`, replacement)).status).toBe(400);
+  clockOffset = 901_000;
+  try {
+    expect((await request(`/clients?limit=1&cursor=${token}`)).status).toBe(400);
+  } finally {
+    clockOffset = 0;
+  }
   expect(
     (await service.handler(new Request(`https://foreign.auth.test/clients?limit=1`, { headers: headers() }))).status,
   ).toBe(400);

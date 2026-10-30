@@ -25,7 +25,7 @@ export function securityPageInput(
     Array.isArray(input) ||
     Object.keys(input).some((key) => key !== 'cursor' && key !== 'limit') ||
     (input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || !/^[A-Za-z0-9_-]{40,4096}$/.test(input.cursor))) ||
+      (typeof input.cursor !== 'string' || !/^[A-Za-z0-9_-]{40,8192}$/.test(input.cursor))) ||
     (input.limit !== undefined && (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100))
   )
     throw new SecurityInventoryDenied();
@@ -56,6 +56,7 @@ export function securityCursors(secret: string, issuer: string, now: () => numbe
   return {
     read(cursor: string | undefined, view: SecurityView, binding: SecurityCursorBinding, limit: number): string | null {
       if (cursor === undefined) return null;
+      const time = now();
       try {
         const bytes = Buffer.from(cursor, 'base64url');
         if (bytes.toString('base64url') !== cursor) throw new Error('Noncanonical cursor');
@@ -74,8 +75,8 @@ export function securityCursors(secret: string, issuer: string, now: () => numbe
           after.length > 1024 ||
           after.includes('\u0000') ||
           !Number.isSafeInteger(expires) ||
-          expires <= now() ||
-          expires > now() + 900
+          expires <= time ||
+          expires > time + 900
         )
           throw new Error('Expired cursor');
         return after;
