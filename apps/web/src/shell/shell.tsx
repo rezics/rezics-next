@@ -1,3 +1,6 @@
+import { AppearanceControls, LanguageControl, ThemeControl } from './appearance-controls';
+import { RezicsMark } from './mobile-mark';
+import { PhoneNavigation, PhoneCreationProvider, PhoneUnreadDot, phoneTabClass } from './phone-navigation';
 import { useOperation } from '../kernel/exposure';
 import { cn } from '@rezics/ui/utils';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -16,7 +19,7 @@ import {
 } from '@rezics/ui/shadcn/sidebar';
 import { Link, useLocation, useRouter, type AnyRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
-import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { PageHeading } from './page-heading';
@@ -31,11 +34,8 @@ import {
   LogIn,
   LogOut,
   Menu as MenuIcon,
-  Monitor,
-  Moon,
   Settings,
   ShieldCheck,
-  Sun,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -47,16 +47,6 @@ import type { SubjectPurchaseRegions } from '../features/pages/subject-slots';
 import { useSession } from '../session/query';
 type ShellSession = NavigationSession;
 
-const names = {
-  en: 'English',
-  'zh-Hant': '繁體中文',
-  'zh-Hans': '简体中文',
-  ja: '日本語',
-  ko: '한국어',
-  de: 'Deutsch',
-  fr: 'Français',
-  es: 'Español',
-} as const;
 /** Hidden until the first Tab press; the sr-only utilities reveal it on focus. */
 const skipLink = cn(
   'sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-9999 focus:rounded-xl focus:bg-primary',
@@ -108,17 +98,10 @@ function useHydrated(): boolean {
   );
 }
 
-function Mark() {
-  return (
-    <svg aria-hidden="true" viewBox="0 142.857 1000 714.286" className="h-5 w-7 shrink-0 fill-brand">
-      <path d="M0 571.429 642.857 142.857 571.429 428.571 1000 142.857v285.714L357.143 857.143l71.428-285.714L0 857.143Z" />
-    </svg>
-  );
-}
 function Logo() {
   return (
     <Link to="/" aria-label="REZICS" className="flex h-10 shrink-0 items-center gap-2.5 rounded-xl px-1.5">
-      <Mark />
+      <RezicsMark />
       <span className="hidden font-extrabold text-[15px] text-foreground tracking-[0.28em] sm:inline">REZICS</span>
     </Link>
   );
@@ -241,7 +224,7 @@ export function NavigationToggle({
         content={navigation}
         trigger={
           <Button
-            className={cn('md:hidden', headerControlClass)}
+            className={cn('relative md:hidden', headerControlClass)}
             variant="ghost"
             size="icon-lg"
             data-open-navigation
@@ -249,6 +232,7 @@ export function NavigationToggle({
             aria-label={m.shell_open_navigation()}
           >
             <MenuIcon aria-hidden="true" />
+            <PhoneUnreadDot session={session} />
           </Button>
         }
       />
@@ -265,124 +249,16 @@ export function NavigationToggle({
     </>
   );
 }
-function ThemeControl() {
-  const hydrated = useHydrated();
-  const [theme, setTheme] = useState<'system' | 'light' | 'dark' | null>(null);
-  useLayoutEffect(() => {
-    const cookie = /(?:^|;\s*)rezics_theme=(system|light|dark)(?:;|$)/.exec(document.cookie)?.[1];
-    setTheme(cookie === 'light' || cookie === 'dark' ? cookie : 'system');
-  }, []);
-  useLayoutEffect(() => {
-    if (theme === null) return;
-    const preference = matchMedia('(prefers-color-scheme: dark)');
-    const apply = () => {
-      const dark = theme === 'dark' || (theme === 'system' && preference.matches);
-      document.documentElement.classList.toggle('dark', dark);
-      document.documentElement.classList.toggle('light', !dark);
-    };
-    apply();
-    if (theme !== 'system') return;
-    preference.addEventListener('change', apply);
-    return () => preference.removeEventListener('change', apply);
-  }, [theme]);
-  const icons = { system: Monitor, light: Sun, dark: Moon };
-  const Icon = icons[theme ?? 'system'];
-  const choose = (value: string) => {
-    const next = value as Exclude<typeof theme, null>;
-    setTheme(next);
-    document.documentElement.classList.remove('light', 'dark');
-    if (next !== 'system') document.documentElement.classList.add(next);
-    document.cookie = `rezics_theme=${next}; Max-Age=31536000; Path=/; SameSite=Lax`;
-  };
-  return (
-    <Menu
-      title={m.shell_theme()}
-      entries={[
-        {
-          type: 'radio',
-          label: m.shell_theme(),
-          value: theme ?? 'system',
-          options: [
-            { value: 'system', label: m.shell_theme_system() },
-            { value: 'light', label: m.shell_theme_light() },
-            { value: 'dark', label: m.shell_theme_dark() },
-          ],
-          onValueChange: choose,
-        },
-      ]}
-      trigger={
-        <Button
-          className={headerControlClass}
-          variant="ghost"
-          size="icon-lg"
-          disabled={!hydrated}
-          aria-label={m.shell_theme()}
-          title={m.shell_theme()}
-        >
-          <Icon aria-hidden="true" className="size-5" />
-        </Button>
-      }
-    />
-  );
-}
-function LanguageControl() {
-  const hydrated = useHydrated();
-  const locale = getLocale();
-  const change = async (value: string | null) => {
-    if (!value || value === locale) return;
-    const next = value as typeof locale;
-    document.cookie = `rezics_locale=${next}; Max-Age=31536000; Path=/; SameSite=Lax`;
-    await setLocale(next);
-  };
-  return (
-    <>
-      <div data-language-js className="contents">
-        <Menu
-          title={m.shell_language()}
-          entries={[
-            {
-              type: 'radio',
-              label: m.shell_language(),
-              value: locale,
-              options: locales.map((option) => ({ value: option, label: names[option] })),
-              onValueChange: change,
-            },
-          ]}
-          trigger={
-            <Button
-              className={cn(
-                headerControlClass,
-                'max-w-32 bg-transparent px-3 hover:bg-accent/60 max-md:w-9 max-md:justify-center max-md:px-0',
-              )}
-              variant="ghost"
-              size="lg"
-              disabled={!hydrated}
-            >
-              <Globe aria-hidden="true" />
-              <span className="sr-only">{m.shell_language()} </span>
-              <span className="hidden md:inline">{names[locale]}</span>
-            </Button>
-          }
-        />
-      </div>
-      <noscript>
-        <details>
-          <summary className="cursor-pointer rounded-lg border border-border/60 px-2 py-2">{names[locale]}</summary>
-          <div className="absolute z-50 grid rounded-xl bg-popover p-2">
-            {locales.map((value) => (
-              <a key={value} lang={value} href={`/${value}`} className="px-2 py-1">
-                {names[value]}
-              </a>
-            ))}
-          </div>
-        </details>
-        <style>{'[data-language-js]{display:none!important}'}</style>
-      </noscript>
-    </>
-  );
-}
 // The account slot is reserved while the browser reads its private session.
-export function AccountMenu({ session, csrfToken }: { session: ShellSession; csrfToken: string | null }) {
+export function AccountMenu({
+  session,
+  csrfToken,
+  phone = false,
+}: {
+  session: ShellSession;
+  csrfToken: string | null;
+  phone?: boolean;
+}) {
   const location = useLocation();
   const [securitySettingsHref, setSecuritySettingsHref] = useState('/security');
   const canOpenLibrary = useOperation('library_entry.list');
@@ -398,28 +274,80 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
       active = false;
     };
   }, [session]);
-  if (session === 'unknown' || session === 'unavailable') return null;
+  const settings = phone ? (
+    <div className="space-y-4 border-t border-border pt-4">
+      <h2 className="text-base font-semibold">{m.settings_heading()}</h2>
+      <AppearanceControls />
+      <a href={`/${getLocale()}/settings`} className={accountMenuLinkClass}>
+        <Settings aria-hidden="true" className="size-4" />
+        {m.settings_heading()}
+      </a>
+    </div>
+  ) : null;
+  const trigger = phone ? (
+    <button
+      id="phone-account-menu-button"
+      aria-controls="phone-account-menu"
+      aria-label={m.shell_you()}
+      aria-describedby="phone-account-state"
+      type="button"
+      className={phoneTabClass}
+      aria-current={location.pathname.startsWith('/settings') ? 'page' : undefined}
+    >
+      <span aria-hidden="true" className="grid size-6 place-items-center rounded-full bg-muted">
+        <UserRound className="size-4" />
+      </span>
+      <span>{m.shell_you()}</span>
+      <span id="phone-account-state" className="sr-only">
+        {session === 'signed-in'
+          ? m.shell_avatar_unavailable()
+          : session === 'signed-out'
+            ? m.account_sign_in()
+            : m.shell_account_unavailable()}
+      </span>
+    </button>
+  ) : undefined;
+  if (session === 'unknown' || session === 'unavailable')
+    return phone ? (
+      <Menu
+        title={m.shell_you()}
+        trigger={trigger!}
+        content={
+          <div className="space-y-4">
+            <p role="status">{m.shell_account_unavailable()}</p>
+            {settings}
+          </div>
+        }
+      />
+    ) : null;
   if (session === 'signed-in') {
     const locale = getLocale();
     return (
       <Menu
-        title={m.account_menu()}
+        title={phone ? m.shell_you() : m.account_menu()}
         closeOnNavigation
         trigger={
-          <Button
-            id="account-menu-button"
-            className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
-            variant="ghost"
-            size="lg"
-            aria-label={m.account_menu()}
-            aria-controls="account-menu"
-          >
-            <UserRound aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
-          </Button>
+          trigger ?? (
+            <Button
+              id="account-menu-button"
+              className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
+              variant="ghost"
+              size="lg"
+              aria-label={m.account_menu()}
+              aria-controls="account-menu"
+            >
+              <UserRound aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+            </Button>
+          )
         }
         content={
-          <div id="account-menu" role="group" aria-labelledby="account-menu-button" className="grid gap-1">
+          <div
+            id={phone ? 'phone-account-menu' : 'account-menu'}
+            role="group"
+            aria-labelledby={phone ? 'phone-account-menu-button' : 'account-menu-button'}
+            className="grid gap-1"
+          >
             {canOpenLibrary ? (
               <a href={`/${locale}/library`} className={accountMenuLinkClass}>
                 <Library aria-hidden="true" className="size-4" />
@@ -442,10 +370,12 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
               <Globe aria-hidden="true" className="size-4" />
               {m.realms_heading()}
             </Link>
-            <a href={`/${locale}/settings`} className={accountMenuLinkClass}>
-              <Settings aria-hidden="true" className="size-4" />
-              {m.settings_heading()}
-            </a>
+            {!phone && (
+              <a href={`/${locale}/settings`} className={accountMenuLinkClass}>
+                <Settings aria-hidden="true" className="size-4" />
+                {m.settings_heading()}
+              </a>
+            )}
             <a href={`/${locale}/accounts`} className={accountMenuLinkClass}>
               <Users aria-hidden="true" className="size-4" />
               {m.av_accounts()}
@@ -469,6 +399,7 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
                 {m.account_sign_out()}
               </Button>
             </form>
+            {settings}
           </div>
         }
       />
@@ -477,17 +408,19 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
   const returnTo = location.publicHref.split('#')[0]!;
   return (
     <Menu
-      title={m.account_menu()}
+      title={phone ? m.shell_you() : m.account_menu()}
       trigger={
-        <Button
-          className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
-          variant="ghost"
-          size="lg"
-          aria-label={m.account_menu()}
-        >
-          <LogIn aria-hidden="true" />
-          <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
-        </Button>
+        trigger ?? (
+          <Button
+            className={cn(headerControlClass, 'w-full px-3 sm:px-4')}
+            variant="ghost"
+            size="lg"
+            aria-label={m.account_menu()}
+          >
+            <LogIn aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+          </Button>
+        )
       }
       content={
         <div role="group" aria-label={m.account_menu()} className="grid gap-1">
@@ -495,6 +428,7 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
             <LogIn aria-hidden="true" className="size-4" />
             {m.account_sign_in()}
           </a>
+          {settings}
         </div>
       }
     />
@@ -504,17 +438,18 @@ export type AppShellProps = {
   children: React.ReactNode;
   navigation?: readonly NavigationContribution[];
   subjectPurchase?: SubjectPurchaseRegions;
+  search?: React.ReactNode;
 };
-export function AppShell({ children, navigation, subjectPurchase }: AppShellProps) {
+export function AppShell({ children, navigation, subjectPurchase, search }: AppShellProps) {
   return (
     <NavigationProvider {...(navigation ? { contributions: navigation } : {})}>
       <FeatureSlotsProvider {...(subjectPurchase ? { subjectPurchase } : {})}>
-        <ShellContent>{children}</ShellContent>
+        <ShellContent search={search}>{children}</ShellContent>
       </FeatureSlotsProvider>
     </NavigationProvider>
   );
 }
-function ShellContent({ children }: { children: React.ReactNode }) {
+function ShellContent({ children, search }: Pick<AppShellProps, 'children' | 'search'>) {
   const { state: session, csrfToken } = useSession();
   const location = useLocation();
   const router = useRouter();
@@ -533,71 +468,83 @@ function ShellContent({ children }: { children: React.ReactNode }) {
     document.cookie = `rezics_nav=${value ? 'collapsed' : 'expanded'}; Max-Age=31536000; Path=/; SameSite=Lax`;
   };
   return (
-    <HeaderSearchFilterProvider>
-      <SidebarProvider
-        className="flex-col"
-        open={!railCollapsed}
-        onOpenChange={(open) => {
-          setCollapsed(!open);
-          // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
-          setTimeout(() => {
-            document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
-          });
-        }}
-      >
-        <a href="#main-content" className={skipLink}>
-          {m.shell_skip_to_content()}
-        </a>
-        <link
-          rel="preload"
-          href="/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-        <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
-          <div className="flex h-16 items-center gap-2 px-3">
-            <NavigationToggle
-              collapsed={railCollapsed}
-              onToggle={() => setCollapsed(!railCollapsed)}
-              pathname={location.pathname}
-              session={session}
-            />
-            <Logo />
-            <div className="ms-auto w-10 min-w-0 shrink-0 md:ms-6 md:w-full md:max-w-[40rem] md:flex-1">
-              <ShellSearch />
-            </div>
-            <div className="ms-auto flex items-center gap-2">
-              <LanguageControl />
-              <ThemeControl />
-              <div data-session-slot className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36">
-                <AccountMenu session={session} csrfToken={csrfToken} />
-                <noscript>
-                  <a
-                    href={`/${getLocale()}/settings`}
-                    className={cn(
-                      headerControlClass,
-                      'inline-flex h-9 w-full items-center justify-center gap-2 px-3 text-sm sm:px-4',
-                    )}
-                  >
-                    <UserRound aria-hidden="true" className="size-4" />
-                    <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
-                  </a>
-                </noscript>
+    <PhoneCreationProvider>
+      <HeaderSearchFilterProvider>
+        <SidebarProvider
+          className="flex-col"
+          open={!railCollapsed}
+          onOpenChange={(open) => {
+            setCollapsed(!open);
+            // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
+            setTimeout(() => {
+              document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
+            });
+          }}
+        >
+          <a href="#main-content" className={skipLink}>
+            {m.shell_skip_to_content()}
+          </a>
+          <link
+            rel="preload"
+            href="/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2"
+            as="font"
+            type="font/woff2"
+            crossOrigin="anonymous"
+          />
+          <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 has-[[data-expanded=true]]:z-50">
+            <div className="flex h-16 items-center gap-2 px-3">
+              <NavigationToggle
+                collapsed={railCollapsed}
+                onToggle={() => setCollapsed(!railCollapsed)}
+                pathname={location.pathname}
+                session={session}
+              />
+              <div className="hidden md:block">
+                <Logo />
+              </div>
+              <div className="min-w-0 flex-1 md:ms-6 md:max-w-[40rem]">{search ?? <ShellSearch />}</div>
+              <div className="ms-auto hidden items-center gap-2 md:flex">
+                <LanguageControl />
+                <ThemeControl />
+                <div data-session-slot className="relative flex h-9 w-10 shrink-0 items-center justify-center sm:w-36">
+                  <AccountMenu session={session} csrfToken={csrfToken} />
+                  <noscript>
+                    <a
+                      href={`/${getLocale()}/settings`}
+                      className={cn(
+                        headerControlClass,
+                        'inline-flex h-9 w-full items-center justify-center gap-2 px-3 text-sm sm:px-4',
+                      )}
+                    >
+                      <UserRound aria-hidden="true" className="size-4" />
+                      <span className="sr-only sm:not-sr-only">{m.account_menu()}</span>
+                    </a>
+                  </noscript>
+                </div>
               </div>
             </div>
+          </header>
+          <ScriptFreeNavigation pathname={location.pathname} session={session} />
+          <div className="flex flex-1">
+            <NavigationColumn pathname={location.pathname} session={session} />
+            <SidebarInset
+              id="main-content"
+              tabIndex={-1}
+              className="min-w-0 px-3 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none md:p-6"
+            >
+              <div className="mx-auto w-full max-w-5xl">{children}</div>
+            </SidebarInset>
           </div>
-        </header>
-        <ScriptFreeNavigation pathname={location.pathname} session={session} />
-        <div className="flex flex-1">
-          <NavigationColumn pathname={location.pathname} session={session} />
-          <SidebarInset id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
-            <div className="mx-auto w-full max-w-5xl">{children}</div>
-          </SidebarInset>
-        </div>
-        <Toaster />
-      </SidebarProvider>
-    </HeaderSearchFilterProvider>
+          <PhoneNavigation
+            session={session}
+            csrfToken={csrfToken}
+            pathname={location.pathname}
+            account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
+          />
+          <Toaster />
+        </SidebarProvider>
+      </HeaderSearchFilterProvider>
+    </PhoneCreationProvider>
   );
 }
 export function StatusPage({ heading, message }: { heading: string; message: string }) {

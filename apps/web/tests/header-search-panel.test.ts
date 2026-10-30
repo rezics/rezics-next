@@ -223,3 +223,133 @@ test('phone sheet and unavailable filters preserve the same input and query', ()
   expect(state.phoneSheet).toBe(false);
   expect(state.query).toBe('Prince');
 });
+
+// These exercise the shipped presenter and bounded history boundary without starting a service.
+test('empty phone composer exposes Recent and a real filter button without invented discovery or a screen focus ring', () => {
+  const state = reduceHeaderSearchState(initialHeaderSearchState(), { type: 'open-phone' });
+  const markup = present(state, { region: { activeCount: 2, open() {} } });
+  expect(inputCount(markup)).toBe(1);
+  expect(markup).toContain('data-search-composer');
+  expect(markup).toContain(m.header_search_recent());
+  expect(markup).toContain(m.header_search_history());
+  expect(markup).toContain(m.search_filters());
+  expect(markup).not.toContain(m.header_search_trending_searches());
+  expect(markup).not.toContain(m.header_search_trending_communities());
+  expect(markup).not.toContain(m.header_search_popular_realms());
+  expect(markup).not.toContain('focus-within:border-ring');
+  expect(markup.indexOf(m.search_filters())).toBeLessThan(markup.indexOf(m.header_search_recent()));
+});
+
+test('recent history is bounded and isolated per account and guest, rejects corrupt scopes and preserves native scoped authority', async () => {
+  const { recentBucket, readRecentHistory, rememberRecent, writeRecentHistory, RECENT_HISTORY_LIMIT } =
+    await import('../src/search/recent-history');
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+  };
+  const alice = recentBucket('signed-in', 'alice')!;
+  const bob = recentBucket('signed-in', 'bob')!;
+  const guest = recentBucket('signed-out')!;
+  expect(recentBucket('unknown', 'alice')).toBeNull();
+  expect(recentBucket('unavailable', 'alice')).toBeNull();
+  expect(recentBucket('signed-in')).toBeNull();
+  let entries = rememberRecent([], 'Private query', scope, 1);
+  writeRecentHistory(storage, alice, entries);
+  expect(readRecentHistory(storage, bob)).toEqual([]);
+  expect(readRecentHistory(storage, guest)).toEqual([]);
+  expect(readRecentHistory(storage, alice)[0]?.scope).toEqual(scope);
+  // A remembered name never creates search authority.
+  expect(headerSearchAction('en', readRecentHistory(storage, alice)[0]?.scope)).toBeUndefined();
+  for (let i = 0; i < 50; i++) entries = rememberRecent(entries, `query ${i}`, undefined, i + 2);
+  expect(entries).toHaveLength(RECENT_HISTORY_LIMIT);
+  entries = rememberRecent(entries, 'query 49');
+  expect(entries).toHaveLength(RECENT_HISTORY_LIMIT);
+  const removed = entries[0]!.id;
+  writeRecentHistory(
+    storage,
+    alice,
+    entries.filter((entry) => entry.id !== removed),
+  );
+  expect(readRecentHistory(storage, alice).some((entry) => entry.id === removed)).toBe(false);
+  const key = [...values.keys()][0]!;
+  values.set(
+    key,
+    JSON.stringify([{ query: 'hidden', visitedAt: 1, scope: { kind: 'unsupported', name: 'Old scope' } }]),
+  );
+  expect(readRecentHistory(storage, alice)).toEqual([]);
+});
+
+test('phone Create consumes shared contextual creation links without exposing navigation leaves or private entries', async () => {
+  const { NavigationProvider } = await import('../src/shell/navigation-view');
+  const { PhoneCreationLinks } = await import('../src/shell/phone-navigation');
+  const { getLocale } = await import('../src/paraglide/runtime.js');
+  const locale = getLocale();
+  const render = (pathname: string) =>
+    renderToStaticMarkup(
+      createElement(NavigationProvider, {
+        contributions: [
+          {
+            id: 'fixture.creation',
+            kind: 'creation',
+            group: 'create',
+            order: 0,
+            label: 'Contextual creation',
+            href: ({ pathname }) => (pathname === '/context' ? '/context/new' : null),
+          },
+          {
+            id: 'fixture.private',
+            kind: 'creation',
+            group: 'create',
+            order: 1,
+            label: 'Private creation',
+            href: '/private/new',
+            signedIn: true,
+            operation: 'collection.create',
+          },
+        ],
+        children: createElement(PhoneCreationLinks, { actions: [], pathname, session: 'signed-out' }),
+      }),
+    );
+  const supported = render(`/${locale}/context`);
+  expect(supported).toContain(`href="/${locale}/context/new"`);
+  expect(supported).toContain('Contextual creation');
+  expect(supported).not.toContain('/private/new');
+  expect(supported).not.toContain(`href="/${locale}/search"`);
+  expect(render('/other')).not.toContain('/context/new');
+});
+
+test('phone composer keeps shared failure recovery and never points at a missing suggestion', () => {
+  let state = reduceHeaderSearchState(initialHeaderSearchState(undefined, 'Prince'), { type: 'open-phone' });
+  state = reduceHeaderSearchState(state, { type: 'suggestions', state: 'ready', result });
+  state = reduceHeaderSearchState(state, { type: 'active', index: 0 });
+  expect(present(state)).toContain('aria-activedescendant="header-option-0"');
+  state = reduceHeaderSearchState(state, { type: 'suggestions', state: 'unavailable' });
+  const failed = present(state, { onRetry() {} });
+  expect(inputCount(failed)).toBe(1);
+  expect(failed).toContain(m.search_suggestions_unavailable());
+  expect(failed).toContain(m.search_facet_retry());
+  expect(failed).not.toContain('aria-activedescendant=');
+  expect(failed).not.toContain('role="option"');
+  expect(failed).toContain('value="Prince"');
+});
+
+test('recent history round-trips native query text without trimming its meaning', async () => {
+  const { rememberRecent, readRecentHistory, writeRecentHistory } = await import('../src/search/recent-history');
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+  };
+  const query = '  Prince  ';
+  let entries = rememberRecent([], query);
+  entries = rememberRecent(entries, 'Prince');
+  expect(entries).toHaveLength(2);
+  writeRecentHistory(storage, 'account:reader', entries);
+  expect(readRecentHistory(storage, 'account:reader').map((entry) => entry.query)).toEqual(['Prince', query]);
+  expect(rememberRecent([], '   ')).toEqual([]);
+});

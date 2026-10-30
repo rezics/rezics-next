@@ -74,6 +74,7 @@ const issuerKeys = await generateKeyPair('ES256', { extractable: true });
 const issuerJwk = { ...(await exportJWK(issuerKeys.publicKey)), alg: 'ES256', kid: 'issuer-1', use: 'sig' };
 
 type Grant = { challenge: string; nonce: string; redirectUri: string };
+let unreadFixture: { count: number; capped: boolean } | null = { count: 0, capped: false };
 const codes = new Map<string, Grant>();
 let counter = 0;
 const liveRefreshTokens = new Set<string>();
@@ -87,6 +88,8 @@ const fake = Bun.serve({
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['personal_library', 'collections'] });
+    if (/^\/v1\/accounts\/[^/]+\/notifications\/count$/.test(url.pathname))
+      return unreadFixture ? json(unreadFixture) : json({ error: 'unavailable' }, 503);
     const issuer = `${url.origin}/auth`;
     const authenticated = async (form: URLSearchParams) => {
       try {
@@ -315,7 +318,7 @@ test.serial(
 );
 
 test.serial(
-  'on a phone the header holds the logo, language, theme and account controls, and the navigation sheet carries every destination',
+  'on a phone the header has menu and one marked search pill, with account and display controls in You and every destination in the navigation sheet',
   async () => {
     const session = await signedInState();
     for (const locale of ['en', 'ja'] as const) {
@@ -324,30 +327,36 @@ test.serial(
         const where = `${locale} ${signed ? 'signed in' : 'signed out'}`;
         const page = await open(pages(locale)[0]!, { viewport: phone, ...(signed ? { storageState: session } : {}) });
         const header = page.getByRole('banner');
-        expect(await header.getByRole('link', { name: 'REZICS', exact: true }).isVisible(), `${where} logo`).toBe(true);
-        expect(await header.getByRole('button', { name: own.shell_language! }).isVisible(), `${where} language`).toBe(
-          true,
-        );
-        expect(await visible(page, own.shell_theme!), `${where} theme`).toBe(true);
-        if (signed) {
-          expect(await visible(page, own.account_menu!), `${where} account`).toBe(true);
-          const label = await header.getByText(own.account_menu!, { exact: true }).boundingBox();
-          expect(label?.width ?? 0, `${where} label`).toBeLessThanOrEqual(1);
-        } else {
-          expect(await header.getByRole('button', { name: own.account_menu!, exact: true }).isVisible()).toBe(true);
-        }
-        await header.getByRole('button', { name: own.account_menu!, exact: true }).click();
-        const account = page.getByRole('dialog', { name: own.account_menu!, exact: true });
+        expect(
+          await header.getByRole('link', { name: 'REZICS', exact: true }).isVisible(),
+          `${where} standalone logo`,
+        ).toBe(false);
+        expect(await visible(page, own.shell_language!), `${where} header language`).toBe(false);
+        expect(await visible(page, own.shell_theme!), `${where} header theme`).toBe(false);
+        expect(await visible(page, own.account_menu!), `${where} header account`).toBe(false);
+        const pill = header.getByRole('button', { name: own.search_label!, exact: true });
+        expect(await pill.isVisible(), `${where} wide search pill`).toBe(true);
+        expect(await pill.locator('svg').count(), `${where} embedded mark`).toBe(1);
+        const pillBox = await pill.boundingBox();
+        expect(pillBox?.width ?? 0, `${where} search width`).toBeGreaterThan(250);
+        const tabs = page.getByRole('navigation', { name: own.shell_phone_tabs!, exact: true });
+        expect(await tabs.isVisible()).toBe(true);
+        await tabs.getByRole('button', { name: own.shell_you!, exact: true }).click();
+        const account = page.getByRole('dialog', { name: own.shell_you!, exact: true });
         await account.waitFor();
         if (signed) await account.getByRole('link', { name: own.account_security_settings!, exact: true }).waitFor();
         else await account.getByRole('link', { name: own.account_sign_in!, exact: true }).waitFor();
+        expect(await account.getByRole('link', { name: own.settings_heading!, exact: true }).isVisible()).toBe(true);
+        expect(await account.getByRole('button', { name: own.shell_language! }).isVisible()).toBe(true);
+        expect(await account.getByRole('button', { name: own.shell_theme!, exact: true }).isVisible()).toBe(true);
         await page.keyboard.press('Escape');
         await account.waitFor({ state: 'hidden' });
         expect(await visible(page, own.shell_open_navigation!), `${where} toggle`).toBe(true);
         expect(await visible(page, own.shell_collapse_navigation!), `${where} collapse`).toBe(false);
-        expect(await header.locator(`input[aria-label="${own.search_label}"]`).isVisible(), `${where} search`).toBe(
-          false,
-        );
+        expect(
+          await header.locator(`input[aria-label="${own.search_label}"]`).isVisible(),
+          `${where} collapsed query input`,
+        ).toBe(false);
         await header.getByRole('button', { name: own.shell_open_navigation!, exact: true }).click();
         await page.getByRole('dialog').waitFor();
         const bar = page.getByRole('navigation', { name: own.shell_navigation!, exact: true }).locator('a');
@@ -380,6 +389,68 @@ test.serial(
       expect(widths.scroll, locale).toBeLessThanOrEqual(widths.inner);
       await page.context().close();
     }
+  },
+  timeout,
+);
+
+test.serial(
+  'phone search contains focus in one composer and returns it to the pill without invented discovery',
+  async () => {
+    const own = await messages('en');
+    const page = await open('/en', { viewport: phone });
+    const pill = page.getByRole('banner').getByRole('button', { name: own.search_label!, exact: true });
+    await pill.click();
+    const sheet = page.getByRole('dialog', { name: own.search_label!, exact: true });
+    const input = sheet.getByRole('combobox', { name: own.search_label!, exact: true });
+    await input.waitFor();
+    expect(await page.locator('input[role="combobox"]').count()).toBe(1);
+    expect(await input.evaluate((node) => document.activeElement === node)).toBe(true);
+    expect(await sheet.getByRole('heading', { name: own.header_search_recent!, exact: true }).isVisible()).toBe(true);
+    expect(await sheet.getByText(own.header_search_trending_searches!, { exact: true }).count()).toBe(0);
+    await input.fill('A remembered search');
+    await page.keyboard.press('Escape');
+    await sheet.waitFor({ state: 'hidden' });
+    expect(await pill.evaluate((node) => document.activeElement === node)).toBe(true);
+    await pill.click();
+    expect(await input.inputValue()).toBe('A remembered search');
+    await page.keyboard.press('Shift+Tab');
+    expect(
+      await sheet
+        .getByRole('button', { name: own.header_search_close!, exact: true })
+        .evaluate((node) => document.activeElement === node),
+    ).toBe(true);
+    await page.keyboard.press('Shift+Tab');
+    expect(await sheet.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+    await page.context().close();
+  },
+  timeout,
+);
+
+test.serial(
+  'native unread state drives the menu dot and Inbox count, and Create offers only the exposed Collection route',
+  async () => {
+    const own = await messages('en');
+    unreadFixture = { count: 3, capped: false };
+    const page = await open(pages('en')[0]!, { viewport: phone, storageState: await signedInState() });
+    await page.getByLabel(own.shell_new_activity!, { exact: true }).waitFor();
+    const tabs = page.getByRole('navigation', { name: own.shell_phone_tabs!, exact: true });
+    expect(await tabs.getByLabel(own.inbox_unread_count!.replace('{count}', '3'), { exact: true }).isVisible()).toBe(
+      true,
+    );
+    await tabs.getByRole('button', { name: own.shell_create!, exact: true }).click();
+    const sheet = page.getByRole('dialog', { name: own.shell_create!, exact: true });
+    await sheet.waitFor();
+    expect(await sheet.locator('a').evaluateAll((links) => links.map((link) => link.getAttribute('href')))).toEqual([
+      '/en/collections/new',
+    ]);
+    await page.keyboard.press('Escape');
+    await sheet.waitFor({ state: 'hidden' });
+    unreadFixture = null;
+    await visit(page, pages('en')[0]!);
+    await tabs.getByLabel(own.inbox_unread_unavailable!, { exact: true }).waitFor();
+    expect(await page.getByLabel(own.shell_new_activity!, { exact: true }).count()).toBe(0);
+    unreadFixture = { count: 0, capped: false };
+    await page.context().close();
   },
   timeout,
 );

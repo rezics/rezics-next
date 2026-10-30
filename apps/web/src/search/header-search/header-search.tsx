@@ -14,11 +14,16 @@ import { useHeaderSearchFilterRegion, type HeaderSearchFilterRegion } from './fi
 import { ScopeChip } from './scope-chip';
 import { initialHeaderSearchState, reduceHeaderSearchState, type HeaderSearchState } from './state';
 import { loadGlobalHeaderSuggestions, type HeaderSuggestionLoader } from './suggestions';
+import { RezicsMark } from '../../shell/mobile-mark';
+import { RecentPanel, type SearchDiscovery } from '../recent-panel';
+import type { RecentEntry, RecentHistory } from '../recent-history';
 import { nextSuggestion, startTypeahead, validSuggestionText } from '../typeahead';
 import type { SearchScope } from './types';
 
 export type HeaderSearchProps = {
   locale: string;
+  history?: RecentHistory | undefined;
+  discovery?: SearchDiscovery | undefined;
   scope?: SearchScope | undefined;
   initialQuery?: string;
   fields?: readonly [string, string][] | undefined;
@@ -34,7 +39,7 @@ export type HeaderSearchProps = {
   presentation?: 'responsive' | 'sheet';
 };
 
-type ViewProps = Pick<HeaderSearchProps, 'locale' | 'fields' | 'suggestionRatio'> & {
+type ViewProps = Pick<HeaderSearchProps, 'locale' | 'fields' | 'suggestionRatio' | 'history' | 'discovery'> & {
   id: string;
   state: HeaderSearchState;
   region: HeaderSearchFilterRegion | null;
@@ -49,6 +54,8 @@ type ViewProps = Pick<HeaderSearchProps, 'locale' | 'fields' | 'suggestionRatio'
   onSuggestion?(href: string): void;
   onActive?(index: number): void;
   onRetry?(): void;
+  onRecent?(entry: RecentEntry): void;
+  onQuery?(query: string): void;
   triggerRef?: RefObject<HTMLButtonElement | null>;
 };
 
@@ -72,6 +79,10 @@ export function HeaderSearchView({
   onRetry,
   suggestionRatio,
   triggerRef,
+  history,
+  discovery,
+  onRecent,
+  onQuery,
 }: ViewProps) {
   const { expanded, phoneSheet, scope, query, suggestions, result, activeIndex } = state;
   const action = headerSearchAction(locale, scope);
@@ -113,11 +124,14 @@ export function HeaderSearchView({
         aria-expanded={expanded}
         aria-controls={`${id}-form`}
         className={cn(
-          'header-search-trigger grid size-10 place-items-center rounded-full hover:bg-accent md:hidden',
+          'header-search-trigger flex h-11 w-full min-w-0 items-center gap-3 rounded-full border border-border/60 bg-muted/50 px-4 text-start text-sm text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring md:hidden',
           expanded && 'hidden',
         )}
       >
-        <Search aria-hidden="true" className="size-5" />
+        <RezicsMark />
+        <span className="truncate">
+          {query || (scope ? m.header_search_in_scope({ scope: scope.name }) : m.header_search_global())}
+        </span>
       </button>
       <form
         {...formProps}
@@ -130,33 +144,40 @@ export function HeaderSearchView({
         action={target?.pathname}
         data-phone-sheet={phoneSheet}
         className={cn(
-          'header-search-surface border border-border bg-background text-foreground focus-within:border-ring',
+          'header-search-surface bg-background text-foreground',
           expanded
             ? cn(
-                'fixed inset-0 z-50 flex h-dvh flex-col overflow-y-auto p-3',
+                'fixed inset-0 z-50 flex h-dvh flex-col overflow-y-auto overscroll-contain p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]',
                 !phoneSheet &&
-                  'md:absolute md:inset-auto md:top-0 md:h-auto md:max-h-[min(80dvh,42rem)] md:w-full md:rounded-3xl md:p-0 md:shadow-xl',
+                  'md:absolute md:inset-auto md:top-0 md:h-auto md:max-h-[min(80dvh,42rem)] md:w-full md:rounded-3xl md:border md:border-border md:p-0 md:shadow-xl',
               )
-            : 'hidden rounded-full md:block',
+            : 'hidden rounded-full border border-border md:block',
         )}
       >
         {retained.map(([name, value], index) => (
           <input key={`${name}-${index}`} type="hidden" name={name} value={value} />
         ))}
-        <div className={cn(expanded && 'rounded-3xl bg-popover text-popover-foreground shadow-xl')}>
+        <div
+          data-search-composer
+          className={cn(
+            expanded && 'shrink-0 rounded-3xl bg-card shadow-lg',
+            expanded && !phoneSheet && 'md:bg-popover md:text-popover-foreground md:shadow-xl',
+          )}
+        >
           <div className="flex min-h-11 min-w-0 items-center gap-2 px-3">
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={m.header_search_close()}
-              className={cn(
-                'grid size-9 shrink-0 place-items-center rounded-full hover:bg-accent',
-                !phoneSheet && 'md:hidden',
-                !expanded && 'hidden',
-              )}
-            >
-              <ArrowLeft aria-hidden="true" className="size-4" />
-            </button>
+            {expanded ? (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label={m.header_search_close()}
+                className={cn(
+                  'grid size-11 shrink-0 place-items-center rounded-full outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+                  !phoneSheet && 'md:hidden',
+                )}
+              >
+                <ArrowLeft aria-hidden="true" className="size-5" />
+              </button>
+            ) : null}
             <Search
               aria-hidden="true"
               className={cn(
@@ -182,15 +203,15 @@ export function HeaderSearchView({
               value={query}
               autoComplete="off"
               maxLength={256}
-              className="h-11 min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-none"
+              className="h-11 min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
           {expanded && (
-            <div className="flex items-center justify-between gap-3 px-3 pb-3">
+            <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-2">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="default"
                 disabled={!region}
                 onClick={onFilters}
                 title={!region ? m.header_search_filters_unavailable() : undefined}
@@ -213,6 +234,9 @@ export function HeaderSearchView({
         </div>
         {expanded && (
           <div className="flex min-h-0 flex-1 flex-col">
+            {!query.trim() && (
+              <RecentPanel history={history} discovery={discovery} onSelect={onRecent} onQuery={onQuery} />
+            )}
             {status && (
               <p id={`${id}-status`} role="status" className="px-4 py-5 text-sm text-muted-foreground">
                 {status}
@@ -299,11 +323,7 @@ export function HeaderSearchView({
         )}
       </form>
       <noscript>
-        <style>
-          {
-            '.header-search-trigger{display:none}.header-search-surface{display:block}@media(max-width:767px){[data-header-search]{position:fixed;inset-inline:1rem;top:4.5rem;width:auto}}'
-          }
-        </style>
+        <style>{'.header-search-trigger{display:none}.header-search-surface{display:block}'}</style>
       </noscript>
     </div>
   );
@@ -319,6 +339,8 @@ export function HeaderSearch({
   onNavigate,
   suggestionRatio,
   presentation = 'responsive',
+  history,
+  discovery,
 }: HeaderSearchProps) {
   const [state, dispatch] = useReducer(reduceHeaderSearchState, undefined, () =>
     initialHeaderSearchState(scope, initialQuery),
@@ -384,6 +406,7 @@ export function HeaderSearch({
     dispatch({
       type: presentation === 'sheet' || window.matchMedia('(max-width: 767px)').matches ? 'open-phone' : 'focus',
     });
+    if (state.query.trim() && state.suggestions === 'idle') dispatch({ type: 'query', query: state.query });
     requestAnimationFrame(() => input.current?.focus());
   };
   useEffect(() => {
@@ -419,9 +442,33 @@ export function HeaderSearch({
     if (onNavigate) onNavigate(href);
     else window.location.assign(href);
   };
+  const submitQuery = (query: string, scope: SearchScope | undefined) => {
+    const action = headerSearchAction(locale, scope);
+    if (!action || (!query.trim() && !scope)) return;
+    history?.remember(query, scope);
+    const url = new URL(action, window.location.origin);
+    url.searchParams.delete('q');
+    url.searchParams.delete('cursor');
+    // Follow the same native GET context as the mounted form. Native routes revalidate remembered scopes.
+    if (!scope) for (const [key, value] of fields ?? []) url.searchParams.append(key, value);
+    if (query.trim()) url.searchParams.set('q', query);
+    visit(`${url.pathname}${url.search}`);
+  };
   return (
     <HeaderSearchView
       id={id}
+      history={history}
+      discovery={discovery}
+      onQuery={(query) => {
+        dispatch({ type: 'query', query });
+        input.current?.focus();
+      }}
+      onRecent={(entry) => {
+        dispatch({ type: 'sync-scope', scope: entry.scope });
+        dispatch({ type: 'query', query: entry.query });
+        if (headerSearchAction(locale, entry.scope)) submitQuery(entry.query, entry.scope);
+        else input.current?.focus();
+      }}
       state={state}
       locale={locale}
       fields={fields}
@@ -437,7 +484,10 @@ export function HeaderSearch({
         dispatch({ type: 'remove-scope' });
         input.current?.focus();
       }}
-      onSuggestion={visit}
+      onSuggestion={(href) => {
+        history?.remember(state.query, state.scope);
+        visit(href);
+      }}
       onActive={(index) => dispatch({ type: 'active', index })}
       onRetry={retry}
       onFilters={() => {
@@ -487,6 +537,7 @@ export function HeaderSearch({
           if (event.key === 'Enter' && state.expanded && state.activeIndex >= 0 && subjects[state.activeIndex]) {
             event.preventDefault();
             const hit = subjects[state.activeIndex]!;
+            history?.remember(state.query, state.scope);
             visit(subjectHref({ id: hit.id, label: localizedLabel(hit.labels, locale).text }, locale).href);
           }
         },
@@ -498,6 +549,7 @@ export function HeaderSearch({
             event.preventDefault();
             return;
           }
+          history?.remember(state.query, state.scope);
           if (!onNavigate) return;
           event.preventDefault();
           const url = new URL(action, window.location.origin);

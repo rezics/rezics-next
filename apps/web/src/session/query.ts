@@ -9,8 +9,8 @@ import { readSessionState, type SessionState } from './state';
 const readSession = createServerFn({ method: 'GET' }).handler(async () => {
   const { env } = await import('cloudflare:workers');
   setResponseHeader('Cache-Control', 'private, no-store');
-  const { state, csrfToken } = await readSessionState(getRequest(), env as Partial<SessionEnv>);
-  return { state, csrfToken };
+  const { state, csrfToken, subject } = await readSessionState(getRequest(), env as Partial<SessionEnv>);
+  return { state, csrfToken, subject: subject ?? null };
 });
 
 // Imperative transports (including image uploads) share the browser query's token.
@@ -62,7 +62,7 @@ export const exposureQuery = queryOptions({
 });
 
 const subscribe = () => () => {};
-type ClientSession = { state: 'unknown' | SessionState; csrfToken: string | null };
+type ClientSession = { state: 'unknown' | SessionState; csrfToken: string | null; subject?: string | null };
 
 function useBrowserSession(): ClientSession {
   const hydrated = useSyncExternalStore(
