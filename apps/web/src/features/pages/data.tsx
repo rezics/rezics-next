@@ -29,6 +29,7 @@ import * as overview from './overview';
 import { SubjectPageCover } from './subject-page-cover';
 import { SubjectPurchaseSlot } from './subject-slots';
 import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
+import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
 import {
   bestRank,
   ExternalValue,
@@ -260,6 +261,12 @@ export function CandidateValue({
     search: '',
   };
   const content = snak.value.type === 'value' ? snak.value.content : undefined;
+  if (snak.value.type === 'somevalue' || snak.value.type === 'novalue')
+    return (
+      <span className="text-muted-foreground">
+        {snak.value.type === 'somevalue' ? messages.unknown : messages.none}
+      </span>
+    );
   if (snak.value.type === 'value' && snak.property.data_type === 'document') {
     const document = statementDocument(subject ?? '', snak, documents);
     if (document && isRecord(content))
@@ -563,6 +570,14 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
             statement={statement.id}
             property={property}
             datatype={statement.property.data_type}
+            locale={options.locale}
+          />
+          <ValueExplanationEntry
+            id={read.subject.id}
+            title={pageText(read.subject.labels, options.locale, original).text}
+            statement={statement.id}
+            property={property}
+            context={read.subject.context}
             locale={options.locale}
           />
         </dd>,

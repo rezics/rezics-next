@@ -18,3 +18,26 @@ supplies current terms and the canonical reader address. Failed or concealed rer
 
 Semantic owns the native terms API. An unavailable operation remains unavailable in the browser; it never becomes
 a successful local preview or a substitute catalogue mutation.
+
+## Browser flow: why this value
+
+Each displayed scalar statement offers **Why this value** at the subject’s `/value` route, addressed by the exact
+property and statement ID. A fresh, authorized current Subject read establishes its value, selected rank, qualifiers,
+references, actual Context and statement release/revision. The latest subject revision and acceptance alone never
+establish selection. A changed selection, unresolved reading, suppressed field, concealed read, denial and failed read
+remain distinct from native unknown-value and no-value assertions. Metadata keeps its actual language and fallback.
+
+The page reuses the ordinary value and document renderer. Only an authorized document representation in the current
+response can supply text; a locator is unavailable text. Citations are supporting material, with no verification or
+rights badge. Sources, Changes, existing review and the current reader remain available as navigation.
+
+Review metadata comes from one bounded current candidate page for the exact emitted slot. Only metadata of the
+selected statement is retained. An absent row is explicitly not returned, with a next-page control only when the
+native response supplies its opaque continuation, including through empty pages. There is no automatic history
+scan, private-alternative cache, point-read API or inference of erased content. Emitted relation metadata is required
+to address relation slots; without it, review information is unavailable. A link carrying another Context cannot
+silently fall back to Global; the existing Realm resolver still owns that native binding.
+
+The session BFF preserves caller authorization and continuity and marks responses private/no-store. The existing
+safe change-detail adapter can explain the selected statement’s exact revision when supplied and matched; its
+currently absent native binding stays explicitly unavailable. No historical snapshot or write authority is assumed.
