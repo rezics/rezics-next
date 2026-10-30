@@ -1,13 +1,13 @@
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { notificationAllowed } from '../access/index.ts';
 import type { Access } from '../request/access.ts';
 import type { Effect } from '../events/effects.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
-import { writeNotices } from './notices.ts';
+import { finalizeOptionalNotice } from './notices.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { postReadableByAccount } from './reads.ts';
 import readRecipient from './read-reply-notice-recipient.sql';
 
@@ -29,18 +29,20 @@ export function createReplyNoticeEffect(pool: Pool, access: Access): Effect {
       const recipient = await withConnection(pool, async (client) => {
         const anchor = await readPartition(client, partitionOf(route));
         if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
-        return readRecipient.run(client, { route, thread_id: data.threadId, post_id: data.itemId });
+        return readRecipient.run(client, {
+          route,
+          thread_id: data.threadId,
+          post_id: data.itemId,
+        });
       });
       if (!recipient || recipient.author_account_id === data.actorId) return;
       const accountId = recipient.author_account_id;
-      if (!(await notificationAllowed(pool, { recipient: accountId, kind: 'reply' }))) return;
-      if (
-        !(await postReadableByAccount({ pool, access }, accountId, data.threadId, data.itemId, {
-          deadline: Date.now() + 5000,
-        }))
-      )
-        return;
-      await writeNotices(pool, [
+      const deadline = deadlineFor(5000);
+      const readable = await postReadableByAccount({ pool, access }, accountId, data.threadId, data.itemId, {
+        deadline,
+      });
+      await finalizeOptionalNotice(
+        pool,
         {
           recipientId: accountId,
           noticeId: newId(routeOf(accountId)!),
@@ -51,9 +53,11 @@ export function createReplyNoticeEffect(pool: Pool, access: Access): Effect {
           sourceId: data.itemId,
           decisionId: null,
           reportId: null,
-          createdAt: new Date(),
+          createdAt: new Date(event.time),
         },
-      ]);
+        readable,
+        deadline,
+      );
     },
   };
 }

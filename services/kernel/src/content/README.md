@@ -41,7 +41,9 @@ notifies the thread's opening-post author. Creating the opening post never notif
 inline node with `attrs.accountId` in a post's first published revision notifies each distinct named account, in
 document order, up to the first ten. Duplicate nodes do not consume additional slots. A draft sends nothing;
 its first publication uses that published revision's mentions. Later revisions send no mentions. Web adds the
-mention node to `packages/document`.
+mention node to `packages/document`. The actual published opening consumes `thread.created.v1`;
+subsequent posts consume `post.created.v1`. Revision events deliver no mentions. Draft creation is not a
+publication transition, and this delivery path adds no draft publication command.
 
 For these post notices a recipient gets at most one notice per post, with `reply` winning over `mention`.
 The actor never receives their own notice. A nested reply does not independently notify the opening-post author;
@@ -62,14 +64,30 @@ their own account. This owner read does not disclose target document bytes. Mode
 otherwise private report reads return 404. The report GET advertises `account:read` and describes the moderator
 alternative.
 
-When the effect runs, each candidate first passes accounts' `notificationAllowed`; `reply` and `mention` then
-pass the same current Access read check as a post read, including the thread, ancestors, board and Realm. Mention
-source selection reads the thread and its revision on the thread route, releases that checkout, then reads the
-board on the board's own route. A failed check writes nothing and is never retried, including on event replay after
-preferences or membership change.
-Deleted accounts receive nothing. Moderation decisions are mandatory through the catalogue's preference override:
-they still use accounts' check, but turning the kind off cannot suppress them. They do not require the recipient
-to read the taken-down target.
+When the effect runs, reply precedence excludes the reply recipient before preferences. Each optional candidate
+passes the current Access post read, including the thread, ancestors, independently anchored board and Realm.
+Every source and Access checkout is released before recipient finalization. Mention source selection reads the
+thread and event revision on the thread route, then reads the board on its own route.
+
+Optional-send finalization is the recipient transaction's actual COMMIT. The transaction takes the existing
+shared `core.partition` writer fence and then reads `notificationAllowed` under READ COMMITTED. Native account
+and preference commands must update that same partition row to commit; a change committed before the fence is
+acquired is visible, and a concurrent writer cannot commit between the authority read and notice commit. No
+lock spans partitions and no resource Access check runs while the recipient lock is held. Unavailable or moved
+partitions fail retryably instead of recording a successful denial.
+
+The recipient/source/kind delivery decision in `notice_finalization` commits with either the notice insert or
+suppression. It is derived delivery state, never preference or resource authority. Unique-key claims also settle
+concurrent redrives; a crash before the effect records completion cannot reopen a committed refusal. Accounts'
+existing account point-read port fences terminal erasure before storing any recipient decision. Missing or deleted
+accounts receive no new delivery records. Pending recipients may record a refusal, so later activation cannot
+resurrect that send. The current inbox disclosure checks still apply after delivery.
+
+Required moderation, report and appeal outcomes continue to use the mandatory catalogue check, independently of
+optional toggles and without requiring access to the taken-down target. Optional finalization does not wrap them.
+Delivery decisions share the existing 180-day retention and recipient-erasure page budget with notices (at most
+1000 total records per page). Events older than that horizon cannot reopen an expired decision. Notice cleanup
+remains separate from account lifecycle authority; a late redrive cannot recreate erased recipient state.
 
 `GET /v1/accounts/{accountId}/notifications?limit=&cursor=` lists the authenticated account's inbox;
 `GET /v1/accounts/{accountId}/notifications/count` returns its unread count, and
@@ -93,7 +111,7 @@ Notification costs are bounded independently of inbox or thread size:
 
 - Reply delivery considers at most two candidates and writes at most two notices per post (the single-parent
   rule above currently selects at most one). Mention delivery considers and writes at most ten. Each candidate
-  has one `notificationAllowed` check and, when allowed, one Access check; recipient overlap is deduplicated.
+  has bounded current Access checks followed by one `notificationAllowed` check at finalization; recipient overlap is deduplicated.
 - Report outcomes write at most one notice per report, amortized against that report's creation. A takedown
   resolves open reports in bounded batches rather than requiring an unbounded synchronous fan-out.
 - List uses one inbox index range of at most `4 × limit` notice rows and checks each distinct reply or mention target
