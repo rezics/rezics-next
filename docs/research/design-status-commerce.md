@@ -206,8 +206,9 @@ Web's ordinary review receives `pages-library-my-published-logs--desktop`, `--ph
 derive opt-in consumer responses from `library-published-logs.json`; variations are constructed presentation inputs,
 not new native recordings or grants. The signed-out story inspects the fallback; the actual route requires sign-in
 before loading. Four focused source cases cover owner selection/hidden references, unsuccessful reads, native cursor
-restart and route/navigation binding. On the committed implementation, local foreground
-`bun run --cwd apps/web typecheck` passed with no type errors in 1,256 files; the four focused
+restart and route/navigation binding. Integration preserves the existing Context navigation and all unrelated
+locale additions alongside the published-log entry. On the resolved committed implementation, local foreground
+`bun run --cwd apps/web typecheck` passed with no type errors in 1,278 files; the four focused
 `bun test apps/web/tests/library-my-logs.test.ts` cases passed with 137 assertions. No separate build or browser,
 native, database or remote check ran. Story plays, ordinary Web visual review, native/privacy/runtime and
 promoted-main proof remain pending.
