@@ -1465,35 +1465,6 @@ END; $$;
 
 
 --
--- Name: guard_record_source_set(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.guard_record_source_set() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE owner semantic.record_source_set;
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Immutable Semantic record source set'; END IF;
- IF TG_TABLE_NAME='record_source_set' THEN
-  IF TG_OP='UPDATE' AND (OLD.sealed OR OLD.native_xid<>pg_current_xact_id()::text
-    OR (NEW.partition_no,NEW.transaction_id,NEW.revision,NEW.native_xid,NEW.erasure_key)
-      IS DISTINCT FROM (OLD.partition_no,OLD.transaction_id,OLD.revision,OLD.native_xid,OLD.erasure_key)) THEN
-   RAISE EXCEPTION 'Immutable Semantic record source set';
-  END IF;
- ELSE
-  SELECT * INTO STRICT owner FROM semantic.record_source_set
-    WHERE partition_no=NEW.partition_no AND transaction_id=NEW.transaction_id;
-  IF TG_OP<>'INSERT' OR owner.sealed OR owner.native_xid<>pg_current_xact_id()::text THEN
-   RAISE EXCEPTION 'Immutable Semantic record source set membership';
-  END IF;
-  NEW.source_hash:=sha256(convert_to(NEW.source_key,'UTF8'));
-  NEW.unit_hash:=sha256(convert_to(NEW.unit_key,'UTF8'));
- END IF;
- RETURN NEW;
-END; $$;
-
-
---
 -- Name: guard_identity_prearm_owner(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1523,6 +1494,35 @@ BEGIN
  (to_jsonb(NEW)-ARRAY['scope','capture_id'])=(to_jsonb(OLD)-ARRAY['scope','capture_id'])
  THEN RETURN NEW; END IF;
  RAISE EXCEPTION 'Immutable identity pre-arm page';
+END; $$;
+
+
+--
+-- Name: guard_record_source_set(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.guard_record_source_set() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE owner semantic.record_source_set;
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Immutable Semantic record source set'; END IF;
+ IF TG_TABLE_NAME='record_source_set' THEN
+  IF TG_OP='UPDATE' AND (OLD.sealed OR OLD.native_xid<>pg_current_xact_id()::text
+    OR (NEW.partition_no,NEW.transaction_id,NEW.revision,NEW.native_xid,NEW.erasure_key)
+      IS DISTINCT FROM (OLD.partition_no,OLD.transaction_id,OLD.revision,OLD.native_xid,OLD.erasure_key)) THEN
+   RAISE EXCEPTION 'Immutable Semantic record source set';
+  END IF;
+ ELSE
+  SELECT * INTO STRICT owner FROM semantic.record_source_set
+    WHERE partition_no=NEW.partition_no AND transaction_id=NEW.transaction_id;
+  IF TG_OP<>'INSERT' OR owner.sealed OR owner.native_xid<>pg_current_xact_id()::text THEN
+   RAISE EXCEPTION 'Immutable Semantic record source set membership';
+  END IF;
+  NEW.source_hash:=sha256(convert_to(NEW.source_key,'UTF8'));
+  NEW.unit_hash:=sha256(convert_to(NEW.unit_key,'UTF8'));
+ END IF;
+ RETURN NEW;
 END; $$;
 
 
@@ -2501,23 +2501,6 @@ CREATE TABLE semantic.candidate (
     CONSTRAINT candidate_view_order_check CHECK (((view_order >= 0) AND (view_order <= 32)))
 );
 
-CREATE TABLE semantic.contribution_lifecycle (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    candidate_id uuid NOT NULL,
-    state text DEFAULT 'deleted'::text NOT NULL,
-    deleted_at timestamp with time zone NOT NULL,
-    purge_after timestamp with time zone NOT NULL,
-    held boolean DEFAULT false NOT NULL,
-    security_revision bigint DEFAULT 1 NOT NULL,
-    CONSTRAINT contribution_lifecycle_pkey PRIMARY KEY (route, subject_id, candidate_id),
-    CONSTRAINT contribution_lifecycle_window CHECK (purge_after = deleted_at + '720:00:00'::interval),
-    CONSTRAINT contribution_lifecycle_state_check CHECK (state = ANY (ARRAY['active'::text, 'deleted'::text, 'purged'::text])),
-    CONSTRAINT contribution_lifecycle_route_check CHECK (route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11))),
-    CONSTRAINT contribution_lifecycle_candidate_route_check CHECK (route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11))),
-    CONSTRAINT contribution_lifecycle_security_revision_check CHECK (security_revision > 0)
-);
-
 
 --
 -- Name: context; Type: TABLE; Schema: semantic; Owner: -
@@ -2604,6 +2587,27 @@ CREATE TABLE semantic.context_role_enrollment (
     "position" bigint NOT NULL,
     CONSTRAINT context_role_enrollment_occurrence_check CHECK ((occurrence > 0)),
     CONSTRAINT context_role_enrollment_side_check CHECK ((side = ANY (ARRAY['creator'::text, 'new'::text, 'former'::text])))
+);
+
+
+--
+-- Name: contribution_lifecycle; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.contribution_lifecycle (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    state text DEFAULT 'deleted'::text NOT NULL,
+    deleted_at timestamp with time zone NOT NULL,
+    purge_after timestamp with time zone NOT NULL,
+    held boolean DEFAULT false NOT NULL,
+    security_revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT contribution_lifecycle_check CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
+    CONSTRAINT contribution_lifecycle_check1 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT contribution_lifecycle_check2 CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
+    CONSTRAINT contribution_lifecycle_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT contribution_lifecycle_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'purged'::text])))
 );
 
 
@@ -5077,6 +5081,14 @@ ALTER TABLE ONLY semantic.context
 
 ALTER TABLE ONLY semantic.context_role_enrollment
     ADD CONSTRAINT context_role_enrollment_pkey PRIMARY KEY (route, occurrence);
+
+
+--
+-- Name: contribution_lifecycle contribution_lifecycle_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.contribution_lifecycle
+    ADD CONSTRAINT contribution_lifecycle_pkey PRIMARY KEY (route, subject_id, candidate_id);
 
 
 --
