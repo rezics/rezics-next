@@ -36,6 +36,8 @@ export type GoalState = {
   tokenBudget: number | null;
 };
 export type ManagerSessionSnapshot = ManagerSpec & {
+  /** Existing persisted sessions without a kind remain managed sessions. */
+  kind?: 'managed';
   threadId: string | null;
   activeTurnId: string | null;
   status: 'starting' | 'running' | 'paused' | 'complete';
@@ -51,7 +53,17 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   continuationTokensUsed?: number;
   pendingRenewal?: { tokensUsed: number; oldThreadId: string | null; ready: boolean };
 };
-export type ManagerState = ManagerSessionSnapshot & { history?: ManagerSessionSnapshot[] };
+export type ManagedManagerState = ManagerSessionSnapshot & { history?: ManagerSessionSnapshot[] };
+/** An existing Claude session registered for authority only; it is not a managed model session. */
+type ResidentManagedFields = Exclude<keyof ManagerSessionSnapshot, 'kind' | 'id' | 'status' | 'threadId'>;
+export type ResidentSupermanagerState = Pick<ManagerSessionSnapshot, 'id' | 'status' | 'threadId'> & {
+  kind: 'resident-supermanager';
+  provider: 'claude';
+  status: 'running';
+  threadId: string;
+  registeredAt: string;
+} & { [Key in ResidentManagedFields]?: never } & { history?: never };
+export type ManagerState = ManagedManagerState | ResidentSupermanagerState;
 export type CompletionEvidence = { passed: boolean; evidencePath: string; summary: string };
 export type ManagerServices = {
   connect?: (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => Promise<AppServer>;
@@ -63,6 +75,19 @@ export type ManagerServices = {
   onAppServerStart?(identity: ProcessIdentity): void;
   onError?: (error: unknown) => void;
 };
+
+function isResidentSupermanager(state: ManagerState): state is ResidentSupermanagerState {
+  return state.kind === 'resident-supermanager';
+}
+
+function assertManagedManager(state: ManagerState): asserts state is ManagedManagerState {
+  if (isResidentSupermanager(state))
+    throw new Error(`Resident supermanager ${state.id} is an external session and has no managed lifecycle`);
+}
+
+function isManagedManager(state: ManagerState): state is ManagedManagerState {
+  return !isResidentSupermanager(state);
+}
 
 const managerDecisionMigration = {
   module: 'manager-decisions',
@@ -95,10 +120,12 @@ export function recordManagerDecision(db: Database, id: string, at = Date.now())
       : null;
     if (!row) throw new Error(`Unknown manager: ${id}`);
     const state = row ? (JSON.parse(row.state) as ManagerState) : null;
+    if (state && isResidentSupermanager(state)) return;
     const threadId = state?.threadId ?? null;
+    const activeTurnId = state && isManagedManager(state) ? state.activeTurnId : null;
     db.query(
       'INSERT OR IGNORE INTO manager_turn_decisions(manager, thread_id, turn_id, decided_at) VALUES (?, ?, ?, ?)',
-    ).run(id, threadId, threadId ? (state?.activeTurnId ?? null) : null, at);
+    ).run(id, threadId, threadId ? (activeTurnId ?? null) : null, at);
   }).immediate();
 }
 
@@ -134,7 +161,8 @@ export class ManagerSessions {
       inbox.signalDirectory,
       () => {
         for (const state of this.list())
-          if (state.status === 'running') this.background(state.id, () => this.dispatch(state.id));
+          if (isManagedManager(state) && state.status === 'running')
+            this.background(state.id, () => this.dispatch(state.id));
       },
       2_000,
     );
@@ -149,7 +177,12 @@ export class ManagerSessions {
     const row = this.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(id) as { state: string } | null;
     if (!row) throw new Error(`Unknown manager: ${id}`);
     const state = JSON.parse(row.state) as ManagerState;
-    if (state.threadId && state.activeTurnId && managerHasDecision(this.db, id, state.threadId, state.activeTurnId))
+    if (
+      isManagedManager(state) &&
+      state.threadId &&
+      state.activeTurnId &&
+      managerHasDecision(this.db, id, state.threadId, state.activeTurnId)
+    )
       state.decision = true;
     return state;
   }
@@ -157,6 +190,7 @@ export class ManagerSessions {
     return (this.db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).map((row) => {
       const state = JSON.parse(row.state) as ManagerState;
       if (
+        isManagedManager(state) &&
         state.threadId &&
         state.activeTurnId &&
         managerHasDecision(this.db, state.id, state.threadId, state.activeTurnId)
@@ -167,6 +201,7 @@ export class ManagerSessions {
   }
   private save(state: ManagerState): void {
     if (
+      isManagedManager(state) &&
       state.threadId &&
       state.activeTurnId &&
       managerHasDecision(this.db, state.id, state.threadId, state.activeTurnId)
@@ -177,6 +212,78 @@ export class ManagerSessions {
         'INSERT INTO manager_sessions(id, state) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET state = excluded.state',
       )
       .run(state.id, JSON.stringify(state));
+  }
+  /** Persist the already-running configured Claude supermanager without creating a managed session. */
+  registerResidentSupermanager(id: string, sessionId: string): Promise<ResidentSupermanagerState> {
+    return this.serial(id, async () => {
+      if (!id || id.trim() !== id) throw new Error('Configured supermanager identity is missing or malformed');
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId))
+        throw new Error('Resident Claude session ID is malformed');
+      let registered!: ResidentSupermanagerState;
+      this.db
+        .transaction(() => {
+          const rows = this.db.query('SELECT id, state FROM manager_sessions').all() as {
+            id: string;
+            state: string;
+          }[];
+          const parsed = rows.map((row) => {
+            try {
+              return {
+                row,
+                state: JSON.parse(row.state) as {
+                  id?: unknown;
+                  kind?: unknown;
+                  provider?: unknown;
+                  status?: unknown;
+                  threadId?: unknown;
+                  sessionId?: unknown;
+                },
+              };
+            } catch {
+              return { row, state: undefined };
+            }
+          });
+          const assignedElsewhere = parsed.find(
+            ({ row, state }) => row.id !== id && (state?.threadId === sessionId || state?.sessionId === sessionId),
+          );
+          if (assignedElsewhere)
+            throw new Error(`Provider session is already assigned to manager ${assignedElsewhere.row.id}`);
+
+          const current = parsed.find(({ row }) => row.id === id);
+          if (current) {
+            const state = current.state as Partial<ResidentSupermanagerState> | undefined;
+            if (
+              state?.kind === 'resident-supermanager' &&
+              state.id === id &&
+              state.provider === 'claude' &&
+              state.status === 'running' &&
+              state.threadId === sessionId
+            ) {
+              registered = state as ResidentSupermanagerState;
+              return;
+            }
+            if (state?.kind === 'resident-supermanager' && state.status === 'running')
+              throw new Error(
+                `Resident supermanager ${id} is already registered to another session; explicit session replacement is unsupported`,
+              );
+            throw new Error(
+              `Manager ${id} already has a persisted session; refusing to replace it with a resident session`,
+            );
+          }
+
+          registered = {
+            kind: 'resident-supermanager',
+            id,
+            provider: 'claude',
+            threadId: sessionId,
+            status: 'running',
+            registeredAt: new Date(this.now()).toISOString(),
+          };
+          this.save(registered);
+        })
+        .immediate();
+      return registered;
+    });
   }
   private serial<T>(id: string, action: () => Promise<T>): Promise<T> {
     const next = (this.chains.get(id) ?? Promise.resolve()).catch(() => {}).then(action);
@@ -225,11 +332,14 @@ export class ManagerSessions {
   }
   private notification(notification: Notification): void {
     if (this.closed) return;
-    const state = this.list().find((state) => state.threadId === notification.params?.threadId);
+    const state = this.list().find(
+      (state) => isManagedManager(state) && state.threadId === notification.params?.threadId,
+    );
     if (state) this.background(state.id, () => this.handleNotification(state.id, notification));
   }
   private async handleNotification(id: string, { method, params }: Notification): Promise<void> {
     const state = this.get(id);
+    assertManagedManager(state);
     // Notifications from a retired Codex thread can already be queued when renewal swaps sessions.
     if (state.threadId && params?.threadId && state.threadId !== params.threadId) return;
     if (method === 'turn/started') {
@@ -310,7 +420,7 @@ export class ManagerSessions {
   }
   // A Claude manager hears its inbox through its own background watcher, so a session that exited never sees new
   // events; the next event resumes it in its window.
-  private reviveClaude(state: ManagerState): void {
+  private reviveClaude(state: ManagedManagerState): void {
     if (!state.threadId || !this.inbox.pending(state.id).length) return;
     const alive = this.services.windows.alive?.(state.id);
     if (alive === false) {
@@ -335,7 +445,7 @@ export class ManagerSessions {
     );
     for (const event of waking) this.inbox.notified(event.id);
   }
-  private registerCodexViewer(state: ManagerState, client: AppServer): void {
+  private registerCodexViewer(state: ManagedManagerState, client: AppServer): void {
     const viewer = [state.pool.executable ?? 'codex', 'resume', state.threadId!];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
     this.services.windows.register(
@@ -356,8 +466,9 @@ export class ManagerSessions {
     spec: ManagerSpec,
     history?: ManagerSessionSnapshot[],
     pendingRenewal?: ManagerSessionSnapshot['pendingRenewal'],
-  ): Promise<ManagerState> {
-    const state: ManagerState = {
+  ): Promise<ManagedManagerState> {
+    const state: ManagedManagerState = {
+      kind: 'managed',
       ...spec,
       threadId: null,
       activeTurnId: null,
@@ -374,7 +485,24 @@ export class ManagerSessions {
       ...(pendingRenewal ? { pendingRenewal } : {}),
       ...(history?.length ? { history } : {}),
     };
-    this.save(state);
+    this.db
+      .transaction(() => {
+        const row = this.db.query('SELECT state FROM manager_sessions WHERE id = ?').get(spec.id) as {
+          state: string;
+        } | null;
+        if (row) {
+          let current: { kind?: unknown } | undefined;
+          try {
+            current = JSON.parse(row.state) as { kind?: unknown };
+          } catch {
+            current = undefined;
+          }
+          if (current?.kind === 'resident-supermanager')
+            throw new Error(`Resident supermanager ${spec.id} is an external session and cannot be started`);
+        }
+        this.save(state);
+      })
+      .immediate();
     try {
       if (spec.engine === 'codex') {
         const client = await this.client(spec.pool);
@@ -424,7 +552,9 @@ export class ManagerSessions {
       this.save(state);
       this.armDeadline(state);
       await this.dispatch(spec.id);
-      return this.get(spec.id);
+      const current = this.get(spec.id);
+      assertManagedManager(current);
+      return current;
     } catch (error) {
       state.status = 'paused';
       this.save(state);
@@ -441,9 +571,10 @@ export class ManagerSessions {
       this.validateSpec(spec);
       // A start that failed before its session existed leaves a paused record without a thread; it may start again.
       const existing = this.list().find((state) => state.id === spec.id);
+      if (existing && isResidentSupermanager(existing)) throw new Error(`Manager already exists: ${spec.id}`);
       if (existing && !(existing.status === 'paused' && !existing.threadId))
         throw new Error(`Manager already exists: ${spec.id}`);
-      return this.startSession(spec, existing?.history);
+      return this.startSession(spec, existing && isManagedManager(existing) ? existing.history : undefined);
     });
   }
   async renew(id: string, spec: ManagerSpec): Promise<ManagerState> {
@@ -451,6 +582,7 @@ export class ManagerSessions {
       if (spec.id !== id) throw new Error(`Manager renewal id does not match: ${id}`);
       this.validateSpec(spec);
       const current = this.get(id);
+      assertManagedManager(current);
       const goalCanRenew =
         current.engine === 'codex' &&
         (current.goalState?.status === 'budgetLimited' || current.goalState?.status === 'blocked');
@@ -458,16 +590,17 @@ export class ManagerSessions {
       return this.renewInternal(id, spec);
     });
   }
-  private async renewInternal(id: string, spec: ManagerSpec): Promise<ManagerState> {
+  private async renewInternal(id: string, spec: ManagerSpec): Promise<ManagedManagerState> {
     // Reapply the stop operation because a paused record can still have a live turn or viewer left behind.
     await this.stopInternal(id);
     const stopped = this.get(id);
+    assertManagedManager(stopped);
     const { history: _history, ...snapshot } = stopped;
     const history = [...(stopped.history ?? []), snapshot];
     return this.startSession(spec, history, stopped.pendingRenewal);
   }
 
-  private specFromState(state: ManagerState): ManagerSpec {
+  private specFromState(state: ManagedManagerState): ManagerSpec {
     const {
       threadId: _threadId,
       activeTurnId: _activeTurnId,
@@ -488,7 +621,7 @@ export class ManagerSessions {
     } = state;
     return spec;
   }
-  private async askForContinuation(state: ManagerState): Promise<void> {
+  private async askForContinuation(state: ManagedManagerState): Promise<void> {
     if (
       state.engine !== 'codex' ||
       state.continuationAsked ||
@@ -501,6 +634,7 @@ export class ManagerSessions {
     this.db
       .transaction(() => {
         const current = this.get(state.id);
+        assertManagedManager(current);
         if (
           current.continuationAsked ||
           !current.goalState ||
@@ -519,10 +653,11 @@ export class ManagerSessions {
       })
       .immediate();
   }
-  private async handleGoalUpdate(state: ManagerState): Promise<boolean> {
+  private async handleGoalUpdate(state: ManagedManagerState): Promise<boolean> {
     if (state.engine !== 'codex') return false;
     await this.askForContinuation(state);
     const current = this.get(state.id);
+    assertManagedManager(current);
     if (current.status !== 'running' || current.goalState?.status !== 'budgetLimited') return false;
     await this.renewForContinuation(current.id, current.goalState.tokensUsed);
     return true;
@@ -531,6 +666,7 @@ export class ManagerSessions {
     this.db
       .transaction(() => {
         const state = this.get(id);
+        assertManagedManager(state);
         const pending = state.pendingRenewal;
         if (!pending || !pending.ready || !state.threadId || state.threadId === pending.oldThreadId) return;
         delete state.pendingRenewal;
@@ -545,6 +681,7 @@ export class ManagerSessions {
   }
   private async renewForContinuation(id: string, tokensUsed: number): Promise<ManagerState> {
     const state = this.get(id);
+    assertManagedManager(state);
     if (state.pendingRenewal) {
       if (state.threadId && state.threadId !== state.pendingRenewal.oldThreadId && state.pendingRenewal.ready) {
         await this.deliverRenewalNotice(id);
@@ -575,7 +712,7 @@ export class ManagerSessions {
       await this.renewForContinuation(id, state.goalState?.tokensUsed ?? 0);
     });
   }
-  private turnStarted(state: ManagerState, turn: string): void {
+  private turnStarted(state: ManagedManagerState, turn: string): void {
     if (state.countedTurn !== turn) {
       state.turns++;
       state.decision = false;
@@ -597,7 +734,7 @@ export class ManagerSessions {
       })
       .immediate();
   }
-  private turnEnded(state: ManagerState, turn: string): void {
+  private turnEnded(state: ManagedManagerState, turn: string): void {
     this.db
       .transaction(() => {
         if (state.activeTurnId !== turn) return;
@@ -615,6 +752,7 @@ export class ManagerSessions {
   async claudeTurn(id: string, start: boolean): Promise<void> {
     return this.serial(id, async () => {
       const state = this.get(id);
+      assertManagedManager(state);
       if (state.engine !== 'claude') throw new Error('Turn hooks are only for Claude managers');
       if (start) this.turnStarted(state, randomUUID());
       else if (state.activeTurnId) this.turnEnded(state, state.activeTurnId);
@@ -628,7 +766,7 @@ export class ManagerSessions {
       await this.checkLimits(state);
     });
   }
-  private armDeadline(state: ManagerState): void {
+  private armDeadline(state: ManagedManagerState): void {
     clearTimeout(this.timers.get(state.id));
     if (this.closed) return;
     const remaining = state.startedAt + state.limits.wallMs - this.now();
@@ -638,13 +776,14 @@ export class ManagerSessions {
         () =>
           this.background(state.id, async () => {
             const current = this.get(state.id);
+            assertManagedManager(current);
             await this.checkLimits(current);
           }),
         Math.max(0, Math.min(remaining + 1, 2_147_483_647)),
       ),
     );
   }
-  private async checkLimits(state: ManagerState): Promise<boolean> {
+  private async checkLimits(state: ManagedManagerState): Promise<boolean> {
     if (state.status !== 'running') return false;
     const reason =
       state.turns > state.limits.turns
@@ -695,6 +834,7 @@ export class ManagerSessions {
     return true;
   }
   private async pauseRemote(state: ManagerState): Promise<void> {
+    assertManagedManager(state);
     if (state.engine === 'codex' && state.threadId) {
       const client = await this.client(state.pool);
       const goal = await client.request('thread/goal/set', {
@@ -717,6 +857,7 @@ export class ManagerSessions {
   }
   private async stopInternal(id: string): Promise<void> {
     const state = this.get(id);
+    assertManagedManager(state);
     state.status = 'paused';
     this.save(state);
     clearTimeout(this.timers.get(id));
@@ -732,11 +873,13 @@ export class ManagerSessions {
 
   private async dispatch(id: string): Promise<void> {
     let state = this.get(id);
+    if (isResidentSupermanager(state)) return;
     if (state.status !== 'running') return;
     if (state.engine === 'claude') return this.reviveClaude(state);
     const client = await this.client(state.pool);
     for (const event of this.inbox.notifications(id)) {
       state = this.get(id);
+      assertManagedManager(state);
       if (state.activeTurnId) {
         try {
           await client.request('turn/steer', {
@@ -762,7 +905,7 @@ export class ManagerSessions {
       this.inbox.notified(event.id);
     }
   }
-  private async startWakeTurn(client: AppServer, state: ManagerState, summary: string): Promise<void> {
+  private async startWakeTurn(client: AppServer, state: ManagedManagerState, summary: string): Promise<void> {
     const turn = await client.request('turn/start', { threadId: state.threadId, input: textInput(summary) });
     this.turnStarted(state, turn.turn.id);
     this.save(state);
@@ -773,6 +916,7 @@ export class ManagerSessions {
 
   private async completeInternal(id: string): Promise<boolean> {
     const state = this.get(id);
+    assertManagedManager(state);
     const evidence = await this.services.checkCompletion(state.goal);
     this.inbox.record(id, { kind: 'completion-check', ...evidence });
     if (!evidence.passed) {
@@ -804,6 +948,7 @@ export class ManagerSessions {
     }
     await this.stopInternal(id);
     const completed = this.get(id);
+    assertManagedManager(completed);
     completed.status = 'complete';
     if (completed.engine === 'codex' && completed.threadId) {
       const client = await this.client(completed.pool);
@@ -825,20 +970,20 @@ export class ManagerSessions {
     return true;
   }
   complete(id: string): Promise<boolean> {
-    this.get(id);
+    assertManagedManager(this.get(id));
     this.background(id, () => this.completeInternal(id));
     return Promise.resolve(true);
   }
   completeCommand(id: string): Promise<boolean> {
-    this.get(id);
+    assertManagedManager(this.get(id));
     return this.serial(id, () => this.completeInternal(id));
   }
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */
   async recover(onProgress?: () => void): Promise<void> {
-    const states = this.list().filter(
-      (state) => state.status === 'running' || state.status === 'starting' || state.pendingRenewal,
-    );
+    const states = this.list()
+      .filter(isManagedManager)
+      .filter((state) => state.status === 'running' || state.status === 'starting' || state.pendingRenewal);
     let progressReported = false;
     const reportProgress = () => {
       if (progressReported) return;
@@ -850,6 +995,7 @@ export class ManagerSessions {
       states.map((state) =>
         this.serial(state.id, async () => {
           let current = this.get(state.id);
+          assertManagedManager(current);
           if (current.pendingRenewal) {
             reportProgress();
             if (
@@ -859,6 +1005,7 @@ export class ManagerSessions {
             ) {
               await this.deliverRenewalNotice(current.id);
               current = this.get(current.id);
+              assertManagedManager(current);
             } else {
               await this.renewInternal(current.id, this.specFromState(current));
               return;

@@ -4,7 +4,14 @@ import { classifyTask } from './routing.ts';
 import type { Brief, PriorityGrant, Task, TaskClass } from './types.ts';
 
 export type AuthenticatedManager = { id: string; sessionId: string };
-type ManagerSession = { id?: unknown; status?: unknown; threadId?: unknown; supermanager?: unknown };
+type ManagerSession = {
+  id?: unknown;
+  kind?: unknown;
+  provider?: unknown;
+  status?: unknown;
+  threadId?: unknown;
+  supermanager?: unknown;
+};
 
 function hasManagerSessions(db: Database): boolean {
   return Boolean(db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get());
@@ -27,6 +34,7 @@ export function authenticatedManager(
   db: Database,
   env: NodeJS.ProcessEnv = process.env,
 ): AuthenticatedManager | undefined {
+  if (env.CODEX_THREAD_ID && env.CLAUDE_CODE_SESSION_ID) return undefined;
   const sessionIds = [env.CODEX_THREAD_ID, env.CLAUDE_CODE_SESSION_ID].filter(
     (value): value is string => typeof value === 'string' && value.length > 0,
   );
@@ -41,6 +49,8 @@ export function authenticatedManager(
       continue;
     }
     if (!state || typeof state !== 'object' || Array.isArray(state)) continue;
+    if (state.kind === 'resident-supermanager' && (state.id !== row.id || state.provider !== 'claude')) continue;
+    if (state.kind !== undefined && state.kind !== 'managed' && state.kind !== 'resident-supermanager') continue;
     if (state.status !== 'running' || typeof state.threadId !== 'string' || !sessionIds.includes(state.threadId))
       continue;
     matches.push({ id: row.id, sessionId: state.threadId });

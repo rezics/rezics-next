@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { runWorkerCommand } from './worker-commands.ts';
+import { authenticatedManager } from './priority-authority.ts';
 import { harness } from './test-support.ts';
 
 function runtimeFor(h: ReturnType<typeof harness>) {
@@ -147,6 +148,22 @@ test('a worker-supplied GOAL_MANAGER without a registered provider session canno
       }),
     ).rejects.toThrow('authenticated manager session');
     expect(h.store.task(task.id).brief.criticalPath).toBe(false);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('provider identity is ambiguous when a caller supplies both Codex and Claude sessions', () => {
+  const h = harness();
+  try {
+    addManager(h.store.db, 'owner', 'owner-session', 'supermanager');
+    expect(
+      authenticatedManager(h.store.db, {
+        CODEX_THREAD_ID: 'owner-session',
+        CLAUDE_CODE_SESSION_ID: 'another-session',
+        GOAL_MANAGER: 'owner',
+      }),
+    ).toBeUndefined();
   } finally {
     h.dispose();
   }
