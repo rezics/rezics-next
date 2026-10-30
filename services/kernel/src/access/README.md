@@ -646,9 +646,56 @@ on every attempt.
 The existing transition producer owns retirement of the exact settled membership hold before account deletion
 entry. It must prove the actual committed/cancelled generation; inverse cleanup or a forced leave cannot stand
 in for settlement. Current Realm member/participation reads may reconcile a pending UI; no workflow-status API
-is introduced. Accounts adopts the current direct manager-add model and keeps Realm succession, orphan and
-delete/restore authority pending in [its membership boundary](../../../../docs/accounts.md#realms-and-spaces-boundary),
+is introduced. Accounts adopts the current direct manager-add model and records Realm ownership and remaining
+delete/restore boundaries in [its membership boundary](../../../../docs/accounts.md#realms-and-spaces-boundary),
 supported by the [Realms/Spaces research](../../../../docs/research/accounts-design-realms-spaces.md).
+
+### Native Realm ownership
+
+`readRealmOwnershipRoles(client: AccessClient, input: {resource: Resource, accountId: string,
+at: AuthoritativeTime, access?: Access}): Promise<readonly {role: string, rank: number, valid: string}[]>` reads bounded direct
+identity grants at T for an already authorized private read. Its built-in role ranks are owner 4, moderator 2,
+member/standing 1. Rank 3 is reserved for an explicitly installed native administrator role; the built-in
+catalogue does not define one. Supply the trusted service's `access` to use its actual installed catalogue,
+including explicitly installed extensions and roles dropped for unmounted actions. Omitting it restricts the
+read to built-in definitions. A grant row alone never installs a role. Neither action
+inference nor group membership supplies a direct role or current account eligibility.
+
+`assertRealmOwnerMayLeave(client: AccessClient, input: {resource: Resource, accountId: string,
+at: AuthoritativeTime}): Promise<void>` requires the actual authorized live Realm command and its exact T.
+It locks `access.resource_initialization`, checks the target's current explicit owner grant and requires another
+current open-ended direct owner interval. Native role revoke, demotion and interval closure use this guard in
+the same SERIALIZABLE command; contention retries must reauthorize and recheck. Ordinary action grant changes
+operate only on `resource_grant`, so they neither remove nor infer an explicit role holder.
+
+`createGrantCommands({pool, access, managementAction, clock?}).transferRealmOwner(context,
+{resource, fromAccountId, toAccountId, previousValid, key})` checks the new account on its source connection
+before target checkout, validates the exact current source owner interval, creates the recipient's `[T,)` owner
+grant, then guards and removes the source grant atomically. If the recipient already has a current open-ended
+direct owner grant, it preserves that interval and transaction identity and returns its actual `valid` instead.
+It retains ordinary scopes, grantor anti-amplification,
+principal admission and authorization before receipt replay. The native command result contains
+`{resource, subject: {kind: 'account', id}, role, valid}` and the ordinary command outcome version fields.
+
+Content must integrate the leave guard in its existing native membership writer. Erasure succession requires a
+separate real native preparation/application helper: original committed account erasure/version and cause,
+target/generation/deadline binding, independently released current candidate account evidence, deterministic
+longest-serving administrator then moderator selection, and same-Realm transaction grant application returning
+the actual successor/version or stable `orphanedAt`/`claimAfter`. That helper and its bounded resumable candidate
+work are not delivered by the guard or by creation-only `initializeResourceGrants`. There is no succession
+constructor/result exported yet. Content owns resource state, freeze/readability, claim requests and native
+removal/restore records; Access must not store a parallel orphan owner or issue a foreign acknowledgement.
+No approved platform claim application authority is delivered. The 30-day deadline alone confers no grant power.
+
+The remaining succession seam is the native candidate source capability: `access.erasure` supplies the exact
+immutable `(route, account_id, version, at)` obligation, but `access.account` supplies mutable current state and
+`transaction_id`, without a temporal account-state read at shared T. Native grants provide temporal role rows;
+they provide neither a stable bounded live-role ordering frontier nor resumable candidate/account-evidence
+custody. The existing erasure discovery cursor enumerates stored rows for cleanup, including history, and is
+not such authority. A pool read, an account version in a body, or a released candidate page cannot establish
+that an exhausted frontier contains no eligible successor in the applying Realm transaction. Content's
+same-transaction succession consumer needs that source/admission seam selected before a truthful preparation
+and application constructor can be exported; the membership transition writer remains its sole producer.
 
 ## Resource denials
 

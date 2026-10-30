@@ -51,6 +51,9 @@ export async function runKernelTypecheck(
             root: repository,
             cwd: directory,
             command: ['bun', 'scripts/typecheck.ts', ...(emitClient ? ['--emit-client'] : [])],
+            // SQL compilation retains the local Reylo query cache. Placement's
+            // existing file-retention rule keeps this compiler-only run here.
+            keepsFiles: true,
           },
           env,
         );

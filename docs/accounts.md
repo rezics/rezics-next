@@ -399,10 +399,33 @@ hold cannot substitute for that transition.
 
 Web can settle pending join/leave using existing member and participation reads. Accepted 202 is not settled
 membership; arbitrary participation denial is not evidence of a ban. No workflow-status API is selected here.
-Realm succession, orphan/last-holder handling, direct-owner inclusion in own-Realm discovery, and Realm/Space
-delete/restore authority remain precise Content/Accounts/Root decisions, with Semantic for Context obligations.
-Generic role commands and record restoration do not supply those policies. No new permission or `globalReach`
-is implied; section 4's closed governance set remains unchanged.
+A sole explicit Realm owner cannot leave or hand back ownership before transferring it. Native role revoke,
+demotion and interval closure use the same locked last-holder guard. Transfer establishes the new direct holder
+before releasing the exact current source grant in one command. An already explicit recipient keeps its current
+open-ended owner interval and its original transaction identity. Action copies and organization membership do
+not establish explicit ownership. Content must call `assertRealmOwnerMayLeave` in its authorized native Realm
+leave transaction, through the existing membership transition writer.
+
+When erasure removes the sole owner, the adopted successor order is the longest-serving active administrator,
+then moderator, with ties broken by native principal key. The built-in catalogue has no administrator role;
+a proposed name or inferred action set does not create administrator candidates. With neither candidate the
+Realm remains readable, freezes governance and becomes eligible for a platform claim request after 30 days.
+That deadline permits a request, never automatic acquisition or a Global `realm:manage` bypass. Another real
+explicit owner retains its grant without a new primary-owner election.
+
+Content owns lifecycle, orphan state, claim requests and moderation/deletion records. Access's source-bound
+erasure succession preparation/application is not yet delivered: it must validate the committed account erasure,
+release its source connection, resolve bounded current candidate evidence at shared T, then apply grants and
+return the native successor/version or fixed orphan timestamps inside Content's Realm-home transaction.
+The private role reader supplies direct role data only, not current account eligibility or authorization.
+Its optional trusted `access` input selects the actual installed catalogue; omission uses built-in definitions.
+The remaining native succession source seam is shared-T account eligibility and resumable live-role candidate
+custody: account state is mutable, and the cleanup discovery cursor is not an ordered current-role authority.
+The [Access ownership contract](../services/kernel/src/access/README.md#native-realm-ownership) records the exact
+source fields and missing admission boundary. An approved platform claim application
+authority also remains unselected. Direct-owner inclusion in own-Realm discovery and Realm/Space delete/restore
+authority remain separate owner decisions, with Semantic for Context obligations. No new permission or
+`globalReach` is implied; section 4's closed governance set remains unchanged.
 
 ### Follows boundary
 
