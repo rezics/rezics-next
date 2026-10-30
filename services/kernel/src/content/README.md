@@ -47,6 +47,22 @@ both board checks and the thread check pass. For a non-public Realm board, each 
 account's current Realm ban key at authorization time (and the delegating principal's key for a delegated actor);
 an open ban overrides every independent grant, while public boards and Global boards read no ban key.
 
+The `readResource` public-eligibility callbacks declare native work through
+`ResourceEligibilityOptions.work.prepare/verify`. Preparation returns the already captured evidence and performs
+no IO. Verification rereads the actual board, thread or post point (including its current head and exact moderation
+decision), compares the full existing disclosure signature and applies current admissibility. Protected Realm board
+checks retain the actual actor and delegating principal ban probes at the evaluator's T. Each dispatched plan keeps
+its full row charge, including misses; successful byte receipts cover the actual parameters and closed projection.
+The adjacent derivation in `read-eligibility-access-work.ts` uses the native keys, unique constraints and title bounds.
+It reads no body or digest and does not charge previously captured evidence or surrounding reader IO.
+
+These declarations participate only in trusted `AccessContext.work`, using the caller's existing Source ledger.
+They supply no permission, cached result or allowance. Every check, including a second check in the same read window,
+executes current native verification; independent board/Realm checks and final snapshots remain required. The separate
+revision projection (digest, bounded arrays/citation and optional body) has no declaration in this callback and refuses
+before dispatch as `Content read eligibility revision projection native work producer`. Ordinary unmetered reads
+retain their existing behavior. Focused callback and receipt cases are in `test/content/eligibility-access-work.test.ts`.
+
 ## Notifications
 
 Content owns minimal in-app notices for `reply`, `mention` and `moderation_decision`, using the names in accounts'

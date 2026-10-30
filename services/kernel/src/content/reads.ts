@@ -12,6 +12,7 @@ import { authoritativeTimeValue } from '../command/command.ts';
 import { realmReadEligibility } from '../community/realm.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
+import { createReadEligibilityWork } from './read-eligibility-access-work.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext } from '../request/access.ts';
 import type { ContentEditionSource } from './edition-model.ts';
@@ -492,8 +493,8 @@ function admissible(row: Row, actor: Actor, tombstone: boolean): boolean {
 
 type ErasedReadProof = { explicit: boolean };
 
-/** Shared post-read resources: every domain operand uses the evaluator's principal. */
-function readResource(
+/** @internal Shared post-read resources: every domain operand uses the evaluator's principal. */
+export function readResource(
   row: Row,
   evidence: object,
   tombstone = false,
@@ -502,16 +503,19 @@ function readResource(
 ): Resource {
   const action = `${row.kind}:read`;
   const resource = { route: route(row.id), id: row.id };
+  const native = createReadEligibilityWork(row, resource.route, evidence);
   const resourceWithEligibility = {
     ...resource,
     eligibility: createResourcePublicEligibility({
       resource,
       action,
-      async prepare() {
-        return evidence;
+      work: native.work,
+      async prepare(context) {
+        return native.prepare(context);
       },
-      async verify({ client, actor, at }) {
-        const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
+      async verify(context) {
+        const { client, actor, at } = context;
+        const current = await native.point(context, () => point(client, row.kind, row.id, row.thread_id ?? row.id));
         if (!current || signature(current) !== signature(row) || !admissible(current, actor, tombstone))
           throw new ContentNotFoundError();
         if (
@@ -526,19 +530,21 @@ function readResource(
           const accounts = new Set([actor.accountId, ...(principal ? [principal] : [])]);
           for (const accountId of accounts) {
             const parameters = { route: route(current.id), realm_id: current.realm_id, account_id: accountId, at };
-            const bans = await client.query(
-              currentBan.sql,
-              currentBan.params.map((name) => parameters[name as keyof typeof parameters]),
+            const values = currentBan.params.map((name) => parameters[name as keyof typeof parameters]);
+            const bans = await native.ban(context, values, () =>
+              client.query<{ banned: boolean }>(currentBan.sql, values),
             );
             if (bans.rows.length !== 0) throw new ContentNotFoundError();
           }
         }
         // Erased public slots still require the requested scope from account tokens.
-        if (placeholder && actor.kind === 'account' && !actor.scopes.includes(action)) return false;
-        return (
+        if (placeholder && actor.kind === 'account' && !actor.scopes.includes(action))
+          return native.complete(context, false);
+        return native.complete(
+          context,
           (current.visibility === 'published' ||
             (withheldReference && isCommittedWithheldReference(current) && current.visibility === 'taken_down')) &&
-          ((!tombstone && current.availability === 'available') || placeholder)
+            ((!tombstone && current.availability === 'available') || placeholder),
         );
       },
     }),
