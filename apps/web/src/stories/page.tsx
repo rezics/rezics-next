@@ -9,6 +9,7 @@ import { routeTree } from '../routeTree.gen';
 import { setStoryRequestContext } from '../../.storybook/react-start';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import { deletedOrganizationThreadId } from '../kernel/fake';
+import { PendingPage } from '../shell/pending';
 import { searchFacetStoryPaths } from '../kernel/fake/search-facets';
 import { selectLabelStory } from '../kernel/fake/library-labels';
 import { selectRatingsFixture, type RatingsFixtureName } from '../kernel/fake/ratings';
@@ -149,11 +150,14 @@ export function PageStory({
       routeTree,
       context: { queryClient, credentialMode },
       history: createMemoryHistory({ initialEntries: [entry] }),
+      defaultPendingComponent: PendingPage,
+      defaultPendingMs: 0,
       parseSearch,
       stringifySearch,
       ssr: {},
       rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
     });
+    void router.load();
     return { router, queryClient };
   }, [entry, labelsFixture]);
   return (

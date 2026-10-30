@@ -105,3 +105,15 @@ test('full page capture resets scroll only when no viewport overlay is open', as
   expect(scrolled).toBe(false);
   expect(framed).toBe(false);
 });
+
+test('page story captures wait for the route content after Storybook finishes rendering', () => {
+  const start = source.indexOf('async function captureOne(');
+  const end = source.indexOf('\nasync function captureJobs(', start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const captureOne = source.slice(start, end);
+  expect(captureOne).toContain("job.id.startsWith('pages-')");
+  expect(captureOne).toContain(
+    "page.locator('main:not([aria-busy=\"true\"])').waitFor({ state: 'visible', timeout: 60_000 })",
+  );
+});

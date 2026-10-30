@@ -65,6 +65,14 @@ describe('routing reference', () => {
     /sign-in.*return path/i,
     /components never check/i,
   ]);
+  rule('subject page hydration', [
+    /Subject pages and views follow the same boundary/i,
+    /server ensures.*public page.*type-frame.*relation-label.*reaction-count.*rating-figure queries/i,
+    /library slot.*reading preferences.*own reaction.*own rating queries.*browser-only/i,
+    /enabled after the session query reports signed in/i,
+    /control space reserved.*first render/i,
+    /update or invalidate.*corresponding query after a write/i,
+  ]);
   rule('data reads', [
     /\*\*Data reads\*\*/,
     /each kernel read.*queryOptions.*beside.*loader/i,

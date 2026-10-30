@@ -1,6 +1,8 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type ContextType } from 'react';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { m } from '../../paraglide/messages.js';
+import { SubjectRatingControl } from './rating-control';
+import type { SubjectOwnRating } from './subject-ratings';
 import { GLOBAL, type Figure, type Ratings } from './subject-ratings';
 
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
@@ -11,6 +13,14 @@ const linkClass = 'text-sm font-medium text-primary underline underline-offset-4
 export const RatingsContext = createContext<Ratings | null | undefined>(undefined);
 /** Story fixtures can show each display state without adding another request to the subject page. */
 export const RatingsPreviewContext = createContext<Ratings | null | undefined>(undefined);
+export const RatingControlContext = createContext<{
+  subjectId: string;
+  locale: string;
+  returnTo: string;
+  session: 'unknown' | 'unavailable' | 'signed-out' | 'signed-in';
+  own: SubjectOwnRating | undefined;
+  failure?: boolean;
+} | null>(null);
 
 function RatingsFailure({ id, subject, locale }: { id: string; subject: string; locale: string }) {
   const options = { locale: locale as never };
@@ -38,12 +48,13 @@ function RatingsFailure({ id, subject, locale }: { id: string; subject: string; 
 export function RatingsSection({ id, subject, locale }: { id: string; subject: string; locale: string }) {
   const routeData = useContext(RatingsContext);
   const previewData = useContext(RatingsPreviewContext);
+  const control = useContext(RatingControlContext);
   const data = previewData === undefined ? routeData : previewData;
 
   if (data === null) return <RatingsFailure id={id} subject={subject} locale={locale} />;
   if (data === undefined) return null;
 
-  return <RatingsView data={data} id={id} subject={subject} locale={locale} />;
+  return <RatingsView data={data} id={id} subject={subject} locale={locale} control={control} />;
 }
 
 export function RatingsView({
@@ -51,11 +62,13 @@ export function RatingsView({
   id,
   subject,
   locale,
+  control,
 }: {
   data: Ratings | null;
   id: string;
   subject: string;
   locale: string;
+  control?: ContextType<typeof RatingControlContext>;
 }) {
   const options = { locale: locale as never };
   const title = m.subject_ratings({}, options);
@@ -166,6 +179,16 @@ export function RatingsView({
             />
           </p>
         ))}
+        {control && (
+          <SubjectRatingControl
+            {...(control.failure !== undefined ? { initialFailure: control.failure } : {})}
+            locale={control.locale}
+            own={control.own}
+            returnTo={control.returnTo}
+            session={control.session}
+            subjectId={control.subjectId}
+          />
+        )}
       </div>
       <a data-slot="see-reviews" className={linkClass} href={reviewsHref}>
         {m.subject_ratings_reviews({}, options)}

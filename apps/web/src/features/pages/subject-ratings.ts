@@ -18,10 +18,19 @@ export type Ratings = { figures: Figure[]; statistics: Statistic[]; realms: Real
 type Response<T> = { status: number; data?: T | null };
 type Route = {
   ratings: { get(options: unknown): Promise<Response<{ figures: Figure[] }>> } & ((args: { questionId: string }) => {
-    vote: { get(options: unknown): Promise<Response<{ units: number }>> };
+    vote: {
+      get(options: unknown): Promise<Response<{ units: number }>>;
+      put(
+        body: { units: number },
+        options: { headers: { authorization: string; 'idempotency-key': string } },
+      ): Promise<Response<unknown>>;
+      delete(options: { headers: { authorization: string; 'idempotency-key': string } }): Promise<Response<unknown>>;
+    };
   });
   'source-statistics': { get(options: unknown): Promise<Response<Statistic[]>> };
 };
+
+export type SubjectOwnRating = { kind: 'ready'; units: number | null } | { kind: 'unavailable' };
 
 export async function readRatings(
   client: KernelClient,
@@ -66,6 +75,45 @@ export async function readRatings(
     };
   } catch {
     return null;
+  }
+}
+
+export async function readOwnRating(
+  client: KernelClient,
+  request: Request,
+  env: Partial<SessionEnv>,
+  id: string,
+): Promise<SubjectOwnRating> {
+  try {
+    await prepareSession(request, env);
+    const authorization = viewerCredential(request);
+    if (!authorization) return { kind: 'unavailable' };
+    const result = await (client.subjects({ id }) as unknown as Route)
+      .ratings({ questionId: QUESTION })
+      .vote.get({ headers: { authorization } });
+    if (result.status === 200) return { kind: 'ready', units: result.data?.units ?? null };
+    if (result.status === 404) return { kind: 'ready', units: null };
+    return { kind: 'unavailable' };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+/** Write this reader's one vote. Each user action supplies its own idempotency key. */
+export async function writeOwnRating(
+  client: KernelClient,
+  id: string,
+  authorization: string,
+  units: number | null,
+  idempotencyKey: string,
+): Promise<boolean> {
+  const vote = (client.subjects({ id }) as unknown as Route).ratings({ questionId: QUESTION }).vote;
+  const headers = { authorization, 'idempotency-key': idempotencyKey };
+  try {
+    const result = units === null ? await vote.delete({ headers }) : await vote.put({ units }, { headers });
+    return units === null ? result.status === 204 : result.status === 200;
+  } catch {
+    return false;
   }
 }
 

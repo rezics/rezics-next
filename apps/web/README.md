@@ -140,6 +140,7 @@ the curation scopes `presentation:publish` and `presentation:activate`, and `ord
 Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
+Rating writes also require the documented website client scope `rating:vote`.
 
 Generate the website's own P-256 key from `apps/web`, keeping intermediate files under `.temp/`:
 
@@ -209,6 +210,7 @@ recordings override discovered recordings for module answers. Bun tests, Storybo
 files automatically once per process, with no shared index or import line.
 
 The recording check is in `tests/recorded-responses.test.ts`; it type-checks every committed kernel response against `@rezics/client`.
+A file under `src/kernel/recorded/` is a response the recorder received from the kernel; a state the recorder stack cannot produce through the API is a fake route module under `src/kernel/fake/`, never constants written out by `record.ts`.
 Page stories draw subjects from `src/kernel/story-subjects.ts` by ID, and recordings that embed subject labels exist for each story locale.
 
 Treat the bundled definitions release and its `definitions-active` and `definitions-release` recordings as one generated
@@ -272,6 +274,8 @@ then the total, and stops the server when it exits.
 Renamed handles redirect 302 to the current handle for 30 days; afterwards, like a deleted account's handle, they answer the same 404 as an unknown handle.
 
 **Public and signed-in routes**: Public routes render on the server without reading the session or any cookie. The session, CSRF token and personal state (library status, own vote, reactions, membership and edit controls) load in the browser after hydration through queries. Signed-in routes check the session in `beforeLoad` and redirect to sign-in with a return path; components never check it themselves.
+
+Subject pages and views follow the same boundary: the server ensures locale and view keyed public page, type-frame, relation-label, reaction-count and rating-figure queries. Library slot, reading preferences, own reaction and own rating queries are browser-only and enabled after the session query reports signed in. Keep their control space reserved from the first render, and update or invalidate the corresponding query after a write. Subject server renders use anonymous defaults for spoiler and suitability preferences. These rules govern current subject routes and supersede older subject-specific read placement details below; the route checks own the current total read bounds.
 
 **Data reads**: Each kernel read has one `queryOptions` factory beside its loader code. Loaders call `context.queryClient.ensureQueryData`; components use `useSuspenseQuery` for public reads and `useQuery` for personal reads in the browser only. Public reads keep `staleTime` 60 s, personal reads 0. The router preloads on intent.
 

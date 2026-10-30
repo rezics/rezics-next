@@ -1,9 +1,8 @@
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
-import { kernelClient } from '../../kernel/client';
+import { keepSearch, subjectUrlForView } from '../../features/pages/subject-queries';
 import { getLocale } from '../../paraglide/runtime.js';
-import { keepSearch, loadSubject, subjectUrlForView } from '../../subject/load-subject';
 
 const redirectRelations = createServerFn({ method: 'GET', strict: false })
   .validator((input: unknown) => {
@@ -24,6 +23,10 @@ const redirectRelations = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
+    const [{ kernelClient }, { loadSubject }] = await Promise.all([
+      import('../../kernel/client'),
+      import('../../subject/load-subject'),
+    ]);
     const result = await loadSubject(kernelClient(data.locale), data.id, data.locale as never);
     if (result.kind === 'missing') throw notFound();
     throw redirect({

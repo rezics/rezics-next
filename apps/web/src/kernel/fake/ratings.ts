@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import type { Ratings } from '../../features/pages/subject-ratings';
 import type { FakeRoute } from '../fake-modules';
+import subjectSourceStatisticsRecording from '../recorded/subject-source-statistics.json';
 
 type SubjectRoutes = ReturnType<KernelClient['subjects']>;
 export type AggregateResponse = NonNullable<Awaited<ReturnType<SubjectRoutes['ratings']['get']>>['data']>;
@@ -11,6 +12,7 @@ type VoteResponse = NonNullable<Awaited<ReturnType<ReturnType<SubjectRoutes['rat
 
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
 export const QUESTION = '00000000-0000-7000-8000-000000000001';
+export const IMPORTED_VN_SUBJECT_ID = '01a1773a-f700-7074-b1ee-5e05671d3be3';
 
 const realmList = [
   { id: '01a1a000-0000-7000-8000-000000000002', name: 'The Quiet Novel Club' },
@@ -43,7 +45,7 @@ const globalScore = {
 const importedStatistics = [
   {
     source: 'vndb',
-    sourceRecordId: 'little-prince',
+    sourceRecordId: 'v4',
     scale: { min: 1, max: 10 },
     mean: 8.4,
     count: 267,
@@ -52,6 +54,7 @@ const importedStatistics = [
     attribution: 'VNDB',
   },
 ] satisfies SourceStatisticsResponse;
+const emptyStatistics = subjectSourceStatisticsRecording as SourceStatisticsResponse;
 
 const emptyGlobal = {
   population: GLOBAL,
@@ -62,6 +65,7 @@ const emptyGlobal = {
 const ownVote = { units: 17, revision: 1, at: '2026-10-28T00:00:00.000Z' } satisfies VoteResponse;
 
 export type RatingsFixtureName =
+  | 'subject-ratings-empty'
   | 'subject-ratings-global'
   | 'subject-ratings-realms'
   | 'subject-ratings-below-threshold'
@@ -81,9 +85,15 @@ function aggregate(figures: AggregateResponse['figures']): AggregateResponse {
 }
 
 export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
+  'subject-ratings-empty': {
+    aggregate: aggregate([emptyGlobal]),
+    statistics: emptyStatistics,
+    voteStatus: 404,
+    preview: { figures: [emptyGlobal], statistics: emptyStatistics, realms: [], own: null },
+  },
   'subject-ratings-global': {
     aggregate: aggregate([globalScore]),
-    statistics: [],
+    statistics: emptyStatistics,
     voteStatus: 404,
     preview: { figures: [globalScore], statistics: [], realms: [], own: null },
   },
@@ -112,7 +122,7 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
       },
       { population: realmList[2]!.id, count: 0, freshness: { asOf: null, updating: false } },
     ]),
-    statistics: [],
+    statistics: emptyStatistics,
     voteStatus: 200,
     vote: ownVote,
     preview: {
@@ -145,7 +155,7 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
   },
   'subject-ratings-below-threshold': {
     aggregate: aggregate([{ population: GLOBAL, count: 3, freshness: { asOf: null, updating: false }, remaining: 2 }]),
-    statistics: [],
+    statistics: emptyStatistics,
     voteStatus: 404,
     preview: {
       figures: [{ population: GLOBAL, count: 3, remaining: 2 }],
@@ -162,7 +172,7 @@ export const ratingsFixtures: Record<RatingsFixtureName, RatingsFixture> = {
   },
   'subject-ratings-own-forbidden': {
     aggregate: aggregate([emptyGlobal]),
-    statistics: [],
+    statistics: emptyStatistics,
     voteStatus: 403,
     preview: { figures: [emptyGlobal], statistics: [], realms: [], own: null },
   },
@@ -174,14 +184,18 @@ export function selectRatingsFixture(name?: RatingsFixtureName): void {
   selectedName = name;
 }
 
-function selectedFixture(): RatingsFixture {
+function selectedFixture(request: Request): RatingsFixture {
   const name =
     selectedName ??
     (globalThis as typeof globalThis & { __rezicsStoryContext?: { ratingsFixture?: string } }).__rezicsStoryContext
       ?.ratingsFixture;
-  return name && Object.hasOwn(ratingsFixtures, name)
-    ? ratingsFixtures[name as RatingsFixtureName]
-    : ratingsFixtures['subject-ratings-imported'];
+  if (!name || !Object.hasOwn(ratingsFixtures, name)) return ratingsFixtures['subject-ratings-empty'];
+
+  const subjectId = new URL(request.url).pathname.split('/')[3];
+  if (name === 'subject-ratings-imported' && subjectId !== IMPORTED_VN_SUBJECT_ID)
+    return ratingsFixtures['subject-ratings-empty'];
+
+  return ratingsFixtures[name as RatingsFixtureName];
 }
 
 function aggregateRoute(request: Request, path: string, fixture: RatingsFixture) {
@@ -198,15 +212,14 @@ function aggregateRoute(request: Request, path: string, fixture: RatingsFixture)
 const requestUrl = (request: Request) => new URL(request.url);
 
 function ratingsRoutes(): FakeRoute[] {
-  const answer = () => selectedFixture();
   const aggregateAnswer: NonNullable<FakeRoute['story']> = ({ request, match }) =>
-    match ? aggregateRoute(request, match[0], answer()) : undefined;
-  const statisticsAnswer: NonNullable<FakeRoute['story']> = () => ({
+    match ? aggregateRoute(request, match[0], selectedFixture(request)) : undefined;
+  const statisticsAnswer: NonNullable<FakeRoute['story']> = ({ request }) => ({
     status: 200,
-    __responseBody: answer().statistics,
+    __responseBody: selectedFixture(request).statistics,
   });
-  const voteAnswer: NonNullable<FakeRoute['story']> = () => {
-    const fixture = answer();
+  const voteAnswer: NonNullable<FakeRoute['story']> = ({ request }) => {
+    const fixture = selectedFixture(request);
     if (fixture.voteStatus === 200 && fixture.vote) return { status: 200, ...fixture.vote };
     return { status: fixture.voteStatus, ...(fixture.voteStatus === 404 ? { code: 'not_found' } : {}) };
   };

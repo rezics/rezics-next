@@ -11,6 +11,37 @@ export type SubjectReactions = {
   value: SubjectReactionKind | null;
 };
 
+export async function readReactionCounts(client: KernelClient, id: string): Promise<SubjectReactions | null> {
+  const counts = await client
+    .subjects({ id })
+    .reactions.get()
+    .catch(() => null);
+  if (counts?.status !== 200 || !counts.data) return null;
+  const shown: SubjectReactions['counts'] = {};
+  for (const { kind, count } of counts.data.counts) if (admitted.has(kind)) shown[kind as SubjectReactionKind] = count;
+  return { counts: shown, value: null };
+}
+
+export async function readOwnReaction(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  id: string,
+): Promise<SubjectReactionKind | null> {
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    if (!authorization) return null;
+    const own = await (client.subjects({ id }) as unknown as OwnReactionRoute).reaction
+      .get({ headers: { authorization } })
+      .catch(() => null);
+    const kind = own?.status === 200 ? own.data?.kind : null;
+    return kind && admitted.has(kind) ? (kind as SubjectReactionKind) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** `GET /v1/subjects/{id}/reaction`, which the generated client declarations do not carry yet. */
 type OwnReactionRoute = {
   reaction: {
@@ -33,23 +64,9 @@ export async function loadSubjectReactions(
   sessionEnv: Partial<SessionEnv>,
   id: string,
 ): Promise<SubjectReactions | null> {
-  let authorization: string | null = null;
-  try {
-    await prepareSession(request, sessionEnv);
-    authorization = viewerCredential(request);
-  } catch {
-    authorization = null;
-  }
-  const subject = client.subjects({ id });
   const [counts, own] = await Promise.all([
-    subject.reactions.get().catch(() => null),
-    authorization
-      ? (subject as unknown as OwnReactionRoute).reaction.get({ headers: { authorization } }).catch(() => null)
-      : null,
+    readReactionCounts(client, id),
+    readOwnReaction(client, request, sessionEnv, id),
   ]);
-  if (counts?.status !== 200 || !counts.data) return null;
-  const shown: SubjectReactions['counts'] = {};
-  for (const { kind, count } of counts.data.counts) if (admitted.has(kind)) shown[kind as SubjectReactionKind] = count;
-  const kind = own?.status === 200 ? own.data?.kind : null;
-  return { counts: shown, value: kind && admitted.has(kind) ? (kind as SubjectReactionKind) : null };
+  return counts ? { ...counts, value: own } : null;
 }

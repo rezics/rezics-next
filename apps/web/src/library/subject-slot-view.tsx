@@ -3,6 +3,7 @@ import { EntryUndoForm, EntryRemoveForm, EntryRestoreFeedback } from './entry-un
 import { Exposure, useOperation } from '../kernel/exposure';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Select,
   SelectContent,
@@ -96,6 +97,7 @@ function LibraryStateSelect({
 
 /** Compact subject-level Library controls rendered in the page's template action slot. */
 export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) {
+  const queryClient = useQueryClient();
   const action = subjectHref({ id: subject.id, label: subject.label }, locale).href;
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
@@ -119,6 +121,14 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
     ['dropped', m.library_subject_state_dropped()],
   ] as const;
   useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    const loadedEntry =
+      data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
+    setEntry(loadedEntry);
+    setSelectedState(loadedEntry?.state ?? '');
+    setCollections(data.collections);
+    setCollectionsLoaded(data.collectionsLoaded);
+  }, [data.entry, data.restore, data.collections, data.collectionsLoaded]);
   const result = actionResult ?? data.result;
   const resultText =
     result === 'saved'
@@ -158,6 +168,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
               headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
             })
               .then((restored) => {
+                void queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] });
                 if (restored.ok) {
                   setEntry(restored.entry);
                   setSelectedState(restored.entry.state);
@@ -198,6 +209,17 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
       });
       applyEntryResult(response, previous);
+      if (
+        response.result === 'saved' ||
+        response.result === 'cleared' ||
+        (response.result === 'conflict' && 'entry' in response)
+      ) {
+        queryClient.setQueryData(
+          ['subject-library', subject.id, locale],
+          (current: SubjectLibrarySlotData | undefined) =>
+            current ? { ...current, entryAvailable: true, entry: response.entry ?? null } : current,
+        );
+      }
     } catch {
       setSelectedState(previous);
       setActionResult('unavailable');
@@ -252,6 +274,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
         headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
       });
       setActionResult(response.result);
+      await queryClient.invalidateQueries({ queryKey: ['subject-library', subject.id, locale] });
     } catch {
       setActionResult('unavailable');
     }

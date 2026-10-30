@@ -6,7 +6,7 @@ const route = join(import.meta.dir, '..', 'src', 'routes', 'subjects', '$id_.$sl
 test('the subject route renders the page model', async () => {
   const source = await Bun.file(route).text();
   expect(source).toContain("from '../../features/pages/subject");
-  expect(source).toContain('loadSubjectPage(');
+  expect(source).toContain('subjectPageQuery(');
   expect(source).toContain('<SubjectPage');
   expect(source).toContain('subjectPageTitle(');
   expect(source).not.toMatch(/\.subjects\(\{/);

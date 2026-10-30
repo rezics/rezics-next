@@ -288,6 +288,16 @@ async function captureOne(page: Page, origin: string, job: Job, out: string): Pr
   try {
     await navigateStory(page, job.id, url);
     await settle(page, job.id, pageErrors);
+    // Page route stories render their router asynchronously after Storybook finishes the story render.
+    if (job.id.startsWith('pages-')) {
+      try {
+        await page.locator('main:not([aria-busy="true"])').waitFor({ state: 'visible', timeout: 60_000 });
+      } catch (error) {
+        const details = pageErrors.slice(0, 5);
+        const firstErrors = details.length ? ` Page errors: ${details.join(' | ')}` : '';
+        throw new Error(`Page story ${job.id} did not render its main content.${firstErrors} ${String(error)}`);
+      }
+    }
     await prepareFullPageCapture(page);
     const file = join(out, screenshotFilename(job));
     await page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });

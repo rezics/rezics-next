@@ -29,7 +29,10 @@ if (!existsSync(routeTree) || newestRouteChange(routes) > statSync(routeTree).mt
 }
 
 const config: StorybookConfig = {
-  framework: { name: '@storybook/react-vite', options: {} },
+  framework: {
+    name: '@storybook/react-vite',
+    options: { builder: { viteConfigPath: null } },
+  },
   features: { viewportStoryGlobals: true } as NonNullable<StorybookConfig['features']> & { viewportStoryGlobals: true },
   stories: ['../src/stories/**/*.stories.tsx', '../src/stories/**/*.mdx', '../src/shell/**/*.stories.tsx'],
   storySorts: [
@@ -69,6 +72,8 @@ const config: StorybookConfig = {
             : [plugin],
       ) ?? [];
     config.plugins = storyPlugins(config.plugins) ?? [];
+    config.server ??= {};
+    config.server.allowedHosts = ['127.0.0.1', 'localhost'];
     config.resolve ??= {};
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),

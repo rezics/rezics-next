@@ -14,6 +14,12 @@ import {
 
 const forbidden = () => problemResponse(problem(403, 'forbidden', 'Forbidden'));
 const needsCsrf = (request: Request) => isUnsafeRequest(request) && carriesSession(request);
+const sharedSubjectRatingForm = (request: Request) =>
+  request.method === 'POST' &&
+  request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() === 'application/x-www-form-urlencoded' &&
+  /^\/(?:de|en|es|fr|ja|ko|zh-Hans|zh-Hant)\/subjects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^/]{1,128}$/i.test(
+    new URL(request.url).pathname,
+  );
 const isAllowedOrigin = createServerOnlyFn(async (request: Request, origin: string | null) => {
   const { env } = await import('cloudflare:workers');
   return isAllowedSiteOrigin(request, origin, (env as Partial<SessionEnv>).SITE_ORIGINS);
@@ -45,7 +51,9 @@ const originMiddleware = createCsrfMiddleware({
 });
 
 const tokenMiddleware = createMiddleware().server(async ({ request, next }) => {
-  if (!needsCsrf(request)) return next();
+  // Public subject HTML cannot carry a reader-specific token. Its HTML form is protected by the exact Origin
+  // allowlist above and the handler only accepts this bounded subject rating form.
+  if (!needsCsrf(request) || sharedSubjectRatingForm(request)) return next();
   if (!(await validatesSessionToken(request))) return forbidden();
   return next();
 });

@@ -311,23 +311,24 @@ test('home page stays within its bound as s grows', async () => {
 }, 300_000);
 test('subject page stays within its bound as s grows', async () => {
   const origin = await site();
-  // The development Worker hides its workerd-bound SESSIONS binding, so its page D count is derived from the route.
+  // Personal state is browser-only; the signed-in cookie does not alter the server's public read set.
   for (const s of [1, 8, 64]) {
     subjectSize = s;
     kernelCalls.length = 0;
     kernelAuthorizations.length = 0;
-    const response = await fetch(`${origin}/en/subjects/${subjectId}/${subjectSlug}`);
+    const response = await fetch(`${origin}/en/subjects/${subjectId}/${subjectSlug}`, {
+      headers: { cookie: `__Host-rezics_session=${cookieId}` },
+    });
     expect(response.status).toBe(200);
     // Agent subtype classification and the page's type label use a bounded definitions read, whatever s is.
     const definitions = kernelCalls.filter((call) => call.includes('/v1/definitions/'));
     expect(definitions.length).toBeLessThanOrEqual(3);
     const page = kernelCalls.filter((call) => !call.includes('/v1/definitions/'));
-    expect(page).toHaveLength(6);
+    expect(page).toHaveLength(5);
     expect(page).toEqual(
       expect.arrayContaining([
         `GET /v1/subjects/${subjectId}`,
         'POST /v1/pages:read',
-        `GET /v1/subjects/${subjectId}/collections?view=FULL&limit=100`,
         `GET /v1/subjects/${subjectId}/reactions`,
         `GET /v1/subjects/${subjectId}/ratings?question=00000000-0000-7000-8000-000000000001&population=00000000-0000-8000-8000-000000000000`,
         `GET /v1/subjects/${subjectId}/source-statistics`,

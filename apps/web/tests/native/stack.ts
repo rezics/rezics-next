@@ -21,6 +21,7 @@ export type NativeKernelRequest = {
   method: string;
   url: string;
   authorization: string | null;
+  idempotencyKey: string | null;
   failure?: { status: number; body: string };
 };
 export type NativeWebStack = {
@@ -506,6 +507,7 @@ async function startStack(): Promise<
           method: request.method,
           url: `${url.pathname}${url.search}`,
           authorization: request.headers.get('authorization'),
+          idempotencyKey: request.headers.get('idempotency-key'),
         };
         requests.push(observed);
         const handling = (async () => {

@@ -4,6 +4,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { SubjectPage, type SubjectPageData } from '../features/pages/subject';
+import { RatingsView } from '../features/pages/subject-ratings-view';
 import { subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import subjectPageRecording from '../kernel/recorded/subject-page.json';
 import { getLocale } from '../paraglide/runtime';
@@ -11,6 +12,9 @@ import { subjectTabs } from '../features/pages/views';
 import { PageStory, exposureStory, pagePaths, pageReady } from './page';
 import { ratingsFixtures } from '../kernel/fake/ratings';
 import { selectEntryUndoOutcome } from '../kernel/fake/library-entry-undo';
+import { IMPORTED_VN_SUBJECT_ID } from '../kernel/fake/ratings';
+import { storySubjects } from '../kernel/story-subjects';
+import { subjectHref } from '../subject/subject-href';
 
 function countUnavailablePage(): SubjectPageData {
   const page = structuredClone(subjectPageRecording) as unknown as SubjectPageData;
@@ -153,14 +157,33 @@ export const ImportedScores: Story = {
   tags: ['!dev'],
   name: 'Imported scores',
   play: pageReady,
-  render: () => (
-    <PageStory
-      visitor="Signed Out"
-      path={pagePaths.subject}
-      ratings={ratingsFixtures['subject-ratings-imported'].preview}
-      ratingsFixture="subject-ratings-imported"
-    />
-  ),
+  render: () => {
+    const subject = storySubjects.find(({ id }) => id === IMPORTED_VN_SUBJECT_ID);
+    if (!subject) throw new Error('The admitted visual-novel story subject is missing.');
+    const locale = getLocale();
+    const label = (subject.labels as Record<string, string>)[locale] ?? subject.labels.en;
+    return (
+      <main className="mx-auto w-full max-w-5xl space-y-8 p-6">
+        <header className="space-y-2">
+          <h1 className="font-serif text-3xl font-semibold tracking-tight">{label}</h1>
+          <p className="text-muted-foreground">Visual novel.</p>
+        </header>
+        <RatingsView
+          control={{
+            subjectId: IMPORTED_VN_SUBJECT_ID,
+            locale,
+            returnTo: subjectHref({ id: IMPORTED_VN_SUBJECT_ID, label }, locale).href,
+            session: 'signed-out',
+            own: { kind: 'ready', units: null },
+          }}
+          data={ratingsFixtures['subject-ratings-imported'].preview}
+          id="clannad-ratings"
+          locale={locale}
+          subject={IMPORTED_VN_SUBJECT_ID}
+        />
+      </main>
+    );
+  },
 };
 
 export const OwnVoteForbidden: Story = {

@@ -501,6 +501,18 @@ test(
   timeout,
 );
 
+test('signed-in and anonymous subject server renders match apart from the CSP nonce', async () => {
+  reset();
+  const auth = await signIn();
+  const anonymous = await fetch(`${auth.origin}${subjectPath}`);
+  const signedIn = await fetch(`${auth.origin}${subjectPath}`, { headers: { cookie: `${session}=${auth.session}` } });
+  expect(anonymous.status).toBe(200);
+  expect(signedIn.status).toBe(200);
+  const normalize = (html: string) => html.replace(/nonce="[^"]*"/g, 'nonce="NONCE"');
+  expect(normalize(await signedIn.text())).toBe(normalize(await anonymous.text()));
+  expect(calls.filter((call) => call.path.endsWith('/reaction'))).toHaveLength(0);
+});
+
 test(
   "reporting the subject lives in the header's overflow menu",
   async () => {
@@ -541,7 +553,6 @@ test(
 test(
   'reading a subject costs one counts read, plus one own-reaction read when signed in, at 1, 10 and 100 reactions',
   async () => {
-    const auth = await signIn();
     const reads: Record<string, number[]> = { out: [], in: [] };
     for (const total of [1, 10, 100]) {
       reset({ like: total });
@@ -556,18 +567,23 @@ test(
 
       reset({ like: total });
       own = 'like';
-      const signedIn = await fetch(`${auth.origin}${subjectPath}`, {
-        headers: { cookie: `${session}=${auth.session}` },
-      });
-      expect(signedIn.status).toBe(200);
-      expect(await signedIn.text()).toContain(`Like ${total}`);
+      const { page } = await open(subjectPath);
+      await page.locator('html[data-hydrated]').waitFor();
+      await eventually(async () => (await pressed(page, `Like ${total}`)) === 'true');
       const inCounts = calls.filter((call) => call.path === `/v1/subjects/${subjectId}/reactions`);
       const inOwn = calls.filter((call) => call.path === `/v1/subjects/${subjectId}/reaction`);
       expect(inCounts).toHaveLength(1);
       expect(inOwn).toHaveLength(1);
-      expect(inOwn[0]!.authorization).toBe(`Bearer ${auth.access}`);
+      expect(inOwn[0]!.authorization).toMatch(/^Bearer /);
+      expect(
+        calls.filter(
+          (call) =>
+            call.authorization !== null && call.method === 'GET' && call.path !== `/v1/subjects/${subjectId}/reaction`,
+        ),
+      ).toHaveLength(0);
       expect(calls.filter((call) => call.path.includes('/reaction') && call.method !== 'GET')).toHaveLength(0);
       reads.in!.push(inCounts.length + inOwn.length);
+      await page.context().close();
     }
     expect(new Set(reads.out).size).toBe(1);
     expect(new Set(reads.in).size).toBe(1);

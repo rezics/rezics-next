@@ -16,6 +16,8 @@ export function SubjectHeaderActions({
   signedIn,
   returnTo,
   verification,
+  personalReady = true,
+  onPersonalChange,
   children,
 }: {
   id: string;
@@ -23,6 +25,8 @@ export function SubjectHeaderActions({
   signedIn: boolean;
   returnTo: string;
   verification: VerificationConfig;
+  personalReady?: boolean;
+  onPersonalChange?: () => Promise<void>;
   children?: ReactNode;
 }) {
   return (
@@ -39,6 +43,8 @@ export function SubjectHeaderActions({
               signedIn={signedIn}
               target={{ kind: 'subject', id }}
               value={reactions.value}
+              personalReady={personalReady}
+              {...(onPersonalChange ? { onMutation: onPersonalChange } : {})}
             />
           </div>
         ) : (
