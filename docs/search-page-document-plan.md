@@ -47,24 +47,24 @@ rezics-next-discussion. No material is being moved from that repository in this 
 
 These declarations are callable in the inspected source:
 
-| Declaration | Actual location and role |
-| --- | --- |
-| `platformRegistry`, `PageRead`, `PageContext` | `packages/composition/src/registry.ts`; closed components and descriptor types |
-| `readCost`, `planReads`, `shownProperties` | `packages/composition/src/reads.ts`; cost and canonical descriptor planning |
-| `pickLanguage`, `localeChain` | `packages/composition/src/strings.ts`; deterministic language fallback |
-| `readPage`, `PageReadError` | `services/kernel/src/presentation/reads.ts`; aggregate executor and validation errors |
-| `pageRoutes` | `services/kernel/src/presentation/http/pages.ts`; `pages.read` request and response |
-| `PageResponseSchema`, `extendPageResponseSchema` | `presentation/http/page-contract.ts`; common response schema |
-| `documentRoutes`, `readDocument` | `content/document-routes.ts`, `content/document-read.ts`; public route and reader |
-| `readCandidateDisclosure` | `semantic/disclosure.ts`; disclosure evidence, explicitly not authorization |
-| `readSubject`, `readContext`, `publicContextEligibility` | `semantic/subject.ts`, `semantic/context.ts`; native facts and Context authority |
-| `readRealm`, `readPublication` | `community/realm.ts`, `community/publication.ts`; current Realm and publication |
-| `withPublicStatementReader` | `semantic/statement-disclosure.ts`; sticky public audience with unchanged caller |
-| `listSubjectThreads`, `readSubjectThread` | `content/subject-threads.ts`, `content/reads.ts`; indexed page and current hydration |
-| `readableDocument`, `DocumentValue` | `apps/web/src/features/pages/values.tsx`; validation and prose rendering |
-| `subjectBody`, `pageContext`, `loadSubjectPage` | `apps/web/src/features/pages/subject.tsx`; aggregate consumer |
-| `subjectJsonLd`, `serializeJsonLd` | `apps/web/src/features/pages/jsonld.ts`; public metadata and script escaping |
-| `CompositionRender`, `PageData` | Web `render.tsx`, `data.tsx`; registry render and prepared page values |
+| Declaration                                              | Actual location and role                                                              |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `platformRegistry`, `PageRead`, `PageContext`            | `packages/composition/src/registry.ts`; closed components and descriptor types        |
+| `readCost`, `planReads`, `shownProperties`               | `packages/composition/src/reads.ts`; cost and canonical descriptor planning           |
+| `pickLanguage`, `localeChain`                            | `packages/composition/src/strings.ts`; deterministic language fallback                |
+| `readPage`, `PageReadError`                              | `services/kernel/src/presentation/reads.ts`; aggregate executor and validation errors |
+| `pageRoutes`                                             | `services/kernel/src/presentation/http/pages.ts`; `pages.read` request and response   |
+| `PageResponseSchema`, `extendPageResponseSchema`         | `presentation/http/page-contract.ts`; common response schema                          |
+| `documentRoutes`, `readDocument`                         | `content/document-routes.ts`, `content/document-read.ts`; public route and reader     |
+| `readCandidateDisclosure`                                | `semantic/disclosure.ts`; disclosure evidence, explicitly not authorization           |
+| `readSubject`, `readContext`, `publicContextEligibility` | `semantic/subject.ts`, `semantic/context.ts`; native facts and Context authority      |
+| `readRealm`, `readPublication`                           | `community/realm.ts`, `community/publication.ts`; current Realm and publication       |
+| `withPublicStatementReader`                              | `semantic/statement-disclosure.ts`; sticky public audience with unchanged caller      |
+| `listSubjectThreads`, `readSubjectThread`                | `content/subject-threads.ts`, `content/reads.ts`; indexed page and current hydration  |
+| `readableDocument`, `DocumentValue`                      | `apps/web/src/features/pages/values.tsx`; validation and prose rendering              |
+| `subjectBody`, `pageContext`, `loadSubjectPage`          | `apps/web/src/features/pages/subject.tsx`; aggregate consumer                         |
+| `subjectJsonLd`, `serializeJsonLd`                       | `apps/web/src/features/pages/jsonld.ts`; public metadata and script escaping          |
+| `CompositionRender`, `PageData`                          | Web `render.tsx`, `data.tsx`; registry render and prepared page values                |
 
 All shorter Kernel paths in that table are relative to `services/kernel/src/`.
 The actual `readDocument(dependencies, id, {actor, deadline})` returns a document plus
@@ -207,7 +207,7 @@ The selector is not permission evidence: it only chooses an already disclosed pu
 ### Cost
 
 - Touches: one named property in one already charged public subject response, its existing qualifiers and reference values; no history, language lookup, permission preparation or Content read.
-- Bound: selection consumes the existing subject-reader output and statement/qualifier bounds; it adds no candidate enumeration API or new scan allowance. It returns at most one binding and schedules at most one body leaf per document descriptor, with no replacement search after failure.
+- Bound: the existing property slot admits at most 32 selected facts, so this selector inspects at most 32 public references and returns at most one binding. It adds no candidate enumeration or replacement search. Its subject dependency retains Semantic's at-most-512 descriptive facts, 64 relation properties, 12-preview entries plus one sentinel per relation property and at-most-256 related IDs; those native reads and Access checks are charged separately, not hidden inside the selector's one output slot.
 - Growth check: use the native owner's maximum admitted property selection and its existing subject bounds, then grow unrelated subjects and historical candidates at 64, 512 and 4096. Record public statements inspected and selected bodies; history growth must not add selector or body dispatch work.
 
 ## Document aggregate execution operation
@@ -233,6 +233,13 @@ The scheduler shares the existing maximum of four concurrent dispatches across b
 it does not allocate another four for documents. Release the page route's admission slot before
 subreads, as current `pages.ts` does. Never hold a subject connection while acquiring a body home.
 
+Within this request, identical effective document GET leaves share one dispatch after selection,
+including their authorization/session/audience identity. Keep each logical descriptor's reserved
+slot even if two leaves coalesce, and validate each property binding independently against the
+shared public response. Never dedup across requests or principals. Merge genuine dependency
+tokens before starting dependent leaves, then merge all leaf and final-guard observations into
+the same scoped aggregate session using existing token helpers; no fabricated position is valid.
+
 For a selected binding, construct precisely `GET /v1/documents/{selected.document}` through the
 same composed dispatch as other standalone reads. Forward the caller's authorization and
 current aggregate session header. Preserve deadline, native admission and public statement
@@ -248,14 +255,14 @@ publisher privilege, internal allow header or permission cache is admitted.
 
 On a native 200, check the public response envelope and require all of:
 
-| Response value | Must equal |
-| --- | --- |
-| `document.id` | selected reference document ID |
-| `document.subjectId` | effective survivor subject, exactly |
-| `document.candidateId` | selected statement ID |
-| `document.revision` | selected `candidateRevision` |
-| `document.language` | selected reference language, exactly |
-| `document.digest` | selected reference digest, exactly |
+| Response value         | Must equal                           |
+| ---------------------- | ------------------------------------ |
+| `document.id`          | selected reference document ID       |
+| `document.subjectId`   | effective survivor subject, exactly  |
+| `document.candidateId` | selected statement ID                |
+| `document.revision`    | selected `candidateRevision`         |
+| `document.language`    | selected reference language, exactly |
+| `document.digest`      | selected reference digest, exactly   |
 
 Do not follow a document redirect or rewrite a foreign body to the current subject after a
 merge. A valid document for another candidate, subject, language or digest is unavailable for
@@ -297,7 +304,7 @@ This future HTTP request has one subject target and the existing language field:
 POST /v1/pages:read
 Content-Type: application/json
 Authorization: Bearer <the current reader token, when present>
-X-Rezics-Session: <the genuine current reader session, when present>
+rezics-session-token: <the genuine current reader session, when present>
 
 {
   "target": { "subject": "00000000-0000-8000-8000-000000000010" },
@@ -306,7 +313,7 @@ X-Rezics-Session: <the genuine current reader session, when present>
 ```
 
 Use the actual `SESSION_HEADER` constant when implementing; the spelling in concrete capture
-must come from that declaration. Angle-bracket tokens above are notation, not minted credentials.
+must remain `rezics-session-token`. Angle-bracket tokens above are notation, not minted credentials.
 The compact example below supplies every field of the new document result; the ordinary
 subject result still has its native complete DTO, rather than a copied body extension.
 
@@ -364,16 +371,16 @@ Global requests retain the existing top-level response shape; no mandatory `cont
 
 ### Missing and failed bodies
 
-| Observation | Document read result and page behavior |
-| --- | --- |
-| No eligible selected reference | 200 `{binding:null,document:null}`; omit body and instructions; Details may show an unresolved fact |
-| Public route 404 | Preserve its 404 problem; no binding, body, ID, rights or reason from the selected-but-withheld reference |
-| Imported erased, exact binding | 200 bound erased metadata with `body:null`; no prose or instructions |
-| Any linkage mismatch | 503 standard `dependency_unavailable` problem; discard body and binding; show section retry |
-| Invalid snapshot or oversized canonical body | Same 503 dependency problem, never truncate, partially render or switch candidate |
-| Standalone 401 | Preserve authentication failure and native challenge; fail the page's authenticated request |
-| Standalone 503 | Preserve typed unavailable/deadline behavior; section retry, no stale body |
-| Unexpected thrown failure | Existing typed error handling; never catch all failures as empty or missing |
+| Observation                                  | Document read result and page behavior                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| No eligible selected reference               | 200 `{binding:null,document:null}`; omit body and instructions; Details may show an unresolved fact       |
+| Public route 404                             | Preserve its 404 problem; no binding, body, ID, rights or reason from the selected-but-withheld reference |
+| Imported erased, exact binding               | 200 bound erased metadata with `body:null`; no prose or instructions                                      |
+| Any linkage mismatch                         | 503 standard `dependency_unavailable` problem; discard body and binding; show section retry               |
+| Invalid snapshot or oversized canonical body | Same 503 dependency problem, never truncate, partially render or switch candidate                         |
+| Standalone 401                               | Preserve authentication failure and native challenge; fail the page's authenticated request               |
+| Standalone 503                               | Preserve typed unavailable/deadline behavior; section retry, no stale body                                |
+| Unexpected thrown failure                    | Existing typed error handling; never catch all failures as empty or missing                               |
 
 `{binding:null,document:null}` is a proposed empty variant of the closed wrapper above.
 All other successful values require a non-null binding and document. Per-read problems use
@@ -389,6 +396,13 @@ proposed adapter around existing readers, not a new authorization helper. Compar
 references, subject revision and resolution with the initial observation before serialization.
 Record the guard's genuine session component. Do not rehydrate related labels just to compare
 bindings, and do not perform a second routing subject GET.
+
+Run one guard per distinct effective subject/Context, shared by all its document descriptors.
+It retains the native anchored-subject costs: at most 512 descriptive facts, 64 relation
+properties, 13 examined preview positions per relation property and 256 related-ID display
+fills where the native reader needs them. Avoid the HTTP route's additional related-label
+hydration, but do not remove native cover-summary or Access work from capture. No claim that
+the guard costs one SQL point follows from its one subject descriptor slot.
 
 The actual signature is `readSubject(pool,id,authorize,context,routeKey,summariesOptions)`.
 Supply the current deadline, observed session and native authorization refresh callbacks;
@@ -662,8 +676,8 @@ For inverse links add the native cursor field to the internal links variant and 
 existing query parameter. Forward relation pages continue through their actual `subject.relations`
 operation with selected Context, property and filters; do not misuse inverse links for forward
 relations. Explicit continuation adapters must preserve direction, qualifier and native sort.
-Document the adapter variant with its real route DTO when implementing; no general graph walk
-or multi-property merged cursor is admitted by this proposal.
+Use the closed variant specified below; no general graph walk or multi-property merged cursor
+is admitted by this proposal.
 
 For editions, contents, appearances and credits use the existing configured relation component
 and native direction. A section containing several relation properties has a separate See all
@@ -679,9 +693,10 @@ that typed failure. A changed Realm selection or profile that makes the node dis
 an explicit restart state/link without replaying the old Context or silently using its old body.
 
 No new signed page continuation token is needed. Native cursor validation bounds token size;
-Web must use the owner's actual supported bound rather than the current arbitrary 2,048-character
-loader check when that would truncate/reject a valid native token. Keep query/body byte admission
-with the owning HTTP contracts. This proposal does not raise any native cursor capacity.
+Content's `SubjectThreadsQuerySchema` admits 1–4,096 characters. Web must accept that actual
+bound rather than its current 2,048-character loader check. Semantic's HTTP page query has no
+declared cursor `maxLength`; retain its actual codec/body admission instead of claiming the
+Content ceiling applies to every native cursor. This proposal raises no native cursor capacity.
 
 SSR URLs preserve locale, subject/Realm routing, view, node and encoded cursor. A new request
 always resolves current authority; a browser back/forward cache or loader cache cannot certify
@@ -694,6 +709,56 @@ Do not follow all pages during one SSR or fetch per returned card.
 - Touches: the same current page selection and planned node, one opaque native continuation, the actual existing list route and final selection guards; no traversal of a prior page's bodies or history.
 - Bound: one continued node per request replaces one preview; at most 16 distinct reads and 128 slots, native registry list limits unchanged (links up to 24 here, threads up to 20), four workers, one dependent round and zero automatic cursor drains. Every new user page is a separately admitted bounded request.
 - Growth check: traverse 53 eligible entries with native page limits 5 and 20, hidden candidate windows and equal sort keys; record each page's candidates, bytes and requests. Grow unrelated relation/thread histories at 64, 512 and 4096, then revoke board access and change Context between pages; no duplicate, skipped stable eligible item, stale authorization or unlimited per-request drain is allowed.
+
+## Forward relation binding operation
+
+The proposed internal forward descriptor is fully separate from inverse `links`:
+
+```ts
+type ForwardRelationsRead = {
+  kind: 'relations';
+  id: string;
+  property: string;
+  context?: string;
+  filter?: string;
+  type?: string;
+  limit: number;
+  cursor?: string;
+};
+```
+
+Use existing safe UUID/CURIE schemas, closed fields and optional cursor handling. Its component
+callback is `readDirected` for an explicitly forward `Appearances` or `Credits` node; change
+that branch from the subject-only display preview to this native forward read, using the
+node's property/filter/type/limit. An inverse node retains `links`. A page's existing subject
+header/dependency is still planned once. `readCost(relations)` equals its requested limit.
+Keep registry limits 1–24 rather than expanding to the native route's 1–100 limit.
+
+Example native input for a first page and its sole continuation difference:
+
+```http
+GET /v1/subjects/00000000-0000-8000-8000-000000000010/relations?property=schema%3Aauthor&context=00000000-0000-8000-8000-000000000060&limit=12
+GET /v1/subjects/00000000-0000-8000-8000-000000000010/relations?property=schema%3Aauthor&context=00000000-0000-8000-8000-000000000060&limit=12&cursor=opaque-native-token
+```
+
+Build URLs with `URLSearchParams`, preserving native encoding and grammar. The aggregate body
+is the actual `subject.relations` DTO: `relations` entries containing native `statement`,
+`target`, `external`, optional `type`/`label`, and nullable `summary`; native `count`,
+`freshness` and `next` remain unchanged. The adapter must not reduce a qualified statement
+to a target label or invent public count semantics of its own. Native route errors retain
+their per-read status/body. Current selected-page denial still conceals the whole response.
+
+Kernel and Web planners must agree on the new forward branch for first and continued pages.
+The consumer groups returned native statements by their existing semantic role while preserving
+order/qualifiers; `next` links name the originating node/property. The result cannot be merged
+with another property's stream. Both whole briefs include this union/cost/dispatcher/client
+closure where they touch the common planner; the traversal brief owns its native tests.
+
+### Cost
+
+- Touches: one native outbound subject/Context/property/filter range, its counter and selected slot views, bounded target summaries/labels and current Access; no global graph or history enumeration.
+- Bound: at L≤24, at most L+1=25 outbound positions without a type filter, or 4L+1=97 with one, plus the native at-most-1,000 type-count candidates. Each returned target's original-language slot uses at most 33 compact fact rows or 32 expanded selections under the existing Semantic contract. These costs are charged per distinct relation descriptor within the same 16-read/128-slot aggregate; native authorization is additional measured work.
+- Growth check: at fixed L=12 and L=24, use 64, 512 and 4096 relations and unrelated histories, with and without type filters and a selected Context overlay. Capture actual range/count rows, slot/label/Access work, statements, blocks and bytes; stable qualified relation traversal and current concealment must hold beyond the first 12 entries.
 
 ## Frozen document acceptance scenarios
 
