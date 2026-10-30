@@ -5,6 +5,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 /** Transport maps native outcomes directly; no private point reads precede receipts. */
 export declare function personalLabelRoutes(app: ReturnType<typeof definitionRoutes>, deps: {
+    routeKey: Uint8Array;
     pool: Pool;
     access: () => Access;
     tokens: KeyRing;
@@ -4853,6 +4854,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
     error: [];
 }, "get", "/v1/libraryLabelAssignments", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     query: import("typebox").TObject<{
+        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<import("typebox").TInteger>;
         labelId: import("typebox").TOptional<import("typebox").TString>;
@@ -4958,7 +4960,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: import("typebox").TObject<{
+        200: import("typebox").TUnion<[import("typebox").TObject<{
             assignments: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
                 labelId: import("typebox").TString;
@@ -4966,7 +4968,97 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 revision: import("typebox").TInteger;
             }>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>;
+        }>, import("typebox").TObject<{
+            assignments: import("typebox").TArray<import("typebox").TObject<{
+                id: import("typebox").TString;
+                labelId: import("typebox").TString;
+                subjectId: import("typebox").TString;
+                revision: import("typebox").TInteger;
+                label: import("typebox").TObject<{
+                    name: import("typebox").TString;
+                }>;
+            }>>;
+            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            assignments: import("typebox").TArray<import("typebox").TObject<{
+                subject: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    label: import("typebox").TString;
+                }>, import("typebox").TNull]>;
+                id: import("typebox").TString;
+                labelId: import("typebox").TString;
+                subjectId: import("typebox").TString;
+                revision: import("typebox").TInteger;
+                libraryEntry: import("typebox").TUnion<[import("typebox").TObject<{
+                    subjectId: import("typebox").TString;
+                    state: import("typebox").TString;
+                    revision: import("typebox").TInteger;
+                    createdAt: import("typebox").TString;
+                    updatedAt: import("typebox").TString;
+                    incarnationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    lastActivityAt: import("typebox").TString;
+                    finishedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        subjectId: import("typebox").TString;
+                        versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
+                        unit: import("typebox").TString;
+                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        completedUnitCount: import("typebox").TInteger;
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                        revision: import("typebox").TInteger;
+                        startedAt: import("typebox").TString;
+                        completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>;
+            }>>;
+            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            label: import("typebox").TObject<{
+                id: import("typebox").TString;
+                name: import("typebox").TString;
+                revision: import("typebox").TInteger;
+            }>;
+        }>]>;
     };
     detail: {
         operationId: string;
@@ -4976,6 +5068,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
             bearerAuth: never[];
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        description: string;
     };
 }, {}, "/v1/libraryLabelAssignments">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, query, admission, job }: {
     server: import("elysia").Server | null;
@@ -5093,6 +5186,96 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 revision: number;
             }[];
             next: string | null;
+        } | {
+            assignments: {
+                id: string;
+                labelId: string;
+                subjectId: string;
+                revision: number;
+                label: {
+                    name: string;
+                };
+            }[];
+            next: string | null;
+        } | {
+            assignments: {
+                subject: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | {
+                    id: string;
+                    type: string;
+                    label: string;
+                } | null;
+                id: string;
+                labelId: string;
+                subjectId: string;
+                revision: number;
+                libraryEntry: {
+                    subjectId: string;
+                    state: string;
+                    revision: number;
+                    createdAt: string;
+                    updatedAt: string;
+                    incarnationId: string | null;
+                    lastActivityAt: string;
+                    finishedAt: string | null;
+                    activeProgressSession: {
+                        id: string;
+                        subjectId: string;
+                        versionSubjectId: string | null;
+                        mode: "completed_units" | "cursor_position" | "scalar_amount";
+                        unit: string;
+                        total: string | null;
+                        amount: string | null;
+                        locator: string | null;
+                        position: string | null;
+                        completedUnitCount: number;
+                        state: "abandoned" | "active" | "completed";
+                        revision: number;
+                        startedAt: string;
+                        completedAt: string | null;
+                    } | null;
+                } | null;
+            }[];
+            next: string | null;
+            label: {
+                id: string;
+                name: string;
+                revision: number;
+            };
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -5202,10 +5385,101 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 revision: number;
             }[];
             next: string | null;
+        } | {
+            assignments: {
+                id: string;
+                labelId: string;
+                subjectId: string;
+                revision: number;
+                label: {
+                    name: string;
+                };
+            }[];
+            next: string | null;
+        } | {
+            assignments: {
+                subject: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | {
+                    id: string;
+                    type: string;
+                    label: string;
+                } | null;
+                id: string;
+                labelId: string;
+                subjectId: string;
+                revision: number;
+                libraryEntry: {
+                    subjectId: string;
+                    state: string;
+                    revision: number;
+                    createdAt: string;
+                    updatedAt: string;
+                    incarnationId: string | null;
+                    lastActivityAt: string;
+                    finishedAt: string | null;
+                    activeProgressSession: {
+                        id: string;
+                        subjectId: string;
+                        versionSubjectId: string | null;
+                        mode: "completed_units" | "cursor_position" | "scalar_amount";
+                        unit: string;
+                        total: string | null;
+                        amount: string | null;
+                        locator: string | null;
+                        position: string | null;
+                        completedUnitCount: number;
+                        state: "abandoned" | "active" | "completed";
+                        revision: number;
+                        startedAt: string;
+                        completedAt: string | null;
+                    } | null;
+                } | null;
+            }[];
+            next: string | null;
+            label: {
+                id: string;
+                name: string;
+                revision: number;
+            };
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         query: import("typebox").TObject<{
+            view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
             cursor: import("typebox").TOptional<import("typebox").TString>;
             limit: import("typebox").TOptional<import("typebox").TInteger>;
             labelId: import("typebox").TOptional<import("typebox").TString>;
@@ -5311,7 +5585,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
-            200: import("typebox").TObject<{
+            200: import("typebox").TUnion<[import("typebox").TObject<{
                 assignments: import("typebox").TArray<import("typebox").TObject<{
                     id: import("typebox").TString;
                     labelId: import("typebox").TString;
@@ -5319,7 +5593,97 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                     revision: import("typebox").TInteger;
                 }>>;
                 next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-            }>;
+            }>, import("typebox").TObject<{
+                assignments: import("typebox").TArray<import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    labelId: import("typebox").TString;
+                    subjectId: import("typebox").TString;
+                    revision: import("typebox").TInteger;
+                    label: import("typebox").TObject<{
+                        name: import("typebox").TString;
+                    }>;
+                }>>;
+                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>, import("typebox").TObject<{
+                assignments: import("typebox").TArray<import("typebox").TObject<{
+                    subject: import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        type: import("typebox").TString;
+                        types: import("typebox").TArray<import("typebox").TString>;
+                        label: import("typebox").TUnion<[import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>, import("typebox").TNull]>;
+                        creativeWork: import("typebox").TBoolean;
+                        cover: import("typebox").TUnion<[import("typebox").TObject<{
+                            media: import("typebox").TString;
+                            width: import("typebox").TInteger;
+                            height: import("typebox").TInteger;
+                            placeholder: import("typebox").TObject<{
+                                thumbhash: import("typebox").TString;
+                                color: import("typebox").TString;
+                            }>;
+                            variants: import("typebox").TArray<import("typebox").TObject<{
+                                format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                                width: import("typebox").TInteger;
+                            }>>;
+                            focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                                x: import("typebox").TNumber;
+                                y: import("typebox").TNumber;
+                            }>, import("typebox").TNull]>;
+                            credit: import("typebox").TObject<{
+                                rightsHolder: import("typebox").TString;
+                                via: import("typebox").TObject<{
+                                    name: import("typebox").TString;
+                                    url: import("typebox").TString;
+                                }>;
+                                license: import("typebox").TString;
+                                obligations: import("typebox").TArray<import("typebox").TString>;
+                            }>;
+                        }>, import("typebox").TNull]>;
+                    }>, import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        type: import("typebox").TString;
+                        label: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    id: import("typebox").TString;
+                    labelId: import("typebox").TString;
+                    subjectId: import("typebox").TString;
+                    revision: import("typebox").TInteger;
+                    libraryEntry: import("typebox").TUnion<[import("typebox").TObject<{
+                        subjectId: import("typebox").TString;
+                        state: import("typebox").TString;
+                        revision: import("typebox").TInteger;
+                        createdAt: import("typebox").TString;
+                        updatedAt: import("typebox").TString;
+                        incarnationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        lastActivityAt: import("typebox").TString;
+                        finishedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
+                            id: import("typebox").TString;
+                            subjectId: import("typebox").TString;
+                            versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
+                            unit: import("typebox").TString;
+                            total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            completedUnitCount: import("typebox").TInteger;
+                            state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                            revision: import("typebox").TInteger;
+                            startedAt: import("typebox").TString;
+                            completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        }>, import("typebox").TNull]>;
+                    }>, import("typebox").TNull]>;
+                }>>;
+                next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                label: import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    name: import("typebox").TString;
+                    revision: import("typebox").TInteger;
+                }>;
+            }>]>;
         };
         detail: {
             operationId: string;
@@ -5329,6 +5693,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 bearerAuth: never[];
             }[];
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+            description: string;
         };
     }, {}, "/v1/libraryLabelAssignments">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
@@ -5355,6 +5720,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
     store: {};
     body: unknown;
     query: {
+        view?: "BASIC" | "FULL";
         cursor?: string;
         limit?: number;
         labelId?: string;
@@ -5378,15 +5744,96 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
 }) => Promise<{
-    assignments: {
+    label?: {
+        id: string;
+        name: string;
+        revision: number;
+    };
+    assignments: (({
         id: string;
         labelId: string;
         subjectId: string;
         revision: number;
-    }[];
+    } & {
+        subject?: (import("../semantic/summaries.ts").SubjectSummary | {
+            id: string;
+            label: string;
+            type: string;
+        }) | null;
+    } & object) | ({
+        id: string;
+        labelId: string;
+        subjectId: string;
+        revision: number;
+        label: {
+            name: string;
+        } & object;
+    } & {
+        subject?: (import("../semantic/summaries.ts").SubjectSummary | {
+            id: string;
+            label: string;
+            type: string;
+        }) | null;
+    } & object) | ({
+        id: string;
+        labelId: string;
+        subjectId: string;
+        revision: number;
+        libraryEntry: ({
+            subjectId: string;
+            state: string;
+            revision: number;
+            createdAt: string;
+            updatedAt: string;
+            incarnationId: string | null;
+            lastActivityAt: string;
+            finishedAt: string | null;
+            activeProgressSession: ({
+                id: string;
+                subjectId: string;
+                versionSubjectId: string | null;
+                mode: "completed_units" | "cursor_position" | "scalar_amount";
+                unit: string;
+                total: string | null;
+                amount: string | null;
+                locator: string | null;
+                position: string | null;
+                completedUnitCount: number;
+                state: "abandoned" | "active" | "completed";
+                revision: number;
+                startedAt: string;
+                completedAt: string | null;
+            } & {
+                subject?: (import("../semantic/summaries.ts").SubjectSummary | {
+                    id: string;
+                    label: string;
+                    type: string;
+                }) | null;
+            } & {
+                versionSubject?: (import("../semantic/summaries.ts").SubjectSummary | {
+                    id: string;
+                    label: string;
+                    type: string;
+                }) | null;
+            } & object) | null;
+        } & {
+            subject?: (import("../semantic/summaries.ts").SubjectSummary | {
+                id: string;
+                label: string;
+                type: string;
+            }) | null;
+        } & object) | null;
+    } & {
+        subject?: (import("../semantic/summaries.ts").SubjectSummary | {
+            id: string;
+            label: string;
+            type: string;
+        }) | null;
+    } & object))[];
     next: string | null;
-}>, {
+} & object>, {
     query: import("typebox").TObject<{
+        view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
         cursor: import("typebox").TOptional<import("typebox").TString>;
         limit: import("typebox").TOptional<import("typebox").TInteger>;
         labelId: import("typebox").TOptional<import("typebox").TString>;
@@ -5508,6 +5955,96 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                     revision: number;
                 }[];
                 next: string | null;
+            } | {
+                assignments: {
+                    id: string;
+                    labelId: string;
+                    subjectId: string;
+                    revision: number;
+                    label: {
+                        name: string;
+                    };
+                }[];
+                next: string | null;
+            } | {
+                assignments: {
+                    subject: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                    } | {
+                        id: string;
+                        type: string;
+                        label: string;
+                    } | null;
+                    id: string;
+                    labelId: string;
+                    subjectId: string;
+                    revision: number;
+                    libraryEntry: {
+                        subjectId: string;
+                        state: string;
+                        revision: number;
+                        createdAt: string;
+                        updatedAt: string;
+                        incarnationId: string | null;
+                        lastActivityAt: string;
+                        finishedAt: string | null;
+                        activeProgressSession: {
+                            id: string;
+                            subjectId: string;
+                            versionSubjectId: string | null;
+                            mode: "completed_units" | "cursor_position" | "scalar_amount";
+                            unit: string;
+                            total: string | null;
+                            amount: string | null;
+                            locator: string | null;
+                            position: string | null;
+                            completedUnitCount: number;
+                            state: "abandoned" | "active" | "completed";
+                            revision: number;
+                            startedAt: string;
+                            completedAt: string | null;
+                        } | null;
+                    } | null;
+                }[];
+                next: string | null;
+                label: {
+                    id: string;
+                    name: string;
+                    revision: number;
+                };
             };
         }>;
         problem: import("elysia").SelectiveProblem<{
@@ -5617,10 +6154,101 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                     revision: number;
                 }[];
                 next: string | null;
+            } | {
+                assignments: {
+                    id: string;
+                    labelId: string;
+                    subjectId: string;
+                    revision: number;
+                    label: {
+                        name: string;
+                    };
+                }[];
+                next: string | null;
+            } | {
+                assignments: {
+                    subject: {
+                        id: string;
+                        type: string;
+                        types: string[];
+                        label: {
+                            value: string;
+                            language: string;
+                        } | null;
+                        creativeWork: boolean;
+                        cover: {
+                            media: string;
+                            width: number;
+                            height: number;
+                            placeholder: {
+                                thumbhash: string;
+                                color: string;
+                            };
+                            variants: {
+                                format: "avif" | "webp";
+                                width: number;
+                            }[];
+                            focalPoint: {
+                                x: number;
+                                y: number;
+                            } | null;
+                            credit: {
+                                rightsHolder: string;
+                                via: {
+                                    name: string;
+                                    url: string;
+                                };
+                                license: string;
+                                obligations: string[];
+                            };
+                        } | null;
+                    } | {
+                        id: string;
+                        type: string;
+                        label: string;
+                    } | null;
+                    id: string;
+                    labelId: string;
+                    subjectId: string;
+                    revision: number;
+                    libraryEntry: {
+                        subjectId: string;
+                        state: string;
+                        revision: number;
+                        createdAt: string;
+                        updatedAt: string;
+                        incarnationId: string | null;
+                        lastActivityAt: string;
+                        finishedAt: string | null;
+                        activeProgressSession: {
+                            id: string;
+                            subjectId: string;
+                            versionSubjectId: string | null;
+                            mode: "completed_units" | "cursor_position" | "scalar_amount";
+                            unit: string;
+                            total: string | null;
+                            amount: string | null;
+                            locator: string | null;
+                            position: string | null;
+                            completedUnitCount: number;
+                            state: "abandoned" | "active" | "completed";
+                            revision: number;
+                            startedAt: string;
+                            completedAt: string | null;
+                        } | null;
+                    } | null;
+                }[];
+                next: string | null;
+                label: {
+                    id: string;
+                    name: string;
+                    revision: number;
+                };
             };
         }>;
         defer: (fn: import("elysia/types").AfterResponseHandler<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
             query: import("typebox").TObject<{
+                view: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"BASIC">, import("typebox").TLiteral<"FULL">]>>;
                 cursor: import("typebox").TOptional<import("typebox").TString>;
                 limit: import("typebox").TOptional<import("typebox").TInteger>;
                 labelId: import("typebox").TOptional<import("typebox").TString>;
@@ -5726,7 +6354,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                         code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                     }>>>;
                 }>;
-                200: import("typebox").TObject<{
+                200: import("typebox").TUnion<[import("typebox").TObject<{
                     assignments: import("typebox").TArray<import("typebox").TObject<{
                         id: import("typebox").TString;
                         labelId: import("typebox").TString;
@@ -5734,7 +6362,97 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                         revision: import("typebox").TInteger;
                     }>>;
                     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                }>;
+                }>, import("typebox").TObject<{
+                    assignments: import("typebox").TArray<import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        labelId: import("typebox").TString;
+                        subjectId: import("typebox").TString;
+                        revision: import("typebox").TInteger;
+                        label: import("typebox").TObject<{
+                            name: import("typebox").TString;
+                        }>;
+                    }>>;
+                    next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    assignments: import("typebox").TArray<import("typebox").TObject<{
+                        subject: import("typebox").TUnion<[import("typebox").TObject<{
+                            id: import("typebox").TString;
+                            type: import("typebox").TString;
+                            types: import("typebox").TArray<import("typebox").TString>;
+                            label: import("typebox").TUnion<[import("typebox").TObject<{
+                                value: import("typebox").TString;
+                                language: import("typebox").TString;
+                            }>, import("typebox").TNull]>;
+                            creativeWork: import("typebox").TBoolean;
+                            cover: import("typebox").TUnion<[import("typebox").TObject<{
+                                media: import("typebox").TString;
+                                width: import("typebox").TInteger;
+                                height: import("typebox").TInteger;
+                                placeholder: import("typebox").TObject<{
+                                    thumbhash: import("typebox").TString;
+                                    color: import("typebox").TString;
+                                }>;
+                                variants: import("typebox").TArray<import("typebox").TObject<{
+                                    format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                                    width: import("typebox").TInteger;
+                                }>>;
+                                focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                                    x: import("typebox").TNumber;
+                                    y: import("typebox").TNumber;
+                                }>, import("typebox").TNull]>;
+                                credit: import("typebox").TObject<{
+                                    rightsHolder: import("typebox").TString;
+                                    via: import("typebox").TObject<{
+                                        name: import("typebox").TString;
+                                        url: import("typebox").TString;
+                                    }>;
+                                    license: import("typebox").TString;
+                                    obligations: import("typebox").TArray<import("typebox").TString>;
+                                }>;
+                            }>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            id: import("typebox").TString;
+                            type: import("typebox").TString;
+                            label: import("typebox").TString;
+                        }>, import("typebox").TNull]>;
+                        id: import("typebox").TString;
+                        labelId: import("typebox").TString;
+                        subjectId: import("typebox").TString;
+                        revision: import("typebox").TInteger;
+                        libraryEntry: import("typebox").TUnion<[import("typebox").TObject<{
+                            subjectId: import("typebox").TString;
+                            state: import("typebox").TString;
+                            revision: import("typebox").TInteger;
+                            createdAt: import("typebox").TString;
+                            updatedAt: import("typebox").TString;
+                            incarnationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            lastActivityAt: import("typebox").TString;
+                            finishedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
+                                id: import("typebox").TString;
+                                subjectId: import("typebox").TString;
+                                versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
+                                unit: import("typebox").TString;
+                                total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                                completedUnitCount: import("typebox").TInteger;
+                                state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                                revision: import("typebox").TInteger;
+                                startedAt: import("typebox").TString;
+                                completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            }>, import("typebox").TNull]>;
+                        }>, import("typebox").TNull]>;
+                    }>>;
+                    next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    label: import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        name: import("typebox").TString;
+                        revision: import("typebox").TInteger;
+                    }>;
+                }>]>;
             };
             detail: {
                 operationId: string;
@@ -5744,6 +6462,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                     bearerAuth: never[];
                 }[];
                 'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+                description: string;
             };
         }, {}, "/v1/libraryLabelAssignments">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, import("elysia").DefaultSingleton & {
             derive: {
@@ -5772,6 +6491,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
         store: {};
         body: unknown;
         query: {
+            view?: "BASIC" | "FULL";
             cursor?: string;
             limit?: number;
             labelId?: string;
@@ -5894,7 +6614,7 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        200: import("typebox").TObject<{
+        200: import("typebox").TUnion<[import("typebox").TObject<{
             assignments: import("typebox").TArray<import("typebox").TObject<{
                 id: import("typebox").TString;
                 labelId: import("typebox").TString;
@@ -5902,7 +6622,97 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
                 revision: import("typebox").TInteger;
             }>>;
             next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-        }>;
+        }>, import("typebox").TObject<{
+            assignments: import("typebox").TArray<import("typebox").TObject<{
+                id: import("typebox").TString;
+                labelId: import("typebox").TString;
+                subjectId: import("typebox").TString;
+                revision: import("typebox").TInteger;
+                label: import("typebox").TObject<{
+                    name: import("typebox").TString;
+                }>;
+            }>>;
+            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            assignments: import("typebox").TArray<import("typebox").TObject<{
+                subject: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    label: import("typebox").TString;
+                }>, import("typebox").TNull]>;
+                id: import("typebox").TString;
+                labelId: import("typebox").TString;
+                subjectId: import("typebox").TString;
+                revision: import("typebox").TInteger;
+                libraryEntry: import("typebox").TUnion<[import("typebox").TObject<{
+                    subjectId: import("typebox").TString;
+                    state: import("typebox").TString;
+                    revision: import("typebox").TInteger;
+                    createdAt: import("typebox").TString;
+                    updatedAt: import("typebox").TString;
+                    incarnationId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    lastActivityAt: import("typebox").TString;
+                    finishedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    activeProgressSession: import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        subjectId: import("typebox").TString;
+                        versionSubjectId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        mode: import("typebox").TUnion<[import("typebox").TLiteral<"scalar_amount">, import("typebox").TLiteral<"cursor_position">, import("typebox").TLiteral<"completed_units">]>;
+                        unit: import("typebox").TString;
+                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        completedUnitCount: import("typebox").TInteger;
+                        state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+                        revision: import("typebox").TInteger;
+                        startedAt: import("typebox").TString;
+                        completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>;
+            }>>;
+            next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            label: import("typebox").TObject<{
+                id: import("typebox").TString;
+                name: import("typebox").TString;
+                revision: import("typebox").TInteger;
+            }>;
+        }>]>;
     };
     detail: {
         operationId: string;
@@ -5912,5 +6722,6 @@ export declare function personalLabelRoutes(app: ReturnType<typeof definitionRou
             bearerAuth: never[];
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
+        description: string;
     };
 }>;

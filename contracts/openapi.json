@@ -59488,6 +59488,7 @@
     },
     "/v1/libraryLabelAssignments": {
       "get": {
+        "description": "FULL by label additionally requires library_entry:list, progress_session:list and reading_progress admission. FULL by subject adds current label names only.",
         "operationId": "library_label.assignment_list",
         "parameters": [
           {
@@ -59508,6 +59509,18 @@
               "maximum": 100,
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "enum": [
+                "BASIC",
+                "FULL"
+              ],
+              "type": "string"
             }
           },
           {
@@ -59534,52 +59547,552 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "assignments": {
-                      "items": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "id": {
-                            "format": "uuid",
-                            "type": "string"
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "assignments": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "labelId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "revision": {
+                                "maximum": 2147483647,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "subjectId": {
+                                "format": "uuid",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "labelId",
+                              "subjectId",
+                              "revision"
+                            ],
+                            "type": "object"
                           },
-                          "labelId": {
-                            "format": "uuid",
-                            "type": "string"
-                          },
-                          "revision": {
-                            "maximum": 2147483647,
-                            "minimum": 1,
-                            "type": "integer"
-                          },
-                          "subjectId": {
-                            "format": "uuid",
-                            "type": "string"
-                          }
+                          "type": "array"
                         },
-                        "required": [
-                          "id",
-                          "labelId",
-                          "subjectId",
-                          "revision"
-                        ],
-                        "type": "object"
+                        "next": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
                       },
-                      "type": "array"
+                      "required": [
+                        "assignments",
+                        "next"
+                      ],
+                      "type": "object"
                     },
-                    "next": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "assignments": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "label": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "type": "object"
+                              },
+                              "labelId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "revision": {
+                                "maximum": 2147483647,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "subjectId": {
+                                "format": "uuid",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "labelId",
+                              "subjectId",
+                              "revision",
+                              "label"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "next": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "assignments",
+                        "next"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "assignments": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "labelId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "libraryEntry": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "activeProgressSession": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "amount": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "completedAt": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "completedUnitCount": {
+                                        "maximum": 20000,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "locator": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "mode": {
+                                        "enum": [
+                                          "scalar_amount",
+                                          "cursor_position",
+                                          "completed_units"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "position": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "revision": {
+                                        "maximum": 2147483646,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "startedAt": {
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "enum": [
+                                          "active",
+                                          "completed",
+                                          "abandoned"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "subjectId": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "total": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "unit": {
+                                        "type": "string"
+                                      },
+                                      "versionSubjectId": {
+                                        "format": "uuid",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "subjectId",
+                                      "versionSubjectId",
+                                      "mode",
+                                      "unit",
+                                      "total",
+                                      "amount",
+                                      "locator",
+                                      "position",
+                                      "completedUnitCount",
+                                      "state",
+                                      "revision",
+                                      "startedAt",
+                                      "completedAt"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "createdAt": {
+                                    "type": "string"
+                                  },
+                                  "finishedAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "incarnationId": {
+                                    "format": "uuid",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "lastActivityAt": {
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "maximum": 2147483646,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "state": {
+                                    "type": "string"
+                                  },
+                                  "subjectId": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "updatedAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "subjectId",
+                                  "state",
+                                  "revision",
+                                  "createdAt",
+                                  "updatedAt",
+                                  "incarnationId",
+                                  "lastActivityAt",
+                                  "finishedAt",
+                                  "activeProgressSession"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "revision": {
+                                "maximum": 2147483647,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "subject": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "cover": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "credit": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "license": {
+                                                "type": "string"
+                                              },
+                                              "obligations": {
+                                                "items": {
+                                                  "type": "string"
+                                                },
+                                                "type": "array"
+                                              },
+                                              "rightsHolder": {
+                                                "type": "string"
+                                              },
+                                              "via": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "name": {
+                                                    "type": "string"
+                                                  },
+                                                  "url": {
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "name",
+                                                  "url"
+                                                ],
+                                                "type": "object"
+                                              }
+                                            },
+                                            "required": [
+                                              "rightsHolder",
+                                              "via",
+                                              "license",
+                                              "obligations"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "focalPoint": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "x": {
+                                                "type": "number"
+                                              },
+                                              "y": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "x",
+                                              "y"
+                                            ],
+                                            "type": [
+                                              "object",
+                                              "null"
+                                            ]
+                                          },
+                                          "height": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "media": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "placeholder": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "color": {
+                                                "type": "string"
+                                              },
+                                              "thumbhash": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "thumbhash",
+                                              "color"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "variants": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "format": {
+                                                  "enum": [
+                                                    "avif",
+                                                    "webp"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "width": {
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                }
+                                              },
+                                              "required": [
+                                                "format",
+                                                "width"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "type": "array"
+                                          },
+                                          "width": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "media",
+                                          "width",
+                                          "height",
+                                          "placeholder",
+                                          "variants",
+                                          "focalPoint",
+                                          "credit"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "creativeWork": {
+                                        "type": "boolean"
+                                      },
+                                      "id": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "language": {
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "language"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "types": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "type",
+                                      "types",
+                                      "label",
+                                      "creativeWork",
+                                      "cover"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "type",
+                                      "label"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "subjectId": {
+                                "format": "uuid",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "labelId",
+                              "subjectId",
+                              "revision",
+                              "subject",
+                              "libraryEntry"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "label": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "maximum": 2147483647,
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "revision"
+                          ],
+                          "type": "object"
+                        },
+                        "next": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "assignments",
+                        "next",
+                        "label"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "assignments",
-                    "next"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
