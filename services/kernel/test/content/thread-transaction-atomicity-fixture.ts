@@ -325,7 +325,14 @@ export async function reserveAvailableImage(
     [media.route, media.id],
   );
   if (stored.rows[0]?.state !== 'available' || stored.rows[0].claimed_at !== null)
-    throw new Error('Fixture image is not available and unclaimed after the production image job');
+    throw new Error(
+      `Fixture image is not available and unclaimed after the production image job: ${JSON.stringify({
+        mediaId: media.id,
+        route: media.route,
+        outcome: outcome.state,
+        stored: stored.rows[0] ?? null,
+      })}`,
+    );
   return media;
 }
 
