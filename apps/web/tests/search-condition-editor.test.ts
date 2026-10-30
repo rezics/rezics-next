@@ -7,7 +7,11 @@ import * as v from 'valibot';
 import recording from '../src/kernel/recorded/definitions-release.json';
 import { ConditionEditor } from '../src/search/condition-editor';
 import {
-  CONDITION_POINTER, conditionAdmission, conditionFieldIssues, conditionMetadata, conditionSearchState,
+  CONDITION_POINTER,
+  conditionAdmission,
+  conditionFieldIssues,
+  conditionMetadata,
+  conditionSearchState,
   type ConditionMetadata,
 } from '../src/search/condition-editor-model';
 import { discoverySearchHref, searchFormFields, searchLoaderDeps, searchParams } from '../src/search/search-params';
@@ -19,22 +23,40 @@ const metadata = conditionMetadata(recording.release);
 const tree: FilterDocument = {
   and: [
     { type: { in: ['schema:Book'] } },
-    { or: [
-      { statement: { property: 'schema:wordCount', range: { gte: 1000001, unit: '1' } } },
-      { not: { type: { in: ['schema:Movie'] } } },
-    ] },
+    {
+      or: [
+        { statement: { property: 'schema:wordCount', range: { gte: 1000001, unit: '1' } } },
+        { not: { type: { in: ['schema:Movie'] } } },
+      ],
+    },
   ],
 };
 const state = searchLoaderDeps({
-  q: '  reading | "原文"  ', condition: JSON.stringify(tree), cursor: 'old+/=',
-  language: ['ja'], kinds: ['schema:Book', 'account'], 'f.schema:inLanguage': ['en'],
+  q: '  reading | "原文"  ',
+  condition: JSON.stringify(tree),
+  cursor: 'old+/=',
+  language: ['ja'],
+  kinds: ['schema:Book', 'account'],
+  'f.schema:inLanguage': ['en'],
   'r.schema:datePublished': JSON.stringify({ gte: 1900 }),
 });
 
-function render(value: FilterDocument | undefined, issues: { pointer: string; code: string }[] = [], definitions: ConditionMetadata | undefined = metadata) {
-  return renderToStaticMarkup(createElement(ConditionEditor, {
-    value, metadata: definitions, onChange() {}, locale: 'en', languages: ['ja'], onLanguages() {}, issues,
-  }));
+function render(
+  value: FilterDocument | undefined,
+  issues: { pointer: string; code: string }[] = [],
+  definitions: ConditionMetadata | undefined = metadata,
+) {
+  return renderToStaticMarkup(
+    createElement(ConditionEditor, {
+      value,
+      metadata: definitions,
+      onChange() {},
+      locale: 'en',
+      languages: ['ja'],
+      onLanguages() {},
+      issues,
+    }),
+  );
 }
 
 test('the actual nested editor submits one typed request through the current URL and SDK, retaining simple filters and kind applicability', async () => {
@@ -50,7 +72,8 @@ test('the actual nested editor submits one typed request through the current URL
   const href = discoverySearchHref('en', edited);
   const params = new URL(href, 'https://example.test').searchParams;
   const restored = searchLoaderDeps({
-    ...Object.fromEntries(params), kinds: params.getAll('kinds'),
+    ...Object.fromEntries(params),
+    kinds: params.getAll('kinds'),
     'f.schema:inLanguage': params.getAll('f.schema:inLanguage'),
   });
   expect(restored).toEqual({ ...state, cursor: undefined });
@@ -59,17 +82,29 @@ test('the actual nested editor submits one typed request through the current URL
   ]);
   const body = discoveryRequest(restored, ['en']);
   const calls: unknown[] = [];
-  const client = createKernelClient('http://kernel.local', { fetch: async (url, init) => {
-    calls.push({ url: String(url), body: JSON.parse(String(init?.body)), authorization: new Headers(init?.headers).get('authorization') });
-    return Response.json({ code: 'unsupported_query', errors: [{ pointer: '/filter/and/4/kind', code: 'unsupported' }] }, { status: 422 });
-  } });
+  const client = createKernelClient('http://kernel.local', {
+    fetch: async (url, init) => {
+      calls.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body)),
+        authorization: new Headers(init?.headers).get('authorization'),
+      });
+      return Response.json(
+        { code: 'unsupported_query', errors: [{ pointer: '/filter/and/4/kind', code: 'unsupported' }] },
+        { status: 422 },
+      );
+    },
+  });
   const response = await client.subjects.$search.post(body);
   expect(calls).toEqual([{ url: 'http://kernel.local/v1/subjects:search', body, authorization: null }]);
-  expect(body.filter).toEqual({ and: [
-    tree, { statement: { property: 'schema:inLanguage', in: ['en'] } },
-    { statement: { property: 'schema:datePublished', range: { gte: 1900 } } },
-    { kind: { in: ['schema:Book', 'account'] } },
-  ] });
+  expect(body.filter).toEqual({
+    and: [
+      tree,
+      { statement: { property: 'schema:inLanguage', in: ['en'] } },
+      { statement: { property: 'schema:datePublished', range: { gte: 1900 } } },
+      { kind: { in: ['schema:Book', 'account'] } },
+    ],
+  });
   expect(facetProblem(response.error)?.errors?.[0]?.code).toBe('unsupported');
 });
 
@@ -94,11 +129,15 @@ test('native 422 pointers mark the actual nested control and retain values, qual
   const scoped = { ...state, filter: JSON.stringify({ or: [{ type: { in: ['schema:Book'] } }, resource] }) };
   expect(conditionAdmission(metadata)(tree, scoped)).toEqual([]);
   const request = discoveryRequest(scoped, ['en']);
-  expect(request.filter).toEqual({ and: [tree, JSON.parse(scoped.filter),
-    { statement: { property: 'schema:inLanguage', in: ['en'] } },
-    { statement: { property: 'schema:datePublished', range: { gte: 1900 } } },
-    { kind: { in: ['schema:Book', 'account'] } },
-  ] });
+  expect(request.filter).toEqual({
+    and: [
+      tree,
+      JSON.parse(scoped.filter),
+      { statement: { property: 'schema:inLanguage', in: ['en'] } },
+      { statement: { property: 'schema:datePublished', range: { gte: 1900 } } },
+      { kind: { in: ['schema:Book', 'account'] } },
+    ],
+  });
   const refusal = await readDiscovery(request, async () => ({ status: 403, error: { code: 'forbidden' } }));
   expect(refusal.discovery.status).toBe('denied');
 });
@@ -107,11 +146,22 @@ test('same-statement qualifiers and released datatype/unit values survive editin
   const definitions: ConditionMetadata = {
     types: { 'ex:Thing': { labels: { en: 'Thing' }, facets: ['ex:amount'] } },
     properties: {
-      'ex:amount': { labels: { en: 'Amount' }, datatype: 'quantity', units: ['native-unit'], qualifiers: ['ex:language'] },
+      'ex:amount': {
+        labels: { en: 'Amount' },
+        datatype: 'quantity',
+        units: ['native-unit'],
+        qualifiers: ['ex:language'],
+      },
       'ex:language': { labels: { en: 'Original language' }, datatype: 'string', value: { pattern: '^[a-z]{2}$' } },
     },
   };
-  const qualified: FilterDocument = { statement: { property: 'ex:amount', range: { gte: 4, unit: 'native-unit' }, qualifiers: [{ property: 'ex:language', in: ['ja'] }] } };
+  const qualified: FilterDocument = {
+    statement: {
+      property: 'ex:amount',
+      range: { gte: 4, unit: 'native-unit' },
+      qualifiers: [{ property: 'ex:language', in: ['ja'] }],
+    },
+  };
   const admit = conditionAdmission(definitions);
   expect(admit(qualified, { ...state, condition: qualified, facets: {}, ranges: {}, kinds: undefined })).toEqual([]);
   const html = render(qualified, [], definitions);
@@ -119,7 +169,9 @@ test('same-statement qualifiers and released datatype/unit values survive editin
   expect(html).toContain('native-unit');
   expect(html).toContain('value="ja"');
   expect(qualified.statement.qualifiers).toEqual([{ property: 'ex:language', in: ['ja'] }]);
-  expect(admit({ or: [{ type: { in: ['ex:Thing'] } }, { not: { owner: { presence: true } } }] }, state)[0]?.code).toBe('unsupported');
+  expect(admit({ or: [{ type: { in: ['ex:Thing'] } }, { not: { owner: { presence: true } } }] }, state)[0]?.code).toBe(
+    'unsupported',
+  );
   expect(html).not.toMatch(/owner\.presence|account selector|Save filter/);
 });
 
@@ -128,13 +180,20 @@ test('shared admission enforces all grammar ceilings, byte bounds and invalid ra
   const type: FilterDocument = { type: { in: ['schema:Book'] } };
   const tooDeep: FilterDocument = { and: [{ and: [{ and: [{ and: [type] }] }] }] };
   const cases: FilterDocument[] = [
-    { and: Array.from({ length: 33 }, () => type) }, tooDeep,
+    { and: Array.from({ length: 33 }, () => type) },
+    tooDeep,
     { or: Array.from({ length: 17 }, () => type) },
     { type: { in: Array.from({ length: 65 }, () => 'schema:Book') } },
     { statement: { property: 'schema:wordCount', range: { gte: 2, lte: 1, unit: '1' } } },
     { statement: { property: 'schema:wordCount', range: { gte: NaN, unit: '1' } } },
     { statement: { property: 'schema:wordCount', range: { gte: 1, unit: 'kg' } } },
-    { statement: { property: 'schema:inLanguage', in: ['en'], qualifiers: Array.from({ length: 5 }, () => ({ property: 'schema:inLanguage', in: ['ja'] })) } },
+    {
+      statement: {
+        property: 'schema:inLanguage',
+        in: ['en'],
+        qualifiers: Array.from({ length: 5 }, () => ({ property: 'schema:inLanguage', in: ['ja'] })),
+      },
+    },
   ];
   for (const input of cases) expect(admit(input, state).length).toBeGreaterThan(0);
   const unfinished: FilterDocument = { statement: { property: 'schema:inLanguage', in: ['en', ''] } };
