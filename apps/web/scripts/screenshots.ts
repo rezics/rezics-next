@@ -26,8 +26,20 @@ type Options = {
 type Job = { id: string; locale: string; theme: string; width?: number; widthSuffix?: boolean };
 type CaptureFailure = { job: Job; error: string };
 type CaptureResult = { files: string[]; failures: CaptureFailure[] };
+type StoryOutcome = {
+  storyId: string;
+  renderId?: number;
+  cycle: number;
+  phase?: string;
+  status?: string;
+  errors: string[];
+};
 type StoryPreview = {
-  __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string; phase?: string } };
+  __STORYBOOK_PREVIEW__?: {
+    currentRender?: { id: string; renderId: number; phase?: string; abortController: { signal: AbortSignal } };
+  };
+  __STORYBOOK_ADDONS_CHANNEL__?: { on: <T>(event: string, listener: (data: T) => void) => void };
+  __REZICS_STORY_OUTCOME__?: { read: () => StoryOutcome | undefined };
 };
 
 type ProgressReporter = ReturnType<typeof createProgressReporter>;
@@ -244,38 +256,169 @@ export async function navigateStory(
   }
 }
 
-async function settle(page: Page, id: string, pageErrors: readonly string[] = []): Promise<void> {
-  const failure = (phase: string | undefined, timeout?: unknown) => {
-    const errors = pageErrors.slice(0, 5);
+/** Installed before preview code: Storybook's channel slot is assigned before it emits render events. */
+function observeStorybook(): void {
+  const preview = globalThis as StoryPreview;
+  let channel: StoryPreview['__STORYBOOK_ADDONS_CHANNEL__'];
+  let render: NonNullable<StoryPreview['__STORYBOOK_PREVIEW__']>['currentRender'];
+  let signal: AbortSignal | undefined;
+  let outcome: StoryOutcome | undefined;
+  let finishing = false;
+  let running = false;
+  let cycle = 0;
+  const errors: string[] = [];
+  const current = () => preview.__STORYBOOK_PREVIEW__?.currentRender;
+  preview.__REZICS_STORY_OUTCOME__ = {
+    read: () => {
+      if (!render || current() !== render || render.abortController.signal !== signal) return undefined;
+      if (signal?.aborted)
+        return {
+          storyId: render.id,
+          renderId: render.renderId,
+          cycle,
+          phase: 'aborted',
+          status: 'error',
+          errors: [...errors],
+        };
+      if (render.phase !== outcome?.phase) return undefined;
+      return outcome && { ...outcome, status: errors.length ? 'error' : outcome.status, errors: [...errors] };
+    },
+  };
+  Object.defineProperty(preview, '__STORYBOOK_ADDONS_CHANNEL__', {
+    configurable: true,
+    get: () => channel,
+    set: (next: typeof channel) => {
+      if (!next || next === channel) {
+        channel = next;
+        return;
+      }
+      channel = next;
+      next.on('storyRenderPhaseChanged', (event: { storyId: string; renderId: number; newPhase: string }) => {
+        const active = current();
+        if (
+          !active ||
+          active.id !== event.storyId ||
+          active.renderId !== event.renderId ||
+          active.phase !== event.newPhase
+        )
+          return;
+        if (active !== render || active.abortController.signal !== signal || event.newPhase === 'loading') {
+          // Concurrent cycles reuse renderId in Storybook. Their outcomes cannot be attributed safely.
+          if (running) errors.push('Overlapping Storybook render cycles have no attributable outcome.');
+          render = active;
+          signal = active.abortController.signal;
+          cycle += 1;
+        }
+        if (event.newPhase === 'loading') running = true;
+        if (['finished', 'aborted', 'errored'].includes(event.newPhase)) running = false;
+        outcome = { storyId: event.storyId, renderId: event.renderId, cycle, phase: event.newPhase, errors: [] };
+        finishing = event.newPhase === 'finished';
+        // STORY_FINISHED has no renderId; StoryRender emits it synchronously inside this finished phase.
+        queueMicrotask(() => {
+          finishing = false;
+        });
+      });
+      next.on(
+        'storyFinished',
+        (event: {
+          storyId: string;
+          status: string;
+          reporters: { type: string; status: string; result: unknown }[];
+        }) => {
+          if (
+            !finishing ||
+            !outcome ||
+            event.storyId !== render?.id ||
+            current() !== render ||
+            signal !== render.abortController.signal ||
+            signal.aborted
+          )
+            return;
+          finishing = false;
+          for (const report of event.reporters ?? []) {
+            if (report.status === 'failed') {
+              let detail: string | undefined;
+              try {
+                detail = JSON.stringify(report.result);
+              } catch {
+                detail = String(report.result);
+              }
+              errors.push(`${report.type}: ${detail}`);
+            }
+          }
+          outcome.status = event.status === 'success' && errors.length === 0 ? 'success' : 'error';
+        },
+      );
+      const recordError = (error: { message?: string; title?: string; description?: string }) => {
+        if (current() === render)
+          errors.push(error.message ?? [error.title, error.description].filter(Boolean).join(': '));
+      };
+      for (const event of ['playFunctionThrewException', 'storyThrewException', 'storyErrored'])
+        next.on(event, recordError);
+      next.on('unhandledErrorsWhilePlaying', (errors: Parameters<typeof recordError>[0][]) =>
+        errors.forEach(recordError),
+      );
+      // Requests invalidate an earlier result even before Storybook starts the next render cycle.
+      for (const event of ['updateStoryArgs', 'resetStoryArgs', 'updateGlobals', 'forceRemount', 'forceReRender']) {
+        next.on(event, (data: { storyId?: string } = {}) => {
+          if (!data.storyId || data.storyId === render?.id) {
+            outcome = undefined;
+            finishing = false;
+          }
+        });
+      }
+    },
+  });
+}
+
+async function settle(page: Page, id: string, pageErrors: readonly string[] = []): Promise<StoryOutcome> {
+  const failure = (outcome: StoryOutcome | undefined, timeout?: unknown) => {
+    const errors = [...(outcome?.errors ?? []), ...pageErrors].slice(0, 5);
     const details = errors.length ? ` First page errors: ${errors.join(' | ')}` : '';
     const wait = timeout instanceof Error ? ` ${timeout.name}: ${timeout.message}` : '';
-    return new Error(`Story ${id} did not finish rendering (last phase: ${phase ?? 'missing'}).${details}${wait}`);
+    return new Error(
+      `Story ${id} did not finish rendering successfully (last phase: ${outcome?.phase ?? 'missing'}, outcome: ${outcome?.status ?? 'missing'}).${details}${wait}`,
+    );
   };
   try {
     await page.waitForFunction(
       (storyId: string) => {
-        const render = (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender;
-        return render?.id === storyId && (render.phase === 'finished' || render.phase === 'errored');
+        const outcome = (globalThis as StoryPreview).__REZICS_STORY_OUTCOME__?.read();
+        return (
+          outcome?.storyId === storyId &&
+          (outcome.status !== undefined || outcome.phase === 'errored' || outcome.phase === 'aborted')
+        );
       },
       id,
       { timeout: 60_000 },
     );
   } catch (error) {
-    const phase = await Promise.race([
+    const unavailable = (phase: string): StoryOutcome => ({ storyId: id, cycle: 0, phase, errors: [] });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
       page
-        .evaluate(() => (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender?.phase)
-        .then((value) => (typeof value === 'string' ? value : 'missing'))
-        .catch(() => 'unavailable'),
-      new Promise<string>((resolve) => setTimeout(() => resolve('unresponsive'), 1_000)),
-    ]);
-    throw failure(phase, error);
+        .evaluate(() => {
+          const preview = globalThis as StoryPreview;
+          const render = preview.__STORYBOOK_PREVIEW__?.currentRender;
+          return (
+            preview.__REZICS_STORY_OUTCOME__?.read() ??
+            (render && { storyId: render.id, renderId: render.renderId, cycle: 0, phase: render.phase, errors: [] })
+          );
+        })
+        .catch(() => unavailable('unavailable')),
+      new Promise<StoryOutcome>((resolve) => {
+        timer = setTimeout(() => resolve(unavailable('unresponsive')), 1_000);
+      }),
+    ]).finally(() => clearTimeout(timer));
+    throw failure(outcome, error);
   }
-  const phase = await page.evaluate(() => (globalThis as StoryPreview).__STORYBOOK_PREVIEW__?.currentRender?.phase);
-  if (phase !== 'finished') throw failure(typeof phase === 'string' ? phase : undefined);
+  const outcome = await page.evaluate(() => (globalThis as StoryPreview).__REZICS_STORY_OUTCOME__?.read());
+  if (outcome?.storyId !== id || outcome.phase !== 'finished' || outcome.status !== 'success') throw failure(outcome);
   await page.evaluate(async () => {
     await document.fonts.ready;
     if (document.fonts.status !== 'loaded') await document.fonts.ready;
   });
+  return outcome;
 }
 
 async function prepareFullPageCapture(page: Page): Promise<void> {
@@ -296,9 +439,11 @@ async function captureOne(page: Page, origin: string, job: Job, out: string): Pr
   };
   page.on('pageerror', onPageError);
   page.on('console', onConsole);
+  let navigated = false;
   try {
     await navigateStory(page, job.id, url);
-    await settle(page, job.id, pageErrors);
+    navigated = true;
+    const outcome = await settle(page, job.id, pageErrors);
     // Page route stories render their router asynchronously after Storybook finishes the story render.
     if (job.id.startsWith('pages-')) {
       try {
@@ -310,9 +455,43 @@ async function captureOne(page: Page, origin: string, job: Job, out: string): Pr
       }
     }
     await prepareFullPageCapture(page);
+    const latest = await page.evaluate(() => (globalThis as StoryPreview).__REZICS_STORY_OUTCOME__?.read());
+    if (
+      latest?.storyId !== job.id ||
+      latest.renderId !== outcome.renderId ||
+      latest.cycle !== outcome.cycle ||
+      latest.status !== 'success' ||
+      latest.phase !== 'finished'
+    ) {
+      throw new Error(`Story ${job.id} render outcome changed before capture. ${latest?.errors.join(' | ') ?? ''}`);
+    }
     const file = join(out, screenshotFilename(job));
     await page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
     return file;
+  } catch (error) {
+    if (navigated) {
+      const diagnostic = join(out, screenshotFilename(job).replace(/\.png$/, '.diagnostic.png'));
+      const retained = await page
+        .screenshot({
+          path: diagnostic,
+          type: 'png',
+          fullPage: true,
+          animations: 'disabled',
+          scale: 'css',
+          timeout: 5_000,
+        })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (retained) {
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)} Diagnostic artifact (not a successful review): ${diagnostic}`,
+          { cause: error },
+        );
+      }
+    }
+    throw error;
   } finally {
     page.off('pageerror', onPageError);
     page.off('console', onConsole);
@@ -397,7 +576,12 @@ async function capture(
         }),
       ),
     );
-    const pages = await Promise.all(contexts.map((context) => context.newPage()));
+    const pages = await Promise.all(
+      contexts.map(async (context) => {
+        await context.addInitScript(observeStorybook);
+        return context.newPage();
+      }),
+    );
     try {
       const result = await captureJobs(
         widthJobs,

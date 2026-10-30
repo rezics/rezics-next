@@ -122,7 +122,7 @@ test('a story render error fails capture with its story id and the page error', 
   const settle = screenshotSettle();
   const page = {
     waitForFunction: async () => undefined,
-    evaluate: async () => 'errored',
+    evaluate: async () => ({ storyId: id, cycle: 1, phase: 'errored', status: 'error', errors: [] }),
   };
   const message = await settle(page, id, ['Synthetic render failure']).then(
     () => '',
