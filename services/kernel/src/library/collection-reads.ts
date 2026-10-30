@@ -104,6 +104,7 @@ function collectionView(row: {
 }
 
 function memberView(row: MemberRow): MemberView {
+  if (row.addedAt === null) throw new Error('A live Collection member must retain its added time');
   return { id: row.id, subjectId: row.subjectId, note: row.note, addedAt: iso(row.addedAt) };
 }
 

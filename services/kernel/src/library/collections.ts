@@ -644,7 +644,7 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
         if (!saved || saved.deletionId !== deletion.deletionId) throw notFound();
         if (!saved.purgeAfter || Date.parse(saved.purgeAfter) <= Date.parse(command.time))
           throw new ProblemError('member_restore_expired');
-        if (saved.deletionRevision !== expectedRevision) throw new ProblemError('member_restore_stale');
+        if (saved.deletionRevision !== BigInt(expectedRevision)) throw new ProblemError('member_restore_stale');
         const subject = await resolveSubject(
           { pool, access, ...(clock ? { clock } : {}) },
           accountActor(actor),

@@ -60,6 +60,8 @@ function asCollection(row: CollectionResult): Collection {
 }
 
 function asMember(row: MemberResult): CollectionMember {
+  if (row.ordinalKey === null || row.addedAt === null)
+    throw new Error('A live Collection member must retain its ordinal and added time');
   return {
     collectionId: row.collectionId,
     id: row.id,
@@ -291,7 +293,10 @@ export async function deleteMember(
     ...write(context),
   });
   const row = rows[0];
-  return row ? { ...asMember(row), deletionId: row.deletionId, revision: row.revision } : null;
+  if (!row) return null;
+  if (row.deletionId === null || row.revision === null)
+    throw new Error('A removed Collection member must return its deletion episode revision');
+  return { ...asMember(row), deletionId: row.deletionId, revision: Number(row.revision) };
 }
 
 export async function readMemberDeletion(

@@ -339,6 +339,7 @@ export async function fullMembers(
   const last = considered.at(-1);
   return {
     members: considered.flatMap((row) => {
+      if (row.addedAt === null) throw new Error('A live Collection member must retain its added time');
       const subject = reader.subjects.get(row.subjectId);
       return subject
         ? [

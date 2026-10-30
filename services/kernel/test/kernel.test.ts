@@ -235,6 +235,7 @@ const typed = [
   'POST /v1/collections/:collectionId/members',
   'PATCH /v1/collections/:collectionId/members/:memberId',
   'DELETE /v1/collections/:collectionId/members/:memberId',
+  'POST /v1/collections/:collectionId/members/:memberId/$restore',
   'POST /v1/collections/:collectionId/members/:memberId/$move',
   'GET /v1/subjects/:id/collections',
   'GET /v1/libraryPins',

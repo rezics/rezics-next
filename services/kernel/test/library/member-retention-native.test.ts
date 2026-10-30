@@ -3,18 +3,22 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createWorkClient } from '../../src/work/client.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { createCollectionCommands } from '../../src/library/collections.ts';
 import { syncSubjectListing, subjectCollections } from '../../src/library/listing.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { accountToken } from '../support/admitted-access.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
 let owner: Awaited<ReturnType<NativeProfileFixture['identity']>>;
+let collectionCommands: ReturnType<typeof createCollectionCommands>;
 let time = Date.now();
 const scopes = ['subject:read', 'collection:create', 'collection:read', 'collection:update', 'collection:delete'];
 beforeAll(async () => {
   f = await createProfileEntryFixture({ clock: () => new Date(time) });
   owner = await f.identity(scopes);
+  collectionCommands = createCollectionCommands({ pool: f.pool, access: f.access, clock: () => new Date(time) });
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
 }, 120000);
 afterAll(async () => {
@@ -129,7 +133,7 @@ test('native delegated editor can Undo a private occurrence; revoked authority c
     actions: ['collection:read', 'collection:update'],
     valid: '(,)',
   };
-  const context = () => ({ actor: f.steward.actor, deadline: deadlineFor(30000) });
+  const context = () => ({ pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30000) });
   await grants.create(context(), { ...input, key: entryKey() });
   const removed = await m.remove(editor.bearer);
   const key = entryKey();
@@ -200,10 +204,10 @@ test('restore respects the live 5000 member cap while preserving the retained ep
       owner.bearer = await accountToken(owner.actor);
       owner.actor = await f.access.authenticate(owner.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
     }
-    await f.commands.addMember(owner.actor, m.collection.id, { subjectId: m.subjectId, note: `filler ${n}` }, entryKey());
+    await collectionCommands.addMember(owner.actor, m.collection.id, { subjectId: m.subjectId, note: `filler ${n}` }, entryKey());
   }
   const removed = await m.remove();
-  await f.commands.addMember(owner.actor, m.collection.id, { subjectId: m.subjectId, note: 'replacement at cap' }, entryKey());
+  await collectionCommands.addMember(owner.actor, m.collection.id, { subjectId: m.subjectId, note: 'replacement at cap' }, entryKey());
   const before = await m.snapshot();
   const response = await f.send(owner.bearer, 'POST', m.path + ':restore', removed);
   expect(response.status).toBe(409);
@@ -229,8 +233,13 @@ let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
 const executorId = `member-retention-${crypto.randomUUID()}`;
 const directory = resolve(import.meta.dir, '../../../../.temp/member-retention', executorId);
 const clockPath = resolve(directory, 'clock');
-const children: ReturnType<typeof runtime>[] = [];
-function runtime(mode: string) {
+type MemberRuntime = {
+  process: ReturnType<typeof Bun.spawn>;
+  until(marker: string): Promise<void>;
+  stop(signal: 'SIGKILL' | 'SIGTERM'): Promise<void>;
+};
+const children: MemberRuntime[] = [];
+function runtime(mode: string): MemberRuntime {
   const process = Bun.spawn(
     [Bun.which('bun')!, `${import.meta.dir}/support/member-retention-runtime.ts`, mode, executorId, clockPath],
     { env: globalThis.process.env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
