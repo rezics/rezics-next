@@ -28,10 +28,10 @@ test('card renders a title link and separate actions, with clamped text and a fi
 
 test('member Types set known list frames and composition supplies the unknown Type fallback', () => {
   const unknown = { id: 'unknown', title: 'Unknown', types: ['type:NotReleased'] };
-  const grid = renderToStaticMarkup(
-    createElement(CoverGrid, { ratio: '1:1', children: [card(), card(unknown)] }),
+  const grid = renderToStaticMarkup(createElement(CoverGrid, { ratio: '1:1', children: [card(), card(unknown)] }));
+  const row = renderToStaticMarkup(
+    createElement(CoverRow, { ratio: '2:3', label: 'Continue', children: card(unknown) }),
   );
-  const row = renderToStaticMarkup(createElement(CoverRow, { ratio: '2:3', label: 'Continue', children: card(unknown) }));
   expect([...grid.matchAll(/data-ratio="([^"]+)"/gu)].map((match) => match[1])).toEqual(['3:4', '1:1']);
   expect(row).toContain('data-ratio="2:3"');
   expect(row).toContain('aria-label="Continue"');
