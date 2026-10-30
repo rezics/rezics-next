@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
+import { Value } from 'typebox/value';
 import type { DocumentSnapshot } from '@rezics/document';
 import type { CommandOutcome, CommandTransaction } from '../../src/command/command.ts';
 import type { Effect } from '../../src/events/effects.ts';
@@ -32,6 +33,8 @@ import type { DownloadContext } from '../../src/content/media-download.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
 import type * as model from '../../src/content/model.ts';
 import type { ImportedSource, Rights } from '../../src/content/imported-contract.ts';
+import type { Kernel } from '../../src/http/kernel.ts';
+import { MediaReservationInputSchema, RealmMediaReservationInputSchema } from '../../src/content/schemas.ts';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 function same<T extends true>(..._proof: T[]): void {}
@@ -590,7 +593,12 @@ function publishedModels(): void {
   same<
     Equal<
       media.MediaReservationInput,
-      Readonly<{ purpose: 'post-image' | 'avatar'; mediaType: string; byteCount: number; sha256?: string }> &
+      Readonly<{
+        purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+        mediaType: string;
+        byteCount: number;
+        sha256?: string;
+      }> &
         (
           | Readonly<{ containerId: string; newThread?: never }>
           | Readonly<{
@@ -599,6 +607,36 @@ function publishedModels(): void {
               containerId?: never;
             }>
         )
+    >
+  >();
+  // Native reservation serves both routes; the generic HTTP input keeps its narrower purposes.
+  type ImageMediaType = 'image/avif' | 'image/gif' | 'image/jpeg' | 'image/png' | 'image/webp';
+  type GenericReservation = Kernel['~Routes']['v1']['media']['post'];
+  type RealmReservation = Kernel['~Routes']['v1']['realms'][':id']['media']['post'];
+  same<
+    Equal<
+      GenericReservation['body'],
+      | {
+          containerId: string;
+          purpose: 'post-image' | 'avatar';
+          mediaType: ImageMediaType;
+          byteCount: number;
+          sha256?: string;
+        }
+      | {
+          newThread: { boardId: string; idempotencyKey: string };
+          purpose: 'post-image';
+          mediaType: ImageMediaType;
+          byteCount: number;
+          sha256?: string;
+        }
+    >
+  >();
+  same<Equal<RealmReservation['params'], { id: string }>>();
+  same<
+    Equal<
+      RealmReservation['body'],
+      { purpose: 'realm-icon' | 'realm-banner'; mediaType: ImageMediaType; byteCount: number; sha256?: string }
     >
   >();
   same<
@@ -678,7 +716,12 @@ function publishedModels(): void {
   same<
     Equal<
       media.MediaMetadata,
-      | (MediaMetadataBase & Readonly<{ purpose: 'post-image' | 'avatar'; mediaType: string; byteCount: number }>)
+      | (MediaMetadataBase &
+          Readonly<{
+            purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+            mediaType: string;
+            byteCount: number;
+          }>)
       | (MediaMetadataBase &
           Readonly<{
             purpose: 'cover';
@@ -769,6 +812,29 @@ function publishedModels(): void {
   same<Equal<reports.ReportRequestContext, model.RequestContext & Readonly<{ botToken?: string }>>>();
 }
 void [publishedSignatures, publishedModels];
+
+test('Realm media reservation keeps its own strict purpose and route-owned parent input', () => {
+  const fields = { mediaType: 'image/png', byteCount: 10 };
+  const containerId = '019a1b2c-3d4e-7f00-8a00-5b0000000061';
+  for (const purpose of ['realm-icon', 'realm-banner']) {
+    const input = { purpose, ...fields };
+    expect(Value.Check(RealmMediaReservationInputSchema, input)).toBe(true);
+    expect(Value.Check(RealmMediaReservationInputSchema, { ...input, sha256: 'a'.repeat(64) })).toBe(true);
+    expect(Value.Check(MediaReservationInputSchema, { ...input, containerId })).toBe(false);
+    for (const extra of [
+      { containerId },
+      { newThread: { boardId: containerId, idempotencyKey: 'thread' } },
+      { unexpected: true },
+    ]) {
+      expect(Value.Check(RealmMediaReservationInputSchema, { ...input, ...extra })).toBe(false);
+    }
+    expect(Value.Check(RealmMediaReservationInputSchema, { purpose, byteCount: 10 })).toBe(false);
+    expect(Value.Check(RealmMediaReservationInputSchema, { purpose, mediaType: 'image/png' })).toBe(false);
+  }
+  for (const purpose of ['post-image', 'avatar', 'cover', 'bad-purpose']) {
+    expect(Value.Check(RealmMediaReservationInputSchema, { purpose, ...fields })).toBe(false);
+  }
+});
 
 test('named content ports are exported', () => {
   for (const port of [
