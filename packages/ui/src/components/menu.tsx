@@ -434,7 +434,7 @@ export function Menu({
                       <a
                         key={index}
                         href={entry.href}
-                      aria-current={entry.current ? 'page' : undefined}
+                        aria-current={entry.current ? 'page' : undefined}
                         className="flex min-h-11 items-center rounded-xl px-3 text-sm hover:bg-accent"
                         onClick={() => close()}
                       >
