@@ -936,5 +936,6 @@
   "library_collection_independent_writes": "Änderungen werden einzeln gespeichert. Schlägt eine Änderung fehl, bleiben zuvor gespeicherte Änderungen erhalten.",
   "library_collection_move_unavailable": "Mitglieder können noch nicht in eine andere Sammlung verschoben werden.",
   "library_collection_builtin_rule": "Die Regeln integrierter Sammlungen sind festgelegt. Filter ändern nur diese Ansicht.",
-  "library_collection_remove_selected": "Ausgewählte entfernen"
+  "library_collection_remove_selected": "Ausgewählte entfernen",
+  "library_collection_select_member": "{title} auswählen"
 }

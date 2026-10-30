@@ -936,5 +936,6 @@
   "library_collection_independent_writes": "變更會逐項儲存。若某項失敗，先前儲存的變更仍會保留。",
   "library_collection_move_unavailable": "目前尚無法將成員移至其他收藏集。",
   "library_collection_builtin_rule": "內建收藏集的規則固定。篩選只會變更目前的檢視。",
-  "library_collection_remove_selected": "移除所選成員"
+  "library_collection_remove_selected": "移除所選成員",
+  "library_collection_select_member": "選取{title}"
 }

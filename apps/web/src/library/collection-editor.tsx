@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Link } from '@tanstack/react-router';
-import { EllipsisIcon, GripVerticalIcon } from 'lucide-react';
+import { ArrowUpIcon, EllipsisIcon, GripVerticalIcon } from 'lucide-react';
 import type { DragEvent, ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -23,7 +23,7 @@ export function CollectionSubjectList({
   onCopy,
   typeRatios,
 }: {
-  typeRatios?: Readonly<Record<string, string>>;
+  typeRatios?: Readonly<Record<string, string>> | undefined;
   subjects: readonly (LibrarySubject | null)[];
   onCopy?: (subject: LibrarySubject) => void | Promise<void>;
 }) {
@@ -153,7 +153,7 @@ export function CollectionMemberList({
   onCopy,
   typeRatios,
 }: {
-  typeRatios?: Readonly<Record<string, string>>;
+  typeRatios?: Readonly<Record<string, string>> | undefined;
   members: readonly CollectionMember[];
   editing: boolean;
   firstPage: boolean;
@@ -259,6 +259,15 @@ export function CollectionMemberList({
               ) : null}
               {editing ? (
                 <>
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex size-8 cursor-grab items-center justify-center text-muted-foreground"
+                    data-drag-handle
+                    draggable={!busy}
+                    onDragStart={beginDrag}
+                  >
+                    <GripVerticalIcon />
+                  </span>
                   <Button
                     type="button"
                     variant="ghost"
@@ -266,11 +275,8 @@ export function CollectionMemberList({
                     aria-label={m.library_member_move_up()}
                     disabled={busy || moveUpAfter === undefined}
                     onClick={() => moveUpAfter !== undefined && onMove?.(member.id, moveUpAfter)}
-                    data-drag-handle
-                    draggable={!busy}
-                    onDragStart={beginDrag}
                   >
-                    <GripVerticalIcon aria-hidden="true" className="-rotate-90" />
+                    <ArrowUpIcon aria-hidden="true" />
                   </Button>
                   <Button
                     type="button"

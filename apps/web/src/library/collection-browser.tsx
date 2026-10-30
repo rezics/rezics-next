@@ -141,7 +141,7 @@ export function CollectionBrowseRow({
       data-collection-row={collection.id}
     >
       <div className="row-span-2 sm:row-span-1">
-        <CollectionCover collection={collection} subject={firstMember} />
+        <CollectionCover collection={collection} subject={firstMember ?? null} />
       </div>
       <div className="col-span-2 min-w-0 py-1 sm:col-span-1">
         <h2 className="line-clamp-2 text-lg font-semibold leading-snug sm:text-xl">{title}</h2>

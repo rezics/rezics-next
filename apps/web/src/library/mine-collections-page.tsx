@@ -55,11 +55,13 @@ export function MineCollectionsPageView({ page, pins }: { page: MineCollectionsP
             collections={collections}
             layout={layout}
             readable={readable}
-            menuFor={
-              canPin
-                ? (collection) => <PinControl collectionId={collection.id} pins={pins} mode="collection" />
-                : undefined
-            }
+            {...(canPin
+              ? {
+                  menuFor: (collection: CollectionBrowseRecord) => (
+                    <PinControl collectionId={collection.id} pins={pins} mode="collection" />
+                  ),
+                }
+              : {})}
           />
         ) : (
           <p className="text-muted-foreground">{m.library_collections_empty()}</p>
@@ -82,7 +84,7 @@ export function MineCollectionsPageView({ page, pins }: { page: MineCollectionsP
                         className="truncate hover:underline"
                         href={`/${getLocale()}/collections/${encodeURIComponent(pin.collectionId)}`}
                       >
-                        {pin.target.title ?? m.library_collection_unavailable()}
+                        {pin.target.title ?? m.library_pin_unavailable()}
                       </a>
                     ) : (
                       <span>{m.library_pin_unavailable()}</span>

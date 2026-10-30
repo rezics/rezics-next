@@ -61,7 +61,7 @@ function renderEditor(mode: CollectionStoryMode = 'private') {
 async function openEditor(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await canvas.findByRole('heading', { level: 1, name: 'Books I come back to' });
-  await userEvent.click(canvas.getAllByRole('button', { name: m.library_collection_actions(), exact: true })[0]!);
+  await userEvent.click(canvas.getAllByRole('button', { name: m.library_collection_actions() })[0]!);
   const body = within(document.body);
   const edit = await body.findByText(m.library_collection_edit(), { exact: true });
   await userEvent.click(edit);
@@ -104,7 +104,7 @@ export const Reordering: Story = {
     down.focus();
     await userEvent.keyboard('{Enter}');
     await expect(firstRow(canvasElement)).toHaveTextContent('The Tale of Genji');
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await expect(firstRow(canvasElement)).toHaveTextContent('The Tale of Genji');
   },
@@ -114,12 +114,12 @@ export const Note: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
     await userEvent.type(within(firstRow(canvasElement)).getByRole('textbox'), 'A draft note');
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_cancel(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_cancel() }));
     await expect(canvas.queryByDisplayValue('A draft note')).toBeNull();
     await openEditor(canvasElement);
     await expect(within(firstRow(canvasElement)).getByRole('textbox')).toHaveValue('');
     await userEvent.type(within(firstRow(canvasElement)).getByRole('textbox'), 'A saved note');
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await expect(await canvas.findByText('A saved note', { exact: true })).toBeVisible();
   },
@@ -129,9 +129,9 @@ export const SavePending: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
     await userEvent.type(canvas.getByRole('textbox', { name: m.library_collection_title() }), ' — revised');
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await expect(await canvas.findByRole('button', { name: m.library_collection_save_pending() })).toBeDisabled();
-    await expect(canvas.getByRole('button', { name: m.library_collection_cancel(), exact: true })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: m.library_collection_cancel() })).toBeDisabled();
   },
   beforeEach: () => () => completePendingCollectionSave(),
 };
@@ -140,7 +140,7 @@ export const SaveError: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
     await userEvent.type(canvas.getByRole('textbox', { name: m.library_collection_title() }), ' — revised');
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await expect(await canvas.findByRole('alert')).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: m.library_collection_title() })).toHaveValue(
       'Books I come back to — revised',

@@ -936,5 +936,6 @@
   "library_collection_independent_writes": "Los cambios se guardan uno a uno. Si uno falla, los cambios ya guardados se conservan.",
   "library_collection_move_unavailable": "Aún no se pueden mover miembros a otra colección.",
   "library_collection_builtin_rule": "Las reglas de las colecciones integradas son fijas. Los filtros solo cambian esta vista.",
-  "library_collection_remove_selected": "Quitar seleccionados"
+  "library_collection_remove_selected": "Quitar seleccionados",
+  "library_collection_select_member": "Seleccionar {title}"
 }

@@ -937,5 +937,6 @@
   "library_collection_independent_writes": "更改将逐项保存。如果某项失败，之前保存的更改仍会保留。",
   "library_collection_move_unavailable": "暂不支持将成员移动到其他收藏集。",
   "library_collection_builtin_rule": "内置收藏集的规则固定。筛选仅更改当前视图。",
-  "library_collection_remove_selected": "移除所选成员"
+  "library_collection_remove_selected": "移除所选成员",
+  "library_collection_select_member": "选择{title}"
 }

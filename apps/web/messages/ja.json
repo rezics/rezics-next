@@ -936,5 +936,6 @@
   "library_collection_independent_writes": "変更は1件ずつ保存されます。途中で失敗しても、それまでに保存された変更は残ります。",
   "library_collection_move_unavailable": "他のコレクションへのメンバー移動には、まだ対応していません。",
   "library_collection_builtin_rule": "組み込みコレクションのルールは固定されています。フィルターは現在の表示にのみ適用されます。",
-  "library_collection_remove_selected": "選択した項目を削除"
+  "library_collection_remove_selected": "選択した項目を削除",
+  "library_collection_select_member": "{title}を選択"
 }

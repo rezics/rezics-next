@@ -59,7 +59,7 @@ export const EditFormOpen: Story = {
   name: 'Owner, collection edit form open',
   play: async ({ canvasElement }) => {
     const view = await collectionReady(canvasElement);
-    await userEvent.click(view.getAllByRole('button', { name: m.library_collection_actions(), exact: true })[0]!);
+    await userEvent.click(view.getAllByRole('button', { name: m.library_collection_actions() })[0]!);
     await userEvent.click(await within(document.body).findByText(m.library_collection_edit(), { exact: true }));
     await view.findByRole('textbox', { name: m.library_collection_title() });
   },
@@ -70,7 +70,7 @@ export const MembersReordered: Story = {
   name: 'Owner, members reordered',
   play: async ({ canvasElement }) => {
     const view = await collectionReady(canvasElement);
-    await userEvent.click(view.getAllByRole('button', { name: m.library_collection_actions(), exact: true })[0]!);
+    await userEvent.click(view.getAllByRole('button', { name: m.library_collection_actions() })[0]!);
     await userEvent.click(await within(document.body).findByText(m.library_collection_edit(), { exact: true }));
     const first = await view.findByRole('link', { name: 'Snow Country' });
     const firstItem = first.closest('li');

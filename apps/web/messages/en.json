@@ -937,5 +937,6 @@
   "library_collection_independent_writes": "Changes are saved one at a time. If a change fails, earlier saved changes remain.",
   "library_collection_move_unavailable": "Moving members to another Collection is not available yet.",
   "library_collection_builtin_rule": "Built-in Collection rules are fixed. Filters change this view only.",
-  "library_collection_remove_selected": "Remove selected"
+  "library_collection_remove_selected": "Remove selected",
+  "library_collection_select_member": "Select {title}"
 }

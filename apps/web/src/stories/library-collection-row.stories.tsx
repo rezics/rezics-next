@@ -26,6 +26,7 @@ type Story = StoryObj<typeof meta>;
 export function recordedBrowseCollection(): CollectionBrowseRecord {
   return {
     ...recording.collection,
+    visibility: 'public',
     curator: recording.collection.curator,
     preview: { state: 'loaded', members: memberPage.members.map((member) => subjectOf(member.subject)!) },
   };

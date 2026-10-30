@@ -1,5 +1,6 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { ContentActions } from '@rezics/ui/content-actions';
+import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
@@ -37,7 +38,7 @@ import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { validatePublicOrigin } from '../shell/origin';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
-import { Share2Icon } from 'lucide-react';
+import { EllipsisIcon, Share2Icon } from 'lucide-react';
 import { reorderCollectionMembers } from './collection-presentation';
 import {
   CollectionMemberList,
@@ -454,7 +455,7 @@ export function CollectionPage({
             ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap items-start gap-2">
-            {owner ? (
+            {owner && !pending && !editing ? (
               <ContentActions
                 ownsContent
                 labels={{
@@ -469,17 +470,27 @@ export function CollectionPage({
                 }}
                 extraEntries={pinActions.entries}
                 onCopyLink={() => copyLink(collectionHref(page.id))}
-                onEdit={pending || editing ? undefined : beginEditing}
-                onDelete={pending || editing ? undefined : removeCollection}
+                onEdit={beginEditing}
+                onDelete={removeCollection}
               />
             ) : (
               <>
-                <ContentActions
-                  ownsContent={false}
-                  labels={{ moreActions: m.library_collection_actions(), copyLink: m.library_collection_copy() }}
-                  onCopyLink={() => copyLink(collectionHref(page.id))}
+                <Menu
+                  title={m.library_collection_actions()}
+                  trigger={
+                    <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+                      <EllipsisIcon aria-hidden="true" />
+                    </Button>
+                  }
+                  entries={[
+                    {
+                      type: 'item',
+                      label: m.library_collection_copy(),
+                      onSelect: () => copyLink(collectionHref(page.id)),
+                    },
+                  ]}
                 />
-                <PinControl collectionId={page.id} pins={pins} mode="collection" />
+                {!owner ? <PinControl collectionId={page.id} pins={pins} mode="collection" /> : null}
               </>
             )}
             <Button type="button" variant="outline" onClick={() => copyLink(collectionHref(page.id))}>
