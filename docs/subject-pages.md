@@ -268,8 +268,8 @@ still governs the later whole-slot selection, not a client-side collapse of exis
 
 The workspace reuses the scalar editor's native value, qualifier and grouped-citation controls and validators.
 Existing unsupported parts stay intact. Names and descriptions use the separate actual terms PATCH editor;
-relations/credits use their exact-slot editor. Document fields require the authored composer; its browser binding
-is currently unavailable here, which is stated explicitly rather than routing to a presentation editor.
+relations/credits use their exact-slot editor. Types with document fields link to the existing
+[authored composer](#original-authored-catalogue-text) at `/authored` for a new original-text candidate.
 
 A contributor explicitly includes changed fields and submits at most twelve fields per workspace. Unchanged or
 excluded fields issue no request. Blank or incomplete values produce invalid drafts, never deletion or clearing.

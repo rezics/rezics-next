@@ -8,6 +8,7 @@ import { pageText } from '../pages/data';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { DefinitionGuideLink } from './definition-guide-view';
+import { AuthoredFieldEntry } from './authored-field-entry';
 import { EditorFailure, PartValue, StatementFields } from './statement-editor-view';
 import type { EditorRead } from './statement-editor';
 import {
@@ -117,6 +118,7 @@ function FactField({
   const label = pageText(definition.labels, locale).text || m.subject_value_unlabelled({}, o);
   const selected = read.public.subject.statements[property] ?? [];
   const [source, setSource] = useState(selected.length === 1 ? selected[0]!.id : '');
+  const sourceIndex = draft?.source ? selected.findIndex((item) => item.id === draft.source) : -1;
   const locked = !!draft && factLocked(draft);
   return (
     <section aria-label={label} className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -165,7 +167,8 @@ function FactField({
             {draft.source && (
               <>
                 {' '}
-                · {m.facts_selected_value({ number: selected.findIndex((item) => item.id === draft.source) + 1 }, o)}
+                ·{' '}
+                {sourceIndex >= 0 ? m.facts_selected_value({ number: sourceIndex + 1 }, o) : m.correction_stale({}, o)}
               </>
             )}
           </p>
@@ -320,13 +323,13 @@ export function SubjectFacts({
             <a className={buttonVariants({ variant: 'outline' })} href={`${href}/relation-edit`}>
               {m.relation_title({}, o)}
             </a>
+            {current.release.types[subject!.type]?.properties.some(
+              (id) => current.release.properties[id]?.datatype === 'document',
+            ) && <AuthoredFieldEntry id={subject!.id} title={label} locale={locale} />}
             <a className={buttonVariants({ variant: 'ghost' })} href={href}>
               {m.candidate_view_public({}, o)}
             </a>
           </nav>
-          {current.release.types[subject!.type]?.properties.some(
-            (id) => current.release.properties[id]?.datatype === 'document',
-          ) && <p className="text-sm text-muted-foreground">{m.facts_documents({}, o)}</p>}
           {!Object.values(groups).some((properties) => properties.length) && <p>{m.facts_empty({}, o)}</p>}
           <form
             className="space-y-6"

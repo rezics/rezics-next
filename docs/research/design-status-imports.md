@@ -21,8 +21,9 @@ and [statistics](../../services/kernel/src/rating/README.md) own their mechanism
 The multi-field consumer uses the actual generated subject, definitions and candidate client through the existing
 private session BFF. Its proposal bodies, keys and returned session tokens remain native. A story seam demonstrates
 partial results and exact retries, without establishing runtime availability or a reviewed page. No second field,
-permission, import administration or publication engine is introduced. Rich-document contributions still require
-the Content-authored composer binding; the facts workspace explicitly identifies that unavailable browser join.
+permission, import administration or publication engine is introduced. Types with rich-document fields link to the
+integrated Content-authored composer for new original-text candidates, retaining its independent native review.
+Its Web/Root visual review and integrated native outcomes remain pending.
 
 ## Research retained
 
