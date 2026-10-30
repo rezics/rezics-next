@@ -185,7 +185,7 @@ test.serial('an ambiguous reservation commit replays the same HTTP intent throug
   const after = await fixture.spaceState(space.spaceId);
   expect(after.revisions).toHaveLength(before.revisions.length + 1);
   expect(after.revisions.filter((revision) => revision.address === address)).toHaveLength(1);
-  expect(headId(after)).toBe(body.headRevisionId);
+  expect(headId(after)).toBe(String(body.headRevisionId));
   expect(await fixture.addressClaim(address)).toMatchObject({ state: 'active', space_id: space.spaceId });
   expect(
     await fixture.receipt(partitionOf(routeOf(space.spaceId)!), actor, key, 'community.space.address'),
