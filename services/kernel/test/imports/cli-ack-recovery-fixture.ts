@@ -452,9 +452,10 @@ export async function runCliAckRecoveryJourney() {
     expect(worker.liveInternetRequests).toEqual([]);
     expect(worker.registrations.some((registration) => registration.name === 'content.importFromUrl')).toBe(true);
 
-    const interrupted = [];
+    type Invocation = Awaited<ReturnType<typeof invoke>>;
+    const interrupted: Invocation[] = [];
     const pendingAfterClose: (Pending & { source: Source })[] = [];
-    const effectsBeforeResume = [];
+    const effectsBeforeResume: Awaited<ReturnType<typeof nativeEffects>>[] = [];
     for (const child of children) {
       const result = await invoke(child.feed, child.feed.interrupted, true);
       expect([1, 130]).toContain(result.code);
@@ -487,7 +488,7 @@ export async function runCliAckRecoveryJourney() {
     ]);
     const originalPendingBodies = pendingAfterClose.map((pending) => pending.bytes);
     const originalPendingKeys = pendingAfterClose.flatMap((pending) => pending.keys);
-    const resumed = [];
+    const resumed: Invocation[] = [];
     const duplicateEffectRows = [];
     for (const [index, child] of children.entries()) {
       const result = await invoke(child.feed, child.feed.successor);
@@ -502,14 +503,14 @@ export async function runCliAckRecoveryJourney() {
       duplicateEffectRows.push(
         ...after.filter((row) => !effectsBeforeResume[index]!.some((before) => isDeepStrictEqual(row, before))),
       );
-      expect(after).toEqual(effectsBeforeResume[index]);
+      expect(after).toEqual(effectsBeforeResume[index]!);
     }
     const originalReceiptRowsAfter = await receipts(originalReceiptRowsBefore.map((row) => row.key));
     expect(originalReceiptRowsAfter).toEqual(originalReceiptRowsBefore);
     const pendingDrainLastEffectOrdinal = Math.max(
       ...resumed.flatMap((result) => result.writes.map((exchange) => exchange.ordinal)),
     );
-    const changedSuccessor = [];
+    const changedSuccessor: Invocation[] = [];
     const changedProposalIds: string[] = [];
     for (const child of children) {
       const result = await invoke(child.feed, child.feed.successor);
