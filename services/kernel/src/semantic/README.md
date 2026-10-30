@@ -65,6 +65,24 @@ This module composes the native relation projector, publication repair and Relay
 local erasure effects. It does not create another process, queue or participant.
 Native registration, convergence and drain evidence lives in `test/semantic/work-module.test.ts`.
 
+`identity-epoch-coordinator.ts` exports `resumeIdentityEpochJob` and `waitIdentityEpochPublished` with the adopted
+`(pool, job) => Promise<void>` signatures. Trusted registration installs the fixed version-1 Search/Library
+composition once, using the existing Search configuration and membership route key. Missing configuration is
+unavailable when resumption is requested. Admitted events enqueue the same job through the existing maintenance
+queue and return-existing workflow ID. Admission, mapping, Search, Library, receipt reconciliation and publication
+run serially with released native homes. Finite 100-page workflow segments retain only job/segment/receipt locators;
+waiting releases native connections and checks actual job/control publication rather than workflow success.
+
+The mapping declaration remains provisional and fails unavailable. The integrated Search and Library
+participants preserve their producer-owned unavailable boundaries until their native coverage is complete.
+Registration therefore establishes neither readiness nor a native ACK. The frozen positive fixture and native publication,
+replay, growth, default-worker and all-copy/privacy/nine-physical-Cost evidence remain outstanding; no native-tested
+coordinator revision is claimed. Accounts additionally needs its real immutable decision/reversal intent verifier,
+the co-owned admission binding and the original caller's publication-before-completion step. Existing publication,
+cutover and operation outcome suites remain unchanged downstream proof. This composition grants no Accounts
+authority and supplies no legacy merge fallback.
+
+
 ## Subject page feed
 
 The public `GET /v1/subject-pages` contract accepts an optional cursor and a limit from 1 to 1,000 (default 20).

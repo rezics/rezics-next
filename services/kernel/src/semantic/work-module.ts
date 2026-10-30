@@ -10,7 +10,8 @@ import {
   SUBJECT_REVISED,
   LINKS_MOVING,
 } from './events.ts';
-import { stepIdentityEpochAdmission, wakeIdentityEpochAdmissionWaiters } from './identity-epoch-admission.ts';
+import { wakeIdentityEpochAdmissionWaiters } from './identity-epoch-admission.ts';
+import { registerIdentityEpochCoordinator, resumeIdentityEpochJob } from './identity-epoch-coordinator.ts';
 import { runCommand } from '../command/command.ts';
 import { createAccess } from '../access/index.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
@@ -68,6 +69,7 @@ export const semanticWorkModule: WorkModule = {
     const scheduleErasure = registerSemanticErasureWork(context);
     await registerRecordRetentionWork(context);
     registerProviderReviewWork(context);
+    registerIdentityEpochCoordinator(context);
     context.addEffects([
       createSemanticErasureEffect(context.pool),
       createSemanticLocatorEffect(context.pool),
@@ -92,7 +94,7 @@ export const semanticWorkModule: WorkModule = {
         types: [IDENTITY_EPOCH_ADMITTED],
         run: async (event) => {
           const data = event.data as { jobId: string; epoch: string };
-          await stepIdentityEpochAdmission(context.pool, { jobId: data.jobId, epoch: BigInt(data.epoch) });
+          await resumeIdentityEpochJob(context.pool, { jobId: data.jobId, epoch: BigInt(data.epoch) });
         },
       },
       {

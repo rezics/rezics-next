@@ -611,6 +611,14 @@ STORE and mapping import only native dependencies and these types; participant p
 only final coordinator composition imports concrete participants. Neither participant waits for or imports coordinator.
 Accounts and ordinary callers bind last, after their actual response contracts and native prerequisites exist.
 
+The coordinator now exports these two functions and registers through the existing Semantic module. Each finite
+DBOS segment contains at most 100 pages and enqueues its deterministic continuation with only job/segment locators;
+it releases its queue slot rather than waiting for a child on the same bounded queue. Wait follows that workflow
+custody but returns only after rereading the actual published job and control. The mapping, Search and Library
+modules on this revision contain visibly provisional, unavailable declarations under the agreed producer names.
+They never return progress or ACKs. Real producer integration, the frozen real positive fixture and native
+publication/crash/growth evidence remain required; no native-tested coordinator revision is claimed.
+
 ### Complete Library canonical coverage under the fixed participant
 
 The SAME version-1 `library-private-follow-counts` identity participant covers every canonical directory,
@@ -758,7 +766,7 @@ be counted as `noData` while missing.
 | Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | MISSING                                                                  |
 | Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | MISSING                                                                  |
 | Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | Allocator/schema present; complete producer integration remains required |
-| Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | MISSING                                                                  |
+| Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | Composition implemented against unavailable producer declarations; native proof and actual Accounts caller remain missing |
 
 These are real capability dependencies, not task identifiers. Store/native-step acceptance must not require a fake
 Search or Library completion. It can prove pending and refusal to publish independently. Full successful publication
@@ -843,7 +851,8 @@ successful test adapter. Admission preservation is not proof of preservation thr
 
 The following exact integration cells are **NOT YET FROZEN**. They remain required outcomes; their prose is not a
 claim of executable coverage. The native STORE and bootstrap exports are implemented; mapping maintenance, fixed
-Search/Library adapters and coordinator exports remain missing. Do not invent their schema, participant paths or barrier exports to make this suite green.
+Real Search/Library adapters remain missing; coordinator exports exist but their provisional dependencies fail
+unavailable. Do not invent producer schema or native proof to make this suite green.
 
 | Scenario title                                                              | Required native schedule and missing prerequisite for owner review                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
