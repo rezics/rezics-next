@@ -436,6 +436,10 @@ export function clientAuthority(
           'UPDATE auth_client_reduction_progress SET completed=true,after_ordinal=terminal_ordinal WHERE operation_id=$1',
           [input.operationId],
         );
+        await connection.query(
+          'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
+          [input.operationId],
+        );
         await connection.query('DELETE FROM auth_client_reduction WHERE client_id=$1 AND operation_id=$2', [
           input.clientId,
           input.operationId,
@@ -492,10 +496,6 @@ export function clientAuthority(
             scopes: row.scopes,
             firstParty: row.first_party,
           }),
-        );
-        await pool.query(
-          'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
-          [row.operation_id],
         );
       } else {
         // Only one additional raw owner is admitted on this erasure page. The
