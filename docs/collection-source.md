@@ -59,7 +59,8 @@ an account or subject carry no dependency. No subject normalization or eligibili
 `native_source_fence` holds only route-leading native writer counters. Every insert/update/delete of these
 owner rows, including raw reorder/rebalance, retained deletion/restoration, Collection activation and participant
 writes, advances the corresponding control in that same transaction. Session child writes fence their native
-parent account. Capture pages compare both Collection and account controls; finalization repeats the checks under
+parent account. Account lifecycle/authentication-floor writes also advance that account control, including
+transient suspension and restoration between pages. Capture pages compare both Collection and account controls; finalization repeats the checks under
 native shared row locks. The final receipt increments the actual active Core partition fence and commits with the
 completed frontier. Consumption rereads the receipt and capture, verifies their same-transaction native provenance
 and current owner position/epoch, and refuses a receipt from the consuming transaction itself.

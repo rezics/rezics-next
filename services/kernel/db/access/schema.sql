@@ -2810,3 +2810,7 @@ BEGIN
   RETURN touched;
 END; $$;
 
+
+-- Native Library custody must observe account termination and authentication-floor changes.
+CREATE TRIGGER native_source_account_writer AFTER INSERT OR UPDATE OR DELETE ON access.account
+  FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();

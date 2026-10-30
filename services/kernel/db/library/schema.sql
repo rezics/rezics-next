@@ -2717,8 +2717,6 @@ CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.
 CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.published_log
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
-CREATE TRIGGER native_source_account_writer AFTER INSERT OR UPDATE OR DELETE ON access.account
-  FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 -- Immutable committed provenance: only the native finalization statement creates this receipt.
 CREATE FUNCTION library.guard_native_source_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
