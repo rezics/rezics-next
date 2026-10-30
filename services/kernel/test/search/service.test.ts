@@ -489,10 +489,17 @@ test('listing readiness requires the actual supported format for all sorts befor
   }
 });
 
-type ReceiptPage = { hits: { hits: {
-  _id: string; _index: string; _source: { partition: number; security_revision: number };
-  sort: (string | number | null)[];
-}[]; total: unknown } };
+type ReceiptPage = {
+  hits: {
+    hits: {
+      _id: string;
+      _index: string;
+      _source: { partition: number; security_revision: number };
+      sort: (string | number | null)[];
+    }[];
+    total: unknown;
+  };
+};
 function receiptObserver() {
   let corrupt: ((page: ReceiptPage) => void) | undefined;
   const calls: { path: string; request: unknown; raw: ReceiptPage; delivered: ReceiptPage }[] = [];
@@ -508,7 +515,13 @@ function receiptObserver() {
       return { ...response, body: delivered as T };
     },
   };
-  return { client: observed, calls, change: (next?: typeof corrupt) => { corrupt = next; } };
+  return {
+    client: observed,
+    calls,
+    change: (next?: typeof corrupt) => {
+      corrupt = next;
+    },
+  };
 }
 
 test('real service refuses cloned native ordinary identity/order/frontier faults before current Source or cursor signing', async () => {
@@ -518,10 +531,22 @@ test('real service refuses cloned native ordinary identity/order/frontier faults
   let signs = 0;
   const { prefix, service } = await deployment(books, {
     client: observed.client,
-    cursors: { keys: cursors.keys, get current() { signs++; return cursors.current; } },
+    cursors: {
+      keys: cursors.keys,
+      get current() {
+        signs++;
+        return cursors.current;
+      },
+    },
     source: (fake) => ({
-      read: (...args) => { reads++; return fake.read(...args); },
-      count: (...args) => { reads++; return fake.count(...args); },
+      read: (...args) => {
+        reads++;
+        return fake.read(...args);
+      },
+      count: (...args) => {
+        reads++;
+        return fake.count(...args);
+      },
     }),
   });
   for (const sort of ['id', 'name', 'collections', 'relevance'] as const) {
@@ -539,19 +564,54 @@ test('real service refuses cloned native ordinary identity/order/frontier faults
     const frontier = structuredClone(observed.calls[0]!.raw.hits.hits[0]!);
     expect(frontier._id).toBe(second.subjects[0]!.id);
     const faults: { name: string; cursor?: string; change: (page: ReceiptPage) => void }[] = [
-      { name: 'duplicate', change: (page) => { page.hits.hits[1] = structuredClone(page.hits.hits[0]!); } },
-      { name: 'reordered', change: (page) => { page.hits.hits.reverse(); } },
-      { name: 'equal frontier', cursor: second.next!, change: (page) => { page.hits.hits[0] = structuredClone(frontier); } },
-      { name: 'before frontier', cursor: second.next!, change: (page) => { page.hits.hits[0] = structuredClone(before); } },
-      ...['\n', '\r\n', '\u2028', '\u2029'].map((suffix) => ({ name: `final ${JSON.stringify(suffix)}`, change: (page: ReceiptPage) => { page.hits.hits[0]!._index += suffix; } })),
-      ...['2', '0', '01', '9007199254740992'].map((generation) => ({ name: `generation ${generation}`, change: (page: ReceiptPage) => { page.hits.hits[0]!._index = `${prefix}subjects-g${generation}`; } })),
+      {
+        name: 'duplicate',
+        change: (page) => {
+          page.hits.hits[1] = structuredClone(page.hits.hits[0]!);
+        },
+      },
+      {
+        name: 'reordered',
+        change: (page) => {
+          page.hits.hits.reverse();
+        },
+      },
+      {
+        name: 'equal frontier',
+        cursor: second.next!,
+        change: (page) => {
+          page.hits.hits[0] = structuredClone(frontier);
+        },
+      },
+      {
+        name: 'before frontier',
+        cursor: second.next!,
+        change: (page) => {
+          page.hits.hits[0] = structuredClone(before);
+        },
+      },
+      ...['\n', '\r\n', '\u2028', '\u2029'].map((suffix) => ({
+        name: `final ${JSON.stringify(suffix)}`,
+        change: (page: ReceiptPage) => {
+          page.hits.hits[0]!._index += suffix;
+        },
+      })),
+      ...['2', '0', '01', '9007199254740992'].map((generation) => ({
+        name: `generation ${generation}`,
+        change: (page: ReceiptPage) => {
+          page.hits.hits[0]!._index = `${prefix}subjects-g${generation}`;
+        },
+      })),
     ];
     for (const fault of faults) {
       observed.calls.length = 0;
       reads = 0;
       signs = 0;
       observed.change(fault.change);
-      const error = await problem(service.search('anonymous', { ...request, ...(fault.cursor ? { cursor: fault.cursor } : {}) }), 'index_not_ready');
+      const error = await problem(
+        service.search('anonymous', { ...request, ...(fault.cursor ? { cursor: fault.cursor } : {}) }),
+        'index_not_ready',
+      );
       expect(reads, fault.name).toBe(0);
       expect(signs, fault.name).toBe(0);
       expect(observed.calls, fault.name).toHaveLength(1);
@@ -559,13 +619,18 @@ test('real service refuses cloned native ordinary identity/order/frontier faults
       expect(call.path).toBe(`/${subjectIndexName(prefix, 1)}/_search/template`);
       expect(call.raw.hits.hits).toHaveLength(3);
       expect(call.delivered).not.toEqual(call.raw);
-      expect(call.request).toMatchObject({ params: { size: 3, has_after: !!fault.cursor, ...(fault.cursor ? { after: frontier.sort } : {}) } });
+      expect(call.request).toMatchObject({
+        params: { size: 3, has_after: !!fault.cursor, ...(fault.cursor ? { after: frontier.sort } : {}) },
+      });
       const response = problemResponse(error, { method: 'POST', id: 'ordinary-receipt' });
       expect(response.status).toBe(503);
       const body: unknown = await response.json();
       expect(body).toMatchObject({ code: 'index_not_ready' });
       for (const field of ['subjects', 'next', 'total', 'as_of']) expect(body).not.toHaveProperty(field);
-      console.info('native service refused ordinary receipt', JSON.stringify({ sort, fault: fault.name, call, sourceCalls: reads, signingCalls: signs }));
+      console.info(
+        'native service refused ordinary receipt',
+        JSON.stringify({ sort, fault: fault.name, call, sourceCalls: reads, signingCalls: signs }),
+      );
     }
     observed.change();
     observed.calls.length = 0;
@@ -581,15 +646,33 @@ test('real service refuses cloned native ordinary identity/order/frontier faults
 }, 120_000);
 
 test('native service keeps ordinary ties, Unicode/null keysets and sparse refills progressing', async () => {
-  const books = [subject(1, 'Tie'), subject(2, 'Ｔｉｅ'), subject(3, '\uE000'), subject(4, '\u{10000}'), subject(5, ''), subject(6, '')];
+  const books = [
+    subject(1, 'Tie'),
+    subject(2, 'Ｔｉｅ'),
+    subject(3, '\uE000'),
+    subject(4, '\u{10000}'),
+    subject(5, ''),
+    subject(6, ''),
+  ];
   const observed = receiptObserver();
   const reads: string[][] = [];
   const { prefix, fake, service } = await deployment(books, {
     client: observed.client,
-    source: (fake) => ({ read: (partition, ids) => { reads.push([...ids]); return fake.read(partition, ids); }, count: (...args) => fake.count(...args) }),
+    source: (fake) => ({
+      read: (partition, ids) => {
+        reads.push([...ids]);
+        return fake.read(partition, ids);
+      },
+      count: (...args) => fake.count(...args),
+    }),
   });
   for (const n of [5, 6])
-    await client.request('POST', `/${subjectIndexName(prefix, 1)}/_update/${books[n - 1]!.id}`, { doc: { name_sort: null } }, { query: { refresh: true } });
+    await client.request(
+      'POST',
+      `/${subjectIndexName(prefix, 1)}/_update/${books[n - 1]!.id}`,
+      { doc: { name_sort: null } },
+      { query: { refresh: true } },
+    );
   for (const sort of ['id', 'name', 'collections', 'relevance'] as const) {
     const request = { filter: { type: { in: ['schema:Book'] } }, sort, limit: 1 };
     let cursor: string | undefined;
@@ -615,7 +698,9 @@ test('native service keeps ordinary ties, Unicode/null keysets and sparse refill
     expect(ids(page)).toEqual([books[3]!.id]);
     expect(page.next).toBeString();
     expect(observed.calls).toHaveLength(2);
-    expect(observed.calls[1]!.request).toMatchObject({ params: { after: observed.calls[0]!.raw.hits.hits.at(-1)!.sort, size: 3 } });
+    expect(observed.calls[1]!.request).toMatchObject({
+      params: { after: observed.calls[0]!.raw.hits.hits.at(-1)!.sort, size: 3 },
+    });
     expect(reads).toHaveLength(2);
     expect(reads.map((ids) => ids.length)).toEqual([3, 3]);
     console.info('native service ordinary refill', JSON.stringify({ sort, calls: observed.calls, reads }));
@@ -623,7 +708,15 @@ test('native service keeps ordinary ties, Unicode/null keysets and sparse refill
 }, 120_000);
 
 test('fixed native ordinary receipt admission keeps call bytes and Source rows fixed at 64/512/4096 unrelated roots and history', async () => {
-  const measurements: { roots: number; history: number; calls: number; bytes: number; rows: number; sourceCalls: number; sourceRows: number }[] = [];
+  const measurements: {
+    roots: number;
+    history: number;
+    calls: number;
+    bytes: number;
+    rows: number;
+    sourceCalls: number;
+    sourceRows: number;
+  }[] = [];
   for (const scale of [64, 512, 4096]) {
     const fixed = Array.from({ length: 8 }, (_, n) => subject(n + 1, `Custody ${n + 1}`));
     const unrelated = Array.from({ length: scale }, (_, n) => subject(n + 100, `Other ${n + 100}`));
@@ -631,11 +724,22 @@ test('fixed native ordinary receipt admission keeps call bytes and Source rows f
     const reads: string[][] = [];
     const { prefix, service } = await deployment([...fixed, ...unrelated], {
       client: observed.client,
-      source: (fake) => ({ read: (partition, ids) => { reads.push([...ids]); return fake.read(partition, ids); }, count: (...args) => fake.count(...args) }),
+      source: (fake) => ({
+        read: (partition, ids) => {
+          reads.push([...ids]);
+          return fake.read(partition, ids);
+        },
+        count: (...args) => fake.count(...args),
+      }),
     });
     // Native overwritten versions grow with the unrelated population; the selected eight roots stay fixed.
-    const history = documentActions({ partition: 10, position: BigInt(scale + 10), subjects: unrelated }, unrelated.map(({ id }) => id));
-    const bulk = await client.bulk<{ errors: boolean }>(bulkLines(subjectIndexName(prefix, 1), history), { query: { refresh: 'wait_for' } });
+    const history = documentActions(
+      { partition: 10, position: BigInt(scale + 10), subjects: unrelated },
+      unrelated.map(({ id }) => id),
+    );
+    const bulk = await client.bulk<{ errors: boolean }>(bulkLines(subjectIndexName(prefix, 1), history), {
+      query: { refresh: 'wait_for' },
+    });
     expect(bulk.errors).toBe(false);
     observed.calls.length = 0;
     const page = await service.search('anonymous', { text: 'custody', sort: 'id', limit: 2 });
@@ -646,8 +750,27 @@ test('fixed native ordinary receipt admission keeps call bytes and Source rows f
     expect(observed.calls[0]!.request).toMatchObject({ params: { size: 5, sort: [{ id: 'asc' }] } });
     const hits = observed.calls[0]!.raw.hits.hits;
     // Prefixes have a fixed length. These are actual returned hit bytes, excluding variable timing metadata.
-    measurements.push({ roots: scale, history: history.length, calls: observed.calls.length, bytes: Buffer.byteLength(JSON.stringify(hits)), rows: hits.length, sourceCalls: reads.length, sourceRows: reads.reduce((sum, ids) => sum + ids.length, 0) });
-    console.info('native ordinary receipt growth', JSON.stringify({ measurement: measurements.at(-1), calls: observed.calls, reads }));
+    measurements.push({
+      roots: scale,
+      history: history.length,
+      calls: observed.calls.length,
+      bytes: Buffer.byteLength(JSON.stringify(hits)),
+      rows: hits.length,
+      sourceCalls: reads.length,
+      sourceRows: reads.reduce((sum, ids) => sum + ids.length, 0),
+    });
+    console.info(
+      'native ordinary receipt growth',
+      JSON.stringify({ measurement: measurements.at(-1), calls: observed.calls, reads }),
+    );
   }
-  expect(measurements.map(({ calls, bytes, rows, sourceCalls, sourceRows }) => ({ calls, bytes, rows, sourceCalls, sourceRows }))).toEqual(Array(3).fill({ calls: 1, bytes: measurements[0]!.bytes, rows: 5, sourceCalls: 1, sourceRows: 5 }));
+  expect(
+    measurements.map(({ calls, bytes, rows, sourceCalls, sourceRows }) => ({
+      calls,
+      bytes,
+      rows,
+      sourceCalls,
+      sourceRows,
+    })),
+  ).toEqual(Array(3).fill({ calls: 1, bytes: measurements[0]!.bytes, rows: 5, sourceCalls: 1, sourceRows: 5 }));
 }, 120_000);
