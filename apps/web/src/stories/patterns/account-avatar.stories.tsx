@@ -156,9 +156,22 @@ export const FailedUploadRetry: Story = {
     const view = await choose(canvasElement);
     await view.findByText(m.settings_profile_avatar_error());
     await expect(view.getByRole('button', { name: m.settings_profile_save() })).toBeDisabled();
+    const selectedPreview = await view.findByRole('img', { name: m.settings_profile_avatar_preview() });
+    const selectedUrl = selectedPreview.getAttribute('src');
+    await expect(selectedUrl).toMatch(/^blob:/);
     await userEvent.click(view.getByRole('button', { name: m.settings_profile_avatar_retry() }));
     await view.findByText(m.settings_profile_avatar_ready());
     await expect(view.queryByText(m.settings_profile_avatar_error())).toBeNull();
+    const preview = await view.findByRole('img', { name: m.settings_profile_avatar_preview() });
+    await expect(preview).toHaveAttribute('src', selectedUrl);
+    await expect(preview).toBeVisible();
+    await waitFor(() => {
+      expect((preview as HTMLImageElement).complete).toBe(true);
+      expect((preview as HTMLImageElement).naturalWidth).toBeGreaterThan(0);
+    });
+    await expect(view.getByRole('button', { name: m.settings_profile_save() })).toBeEnabled();
+    await expect(view.queryByText(m.settings_saved())).toBeNull();
+    await expect(view.queryByText(m.settings_profile_avatar_saved())).toBeNull();
   },
 };
 export const ExplicitSaveReadback: Story = {
