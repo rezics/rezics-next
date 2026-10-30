@@ -142,15 +142,29 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       throw new DOMException('Recent account changed', 'AbortError');
   };
   const load = () => readRecentDocument(storage, bucket);
-  const nativeKey = (entry: NativeEntry | undefined) =>
-    entry
-      ? JSON.stringify([entry.kind, entry.kind === 'query' ? entry.text.trim() : '', entry.scope ?? null])
-      : undefined;
+  const nativeKey = (entry: NativeEntry | undefined) => {
+    if (!entry) return;
+    const scope = entry.scope;
+    return JSON.stringify([
+      entry.kind,
+      entry.kind === 'query' ? entry.text.trim() : '',
+      scope?.kind ?? null,
+      scope ? (scope.kind === 'route' ? scope.route : scope.id.toLowerCase()) : null,
+    ]);
+  };
   const save = (document: RecentDocument, journal: Journal) =>
     writeRecentDocument(storage, bucket, { ...document, native: journal });
-  function reconcile(): { document: RecentDocument; journal: Journal } {
+  function reconcile(snapshot?: readonly RecentEntry[]): { document: RecentDocument; journal: Journal } {
     const document = load(),
       journal = journalOf(document);
+    if (
+      snapshot &&
+      document.entries.length === snapshot.length &&
+      document.entries.every(
+        (entry, index) => entry.id === snapshot[index]?.id && entry.visitedAt === snapshot[index]?.visitedAt,
+      )
+    )
+      document.entries = [...snapshot];
     journal.pending = journal.pending.filter((p) => Date.parse(p.queuedAt) > Date.now() - lifetime);
     const push = (change: Queued['change'], extra: Partial<Queued> = {}) => {
       if (journal.pending.length >= 100) throw new RecentSyncError('unavailable');
@@ -244,20 +258,13 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     return serial(bucket, async () => {
       live(signal);
       // The caller's entries may already be stale. Always use the sole persisted local document.
-      const retained = load();
-      if (
-        retained.entries.length === input.length &&
-        retained.entries.every(
-          (entry, index) => entry.id === input[index]?.id && entry.visitedAt === input[index]?.visitedAt,
-        )
-      )
-        writeRecentDocument(storage, bucket, { ...retained, entries: [...input] });
-      let { document, journal } = reconcile();
+      let { document, journal } = reconcile(input);
       if (journal.conflict) {
         if (!retry) throw new RecentSyncError('conflict');
         journal = fresh();
         document = { entries: document.entries.filter((e) => !nativeRecentEntry(e)), removed: [] };
         save(document, journal);
+        onRemote?.(document.entries);
         needsRead = true;
       }
       try {

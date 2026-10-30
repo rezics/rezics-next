@@ -1104,6 +1104,5 @@ Query entries optionally carry exactly the existing Realm/Collection/Library sco
 accepts references only; scoped query display uses the same current owner hydration as a visited scope and is null
 when that scope is unavailable. Its destination keeps both the scoped route and query. Scope availability is also
 checked on the ordinary create operation.
-The shared Web input and `/search/history` use the delivered `useRecentHistory(bucket, adapter?)` local store and
-the typed BFF account queue in that same storage key. They discard pending changes only on explicit conflict reload,
-never upload anonymous history, omit persisted scope display and clear native account data on logout/account switch.
+The shared Web input and `/search/history` use the typed BFF and account-separated queues, discard pending changes
+only on explicit conflict reload, never upload anonymous history, omit persisted scope display and clear on logout.
