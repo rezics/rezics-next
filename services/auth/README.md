@@ -1510,6 +1510,12 @@ native verifier can still use them. Their expiry is not a shared-copy handoff.
 An unfinished client reduction retains its progress witness; only its real native
 finish marks its request terminal. A fenced, interrupted reduction without that
 proof keeps native erasure pending rather than discarding its consumer's witness.
+An unfinished registration loses its encrypted credential and credential digest
+on the selected native page, while retaining its exact release witness. The purge
+guard permits only those two fields to become null under the matching obligation.
+Completed credential effects use the immutable native success result written with
+the credential CAS after opening/floor revalidation; their establishment children
+must drain before the receipt is erased.
 
 ### Remaining producer and composition gaps
 
@@ -1532,11 +1538,10 @@ remains pending, including after native work and the original consent cutoff:
 - A stalled registration on a surviving subject can still require its native
   release consumer's stage witness. That lifecycle must supply a terminal proof
   before the witness can be removed; history deletion is not such a proof.
-- A staged credential-effect witness for a surviving subject, and every committed
-  credential-effect witness, remain pending when an associated account or client
-  is erased. Auth has no actual terminal-consumer proof for that native
-  opening/floor association. Even a deleted subject's obligation cannot substitute
-  for that proof; removing its witness could strand a committed release.
+- An unfinished credential-effect witness for a surviving subject remains pending
+  when an associated account or client is erased. Its native consumer must supply
+  a terminal-refusal proof; a missing user or shared-history deletion cannot
+  substitute for that proof.
 - External delivery-provider diagnostics/logs and backup restore deletion replay
   are not composed native custody sinks.
 

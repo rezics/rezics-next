@@ -479,6 +479,11 @@ CREATE FUNCTION public.auth_erasure_guard_auth_registration_stage() RETURNS trig
     LANGUAGE plpgsql
     AS $$
 BEGIN
+  IF TG_OP='UPDATE' AND NEW.ciphertext IS NULL AND NEW.credential_digest IS NULL
+    AND (to_jsonb(NEW)-ARRAY['ciphertext','credential_digest'])=(to_jsonb(OLD)-ARRAY['ciphertext','credential_digest'])
+    AND EXISTS (SELECT 1 FROM auth_erasure e
+      WHERE e.id=NULLIF(current_setting('auth.erasure_obligation',true),'')::bigint
+        AND e.account_id IN (OLD.account_id,OLD.erasure_creator_id,OLD.erasure_operator_id)) THEN RETURN NEW; END IF;
   IF TG_OP='UPDATE' AND NEW.erasure_release_at IS NOT NULL
     AND (to_jsonb(NEW)-'erasure_release_at')=(to_jsonb(OLD)-'erasure_release_at') THEN RETURN NEW; END IF;
   IF TG_OP='UPDATE' THEN

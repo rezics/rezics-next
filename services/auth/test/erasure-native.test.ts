@@ -163,6 +163,32 @@ test('existing deletion caller drains real Auth stores before user deletion; def
       credential: { kind: 'password', password: 'replacement secret password' },
     });
     expect(staged.effectRef).toBeString();
+    // A finished native credential effect has a real immutable success proof;
+    // erasure must remove that encrypted stage as well as unfinished own stages.
+    const committedKey = await generateKeyPair('ES256', { extractable: true });
+    const committedStage = await f.host.service.internal.stageCredentialEffect({
+      key: 'committed-native-key',
+      subjectAccountId: owner,
+      headers: new Headers({ cookie: victim.cookie }),
+      credential: {
+        kind: 'key',
+        kid: 'committed-native-key',
+        publicJwk: { ...(await exportJWK(committedKey.publicKey)), alg: 'ES256' },
+      },
+    });
+    const commitInput = { ...committedStage, subjectAccountId: owner, headers: new Headers({ cookie: victim.cookie }) };
+    const approvedEffect = await f.host.service.internal.approveCredentialEffect(commitInput);
+    const committedEffect = await f.host.service.internal.applyCredentialEffect({
+      ...commitInput,
+      authorization: approvedEffect.reference,
+    });
+    expect(
+      (
+        await f.pool.query('SELECT committed_at FROM auth_effect_receipt WHERE receipt_id=$1', [
+          committedEffect.receiptId,
+        ])
+      ).rows[0]!.committed_at,
+    ).toBeInstanceOf(Date);
     const recovery = await f.call('/recovery/start', { email: victim.email });
     expect(recovery.status).toBe(200);
     await eventually(async () => f.deliveries.length === 1);
@@ -236,6 +262,8 @@ test('existing deletion caller drains real Auth stores before user deletion; def
       ['account', 'userId'],
       ['session', 'userId'],
       ['passkey', 'userId'],
+      ['auth_public_key', 'account_id'],
+      ['auth_key_assertion', 'account_id'],
       ['verification', 'erasure_account_id'],
       ['auth_effect_receipt', 'account_id'],
       ['auth_registration_stage', 'account_id'],
@@ -381,6 +409,78 @@ test('actual automated registration attributes its immutable native provisioning
     expect(row.erasure_operator_id).toBe(owner.accountId);
     expect(row.erasure_stage_id).toBe(row.registration_id);
     expect(row.completed_at).toBeInstanceOf(Date);
+  } finally {
+    await f.close();
+  }
+}, 120_000);
+
+test('a real stalled encrypted registration loses its secret while the native release witness stays pending', async () => {
+  const f = await nativeFixture();
+  try {
+    const owner = await f.person('stalled-creator');
+    const key = 'native-stalled-registration';
+    const operation = {
+      kind: 'automated' as const,
+      registrationId: '',
+      operatorAccountId: owner.accountId,
+      handle: 'native_stalled_registration',
+      operationKey: key,
+      authorization: 'approval-request',
+    };
+    const approval = await f.approvals.approve(owner.bearer, { operationKey: key, operation }, f.context());
+    // Fault the real producer after its encrypted stage and native reservation
+    // have committed, before it can provision. The erasure scheduler is unchanged.
+    f.bindings.workflowPorts.provisioningReference = async () => {
+      throw new Error('native provisioning unavailable');
+    };
+    await expect(
+      f.host.workflows.createAutomated({
+        key,
+        handle: operation.handle,
+        operatorAccountId: owner.accountId,
+        authorization: approval.reference,
+        credential: { email: 'native-stalled-registration@native-erasure.test', password },
+      }),
+    ).rejects.toThrow();
+    const before = (
+      await f.pool.query(
+        `SELECT registration_id,account_id,handle,reservation_id,ciphertext,credential_digest
+         FROM auth_registration_stage WHERE erasure_creator_id=$1 AND completed_at IS NULL`,
+        [owner.accountId],
+      )
+    ).rows[0]!;
+    expect(before.ciphertext).toBeInstanceOf(Buffer);
+    expect(before.credential_digest).toBeInstanceOf(Buffer);
+    expect(before.reservation_id).toBeString();
+    const account = await f.bindings.trustedAccess.readAccount(owner.accountId);
+    const id = await startNativeErasure(f.pool, owner.accountId, account!.authnEpoch);
+    let code = '';
+    for (let page = 0; page < 150; page++) {
+      const result = await nativeErasurePage(f.pool, id);
+      code = result.code;
+      if (result.state === 'pending') break;
+    }
+    expect(code).toBe('native-stage');
+    expect(
+      (
+        await f.pool.query(
+          `SELECT account_id,handle,reservation_id,ciphertext,credential_digest,erasure_release_at
+           FROM auth_registration_stage WHERE registration_id=$1`,
+          [before.registration_id],
+        )
+      ).rows[0],
+    ).toEqual({
+      account_id: before.account_id,
+      handle: before.handle,
+      reservation_id: before.reservation_id,
+      ciphertext: null,
+      credential_digest: null,
+      erasure_release_at: null,
+    });
+    expect(
+      (await f.pool.query('SELECT native_completed_at FROM auth_erasure WHERE id=$1', [id])).rows[0]!
+        .native_completed_at,
+    ).toBeNull();
   } finally {
     await f.close();
   }

@@ -216,7 +216,15 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
         AND completed_at IS NULL AND expired_at IS NULL AND erasure_release_at IS NULL`,
         [key],
       );
-      if (held.rowCount) return { after, keys, blocked: 'native-stage' };
+      if (held.rowCount) {
+        // The release consumer needs the native reservation witness, not the
+        // encrypted credential. A fenced producer cannot install it again.
+        await connection.query(
+          'UPDATE auth_registration_stage SET ciphertext=NULL,credential_digest=NULL WHERE registration_id=$1',
+          [key],
+        );
+        return { after, keys, blocked: 'native-stage' };
+      }
     }
     if (store.table === 'auth_workflow_request') {
       const held = await connection.query(
@@ -233,14 +241,14 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
       if (held.rowCount) return { after, keys, blocked: 'native-release' };
     }
     if (store.table === 'auth_effect_receipt') {
-      // A committed effect can still be needed by its native opening/floor
-      // consumer, including after the subject is deleted. A surviving subject's
-      // staged operation also lacks a terminal-refusal proof. Neither a missing
-      // user nor an erasure obligation substitutes for the consumer's proof.
+      // The immutable committed result is written with the credential CAS only
+      // after the real opening/floor consumer has returned and been revalidated.
+      // Establishment children were checked above. An unfinished surviving
+      // subject's stage still needs its consumer's terminal-refusal proof.
       const held = await connection.query(
         `SELECT 1 FROM auth_effect_receipt r WHERE receipt_id=$1
-         AND (committed_at IS NOT NULL OR (stage_version IS NOT NULL
-           AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)))`,
+         AND stage_version IS NOT NULL AND committed_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)`,
         [key],
       );
       if (held.rowCount) return { after, keys, blocked: 'native-release' };
