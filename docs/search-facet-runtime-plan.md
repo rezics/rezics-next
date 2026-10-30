@@ -587,7 +587,7 @@ paths:
   - services/kernel/test/search/**
   - services/kernel/src/server.ts
   - services/kernel/src/work/modules.ts
-  - services/kernel/db/migrations/*
+  - contracts/openapi.json
   - packages/client/src/kernel/**
   - packages/client/tests/*
 riskAreas: [authorization, disclosure, rights, deletion, account]
@@ -645,7 +645,7 @@ If a native engine query/template is needed, add a new version rather than rewri
 The old `countFacets` helper can remain for its existing internal tests but cannot serve this route.
 Do not rename the sampled helper into a complete enumeration API.
 
-Update `http/routes.ts` to accept optional per-property cursor.
+Update `search/http/routes.ts` to accept optional per-property cursor.
 Require `next: string | null` in every successful facet schema.
 Keep count/total/relation/estimate absent from the response schema.
 Expose existing `409 search_restart_required` alongside current errors.
@@ -661,6 +661,7 @@ Close only this runtime's observations and drain on worker shutdown.
 Do not stop shared services to make an isolated test pass.
 
 Regenerate kernel OpenAPI and client declarations through their existing generators.
+`contracts/openapi.json` is the generated HTTP authority consumed by external clients.
 `bun run --cwd services/kernel openapi` owns the OpenAPI output.
 `bun run --cwd services/kernel client` owns `packages/client/src/kernel/**`.
 Generated Search service/routes declarations must include cursor and required `next`.
@@ -678,6 +679,86 @@ That shared consumer must consume the same full structural roster policy.
 These are Web-owned call sites, not permission to create a separate public wire.
 The runtime assignment hands exact typed responses to the native closure/consumer work below.
 A backend pass cannot be reported as Web completion.
+
+### Concrete native operation proposal and phase custody
+
+Adopt these additive operations on the existing native consumer factory, rather than cast subject plans.
+The following names/signatures are proposals; current imports remain exactly those listed earlier.
+The factory owns native storage, Source, engine, clock and public-source registration.
+It never receives an authorization/refresh/completion callback from a request or test.
+
+```ts
+// Proposed additive methods; not current exports.
+type FacetNativeRead = Readonly<{
+  plan: FacetNativePlan;
+  queried: PublicFilterQueriedObservation;
+  size: number;
+  after: string | null;
+}>;
+type FacetNativeReadyFacet = Readonly<{
+  property: string;
+  values: readonly FacetDiscoveryValue[];
+  after: string | null;
+  hasMore: boolean;
+}>;
+type FacetNativePageResult =
+  | Readonly<{
+      status: 'ready';
+      facets: readonly FacetNativeReadyFacet[];
+      asOf: string;
+      cost: PublicFilterCost;
+    }>
+  | Readonly<{ status: 'preparing'; cost: PublicFilterCost }>
+  | PublicFilterConsumerUnavailable;
+interface FacetNativeOperations {
+  captureFacet(
+    request: Readonly<{ plan: FacetNativePlan }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<PublicFilterConsumerCapture>;
+  pageFacets(
+    request: Readonly<{ reads: readonly FacetNativeRead[] }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<FacetNativePageResult>;
+}
+```
+
+`captureFacet` resolves/reserves the real definition and its one-building generation.
+Its captured result refers only to an actually ready immutable build, never partially staged rows.
+Its preparing result returns a persisted existing `PublicFilterConsumerJob` for durable work.
+Run it through the existing declared `repairStep(job, context)` after owner adoption.
+`pageFacets` owns admission, actual start, native value reads, current checks and final validation.
+Its `ready` branch follows all final native checks and contains the exact candidate-derived key position.
+`hasMore` is true only for an eligible undisclosed lookahead, never for a capped storage page alone.
+The HTTP service encodes that position with its authenticated per-property binding.
+Neither `hasMore` nor the result object is accepted back as native safety evidence.
+Authentication failures/restart/denial use the existing ProblemError path, not a new public union.
+A mixed safe/unsafe request returns preparing/unavailable without any ready sibling payload.
+
+During preparation, derive all filter leaves from `compileCurrentFilter` on the expanded AST.
+Retain one three-valued match accumulator per admitted leaf, at most the existing 32 leaves.
+Fold each complete selected statement into the matching property/range/qualifier leaves once.
+Qualifiers must be satisfied on that same statement; separate statements cannot cross-match.
+Keep unknown/withheld evidence uncertain until the complete Source boundary proves its meaning.
+At subject completion, use the existing plan evaluator; only proven true contributes values.
+Unknown subject evidence retains preparation, never a false operand under NOT.
+Retain bounded contribution records until that subject's membership is proven; do not publish early.
+
+Text membership uses the same compiled text AST and analyzer on the registered immutable native PIT.
+Evaluate a bounded enumerated subject-key batch against that PIT, with a terms-ID restriction,
+`track_total_hits:false`, no sampler, no aggregation and no sampled statement filter.
+Only the engine's actual matching subject IDs establish the text operand for that batch.
+Bound batch size by the step's candidate/point/byte allowance; include every engine iterator cost.
+Ordinary creation/text change bridges and projection version checks reconcile this retained batch.
+A lost PIT or incompatible subject/projection generation invalidates staged publication.
+No JavaScript string search, alternate analyzer or failed engine request becomes text false.
+This is preparation work over captured finite input, never a claimed direct page optimization.
+
+The captured source generation must join each subject's complete projection observation/version.
+A `changed` projection abandons that subject's staged effects and follows its retained replacement.
+Captured ordinary changes are applied through their finite bridge before sealing the generation.
+No old/new partial projections are concatenated into one supposedly complete subject.
+The publication CAS verifies this join through the existing owner observation custody.
+A quiet finite input must complete; continuous changes cannot hide a repeatedly restarted prefix.
 
 ### Frozen runtime scenario: complete item page
 
@@ -728,6 +809,48 @@ No successful continuation is empty.
 For exactly 20 eligible values at size 20, the first page is full and final.
 For zero eligible values, only the initial page may be empty and final.
 For an absent 24th value, do not invent a lower-bound bucket or count.
+
+### Frozen runtime scenario: actual failure envelopes
+
+For a valid request with `facets[0].cursor` replaced by a malformed string, require this body.
+Only `request_id` is populated from the actual request context; no private locator appears.
+The existing problem handler owns content type and any normal correlation headers.
+
+```json
+{
+  "type": "https://rezics.com/problems/invalid_request",
+  "title": "Invalid Request",
+  "status": 400,
+  "code": "invalid_request",
+  "retryable": false,
+  "effect_status": "not_applied",
+  "request_id": "<actual request id>",
+  "errors": [{ "pointer": "/facets/0/cursor", "code": "invalid_format" }]
+}
+```
+
+An authenticated expired/lost-context token instead requires this body:
+
+```json
+{
+  "type": "https://rezics.com/problems/search_restart_required",
+  "title": "Search Restart Required",
+  "status": 409,
+  "code": "search_restart_required",
+  "retryable": false,
+  "effect_status": "not_applied",
+  "request_id": "<actual request id>"
+}
+```
+
+An admitted build not yet ready returns the existing 503 `index_not_ready` problem.
+Its type/title/status/code are respectively `https://rezics.com/problems/index_not_ready`,
+`Search Index Not Ready`, `503`, `index_not_ready`; `retryable` is true.
+It has the same ordinary `effect_status`/actual `request_id` fields and `Retry-After: 1`.
+It contains no facet values, public native job, fake token or exhaustion claim.
+For the oversized 160-slot common page use 422 `unsupported_query`, not syntax 400.
+Its ordinary problem fields come from the existing problem handler and `retryable` is false.
+All such failures leave previously published public cursor positions replayable under current safety.
 
 ### Frozen runtime scenario: canonical and code/type order
 
@@ -1287,8 +1410,8 @@ bun run --cwd packages/client typecheck
 ```
 
 Run existing deferred native persona/classification acceptance unchanged after its owner adopts the wire migration.
-Use the Web owner's recorded-response story/interaction check command for the changed existing stories.
-Do not invent a Storybook runner or call a type check a renderer pass.
+Use `bun run --cwd apps/web test:stories` for the changed existing recorded-response stories
+under the Web owner's scoped runner policy. A type check is not a renderer pass.
 The native closure report contains actual request bodies and successful/error response envelopes.
 It includes every page's IDs, expected canonical union and selected refinement subject IDs.
 It records real released roster/operator/unit data and the controlled citations used to seed records.
