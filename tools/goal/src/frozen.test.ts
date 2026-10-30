@@ -50,9 +50,26 @@ describe('frozen acceptance files', () => {
       writeFileSync(join(real.worktree, 'tests/acceptance.test.ts'), 'worker changed the acceptance test\n');
       git(real.worktree, ['add', '--', 'tests/acceptance.test.ts']);
       git(real.worktree, ['commit', '-m', 'change frozen acceptance']);
+      const advancedTarget = h.advanceDev('tests/acceptance.test.ts', 'integration changed frozen acceptance\n');
       await h.train();
-      expect(h.head()).toBe(h.head('main'));
+      expect(advancedTarget).not.toBe(h.head('main'));
+      expect(h.head()).toBe(advancedTarget);
       expect(h.inbox.some(event => event.kind === 'spec-conflict' && event.summary.includes('tests/acceptance.test.ts'))).toBe(true);
+      expect(h.store.task(real.id).currentAttempt).toBe(1);
+      expect(h.store.task(real.id).state).toBe('stopped');
+      expect(h.store.attempt({ taskId: real.id, attempt: 1 }).escalation).toBe('spec-conflict');
+      const outcome = h.store.events(real.id, 1).find(event => event.kind === 'gate-outcome');
+      const durableOutcome = JSON.parse(outcome!.body);
+      expect(durableOutcome.refusal).toEqual({
+        kind: 'frozen-acceptance-change',
+        paths: ['tests/acceptance.test.ts'],
+      });
+      expect(durableOutcome.rebaseConflict).toBeUndefined();
+      expect(durableOutcome.conflictedFiles).toBeUndefined();
+      const refusalEvents = h.store.events(real.id).filter(event => event.kind === 'manager-event');
+      expect(refusalEvents).toHaveLength(1);
+      expect(JSON.parse(refusalEvents[0]!.body).summary).toContain('tests/acceptance.test.ts');
+      expect(h.queue.next()).toBeUndefined();
     } finally { h.dispose(); }
   });
 

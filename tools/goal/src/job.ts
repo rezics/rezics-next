@@ -26,6 +26,7 @@ import { readRouting } from './routing.ts';
 import { settle } from './settle.ts';
 import { firstFailure } from './merge.ts';
 import {
+  canonicalConflictPaths,
   completeRebaseConflictContext,
   repeatedNoProgressConflict,
   REBASE_CONFLICT_HISTORY_LIMIT,
@@ -1451,6 +1452,28 @@ export class WorkerJob implements GateOutcomeSink {
           });
         });
         const evidencePath = evidenceBundle(task, store.attempt(outcome));
+        if (outcome.refusal?.kind === 'frozen-acceptance-change') {
+          const paths = canonicalConflictPaths(outcome.refusal.paths);
+          const detail = `frozen acceptance files changed: ${paths.join(', ')}`;
+          record.escalation = 'spec-conflict';
+          store.updateAttempt(outcome, (a) => {
+            a.escalation = 'spec-conflict';
+          });
+          store.updateTask(outcome, (current) => {
+            current.state = 'stopped';
+          });
+          const event = {
+            managerId: task.brief.manager,
+            taskId: task.id,
+            kind: 'spec-conflict' as const,
+            summary: `spec-conflict: ${detail}`,
+            evidencePath,
+          };
+          store.event(outcome, 'manager-event', event);
+          this.inbox.deliver(event);
+          store.putRecord(record);
+          return;
+        }
         // Only an identical complete Git conflict is evidence that the resolution attempt made no progress.
         // Historical outcomes without captured target/source/files remain unknown and cannot trigger this guard.
         const priorConflictContexts = store

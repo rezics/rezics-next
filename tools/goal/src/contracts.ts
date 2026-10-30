@@ -51,6 +51,10 @@ export interface LandingQueue {
 }
 
 export type GateStage = 'setup' | 'rebase' | 'scope' | 'gate' | 'merge';
+export type GateOutcomeRefusal = {
+  kind: 'frozen-acceptance-change';
+  paths: readonly string[];
+};
 
 export type FirstFailure = {
   /** Stable for the same failing assertion across runs; repeats are detected by comparing it. */
@@ -87,6 +91,8 @@ export type GateOutcome = AttemptRef & {
   nonGeneratedDiffLines?: number;
   /** Paths left unresolved by a rebase-stage failure. */
   conflictedFiles?: readonly string[];
+  /** Typed train refusal for immutable inputs; not a Git rebase conflict. */
+  refusal?: GateOutcomeRefusal;
   /** Complete Git identity of an actual unresolved rebase conflict; absent on legacy or non-Git failures. */
   rebaseConflict?: RebaseConflictContext;
   diffLines: number;

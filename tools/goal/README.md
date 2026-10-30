@@ -66,7 +66,8 @@ Briefs can carry frozen acceptance files in fenced blocks whose info string incl
 configured `formatCommand` on exactly these files before committing them and records their formatted SHA-256 hashes. If
 the formatter rejects a file, the controller restores the brief's original bytes, commits those, and reports the
 formatter output so the manager can repair the brief. The train checks hashes before formatting a landing and refuses
-integration if a worker changes a frozen file.
+integration if a worker changes a frozen file. This immutable-input refusal names the changed paths and goes directly
+to the manager as a specification conflict; it does not enter the Git rebase conflict retry path.
 When a retry reshapes a brief and drops a previously frozen path, the controller restores that file from the task's base
 commit when it existed there; it removes the file only when it was absent from the base. Paths still frozen by the new
 brief continue to be written and formatted from that brief.
