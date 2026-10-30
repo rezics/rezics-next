@@ -3,6 +3,9 @@
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
 generations.
 
+[Retained public-filter custody](public-filter-custody.md) owns immutable observation/use/PIT lifecycle, bounded
+drain revalidation and accepted release-width retention through the original immutable meaning authority.
+
 The optional `languages` request field is the reader's language chain, in priority order. Search follows semantic's
 label choice rule for hit labels, requested descriptions and item fact labels, returning one entry per nonempty map.
 Omitting `languages` keeps every language.

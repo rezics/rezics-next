@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, walkFilter } from '@rezics/filter';
+import releaseExists from '../semantic/definitions-exists.sql';
+import compositeReference from '../semantic/composite-read.sql';
 import { withConnection } from '../database/pool.ts';
 import { compileFilter } from './filter.ts';
 import { compileText } from './text.ts';
@@ -16,11 +18,43 @@ import type {
   CustodyFailure,
   CustodyFound,
   CustodyRead,
+  CustodyRetainedDefinition,
+  CustodyReleaseReference,
   CustodyRegistration,
   PublicFilterCustody,
 } from './public-filter-custody-contract.ts';
 
 const readSql = readFileSync(new URL('./public-filter-custody-read.sql', import.meta.url), 'utf8');
+// Process-local hints span factories (and wrapped pools). No hint can establish durable drain.
+const drainWaiters = new Map<string, Set<() => void>>();
+function drainSignal(observation: string) {
+  let wake!: () => void;
+  const signalled = new Promise<void>((resolve) => {
+    wake = resolve;
+  });
+  const waiters = drainWaiters.get(observation) ?? new Set<() => void>();
+  waiters.add(wake);
+  drainWaiters.set(observation, waiters);
+  return {
+    async wait(until: number) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          signalled,
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, Math.max(0, until - Date.now()));
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    dispose() {
+      waiters.delete(wake);
+      if (!waiters.size) drainWaiters.delete(observation);
+    },
+  };
+}
 // A tagged canonical tree preserves bigint/undefined without collisions with user JSON objects.
 type Tree = [string, unknown?];
 function tree(value: unknown): Tree {
@@ -155,6 +189,38 @@ async function sql(db: Pool | PoolClient, meter: Meter, query: string, values: u
   if (/\b(INSERT|UPDATE|DELETE)\b/.test(query)) meter.resultWrites += result.rowCount ?? 0;
   return result;
 }
+function isReleaseReference(
+  release: CustodyRetainedDefinition['meaning']['release'],
+): release is CustodyReleaseReference {
+  return 'authority' in release && release.authority === 'semantic.readRelease';
+}
+async function requireReleaseAuthority(pool: Pool, meter: Meter, digest: string) {
+  // Use the existing immutable owner lookups. Charge their actual SQL and returned metadata too.
+  // Neither lookup loads a release body, joins homes, nor consults/caches permission.
+  const db = { query: (query: string, values?: unknown[]) => sql(pool, meter, query, values) } as Pool;
+  if (await releaseExists.run(db, { route: 0, digest })) return;
+  if (await compositeReference.run(db, { digest })) return;
+  throw new Failure('definition_missing');
+}
+async function retainedDefinition(pool: Pool, meter: Meter, definition: CustodyDefinition) {
+  let retained: CustodyRetainedDefinition = definition;
+  let encoded = encode({ digest: digest(retained), data: retained });
+  if (Buffer.byteLength(encoded) > 1048576) {
+    await requireReleaseAuthority(pool, meter, definition.meaning.digest);
+    retained = {
+      ...definition,
+      meaning: {
+        digest: definition.meaning.digest,
+        type: definition.meaning.type,
+        release: { authority: 'semantic.readRelease', digest: definition.meaning.digest },
+      },
+    };
+    encoded = encode({ digest: digest(retained), data: retained });
+  }
+  // The original storage ceiling applies to all retained capture/key metadata as well.
+  requireValue(Buffer.byteLength(encoded) <= 1048576);
+  return encoded;
+}
 async function engine<T>(
   search: OpenSearch,
   meter: Meter,
@@ -261,8 +327,13 @@ async function read(
   check(context);
   if (!row) throw new Failure('observation_lost');
   if (row.failure) throw new Failure(row.failure);
-  const definition = decode<{ digest: string; data: CustodyDefinition }>(row.definition);
+  const definition = decode<{ digest: string; data: CustodyRetainedDefinition }>(row.definition);
   requireValue(definition.digest === digest(definition.data));
+  if (isReleaseReference(definition.data.meaning.release)) {
+    requireValue(definition.data.meaning.release.digest === definition.data.meaning.digest);
+    await requireReleaseAuthority(pool, meter, definition.data.meaning.digest);
+    check(context);
+  }
   return {
     status: 'found',
     definition: definition.data,
@@ -388,6 +459,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           partition: definition.source.partition,
           id: digest({ consumer, source: definition.source.id }),
         };
+        const retained = await retainedDefinition(pool, meter, definition);
         await transaction(meter, async (client) => {
           await sql(
             client,
@@ -400,13 +472,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             meter,
             `INSERT INTO search.public_filter_registration VALUES ($1,$2,$3,$4,$5,'active')
             ON CONFLICT (partition_no,id) DO UPDATE SET id=EXCLUDED.id WHERE public_filter_registration.consumer=EXCLUDED.consumer AND public_filter_registration.definition=EXCLUDED.definition AND public_filter_registration.state='active' RETURNING id`,
-            [
-              identity.partition,
-              identity.id,
-              consumer.physicalTarget,
-              encode(consumer),
-              encode({ digest: digest(definition), data: definition }),
-            ],
+            [identity.partition, identity.id, consumer.physicalTarget, encode(consumer), retained],
           );
           if (!result.rowCount) throw new Failure('binding_mismatch');
         });
@@ -563,6 +629,13 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             'DELETE FROM search.public_filter_reference WHERE (partition_no,observation,token)=($1,$2,$3)',
             [partition(use.observation), use.observation, use.token],
           );
+          const active = await sql(
+            pool,
+            meter,
+            'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at>$3 ORDER BY expires_at DESC LIMIT 1',
+            [partition(use.observation), use.observation, Date.now()],
+          );
+          if (!active.rowCount) for (const wake of drainWaiters.get(use.observation) ?? []) wake();
           return { status: 'released' as const, cost: meter };
         },
         true,
@@ -667,14 +740,29 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
         );
         if (!barrier.rowCount) throw new Failure('observation_lost');
         if (barrier.rows[0].state === 'closed') return { status: 'closed' as const, cost: meter };
-        const refs = await sql(
-          pool,
-          meter,
-          'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) ORDER BY expires_at DESC LIMIT 1',
-          values,
-        );
-        if (refs.rows[0])
-          await Bun.sleep(Math.max(0, Math.min(Number(refs.rows[0].expires_at) + 1, context.deadline) - Date.now()));
+        const signal = drainSignal(input.snapshot.observation);
+        try {
+          // At most three indexed maximum probes, including stale delivery and cross-process fallback.
+          // Timer fallbacks revalidate halfway and near the deadline, reserving up to 100ms for native close.
+          // Release signals can advance a wait; every advance re-reads durable state before deletion.
+          for (let attempt = 0; attempt < 3; attempt++) {
+            check(context);
+            const refs = await sql(
+              pool,
+              meter,
+              'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at>$3 ORDER BY expires_at DESC LIMIT 1',
+              [...values, Date.now()],
+            );
+            if (!refs.rowCount) break;
+            if (attempt === 2) throw new Failure('deadline');
+            const now = Date.now();
+            const remaining = context.deadline - now;
+            const next = attempt === 0 ? now + remaining / 2 : context.deadline - Math.min(100, remaining / 4);
+            await signal.wait(Math.min(Number(refs.rows[0].expires_at) + 1, next));
+          }
+        } finally {
+          signal.dispose();
+        }
         check(context);
         await sql(
           pool,

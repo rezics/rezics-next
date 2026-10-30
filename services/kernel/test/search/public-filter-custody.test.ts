@@ -3,7 +3,12 @@ import { createPool } from '../../src/database/pool.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { createPublicFilterCustody, readPublicFilterConsumerCustody } from '../../src/search/public-filter-custody.ts';
 import type { CustodyDefinition } from '../../src/search/public-filter-custody-contract.ts';
-import { releaseDigest, RELEASE_FORMAT } from '@rezics/definitions';
+import { releaseDigest, RELEASE_FORMAT, RELEASE_LIMITS, releaseAdmission, validateRelease } from '@rezics/definitions';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { createKernel } from '../../src/http/kernel.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { newId } from '../../src/route/route.ts';
+import { createRealAccess } from '../semantic/real-access.ts';
 import { openGrowthDatabase, capture, costOf, checkGrowth, assertGrowthAccessPaths } from '../support/growth.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
@@ -491,3 +496,362 @@ test('full expanded negative AST text keyset and configuration are copied before
   expect((await registry.read({ queried: opened.queried }, context())).status).toBe('found');
   await registry.closeObservation(opened.queried, search, context());
 }, 120_000);
+
+test('native close revalidates a held obsolete maximum after another factory releases the actual long last use', async () => {
+  const n = await setup();
+  const unrelated = await setup();
+  const releaser = createPublicFilterCustody(pool);
+  const leaseDeadline = Date.now() + 60_000;
+  const acquired = await registry.acquire(n.queried, { deadline: leaseDeadline });
+  if (acquired.status !== 'acquired') throw new Error(acquired.reason);
+  let reached!: () => void;
+  let deliver!: () => void;
+  const maximumRead = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const delivery = new Promise<void>((resolve) => {
+    deliver = resolve;
+  });
+  let held = false;
+  let referenceReads = 0;
+  const db = await openGrowthDatabase();
+  const heldPool = new Proxy(db.pool, {
+    get(target, key) {
+      if (key === 'query')
+        return async (query: string, values?: unknown[]) => {
+          // Execute the real statement first. The pool has returned its checkout before delivery is held.
+          const result = await target.query(query, values);
+          if (query.includes('SELECT expires_at FROM search.public_filter_reference')) {
+            referenceReads++;
+            if (!held) {
+              held = true;
+              expect(Number(result.rows[0].expires_at)).toBe(leaseDeadline);
+              reached();
+              await delivery;
+            }
+          }
+          return result;
+        };
+      const value = Reflect.get(target, key);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const closer = createPublicFilterCustody(heldPool);
+  const deleted: unknown[] = [];
+  const observedSearch: typeof search = {
+    ...search,
+    async request<T>(
+      method: Parameters<typeof search.request>[0],
+      path: string,
+      body?: unknown,
+      options?: Parameters<typeof search.request>[3],
+    ) {
+      if (method === 'DELETE') deleted.push(body);
+      return search.request<T>(method, path, body, options);
+    },
+  };
+  const deadline = Date.now() + 5_000;
+  const measuredClose = capture(db, () => closer.closeObservation(n.queried, observedSearch, { deadline }), {
+    includeBackends: true,
+  });
+  const closing = measuredClose.then((measured) => measured.value);
+  try {
+    await maximumRead;
+    expect((await registry.acquire(n.queried, context())).status).toBe('unready');
+    expect((await releaser.release(acquired.use, context())).status).toBe('released');
+    expect(
+      (
+        await pool.query('SELECT token FROM search.public_filter_reference WHERE partition_no=7 AND observation=$1', [
+          n.queried.snapshot.observation,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    deliver();
+    const result = await closing;
+    expect(result.status).toBe('closed');
+    expect(Date.now()).toBeLessThan(deadline);
+    expect(Date.now()).toBeLessThan(leaseDeadline);
+    expect(referenceReads).toBeGreaterThanOrEqual(2);
+    expect(result.cost.statements).toBeLessThanOrEqual(12);
+    expect(result.cost.bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(result.cost.engineRequests).toBe(1);
+    const nativeClose = costOf((await measuredClose).capture);
+    expect(nativeClose.statements).toBeLessThanOrEqual(12);
+    expect(nativeClose.requestBytes! + nativeClose.responseBytes!).toBeLessThanOrEqual(4 * 1024 * 1024);
+    if (n.queried.snapshot.kind !== 'pit') throw new Error('Expected native PIT');
+    expect(deleted).toEqual([{ pit_id: [n.queried.snapshot.pit] }]);
+    expect((await registry.read({ queried: unrelated.queried }, context())).status).toBe('found');
+    await append(unrelated.queried);
+  } finally {
+    deliver();
+    await closing;
+    await closer.close();
+    await db.close();
+    await releaser.close();
+    await registry.closeObservation(n.queried, search, context());
+    await registry.closeObservation(unrelated.queried, search, context());
+  }
+}, 120_000);
+
+test('live uses forbid native deletion, expired uses drain, and a deadline or lost close delivery recovers only its owned PIT', async () => {
+  const n = await setup();
+  const unrelated = await setup();
+  const acquired = await registry.acquire(n.queried, { deadline: Date.now() + 60_000 });
+  if (acquired.status !== 'acquired') throw new Error(acquired.reason);
+  const closed = await registry.closeObservation(n.queried, search, { deadline: Date.now() + 250 });
+  expect(closed).toMatchObject({ status: 'unavailable', reason: 'deadline', cost: { engineRequests: 0 } });
+  expect(closed.cost.statements).toBeLessThanOrEqual(12);
+  if (n.queried.snapshot.kind !== 'pit') throw new Error('Expected native PIT');
+  const probe = await search.request<{ _shards: { failed: number } }>('POST', '/_search', {
+    size: 0,
+    pit: { id: n.queried.snapshot.pit, keep_alive: '1m' },
+  });
+  expect(probe.body._shards.failed).toBe(0);
+  expect((await registry.acquire(n.queried, context())).status).toBe('unready');
+  expect((await registry.release(acquired.use, context())).status).toBe('released');
+  const recovered = createPublicFilterCustody(pool);
+  let lostDelivery = false;
+  const lossySearch: typeof search = {
+    ...search,
+    async request<T>(
+      method: Parameters<typeof search.request>[0],
+      path: string,
+      body?: unknown,
+      options?: Parameters<typeof search.request>[3],
+    ) {
+      const result = await search.request<T>(method, path, body, options);
+      if (method === 'DELETE' && !lostDelivery) {
+        lostDelivery = true;
+        throw new Error('Injected loss after actual native close');
+      }
+      return result;
+    },
+  };
+  try {
+    expect(await recovered.closeObservation(n.queried, lossySearch, context())).toMatchObject({
+      status: 'unavailable',
+      reason: 'owner_unavailable',
+    });
+    expect((await recovered.closeObservation(n.queried, search, context())).status).toBe('closed');
+    const expired = await registry.acquire(unrelated.queried, { deadline: Date.now() + 200 });
+    if (expired.status !== 'acquired') throw new Error(expired.reason);
+    // This is the separate expiry positive, not the early-release control above.
+    const draining = await recovered.closeObservation(unrelated.queried, search, context());
+    expect(draining.status).toBe('closed');
+    expect(draining.cost.statements).toBeLessThanOrEqual(12);
+    expect(
+      (
+        await pool.query('SELECT token FROM search.public_filter_reference WHERE partition_no=7 AND observation=$1', [
+          unrelated.queried.snapshot.observation,
+        ])
+      ).rowCount,
+    ).toBe(0);
+  } finally {
+    await recovered.close();
+    await registry.closeObservation(n.queried, search, context());
+    await registry.closeObservation(unrelated.queried, search, context());
+  }
+}, 120_000);
+
+// A real admitted catalogue at the release authority's byte boundary, retaining the entire bundled grammar.
+// Extra released reference properties carry native schemas and descriptions, not a fixture-only empty release.
+function wideRelease() {
+  const release = structuredClone(bundledRelease);
+  release.catalogue = { ...release.catalogue, version: crypto.randomUUID() };
+  release.prefixes.custody = 'https://example.test/custody/';
+  release.types['schema:Book']!.properties.push('custody:reference0');
+  release.types['schema:Book']!.facets.push('custody:reference0');
+  let bytes = Buffer.byteLength(JSON.stringify(release));
+  let last = '';
+  for (let index = 0; index < RELEASE_LIMITS.properties; index++) {
+    const key = `custody:reference${index}`;
+    const property = {
+      iri: `https://example.test/custody/reference${index}`,
+      labels: { en: `Catalogue reference ${index}` },
+      mappings: [],
+      datatype: 'wikibase-item' as const,
+      multivalued: true,
+      targets: ['schema:CreativeWork'],
+      qualifiers: ['wdt:P3831'],
+      value: structuredClone(release.properties['schema:publisher']!.value),
+      descriptions: {
+        en: (
+          `Reference ${index} identifies the related catalogue work. The role qualifier records ` +
+          'the association independently from its target; filters preserve this association and the released value schema. '
+        ).repeat(7),
+      },
+    };
+    const added = Buffer.byteLength(JSON.stringify(key)) + Buffer.byteLength(JSON.stringify(property)) + 2;
+    if (bytes + added > RELEASE_LIMITS.bytes) {
+      expect(releaseAdmission({ ...release, properties: { ...release.properties, [key]: property } })).toContainEqual({
+        pointer: '',
+        code: 'limit',
+      });
+      break;
+    }
+    release.properties[key] = property;
+    last = key;
+    bytes += added;
+  }
+  expect(bytes).toBe(Buffer.byteLength(JSON.stringify(release)));
+  expect(bytes).toBeGreaterThan(RELEASE_LIMITS.bytes - 2_000);
+  expect(bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+  expect(validateRelease(release)).toEqual([]);
+  return { release, last, bytes };
+}
+
+test('accepted native wide release capture and cold keyed recovery retain full immutable meaning and grammar within original byte allowances', async () => {
+  const { release, last } = wideRelease();
+  // Publish through real authorization and the ordinary immutable release command, not custody fixture rows.
+  const access = await createRealAccess(pool, { publisher: newId(0) }, ['definitions:publish', 'definitions:read']);
+  await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'publisher', 'definitions:publish');
+  const kernel = createKernel({
+    pool,
+    access: access.access,
+    writeRate: access.writeRate,
+    routeKey: new Uint8Array(32).fill(8),
+  });
+  const published = await kernel.handle(
+    new Request('http://kernel.test/v1/definitions/releases', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${access.bearer('publisher')}`,
+        'idempotency-key': `"${crypto.randomUUID()}"`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ release }),
+    }),
+  );
+  expect(published.status).toBe(201);
+  const identity = (await published.json()) as { digest: string };
+  expect(identity.digest).toBe(releaseDigest(release));
+  const physical = await target();
+  const d = definition();
+  const subject = crypto.randomUUID();
+  const meaning = { release, digest: identity.digest, type: 'schema:Book' };
+  const filterDocument = {
+    and: [
+      { type: { in: ['schema:Book'] } },
+      { not: { statement: { property: 'schema:author', in: [subject] } } },
+      {
+        statement: {
+          property: 'custody:reference0',
+          in: [subject],
+          qualifiers: [{ property: 'wdt:P3831', in: [subject] }],
+        },
+      },
+    ],
+  };
+  const definitionInput: CustodyDefinition = {
+    ...d,
+    meaning,
+    capture: { ...d.capture, filterDocument, text: { kind: 'term', value: 'wide native catalogue' } },
+    dependencyKeys: [
+      { kind: 'type' },
+      { kind: 'order', order: 'id' },
+      { kind: 'property', property: 'schema:author' },
+      { kind: 'property', property: 'wdt:P3831' },
+      { kind: 'property', property: 'custody:reference0' },
+    ],
+  };
+  const expected = structuredClone(definitionInput);
+  const db = await openGrowthDatabase();
+  const custody = createPublicFilterCustody(db.pool);
+  let retained: Parameters<typeof registry.read>[0] | undefined;
+  try {
+    const captureOperation = await capture(
+      db,
+      () =>
+        custody.register(
+          {
+            definition: definitionInput,
+            physicalTarget: physical.index,
+            consumerGeneration: 'wide',
+            projectionGeneration: '1',
+          },
+          search,
+          context(),
+        ),
+      { includeBackends: true },
+    );
+    const registered = captureOperation.value;
+    if (registered.status !== 'registered') throw new Error(registered.reason);
+    const nativeCapture = costOf(captureOperation.capture);
+    expect(registered.cost.bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(nativeCapture.requestBytes! + nativeCapture.responseBytes!).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(registered.cost.statements).toBeLessThanOrEqual(12);
+    expect(captureOperation.capture.statements.some((sql) => sql.includes('semantic.definition_release'))).toBe(true);
+    const stored = await pool.query(
+      'SELECT octet_length(definition) AS bytes FROM search.public_filter_registration WHERE partition_no=$1 AND id=$2',
+      [registered.registration.partition, registered.registration.id],
+    );
+    expect(stored.rows[0].bytes).toBeLessThanOrEqual(1024 * 1024);
+    const opened = await custody.openPit(
+      { registration: registered.registration, covered: cut(), keepAliveMs: 300_000 },
+      search,
+      context(),
+    );
+    if (opened.status !== 'retained') throw new Error(opened.reason);
+    const execution = await append(opened.queried);
+    retained = { queried: opened.queried, execution: execution.id };
+    // Mutating the complete input cannot replace either the authority or any retained AST/key/capture field.
+    definitionInput.meaning.release.properties[last]!.labels.en = 'mutated';
+    const joined = await capture(db, () => custody.read(retained!, context()), { includeBackends: true });
+    if (joined.value.status !== 'found') throw new Error(joined.value.reason);
+    const reference = { authority: 'semantic.readRelease', digest: identity.digest };
+    expect(joined.value.definition).toEqual({ ...expected, meaning: { ...expected.meaning, release: reference } });
+    expect(joined.value.execution).toEqual(execution);
+    expect(joined.value.cost.bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+    const nativeJoin = costOf(joined.capture);
+    expect(nativeJoin.requestBytes! + nativeJoin.responseBytes!).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(nativeJoin.rows).toBeLessThanOrEqual(64);
+    expect(nativeJoin.blocks).toBeLessThanOrEqual(48);
+    expect(joined.capture.statements.some((sql) => sql.includes('semantic.definition_release'))).toBe(true);
+    await custody.close();
+    const modulePath = new URL('../../src/search/public-filter-custody.ts', import.meta.url).pathname;
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        '--eval',
+        `
+      import { Pool } from 'pg';
+      import { readPublicFilterConsumerCustody } from ${JSON.stringify(modulePath)};
+      const pool = new Pool({connectionString: process.env.DATABASE_URL, max:1});
+      const result = await readPublicFilterConsumerCustody(pool, JSON.parse(process.env.CUSTODY_REQUEST), {deadline:Date.now()+60000});
+      console.log(JSON.stringify(result)); await pool.end();
+    `,
+      ],
+      {
+        env: { ...process.env, CUSTODY_REQUEST: JSON.stringify(retained) },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+    const [stdout, stderr, exit] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect({ exit, stderr }).toEqual({ exit: 0, stderr: '' });
+    const recovered = JSON.parse(stdout);
+    expect(recovered.status).toBe('found');
+    expect(recovered.definition).toEqual(joined.value.definition);
+    expect(recovered.execution).toEqual(execution);
+    expect(recovered.cost.statements).toBeGreaterThanOrEqual(2);
+    expect(recovered.cost.statements).toBeLessThanOrEqual(12);
+    expect(recovered.cost.bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+    // The reference still locates the complete original admitted meaning, including unused grammar.
+    const authority = await pool.query('SELECT body FROM semantic.definition_release WHERE route=0 AND digest=$1', [
+      identity.digest,
+    ]);
+    expect(authority.rows[0].body).toEqual(expected.meaning.release);
+    expect(releaseDigest(authority.rows[0].body)).toBe(reference.digest);
+    expect((await registry.read({ queried: opened.queried, execution: crypto.randomUUID() }, context())).status).toBe(
+      'unready',
+    );
+  } finally {
+    if (retained) await registry.closeObservation(retained.queried, search, context());
+    await custody.close();
+    await db.close();
+  }
+}, 600_000);

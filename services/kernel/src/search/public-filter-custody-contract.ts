@@ -20,6 +20,21 @@ export type CustodyDefinition = Readonly<{
   capture: PublicFilterConsumerCaptureInput;
   dependencyKeys: readonly PublicFilterDependencyKey[];
 }>;
+/** Exact immutable authority consumed through semantic.readRelease, including registered composites.
+ * This locates complete meaning, never current Source permission or a reduced copy of its grammar.
+ */
+export type CustodyReleaseReference = Readonly<{
+  authority: 'semantic.readRelease';
+  digest: string;
+}>;
+/** Wide meanings retain their immutable authority instead of copying a four-MiB release into one MiB. */
+export type CustodyRetainedDefinition = Omit<CustodyDefinition, 'meaning'> &
+  Readonly<{
+    meaning: Omit<PublicFilterProjectionMeaning, 'release'> &
+      Readonly<{
+        release: PublicFilterProjectionMeaning['release'] | CustodyReleaseReference;
+      }>;
+  }>;
 export type CustodyRegistration = Readonly<{ partition: number; id: string }>;
 export type CustodyExecution = Readonly<{
   id: string;
@@ -46,7 +61,7 @@ export type CustodyFailure = Readonly<{
 }>;
 export type CustodyFound = Readonly<{
   status: 'found';
-  definition: CustodyDefinition;
+  definition: CustodyRetainedDefinition;
   queried: PublicFilterQueriedObservation;
   covered: PrivacyReductionStart;
   execution: CustodyExecution | null;
