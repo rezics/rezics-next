@@ -331,3 +331,257 @@ test('missing original Auth tail stays pending even when an old restored image h
     fixture.close();
   }
 });
+
+// Delivered Source integration: all successful point/page/verifier values below
+// come from native Access, never from a header/empty-page readiness callback.
+import { createAuthErasureObligationBindings } from '../../kernel/src/access/auth-erasure-obligations.ts';
+import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../kernel/src/access/lifecycle.ts';
+import { newId } from '../../kernel/src/route/route.ts';
+import { admittedAccess, authenticateAccount } from '../../kernel/test/support/admitted-access.ts';
+import { startNativeErasure } from '../src/erasure-native.ts';
+import { stageRestoredAuthObligations } from '../src/restore-admission.ts';
+
+async function nativeRestoreRoot(f: Awaited<ReturnType<typeof nativeFixture>>, route: number) {
+  const accountId = newId(route);
+  await f.kernel.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+     VALUES($1,$2,'actor','active',$2)`, [route, accountId],
+  );
+  await f.kernel.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES($1,$2,$2,'account:delete','(,)'::tstzrange,$2)`, [route, accountId],
+  );
+  const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
+  const actor = await authenticateAccount(access, { pool: f.kernel, deadline: Date.now() + 10000 }, {
+    accountId, clientId: 'restore-native-source', scopes: [...LIFECYCLE_ACTIONS.keys()],
+  });
+  await createLifecycleCommands({ pool: f.kernel, access }).tombstone(
+    { actor, deadline: Date.now() + 10000 }, { accountId, key: crypto.randomUUID() },
+  );
+  const point = await createAuthErasureObligationBindings(f.kernel).readAuthErasureObligation({
+    accountId, deadline: Date.now() + 10000,
+  });
+  if (point.state !== 'ready') throw new Error('Actual native tombstone did not produce its obligation');
+  // This is real ORIGINAL Auth progress in the surviving database, not progress
+  // synthesized in the old restored snapshot from Source alone.
+  await startNativeErasure(f.pool, accountId, Number(point.obligation.minimumAuthnEpoch), point.obligation);
+  return point.obligation;
+}
+
+function restoredNativeOwner(f: Awaited<ReturnType<typeof nativeFixture>>, database: Pool, generation: string): AuthRestoredGeneration {
+  const inventory: AuthRestoreInventory = {
+    generation, databaseIdentity: 'isolated-native-auth-fixture', inventoryEntry: generation,
+    inventoryVersion: 'one', sourceCluster: 'native-fixture-cluster', sourceTimeline: 'native-fixture-timeline',
+    sourceLineage: 'independent-current-access', capturePoint: 'before-confirmations',
+    committedNativeTail: 'surviving-native-auth-database',
+  };
+  const recovered = new Map<string, AuthRestoreNativeProgress>();
+  return {
+    kind: 'RESTORED', generation, obligations: createAuthErasureObligationBindings(f.kernel),
+    databaseOwner: {
+      async verifyRestoredDatabase(input) {
+        expect(input.database).toBe(database);
+        expect(database.idleCount).toBe(database.totalCount);
+        return inventory;
+      },
+      async recoverCommittedNativeProgress({ accountId }) {
+        expect(database.idleCount).toBe(database.totalCount);
+        if (recovered.has(accountId)) return recovered.get(accountId)!;
+        const row = (await f.pool.query('SELECT * FROM auth_erasure WHERE account_id=$1', [accountId])).rows[0];
+        if (!row) return { pending: 'original-progress-unavailable' };
+        const progress: AuthRestoreNativeProgress = {
+          source: { accountId, route: f.routeOf(accountId)!, version: row.kernel_version, at: row.kernel_at },
+          originalNativeId: row.id, checkpoint: inventory.committedNativeTail, floor: row.barrier,
+          acceptedAt: row.accepted_at.toISOString(), applicable: row.applicable,
+          userDeletion: row.user_deleted_at ? {
+            state: 'established', deletedAt: row.user_deleted_at.toISOString(), consentDueAt: row.consent_due_at.toISOString(),
+            consentCompletedAt: row.consent_completed_at?.toISOString() ?? null,
+          } : { state: 'never-established' },
+          consumer: row.source_accepted_at ? {
+            state: 'accepted', workflowId: row.source_workflow_id, continuationId: row.source_continuation_id,
+            receiptId: row.source_receipt_id, acceptedAt: row.source_accepted_at.toISOString(),
+            dischargedAt: row.source_discharged_at?.toISOString() ?? null,
+            publishedAt: row.source_published_at?.toISOString() ?? null,
+          } : { state: 'pending' },
+        };
+        recovered.set(accountId, progress);
+        return progress;
+      },
+    },
+  };
+}
+
+test('Actual native Access obligation page and point bind immutable restored Auth progress and durable bounded checkpoints before admission while unknown original floor Source lineage receiving or live handoff remains closed', async () => {
+  const f = await nativeFixture();
+  const copy = testDatabase();
+  const database = new Pool({ connectionString: copy.url, max: 1 });
+  let unfault = () => {};
+  try {
+    const roots = [];
+    for (let i = 0; i < 49; i++) roots.push(await nativeRestoreRoot(f, 15));
+    const highRoute = await nativeRestoreRoot(f, 65535);
+    const restored = restoredNativeOwner(f, database, 'native-obligation-page-copy');
+    const native = restored.obligations!;
+    let pageDeadline = 0;
+    const cuts = new Set<string>();
+    restored.obligations = {
+      async startAuthErasureObligationCut(input) {
+        expect(database.idleCount).toBe(database.totalCount);
+        cuts.add(input.cutId);
+        pageDeadline = input.deadline;
+        return native.startAuthErasureObligationCut(input);
+      },
+      async pageAuthErasureObligations(input) {
+        expect(database.idleCount).toBe(database.totalCount);
+        expect(input.deadline).toBe(pageDeadline);
+        return native.pageAuthErasureObligations(input);
+      },
+      async readAuthErasureObligation(input) {
+        expect(database.idleCount).toBe(database.totalCount);
+        expect(input.deadline).toBe(pageDeadline);
+        return native.readAuthErasureObligation(input);
+      },
+      async verifyAuthErasureObligationCut(input) {
+        expect(database.idleCount).toBe(database.totalCount);
+        expect(input.deadline).toBe(pageDeadline);
+        return native.verifyAuthErasureObligationCut(input);
+      },
+    };
+    // Crash AFTER genuine imports but BEFORE the corresponding page checkpoint.
+    unfault = failNativeQueries(database, (sql) => sql.startsWith('UPDATE auth_restore_generation SET source_cut='));
+    await expect(stageRestoredAuthObligations(database, restored)).rejects.toThrow('Injected native consumer interruption');
+    unfault();
+    const state = async () => (await database.query(
+      'SELECT source_cut_id,source_cursor,source_verify_partition FROM auth_restore_generation WHERE generation=$1',
+      [restored.generation],
+    )).rows[0]!;
+    expect((await state()).source_cursor).toEqual({ partition: 0, afterOrdinal: '0' });
+    expect((await database.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(48);
+    await stageRestoredAuthObligations(database, restored);
+    expect((await database.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(48);
+    expect((await state()).source_cursor).toEqual({ partition: 0, afterOrdinal: roots[47]!.ordinal });
+    await stageRestoredAuthObligations(database, restored);
+    expect((await database.query('SELECT 1 FROM auth_restore_replay')).rowCount).toBe(49);
+    expect((await state()).source_cursor).toEqual({ partition: 1, afterOrdinal: '0' });
+    // Every empty partition is actually visited. Header/EOF alone cannot admit.
+    for (let i = 1; i < 4096; i++) await stageRestoredAuthObligations(database, restored);
+    expect((await state()).source_cursor).toBeNull();
+    expect((await state()).source_verify_partition).toBe(0);
+    const bound = (await database.query(
+      `SELECT r.source_obligation,r.original_progress,e.source_route,e.barrier,r.obligation_id
+       FROM auth_restore_replay r JOIN auth_erasure e ON e.id=r.obligation_id WHERE e.account_id=$1`, [highRoute.accountId],
+    )).rows[0]!;
+    expect(bound.source_obligation).toEqual(highRoute);
+    expect(bound.source_route).toBe(65535);
+    expect(String(bound.barrier)).toBe(highRoute.minimumAuthnEpoch);
+    expect(bound.original_progress.source.at).toBe(highRoute.at);
+    expect(cuts.size).toBe(1);
+    expect((await database.query('SELECT 1 FROM auth_restore_source_partition')).rowCount).toBe(4096);
+    for (let i = 0; i < 4095; i++) await stageRestoredAuthObligations(database, restored);
+    expect(await stageRestoredAuthObligations(database, restored)).toEqual({ pending: 'source-live-handoff-pending' });
+    const observation = (await database.query(
+      'SELECT verification FROM auth_restore_source_partition WHERE generation=$1 AND partition=4095', [restored.generation],
+    )).rows[0]!.verification;
+    expect(observation).toMatchObject({ state: 'current', highWater: highRoute.ordinal, liveHighWater: highRoute.ordinal });
+    expect(observation.sourceGeneration).toBeString();
+    expect(observation.sourceOwner).toBeString();
+    expect(observation.sourceEpoch).toBeNumber();
+    await expect(requireRestoredAuthAdmission(database, restored)).rejects.toMatchObject({ code: 'source-live-handoff-pending' });
+    await expect(createAuthService({ ...closedOptions(database), restoredGeneration: restored })).rejects.toMatchObject({ code: 'source-live-handoff-pending' });
+    expect((await database.query('SELECT 1 FROM auth_signing_key')).rowCount).toBe(0);
+    // Source-only discovery has neither released the original consumer nor
+    // cleaned copies or manufactured receiving/physical readiness.
+    expect((await database.query('SELECT copies_completed_at FROM auth_restore_replay WHERE obligation_id=$1', [bound.obligation_id])).rows[0]!.copies_completed_at).toBeNull();
+    expect(await replayRestoredAuthPage(database, restored, bound.obligation_id)).toHaveProperty('pending');
+    await expect(database.query('UPDATE auth_restore_generation SET source_cut_id=gen_random_uuid()')).rejects.toThrow();
+    await expect(database.query(`UPDATE auth_restore_replay SET source_obligation=jsonb_set(source_obligation,'{receiptId}','"changed"')`)).rejects.toThrow();
+    const later = await nativeRestoreRoot(f, 65535);
+    expect(later.ordinal).not.toBe(highRoute.ordinal);
+    expect((await native.verifyAuthErasureObligationCut({ cutId: (await state()).source_cut_id, partition: 4095, deadline: Date.now() + 10000 })).state).toBe('pending');
+    await expect(requireRestoredAuthAdmission(database, restored)).rejects.toMatchObject({ code: 'source-live-handoff-pending' });
+    expect(cuts.size).toBe(1);
+  } finally {
+    unfault();
+    await database.end();
+    copy.close();
+    await f.close();
+  }
+}, 240_000);
+
+// Fault wrappers below only deny/change actual native reads; none supplies
+// successful Source authority, native original progress or external proof.
+test('native Source point disagreement, exact floor domain and missing original Auth tail never import replacement progress', async () => {
+  const f = await nativeFixture();
+  const copy = testDatabase();
+  const database = new Pool({ connectionString: copy.url, max: 1 });
+  try {
+    const root = await nativeRestoreRoot(f, 65535);
+    const restored = restoredNativeOwner(f, database, 'point-mismatch-copy');
+    const native = restored.obligations!;
+    for (const minimumAuthnEpoch of ['2147483648', '9007199254740993', '1.5', '02', '-1', '2e0']) {
+      restored.obligations = { ...native, async readAuthErasureObligation(input) {
+        const point = await native.readAuthErasureObligation(input);
+        if (point.state !== 'ready') return point;
+        return { state: 'ready', obligation: { ...point.obligation, minimumAuthnEpoch } };
+      } };
+      await expect(importRestoredAuthProgress(database, restored, root.accountId)).rejects.toMatchObject({ code: 'original-progress-mismatch' });
+    }
+    restored.obligations = native;
+    const recover = restored.databaseOwner!.recoverCommittedNativeProgress;
+    const genuine = await recover({ inventory: {} as AuthRestoreInventory, accountId: root.accountId });
+    if ('pending' in genuine) throw new Error('Missing original native progress');
+    for (const changed of [
+      { ...genuine, floor: genuine.floor + 1 },
+      { ...genuine, source: { ...genuine.source, route: 4095 } },
+      { ...genuine, source: { ...genuine.source, version: genuine.source.version + 1 } },
+      { ...genuine, source: { ...genuine.source, at: new Date(0).toISOString() } },
+    ]) {
+      restored.databaseOwner!.recoverCommittedNativeProgress = async () => changed;
+      await expect(importRestoredAuthProgress(database, restored, root.accountId)).rejects.toMatchObject({ code: 'original-progress-mismatch' });
+    }
+    restored.databaseOwner!.recoverCommittedNativeProgress = async () => ({ pending: 'original-progress-unavailable' });
+    await expect(importRestoredAuthProgress(database, restored, root.accountId)).rejects.toMatchObject({ code: 'original-progress-unavailable' });
+    expect((await database.query('SELECT 1 FROM auth_erasure')).rowCount).toBe(0);
+    restored.databaseOwner!.recoverCommittedNativeProgress = recover;
+    const id = await importRestoredAuthProgress(database, restored, root.accountId);
+    expect((await database.query('SELECT source_route FROM auth_erasure WHERE id=$1', [id])).rows[0]!.source_route).toBe(65535);
+    await f.kernel.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=4095');
+    await expect(importRestoredAuthProgress(database, restored, root.accountId)).rejects.toMatchObject({ code: 'source-consumer-pending' });
+    await expect(requireRestoredAuthAdmission(database)).rejects.toMatchObject({ code: 'restore-lineage-unavailable' });
+  } finally {
+    await database.end();
+    copy.close();
+    await f.close();
+  }
+}, 120_000);
+
+test('native pending original floor and changed Source ownership retain the exact bounded page and never advance past it', async () => {
+  const f = await nativeFixture();
+  const copy = testDatabase();
+  const database = new Pool({ connectionString: copy.url, max: 1 });
+  try {
+    const accountId = newId(16);
+    await f.kernel.query(`INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+      VALUES(16,$1,'actor','active',$1)`, [accountId]);
+    await f.kernel.query("UPDATE access.account SET state='deleted',authn_fenced=true,minimum_authn_epoch=123 WHERE route=16 AND account_id=$1", [accountId]);
+    await f.kernel.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES(16,$1,1,clock_timestamp())', [accountId]);
+    const restored = restoredNativeOwner(f, database, 'unknown-original-floor-copy');
+    await stageRestoredAuthObligations(database, restored);
+    await stageRestoredAuthObligations(database, restored);
+    const checkpoint = async () => (await database.query('SELECT source_cut_id,source_cursor FROM auth_restore_generation')).rows[0]!;
+    const before = await checkpoint();
+    expect(before.source_cursor).toEqual({ partition: 1, afterOrdinal: '0' });
+    const page = (await database.query('SELECT page FROM auth_restore_source_partition WHERE partition=1')).rows[0]!.page;
+    expect(page).toMatchObject({ state: 'pending', pending: [{ accountId, reason: 'original-floor-unavailable' }] });
+    expect((await database.query('SELECT 1 FROM auth_erasure')).rowCount).toBe(0);
+    await f.kernel.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=1');
+    await stageRestoredAuthObligations(database, restored);
+    expect(await checkpoint()).toEqual(before);
+    expect((await database.query('SELECT page FROM auth_restore_source_partition WHERE partition=1')).rows[0]!.page).toMatchObject({ state: 'pending', reason: 'source-unavailable' });
+    await expect(requireRestoredAuthAdmission(database, restored)).rejects.toMatchObject({ code: 'source-consumer-pending' });
+  } finally {
+    await database.end();
+    copy.close();
+    await f.close();
+  }
+}, 120_000);

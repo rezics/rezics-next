@@ -60,22 +60,45 @@ reintroduced bytes, including an image carrying older completion. Original first
 first deletion transaction. Missing original consumer release stays pending.
 No approval, credential effect or 30-minute source authorization is renewed.
 
-The independent Source provider remains unavailable in this revision. Neither
-`packages/auth-contract/src/auth-erasure-obligations.ts` nor
-`services/kernel/src/access/auth-erasure-obligations.ts`, nor an exact
-owner-authored declaration adapter, is present. Auth therefore publishes no
-substitute point/feed/floor/cursor/seal API and admits no restored generation.
-Those original Access modules must supply their actual declarations verbatim,
-including literal `FIRST`, one of the fixed 4,096 partitions per page, at most
-48 obligations/64 KiB, immutable source/cut and sealed current boundary plus
-live fence/feed handoff. An active-user poll cannot implement this dependency.
-Native import/replay can proceed independently; successful local cleanup returns
-pending and cannot masquerade as current Source authority or consumer release.
+`AuthRestoredGeneration.obligations` accepts the original
+`AuthErasureObligationPorts` from `@rezics/auth-contract`. Trusted service/host
+composition supplies the native `createAuthErasureObligationBindings(pool)` or
+the same four methods on default `createAuthBindings`; Auth receives no kernel
+pool, module or HTTP-provided readiness. `stageRestoredAuthObligations` stages
+one actual native partition/page, at most 48 obligations, under one five-second
+absolute deadline. It persists a stable cut UUID before contacting Access and
+reuses that locator on every retry. The UUID establishes no backup proof.
 
-Even after the Source interface arrives, cutover must compose native required
-receiving closure and actual external-owner readiness before serving. Current
-admission fails explicitly with `source-authority-unavailable`; there is no
-successful unavailable placeholder or bypass RPC. History completion publication
+Each ready page obligation is resolved again through the real Source point port
+and compared with independently recovered Auth progress before import. Route
+(0–65535), account, version, exact PostgreSQL T and canonical native integer floor
+must agree. The original Source receipt and ordinal are retained separately from
+Auth's original consumer receipt/continuation. Unknown original floors or missing
+Auth tail never create replacement native progress. No Auth checkout spans a
+Source or database-owner read. The existing account producer/floor locks still
+serialize imports. Durable page/cut/cursor and version checkpoints accompany
+immutable Source obligations and Auth original progress; a crash repeats the
+same page and each native replay uses the existing engine.
+
+Traversal follows native `state` and `next`, keeping pending/initializing pages
+at their original cursor. Empty pages and `sealedPartitions` alone prove no
+completion. After traversal, bounded calls verify all 4096 partitions through
+the actual current Source verifier and retain its generation/epoch/owner and
+high-water/live-high-water observations. A changed head/owner stays pending on
+the same cut rather than silently replacing it. Verification is an observation,
+not a live cutover fence. The delivered Access port has no owner-native durable
+handoff of subsequent obligations to this restored generation through gate
+opening. After positive traversal/verification, admission therefore reports
+`source-live-handoff-pending`. Earlier incomplete Source work reports
+`source-consumer-pending`; a missing/failing port reports
+`source-authority-unavailable`. Native replay, receiving closure and actual
+external/database-owner physical readiness remain separate required work; no
+installed owner certifies the latter boundaries.
+
+`requireRestoredAuthAdmission` performs one bounded Source stage before refusing
+construction. Reconciliation workers may call staging and native replay directly
+while the restored database remains isolated. No generation is released from
+native-only progress. History completion publication
 is held on a marked restore image, including old carried completion; genuine
 original Source consumption still redrives independently. This delivers no
 physical backup/replica/mail/log deletion or final coordinator ACK. Outstanding

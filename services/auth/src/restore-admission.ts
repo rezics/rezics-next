@@ -1,4 +1,12 @@
-import type { AuthErasureBarrier } from '@rezics/auth-contract';
+import type {
+  AuthErasureBarrier,
+  AuthErasureObligation,
+  AuthErasureObligationCut,
+  AuthErasureObligationCursor,
+  AuthErasureObligationPage,
+  AuthErasureObligationPorts,
+  AuthErasureObligationVerification,
+} from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import { nativeErasurePage } from './erasure-native.ts';
 import { erasureHistoryPage } from './erasure-history.ts';
@@ -13,6 +21,7 @@ export type AuthRestorePendingCode =
   | 'original-progress-mismatch'
   | 'source-authority-unavailable'
   | 'source-consumer-pending'
+  | 'source-live-handoff-pending'
   | 'native-replay-pending'
   | 'receiving-closure-pending'
   | 'external-owner-pending';
@@ -78,10 +87,12 @@ export interface AuthRestoreDatabaseOwner {
   verifyRestoredDatabase(input: {
     database: Pool;
     generation: string;
+    deadline?: number | undefined;
   }): Promise<AuthRestoreInventory | { pending: 'restore-lineage-unavailable' | 'restore-lineage-mismatch' }>;
   recoverCommittedNativeProgress(input: {
     inventory: AuthRestoreInventory;
     accountId: string;
+    deadline?: number | undefined;
   }): Promise<AuthRestoreNativeProgress | { pending: 'original-progress-unavailable' }>;
 }
 
@@ -89,6 +100,9 @@ export interface AuthRestoredGeneration {
   kind: 'RESTORED';
   generation: string;
   databaseOwner?: AuthRestoreDatabaseOwner;
+  /** Fixed native Access capability, supplied by trusted service/host composition.
+   * No kernel pool or runtime request field crosses this boundary. */
+  obligations?: AuthErasureObligationPorts;
 }
 
 function fail(code: AuthRestorePendingCode): never {
@@ -100,7 +114,7 @@ const timestamp = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 64 && Number.isFinite(Date.parse(value));
 const instant = (value: Date | string | null) => (value === null ? null : new Date(value).getTime());
 
-async function inventoryFor(database: Pool, restored: AuthRestoredGeneration): Promise<AuthRestoreInventory> {
+async function inventoryFor(database: Pool, restored: AuthRestoredGeneration, deadline?: number): Promise<AuthRestoreInventory> {
   if (restored.kind !== 'RESTORED' || !key(restored.generation)) fail('restore-lineage-mismatch');
   // NULL inventory records only the declaration, never verified backup evidence.
   // Failed native recovery must also keep later construction closed by omission.
@@ -110,7 +124,7 @@ async function inventoryFor(database: Pool, restored: AuthRestoredGeneration): P
   if (!restored.databaseOwner) fail('database-owner-unavailable');
   let result: Awaited<ReturnType<AuthRestoreDatabaseOwner['verifyRestoredDatabase']>>;
   try {
-    result = await restored.databaseOwner.verifyRestoredDatabase({ database, generation: restored.generation });
+    result = await restored.databaseOwner.verifyRestoredDatabase({ database, generation: restored.generation, deadline });
   } catch {
     return fail('restore-lineage-unavailable');
   }
@@ -165,23 +179,49 @@ export async function importRestoredAuthProgress(
   restored: AuthRestoredGeneration,
   accountId: string,
 ): Promise<string> {
-  const inventory = await inventoryFor(database, restored);
+  const deadline = Date.now() + 5000;
+  const inventory = await inventoryFor(database, restored, deadline);
   if (!key(accountId)) fail('original-progress-mismatch');
+  const obligation = restored.obligations
+    ? await sourcePoint(restored.obligations, accountId, deadline)
+    : undefined;
+  return importProgress(database, restored, inventory, accountId, obligation, deadline);
+}
+
+async function importProgress(
+  database: Pool,
+  restored: AuthRestoredGeneration,
+  inventory: AuthRestoreInventory,
+  accountId: string,
+  obligation?: AuthErasureObligation,
+  deadline?: number,
+): Promise<string> {
   let progress: Awaited<ReturnType<AuthRestoreDatabaseOwner['recoverCommittedNativeProgress']>>;
   try {
-    progress = await restored.databaseOwner!.recoverCommittedNativeProgress({ inventory, accountId });
+    progress = await restored.databaseOwner!.recoverCommittedNativeProgress({ inventory, accountId, deadline });
   } catch {
     return fail('original-progress-unavailable');
   }
   if (!progress || typeof progress !== 'object') fail('original-progress-unavailable');
   if ('pending' in progress) fail(progress.pending);
   progress = normalizeProgress(progress, accountId);
+  if (deadline !== undefined && Date.now() >= deadline) fail('source-consumer-pending');
+  if (obligation && (
+    progress.source.route !== obligation.route || progress.source.version !== obligation.version ||
+    progress.source.at !== obligation.at || String(progress.floor) !== obligation.minimumAuthnEpoch
+  )) fail('original-progress-mismatch');
   await bindInventory(database, inventory);
   // ALL owner reads have completed before this checkout. There is no foreign
   // call, wait or SDK recovery while holding a native producer lock.
   const connection = await database.connect();
   try {
     await connection.query('BEGIN');
+    if (deadline !== undefined) {
+      if (Date.now() >= deadline) fail('source-consumer-pending');
+      await connection.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [
+        String(Math.max(1, deadline - Date.now())),
+      ]);
+    }
     await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-erasure:${accountId}`]);
     const source = progress.source;
     const deletion = progress.userDeletion.state === 'established' ? progress.userDeletion : null;
@@ -216,6 +256,15 @@ export async function importRestoredAuthProgress(
       );
       if (imported.rows[0]) {
         if (!imported.rows[0].matches) fail('original-progress-mismatch');
+        if (obligation) {
+          const bound = await connection.query(
+            `UPDATE auth_restore_replay SET source_obligation=$3::jsonb
+             WHERE generation=$1 AND obligation_id=$2
+             AND (source_obligation IS NULL OR source_obligation=$3::jsonb) RETURNING obligation_id`,
+            [restored.generation, previous.id, JSON.stringify(obligation)],
+          );
+          if (!bound.rowCount) fail('original-progress-mismatch');
+        }
         // Local native work may since have established its first cutoff or
         // published its genuine consumer proof. Never overwrite that progress
         // with the immutable evidence captured at the start of this generation.
@@ -284,11 +333,11 @@ export async function importRestoredAuthProgress(
     // The original Auth evidence is immutable within this restore generation.
     // New generations get a fresh native cursor even when the old one completed.
     const replay = await connection.query(
-      `INSERT INTO auth_restore_replay(generation,obligation_id,original_progress)
-       VALUES ($1,$2,$3::jsonb) ON CONFLICT(generation,obligation_id)
+      `INSERT INTO auth_restore_replay(generation,obligation_id,original_progress,source_obligation)
+       VALUES ($1,$2,$3::jsonb,$4::jsonb) ON CONFLICT(generation,obligation_id)
        DO UPDATE SET generation=EXCLUDED.generation
        WHERE auth_restore_replay.original_progress=EXCLUDED.original_progress RETURNING obligation_id`,
-      [restored.generation, row.id, JSON.stringify(progress)],
+      [restored.generation, row.id, JSON.stringify(progress), obligation ? JSON.stringify(obligation) : null],
     );
     if (!replay.rowCount) fail('original-progress-mismatch');
     await connection.query('COMMIT');
@@ -308,7 +357,7 @@ function normalizeProgress(progress: AuthRestoreNativeProgress, accountId: strin
     source.accountId !== accountId ||
     !Number.isInteger(source.route) ||
     source.route < 0 ||
-    source.route >= 4096 ||
+    source.route > 65535 ||
     !Number.isSafeInteger(source.version) ||
     source.version < 1 ||
     source.version > 2147483647 ||
@@ -446,23 +495,198 @@ export async function replayRestoredAuthPage(
   return { pending: 'external-owner-pending' };
 }
 
-/** FIRST is the Source owner's required initial cursor. Its opaque floor/cut,
- * point/feed APIs and live handoff must be consumed from the actual original
- * packages/auth-contract/src/auth-erasure-obligations.ts and
- * services/kernel/src/access/auth-erasure-obligations.ts declarations verbatim.
- * Neither exists in this revision, nor is there an owner-authored declaration
- * adapter. Do not invent a cursor/seal/provider here. Exact native import above
- * can proceed, but no generation can be admitted from native progress alone.
+/** Canonical native integer domains, checked as strings before conversion. */
+const ordinal = (value: unknown): value is string =>
+  typeof value === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n;
+const floor = (value: unknown): value is string =>
+  typeof value === 'string' && /^(0|[1-9][0-9]{0,9})$/.test(value) && BigInt(value) <= 2147483647n;
+const partition = (value: number) => Number.isInteger(value) && value >= 0 && value < 4096;
+function validCursor(value: AuthErasureObligationCursor): boolean {
+  return !!value && partition(value.partition) && ordinal(value.afterOrdinal);
+}
+function validCut(cut: AuthErasureObligationCut, cutId: string): boolean {
+  return !!cut && cut.cutId === cutId && cut.participant === 'auth' && cut.inventoryVersion === 1 &&
+    cut.producerVersion === 1 && cut.partitions === 4096 && Number.isInteger(cut.sealedPartitions) &&
+    cut.sealedPartitions >= 0 && cut.sealedPartitions <= 4096;
+}
+function exactObligation(value: AuthErasureObligation): AuthErasureObligation {
+  if (!value || !Number.isInteger(value.route) || value.route < 0 || value.route > 65535 ||
+    !key(value.accountId) || !Number.isInteger(value.version) || value.version < 1 || value.version > 2147483647 ||
+    !timestamp(value.at) || !floor(value.minimumAuthnEpoch) || !key(value.receiptId) ||
+    !ordinal(value.ordinal) || value.ordinal === '0' || Buffer.byteLength(JSON.stringify(value)) > 1024)
+    fail('original-progress-mismatch');
+  return { route: value.route, accountId: value.accountId, version: value.version, at: value.at,
+    minimumAuthnEpoch: value.minimumAuthnEpoch, receiptId: value.receiptId, ordinal: value.ordinal };
+}
+const sameObligation = (a: AuthErasureObligation, b: AuthErasureObligation) =>
+  JSON.stringify(exactObligation(a)) === JSON.stringify(exactObligation(b));
+async function sourceCall<T>(deadline: number, call: () => Promise<T>): Promise<T> {
+  if (Date.now() >= deadline) fail('source-consumer-pending');
+  try {
+    const result = await call();
+    if (Date.now() >= deadline) fail('source-consumer-pending');
+    return result;
+  } catch (error) {
+    if (error instanceof AuthRestoreAdmissionError) throw error;
+    return fail('source-authority-unavailable');
+  }
+}
+async function sourcePoint(ports: AuthErasureObligationPorts, accountId: string, deadline: number) {
+  const point = await sourceCall(deadline, () => ports.readAuthErasureObligation({ accountId, deadline }));
+  if (!point || point.state !== 'ready') fail('source-consumer-pending');
+  const obligation = exactObligation(point.obligation);
+  if (obligation.accountId !== accountId) fail('original-progress-mismatch');
+  return obligation;
+}
+
+type SourceCheckpoint = {
+  source_cut_id: string;
+  source_cursor: AuthErasureObligationCursor | null;
+  source_verify_partition: number;
+  source_revision: string;
+};
+
+/** One actual Source partition/page (max 48), or one current partition verifier.
+ * Each foreign read runs after the previous Auth query/checkpoint has released
+ * its checkout. CAS checkpoints make concurrent/crashed attempts replay the same
+ * cut and page; a cut UUID is only a native locator, never backup evidence.
+ * Native cleanup remains replayRestoredAuthPage's existing engine.
+ */
+export async function stageRestoredAuthObligations(
+  database: Pool,
+  restored: AuthRestoredGeneration,
+): Promise<{ pending: AuthRestorePendingCode }> {
+  const deadline = Date.now() + 5000;
+  const inventory = await inventoryFor(database, restored, deadline);
+  await bindInventory(database, inventory);
+  const ports = restored.obligations;
+  if (!ports) return { pending: 'source-authority-unavailable' };
+  const checkpoint = (await database.query<SourceCheckpoint>(
+    `SELECT source_cut_id,source_cursor,source_verify_partition,source_revision
+     FROM auth_restore_generation WHERE generation=$1`, [restored.generation],
+  )).rows[0]!;
+  const cutId = checkpoint.source_cut_id;
+  const cut = await sourceCall(deadline, () => ports.startAuthErasureObligationCut({ cutId, deadline }));
+  if (!validCut(cut, cutId)) fail('source-consumer-pending');
+  const cursor = checkpoint.source_cursor;
+  if (cursor) {
+    if (!validCursor(cursor)) fail('source-consumer-pending');
+    const page = await sourceCall(deadline, () => ports.pageAuthErasureObligations({ cutId, cursor, deadline }));
+    validatePage(page, cutId, cursor);
+    for (const raw of page.obligations) {
+      const obligation = exactObligation(raw);
+      const current = await sourcePoint(ports, obligation.accountId, deadline);
+      if (!sameObligation(current, obligation)) fail('original-progress-mismatch');
+      await importProgress(database, restored, inventory, obligation.accountId, obligation, deadline);
+    }
+    // Pending/initializing pages may contain useful ready obligations, but their
+    // next locator never skips an unresolved original floor or Source home.
+    const advance = page.pending.length === 0 && (page.state === 'page' || page.state === 'partition-end');
+    await checkpointSource(database, restored.generation, checkpoint, page, advance, deadline);
+    return { pending: 'source-consumer-pending' };
+  }
+  if (checkpoint.source_verify_partition < 4096) {
+    const selected = checkpoint.source_verify_partition;
+    const verification = await sourceCall(deadline, () => ports.verifyAuthErasureObligationCut({
+      cutId, partition: selected, deadline,
+    }));
+    const current = validVerification(verification, cutId, selected) && cut.sealedPartitions === 4096;
+    await checkpointVerification(database, restored.generation, checkpoint, verification, current, deadline);
+    return { pending: current && selected === 4095 ? 'source-live-handoff-pending' : 'source-consumer-pending' };
+  }
+  // Access's verifier releases its partition locks before returning. It has no
+  // owner-native registration/fence transferring future feed obligations to this
+  // restored generation through gate opening. Saved current observations cannot
+  // supply that live handoff, regardless of native/receiving completion.
+  return { pending: 'source-live-handoff-pending' };
+}
+
+function validatePage(page: AuthErasureObligationPage, cutId: string, cursor: AuthErasureObligationCursor) {
+  if (!page || Buffer.byteLength(JSON.stringify(page)) > 65536 || !validCut(page.cut, cutId) ||
+    !page.cursor || page.cursor.partition !== cursor.partition || page.cursor.afterOrdinal !== cursor.afterOrdinal ||
+    !Array.isArray(page.obligations) || !Array.isArray(page.pending) || page.obligations.length + page.pending.length > 48 ||
+    !['initializing', 'pending', 'page', 'partition-end'].includes(page.state)) fail('source-consumer-pending');
+  let previous = BigInt(cursor.afterOrdinal);
+  for (const item of page.obligations) {
+    exactObligation(item);
+    // Route matching belongs to Source, not the 4096-way feed cursor.
+    if (BigInt(item.ordinal) <= previous) fail('source-consumer-pending');
+    previous = BigInt(item.ordinal);
+  }
+  if (page.next !== null && !validCursor(page.next)) fail('source-consumer-pending');
+  if (page.state === 'page' && (!page.next || page.next.partition !== cursor.partition ||
+    BigInt(page.next.afterOrdinal) < previous || BigInt(page.next.afterOrdinal) <= BigInt(cursor.afterOrdinal)))
+    fail('source-consumer-pending');
+  if (page.state === 'partition-end' && (page.pending.length !== 0 ||
+    (cursor.partition === 4095 ? page.next !== null : !page.next ||
+      page.next.partition !== cursor.partition + 1 || page.next.afterOrdinal !== '0')))
+    fail('source-consumer-pending');
+}
+function validVerification(value: AuthErasureObligationVerification, cutId: string, selected: number): boolean {
+  return !!value && value.cutId === cutId && value.partition === selected && value.state === 'current' &&
+    key(value.sourceGeneration) && key(value.sourceOwner) && Number.isSafeInteger(value.sourceEpoch) &&
+    value.sourceEpoch! >= 0 && ordinal(value.highWater) && ordinal(value.liveHighWater) &&
+    value.highWater === value.liveHighWater;
+}
+async function checkpointSource(
+  database: Pool, generation: string, checkpoint: SourceCheckpoint, page: AuthErasureObligationPage,
+  advance: boolean, deadline: number,
+) {
+  const client = await database.connect();
+  try {
+    await client.query('BEGIN');
+    if (Date.now() >= deadline) fail('source-consumer-pending');
+    await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [String(Math.max(1, deadline - Date.now()))]);
+    const changed = await client.query(
+      `UPDATE auth_restore_generation SET source_cut=$3::jsonb,source_cursor=$4::jsonb,source_revision=source_revision+1
+       WHERE generation=$1 AND source_revision=$2 RETURNING generation`,
+      [generation, checkpoint.source_revision, JSON.stringify(page.cut), (advance ? page.next : checkpoint.source_cursor) === null ? null : JSON.stringify(advance ? page.next : checkpoint.source_cursor)],
+    );
+    if (changed.rowCount) await client.query(
+      `INSERT INTO auth_restore_source_partition(generation,partition,page) VALUES($1,$2,$3::jsonb)
+       ON CONFLICT(generation,partition) DO UPDATE SET page=EXCLUDED.page`,
+      [generation, page.cursor.partition, JSON.stringify(page)],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}
+async function checkpointVerification(
+  database: Pool, generation: string, checkpoint: SourceCheckpoint,
+  verification: AuthErasureObligationVerification, current: boolean, deadline: number,
+) {
+  const client = await database.connect();
+  try {
+    await client.query('BEGIN');
+    if (Date.now() >= deadline) fail('source-consumer-pending');
+    await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [String(Math.max(1, deadline - Date.now()))]);
+    const changed = await client.query(
+      `UPDATE auth_restore_generation SET source_verify_partition=source_verify_partition+$3,source_revision=source_revision+1
+       WHERE generation=$1 AND source_revision=$2 RETURNING generation`,
+      [generation, checkpoint.source_revision, current ? 1 : 0],
+    );
+    if (changed.rowCount) await client.query(
+      `UPDATE auth_restore_source_partition SET verification=$3::jsonb WHERE generation=$1 AND partition=$2`,
+      [generation, checkpoint.source_verify_partition, JSON.stringify(verification)],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}
+
+/** Admission precedes handler/issuer/SDK/maintenance construction. Native Source
+ * staging is useful progress, never an assertion of external or physical custody.
  */
 export async function requireRestoredAuthAdmission(database: Pool, restored?: AuthRestoredGeneration): Promise<void> {
   if (!restored) {
-    // Also refuse a database already marked RESTORED when configuration omits
-    // the declaration. A copied old marker is not an admission for a new image.
     const marked = await database.query('SELECT generation FROM auth_restore_generation LIMIT 1');
     if (marked.rowCount) fail('restore-lineage-unavailable');
     return;
   }
-  const inventory = await inventoryFor(database, restored);
-  await bindInventory(database, inventory);
-  fail('source-authority-unavailable');
+  const result = await stageRestoredAuthObligations(database, restored);
+  fail(result.pending);
 }

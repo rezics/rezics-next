@@ -112,7 +112,12 @@ export type PasskeyEffect =
       registrationDigest: string;
     };
 
-export { AuthRestoreAdmissionError, importRestoredAuthProgress, replayRestoredAuthPage } from './restore-admission.ts';
+export {
+  AuthRestoreAdmissionError,
+  importRestoredAuthProgress,
+  replayRestoredAuthPage,
+  stageRestoredAuthObligations,
+} from './restore-admission.ts';
 export type {
   AuthRestoredGeneration,
   AuthRestoreDatabaseOwner,
