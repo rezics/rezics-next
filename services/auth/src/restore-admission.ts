@@ -114,7 +114,11 @@ const timestamp = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 64 && Number.isFinite(Date.parse(value));
 const instant = (value: Date | string | null) => (value === null ? null : new Date(value).getTime());
 
-async function inventoryFor(database: Pool, restored: AuthRestoredGeneration, deadline?: number): Promise<AuthRestoreInventory> {
+async function inventoryFor(
+  database: Pool,
+  restored: AuthRestoredGeneration,
+  deadline?: number,
+): Promise<AuthRestoreInventory> {
   if (restored.kind !== 'RESTORED' || !key(restored.generation)) fail('restore-lineage-mismatch');
   // NULL inventory records only the declaration, never verified backup evidence.
   // Failed native recovery must also keep later construction closed by omission.
@@ -124,7 +128,11 @@ async function inventoryFor(database: Pool, restored: AuthRestoredGeneration, de
   if (!restored.databaseOwner) fail('database-owner-unavailable');
   let result: Awaited<ReturnType<AuthRestoreDatabaseOwner['verifyRestoredDatabase']>>;
   try {
-    result = await restored.databaseOwner.verifyRestoredDatabase({ database, generation: restored.generation, deadline });
+    result = await restored.databaseOwner.verifyRestoredDatabase({
+      database,
+      generation: restored.generation,
+      deadline,
+    });
   } catch {
     return fail('restore-lineage-unavailable');
   }
@@ -182,9 +190,7 @@ export async function importRestoredAuthProgress(
   const deadline = Date.now() + 5000;
   const inventory = await inventoryFor(database, restored, deadline);
   if (!key(accountId)) fail('original-progress-mismatch');
-  const obligation = restored.obligations
-    ? await sourcePoint(restored.obligations, accountId, deadline)
-    : undefined;
+  const obligation = restored.obligations ? await sourcePoint(restored.obligations, accountId, deadline) : undefined;
   return importProgress(database, restored, inventory, accountId, obligation, deadline);
 }
 
@@ -206,10 +212,14 @@ async function importProgress(
   if ('pending' in progress) fail(progress.pending);
   progress = normalizeProgress(progress, accountId);
   if (deadline !== undefined && Date.now() >= deadline) fail('source-consumer-pending');
-  if (obligation && (
-    progress.source.route !== obligation.route || progress.source.version !== obligation.version ||
-    progress.source.at !== obligation.at || String(progress.floor) !== obligation.minimumAuthnEpoch
-  )) fail('original-progress-mismatch');
+  if (
+    obligation &&
+    (progress.source.route !== obligation.route ||
+      progress.source.version !== obligation.version ||
+      progress.source.at !== obligation.at ||
+      String(progress.floor) !== obligation.minimumAuthnEpoch)
+  )
+    fail('original-progress-mismatch');
   await bindInventory(database, inventory);
   // ALL owner reads have completed before this checkout. There is no foreign
   // call, wait or SDK recovery while holding a native producer lock.
@@ -505,18 +515,45 @@ function validCursor(value: AuthErasureObligationCursor): boolean {
   return !!value && partition(value.partition) && ordinal(value.afterOrdinal);
 }
 function validCut(cut: AuthErasureObligationCut, cutId: string): boolean {
-  return !!cut && cut.cutId === cutId && cut.participant === 'auth' && cut.inventoryVersion === 1 &&
-    cut.producerVersion === 1 && cut.partitions === 4096 && Number.isInteger(cut.sealedPartitions) &&
-    cut.sealedPartitions >= 0 && cut.sealedPartitions <= 4096;
+  return (
+    !!cut &&
+    cut.cutId === cutId &&
+    cut.participant === 'auth' &&
+    cut.inventoryVersion === 1 &&
+    cut.producerVersion === 1 &&
+    cut.partitions === 4096 &&
+    Number.isInteger(cut.sealedPartitions) &&
+    cut.sealedPartitions >= 0 &&
+    cut.sealedPartitions <= 4096
+  );
 }
 function exactObligation(value: AuthErasureObligation): AuthErasureObligation {
-  if (!value || !Number.isInteger(value.route) || value.route < 0 || value.route > 65535 ||
-    !key(value.accountId) || !Number.isInteger(value.version) || value.version < 1 || value.version > 2147483647 ||
-    !timestamp(value.at) || !floor(value.minimumAuthnEpoch) || !key(value.receiptId) ||
-    !ordinal(value.ordinal) || value.ordinal === '0' || Buffer.byteLength(JSON.stringify(value)) > 1024)
+  if (
+    !value ||
+    !Number.isInteger(value.route) ||
+    value.route < 0 ||
+    value.route > 65535 ||
+    !key(value.accountId) ||
+    !Number.isInteger(value.version) ||
+    value.version < 1 ||
+    value.version > 2147483647 ||
+    !timestamp(value.at) ||
+    !floor(value.minimumAuthnEpoch) ||
+    !key(value.receiptId) ||
+    !ordinal(value.ordinal) ||
+    value.ordinal === '0' ||
+    Buffer.byteLength(JSON.stringify(value)) > 1024
+  )
     fail('original-progress-mismatch');
-  return { route: value.route, accountId: value.accountId, version: value.version, at: value.at,
-    minimumAuthnEpoch: value.minimumAuthnEpoch, receiptId: value.receiptId, ordinal: value.ordinal };
+  return {
+    route: value.route,
+    accountId: value.accountId,
+    version: value.version,
+    at: value.at,
+    minimumAuthnEpoch: value.minimumAuthnEpoch,
+    receiptId: value.receiptId,
+    ordinal: value.ordinal,
+  };
 }
 const sameObligation = (a: AuthErasureObligation, b: AuthErasureObligation) =>
   JSON.stringify(exactObligation(a)) === JSON.stringify(exactObligation(b));
@@ -561,10 +598,13 @@ export async function stageRestoredAuthObligations(
   await bindInventory(database, inventory);
   const ports = restored.obligations;
   if (!ports) return { pending: 'source-authority-unavailable' };
-  const checkpoint = (await database.query<SourceCheckpoint>(
-    `SELECT source_cut_id,source_cursor,source_verify_partition,source_revision
-     FROM auth_restore_generation WHERE generation=$1`, [restored.generation],
-  )).rows[0]!;
+  const checkpoint = (
+    await database.query<SourceCheckpoint>(
+      `SELECT source_cut_id,source_cursor,source_verify_partition,source_revision
+     FROM auth_restore_generation WHERE generation=$1`,
+      [restored.generation],
+    )
+  ).rows[0]!;
   const cutId = checkpoint.source_cut_id;
   const cut = await sourceCall(deadline, () => ports.startAuthErasureObligationCut({ cutId, deadline }));
   if (!validCut(cut, cutId)) fail('source-consumer-pending');
@@ -587,9 +627,13 @@ export async function stageRestoredAuthObligations(
   }
   if (checkpoint.source_verify_partition < 4096) {
     const selected = checkpoint.source_verify_partition;
-    const verification = await sourceCall(deadline, () => ports.verifyAuthErasureObligationCut({
-      cutId, partition: selected, deadline,
-    }));
+    const verification = await sourceCall(deadline, () =>
+      ports.verifyAuthErasureObligationCut({
+        cutId,
+        partition: selected,
+        deadline,
+      }),
+    );
     const current = validVerification(verification, cutId, selected) && cut.sealedPartitions === 4096;
     await checkpointVerification(database, restored.generation, checkpoint, verification, current, deadline);
     return { pending: current && selected === 4095 ? 'source-live-handoff-pending' : 'source-consumer-pending' };
@@ -602,10 +646,19 @@ export async function stageRestoredAuthObligations(
 }
 
 function validatePage(page: AuthErasureObligationPage, cutId: string, cursor: AuthErasureObligationCursor) {
-  if (!page || Buffer.byteLength(JSON.stringify(page)) > 65536 || !validCut(page.cut, cutId) ||
-    !page.cursor || page.cursor.partition !== cursor.partition || page.cursor.afterOrdinal !== cursor.afterOrdinal ||
-    !Array.isArray(page.obligations) || !Array.isArray(page.pending) || page.obligations.length + page.pending.length > 48 ||
-    !['initializing', 'pending', 'page', 'partition-end'].includes(page.state)) fail('source-consumer-pending');
+  if (
+    !page ||
+    Buffer.byteLength(JSON.stringify(page)) > 65536 ||
+    !validCut(page.cut, cutId) ||
+    !page.cursor ||
+    page.cursor.partition !== cursor.partition ||
+    page.cursor.afterOrdinal !== cursor.afterOrdinal ||
+    !Array.isArray(page.obligations) ||
+    !Array.isArray(page.pending) ||
+    page.obligations.length + page.pending.length > 48 ||
+    !['initializing', 'pending', 'page', 'partition-end'].includes(page.state)
+  )
+    fail('source-consumer-pending');
   let previous = BigInt(cursor.afterOrdinal);
   for (const item of page.obligations) {
     exactObligation(item);
@@ -614,68 +667,111 @@ function validatePage(page: AuthErasureObligationPage, cutId: string, cursor: Au
     previous = BigInt(item.ordinal);
   }
   if (page.next !== null && !validCursor(page.next)) fail('source-consumer-pending');
-  if (page.state === 'page' && (!page.next || page.next.partition !== cursor.partition ||
-    BigInt(page.next.afterOrdinal) < previous || BigInt(page.next.afterOrdinal) <= BigInt(cursor.afterOrdinal)))
+  if (
+    page.state === 'page' &&
+    (!page.next ||
+      page.next.partition !== cursor.partition ||
+      BigInt(page.next.afterOrdinal) < previous ||
+      BigInt(page.next.afterOrdinal) <= BigInt(cursor.afterOrdinal))
+  )
     fail('source-consumer-pending');
-  if (page.state === 'partition-end' && (page.pending.length !== 0 ||
-    (cursor.partition === 4095 ? page.next !== null : !page.next ||
-      page.next.partition !== cursor.partition + 1 || page.next.afterOrdinal !== '0')))
+  if (
+    page.state === 'partition-end' &&
+    (page.pending.length !== 0 ||
+      (cursor.partition === 4095
+        ? page.next !== null
+        : !page.next || page.next.partition !== cursor.partition + 1 || page.next.afterOrdinal !== '0'))
+  )
     fail('source-consumer-pending');
 }
 function validVerification(value: AuthErasureObligationVerification, cutId: string, selected: number): boolean {
-  return !!value && value.cutId === cutId && value.partition === selected && value.state === 'current' &&
-    key(value.sourceGeneration) && key(value.sourceOwner) && Number.isSafeInteger(value.sourceEpoch) &&
-    value.sourceEpoch! >= 0 && ordinal(value.highWater) && ordinal(value.liveHighWater) &&
-    value.highWater === value.liveHighWater;
+  return (
+    !!value &&
+    value.cutId === cutId &&
+    value.partition === selected &&
+    value.state === 'current' &&
+    key(value.sourceGeneration) &&
+    key(value.sourceOwner) &&
+    Number.isSafeInteger(value.sourceEpoch) &&
+    value.sourceEpoch! >= 0 &&
+    ordinal(value.highWater) &&
+    ordinal(value.liveHighWater) &&
+    value.highWater === value.liveHighWater
+  );
 }
 async function checkpointSource(
-  database: Pool, generation: string, checkpoint: SourceCheckpoint, page: AuthErasureObligationPage,
-  advance: boolean, deadline: number,
+  database: Pool,
+  generation: string,
+  checkpoint: SourceCheckpoint,
+  page: AuthErasureObligationPage,
+  advance: boolean,
+  deadline: number,
 ) {
   const client = await database.connect();
   try {
     await client.query('BEGIN');
     if (Date.now() >= deadline) fail('source-consumer-pending');
-    await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [String(Math.max(1, deadline - Date.now()))]);
+    await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [
+      String(Math.max(1, deadline - Date.now())),
+    ]);
     const changed = await client.query(
       `UPDATE auth_restore_generation SET source_cut=$3::jsonb,source_cursor=$4::jsonb,source_revision=source_revision+1
        WHERE generation=$1 AND source_revision=$2 RETURNING generation`,
-      [generation, checkpoint.source_revision, JSON.stringify(page.cut), (advance ? page.next : checkpoint.source_cursor) === null ? null : JSON.stringify(advance ? page.next : checkpoint.source_cursor)],
+      [
+        generation,
+        checkpoint.source_revision,
+        JSON.stringify(page.cut),
+        (advance ? page.next : checkpoint.source_cursor) === null
+          ? null
+          : JSON.stringify(advance ? page.next : checkpoint.source_cursor),
+      ],
     );
-    if (changed.rowCount) await client.query(
-      `INSERT INTO auth_restore_source_partition(generation,partition,page) VALUES($1,$2,$3::jsonb)
+    if (changed.rowCount)
+      await client.query(
+        `INSERT INTO auth_restore_source_partition(generation,partition,page) VALUES($1,$2,$3::jsonb)
        ON CONFLICT(generation,partition) DO UPDATE SET page=EXCLUDED.page`,
-      [generation, page.cursor.partition, JSON.stringify(page)],
-    );
+        [generation, page.cursor.partition, JSON.stringify(page)],
+      );
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
-  } finally { client.release(); }
+  } finally {
+    client.release();
+  }
 }
 async function checkpointVerification(
-  database: Pool, generation: string, checkpoint: SourceCheckpoint,
-  verification: AuthErasureObligationVerification, current: boolean, deadline: number,
+  database: Pool,
+  generation: string,
+  checkpoint: SourceCheckpoint,
+  verification: AuthErasureObligationVerification,
+  current: boolean,
+  deadline: number,
 ) {
   const client = await database.connect();
   try {
     await client.query('BEGIN');
     if (Date.now() >= deadline) fail('source-consumer-pending');
-    await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [String(Math.max(1, deadline - Date.now()))]);
+    await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [
+      String(Math.max(1, deadline - Date.now())),
+    ]);
     const changed = await client.query(
       `UPDATE auth_restore_generation SET source_verify_partition=source_verify_partition+$3,source_revision=source_revision+1
        WHERE generation=$1 AND source_revision=$2 RETURNING generation`,
       [generation, checkpoint.source_revision, current ? 1 : 0],
     );
-    if (changed.rowCount) await client.query(
-      `UPDATE auth_restore_source_partition SET verification=$3::jsonb WHERE generation=$1 AND partition=$2`,
-      [generation, checkpoint.source_verify_partition, JSON.stringify(verification)],
-    );
+    if (changed.rowCount)
+      await client.query(
+        `UPDATE auth_restore_source_partition SET verification=$3::jsonb WHERE generation=$1 AND partition=$2`,
+        [generation, checkpoint.source_verify_partition, JSON.stringify(verification)],
+      );
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
-  } finally { client.release(); }
+  } finally {
+    client.release();
+  }
 }
 
 /** Admission precedes handler/issuer/SDK/maintenance construction. Native Source
