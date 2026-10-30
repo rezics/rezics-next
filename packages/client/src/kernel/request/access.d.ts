@@ -32,6 +32,8 @@ export declare function resourcePage(page: ResourcePage): ResourcePage;
 export type ActionMetadata = {
     anonymous: boolean;
     replay?: 'self-account-read';
+    /** Mounted personal actions use the verified acting account's native owner authority. */
+    authority?: 'own-account';
     /** Resource types the command initializes. Absent means it initializes none. */
     'x-resource-types'?: readonly string[];
 };

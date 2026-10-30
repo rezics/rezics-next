@@ -4079,7 +4079,9 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../request/access.ts").Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4559,7 +4561,9 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../request/access.ts").Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4589,7 +4593,9 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../request/access.ts").Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4953,7 +4959,9 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
                     deadline: number;
                     signal: AbortSignal;
                 };
-                readonly actor: import("../request/access.ts").Actor;
+                readonly actor: import("../request/access.ts").AccountActor | {
+                    kind: 'anonymous';
+                };
                 readonly session: {
                     readonly components: import("../tokens/session.ts").SessionComponent[];
                     record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4985,7 +4993,9 @@ export declare function pinRoutes(app: ReturnType<typeof definitionRoutes>, deps
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../request/access.ts").Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;

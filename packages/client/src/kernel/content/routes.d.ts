@@ -1,7 +1,6 @@
 import { type ContentBoardDependencies } from './boards.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { createApp } from '../http/app.ts';
-import { type Actor } from '../request/access.ts';
 import { type ContentCommandDependencies } from './commands.ts';
 import type { ContentRuntime } from './runtime.ts';
 import { type ItemView, type PostEntry, type SubjectReactionKind } from './reads.ts';
@@ -10607,7 +10606,9 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -11183,7 +11184,9 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -11211,7 +11214,9 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -11704,7 +11709,9 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -12160,7 +12167,9 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -12186,7 +12195,9 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;

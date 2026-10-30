@@ -15,6 +15,7 @@ export type ViewerActionBinding = Readonly<{
     action: string;
     operationId: string;
     exposure: Exposure;
+    authority: 'resource' | 'own-account';
 }>;
 export type ViewerActionBindings = ReadonlyMap<string, readonly ViewerActionBinding[]>;
 /** No module-maintained operation list: only mounted direct declarations and
@@ -89,7 +90,9 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -467,7 +470,9 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -496,7 +501,9 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;

@@ -1,4 +1,4 @@
-import { type Access, type Actor } from '../request/access.ts';
+import { type Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { Pool } from 'pg';
 type Dependencies = Readonly<{
@@ -3819,7 +3819,9 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4333,7 +4335,9 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4361,7 +4365,9 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4872,7 +4878,9 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
                     deadline: number;
                     signal: AbortSignal;
                 };
-                readonly actor: Actor;
+                readonly actor: import("../request/access.ts").AccountActor | {
+                    kind: 'anonymous';
+                };
                 readonly session: {
                     readonly components: import("../tokens/session.ts").SessionComponent[];
                     record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4902,7 +4910,9 @@ export declare function sourceFenceRoutes(app: ReturnType<typeof definitionRoute
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;

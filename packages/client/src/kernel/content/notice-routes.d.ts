@@ -4035,7 +4035,9 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("./reads.ts").Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4627,7 +4629,9 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("./reads.ts").Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4657,7 +4661,9 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("./reads.ts").Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;

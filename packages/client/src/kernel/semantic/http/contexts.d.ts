@@ -1,5 +1,5 @@
 import type { definitionRoutes } from './definitions.ts';
-import { type Resource } from '../../request/access.ts';
+import { type AccountActor, type Resource } from '../../request/access.ts';
 import type { Access } from '../../request/access.ts';
 declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: {
     pool: import('pg').Pool;
@@ -4182,7 +4182,9 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../../request/access.ts").Actor;
+        readonly actor: AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
@@ -4470,7 +4472,9 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../../request/access.ts").Actor;
+            readonly actor: AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
@@ -4496,7 +4500,9 @@ declare function contextRoutes(app: ReturnType<typeof definitionRoutes>, depende
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../../request/access.ts").Actor;
+    readonly actor: AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;

@@ -3152,7 +3152,9 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../../request/access.ts").Actor;
+        readonly actor: import("../../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
@@ -3800,7 +3802,9 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../../request/access.ts").Actor;
+            readonly actor: import("../../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
@@ -3945,7 +3949,9 @@ export declare function bulkRoutes(app: ReturnType<typeof subjectRoutes>, { pool
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../../request/access.ts").Actor;
+    readonly actor: import("../../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;

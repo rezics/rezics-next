@@ -19,6 +19,7 @@ export declare function assertInternalActionDeclarations(actions: ActionCatalogu
 export declare function accessActionCatalogue(declared: ActionCatalogue): Map<string, {
     anonymous: boolean;
     replay?: 'self-account-read';
+    authority?: 'own-account';
     'x-resource-types'?: readonly string[];
 }>;
 /** The native batch's already-observed kernel instant; no second clock query. */

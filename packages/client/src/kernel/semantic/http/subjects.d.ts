@@ -1,7 +1,7 @@
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { type Item } from '../item.ts';
-import type { Access, Resource } from '../../request/access.ts';
+import type { Access, AccountActor, Resource } from '../../request/access.ts';
 import { createApp } from '../../http/app.ts';
 import { type SubjectRelationCountResponse } from '../counts.ts';
 export declare const ItemSchema: import("typebox").TObject<{
@@ -3133,7 +3133,9 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../../request/access.ts").Actor;
+        readonly actor: AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../../tokens/session.ts").SessionComponent[];
             record(component: import("../../tokens/session.ts").SessionComponent): void;
@@ -3501,7 +3503,9 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../../request/access.ts").Actor;
+            readonly actor: AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../../tokens/session.ts").SessionComponent[];
                 record(component: import("../../tokens/session.ts").SessionComponent): void;
@@ -3527,7 +3531,9 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../../request/access.ts").Actor;
+    readonly actor: AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../../tokens/session.ts").SessionComponent[];
         record(component: import("../../tokens/session.ts").SessionComponent): void;

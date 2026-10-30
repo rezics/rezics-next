@@ -3992,7 +3992,9 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4662,7 +4664,9 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -4702,7 +4706,9 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
