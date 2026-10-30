@@ -92,7 +92,7 @@ export async function runCliKeyRotationJourney() {
     let controller = new AbortController();
     let consumed = 0;
     let sealedInputBytes = 0;
-    let lost: { request: Request; bytes: string; result: BatchWriteResult } | undefined;
+    const loss: { committed?: { request: Request; bytes: string; result: BatchWriteResult } } = {};
     const signIns: SignIn[] = [];
     const tokens: Token[] = [];
     const writes: Write[] = [];
@@ -128,7 +128,7 @@ export async function runCliKeyRotationJourney() {
             status: response.status,
             ...(claims
               ? {
-                  account: claims.sub,
+                  account: String(claims.sub),
                   client: String(claims.client_id),
                   scopes: String(claims.scope).split(' ').sort(),
                 }
@@ -170,7 +170,7 @@ export async function runCliKeyRotationJourney() {
       const response = await runtime.replay(request);
       const body = await response.clone().json();
       if (url.pathname === '/v1/sourceFences:check')
-        fences.push({ phase, request: JSON.parse(bytes), status: response.status, body });
+        fences.push({ phase, request: Object.fromEntries(url.searchParams), status: response.status, body });
       if (request.method !== 'GET' && url.pathname !== '/v1/sourceFences:check')
         writes.push({
           phase,
@@ -180,14 +180,14 @@ export async function runCliKeyRotationJourney() {
           status: response.status,
           body,
         });
-      if (phase === 'pending' && isBatch && !lost) {
+      if (phase === 'pending' && isBatch && !loss.committed) {
         const batch = JSON.parse(bytes) as BatchWriteRequest;
         if (batch.commands.every((c) => c.op !== 'create')) {
           expect(response.status).toBe(200);
           const result = body as BatchWriteResult;
           expect(result.results).toHaveLength(batch.commands.length);
           for (const ack of result.results) expect('value' in ack).toBe(true);
-          lost = { request: replay, bytes, result };
+          loss.committed = { request: replay, bytes, result };
           controller.abort(new DOMException('Committed response lost', 'AbortError'));
           throw controller.signal.reason;
         }
@@ -253,6 +253,7 @@ export async function runCliKeyRotationJourney() {
           },
         },
       });
+      console.log('CLI key rotation invocation', JSON.stringify({ phase, ...result }));
       expect(result.openHandles).toBe(0);
       expect(result.stderr).not.toContain('Bearer ');
       expect(result.stderr).not.toContain(old.privateJwk.d!);
@@ -311,6 +312,7 @@ export async function runCliKeyRotationJourney() {
       return rows;
     }
     const pending = await invoke('pending');
+    const lost = loss.committed;
     if (!lost) throw new Error('No native committed proposal response was lost');
     const before = inspect();
     expect(before.run).not.toBeNull();
@@ -366,6 +368,11 @@ export async function runCliKeyRotationJourney() {
     expect(after.records[0]!.recordRevision).toBe('unversioned');
     expect(after.records[0]!.converter_revision).toBe(coordinator[0]!.revision);
     expect(after.records[0]!.digest).toMatch(/^[a-f0-9]{64}$/);
+    for (const command of commands.values()) {
+      expect(command.source.digest).toBe(after.records[0]!.digest);
+      expect(command.source.record_revision).toBe(after.records[0]!.recordRevision);
+      expect(command.source.converter_revision).toBe(after.records[0]!.converter_revision);
+    }
     const resumedWrites = writes.filter((w) => w.phase === 'resumed' && w.path === '/v1/subjects:batchWrite');
     const resumedPreparedBytes = resumedWrites.map((w) => w.bytes);
     const resumedPreparedKeys = resumedWrites.map((w) =>
