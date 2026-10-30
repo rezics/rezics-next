@@ -832,7 +832,7 @@ test('stack-free placement: a real managed local check completes while every fak
     expect(report.join('')).toContain('check: exit status 0');
     expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('local importer evidence ran');
     expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('waiting (4/4 held, 0 ahead)');
-    expect(readFileSync(join(fixture.root, record.log), 'utf8')).toMatch(/slots \(4\/4\) after \d+ ms/);
+    expect(readFileSync(join(fixture.root, record.log), 'utf8')).toMatch(/slots [\d,]+ \(4\/4\) after \d+ ms/);
     expect(readFileSync(join(fixture.root, record.log), 'utf8')).not.toContain('remote-check:');
     expect(existsSync(fixture.remoteEvents)).toBe(false);
   } finally {
