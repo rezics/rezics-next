@@ -92,6 +92,18 @@ async function deployment(subjects: readonly IndexedSubject[]) {
   const prefix = `test-${crypto.randomUUID().slice(0, 8)}-`;
   prefixes.push(prefix);
   const fake = createFakeSource();
+  // This controlled Source stores bodies in memory; its observation versions belong
+  // to the native log, including partitions introduced by other tests in this file.
+  const memoryRead = fake.read;
+  const memoryCount = fake.count;
+  const position = async (partition: number) => {
+    const { rows } = await admin.query<{ position: string }>(
+      'SELECT position::text FROM core.partition WHERE partition_no = $1', [partition],
+    );
+    return BigInt(rows[0]!.position);
+  };
+  fake.read = async (partition, ids) => ({ ...(await memoryRead(partition, ids)), position: await position(partition) });
+  fake.count = async (partition) => ({ ...(await memoryCount(partition)), position: await position(partition) });
   const runner = await startSearchIndexing({
     pool,
     search,

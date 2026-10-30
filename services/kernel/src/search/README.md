@@ -738,7 +738,7 @@ source key equality, copy completeness, late-write pruning or erasure. No name/U
   fixed overflow field, reach a running deployment through replay/reconcile into a new generation and alias switch.
   Grow H/N, fixing batch size and generation count.
 - Bound: Whole-index maintenance: `O(H)` replayed event rows per partition over the run, `O(ceil(H/b))` batches
-  for fixed batch occupancy plus their indexed probes; not `O(1)` per rebuild. Two activation requests, zero
+  for fixed batch occupancy plus their indexed probes; not `O(1)` per rebuild. Two activation writes and two fresh native observations (physical mapping and final generation/alias resolve), zero
   activation SQL. At most three generations per prefix, so the runner feeds at most three; rebuild exclusion uses a
   PostgreSQL session advisory lock keyed by alias, with two lock statements on one held connection; alias switching
   is delegated to OpenSearch and is constant-size.
@@ -749,19 +749,37 @@ source key equality, copy completeness, late-write pruning or erasure. No name/U
 
 ### Reconcile
 
-- Touches: Per explicit rebuild, default <= 5 rounds: `reconcile.sql` twice reads all heads/checkpoints, then
-  `source.count(partition)` for every nonempty partition (<= 4,096, concurrency 8), plus a count for any newly
-  nonempty partition after the first snapshot. One generation `_search` with size 0 and partition terms aggregation
-  size 4,096. Grow N/P/H, fixing round count and nonempty partition set.
-- Bound: Two SQL statements: `O(4096)` rows, indexed `O(4096*L(P))` blocks; one engine aggregation; <= 4,096
-  source count calls per round. Each `subjectSource.count` reads one `core.partition` position and one
-  `semantic.partition_subjects` row by primary key: constant rows and statements, logarithmic blocks, independent
-  of N and subjects in the partition. Whole-index operation, never per change.
-- Growth check: [test/search/generations.test.ts](../../test/search/generations.test.ts): “each reconciliation round
-  reads every non-empty partition count once and makes one index aggregation” proves stable-partition calls;
-  [test/search/growth-indexing.test.ts](../../test/search/growth-indexing.test.ts): “Reconcile stays within its bound
-  as P grows” (heads and checkpoints); [test/semantic/growth-search-source.test.ts](../../test/semantic/growth-search-source.test.ts):
-  “Source count stays within its bound as P grows”.
+- Touches: Per explicit rebuild, default <= 5 rounds: `reconcile.sql` reads native heads/checkpoints before and
+  after one Source count snapshot per observed nonempty partition (<= 4,096, concurrency 8) and one physical
+  generation `_search` with size 0 and partition terms aggregation size 4,096. Newly observed partitions receive
+  one count for diagnostics and remain pending until a later round. No history scan or hits enumeration is added.
+- Admission: Each Source receipt contains exactly a bigint position in PostgreSQL's nonnegative bigint domain
+  and a nonnegative safe integer count. Missing or malformed evidence is unavailable. Quiet means both native
+  head/checkpoint observations and that same Source position agree. Stale or moving observations remain pending
+  and exhaust the existing busy bound; a quiet count disagreement is mismatch. Real zero counts remain valid.
+  The native aggregation must have integral zero `doc_count_error_upper_bound` and `sum_other_doc_count`, unique
+  valid home keys and safe counts, with complete shards and no timeout/termination. Missing/incomplete evidence
+  is unavailable, including on an empty generation.
+- Activation: After certification, write activation metadata on the exact physical generation, read it back with
+  the same sort format/timestamp, then atomically switch the alias and resolve the final bounded native generation
+  set. Even acknowledged writes require these observations. Negative, malformed or lost replies can succeed only
+  when a fresh definitive observation establishes their actual effect. Otherwise return unavailable without retrying
+  the write or rolling back a concurrently changed alias. An unavailable result can therefore leave an applied
+  alias switch; subsequent discovery/rebuild uses the actual native state. This optimistic per-round proof does
+  not claim that concurrent writes cease globally at switch or establish complete Source key equality.
+- Bound: Two reconciliation SQL statements: `O(4096)` rows, indexed `O(4096*L(P))` blocks; one engine aggregation;
+  <= 4,096 Source count calls per round. Each native `subjectSource.count` reads one `core.partition` position and
+  one `semantic.partition_subjects` row by primary key: constant rows/statements, logarithmic blocks. Activation
+  adds constant native metadata requests and retains the original advisory lock and generation limits.
+- Growth check: [rebuild-custody-native.test.ts](../../test/search/rebuild-custody-native.test.ts) captures actual
+  rebuild SQL rows/blocks, engine requests/bytes, exact Source keys and eight-count concurrency at 64/512/4,096
+  unrelated histories and separately nonempty partitions. Its controlled body/count adapter includes native core
+  position reads; Semantic count/indexed maintenance cost is additional, owned by
+  [growth-search-source.test.ts](../../test/semantic/growth-search-source.test.ts). Actual runner replay and external
+  version writes, receipt rejection, interleavings, native activation effects and recovery are tested separately
+  from growth. These controlled receipts do not prove native Semantic publication, permission or whole-query deletion.
+  Existing [generations.test.ts](../../test/search/generations.test.ts) and
+  [growth-indexing.test.ts](../../test/search/growth-indexing.test.ts) retain lifecycle and metadata growth coverage.
 
 ### Retire
 
