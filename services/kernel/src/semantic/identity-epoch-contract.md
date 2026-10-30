@@ -1443,6 +1443,16 @@ It decrements only newly retained custody and never rewinds the
 scheduling cursor. These bounded transient locators add no retained copy or membership vector. Dirty-home repair
 keeps its individual scheduler steps and four pipelines. Pool and queue limits are unchanged. Individual
 source export/receiving/source ACK commands, raw100 bound, all4096 closure and every registered queue remain intact.
+An initially empty legacy home uses three local storage functions to fuse statements within those same three
+native commands. Its complete indexed local subject/member/dirty census commits a retained generation-1 empty
+page and native export; a separately committed receiving command validates that page/native owner and retains
+the ordinary custody and basis; a third source command verifies both exact native receipts before ACK/sealing.
+The source closure checks current dirty heads, so a concurrent h+1 cannot be cleared. All page, custody, basis,
+three native commits, indexes, outbox and topology copies remain charged exactly as for the ordinary empty
+protocol. No extra record, command allowance, larger page, queue or pool is introduced. An interruption at any
+stage resumes the same retained page through the ordinary native recovery path. The nested-function RLS witness
+covers these commands and rejects ACK before receiving custody. Dirty repair merges known unfinished and newly
+dirty homes in cursor order before wrapping; an unfinished lower home cannot starve a newly dirty higher home.
 The shared relay refills released worker slots from its current fixed-topology scan, retaining its normal four-worker
 limit, pause/stop drain and poll interval. It does not discard the rest of a scan after its first four launches,
 which would impose at least 102.4 seconds of polling on 4096 actual native homes. No checkpoint is fabricated.

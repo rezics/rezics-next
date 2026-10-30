@@ -52,6 +52,9 @@ import subjects from './identity-epoch-bootstrap-subjects.sql';
 import members from './identity-epoch-bootstrap-members.sql';
 import dirty from './identity-epoch-bootstrap-dirty.sql';
 import memberDirty from './identity-epoch-bootstrap-member-dirty.sql';
+import exportEmpty from './identity-epoch-bootstrap-export-empty.sql';
+import receiveEmpty from './identity-epoch-bootstrap-receive-empty.sql';
+import ackEmpty from './identity-epoch-bootstrap-ack-empty.sql';
 
 const NIL = '00000000-0000-0000-0000-000000000000';
 type Phase = 'subjects' | 'members' | 'dirty' | 'member-dirty';
@@ -571,6 +574,18 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
       while (issued < selected.value.length) {
         const index = issued++;
         const partition = selected.value[index]!;
+        const empty = await closeInitialEmptyHome(pool, partition, index === 0);
+        if (empty) {
+          if (empty.sealed)
+            closures.push({
+              source_partition: partition,
+              source_generation: '1',
+              source_epoch: empty.epoch,
+              source_transaction_id: empty.transactionId,
+              source_position: empty.position.toString(),
+            });
+          continue;
+        }
         // The continuation belongs to the real first source ACK, not the shared topology queue key.
         // A crash before that ACK is recovered by this already durable DBOS effect.
         await stepBootstrapHome(pool, partition, index === 0);
@@ -610,4 +625,54 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
       ],
     };
   });
+}
+
+/** The empty case keeps all three native commits, page, receiving custody/basis and source
+ * closure. Only SQL round trips inside each home are fused. Any interrupted stage falls
+ * back to the existing retained-page recovery path, including exact owner/head checks.
+ */
+async function closeInitialEmptyHome(pool: Pool, partition: number, schedule: boolean) {
+  const exported = await runCommand(pool, { partition }, async (tx, { transactionId }) => {
+    const applied = (await tx.query(exportEmpty.sql, [partition, transactionId])).rows[0]?.applied;
+    if (!applied) return noEffect(false);
+    return { value: true, events: [{ ...identityBootstrapWake(partition, 1n), type: IDENTITY_EPOCH_PROGRESS }] };
+  });
+  if (!exported.value) return null;
+  // These locators are actual committed outcomes, not input supplied by a caller.
+  const received = await runCommand(pool, { partition }, async (tx, { transactionId }) => {
+    const applied = (
+      await tx.query(receiveEmpty.sql, [
+        partition,
+        exported.transactionId,
+        exported.epoch,
+        exported.position.toString(),
+        transactionId,
+      ])
+    ).rows[0]?.applied;
+    if (!applied) return noEffect(false);
+    return { value: true, events: [{ ...identityBootstrapWake(partition, 1n), type: IDENTITY_EPOCH_PROGRESS }] };
+  });
+  if (!received.value) return null;
+  const acknowledged = await runCommand(pool, { partition }, async (tx, { transactionId }) => {
+    const result = (
+      await tx.query(ackEmpty.sql, [
+        partition,
+        exported.transactionId,
+        received.transactionId,
+        received.epoch,
+        received.position.toString(),
+        transactionId,
+      ])
+    ).rows[0];
+    if (!result?.applied) return noEffect({ applied: false, sealed: false });
+    return {
+      value: { applied: true, sealed: result.sealed === true },
+      events: [
+        schedule
+          ? { type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition } }
+          : { ...identityBootstrapWake(partition, 1n), type: IDENTITY_EPOCH_PROGRESS },
+      ],
+    };
+  });
+  return acknowledged.value.applied ? { ...acknowledged, sealed: acknowledged.value.sealed } : null;
 }

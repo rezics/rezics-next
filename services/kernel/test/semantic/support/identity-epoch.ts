@@ -16,8 +16,7 @@ export const release = { digest: bundledDigest, release: bundledRelease };
 export const globalResource = { route: 0, id: GLOBAL_CONTEXT };
 export const digest = (key: string) => createHash('sha256').update(key).digest();
 
-export async function epochFixture() {
-  const url = process.env.DATABASE_URL;
+export async function epochFixture(url = process.env.DATABASE_URL) {
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
   const admin = new pg.Pool({ connectionString: url, max: 2 });

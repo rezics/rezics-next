@@ -166,6 +166,9 @@ committed by its first actual source ACK, so successive batches use the existing
 rather than serialize at topology home 0. The durable DBOS effect recovers a crash before that ACK. Dirty-home repair retains its
 individual scheduler steps. Legacy deployments' 4096 homes, including empty
 homes, retain their actual source export, receiving custody, source ACK and native closure. Native source changes retain dirty heads and wake the same scheduler.
+Initially empty legacy homes fuse local SQL statements while preserving three separate native commits and
+the same retained page, receiving custody/basis and source closure. Interrupted stages recover through the
+ordinary retained-page protocol. New dirty homes join the ordered repair cursor before it wraps to earlier work.
 `readIdentityEpochCutover(client)` observes valid native absence closure or retained full topology custody;
 point mappings do not wait for a legacy sweep.
 The shared relay refills completed worker slots from the current fixed-topology scan. Its normal concurrency and

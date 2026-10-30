@@ -9,8 +9,12 @@ import {
 } from '../community/community-driver.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
-import { readIdentityEpochCutover } from '../../src/semantic/identity-epoch-bootstrap.ts';
-import { identityEpochDatabase, seedLegacyRoot } from './support/identity-epoch.ts';
+import {
+  readIdentityEpochCutover,
+  stepIdentityEpochBootstrap,
+  stepIdentityEpochBootstrapWork,
+} from '../../src/semantic/identity-epoch-bootstrap.ts';
+import { epochFixture, home, identityEpochDatabase, seedLegacyRoot } from './support/identity-epoch.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 
 afterAll(closeCommunityDrivers);
@@ -318,6 +322,51 @@ test('concurrent native installers retain one cut and one closure receipt', asyn
     ).toEqual([{ count: 1 }]);
     expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'ready' });
   } finally {
+    await db.close();
+  }
+}, 30_000);
+
+test('absence repair visits a new dirty home before wrapping to an unfinished earlier home', async () => {
+  const db = await identityEpochDatabase();
+  const f = await epochFixture(db.url);
+  try {
+    expect((await installIdentityEpochBootstrap(f.pool)).mode).toBe('absence');
+    const low = (await f.create('Earlier original', 0x6ea0)).subject.id;
+    const lowTarget = (await f.create('Earlier survivor', 0x6ea0)).subject.id;
+    const high = (await f.create('Later original', 0x6eb0)).subject.id;
+    const highTarget = (await f.create('Later survivor', 0x6eb0)).subject.id;
+    let progress;
+    do {
+      progress = await stepIdentityEpochBootstrap(f.pool, home(low));
+    } while (progress.state !== 'caught-up');
+    await f.merge(low, lowTarget);
+    expect((await stepIdentityEpochBootstrapWork(f.pool, false))?.partition).toBe(home(low));
+    await f.merge(high, highTarget);
+    // The earlier home still has a real dirty/member-dirty continuation. The new home
+    // has never had a bootstrap_home row, and must participate in the same ordered cursor.
+    expect(
+      (
+        await f.admin.query('SELECT needs_work FROM semantic.identity_epoch_bootstrap_home WHERE partition_no=$1', [
+          home(low),
+        ])
+      ).rows,
+    ).toEqual([{ needs_work: true }]);
+    expect((await stepIdentityEpochBootstrapWork(f.pool, false))?.partition).toBe(home(high));
+    for (const original of [low, high]) {
+      do {
+        progress = await stepIdentityEpochBootstrap(f.pool, home(original));
+      } while (progress.state !== 'caught-up');
+    }
+    expect(await identityEpochStore.readMapping(f.pool, high)).toMatchObject({ state: 'mapped', terminal: highTarget });
+    expect(await identityEpochStore.readMapping(f.pool, low)).toMatchObject({ state: 'mapped', terminal: lowTarget });
+    expect(
+      (await f.admin.query('SELECT count(*)::integer homes FROM semantic.identity_epoch_bootstrap_home')).rows,
+    ).toEqual([{ homes: 2 }]);
+    expect((await f.admin.query('SELECT remaining FROM semantic.identity_epoch_bootstrap_topology')).rows).toEqual([
+      { remaining: 4096 },
+    ]);
+  } finally {
+    await f.close();
     await db.close();
   }
 }, 30_000);

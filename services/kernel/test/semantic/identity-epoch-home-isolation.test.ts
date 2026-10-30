@@ -13,6 +13,10 @@ import {
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
 import acquire from '../../src/semantic/identity-epoch-admission-acquire.sql';
+import exportEmpty from '../../src/semantic/identity-epoch-bootstrap-export-empty.sql';
+import receiveEmpty from '../../src/semantic/identity-epoch-bootstrap-receive-empty.sql';
+import ackEmpty from '../../src/semantic/identity-epoch-bootstrap-ack-empty.sql';
+import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
 import type { IdentityAdmissionInput } from '../../src/semantic/identity-epoch-contract.ts';
 import { digest, epochFixture, home, release, type EpochFixture } from './support/identity-epoch.ts';
 
@@ -49,6 +53,130 @@ beforeAll(async () => {
       USING (${table.key}=current_setting('identity_test.home')::integer)
       WITH CHECK (${table.key}=current_setting('identity_test.home')::integer)`);
   }
+});
+
+test('empty legacy homes retain three distinct native commits and reject source ACK before receiving custody under nested RLS', async () => {
+  const partition = 0x6f7;
+  const exported = await isolated(/export_identity_epoch_empty_bootstrap/, partition, () =>
+    runCommand(f.pool, { partition }, async (tx, { transactionId }) => {
+      expect((await tx.query(exportEmpty.sql, [partition, transactionId])).rows).toEqual([{ applied: true }]);
+      expect(
+        (await tx.query('SELECT * FROM semantic.identity_epoch_native_commit WHERE partition_no<>$1', [partition]))
+          .rows,
+      ).toEqual([]);
+      return { value: null, events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition, generation: '1' } }] };
+    }),
+  );
+  await expect(
+    isolated(/ack_identity_epoch_empty_bootstrap/, partition, () =>
+      runCommand(f.pool, { partition }, async (tx, { transactionId }) => {
+        await tx.query(ackEmpty.sql, [
+          partition,
+          exported.transactionId,
+          randomUUID(),
+          exported.epoch,
+          exported.position.toString(),
+          transactionId,
+        ]);
+        return noEffect(null);
+      }),
+    ),
+  ).rejects.toThrow('identity_epoch_bootstrap_custody_unavailable');
+  expect(
+    (
+      await f.admin.query('SELECT acknowledged FROM semantic.identity_epoch_bootstrap_page WHERE partition_no=$1', [
+        partition,
+      ])
+    ).rows,
+  ).toEqual([{ acknowledged: false }]);
+  const received = await isolated(/receive_identity_epoch_empty_bootstrap/, partition, () =>
+    runCommand(f.pool, { partition }, async (tx, { transactionId }) => {
+      expect(
+        (
+          await tx.query(receiveEmpty.sql, [
+            partition,
+            exported.transactionId,
+            exported.epoch,
+            exported.position.toString(),
+            transactionId,
+          ])
+        ).rows,
+      ).toEqual([{ applied: true }]);
+      return { value: null, events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition, generation: '1' } }] };
+    }),
+  );
+  const acknowledged = await isolated(/ack_identity_epoch_empty_bootstrap/, partition, () =>
+    runCommand(f.pool, { partition }, async (tx, { transactionId }) => {
+      expect(
+        (
+          await tx.query(ackEmpty.sql, [
+            partition,
+            exported.transactionId,
+            received.transactionId,
+            received.epoch,
+            received.position.toString(),
+            transactionId,
+          ])
+        ).rows,
+      ).toEqual([{ applied: true, sealed: true }]);
+      return { value: null, events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition, generation: '1' } }] };
+    }),
+  );
+  expect(new Set([exported.transactionId, received.transactionId, acknowledged.transactionId]).size).toBe(3);
+  expect([exported.position, received.position, acknowledged.position]).toEqual([1n, 2n, 3n]);
+  const rows = (
+    await f.admin.query(
+      `
+    SELECT page.transaction_id export,b.transaction_id receiving,h.sealed_transaction_id ack,page.acknowledged
+    FROM semantic.identity_epoch_bootstrap_home h
+    JOIN semantic.identity_epoch_bootstrap_page page USING(partition_no)
+    JOIN semantic.identity_epoch_bootstrap_basis b ON b.partition_no=h.partition_no
+      AND b.source_partition=h.partition_no AND b.source_generation=page.generation
+      AND b.source_transaction_id=page.transaction_id
+    JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id,c.epoch,c.position)=
+      (h.partition_no,h.sealed_transaction_id,h.sealed_epoch,h.sealed_position)
+    WHERE h.partition_no=$1 AND NOT h.needs_work AND h.sealed_generation=1 AND c.purpose='bootstrap'
+  `,
+      [partition],
+    )
+  ).rows;
+  expect(rows).toEqual([
+    {
+      export: exported.transactionId,
+      receiving: received.transactionId,
+      ack: acknowledged.transactionId,
+      acknowledged: true,
+    },
+  ]);
+});
+
+test('an interrupted empty export recovers its same retained page through the original native receiving and ACK path', async () => {
+  const partition = 0x6f8;
+  const exported = await isolated(/export_identity_epoch_empty_bootstrap/, partition, () =>
+    runCommand(f.pool, { partition }, async (tx, { transactionId }) => {
+      expect((await tx.query(exportEmpty.sql, [partition, transactionId])).rows).toEqual([{ applied: true }]);
+      return { value: null, events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition, generation: '1' } }] };
+    }),
+  );
+  // Stop after the real export commit. No receiving row or source ACK is installed by setup.
+  expect(
+    (await f.admin.query('SELECT * FROM semantic.identity_epoch_bootstrap_basis WHERE partition_no=$1', [partition]))
+      .rows,
+  ).toEqual([]);
+  const recovered = await isolated(/identity_epoch_bootstrap_(basis|page)/, partition, () =>
+    stepIdentityEpochBootstrap(f.pool, partition),
+  );
+  expect(recovered.state).toBe('caught-up');
+  expect(recovered.generation).toBe(1n);
+  expect(recovered.native.transactionId).toBe(exported.transactionId);
+  expect(
+    (
+      await f.admin.query(
+        'SELECT generation,acknowledged FROM semantic.identity_epoch_bootstrap_page WHERE partition_no=$1',
+        [partition],
+      )
+    ).rows,
+  ).toEqual([{ generation: '1', acknowledged: true }]);
 });
 
 afterAll(async () => {
