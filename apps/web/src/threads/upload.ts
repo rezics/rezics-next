@@ -257,7 +257,7 @@ async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
     const response = await siteFetch(`/media/${encodeURIComponent(id)}`, { method: 'GET', signal });
     if (!response.ok) throw await refusalFrom(response);
     const media = mediaOf(await response.json());
-    if (!media) throw new UploadRefusal('unavailable');
+    if (!media || media.id !== id) throw new UploadRefusal('unavailable');
     if (media.state === 'available' || media.state === 'rejected') return media;
     const wait = Math.min(delay, maxDelay);
     delay = Math.min(delay * 2, maxDelay);
@@ -267,6 +267,21 @@ async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
   throw new UploadRefusal('unavailable');
 }
 
+async function readUploadedImage(mediaId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
+  try {
+    const settled = await poll(mediaId, signal);
+    if (settled.state !== 'available') throw new UploadRefusal('rejected');
+    const size = await naturalSize(file, signal);
+    return { src: mediaId, width: size.width, height: size.height };
+  } catch (error) {
+    throwIfAborted(signal);
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    failure.mediaId = mediaId;
+    throw failure;
+  }
+}
+
 /** Reserve a post image on a thread or a future thread, upload its bytes, and resolve once content accepts it. */
 async function uploadImage(
   target: ReserveTarget,
@@ -274,26 +289,33 @@ async function uploadImage(
   signal: AbortSignal,
   purpose: ImagePurpose,
 ): Promise<UploadedImage> {
+  let mediaId: string | undefined;
   try {
     throwIfAborted(signal);
     if (!isPostImageType(file.type)) throw new UploadRefusal('type');
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
     const reserved = await reserve(target, file, signal, purpose);
+    mediaId = reserved.id;
     throwIfAborted(signal);
     await putBytes(reserved, file, signal);
-    const settled = await poll(reserved.id, signal);
-    if (settled.state === 'rejected') throw new UploadRefusal('rejected');
-    const size = await naturalSize(file, signal);
-    return { src: reserved.id, width: size.width, height: size.height };
+    return await readUploadedImage(mediaId, file, signal);
   } catch (error) {
-    if (error instanceof UploadRefusal || isAbort(error)) throw error;
-    throw new UploadRefusal('unavailable');
+    throwIfAborted(signal);
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    if (mediaId !== undefined) failure.mediaId = mediaId;
+    throw failure;
   }
 }
 
 export function uploadReplyImage(target: PostReserveTarget, file: File, signal: AbortSignal): Promise<UploadedImage> {
   return uploadImage(target, file, signal, 'post-image');
+}
+
+/** Read the original reservation on manual retry, using the original file only for preview dimensions. */
+export function resumeReplyImageUpload(mediaId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
+  return readUploadedImage(mediaId, file, signal);
 }
 
 export function uploadAvatar(accountId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {

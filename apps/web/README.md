@@ -256,6 +256,18 @@ Read `GET /media/<id>` until the state is `available` or `rejected`; it returns 
 only. A `401` means the session has ended. Reservation responses use `Cache-Control: private, no-store`.
 This transport is for website uploads; imported covers use content's own server-side fetch command.
 
+The shared client in `src/threads/upload.ts` retains the actual reservation ID as `UploadRefusal.mediaId` when byte
+upload, processing or preview decoding fails after reservation. A failure before reservation has no media ID, and
+cancellation remains an abort. Consumers keep the original target and `File` locally. On an explicit retry of a known
+post-image reservation, call `resumeReplyImageUpload(mediaId: string, file: File, signal: AbortSignal): Promise<UploadedImage>`
+from that module. It reads only the original `/media/<id>` using the existing limit of 32 reads, 60 seconds and
+exponential delays from 250 ms to 2 seconds; it never reserves, uploads or completes again. Only native `available`
+state resolves to `{src, width, height}`, with the original media ID and the original file's natural dimensions.
+Rejected, missing, expired and unavailable reservations stay failures and retain their ID for the consumer. The ID
+and file grant no permission or reference ownership: native uploader and container checks still govern reads and
+claims. The existing shared avatar upload also retains failures' IDs; this adds no avatar retry API or account UI.
+Focused cases live in `tests/thread-upload.test.ts`. This helper adds no Pages or Patterns surface.
+
 Viewer credentials come from an explicit `Authorization` header, forwarded unchanged, or from the person's server-side
 session. Access and refresh tokens stay in the Worker; the browser holds an opaque `__Host-rezics_session` cookie.
 Only routes that use the credential resolve tokens, currently `/media` and `/media/…`, `POST /checkout`, order reads,

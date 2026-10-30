@@ -1,0 +1,236 @@
+import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
+
+mock.module('../src/session/query', () => ({ sessionCsrfToken: () => 'site-csrf' }));
+const { resumeReplyImageUpload, uploadReplyImage, uploadAvatar, UploadRefusal } = await import('../src/threads/upload');
+
+const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
+const mediaPath = `/media/${mediaId}`;
+const file = new File(['original image bytes'], 'chart.png', { type: 'image/png' });
+const signal = () => new AbortController().signal;
+const originalBitmap = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
+const originalTimeout = globalThis.setTimeout;
+const closeBitmap = mock(() => {});
+const decode = mock(async (_file: Blob) => ({ width: 7, height: 5, close: closeBitmap }));
+const calls: { path: string; init: RequestInit }[] = [];
+
+function media(state: string, id = mediaId): Response {
+  return Response.json({
+    media: { id, state, mediaType: file.type, byteCount: file.size },
+  });
+}
+
+function intercept(handler: (path: string, init: RequestInit) => Response | Promise<Response>) {
+  return spyOn(globalThis, 'fetch').mockImplementation((async (input, init = {}) => {
+    const path = String(input);
+    calls.push({ path, init });
+    return handler(path, init);
+  }) as typeof fetch);
+}
+
+async function refusal(result: Promise<unknown>): Promise<InstanceType<typeof UploadRefusal>> {
+  const failure = await result.catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(UploadRefusal);
+  return failure as InstanceType<typeof UploadRefusal>;
+}
+
+// Advance only the upload's backoff clock, keeping bounded polling tests local and immediate.
+function fastBackoff() {
+  let now = 0;
+  const waits: number[] = [];
+  spyOn(Date, 'now').mockImplementation(() => now);
+  spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) => {
+    waits.push(delay ?? 0);
+    now += delay ?? 0;
+    return originalTimeout(callback, 0, ...args);
+  });
+  return { waits, advance: (ms: number) => (now += ms) };
+}
+
+beforeEach(() => {
+  calls.length = 0;
+  closeBitmap.mockClear();
+  decode.mockReset();
+  decode.mockImplementation(async () => ({ width: 7, height: 5, close: closeBitmap }));
+  Object.defineProperty(globalThis, 'createImageBitmap', { configurable: true, value: decode });
+});
+
+afterEach(() => {
+  mock.restore();
+  if (originalBitmap) Object.defineProperty(globalThis, 'createImageBitmap', originalBitmap);
+  else Reflect.deleteProperty(globalThis, 'createImageBitmap');
+});
+
+test('Keep the original post-image reservation through uncertain upload processing', async () => {
+  for (const mode of ['completion-refused', 'completion-lost', 'poll-lost', 'rate-limited', 'dimensions'] as const) {
+    calls.length = 0;
+    decode.mockImplementation(async () => ({ width: mode === 'dimensions' ? 0 : 7, height: 5, close: closeBitmap }));
+    intercept((_path, init) => {
+      if (init.method === 'POST') return media('reserved');
+      if (init.method === 'PUT') {
+        if (mode === 'completion-refused')
+          return Response.json({ privateMetadata: 'not for callers' }, { status: 503 });
+        if (mode === 'completion-lost') throw new Error('lost completion response with private storage key');
+        return new Response(null, { status: 204 });
+      }
+      if (mode === 'poll-lost') throw new Error('private processing error');
+      if (mode === 'rate-limited') return new Response(null, { status: 429, headers: { 'retry-after': '7' } });
+      return media('available');
+    });
+
+    const failure = await refusal(uploadReplyImage('original-thread', file, signal()));
+    expect(failure.mediaId).toBe(mediaId);
+    expect(JSON.parse(JSON.stringify(failure))).toEqual({
+      name: 'UploadRefusal',
+      reason: mode === 'rate-limited' ? 'rate-limited' : 'unavailable',
+      ...(mode === 'rate-limited' ? { retryAfter: 7 } : {}),
+      mediaId,
+    });
+    expect(failure.message).toBe(failure.reason);
+    expect(failure.cause).toBeUndefined();
+    expect(calls.map(({ path, init }) => [init.method, path])).toEqual([
+      ['POST', '/media'],
+      ['PUT', mediaPath],
+      ...(['completion-refused', 'completion-lost'].includes(mode) ? [] : [['GET', mediaPath]]),
+    ]);
+  }
+});
+
+test('manual resume reads one original reservation and uses the original File for preview dimensions', async () => {
+  let reads = 0;
+  const { waits } = fastBackoff();
+  intercept((_path, init) => {
+    if (init.method === 'POST') return media('reserved');
+    if (init.method === 'PUT') throw new Error('completion response lost');
+    reads += 1;
+    return media(reads === 1 ? 'uploaded' : 'available');
+  });
+
+  const failure = await refusal(uploadReplyImage({ containerId: 'original-thread' }, file, signal()));
+  expect(decode).not.toHaveBeenCalled();
+  const resumed = await resumeReplyImageUpload(failure.mediaId!, file, signal());
+  expect(resumed).toEqual({ src: mediaId, width: 7, height: 5 });
+  expect(decode).toHaveBeenCalledTimes(1);
+  expect(decode).toHaveBeenCalledWith(file);
+  expect(closeBitmap).toHaveBeenCalledTimes(1);
+  expect(waits).toEqual([250]);
+  expect(calls.map(({ path, init }) => [init.method, path])).toEqual([
+    ['POST', '/media'],
+    ['PUT', mediaPath],
+    ['GET', mediaPath],
+    ['GET', mediaPath],
+  ]);
+  expect(JSON.parse(String(calls[0]!.init.body))).toEqual({
+    containerId: 'original-thread',
+    purpose: 'post-image',
+    mediaType: file.type,
+    byteCount: file.size,
+  });
+  expect(await (calls[1]!.init.body as Blob).text()).toBe(await file.text());
+  for (const { init } of calls) {
+    expect(init.credentials).toBe('same-origin');
+    expect(init.cache).toBe('no-store');
+    expect(new Headers(init.headers).get('X-CSRF-Token')).toBe(init.method === 'GET' ? null : 'site-csrf');
+  }
+});
+
+test('processing timeout keeps the real ID and resume preserves the existing read, time and backoff bounds', async () => {
+  const { waits, advance } = fastBackoff();
+  let slowRead = false;
+  intercept((_path, init) => {
+    if (init.method === 'POST') return media('reserved');
+    if (init.method === 'PUT') return new Response(null, { status: 204 });
+    if (slowRead) advance(59_751);
+    return media('uploaded');
+  });
+
+  for (const operation of [
+    () => uploadReplyImage('original-thread', file, signal()),
+    () => resumeReplyImageUpload(mediaId, file, signal()),
+  ]) {
+    calls.length = 0;
+    waits.length = 0;
+    expect(await refusal(operation())).toMatchObject({ reason: 'unavailable', mediaId });
+    expect(calls.filter(({ init }) => init.method === 'GET')).toHaveLength(32);
+    expect(waits).toEqual([250, 500, 1_000, ...Array(28).fill(2_000)]);
+    expect(waits.reduce((sum, wait) => sum + wait, 0)).toBeLessThanOrEqual(60_000);
+  }
+  calls.length = 0;
+  waits.length = 0;
+  slowRead = true;
+  expect(await refusal(resumeReplyImageUpload(mediaId, file, signal()))).toMatchObject({
+    reason: 'unavailable',
+    mediaId,
+  });
+  expect(calls.map(({ init }) => init.method)).toEqual(['GET']);
+  expect(waits).toEqual([]);
+  expect(decode).not.toHaveBeenCalled();
+});
+
+test('rejected, missing, expired, unavailable and mismatched reservations never become successful resumed images', async () => {
+  for (const outcome of ['rejected', 404, 410, 503, 'mismatched'] as const) {
+    calls.length = 0;
+    intercept(() =>
+      typeof outcome === 'number'
+        ? new Response(null, { status: outcome })
+        : media(
+            outcome === 'rejected' ? 'rejected' : 'available',
+            outcome === 'mismatched' ? 'another-reservation' : mediaId,
+          ),
+    );
+    const failure = await refusal(resumeReplyImageUpload(mediaId, file, signal()));
+    expect(failure).toMatchObject({ reason: outcome === 'rejected' ? 'rejected' : 'unavailable', mediaId });
+    expect(calls.map(({ path, init }) => [init.method, path])).toEqual([['GET', mediaPath]]);
+  }
+  expect(decode).not.toHaveBeenCalled();
+});
+
+test('failures before a native reservation never invent an ID, and avatar uploads retain their actual ID', async () => {
+  const invalid = new File(['text'], 'note.txt', { type: 'text/plain' });
+  intercept(() => new Response(null, { status: 503 }));
+  expect(await refusal(uploadReplyImage('thread', invalid, signal()))).toMatchObject({
+    reason: 'type',
+    mediaId: undefined,
+  });
+  expect(calls).toHaveLength(0);
+  expect(await refusal(uploadReplyImage('thread', file, signal()))).toMatchObject({
+    reason: 'unavailable',
+    mediaId: undefined,
+  });
+  expect(calls.map(({ init }) => init.method)).toEqual(['POST']);
+
+  calls.length = 0;
+  intercept((_path, init) => (init.method === 'POST' ? media('reserved') : new Response(null, { status: 503 })));
+  expect(await refusal(uploadAvatar('original-account', file, signal()))).toMatchObject({
+    reason: 'unavailable',
+    mediaId,
+  });
+  expect(JSON.parse(String(calls[0]!.init.body))).toMatchObject({ containerId: 'original-account', purpose: 'avatar' });
+  expect(calls.map(({ init }) => init.method)).toEqual(['POST', 'PUT']);
+});
+
+test('abort remains cancellation before resume, during byte upload and while waiting to resume', async () => {
+  const cancelled = new AbortController();
+  cancelled.abort();
+  intercept(() => {
+    throw new Error('must not fetch');
+  });
+  await expect(resumeReplyImageUpload(mediaId, file, cancelled.signal)).rejects.toBe(cancelled.signal.reason);
+  expect(calls).toHaveLength(0);
+
+  const uploading = new AbortController();
+  intercept((_path, init) => {
+    if (init.method === 'POST') return media('reserved');
+    uploading.abort();
+    throw new Error('transport failed during cancellation');
+  });
+  await expect(uploadReplyImage('original-thread', file, uploading.signal)).rejects.toBe(uploading.signal.reason);
+  expect(calls.map(({ init }) => init.method)).toEqual(['POST', 'PUT']);
+
+  calls.length = 0;
+  const resuming = new AbortController();
+  intercept(() => media('uploaded'));
+  spyOn(globalThis, 'setTimeout').mockImplementation(() => originalTimeout(() => resuming.abort(), 0));
+  await expect(resumeReplyImageUpload(mediaId, file, resuming.signal)).rejects.toBe(resuming.signal.reason);
+  expect(calls.map(({ path, init }) => [init.method, path])).toEqual([['GET', mediaPath]]);
+  expect(decode).not.toHaveBeenCalled();
+});
