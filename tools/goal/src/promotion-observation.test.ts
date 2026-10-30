@@ -115,12 +115,24 @@ test('restarts preserve append-only group identity, failures, and unknown interv
   try {
     const firstParent = beginPromotionParentWindow(db, 'promotion-a', '2026-10-30T01:00:00.000Z');
     const secondParent = beginPromotionParentWindow(db, 'promotion-b', '2026-10-30T01:00:00.000Z');
-    const first = group(db, { parentWindowId: firstParent, at: '2026-10-30T01:00:01.000Z', promotionId: 'promotion-a' });
+    const first = group(db, {
+      parentWindowId: firstParent,
+      at: '2026-10-30T01:00:01.000Z',
+      promotionId: 'promotion-a',
+    });
     finishPromotionGroupWindow(db, first, 'failed', false, '2026-10-30T01:00:10.000Z');
-    const interrupted = group(db, { parentWindowId: secondParent, at: '2026-10-30T01:00:01.000Z', promotionId: 'promotion-b' });
+    const interrupted = group(db, {
+      parentWindowId: secondParent,
+      at: '2026-10-30T01:00:01.000Z',
+      promotionId: 'promotion-b',
+    });
     // Concurrent promotion identities retain independent windows instead of overwriting singleton recovery state.
     expect(first).not.toBe(interrupted);
-    expect(readPromotionGroupWindows(db).map((row) => row.promotionId).sort()).toEqual(['promotion-a', 'promotion-b']);
+    expect(
+      readPromotionGroupWindows(db)
+        .map((row) => row.promotionId)
+        .sort(),
+    ).toEqual(['promotion-a', 'promotion-b']);
     recoverIncompletePromotionWindows(db, '2026-10-30T01:02:00.000Z');
 
     db.close();
@@ -179,7 +191,9 @@ test('without a public physical custody seam, nested markers and caller timeouts
 
   expect(producer).toContain('export function readHosts');
   expect(producer).toContain('export async function remoteCheck');
-  expect(producer).not.toMatch(/export\s+(?:type|interface|function|const)\s+.*(?:Custody|Incarnation|CgroupDescriptor)/i);
+  expect(producer).not.toMatch(
+    /export\s+(?:type|interface|function|const)\s+.*(?:Custody|Incarnation|CgroupDescriptor)/i,
+  );
   expect(observer).toContain(PROMOTION_PHYSICAL_CUSTODY_UNAVAILABLE);
   expect(observer).not.toContain('exitCode');
 

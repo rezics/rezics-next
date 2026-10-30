@@ -29,13 +29,7 @@ function host(name: 'a' | 'b' | 'c') {
 }
 
 function configured(settings: Settings, hostsFile: string): string[] {
-  const command = [
-    'env',
-    'KERNEL_CHECK_CONCURRENCY=5',
-    `KERNEL_CHECK_REMOTE=${hostsFile}`,
-    'bun',
-    'scripts/gate.ts',
-  ];
+  const command = ['env', 'KERNEL_CHECK_CONCURRENCY=5', `KERNEL_CHECK_REMOTE=${hostsFile}`, 'bun', 'scripts/gate.ts'];
   settings.gate = command;
   settings.promotionPlacement = { ordinaryHostsFile: hostsFile };
   return command;
@@ -379,13 +373,7 @@ test('invalid, ambiguous, mismatched, unreadable, or undersized host inputs fail
     writeFileSync(ordinaryHostsFile, JSON.stringify({ hosts: [host('a'), wrongB, host('c')] }));
     expect(() => preparePromotionGate(h.settings, run, command)).toThrow('differs from the measured topology');
 
-    const duplicateEnv = [
-      'env',
-      'KERNEL_CHECK_REMOTE=/tmp/a',
-      'KERNEL_CHECK_REMOTE=/tmp/b',
-      'bun',
-      'scripts/gate.ts',
-    ];
+    const duplicateEnv = ['env', 'KERNEL_CHECK_REMOTE=/tmp/a', 'KERNEL_CHECK_REMOTE=/tmp/b', 'bun', 'scripts/gate.ts'];
     h.settings.gate = duplicateEnv;
     h.settings.promotionPlacement = { ordinaryHostsFile };
     writeFileSync(ordinaryHostsFile, JSON.stringify({ hosts: [host('a'), host('b'), host('c')] }));

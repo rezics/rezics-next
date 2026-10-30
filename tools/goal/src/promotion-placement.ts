@@ -40,10 +40,17 @@ function configuredSourcePath(settings: Settings): string {
   try {
     accessSync(file, constants.R_OK);
   } catch (error) {
-    throw new Error(`promotion ordinary host input ${file} is not readable: ${error instanceof Error ? error.message : error}`);
+    throw new Error(
+      `promotion ordinary host input ${file} is not readable: ${error instanceof Error ? error.message : error}`,
+    );
   }
   const relativePath = relative(settings.mainCheckout, file);
-  if (relativePath && relativePath !== '..' && !relativePath.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(relativePath)) {
+  if (
+    relativePath &&
+    relativePath !== '..' &&
+    !relativePath.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) &&
+    !isAbsolute(relativePath)
+  ) {
     const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', relativePath], {
       cwd: settings.mainCheckout,
       encoding: 'utf8',
@@ -56,17 +63,22 @@ function configuredSourcePath(settings: Settings): string {
 function validateOrdinaryHosts(hosts: Host[]): { selected: Host; totalOrdinarySlots: number; cOrdinarySlots: number } {
   const names = hosts.map((host) => host.name);
   const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
-  if (duplicates.length) throw new Error(`promotion ordinary host input has duplicate hosts: ${[...new Set(duplicates)].join(', ')}`);
+  if (duplicates.length)
+    throw new Error(`promotion ordinary host input has duplicate hosts: ${[...new Set(duplicates)].join(', ')}`);
   const expectedNames = Object.keys(expected);
   const actualNames = [...names].sort();
   if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
-    throw new Error(`promotion ordinary host topology must be exactly a,b,c; received ${actualNames.join(', ') || 'none'}`);
+    throw new Error(
+      `promotion ordinary host topology must be exactly a,b,c; received ${actualNames.join(', ') || 'none'}`,
+    );
   }
 
   const ordinary = hosts.map((host) => ({ host, slots: host.slots - PROMOTION_EXPRESS_SLOTS_PER_HOST }));
   const withoutExpress = ordinary.filter(({ slots }) => slots < 1);
   if (withoutExpress.length) {
-    throw new Error(`promotion ordinary hosts must each retain a slot after express capacity: ${withoutExpress.map(({ host }) => host.name).join(', ')}`);
+    throw new Error(
+      `promotion ordinary hosts must each retain a slot after express capacity: ${withoutExpress.map(({ host }) => host.name).join(', ')}`,
+    );
   }
   const totalOrdinarySlots = ordinary.reduce((sum, entry) => sum + entry.slots, 0);
   const cOrdinarySlots = ordinary.find(({ host }) => host.name === PROMOTION_GATE_HOST)?.slots ?? 0;
@@ -76,7 +88,9 @@ function validateOrdinaryHosts(hosts: Host[]): { selected: Host; totalOrdinarySl
     );
   }
   if (totalOrdinarySlots !== 14) {
-    throw new Error(`promotion ordinary host capacity must total 14 slots after express capacity; received ${totalOrdinarySlots}`);
+    throw new Error(
+      `promotion ordinary host capacity must total 14 slots after express capacity; received ${totalOrdinarySlots}`,
+    );
   }
 
   for (const host of hosts) {
@@ -92,11 +106,16 @@ function validateOrdinaryHosts(hosts: Host[]): { selected: Host; totalOrdinarySl
     }
   }
 
-  return { selected: ordinary.find(({ host }) => host.name === PROMOTION_GATE_HOST)!.host, totalOrdinarySlots, cOrdinarySlots };
+  return {
+    selected: ordinary.find(({ host }) => host.name === PROMOTION_GATE_HOST)!.host,
+    totalOrdinarySlots,
+    cOrdinarySlots,
+  };
 }
 
 function envCommand(command: readonly string[], hostsFile: string): string[] {
-  if (command[0] !== 'env') throw new Error('promotion root gate must use an explicit env command for remote host routing');
+  if (command[0] !== 'env')
+    throw new Error('promotion root gate must use an explicit env command for remote host routing');
   let index = 1;
   const assignments: string[] = [];
   while (index < command.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(command[index]!)) {
@@ -107,7 +126,12 @@ function envCommand(command: readonly string[], hostsFile: string): string[] {
     throw new Error('promotion root gate must invoke the supported `bun scripts/gate.ts` command');
   }
 
-  const relevant = new Set(['KERNEL_CHECK_REMOTE', 'KERNEL_CHECK_CONCURRENCY', 'GATE_REMOTE_SLOTS', 'GATE_CONCURRENCY']);
+  const relevant = new Set([
+    'KERNEL_CHECK_REMOTE',
+    'KERNEL_CHECK_CONCURRENCY',
+    'GATE_REMOTE_SLOTS',
+    'GATE_CONCURRENCY',
+  ]);
   const seen = new Set<string>();
   for (const assignment of assignments) {
     const separator = assignment.indexOf('=');
@@ -158,7 +182,9 @@ export function preparePromotionGate(
     sourceBytes = readFileSync(sourcePath);
     hosts = readHosts(sourcePath);
   } catch (error) {
-    throw new Error(`could not read promotion ordinary host input ${sourcePath}: ${error instanceof Error ? error.message : error}`);
+    throw new Error(
+      `could not read promotion ordinary host input ${sourcePath}: ${error instanceof Error ? error.message : error}`,
+    );
   }
   const { selected, totalOrdinarySlots, cOrdinarySlots } = validateOrdinaryHosts(hosts);
   const hostProjection = JSON.stringify(selected);

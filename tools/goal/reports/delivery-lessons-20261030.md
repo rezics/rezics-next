@@ -95,23 +95,23 @@ The retained measurement window was 2026-10-29 11:04:52 UTC through 2026-10-30 1
 started or stopped to collect it. The original retained data remains available at these paths in the read-only main
 checkout; hashes identify the exact inputs:
 
-| Input | SHA-256 |
-| --- | --- |
-| `.temp/goal/performance/findings/worker-waits-gate-windows-24h.json` | `e5d9ebed8c3343862662c276ac848e3b3c86032bd6c1020d64b38956e49b2261` |
-| `.temp/goal/performance/findings/gate-host-resources-initial.json` | `4b68dd798a7b3dac486223738ee6eb3606c007ca799c2b0182e04aac162cbf76` |
-| `.temp/goal/performance/findings/gate-current-cpu-sample.json` | `ee88bff45c71574b671cd9afe868881a0375496b135203cbdc8a6e033e68a046` |
-| `.temp/goal/performance/findings/gate-resource-log-lines-24h.json` | `1640693b21bb8dc08c9c70b1a3a3e578d3a1056d285e6625d9b5f557fd75f7f9` |
+| Input                                                                             | SHA-256                                                            |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `.temp/goal/performance/findings/worker-waits-gate-windows-24h.json`              | `e5d9ebed8c3343862662c276ac848e3b3c86032bd6c1020d64b38956e49b2261` |
+| `.temp/goal/performance/findings/gate-host-resources-initial.json`                | `4b68dd798a7b3dac486223738ee6eb3606c007ca799c2b0182e04aac162cbf76` |
+| `.temp/goal/performance/findings/gate-current-cpu-sample.json`                    | `ee88bff45c71574b671cd9afe868881a0375496b135203cbdc8a6e033e68a046` |
+| `.temp/goal/performance/findings/gate-resource-log-lines-24h.json`                | `1640693b21bb8dc08c9c70b1a3a3e578d3a1056d285e6625d9b5f557fd75f7f9` |
 | `.temp/goal/performance/findings/admission-delivery-vs-current-check-source.json` | `7ce8eb7356292a51e1a3f8d72244947327ec39205f2001935d671ab83089ecf8` |
-| `.temp/goal/performance/findings/admission-integrated-source-receipt.json` | `520d230c68f884d697103cd1a93cd542c9e6218eef5d0171f97fe945f9abc675` |
+| `.temp/goal/performance/findings/admission-integrated-source-receipt.json`        | `520d230c68f884d697103cd1a93cd542c9e6218eef5d0171f97fe945f9abc675` |
 
 The analysis found 1,858 retained wrapper logs. Of those, 1,480 had a first outer admission marker and 378 did not;
 the missing 378 are unknown waits, not zero. Total first-admission waiting was 609.140 worker-hours. Among requests
 with first admissions, 773 were requested during observed parent promotion activity and 707 outside it:
 
-| Request time | Count | Median wait | Mean wait | p90 wait |
-| --- | ---: | ---: | ---: | ---: |
-| During parent promotion activity | 773 | 9.16 min | 27.18 min | 87.89 min |
-| Outside parent promotion activity | 707 | 10.22 min | 21.98 min | 67.84 min |
+| Request time                      | Count | Median wait | Mean wait |  p90 wait |
+| --------------------------------- | ----: | ----------: | --------: | --------: |
+| During parent promotion activity  |   773 |    9.16 min | 27.18 min | 87.89 min |
+| Outside parent promotion activity |   707 |   10.22 min | 21.98 min | 67.84 min |
 
 These are associations, not causal gate costs. The parent intervals run from log birth through last output or current
 native-live observation; they are not exact gate-host occupancy, and an outside request can wait into a gate window.

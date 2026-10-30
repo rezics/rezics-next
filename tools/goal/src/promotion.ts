@@ -269,11 +269,12 @@ async function gateAt(
     }
     if (preparedForCache) store.savePromotion(run);
     const needsFreshPlacementGate = preparedForCache !== null && placementBefore === undefined;
-    const cached = force || placementPreflightFailed || needsFreshPlacementGate
-      ? undefined
-      : run[target].find(
-          (result) => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command),
-        );
+    const cached =
+      force || placementPreflightFailed || needsFreshPlacementGate
+        ? undefined
+        : run[target].find(
+            (result) => result.commit === commit && JSON.stringify(result.command) === JSON.stringify(command),
+          );
     if (!cached) break;
     results.push(cached);
     if (!cached.passed) return results;
@@ -1110,9 +1111,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
   }
   observe(() => recoverIncompletePromotionWindows(store.db));
   const previousParentId = options.observationParentId;
-  const observationParentId = observe(() =>
-    beginPromotionParentWindow(store.db, store.promotion()?.id ?? null),
-  );
+  const observationParentId = observe(() => beginPromotionParentWindow(store.db, store.promotion()?.id ?? null));
   if (observationParentId) options.observationParentId = observationParentId;
   try {
     for (;;) {

@@ -845,7 +845,6 @@ managers, tell every manager to resume and retry its stopped tasks, and remove `
 are in. A local `<state>/resume.sh` can script these steps for one pause; it is local configuration, not a repository
 file.
 
-
 ## Promotion placement and observations
 
 Future full promotion gates can opt into the measured one-host placement by adding this field to the untracked local

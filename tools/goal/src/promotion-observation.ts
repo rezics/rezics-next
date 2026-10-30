@@ -215,9 +215,11 @@ export function beginPromotionGroupWindow(
   const at = timestamp(input.at);
   db.transaction(() => {
     const attempt =
-      (db
-        .query('SELECT MAX(attempt) AS attempt FROM promotion_group_windows WHERE promotion_id=? AND group_key=?')
-        .get(input.promotionId, input.group) as { attempt: number | null }).attempt ?? 0;
+      (
+        db
+          .query('SELECT MAX(attempt) AS attempt FROM promotion_group_windows WHERE promotion_id=? AND group_key=?')
+          .get(input.promotionId, input.group) as { attempt: number | null }
+      ).attempt ?? 0;
     db.query(
       `INSERT INTO promotion_group_windows(
         id,parent_window_id,promotion_id,group_key,attempt,commit_hash,commands_json,
@@ -239,9 +241,10 @@ export function beginPromotionGroupWindow(
       at,
       PROMOTION_PHYSICAL_CUSTODY_UNAVAILABLE,
     );
-    db.query(
-      `UPDATE promotion_group_windows SET source_status='unavailable', source_reason=? WHERE id=?`,
-    ).run(PROMOTION_LAUNCH_SOURCE_UNAVAILABLE, id);
+    db.query(`UPDATE promotion_group_windows SET source_status='unavailable', source_reason=? WHERE id=?`).run(
+      PROMOTION_LAUNCH_SOURCE_UNAVAILABLE,
+      id,
+    );
   }).immediate();
   return id;
 }
@@ -271,7 +274,10 @@ export function markPromotionGroupPhase(
   } else if (phase === 'execution-ended') {
     db.query(`UPDATE promotion_group_windows SET ${field}=? WHERE id=? AND terminal_at IS NULL`).run(value, windowId);
   } else {
-    db.query(`UPDATE promotion_group_windows SET ${field}=COALESCE(${field},?) WHERE id=? AND terminal_at IS NULL`).run(value, windowId);
+    db.query(`UPDATE promotion_group_windows SET ${field}=COALESCE(${field},?) WHERE id=? AND terminal_at IS NULL`).run(
+      value,
+      windowId,
+    );
   }
 }
 
@@ -321,9 +327,13 @@ export function recoverIncompletePromotionWindows(db: Database, at = new Date().
 
 export function readPromotionParentWindows(db: Database): PromotionParentWindow[] {
   ensurePromotionObservationSchema(db);
-  return (db
-    .query('SELECT id,promotion_id,started_at,terminal_at,outcome FROM promotion_parent_windows ORDER BY started_at,id')
-    .all() as any[]).map((row) => ({
+  return (
+    db
+      .query(
+        'SELECT id,promotion_id,started_at,terminal_at,outcome FROM promotion_parent_windows ORDER BY started_at,id',
+      )
+      .all() as any[]
+  ).map((row) => ({
     id: row.id,
     promotionId: row.promotion_id,
     startedAt: row.started_at,
@@ -334,9 +344,10 @@ export function readPromotionParentWindows(db: Database): PromotionParentWindow[
 
 export function readPromotionGroupWindows(db: Database): PromotionGroupWindow[] {
   ensurePromotionObservationSchema(db);
-  return (db
-    .query(
-      `SELECT id,parent_window_id,promotion_id,group_key,attempt,commit_hash,commands_json,
+  return (
+    db
+      .query(
+        `SELECT id,parent_window_id,promotion_id,group_key,attempt,commit_hash,commands_json,
         enqueued_at,wait_started_at,wait_ended_at,admitted_at,preparation_started_at,preparation_ended_at,
         execution_started_at,execution_ended_at,terminal_at,outcome,timed_out,physical_status,physical_reason,
         source_status,source_reason,launch_source_revision,launch_remote_check_sha256,
@@ -344,8 +355,9 @@ export function readPromotionGroupWindows(db: Database): PromotionGroupWindow[] 
         resource_sample_count,cpu_peak_cores,cpu_interval_ms,cpu_coverage_ms,memory_peak_bytes,memory_peak_scope,
         physical_host,physical_run_id,physical_generation,physical_incarnation,physical_cgroup,sample_started_at,sample_ended_at
        FROM promotion_group_windows ORDER BY enqueued_at,id`,
-    )
-    .all() as any[]).map((row) => ({
+      )
+      .all() as any[]
+  ).map((row) => ({
     id: row.id,
     parentWindowId: row.parent_window_id,
     promotionId: row.promotion_id,

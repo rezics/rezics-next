@@ -230,7 +230,9 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       : (() => {
           const placement = object(local.promotionPlacement, 'promotionPlacement');
           keys(placement, ['ordinaryHostsFile'], 'promotionPlacement');
-          return { ordinaryHostsFile: path(text(placement.ordinaryHostsFile, 'promotionPlacement.ordinaryHostsFile'), '') };
+          return {
+            ordinaryHostsFile: path(text(placement.ordinaryHostsFile, 'promotionPlacement.ordinaryHostsFile'), ''),
+          };
         })();
   const integration: Record<string, unknown> = {
     ...defaults.integration,
