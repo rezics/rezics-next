@@ -744,9 +744,9 @@ export class WorkerStore implements AttemptFence {
         const expected = structuredClone(before);
         expected.brief.criticalPath = current.brief.criticalPath;
         expected.taskClass = current.taskClass;
-        if (Object.hasOwn(current, 'priorityHistory')) expected.priorityHistory = structuredClone(current.priorityHistory);
+        if (current.priorityHistory !== undefined) expected.priorityHistory = structuredClone(current.priorityHistory);
         else delete expected.priorityHistory;
-        if (Object.hasOwn(current, 'priorityGrants')) expected.priorityGrants = structuredClone(current.priorityGrants);
+        if (current.priorityGrants !== undefined) expected.priorityGrants = structuredClone(current.priorityGrants);
         else delete expected.priorityGrants;
         if (!isDeepStrictEqual(expected, current))
           throw new Error('priority metadata update changed non-priority task fields');
