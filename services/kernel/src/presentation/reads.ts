@@ -621,7 +621,6 @@ export async function readPage(options: {
     }
     const result = await responseResult(response);
     if (result.status !== 200) {
-      // Preserve standalone failures rather than turn 301/503 into a successful empty body.
       for (const read of reads) {
         if (read.descriptor.kind === 'subject' && read.descriptor.id === descriptor?.id)
           byCanonical.set(read.canonical, result);

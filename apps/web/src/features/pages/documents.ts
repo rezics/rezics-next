@@ -9,7 +9,6 @@ export function statementDocument(
   if (statement.value.type !== 'value') return;
   const content = statement.value.content;
   if (!content || typeof content !== 'object' || !('document' in content) || !('language' in content)) return;
-  // Existing direct public representations may already carry a validated snapshot.
   if (checkDocument(content.document)) return content.document;
   if (!documents || typeof documents !== 'object' || !statement.id || !Object.hasOwn(documents, statement.id)) return;
   const document: unknown = Reflect.get(documents, statement.id);

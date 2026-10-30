@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { pickLanguage } from './strings.ts';
 
-/** The subject observation is a dependency, shared with the ordinary subject read. */
 export type PageDocumentRead = { kind: 'documents'; id: string; context?: string; properties: string[] };
 export type PageDocumentReference = { candidate: string; document: string; digest: string; language: string };
 /** One subject observation leaves at most fifteen native document operations. */
@@ -12,7 +11,6 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** Select only the current public observation, never candidates or historical facts. */
 export function pageDocumentReferences(
   subject: unknown,
   properties: readonly string[],
