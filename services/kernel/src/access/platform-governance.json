@@ -39,6 +39,7 @@
     "space:restore",
     "realm:create",
     "realm:restore",
+    "realm:approve_claim",
     "zone:create"
   ],
   "globalReach": [

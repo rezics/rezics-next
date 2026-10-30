@@ -579,6 +579,12 @@ export {
   type RealmErasureSuccessionResult,
   type RealmErasureSuccessionAuthorization,
 } from './realm-ownership.ts';
+export {
+  approveRealmClaim,
+  type ApproveRealmClaimInput,
+  type ApproveRealmClaimContext,
+  type RealmClaimApproval,
+} from './realm-claim.ts';
 export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
 export { grantGroupRole } from './resource-group-grant.ts';
 export { installStandingParentGrant } from './standing-parent.ts';

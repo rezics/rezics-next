@@ -2290,6 +2290,10 @@ CREATE INDEX resource_role_grant_point_lookup ON access.resource_role_grant USIN
 
 CREATE INDEX realm_owner_continuity ON access.resource_role_grant USING gist (route, resource_id, valid) INCLUDE (subject_id) WHERE ((subject_kind = 'identity'::text) AND (subject_role = ''::text) AND (grant_role = 'community.realm.owner'::text) AND upper_inf(valid));
 
+CREATE INDEX realm_claim_current_owner ON access.resource_role_grant
+USING gist (route, resource_id, valid)
+WHERE subject_kind = 'identity' AND subject_role = '' AND grant_role = 'community.realm.owner';
+
 
 --
 -- Name: workflow_approval_expiry; Type: INDEX; Schema: access; Owner: -

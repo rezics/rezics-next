@@ -126,7 +126,7 @@ or Content's full delivery/sale proof; those remain producer acceptance obligati
 neither restore action. No Space moderator, administrator, management reach or generic restore authority is added.
 One restore action cannot authorize restoration of the other resource type.
 
-`community/actions.ts` exports the exact nonanonymous `NATIVE_CONTAINER_ACTIONS` restoration declarations.
+`community/actions.ts` exports the exact nonanonymous `NATIVE_CONTAINER_ACTIONS` restoration and claim-approval declarations.
 Kernel composes them with mounted metadata once, sharing that catalogue between Access and resource-type
 validation. Mounted declarations must agree on security and replay policy; unresolved role actions still fail
 construction. Content owns the protected native operations. Its local restore decision
@@ -755,6 +755,56 @@ are not request traversal inputs. Progress and private evidence are locators and
 owner registry. The existing guard and ordinary transfer remain independently delivered; claim approval is a
 separate authority and the 30-day deadline alone confers no grant power.
 
+### Platform approval of an orphan Realm claim
+
+`approveRealmClaim({pool, access, clock?}, actor, {realmId, requestId}, {deadline, idempotencyKey})`
+is the owning Access entry. Its result is `{realmId, requestId, claimantAccountId, state: 'owned', orphanedAt,
+approvedAt}`. Callers supply neither claimant nor generation, eligibility, role or approval evidence.
+Only the exact nonanonymous `realm:approve_claim` action on `PLATFORM_RESOURCE` admits the command, through
+ordinary `resourceAuthorization` at each live attempt's T. `platform.governance` includes that action directly;
+it is not a `globalReach` action and grants no other Realm operation. Membership, Realm management, Global
+`access:grant`, first request and elapsed time supply no approval authority. The real actor, current account,
+principal assignment and client scopes remain subject to the existing formula and command admission.
+Preparation releases its checkout before the Realm-home transaction. Current admission precedes receipt replay;
+replay must not require the orphan state removed by the successful original command.
+
+The independent internal `realm-claim-grant.ts` writer requires the real live Realm-home command with that exact
+completed Global authorization, the installed `community.realm.owner` template, the existing creation/owner lock,
+complete current-role coverage and the current native role frontier locked through commit. A bounded indexed
+temporal predicate rejects every current explicit identity owner, including finite intervals; groups never become
+explicit owners. It calls `shareAccount` before writing one native `[T,infinity)` owner role, using existing grant
+directory/frontier triggers. Ordinary grant commands and their last-holder and anti-amplification rules are unchanged.
+
+For a new effect, the command calls Content's `lockRealmClaimApprovalSource(tx, {realmId, requestId})`,
+then the native Access owner writer, then `applyRealmClaimApproval(tx, source)` before publishing the receipt
+and `com.rezics.access.realm.claim.approve.v1` event. All three calls share the live Realm-home
+`CommandTransaction`; receipt replay never reacquires a source or writes a grant. A missing source is denied;
+an unavailable source fails the command without treating unknown state as absence.
+
+The adopted Content port binds its opaque source to this transaction and the exact native request's
+`realm_id`, `request_id`, `account_id`, `requested_at` and `orphaned_at`. The existing Realm `orphaned_at`
+is the episode; there is no numeric generation or fabricated request transaction. Content must lock the current
+active/nonremoved orphaned Realm and selected pending same-episode request, verify the current lifecycle/source
+and original `claim_eligible_at = orphaned_at + 720 hours <= T`, and retain its native source identity across the
+grant. Application verifies the same source/transaction and actual installed claimant owner role, changes the
+Realm to owned, clears its orphan timestamps and approves the exact request at native command T. Competing
+requests in that episode cannot subsequently apply. Original orphan/request provenance and deadline survive in
+the source and result. Stale source/request, claimant fencing, removal/restore, a later owner or failed application
+rolls back grant, state, request, event and receipt together.
+
+**The native Content implementation is still unavailable in this checkout.**
+`community/realm-claim-approval.ts` publishes the agreed original-module types and callable signatures with
+unconditionally unavailable provisional bodies. It returns no source or application result and performs no SQL.
+Content owns replacing those bodies with its real transaction-bound source/state implementation, native
+request/decision retention and route exposure. The Access composition is implemented, but these declarations
+provide neither native approval nor acceptance proof. No optional adapter, caller callback, copied Content SQL
+or parallel owner registry supplies authority.
+
+The real command basis, grant transaction provenance and event association retain the approver/principal through
+the existing command machinery. Native grant retention remains with the existing Access grant owners and
+[retention inventory](#retention-inventory). Shared-history custody retains its existing producer
+coverage gaps; this entry does not claim preference-only history coverage for a new producer.
+
 ## Resource denials
 
 `recordResourceDenial` and `endResourceDenial` run inside the caller's command transaction. The transaction's own authorization must be execute mode for the same resource route and id, and `at` must be that attempt's authoritative time. Otherwise they throw `ResourceAccessWriteDeniedError` and write nothing. `reason` is `resource`, `suspension` or `realm_ban`. `action` matches the denial table's action pattern. `subjectRole` is empty, so the row is one direct identity denial. `record` opens `[T, infinity)` and leaves a key that is already open at T unchanged. `end` sets that open row's upper bound to T and leaves the table unchanged when no open row contains T. A row whose lower bound is already T cannot be closed to an empty range, so that call throws and writes nothing. One key — resource, subject, action and reason — is one row. Community records `realm_ban` on the Realm resource for `realm:join` and `realm:participate`. From T the formula denies exactly that action; ending the row restores the underlying grant from the closing T.
@@ -1365,6 +1415,18 @@ no-candidate. No separate snapshot or mutable transaction-id surrogate is provid
 - Touches: `grant-command*.ts` prepares/checks a distinct management/new/old actions. `grant-create/change/revoke.sql` use exact subject/action/range temporal primary keys in `resource_grant`, inserting/deleting O(b) rows; `role-grant-mutate.sql` changes at most one old and one new role-grant after authorizing expanded actions. One resource-partition mutation statement, no recipient-account join. On the Global Context, each `gate:<group>` action may use one extra exact `gate:any` check instead of that action; `gate:any` stays exact.
 - Bound: `a(P+Q)` plus O(b) mutated rows, one mutation statement and `O(b I_Gt(1))` mutation blocks; integrated fixed-action check measures constant rows/statements and logarithmic blocks as Gt grows. Work also scales with uncapped action arrays and catalogue expansion. The extra Global `gate:any` check is at most one per granted gate action, `O((1+K) log G)`, `K <= 1000`. Other actions are unchanged.
 - Growth check: `test/access/growth-commands.test.ts`: `Grant create/change/revoke stays within its bound as Gt grows`
+
+### Approve one Realm claim
+
+- Touches: released current actor/principal and exact Global action evidence; the selected Content request/current
+  Realm source; the existing Realm creation lock and current-role frontier; one claimant fence and native
+  grant/state/receipt bundle in that Realm home. Content source/application is still required as described above.
+- Bound: fixed indexed point probes and O(changes log R), with the existing authorization bounds. The partial
+  `realm_claim_current_owner` index excludes group subjects; its temporal probe skips closed owner history. No membership,
+  owner graph or request enumeration, and no new owner store.
+- Growth check: preserve existing authorization/grant/source bounds for native acceptance after integration.
+  Current minimal verification adds no native growth capture. `test/access/realm-claim.test.ts` records the focused
+  approval, refusal, retry, competing-request and atomic-rollback outcomes; it has not been run in minimal mode.
 
 ### Delegation create/revoke/read
 
@@ -1977,6 +2039,28 @@ Bounds hold for a fixed admitted neighbourhood: account batches are at most 100,
 
 Semantic identity job steps and participant-owned erasure cleanup have no row because those operations are not implemented on this base.
 
+## Private account management reads
+
+`GET /v1/me/managedAccounts` (`account.list_managed`, `account:read`) reads the current human's own identity,
+organization memberships and personal operator responsibility holds. It accepts `organizationsCursor` and
+`operatorsCursor`. Incomplete native membership-inverse coverage returns an explicit `preparing` organization
+section, while independently available identity and responsibility sections remain readable.
+
+`GET /v1/accounts/{accountId}/management` (`account.read_management`, `account:read`) accepts `membersCursor` and
+`operatorsCursor`. Both routes require the installed formula's `account:read` on the human's own account, and
+reject operated identities. Organization details require current native membership. Private holders and operator
+responsibilities additionally require `account:manage` on that organization; an ordinary member receives a denied
+holders section. An automated target requires current management of its native current operator, including current
+organization membership where applicable. Attribution and coordination rows never confer management authority.
+
+Reads use one authoritative read time, 20 scanned candidates per section and viewer/target/feed-bound signed
+cursors. The inverse is bounded by its existing 1000-membership cap; every candidate is checked against current
+organization membership. Member candidates seek the native live-membership slot index and each verifies its authoritative temporal role; responsibility seeks
+reuse `operator-page.sql`. Each scanned responsibility has one subject-anchor relation read; `current` means the
+operator and exact reservation still match, while `reconciling` means the hold remains without that match. Neither
+state asserts a workflow's completion or cancellation. Responses are allowlisted and `private, no-store`, with no
+credentials, approval references, private profile or suspension reason. These read endpoints add no write capability.
+
 ## Viewer preferences
 
 Access stores one optional `account_preferences` row on the account's route and partition. Missing storage means
@@ -2242,6 +2326,12 @@ fixed 4,096 partitions one at a time, seeking only the account prefix. These are
 runtime includes exact receipt/outbox minimizers, supported SDK retirement and the default native receiving worker
 described below. Complete producer conversion, scoped execution admission budgets and final coverage remain gaps. Semantic provenance has its own owner and retention
 rules; content and delivery custody, including media and caches, remain separate obligations.
+
+Realm claim approval associates its native receipt and outbox event with the actual approval transaction and
+Realm subject; its result/event also carries the claimant account. Those shared-history artifacts retain the
+same unconverted-producer custody/minimization gap. The owner role uses the existing `resource_role_grant`
+inventory below. Content owns the native request, selected decision and original orphan provenance; Access
+introduces no separate approval history or owner store.
 
 This inventory describes current storage and implemented cleanup, including account-linked ids, digests and
 payloads that remain personal data. A retention purpose describes the store's operational use, not a new legal
@@ -2512,28 +2602,6 @@ completion. Shared-history acknowledgement requires that fact and kernel's own
 producer/minimizer closure; this implementation emits no participant ACK and
 introduces no final-ACK dependency cycle. The global participant inventory and
 Search's explicitly undelivered cleanup are preserved.
-
-### Private account management reads
-
-`GET /v1/me/managedAccounts` (`account.list_managed`, `account:read`) reads the current human's own identity,
-organization memberships and personal operator responsibility holds. It accepts `organizationsCursor` and
-`operatorsCursor`. Incomplete native membership-inverse coverage returns an explicit `preparing` organization
-section, while independently available identity and responsibility sections remain readable.
-
-`GET /v1/accounts/{accountId}/management` (`account.read_management`, `account:read`) accepts `membersCursor` and
-`operatorsCursor`. Both routes require the installed formula's `account:read` on the human's own account, and
-reject operated identities. Organization details require current native membership. Private holders and operator
-responsibilities additionally require `account:manage` on that organization; an ordinary member receives a denied
-holders section. An automated target requires current management of its native current operator, including current
-organization membership where applicable. Attribution and coordination rows never confer management authority.
-
-Reads use one authoritative read time, 20 scanned candidates per section and viewer/target/feed-bound signed
-cursors. The inverse is bounded by its existing 1000-membership cap; every candidate is checked against current
-organization membership. Member candidates seek the native live-membership slot index and each verifies its authoritative temporal role; responsibility seeks
-reuse `operator-page.sql`. Each scanned responsibility has one subject-anchor relation read; `current` means the
-operator and exact reservation still match, while `reconciling` means the hold remains without that match. Neither
-state asserts a workflow's completion or cancellation. Responses are allowlisted and `private, no-store`, with no
-credentials, approval references, private profile or suspension reason. These read endpoints add no write capability.
 
 ## Delivered preference history coverage
 
