@@ -23,6 +23,8 @@ import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { readPublicAccountByAgent } from '../../access/account-data.ts';
 import { PageResponseSchema } from './page-contract.ts';
+import { deadlineClient } from '../../access/authenticate.ts';
+import { readItemTypes } from '../../semantic/subject.ts';
 import { withConnection } from '../../database/pool.ts';
 import type { createApp } from '../../http/app.ts';
 import { customMethod, customMethodPath } from '../../http/custom-method.ts';
@@ -225,7 +227,7 @@ function respond(status: number, body: unknown, session: string | null, cache: b
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-export function pageRoutes<App extends Parameters<typeof actionCatalogue>[0]>(
+export function pageRoutes<App>(
   app: App,
   {
     pool,
@@ -304,7 +306,7 @@ export function pageRoutes<App extends Parameters<typeof actionCatalogue>[0]>(
       };
       let selected: SelectedPage | undefined;
       const authority = {
-        deps: { pool, access: typeof access === 'function' ? access({ actions: actionCatalogue(app) }) : access ?? createAccess({ actions: actionCatalogue(app) }), routeKey },
+        deps: { pool, access: typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access ?? createAccess({ actions: actionCatalogue(routed) }), routeKey },
         actor,
         deadline: job.deadline,
         run: <T>(work: () => Promise<T>) => admission.run('normal', job, work),
@@ -326,12 +328,27 @@ export function pageRoutes<App extends Parameters<typeof actionCatalogue>[0]>(
       if ('route' in target) {
         resolved = resolveTemplate(active.profile, { route: target.route });
       } else {
+        const release = await activeRelease(pool);
         let subjectTarget: string | null = null;
         let kind = 'actor';
         let automated = false;
         if ('subject' in target) {
           subjectTarget = target.subject;
-          if (target.realm) selected = await selectPage(authority, target.realm, subjectTarget);
+          if (target.realm) {
+            // Agent addresses always resolve through Global. This native identity point reads no facts or candidates.
+            const types = await admission.run('normal', job, () => withConnection(pool, (client) =>
+              readItemTypes(deadlineClient(client, job.deadline), [target.subject])));
+            const roots = new Set(['schema:Person', 'schema:Organization', 'schema:SoftwareApplication']);
+            const visited = new Set<string>();
+            const agentType = (type: string): boolean => {
+              if (roots.has(type)) return true;
+              if (visited.has(type)) return false;
+              visited.add(type);
+              return (release?.release.types[type]?.bases ?? []).some(agentType);
+            };
+            const type = types.get(target.subject);
+            if (!type || !agentType(type)) selected = await selectPage(authority, target.realm, subjectTarget);
+          }
         } else {
           const result = await probe({ kind: 'account', handle: target.account });
           if (result.status !== 200) return respond(result.status, result.body, probeSession, false);
@@ -366,7 +383,6 @@ export function pageRoutes<App extends Parameters<typeof actionCatalogue>[0]>(
             }
           }
         }
-        const release = await activeRelease(pool);
         // An account without a named subject takes the template of its kind's agent type.
         const type =
           subject?.type ??
