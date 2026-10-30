@@ -453,6 +453,10 @@ test(
     const first = await readPage('/en/settings');
     const page = await open('/en/settings', first.cookie!);
     try {
+      const reading = page.getByRole('region', { name: 'Reading', exact: true });
+      const conflict = reading.getByRole('alert').filter({
+        has: page.getByText('Your settings changed elsewhere', { exact: true }),
+      });
       const none = page.getByRole('radio', { name: 'Hide all spoilers' });
       const minor = page.getByRole('radio', { name: 'Show minor spoilers' });
       const major = page.getByRole('radio', { name: 'Show all spoilers' });
@@ -460,15 +464,15 @@ test(
       // Another device changed the settings after this page read version 3.
       stored = { spoilerLevel: 2, suitability: 'blur', version: 4 };
       await minor.click();
-      await page.getByRole('alert').getByText('Your settings changed elsewhere').waitFor();
+      await conflict.waitFor();
       expect(patches()).toHaveLength(1);
       expect(patches()[0]).toMatchObject({ body: { expectedVersion: 3, spoilerLevel: 1 } });
       // The stale write changed nothing, and the person's choice is still what the page shows.
       expect(stored).toEqual({ spoilerLevel: 2, suitability: 'blur', version: 4 });
       expect(await minor.getAttribute('aria-checked')).toBe('true');
 
-      await page.getByRole('button', { name: 'Reload' }).click();
-      await page.getByRole('alert').waitFor({ state: 'detached' });
+      await reading.getByRole('button', { name: 'Reload', exact: true }).click();
+      await conflict.waitFor({ state: 'detached' });
       expect(await major.getAttribute('aria-checked')).toBe('true');
       expect(await minor.getAttribute('aria-checked')).toBe('false');
 
