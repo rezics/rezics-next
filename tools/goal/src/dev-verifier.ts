@@ -122,6 +122,24 @@ export type DevVerifierOptions = {
   runGate?: GateRunner;
 };
 
+/**
+ * Checks the verifier runs at once. It verifies after integration at ordinary priority, so it takes a share of the
+ * check hosts, never all of them: on 2026-10-30 one run started 48 checks together and workers waited an hour.
+ */
+export const VERIFY_CONCURRENCY = 3;
+async function mapBounded<T, R>(items: readonly T[], limit: number, run: (item: T, index: number) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await run(items[index]!, index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+  return results;
+}
+
 /** Verify a fixed dev head; the ref moves only after a compare-and-swap against that exact head. */
 export async function verifyDev(options: DevVerifierOptions): Promise<void> {
   const { settings, store } = options,
@@ -159,7 +177,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
         const result = await run(check.command, tree, log);
         return { ...result, log, commit, check };
       };
-      let results = await Promise.all(checks.map((check, i) => runCheck(check, dev, `head-${i}`)));
+      let results = await mapBounded(checks, VERIFY_CONCURRENCY, (check, i) => runCheck(check, dev, `head-${i}`));
       let failed = results.find((item) => !item.passed);
       if (!failed) {
         try {

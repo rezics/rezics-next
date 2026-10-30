@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { devVerificationState, verifyDev } from './dev-verifier.ts';
+import { devVerificationState, VERIFY_CONCURRENCY, verifyDev } from './dev-verifier.ts';
 import type { Settings, Task } from './types.ts';
 
 const roots: string[] = [];
@@ -177,4 +177,34 @@ test('infrastructure failure reruns only that command and never reverts a landin
   expect(calls.filter((command) => command === 'acceptance kernel-task')).toHaveLength(1);
   expect(git(root, 'rev-parse', 'dev')).toBe(landing);
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(landing);
+});
+
+test('runs at most VERIFY_CONCURRENCY checks at once and still runs every check', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  const tasks: Task[] = [];
+  let head = base;
+  for (let index = 0; index < 8; index++) {
+    head = commit(root, `services/kernel/file-${index}.ts`, `export const value = ${index};\n`, `landing ${index}`);
+    tasks.push(landedTask(base, head, `task-${index}`));
+  }
+  git(root, 'branch', '-f', 'dev', head);
+  const ctx = setup(root, tasks);
+  const commands: string[] = [];
+  let running = 0,
+    highest = 0;
+  await verifyDev({
+    ...ctx,
+    runGate: async (command) => {
+      running++;
+      highest = Math.max(highest, running);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      running--;
+      commands.push(command.join(' '));
+      return { passed: true, output: '', timedOut: false };
+    },
+  });
+  expect(highest).toBe(VERIFY_CONCURRENCY);
+  for (let index = 0; index < 8; index++) expect(commands).toContain(`acceptance task-${index}`);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
 });
