@@ -54,6 +54,305 @@ CREATE TYPE core.history_store_kind AS ENUM (
 
 
 --
+-- Name: agent_identity_history_copy_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.agent_identity_history_copy_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r record; n integer := 0; phase text;
+BEGIN
+ IF TG_OP<>'INSERT' THEN
+   RAISE EXCEPTION 'Original Agent identity copy requires native retention discharge' USING ERRCODE='23514';
+ END IF;
+ -- SHARE the restore/routing generation and exact home through native COMMIT.
+ PERFORM 1 FROM core.history_family_domain WHERE singleton AND generation=NEW.domain_generation FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Agent identity history domain changed' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM core.partition WHERE partition_no=NEW.partition_no AND write_state='active'
+   AND epoch=NEW.receiver_epoch AND epoch=NEW.source_epoch AND position=NEW.source_position FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Agent identity history home changed' USING ERRCODE='23514'; END IF;
+ -- Every technical association is enrolled under the actual copy's complete native role union.
+ FOR r IN SELECT account_route,account_id,state FROM core.history_locator
+   WHERE partition_no=NEW.partition_no AND artifact_type=NEW.artifact_type AND locator=NEW.locator
+   ORDER BY account_route,account_id LIMIT 65 FOR SHARE
+ LOOP
+   n:=n+1;
+   IF n>64 OR r.state<>'pending' THEN
+     RAISE EXCEPTION 'Agent identity history role union unavailable' USING ERRCODE='23514';
+   END IF;
+   SELECT s.phase INTO STRICT phase FROM core.history_seal s
+     WHERE s.partition_no=NEW.partition_no AND s.account_route=r.account_route AND s.account_id=r.account_id FOR SHARE;
+   IF phase<>'open' THEN RAISE EXCEPTION 'history account partition is sealed' USING ERRCODE='23514'; END IF;
+ END LOOP;
+ IF n=0 THEN RAISE EXCEPTION 'Agent identity history role union unavailable' USING ERRCODE='23514'; END IF;
+ PERFORM core.history_family_touch_artifact(NEW.partition_no,NEW.artifact_type,NEW.locator);
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: guard_agent_identity_work(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.guard_agent_identity_work() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'native identity SDK custody is permanent' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='agent_identity_work_source' THEN
+   RAISE EXCEPTION 'native identity SDK source intent is immutable' USING ERRCODE='23514';
+ END IF;
+ IF    (to_jsonb(NEW)-ARRAY['source','creation_captured','request_digest']) IS DISTINCT FROM
+   (to_jsonb(OLD)-ARRAY['source','creation_captured','request_digest']) OR
+   (OLD.request_digest IS NOT NULL AND NEW.request_digest IS DISTINCT FROM OLD.request_digest) OR
+   (OLD.source IS NOT NULL AND NEW.source IS DISTINCT FROM OLD.source) OR
+   (OLD.creation_captured AND NOT NEW.creation_captured) THEN
+   RAISE EXCEPTION 'native identity SDK custody is immutable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: history_auth_changed(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_auth_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NEW.phase='copies-erased' THEN PERFORM core.history_wake_account(NEW.route,NEW.account_id); END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: history_consumer_changed(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_consumer_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r record; k bytea;
+BEGIN
+ IF OLD.state=NEW.state THEN RETURN NEW; END IF;
+ k:=decode('0102','hex') || int2send(NEW.partition_no::smallint) || int8send(NEW.position) || int2send(NEW.event_seq::smallint);
+ FOR r IN SELECT account_route,account_id FROM core.history_locator
+   WHERE partition_no=NEW.partition_no AND artifact_type='outbox-event/v1' AND locator=k
+   ORDER BY account_route,account_id LIMIT 64
+ LOOP PERFORM core.history_wake_account(r.account_route,r.account_id); END LOOP;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: history_family_admit(text, integer, uuid); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_admit(p_family text, p_route integer, p_account uuid) RETURNS void
+    LANGUAGE sql
+    AS $$
+ INSERT INTO core.history_family_fence(account_route,account_id) VALUES(p_route,p_account) ON CONFLICT DO NOTHING;
+ INSERT INTO core.history_family_coverage(family,account_route,account_id,barrier_version,barrier_at,
+   definition_digest,domain_generation,fence_revision)
+ SELECT p_family,e.route,e.account_id,e.version,e.at::text,d.digest,g.generation,f.revision
+ FROM access.erasure e,core.history_family_definition d,core.history_family_domain g,core.history_family_fence f
+ WHERE e.route=p_route AND e.account_id=p_account AND d.family=p_family AND g.singleton
+  AND f.account_route=e.route AND f.account_id=e.account_id ON CONFLICT DO NOTHING;
+$$;
+
+
+--
+-- Name: history_family_consumer_changed(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_consumer_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r record; p integer; k bytea;
+BEGIN
+ IF TG_OP='DELETE' THEN
+  p:=OLD.partition_no; k:=decode('0102','hex')||int2send(p::smallint)||int8send(OLD.position)||int2send(OLD.event_seq::smallint);
+ ELSE
+  p:=NEW.partition_no; k:=decode('0102','hex')||int2send(p::smallint)||int8send(NEW.position)||int2send(NEW.event_seq::smallint);
+ END IF;
+ FOR r IN SELECT account_route,account_id FROM core.history_locator
+  WHERE partition_no=p AND artifact_type='outbox-event/v1' AND locator=k
+  ORDER BY account_route,account_id LIMIT 65
+ LOOP PERFORM core.history_family_touch(r.account_route,r.account_id); END LOOP;
+ RETURN NULL;
+END; $$;
+
+
+--
+-- Name: history_family_domain_changed(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_domain_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_LEVEL='ROW' AND TG_OP='UPDATE' THEN
+  IF OLD IS NOT DISTINCT FROM NEW THEN RETURN NULL; END IF;
+ END IF;
+ UPDATE core.history_family_domain SET generation=generation+1 WHERE singleton;
+ RETURN NULL;
+END; $$;
+
+
+--
+-- Name: history_family_job_admitted(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_job_admitted() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE d record;
+BEGIN
+ FOR d IN SELECT family FROM core.history_family_definition ORDER BY family LIMIT 9
+ LOOP PERFORM core.history_family_admit(d.family,NEW.account_route,NEW.account_id); END LOOP;
+ RETURN NULL;
+END; $$;
+
+
+--
+-- Name: history_family_physical_changed(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_physical_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE k jsonb; t text; r record;
+BEGIN
+ IF TG_TABLE_NAME='receipt' THEN
+  t:='command-receipt/v1'; k:=jsonb_build_array(OLD.principal_kind,OLD.principal_id,OLD.command_kind,OLD.idempotency_key);
+ ELSIF TG_TABLE_NAME='outbox' THEN
+  t:='outbox-event/v1'; k:=jsonb_build_array(OLD.position::text,OLD.event_seq);
+ ELSE
+  t:='durable-work/v1'; k:=jsonb_build_array(OLD.work_id);
+ END IF;
+ FOR r IN SELECT l.account_route,l.account_id FROM core.history_family_watch w
+   JOIN core.history_locator l USING(partition_no,artifact_type,locator)
+   WHERE w.partition_no=OLD.partition_no AND w.artifact_type=t AND w.source_key=k
+   ORDER BY l.account_route,l.account_id LIMIT 65
+ LOOP PERFORM core.history_family_touch(r.account_route,r.account_id); END LOOP;
+ RETURN NULL;
+END; $$;
+
+
+--
+-- Name: history_family_preserve_locator(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_preserve_locator() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE sealed boolean;
+BEGIN
+ SELECT phase<>'open' INTO sealed FROM core.history_seal WHERE partition_no=OLD.partition_no
+  AND account_route=OLD.account_route AND account_id=OLD.account_id FOR SHARE;
+ IF TG_OP='DELETE' THEN
+  IF sealed OR OLD.state='minimized' THEN
+   RAISE EXCEPTION 'sealed history role is irreversible' USING ERRCODE='23514';
+  END IF;
+  RETURN OLD;
+ END IF;
+ IF (sealed AND (OLD.partition_no,OLD.account_route,OLD.account_id,OLD.artifact_type,OLD.locator,OLD.roles,OLD.minimizer_version)
+   IS DISTINCT FROM (NEW.partition_no,NEW.account_route,NEW.account_id,NEW.artifact_type,NEW.locator,NEW.roles,NEW.minimizer_version))
+   OR (OLD.state='minimized' AND (NEW.state<>'minimized' OR NEW.proof_barrier IS DISTINCT FROM OLD.proof_barrier))
+ THEN RAISE EXCEPTION 'sealed history role is irreversible' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: history_family_scope_changed(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_scope_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND OLD IS NOT DISTINCT FROM NEW THEN RETURN NULL; END IF;
+ IF TG_OP<>'INSERT' THEN PERFORM core.history_family_touch(OLD.account_route,OLD.account_id); END IF;
+ IF TG_OP='INSERT' OR (TG_OP='UPDATE' AND (NEW.account_route,NEW.account_id) IS DISTINCT FROM (OLD.account_route,OLD.account_id)) THEN
+  PERFORM core.history_family_touch(NEW.account_route,NEW.account_id);
+ END IF;
+ IF TG_TABLE_NAME IN ('history_locator','history_receiving_proof') THEN
+  IF TG_OP<>'INSERT' THEN
+   PERFORM core.history_family_touch_artifact(OLD.partition_no,OLD.artifact_type,OLD.locator);
+  END IF;
+  IF TG_OP<>'DELETE' THEN
+   PERFORM core.history_family_touch_artifact(NEW.partition_no,NEW.artifact_type,NEW.locator);
+  END IF;
+ END IF;
+ RETURN NULL;
+END; $$;
+
+
+--
+-- Name: history_family_touch(integer, uuid); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_touch(p_route integer, p_account uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ -- Before erasure there is no issuer or aggregate to invalidate.
+ IF EXISTS(SELECT 1 FROM access.erasure WHERE route=p_route AND account_id=p_account) THEN
+  INSERT INTO core.history_family_fence(account_route,account_id) VALUES(p_route,p_account)
+   ON CONFLICT(account_route,account_id) DO UPDATE SET revision=core.history_family_fence.revision+1;
+  UPDATE core.history_family_coverage SET phase='scan',gap=NULL,proof_id=NULL,next_run=now()
+   WHERE account_route=p_route AND account_id=p_account;
+ END IF;
+END; $$;
+
+
+--
+-- Name: history_family_touch_artifact(integer, text, bytea); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_touch_artifact(p_partition integer, p_type text, p_locator bytea) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r record; n integer:=0;
+BEGIN
+ FOR r IN SELECT account_route,account_id FROM core.history_locator
+  WHERE partition_no=p_partition AND artifact_type=p_type AND locator=p_locator
+  ORDER BY account_route,account_id LIMIT 65
+ LOOP
+  n:=n+1;
+  IF n>64 THEN RAISE EXCEPTION 'history role union exceeds native bound' USING ERRCODE='23514'; END IF;
+  PERFORM core.history_family_touch(r.account_route,r.account_id);
+ END LOOP;
+END; $$;
+
+
+--
+-- Name: history_family_validate_enrollment(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_family_validate_enrollment() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE e record; s record; d record; h record;
+BEGIN
+ SELECT version,at::text INTO STRICT e FROM access.erasure
+  WHERE route=NEW.account_route AND account_id=NEW.account_id FOR SHARE;
+ SELECT phase,barrier_id INTO STRICT s FROM core.history_seal WHERE partition_no=NEW.partition_no
+  AND account_route=NEW.account_route AND account_id=NEW.account_id FOR SHARE;
+ SELECT digest,sources INTO STRICT d FROM core.history_family_definition WHERE family=NEW.family FOR SHARE;
+ SELECT epoch,write_state INTO STRICT h FROM core.partition WHERE partition_no=NEW.partition_no FOR SHARE;
+ IF h.epoch<>NEW.partition_epoch OR h.write_state<>'active' OR e.version<>NEW.barrier_version OR e.at<>NEW.barrier_at OR s.phase='open' OR s.barrier_id<>NEW.account_id
+   OR d.digest<>NEW.definition_digest OR NOT EXISTS(
+     SELECT 1 FROM jsonb_to_recordset(d.sources) AS p("artifactType" text,producer text,version integer)
+     WHERE p."artifactType"=NEW.artifact_type AND p.producer=NEW.producer AND p.version=NEW.producer_version)
+ THEN RAISE EXCEPTION 'history family enrollment does not match native source' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: history_guard_locator(); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -73,6 +372,28 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: history_payload_irreversible(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_payload_irreversible() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_TABLE_NAME='receipt' THEN
+   IF OLD.payload_state='minimized' AND (NEW.payload_state<>'minimized' OR NEW.response<>'null'::jsonb) THEN
+     RAISE EXCEPTION 'minimized history payload is sealed' USING ERRCODE='23514';
+   END IF;
+ ELSE
+   IF OLD.payload_state='minimized' AND
+     (NEW.payload_state<>'minimized' OR NEW.data<>'{}'::jsonb OR NEW.subject IS NOT NULL) THEN
+     RAISE EXCEPTION 'minimized history payload is sealed' USING ERRCODE='23514';
+   END IF;
+ END IF;
+ RETURN NEW;
+END; $$;
 
 
 --
@@ -100,9 +421,243 @@ END;
 $$;
 
 
+--
+-- Name: history_receiving_proof_immutable(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_receiving_proof_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ RAISE EXCEPTION 'history receiving proof is immutable' USING ERRCODE='23514';
+END; $$;
+
+
+--
+-- Name: history_retirement_irreversible(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_retirement_irreversible() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF OLD.state='retired' AND (NEW.state<>'retired' OR NEW.request IS NOT NULL OR NEW.scope IS NOT NULL
+   OR NEW.request_digest<>OLD.request_digest OR NEW.owner IS DISTINCT FROM OLD.owner
+   OR (OLD.absence_verified AND NOT NEW.absence_verified)) THEN
+   RAISE EXCEPTION 'retired history work is sealed' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: history_wake_account(integer, uuid); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_wake_account(p_route integer, p_account uuid) RETURNS void
+    LANGUAGE sql
+    AS $$
+ UPDATE core.preference_history_job SET phase='scan',scan_partition=0,scan_type=NULL,scan_locator=NULL,
+   verify_partition=0,gap=NULL,next_run=now()
+ WHERE account_route=p_route AND account_id=p_account AND phase='pending';
+$$;
+
+
+--
+-- Name: history_work_changed(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.history_work_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r record; k bytea;
+BEGIN
+ IF (OLD.owner_ready,OLD.absence_verified) IS NOT DISTINCT FROM (NEW.owner_ready,NEW.absence_verified) THEN RETURN NEW; END IF;
+ k:=decode('0103','hex') || convert_to(NEW.work_id::text,'UTF8');
+ FOR r IN SELECT account_route,account_id FROM core.history_locator
+   WHERE partition_no=NEW.partition_no AND artifact_type='durable-work/v1' AND locator=k
+   ORDER BY account_route,account_id LIMIT 64
+ LOOP PERFORM core.history_wake_account(r.account_route,r.account_id); END LOOP;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: record_history_preserve_copy(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.record_history_preserve_copy() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'record history association is immutable' USING ERRCODE='23514'; END IF;
+ IF (NEW.source_key,NEW.partition_no,NEW.artifact_type,NEW.locator,NEW.original_transaction,NEW.producer_version,NEW.coverage)
+   IS DISTINCT FROM
+   (OLD.source_key,OLD.partition_no,OLD.artifact_type,OLD.locator,OLD.original_transaction,OLD.producer_version,OLD.coverage)
+   OR (OLD.original_position IS NOT NULL AND NEW.original_position IS DISTINCT FROM OLD.original_position)
+   OR (OLD.state='minimized' AND NEW.state<>'minimized') THEN
+   RAISE EXCEPTION 'record history association is immutable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: record_history_preserve_purge_set(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.record_history_preserve_purge_set() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' OR (to_jsonb(NEW)-'next_attempt') IS DISTINCT FROM (to_jsonb(OLD)-'next_attempt') THEN
+   RAISE EXCEPTION 'record history native set enrollment is immutable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: record_history_preserve_source_set(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.record_history_preserve_source_set() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'record history source set is immutable' USING ERRCODE='23514'; END IF;
+ -- The one allowed enrichment is an exact native immutable snapshot after Source seal.
+ IF to_jsonb(OLD)->>'metadata_state'='building' AND to_jsonb(NEW)->>'metadata_state'='native-snapshot' THEN
+  IF (to_jsonb(NEW)-ARRAY['original_position','metadata_state','snapshot_digest','member_count'])
+     IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['original_position','metadata_state','snapshot_digest','member_count'])
+     OR (OLD.original_position IS NOT NULL AND NEW.original_position IS DISTINCT FROM OLD.original_position) THEN
+   RAISE EXCEPTION 'record history source set is immutable' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+ END IF;
+ IF (to_jsonb(NEW)-ARRAY['original_position','state','next_attempt','gap'])
+   IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['original_position','state','next_attempt','gap'])
+   OR (OLD.original_position IS NOT NULL AND NEW.original_position IS DISTINCT FROM OLD.original_position)
+   OR (to_jsonb(OLD)->>'state'='minimized' AND to_jsonb(NEW)->>'state'<>'minimized') THEN
+   RAISE EXCEPTION 'record history source set is immutable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: validate_agent_identity_work_source(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.validate_agent_identity_work_source() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS (
+   SELECT 1 FROM access.agent_identity_intent i
+   WHERE i.route=get_byte(uuid_send((NEW.source_key::jsonb->>1)::uuid),10)*256+
+                 get_byte(uuid_send((NEW.source_key::jsonb->>1)::uuid),11)
+     AND i.account_id=(NEW.source_key::jsonb->>1)::uuid
+     AND i.direction=NEW.source_key::jsonb->>0 AND i.receipt_id=(NEW.source_key::jsonb->>2)::uuid
+     AND i.source_partition=NEW.partition_no AND i.source_epoch=(NEW.source->>'epoch')::integer
+     AND i.source_position=(NEW.source->>'position')::bigint
+     AND i.source_transaction_id=(NEW.source->>'transactionId')::uuid
+     AND i.intent_digest=NEW.source->>'digest' AND i.release=NEW.source->>'release'
+     AND i.workflow_id=NEW.source->>'workflowId'
+     AND i.xmin::text=pg_current_xact_id()::text
+ ) OR NEW.source_key<>NEW.source->>'key' OR NEW.partition_no<>(NEW.source->>'partition')::integer THEN
+   RAISE EXCEPTION 'SDK association lacks actual original Account source command' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: agent_identity_history_copy; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.agent_identity_history_copy (
+    partition_no integer NOT NULL,
+    source_route integer NOT NULL,
+    source_account_id uuid NOT NULL,
+    source_direction text NOT NULL COLLATE pg_catalog."C",
+    source_receipt_id uuid NOT NULL,
+    source_digest text NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    artifact_type text NOT NULL COLLATE pg_catalog."C",
+    locator bytea NOT NULL,
+    writer_version integer NOT NULL,
+    receiver_epoch integer NOT NULL,
+    domain_generation bigint NOT NULL,
+    CONSTRAINT agent_identity_history_copy_artifact_type_check CHECK ((artifact_type = ANY (ARRAY['command-receipt/v1'::text, 'outbox-event/v1'::text]))),
+    CONSTRAINT agent_identity_history_copy_check CHECK ((source_route = ((get_byte(uuid_send(source_account_id), 10) * 256) + get_byte(uuid_send(source_account_id), 11)))),
+    CONSTRAINT agent_identity_history_copy_check1 CHECK ((partition_no = (source_route / 16))),
+    CONSTRAINT agent_identity_history_copy_domain_generation_check CHECK ((domain_generation > 0)),
+    CONSTRAINT agent_identity_history_copy_locator_check CHECK (((octet_length(locator) >= 1) AND (octet_length(locator) <= 256))),
+    CONSTRAINT agent_identity_history_copy_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT agent_identity_history_copy_receiver_epoch_check CHECK ((receiver_epoch > 0)),
+    CONSTRAINT agent_identity_history_copy_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT agent_identity_history_copy_source_direction_check CHECK ((source_direction = ANY (ARRAY['account-agent.verify'::text, 'account-agent.unverify'::text]))),
+    CONSTRAINT agent_identity_history_copy_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT agent_identity_history_copy_source_position_check CHECK ((source_position > 0)),
+    CONSTRAINT agent_identity_history_copy_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535))),
+    CONSTRAINT agent_identity_history_copy_writer_version_check CHECK ((writer_version = 1))
+);
+
+
+--
+-- Name: agent_identity_work; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.agent_identity_work (
+    custody_id uuid NOT NULL,
+    workflow_id text NOT NULL COLLATE pg_catalog."C",
+    source_key text NOT NULL COLLATE pg_catalog."C",
+    approval jsonb,
+    source jsonb,
+    accounts jsonb NOT NULL,
+    receiver_epoch integer NOT NULL,
+    receiver_generation bigint NOT NULL,
+    writer_version integer DEFAULT 1 NOT NULL,
+    receiver_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    creation_captured boolean DEFAULT false NOT NULL,
+    request_digest bytea,
+    CONSTRAINT agent_identity_work_accounts_check CHECK (((jsonb_array_length(accounts) >= 1) AND (jsonb_array_length(accounts) <= 64))),
+    CONSTRAINT agent_identity_work_approval_check CHECK ((octet_length((approval)::text) <= 4096)),
+    CONSTRAINT agent_identity_work_check CHECK (((approval IS NOT NULL) OR (source IS NOT NULL))),
+    CONSTRAINT agent_identity_work_receiver_epoch_check CHECK ((receiver_epoch > 0)),
+    CONSTRAINT agent_identity_work_receiver_generation_check CHECK ((receiver_generation > 0)),
+    CONSTRAINT agent_identity_work_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT agent_identity_work_source_check CHECK ((octet_length((source)::text) <= 4096)),
+    CONSTRAINT agent_identity_work_source_key_check CHECK ((octet_length(source_key) <= 256)),
+    CONSTRAINT agent_identity_work_workflow_id_check CHECK ((octet_length(workflow_id) <= 256)),
+    CONSTRAINT agent_identity_work_writer_version_check CHECK ((writer_version = 1))
+);
+
+
+--
+-- Name: agent_identity_work_source; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.agent_identity_work_source (
+    partition_no integer NOT NULL,
+    source_key text NOT NULL COLLATE pg_catalog."C",
+    custody_id uuid NOT NULL,
+    source jsonb NOT NULL,
+    source_generation bigint NOT NULL,
+    writer_version integer DEFAULT 1 NOT NULL,
+    CONSTRAINT agent_identity_work_source_source_check CHECK ((octet_length((source)::text) <= 4096)),
+    CONSTRAINT agent_identity_work_source_source_generation_check CHECK ((source_generation > 0)),
+    CONSTRAINT agent_identity_work_source_source_key_check CHECK ((octet_length(source_key) <= 256)),
+    CONSTRAINT agent_identity_work_source_writer_version_check CHECK ((writer_version = 1))
+);
+
 
 --
 -- Name: consumer_checkpoint; Type: TABLE; Schema: core; Owner: -
@@ -130,6 +685,142 @@ CREATE TABLE core.consumer_lag (
     oldest_pending_at timestamp with time zone,
     observed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     CONSTRAINT consumer_lag_consumer_check CHECK ((consumer ~ '^[a-z][a-z0-9_]{0,62}$'::text))
+);
+
+
+--
+-- Name: history_event_consumer; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_event_consumer (
+    partition_no integer NOT NULL,
+    "position" bigint NOT NULL,
+    event_seq integer NOT NULL,
+    consumer text NOT NULL COLLATE pg_catalog."C",
+    workflow_id text NOT NULL,
+    state text DEFAULT 'open'::text NOT NULL,
+    CONSTRAINT history_event_consumer_consumer_check CHECK ((consumer ~ '^[a-z][a-z0-9_]{0,62}$'::text)),
+    CONSTRAINT history_event_consumer_event_seq_check CHECK (((event_seq >= 0) AND (event_seq <= 999))),
+    CONSTRAINT history_event_consumer_position_check CHECK (("position" > 0)),
+    CONSTRAINT history_event_consumer_state_check CHECK ((state = ANY (ARRAY['open'::text, 'completed'::text, 'transferred'::text, 'suppressed'::text]))),
+    CONSTRAINT history_event_consumer_workflow_id_check CHECK ((octet_length(workflow_id) <= 256))
+);
+
+
+--
+-- Name: history_family_coverage; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_family_coverage (
+    family text NOT NULL,
+    account_route integer NOT NULL,
+    account_id uuid NOT NULL,
+    barrier_version integer NOT NULL,
+    barrier_at text NOT NULL,
+    definition_digest text NOT NULL,
+    domain_generation bigint NOT NULL,
+    fence_revision bigint NOT NULL,
+    partition_cursor integer DEFAULT '-1'::integer NOT NULL,
+    current_partition integer,
+    artifact_type text COLLATE pg_catalog."C",
+    locator bytea,
+    phase text DEFAULT 'scan'::text NOT NULL,
+    gap text,
+    proof_id uuid,
+    next_run timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT history_family_coverage_barrier_version_check CHECK ((barrier_version > 0)),
+    CONSTRAINT history_family_coverage_check CHECK (((artifact_type IS NULL) = (locator IS NULL))),
+    CONSTRAINT history_family_coverage_check1 CHECK (((phase = 'complete'::text) = (proof_id IS NOT NULL))),
+    CONSTRAINT history_family_coverage_check2 CHECK (((phase = 'pending'::text) = (gap IS NOT NULL))),
+    CONSTRAINT history_family_coverage_current_partition_check CHECK (((current_partition >= 0) AND (current_partition <= 4095))),
+    CONSTRAINT history_family_coverage_gap_check CHECK ((octet_length(gap) <= 256)),
+    CONSTRAINT history_family_coverage_locator_check CHECK (((octet_length(locator) >= 1) AND (octet_length(locator) <= 256))),
+    CONSTRAINT history_family_coverage_partition_cursor_check CHECK (((partition_cursor >= '-1'::integer) AND (partition_cursor <= 4095))),
+    CONSTRAINT history_family_coverage_phase_check CHECK ((phase = ANY (ARRAY['scan'::text, 'pending'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: history_family_definition; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_family_definition (
+    family text NOT NULL,
+    version integer NOT NULL,
+    digest text NOT NULL,
+    registry_digest text NOT NULL,
+    sources jsonb NOT NULL,
+    admit_cursor uuid,
+    admission_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT history_family_definition_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT history_family_definition_family_check CHECK ((family = ANY (ARRAY['access'::text, 'commerce'::text, 'community'::text, 'content'::text, 'library'::text, 'rating'::text, 'semantic'::text, 'zones'::text, 'imports'::text]))),
+    CONSTRAINT history_family_definition_registry_digest_check CHECK ((registry_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT history_family_definition_sources_check CHECK (((jsonb_typeof(sources) = 'array'::text) AND ((jsonb_array_length(sources) >= 1) AND (jsonb_array_length(sources) <= 100)))),
+    CONSTRAINT history_family_definition_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: history_family_domain; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_family_domain (
+    singleton boolean DEFAULT true NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT history_family_domain_generation_check CHECK ((generation > 0)),
+    CONSTRAINT history_family_domain_singleton_check CHECK (singleton)
+);
+
+
+--
+-- Name: history_family_enrollment; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_family_enrollment (
+    family text NOT NULL,
+    account_route integer NOT NULL,
+    account_id uuid NOT NULL,
+    partition_no integer NOT NULL,
+    artifact_type text NOT NULL COLLATE pg_catalog."C",
+    producer text NOT NULL,
+    producer_version integer NOT NULL,
+    definition_digest text NOT NULL,
+    barrier_version integer NOT NULL,
+    barrier_at text NOT NULL,
+    partition_epoch integer NOT NULL,
+    source_cut bytea NOT NULL,
+    CONSTRAINT history_family_enrollment_artifact_type_check CHECK ((artifact_type = ANY (ARRAY['command-receipt/v1'::text, 'outbox-event/v1'::text, 'durable-work/v1'::text]))),
+    CONSTRAINT history_family_enrollment_barrier_version_check CHECK ((barrier_version > 0)),
+    CONSTRAINT history_family_enrollment_definition_digest_check CHECK ((definition_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT history_family_enrollment_partition_epoch_check CHECK ((partition_epoch > 0)),
+    CONSTRAINT history_family_enrollment_producer_check CHECK ((producer ~ '^[a-z][a-z0-9_.-]{0,95}$'::text)),
+    CONSTRAINT history_family_enrollment_producer_version_check CHECK ((producer_version > 0)),
+    CONSTRAINT history_family_enrollment_source_cut_check CHECK (((octet_length(source_cut) >= 1) AND (octet_length(source_cut) <= 256)))
+);
+
+
+--
+-- Name: history_family_fence; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_family_fence (
+    account_route integer NOT NULL,
+    account_id uuid NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT history_family_fence_revision_check CHECK ((revision > 0))
+);
+
+
+--
+-- Name: history_family_watch; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_family_watch (
+    partition_no integer NOT NULL,
+    artifact_type text NOT NULL COLLATE pg_catalog."C",
+    locator bytea NOT NULL,
+    source_key jsonb NOT NULL,
+    CONSTRAINT history_family_watch_source_key_check CHECK ((octet_length((source_key)::text) <= 1024))
 );
 
 
@@ -174,17 +865,56 @@ CREATE TABLE core.history_progress (
     locator bytea,
     state text DEFAULT 'pending'::text NOT NULL,
     proof text,
+    coverage_gap text,
+    applicable boolean DEFAULT false NOT NULL,
     CONSTRAINT history_progress_account_route_check CHECK (((account_route >= 0) AND (account_route <= 65535))),
     CONSTRAINT history_progress_artifact_type_check CHECK ((artifact_type = ANY (ARRAY['command-receipt/v1'::text, 'outbox-event/v1'::text, 'durable-work/v1'::text]))),
     CONSTRAINT history_progress_check CHECK ((barrier_id = account_id)),
     CONSTRAINT history_progress_check1 CHECK ((account_route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT history_progress_check2 CHECK (((artifact_type IS NULL) = (locator IS NULL))),
     CONSTRAINT history_progress_check3 CHECK (((state = 'pending'::text) = (proof IS NULL))),
+    CONSTRAINT history_progress_coverage_gap_check CHECK ((octet_length(coverage_gap) <= 2048)),
     CONSTRAINT history_progress_locator_check CHECK (((octet_length(locator) >= 1) AND (octet_length(locator) <= 256))),
     CONSTRAINT history_progress_partition_epoch_check CHECK ((partition_epoch > 0)),
     CONSTRAINT history_progress_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT history_progress_proof_check CHECK ((proof = ANY (ARRAY['erased'::text, 'none'::text]))),
     CONSTRAINT history_progress_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: history_receiving_proof; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_receiving_proof (
+    partition_no integer NOT NULL,
+    account_route integer NOT NULL,
+    account_id uuid NOT NULL,
+    artifact_type text NOT NULL COLLATE pg_catalog."C",
+    locator bytea NOT NULL,
+    barrier_version integer NOT NULL,
+    barrier_at text NOT NULL,
+    partition_epoch integer NOT NULL,
+    role_digest bytea NOT NULL,
+    CONSTRAINT history_receiving_proof_barrier_version_check CHECK ((barrier_version > 0)),
+    CONSTRAINT history_receiving_proof_partition_epoch_check CHECK ((partition_epoch > 0)),
+    CONSTRAINT history_receiving_proof_role_digest_check CHECK ((octet_length(role_digest) = 32))
+);
+
+
+--
+-- Name: history_registry; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.history_registry (
+    singleton boolean DEFAULT true NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    digest text NOT NULL,
+    gaps jsonb NOT NULL,
+    CONSTRAINT history_registry_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT history_registry_gaps_check CHECK (((jsonb_typeof(gaps) = 'array'::text) AND (octet_length((gaps)::text) <= 4096))),
+    CONSTRAINT history_registry_generation_check CHECK ((generation > 0)),
+    CONSTRAINT history_registry_singleton_check CHECK (singleton)
 );
 
 
@@ -217,10 +947,21 @@ CREATE TABLE core.history_work (
     state text DEFAULT 'pending'::text NOT NULL,
     owner_ready boolean DEFAULT false NOT NULL,
     retired_at timestamp with time zone,
+    owner text,
+    request jsonb,
+    scope jsonb,
+    source_partition integer,
+    source_transaction uuid,
+    admitted boolean DEFAULT false NOT NULL,
+    absence_verified boolean DEFAULT false NOT NULL,
     CONSTRAINT history_work_check CHECK (((state <> 'ready'::text) OR owner_ready)),
     CONSTRAINT history_work_check1 CHECK (((state = 'retired'::text) = (retired_at IS NOT NULL))),
+    CONSTRAINT history_work_owner_check CHECK ((owner ~ '^[a-z][a-z0-9_.-]{0,95}$'::text)),
     CONSTRAINT history_work_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT history_work_request_check CHECK ((octet_length((request)::text) <= 65536)),
     CONSTRAINT history_work_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT history_work_scope_check CHECK ((octet_length((scope)::text) <= 16384)),
+    CONSTRAINT history_work_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095))),
     CONSTRAINT history_work_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'ready'::text, 'retired'::text])))
 );
 
@@ -240,8 +981,11 @@ CREATE TABLE core.outbox (
     subject text,
     data jsonb NOT NULL,
     recorded_at timestamp with time zone DEFAULT now() NOT NULL,
+    payload_state text DEFAULT 'present'::text NOT NULL,
     CONSTRAINT outbox_check CHECK (((event_seq >= 0) AND (event_seq < event_count))),
     CONSTRAINT outbox_event_count_check CHECK ((event_count > 0)),
+    CONSTRAINT outbox_minimized_payload CHECK (((payload_state <> 'minimized'::text) OR ((data = '{}'::jsonb) AND (subject IS NULL)))),
+    CONSTRAINT outbox_payload_state_check CHECK ((payload_state = ANY (ARRAY['present'::text, 'minimized'::text]))),
     CONSTRAINT outbox_position_check CHECK (("position" > 0))
 );
 
@@ -266,6 +1010,43 @@ CREATE TABLE core.partition (
 
 
 --
+-- Name: preference_history_job; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.preference_history_job (
+    job_id uuid NOT NULL,
+    partition_no integer NOT NULL,
+    account_route integer NOT NULL,
+    account_id uuid NOT NULL,
+    barrier_id uuid NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    cursor bytea,
+    scan_partition integer DEFAULT 0 NOT NULL,
+    scan_type text COLLATE pg_catalog."C",
+    scan_locator bytea,
+    phase text DEFAULT 'scan'::text NOT NULL,
+    applicable boolean DEFAULT false NOT NULL,
+    next_run timestamp with time zone DEFAULT now() NOT NULL,
+    gap text,
+    barrier_version integer,
+    barrier_at text,
+    registry_digest text,
+    verify_partition integer DEFAULT 0 NOT NULL,
+    registry_generation bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT history_job_cursor CHECK (((scan_type IS NULL) = (scan_locator IS NULL))),
+    CONSTRAINT preference_history_job_check CHECK ((barrier_id = account_id)),
+    CONSTRAINT preference_history_job_check1 CHECK ((partition_no = (account_route >> 4))),
+    CONSTRAINT preference_history_job_cursor_check CHECK (((octet_length(cursor) >= 1) AND (octet_length(cursor) <= 256))),
+    CONSTRAINT preference_history_job_gap_check CHECK ((octet_length(gap) <= 2048)),
+    CONSTRAINT preference_history_job_phase_check CHECK ((phase = ANY (ARRAY['scan'::text, 'verify'::text, 'pending'::text, 'complete'::text]))),
+    CONSTRAINT preference_history_job_scan_locator_check CHECK (((octet_length(scan_locator) >= 1) AND (octet_length(scan_locator) <= 256))),
+    CONSTRAINT preference_history_job_scan_partition_check CHECK (((scan_partition >= 0) AND (scan_partition <= 4096))),
+    CONSTRAINT preference_history_job_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'covered-pending'::text]))),
+    CONSTRAINT preference_history_job_verify_partition_check CHECK (((verify_partition >= 0) AND (verify_partition <= 4096)))
+);
+
+
+--
 -- Name: receipt; Type: TABLE; Schema: core; Owner: -
 --
 
@@ -279,9 +1060,6 @@ CREATE TABLE core.receipt (
     "position" bigint NOT NULL,
     transaction_id uuid NOT NULL,
     response jsonb NOT NULL,
-    payload_state text DEFAULT 'present'::text NOT NULL,
-    CONSTRAINT receipt_payload_state_check CHECK (payload_state IN ('present','minimized')),
-    CONSTRAINT receipt_minimized_response CHECK (payload_state <> 'minimized' OR response = 'null'::jsonb),
     created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     principal_kind text NOT NULL,
     actor_account_id uuid GENERATED ALWAYS AS (
@@ -289,12 +1067,147 @@ CASE
     WHEN (principal_kind = 'account'::text) THEN principal_id
     ELSE NULL::uuid
 END) STORED,
+    payload_state text DEFAULT 'present'::text NOT NULL,
     CONSTRAINT receipt_anonymous_key_check CHECK (((principal_kind <> 'anonymous'::text) OR (idempotency_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text) OR (idempotency_key ~ '^rk1\.(0|[1-9][0-9]{0,2})\.[A-Za-z0-9_-]{43}$'::text))),
     CONSTRAINT receipt_epoch_check CHECK ((epoch > 0)),
     CONSTRAINT receipt_idempotency_key_check CHECK (((char_length(idempotency_key) >= 1) AND (char_length(idempotency_key) <= 255))),
+    CONSTRAINT receipt_minimized_response CHECK (((payload_state <> 'minimized'::text) OR (response = 'null'::jsonb))),
+    CONSTRAINT receipt_payload_state_check CHECK ((payload_state = ANY (ARRAY['present'::text, 'minimized'::text]))),
     CONSTRAINT receipt_position_check CHECK (("position" >= 0)),
     CONSTRAINT receipt_principal_check CHECK ((((principal_kind = 'account'::text) AND (principal_id <> '00000000-0000-0000-0000-000000000000'::uuid)) OR ((principal_kind = 'anonymous'::text) AND (principal_id = '00000000-0000-0000-0000-000000000000'::uuid)))),
     CONSTRAINT receipt_request_digest_check CHECK ((octet_length(request_digest) = 32))
+);
+
+
+--
+-- Name: record_history_locator; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.record_history_locator (
+    source_key text NOT NULL COLLATE pg_catalog."C",
+    partition_no integer NOT NULL,
+    artifact_type text NOT NULL COLLATE pg_catalog."C",
+    locator bytea NOT NULL,
+    original_transaction uuid NOT NULL,
+    original_position bigint,
+    producer_version integer NOT NULL,
+    coverage text DEFAULT 'partial'::text NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    next_attempt timestamp with time zone DEFAULT now() NOT NULL,
+    gap text,
+    CONSTRAINT record_history_locator_artifact_type_check CHECK ((artifact_type = ANY (ARRAY['command-receipt/v1'::text, 'outbox-event/v1'::text, 'durable-work/v1'::text]))),
+    CONSTRAINT record_history_locator_coverage_check CHECK ((coverage = 'partial'::text)),
+    CONSTRAINT record_history_locator_gap_check CHECK ((octet_length(gap) <= 256)),
+    CONSTRAINT record_history_locator_locator_check CHECK (((octet_length(locator) >= 1) AND (octet_length(locator) <= 256))),
+    CONSTRAINT record_history_locator_original_position_check CHECK ((original_position >= 0)),
+    CONSTRAINT record_history_locator_producer_version_check CHECK ((producer_version = 1)),
+    CONSTRAINT record_history_locator_source_key_check CHECK (((octet_length(source_key) >= 1) AND (octet_length(source_key) <= 256))),
+    CONSTRAINT record_history_locator_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'minimized'::text])))
+);
+
+
+--
+-- Name: record_history_purge; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.record_history_purge (
+    source_key text NOT NULL COLLATE pg_catalog."C",
+    deletion_generation uuid NOT NULL,
+    partition_no integer NOT NULL,
+    subject_id uuid,
+    candidate_id uuid,
+    revision integer,
+    document_id uuid,
+    gap text DEFAULT 'record-original-producer-coverage-unsealed'::text NOT NULL,
+    next_run timestamp with time zone DEFAULT now() NOT NULL,
+    reference_kind text DEFAULT 'contribution'::text NOT NULL,
+    resource_id uuid,
+    set_frontier bytea,
+    set_inventory_sealed boolean DEFAULT false NOT NULL,
+    native_set_frontier text,
+    native_set_index_complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT record_history_purge_gap_check CHECK ((octet_length(gap) <= 256)),
+    CONSTRAINT record_history_purge_reference CHECK ((((reference_kind = 'contribution'::text) AND (resource_id IS NULL) AND (subject_id IS NOT NULL) AND (candidate_id IS NOT NULL) AND (revision IS NOT NULL) AND (revision > 0)) OR ((reference_kind = ANY (ARRAY['context'::text, 'zone'::text])) AND (resource_id IS NOT NULL) AND (subject_id IS NULL) AND (candidate_id IS NULL) AND (revision IS NULL) AND (document_id IS NULL)))),
+    CONSTRAINT record_history_purge_reference_kind_check CHECK ((reference_kind = ANY (ARRAY['contribution'::text, 'context'::text, 'zone'::text]))),
+    CONSTRAINT record_history_purge_revision_check CHECK ((revision > 0)),
+    CONSTRAINT record_history_purge_set_frontier_check CHECK (((set_frontier IS NULL) OR ((octet_length(set_frontier) >= 1) AND (octet_length(set_frontier) <= 256))))
+);
+
+
+--
+-- Name: record_history_purge_set; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.record_history_purge_set (
+    source_key text NOT NULL COLLATE pg_catalog."C",
+    deletion_generation uuid NOT NULL,
+    source_partition integer NOT NULL,
+    set_locator bytea NOT NULL,
+    set_revision bytea NOT NULL,
+    original_transaction uuid NOT NULL,
+    member_count integer NOT NULL,
+    next_attempt timestamp with time zone DEFAULT now() NOT NULL,
+    native_revision integer,
+    snapshot_digest text,
+    CONSTRAINT record_history_purge_set_check CHECK (((native_revision IS NULL) = (snapshot_digest IS NULL))),
+    CONSTRAINT record_history_purge_set_member_count_check CHECK (((member_count >= 0) AND (member_count <= 512))),
+    CONSTRAINT record_history_purge_set_native_revision_check CHECK ((native_revision > 0)),
+    CONSTRAINT record_history_purge_set_snapshot_digest_check CHECK ((snapshot_digest <> ''::text))
+);
+
+
+--
+-- Name: record_history_source_set; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.record_history_source_set (
+    source_partition integer NOT NULL,
+    set_locator bytea NOT NULL,
+    set_revision bytea NOT NULL,
+    original_transaction uuid NOT NULL,
+    original_position bigint,
+    member_count integer,
+    producer_version integer NOT NULL,
+    native_revision integer,
+    snapshot_digest text,
+    metadata_state text DEFAULT 'legacy'::text NOT NULL,
+    CONSTRAINT record_history_source_set_check CHECK ((((metadata_state = 'legacy'::text) AND (native_revision IS NULL) AND (snapshot_digest IS NULL) AND (member_count IS NOT NULL)) OR ((metadata_state = 'building'::text) AND (native_revision IS NOT NULL) AND (snapshot_digest IS NULL) AND (member_count IS NULL)) OR ((metadata_state = 'native-snapshot'::text) AND (native_revision IS NOT NULL) AND (snapshot_digest IS NOT NULL) AND (member_count IS NOT NULL)))),
+    CONSTRAINT record_history_source_set_member_count_check CHECK (((member_count >= 0) AND (member_count <= 512))),
+    CONSTRAINT record_history_source_set_metadata_state_check CHECK ((metadata_state = ANY (ARRAY['legacy'::text, 'building'::text, 'native-snapshot'::text]))),
+    CONSTRAINT record_history_source_set_native_revision_check CHECK ((native_revision > 0)),
+    CONSTRAINT record_history_source_set_original_position_check CHECK ((original_position >= 0)),
+    CONSTRAINT record_history_source_set_producer_version_check CHECK ((producer_version = 1)),
+    CONSTRAINT record_history_source_set_set_locator_check CHECK (((octet_length(set_locator) >= 1) AND (octet_length(set_locator) <= 256))),
+    CONSTRAINT record_history_source_set_set_revision_check CHECK (((octet_length(set_revision) >= 1) AND (octet_length(set_revision) <= 256))),
+    CONSTRAINT record_history_source_set_snapshot_digest_check CHECK ((snapshot_digest <> ''::text))
+);
+
+
+--
+-- Name: record_history_source_set_copy; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.record_history_source_set_copy (
+    source_partition integer NOT NULL,
+    set_locator bytea NOT NULL,
+    set_revision bytea NOT NULL,
+    partition_no integer NOT NULL,
+    artifact_type text NOT NULL COLLATE pg_catalog."C",
+    locator bytea NOT NULL,
+    original_transaction uuid NOT NULL,
+    original_position bigint,
+    producer_version integer NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    next_attempt timestamp with time zone DEFAULT now() NOT NULL,
+    gap text,
+    CONSTRAINT record_history_source_set_copy_artifact_type_check CHECK ((artifact_type = ANY (ARRAY['command-receipt/v1'::text, 'outbox-event/v1'::text, 'durable-work/v1'::text]))),
+    CONSTRAINT record_history_source_set_copy_gap_check CHECK ((octet_length(gap) <= 256)),
+    CONSTRAINT record_history_source_set_copy_locator_check CHECK (((octet_length(locator) >= 1) AND (octet_length(locator) <= 256))),
+    CONSTRAINT record_history_source_set_copy_original_position_check CHECK ((original_position >= 0)),
+    CONSTRAINT record_history_source_set_copy_producer_version_check CHECK ((producer_version = 1)),
+    CONSTRAINT record_history_source_set_copy_set_locator_check CHECK (((octet_length(set_locator) >= 1) AND (octet_length(set_locator) <= 256))),
+    CONSTRAINT record_history_source_set_copy_set_revision_check CHECK (((octet_length(set_revision) >= 1) AND (octet_length(set_revision) <= 256))),
+    CONSTRAINT record_history_source_set_copy_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'minimized'::text])))
 );
 
 
@@ -333,6 +1246,54 @@ CREATE TABLE public.schema_migrations (
 
 
 --
+-- Name: agent_identity_history_copy agent_identity_history_copy_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_history_copy
+    ADD CONSTRAINT agent_identity_history_copy_pkey PRIMARY KEY (partition_no, source_route, source_account_id, source_direction, source_receipt_id, artifact_type, locator);
+
+
+--
+-- Name: agent_identity_work agent_identity_work_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_work
+    ADD CONSTRAINT agent_identity_work_pkey PRIMARY KEY (custody_id);
+
+
+--
+-- Name: agent_identity_work_source agent_identity_work_source_custody_id_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_work_source
+    ADD CONSTRAINT agent_identity_work_source_custody_id_key UNIQUE (custody_id);
+
+
+--
+-- Name: agent_identity_work agent_identity_work_source_key_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_work
+    ADD CONSTRAINT agent_identity_work_source_key_key UNIQUE (source_key);
+
+
+--
+-- Name: agent_identity_work_source agent_identity_work_source_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_work_source
+    ADD CONSTRAINT agent_identity_work_source_pkey PRIMARY KEY (partition_no, source_key);
+
+
+--
+-- Name: agent_identity_work agent_identity_work_workflow_id_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_work
+    ADD CONSTRAINT agent_identity_work_workflow_id_key UNIQUE (workflow_id);
+
+
+--
 -- Name: consumer_checkpoint consumer_checkpoint_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -349,6 +1310,70 @@ ALTER TABLE ONLY core.consumer_lag
 
 
 --
+-- Name: history_event_consumer history_event_consumer_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_event_consumer
+    ADD CONSTRAINT history_event_consumer_pkey PRIMARY KEY (partition_no, "position", event_seq, consumer);
+
+
+--
+-- Name: history_event_consumer history_event_consumer_workflow_id_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_event_consumer
+    ADD CONSTRAINT history_event_consumer_workflow_id_key UNIQUE (workflow_id);
+
+
+--
+-- Name: history_family_coverage history_family_coverage_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_coverage
+    ADD CONSTRAINT history_family_coverage_pkey PRIMARY KEY (family, account_route, account_id);
+
+
+--
+-- Name: history_family_definition history_family_definition_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_definition
+    ADD CONSTRAINT history_family_definition_pkey PRIMARY KEY (family);
+
+
+--
+-- Name: history_family_domain history_family_domain_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_domain
+    ADD CONSTRAINT history_family_domain_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: history_family_enrollment history_family_enrollment_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_enrollment
+    ADD CONSTRAINT history_family_enrollment_pkey PRIMARY KEY (family, account_route, account_id, partition_no, artifact_type, producer);
+
+
+--
+-- Name: history_family_fence history_family_fence_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_fence
+    ADD CONSTRAINT history_family_fence_pkey PRIMARY KEY (account_route, account_id);
+
+
+--
+-- Name: history_family_watch history_family_watch_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_watch
+    ADD CONSTRAINT history_family_watch_pkey PRIMARY KEY (partition_no, artifact_type, locator);
+
+
+--
 -- Name: history_locator history_locator_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -362,6 +1387,22 @@ ALTER TABLE ONLY core.history_locator
 
 ALTER TABLE ONLY core.history_progress
     ADD CONSTRAINT history_progress_pkey PRIMARY KEY (account_route, account_id, barrier_id, store_kind, partition_no);
+
+
+--
+-- Name: history_receiving_proof history_receiving_proof_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_receiving_proof
+    ADD CONSTRAINT history_receiving_proof_pkey PRIMARY KEY (partition_no, account_route, account_id, artifact_type, locator, partition_epoch);
+
+
+--
+-- Name: history_registry history_registry_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_registry
+    ADD CONSTRAINT history_registry_pkey PRIMARY KEY (singleton);
 
 
 --
@@ -397,11 +1438,75 @@ ALTER TABLE ONLY core.partition
 
 
 --
+-- Name: preference_history_job preference_history_job_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.preference_history_job
+    ADD CONSTRAINT preference_history_job_pkey PRIMARY KEY (job_id);
+
+
+--
 -- Name: receipt receipt_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
 ALTER TABLE ONLY core.receipt
     ADD CONSTRAINT receipt_pkey PRIMARY KEY (partition_no, principal_kind, principal_id, command_kind, idempotency_key);
+
+
+--
+-- Name: record_history_locator record_history_locator_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_locator
+    ADD CONSTRAINT record_history_locator_pkey PRIMARY KEY (source_key, partition_no, artifact_type, locator);
+
+
+--
+-- Name: record_history_purge record_history_purge_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_purge
+    ADD CONSTRAINT record_history_purge_pkey PRIMARY KEY (source_key, deletion_generation);
+
+
+--
+-- Name: record_history_purge_set record_history_purge_set_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_purge_set
+    ADD CONSTRAINT record_history_purge_set_pkey PRIMARY KEY (source_key, deletion_generation, source_partition, set_locator, set_revision);
+
+
+--
+-- Name: record_history_source_set_copy record_history_source_set_cop_partition_no_artifact_type_lo_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_source_set_copy
+    ADD CONSTRAINT record_history_source_set_cop_partition_no_artifact_type_lo_key UNIQUE (partition_no, artifact_type, locator);
+
+
+--
+-- Name: record_history_source_set_copy record_history_source_set_copy_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_source_set_copy
+    ADD CONSTRAINT record_history_source_set_copy_pkey PRIMARY KEY (source_partition, set_locator, set_revision, partition_no, artifact_type, locator);
+
+
+--
+-- Name: record_history_source_set record_history_source_set_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_source_set
+    ADD CONSTRAINT record_history_source_set_pkey PRIMARY KEY (source_partition, set_locator, set_revision);
+
+
+--
+-- Name: record_history_source_set record_history_source_set_source_partition_original_transac_key; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_source_set
+    ADD CONSTRAINT record_history_source_set_source_partition_original_transac_key UNIQUE (source_partition, original_transaction);
 
 
 --
@@ -429,10 +1534,73 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: agent_identity_approval_original; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX agent_identity_approval_original ON core.receipt USING btree (partition_no, transaction_id) WHERE ((principal_kind = 'account'::text) AND (command_kind = 'access.agent-verification.approve'::text));
+
+
+--
+-- Name: agent_identity_history_copy_receiver; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX agent_identity_history_copy_receiver ON core.agent_identity_history_copy USING btree (partition_no, artifact_type, locator, source_route, source_account_id, source_direction, source_receipt_id);
+
+
+--
+-- Name: agent_identity_reversal_original; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX agent_identity_reversal_original ON core.receipt USING btree (partition_no, transaction_id) WHERE ((principal_kind = 'account'::text) AND (command_kind = ANY (ARRAY['access.agent-verification.released'::text, 'access.agent-verification.revoked'::text, 'access.agent-verification.deleted'::text])));
+
+
+--
 -- Name: consumer_checkpoint_consumer_idx; Type: INDEX; Schema: core; Owner: -
 --
 
 CREATE INDEX consumer_checkpoint_consumer_idx ON core.consumer_checkpoint USING btree (consumer, partition_no);
+
+
+--
+-- Name: history_family_runnable; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_family_runnable ON core.history_family_coverage USING btree (next_run, family, account_route, account_id) WHERE (phase = 'scan'::text);
+
+
+--
+-- Name: history_family_stale; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_family_stale ON core.history_family_coverage USING btree (domain_generation, family, account_route, account_id) WHERE (phase <> 'scan'::text);
+
+
+--
+-- Name: history_family_watch_source; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX history_family_watch_source ON core.history_family_watch USING btree (partition_no, artifact_type, source_key);
+
+
+--
+-- Name: history_job_pending; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_job_pending ON core.preference_history_job USING btree (job_id) WHERE (phase = 'pending'::text);
+
+
+--
+-- Name: history_locator_artifact; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_locator_artifact ON core.history_locator USING btree (partition_no, artifact_type, locator, account_route, account_id);
+
+
+--
+-- Name: history_locator_family_page; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_locator_family_page ON core.history_locator USING btree (partition_no, account_route, account_id, artifact_type, locator);
 
 
 --
@@ -441,6 +1609,250 @@ CREATE INDEX consumer_checkpoint_consumer_idx ON core.consumer_checkpoint USING 
 
 CREATE INDEX history_locator_pending ON core.history_locator USING btree (partition_no, account_route, account_id, artifact_type, locator) WHERE (state = 'pending'::text);
 
+
+--
+-- Name: history_progress_pending; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_progress_pending ON core.history_progress USING btree (account_route, account_id, barrier_id, store_kind, partition_no) WHERE (state = 'pending'::text);
+
+
+--
+-- Name: history_registry_redrive; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_registry_redrive ON core.preference_history_job USING btree (registry_generation, job_id);
+
+
+--
+-- Name: history_work_source; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX history_work_source ON core.history_work USING btree (source_partition, work_id);
+
+
+--
+-- Name: preference_history_barrier; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE UNIQUE INDEX preference_history_barrier ON core.preference_history_job USING btree (account_route, account_id, barrier_id);
+
+
+--
+-- Name: preference_history_runnable; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX preference_history_runnable ON core.preference_history_job USING btree (next_run, job_id) WHERE (phase = ANY (ARRAY['scan'::text, 'verify'::text]));
+
+
+--
+-- Name: record_history_copy; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_copy ON core.record_history_locator USING btree (partition_no, artifact_type, locator, source_key);
+
+
+--
+-- Name: record_history_original; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_original ON core.record_history_locator USING btree (partition_no, original_transaction) WHERE (original_position IS NULL);
+
+
+--
+-- Name: record_history_pending; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_pending ON core.record_history_locator USING btree (source_key, next_attempt, partition_no, artifact_type, locator) WHERE (state = 'pending'::text);
+
+
+--
+-- Name: record_history_purge_runnable; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_purge_runnable ON core.record_history_purge USING btree (next_run, source_key, deletion_generation);
+
+
+--
+-- Name: record_history_purge_set_runnable; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_purge_set_runnable ON core.record_history_purge_set USING btree (source_key, deletion_generation, next_attempt, source_partition, set_locator, set_revision);
+
+
+--
+-- Name: record_history_receiving_pending; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_receiving_pending ON core.record_history_locator USING btree (source_key, next_attempt, partition_no, artifact_type, locator) WHERE ((state = 'pending'::text) OR (gap = 'record-source-native-release-pending'::text));
+
+
+--
+-- Name: record_history_source_set_copy_original; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_source_set_copy_original ON core.record_history_source_set_copy USING btree (partition_no, original_transaction) WHERE (original_position IS NULL);
+
+
+--
+-- Name: record_history_source_set_copy_pending; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_source_set_copy_pending ON core.record_history_source_set_copy USING btree (source_partition, set_locator, set_revision, next_attempt, partition_no, artifact_type, locator) WHERE ((state = 'pending'::text) OR (gap = 'record-source-native-release-pending'::text));
+
+
+--
+-- Name: record_history_source_set_original; Type: INDEX; Schema: core; Owner: -
+--
+
+CREATE INDEX record_history_source_set_original ON core.record_history_source_set USING btree (source_partition, original_transaction) WHERE (original_position IS NULL);
+
+
+--
+-- Name: agent_identity_history_copy agent_identity_history_copy_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_history_copy_guard BEFORE INSERT OR DELETE OR UPDATE ON core.agent_identity_history_copy FOR EACH ROW EXECUTE FUNCTION core.agent_identity_history_copy_guard();
+
+
+--
+-- Name: agent_identity_work agent_identity_work_immutable; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_work_immutable BEFORE DELETE OR UPDATE ON core.agent_identity_work FOR EACH ROW EXECUTE FUNCTION core.guard_agent_identity_work();
+
+
+--
+-- Name: agent_identity_work_source agent_identity_work_source_immutable; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_work_source_immutable BEFORE DELETE OR UPDATE ON core.agent_identity_work_source FOR EACH ROW EXECUTE FUNCTION core.guard_agent_identity_work();
+
+
+--
+-- Name: agent_identity_work_source agent_identity_work_source_native; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER agent_identity_work_source_native AFTER INSERT ON core.agent_identity_work_source DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.validate_agent_identity_work_source();
+
+
+--
+-- Name: partition follow_count_source_topology; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER follow_count_source_topology AFTER INSERT ON core.partition FOR EACH ROW EXECUTE FUNCTION library.install_follow_count_partition();
+
+
+--
+-- Name: history_event_consumer history_consumer_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_consumer_changed AFTER UPDATE OF state ON core.history_event_consumer FOR EACH ROW EXECUTE FUNCTION core.history_consumer_changed();
+
+
+--
+-- Name: history_event_consumer history_family_consumer_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_consumer_changed AFTER INSERT OR DELETE OR UPDATE ON core.history_event_consumer FOR EACH ROW EXECUTE FUNCTION core.history_family_consumer_changed();
+
+
+--
+-- Name: history_family_definition history_family_definition_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_definition_changed AFTER INSERT OR DELETE OR UPDATE OF version, digest, sources, registry_digest ON core.history_family_definition FOR EACH ROW EXECUTE FUNCTION core.history_family_domain_changed();
+
+
+--
+-- Name: history_family_enrollment history_family_enrollment_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_enrollment_changed AFTER INSERT OR DELETE OR UPDATE ON core.history_family_enrollment FOR EACH ROW EXECUTE FUNCTION core.history_family_scope_changed();
+
+
+--
+-- Name: preference_history_job history_family_job_admitted; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_job_admitted AFTER INSERT ON core.preference_history_job FOR EACH ROW EXECUTE FUNCTION core.history_family_job_admitted();
+
+
+--
+-- Name: history_locator history_family_locator_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_locator_changed AFTER INSERT OR DELETE OR UPDATE ON core.history_locator FOR EACH ROW EXECUTE FUNCTION core.history_family_scope_changed();
+
+
+--
+-- Name: outbox history_family_outbox_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_outbox_changed AFTER DELETE OR UPDATE ON core.outbox FOR EACH ROW EXECUTE FUNCTION core.history_family_physical_changed();
+
+
+--
+-- Name: history_locator history_family_preserve_locator; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_preserve_locator BEFORE DELETE OR UPDATE ON core.history_locator FOR EACH ROW EXECUTE FUNCTION core.history_family_preserve_locator();
+
+
+--
+-- Name: receipt history_family_receipt_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_receipt_changed AFTER DELETE OR UPDATE ON core.receipt FOR EACH ROW EXECUTE FUNCTION core.history_family_physical_changed();
+
+
+--
+-- Name: history_receiving_proof history_family_receiving_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_receiving_changed AFTER INSERT ON core.history_receiving_proof FOR EACH ROW EXECUTE FUNCTION core.history_family_scope_changed();
+
+
+--
+-- Name: history_registry history_family_registry_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_registry_changed AFTER INSERT OR DELETE OR UPDATE ON core.history_registry FOR EACH ROW EXECUTE FUNCTION core.history_family_domain_changed();
+
+
+--
+-- Name: partition history_family_route_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_route_changed AFTER INSERT OR DELETE OR UPDATE OF node, write_state, moved_to, epoch ON core.partition FOR EACH STATEMENT EXECUTE FUNCTION core.history_family_domain_changed();
+
+
+--
+-- Name: history_seal history_family_seal_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_seal_changed AFTER INSERT OR DELETE OR UPDATE ON core.history_seal FOR EACH ROW EXECUTE FUNCTION core.history_family_scope_changed();
+
+
+--
+-- Name: history_family_enrollment history_family_validate_enrollment; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_validate_enrollment BEFORE INSERT OR UPDATE ON core.history_family_enrollment FOR EACH ROW EXECUTE FUNCTION core.history_family_validate_enrollment();
+
+
+--
+-- Name: history_family_watch history_family_watch_immutable; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_watch_immutable BEFORE DELETE OR UPDATE ON core.history_family_watch FOR EACH ROW EXECUTE FUNCTION core.history_receiving_proof_immutable();
+
+
+--
+-- Name: history_work history_family_work_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_family_work_changed AFTER DELETE OR UPDATE ON core.history_work FOR EACH ROW EXECUTE FUNCTION core.history_family_physical_changed();
 
 
 --
@@ -451,10 +1863,111 @@ CREATE TRIGGER history_locator_guard BEFORE INSERT OR UPDATE OF partition_no, ac
 
 
 --
+-- Name: outbox history_outbox_irreversible; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_outbox_irreversible BEFORE UPDATE ON core.outbox FOR EACH ROW EXECUTE FUNCTION core.history_payload_irreversible();
+
+
+--
+-- Name: receipt history_receipt_irreversible; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_receipt_irreversible BEFORE UPDATE ON core.receipt FOR EACH ROW EXECUTE FUNCTION core.history_payload_irreversible();
+
+
+--
+-- Name: history_receiving_proof history_receiving_proof_immutable; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_receiving_proof_immutable BEFORE DELETE OR UPDATE ON core.history_receiving_proof FOR EACH ROW EXECUTE FUNCTION core.history_receiving_proof_immutable();
+
+
+--
+-- Name: history_work history_retirement_irreversible; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_retirement_irreversible BEFORE UPDATE ON core.history_work FOR EACH ROW EXECUTE FUNCTION core.history_retirement_irreversible();
+
+
+--
 -- Name: history_seal history_seal_preserve; Type: TRIGGER; Schema: core; Owner: -
 --
 
 CREATE TRIGGER history_seal_preserve BEFORE DELETE OR UPDATE ON core.history_seal FOR EACH ROW EXECUTE FUNCTION core.history_preserve_seal();
+
+
+--
+-- Name: history_work history_work_changed; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER history_work_changed AFTER UPDATE OF owner_ready, absence_verified ON core.history_work FOR EACH ROW EXECUTE FUNCTION core.history_work_changed();
+
+
+--
+-- Name: partition identity_epoch_prearm_owner_gate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER identity_epoch_prearm_owner_gate BEFORE DELETE OR UPDATE ON core.partition FOR EACH ROW EXECUTE FUNCTION semantic.guard_identity_prearm_owner();
+
+
+--
+-- Name: record_history_locator record_history_preserve_copy; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER record_history_preserve_copy BEFORE DELETE OR UPDATE ON core.record_history_locator FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_copy();
+
+
+--
+-- Name: record_history_purge_set record_history_preserve_purge_set; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER record_history_preserve_purge_set BEFORE DELETE OR UPDATE ON core.record_history_purge_set FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_purge_set();
+
+
+--
+-- Name: record_history_source_set record_history_preserve_source_set; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER record_history_preserve_source_set BEFORE DELETE OR UPDATE ON core.record_history_source_set FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_source_set();
+
+
+--
+-- Name: record_history_source_set_copy record_history_preserve_source_set_copy; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER record_history_preserve_source_set_copy BEFORE DELETE OR UPDATE ON core.record_history_source_set_copy FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_source_set();
+
+
+--
+-- Name: partition record_purge_source_home_gate; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER record_purge_source_home_gate BEFORE UPDATE OF epoch, write_state, moved_to ON core.partition FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_home_gate();
+
+
+--
+-- Name: agent_identity_history_copy agent_identity_history_copy_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_history_copy
+    ADD CONSTRAINT agent_identity_history_copy_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: agent_identity_history_copy agent_identity_history_copy_partition_no_source_route_sour_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_history_copy
+    ADD CONSTRAINT agent_identity_history_copy_partition_no_source_route_sour_fkey FOREIGN KEY (partition_no, source_route, source_account_id, artifact_type, locator) REFERENCES core.history_locator(partition_no, account_route, account_id, artifact_type, locator);
+
+
+--
+-- Name: agent_identity_work_source agent_identity_work_source_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_work_source
+    ADD CONSTRAINT agent_identity_work_source_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
 
 
 --
@@ -463,6 +1976,70 @@ CREATE TRIGGER history_seal_preserve BEFORE DELETE OR UPDATE ON core.history_sea
 
 ALTER TABLE ONLY core.consumer_checkpoint
     ADD CONSTRAINT consumer_checkpoint_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: history_event_consumer history_event_consumer_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_event_consumer
+    ADD CONSTRAINT history_event_consumer_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: history_family_coverage history_family_coverage_account_route_account_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_coverage
+    ADD CONSTRAINT history_family_coverage_account_route_account_id_fkey FOREIGN KEY (account_route, account_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: history_family_coverage history_family_coverage_family_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_coverage
+    ADD CONSTRAINT history_family_coverage_family_fkey FOREIGN KEY (family) REFERENCES core.history_family_definition(family);
+
+
+--
+-- Name: history_family_enrollment history_family_enrollment_account_route_account_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_enrollment
+    ADD CONSTRAINT history_family_enrollment_account_route_account_id_fkey FOREIGN KEY (account_route, account_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: history_family_enrollment history_family_enrollment_family_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_enrollment
+    ADD CONSTRAINT history_family_enrollment_family_fkey FOREIGN KEY (family) REFERENCES core.history_family_definition(family);
+
+
+--
+-- Name: history_family_enrollment history_family_enrollment_partition_no_account_route_accou_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_enrollment
+    ADD CONSTRAINT history_family_enrollment_partition_no_account_route_accou_fkey FOREIGN KEY (partition_no, account_route, account_id) REFERENCES core.history_seal(partition_no, account_route, account_id);
+
+
+--
+-- Name: history_family_enrollment history_family_enrollment_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_enrollment
+    ADD CONSTRAINT history_family_enrollment_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: history_family_fence history_family_fence_account_route_account_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_family_fence
+    ADD CONSTRAINT history_family_fence_account_route_account_id_fkey FOREIGN KEY (account_route, account_id) REFERENCES access.erasure(route, account_id);
 
 
 --
@@ -498,6 +2075,22 @@ ALTER TABLE ONLY core.history_progress
 
 
 --
+-- Name: history_receiving_proof history_receiving_proof_partition_no_account_route_account_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_receiving_proof
+    ADD CONSTRAINT history_receiving_proof_partition_no_account_route_account_fkey FOREIGN KEY (partition_no, account_route, account_id, artifact_type, locator) REFERENCES core.history_locator(partition_no, account_route, account_id, artifact_type, locator);
+
+
+--
+-- Name: history_receiving_proof history_receiving_proof_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.history_receiving_proof
+    ADD CONSTRAINT history_receiving_proof_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
 -- Name: history_seal history_seal_account_route_barrier_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -530,11 +2123,67 @@ ALTER TABLE ONLY core.outbox
 
 
 --
+-- Name: preference_history_job preference_history_job_account_route_barrier_id_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.preference_history_job
+    ADD CONSTRAINT preference_history_job_account_route_barrier_id_fkey FOREIGN KEY (account_route, barrier_id) REFERENCES access.erasure(route, account_id);
+
+
+--
+-- Name: preference_history_job preference_history_job_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.preference_history_job
+    ADD CONSTRAINT preference_history_job_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
 -- Name: receipt receipt_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
 --
 
 ALTER TABLE ONLY core.receipt
     ADD CONSTRAINT receipt_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: record_history_locator record_history_locator_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_locator
+    ADD CONSTRAINT record_history_locator_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: record_history_purge record_history_purge_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_purge
+    ADD CONSTRAINT record_history_purge_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: record_history_purge_set record_history_purge_set_source_key_deletion_generation_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_purge_set
+    ADD CONSTRAINT record_history_purge_set_source_key_deletion_generation_fkey FOREIGN KEY (source_key, deletion_generation) REFERENCES core.record_history_purge(source_key, deletion_generation);
+
+
+--
+-- Name: record_history_source_set_copy record_history_source_set_copy_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_source_set_copy
+    ADD CONSTRAINT record_history_source_set_copy_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: record_history_source_set record_history_source_set_source_partition_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.record_history_source_set
+    ADD CONSTRAINT record_history_source_set_source_partition_fkey FOREIGN KEY (source_partition) REFERENCES core.partition(partition_no);
 
 
 --

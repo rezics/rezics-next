@@ -1,3 +1,4 @@
+import canonicalize from 'canonicalize';
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import { Pool, type PoolClient, type QueryResult } from 'pg';
 import { WORK_QUEUES, type WorkQueueName } from './queues.ts';
@@ -12,14 +13,21 @@ export type WorkIntent = Readonly<{
   workflowId: string;
   /** Locators only; consumer modules own their input schema. */
   input: Readonly<{ accounts: readonly string[]; [locator: string]: unknown }>;
+  /** Original positional SDK arguments, when the existing workflow predates scoped work. */
+  arguments?: readonly unknown[];
 }>;
 
 /** Executor internals. The SDK uses this very connection; no pool checkout or relay. */
-export async function enqueueWorkIntent(work: WorkClient, client: PoolClient, intent: WorkIntent): Promise<void> {
+export async function enqueueWorkIntent(
+  work: WorkClient,
+  client: PoolClient,
+  intent: WorkIntent,
+  capture?: (created: boolean) => void,
+): Promise<void> {
   if (!Object.hasOwn(WORK_QUEUES, intent.queue) || !intent.workflowName || !intent.workflowId)
     throw new TypeError('An operational intent requires an existing queue, workflow name and deterministic id');
   // 5.4.6 checks the returned name but merely warns for a queue mismatch. Inspect
-  // its upsert result on the same pg client, adding no statement or connection.
+  // its upsert result and, for native identity custody, exact input on this same pg client.
   const checked = new Proxy(client, {
     get(target, property) {
       if (property !== 'query') return Reflect.get(target, property, target);
@@ -27,8 +35,16 @@ export async function enqueueWorkIntent(work: WorkClient, client: PoolClient, in
         const result: QueryResult = await target.query(sql, values);
         if (result.fields.some(({ name }) => name === 'queue_name')) {
           const row = result.rows[0];
+          if (capture && row) capture(row.creator_xid === values[22]);
           if (row && (row.name !== intent.workflowName || row.queue_name !== intent.queue))
             throw new TypeError(`Conflicting workflow name or queue for ${intent.workflowId}`);
+        }
+        if (capture && sql.includes('.workflow_input ') && values[0] === intent.workflowId) {
+          const stored = (
+            await target.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [intent.workflowId])
+          ).rows[0];
+          if (!stored || canonicalize(JSON.parse(stored.inputs)) !== canonicalize(JSON.parse(String(values[1]))))
+            throw new TypeError('Original identity SDK arguments differ from native custody');
         }
         return result;
       };
@@ -42,8 +58,27 @@ export async function enqueueWorkIntent(work: WorkClient, client: PoolClient, in
       workflowIDReusePolicy: 'return-existing',
       workflowID: intent.workflowId,
     },
-    intent.input,
+    ...(intent.arguments ?? [intent.input]),
   );
+}
+
+/** Exact existence probes for the supported durable family. Pre-mapping orphan copies are
+ * legacy too; a newly inserted SDK status row cannot retroactively cover their creation. */
+export async function hasRetainedWorkCopies(client: PoolClient, workflowId: string): Promise<boolean> {
+  for (const [table, key] of [
+    ['workflow_status', 'workflow_uuid'],
+    ['workflow_input', 'workflow_uuid'],
+    ['workflow_output', 'workflow_uuid'],
+    ['operation_outputs', 'workflow_uuid'],
+    ['workflow_events', 'workflow_uuid'],
+    ['workflow_events_history', 'workflow_uuid'],
+    ['notifications', 'destination_uuid'],
+    ['streams', 'workflow_uuid'],
+  ] as const) {
+    if ((await client.query(`SELECT 1 FROM dbos.${table} WHERE ${key}=$1 LIMIT 1`, [workflowId])).rows.length)
+      return true;
+  }
+  return false;
 }
 
 /** Enqueue without launching an executor. A supplied pool remains the caller's responsibility. */

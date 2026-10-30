@@ -6,9 +6,9 @@ import type { WorkClient } from '../work/client.ts';
 import { decodeLocator } from './locator.ts';
 import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
 
-/** Exact unresolved original-copy branch. These SDK-owned recording calls expose no native
- * History recording callback in the supported integration. A deterministic workflow name or
- * a successful enqueue/step return is not a generated HistoryArtifact or receiving custody. */
+/** Historical executions without captured native SDK creation keep this exact unresolved gap.
+ * New executions use agent-identity-work's transactional mapping and two-stage source handoff.
+ * A deterministic workflow name or successful SDK return cannot certify older receiving custody. */
 export const AGENT_IDENTITY_DURABLE_ASSOCIATION = Object.freeze({
   state: 'pending',
   gap: 'agent-identity-sdk-recording-port-unavailable',
@@ -95,10 +95,19 @@ export async function minimizeHistoryWork(
 ): Promise<string | null> {
   const key = decodeLocator('durable-work/v1', locator);
   if (key.artifactType !== 'durable-work/v1') throw new TypeError('Invalid durable locator');
+  const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
+  const mapping = await withConnection(pool, (tx) => resolveAgentIdentitySDKWork(tx, key.workId));
+  if (mapping?.gap) return mapping.gap;
+  const sdkWorkId = mapping?.workflowId ?? key.workId;
   const prepared = await withConnection(pool, async (tx): Promise<string | null> => {
     await tx.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
     try {
       if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
+      const custody = await resolveAgentIdentitySDKWork(tx, key.workId);
+      if (custody?.gap) {
+        await tx.query('COMMIT');
+        return custody.gap;
+      }
       await sealHistoryAccount(tx, job.partition_no, job.account_route, job.account_id);
       const result = await tx.query('SELECT * FROM core.history_work WHERE partition_no=$1 AND work_id=$2 FOR UPDATE', [
         job.partition_no,
@@ -168,11 +177,11 @@ export async function minimizeHistoryWork(
   if (prepared) return prepared;
   if (job.partition_no === 0) {
     // A registration does not certify pre-existing history. Probe physical rows/serialized bytes.
-    const before = await inspect(pool, key.workId);
+    const before = await inspect(pool, sdkWorkId);
     if (!before.bounded) return 'work-execution-budget-uncovered';
-    await client.cancelWorkflow(key.workId, { cancelChildren: false });
-    await client.deleteWorkflows([key.workId], false);
-    if (!(await inspect(pool, key.workId)).empty) return 'work-physical-copy-remains';
+    await client.cancelWorkflow(sdkWorkId, { cancelChildren: false });
+    await client.deleteWorkflows([sdkWorkId], false);
+    if (!(await inspect(pool, sdkWorkId)).empty) return 'work-physical-copy-remains';
   }
   await withConnection(pool, async (tx) => {
     await tx.query('BEGIN');

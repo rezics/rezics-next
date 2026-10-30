@@ -1,3 +1,4 @@
+import { recordAgentIdentityWorkSource } from '../history/agent-identity-source.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 /** Access-owned source history. These helpers are internal to the native identity bridge. */
 import { createHash } from 'node:crypto';
@@ -45,7 +46,7 @@ type Source = {
   reason?: string | null;
 };
 export type AccountIdentitySource = Readonly<{
-  input: IdentityAdmissionInput;
+  input: Readonly<{ intent: IdentityIntent; receipt: AccountReceipt }>;
   partition: number;
   epoch: number;
   position: bigint;
@@ -111,7 +112,7 @@ function accountRoute(receipt: AccountReceipt): number {
   return route;
 }
 
-/** Exactly one extra statement in the ORIGINAL eventful account-home command. */
+/** Record the immutable source and its SDK handoff in the ORIGINAL eventful account-home command. */
 export async function recordAccountIdentitySource(tx: CommandTransaction, source: Source): Promise<void> {
   const command = currentCommand(tx);
   const route = accountRoute(source.receipt);
@@ -281,6 +282,7 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
     }),
   );
   await declareAgentIdentitySource(tx, key, digestOf(input));
+  await recordAgentIdentityWorkSource(tx, source.receipt, source.decision?.custody_id ?? null);
 }
 
 /** Current native T and account terminal fence precede the immutable receipt lookup and any disclosure. */
@@ -506,12 +508,21 @@ export async function readOriginalAgentIdentityDecision(pool: Pool, requestId: s
           epoch: number;
           position: string;
           transaction_id: string;
+          native_receipt_key: string;
+          request_digest: string;
+          custody_id: string | null;
         }>(
           `SELECT r.request_id,r.account_id,r.account_kind,r.catalogue_subject_id,r.requested_by,r.decided_by,
-        b.epoch,b.position::text,b.transaction_id
+        b.epoch,b.position::text,b.transaction_id,c.idempotency_key AS native_receipt_key,
+        encode(c.request_digest,'hex') AS request_digest,w.custody_id
       FROM access.agent_verification_request r
       JOIN editorial.write_basis b ON b.partition_no=0 AND b.transaction_id=r.decision_receipt_id
         AND b.principal_kind='account' AND b.principal_id=r.decided_by
+      JOIN core.receipt c ON c.partition_no=0 AND c.transaction_id=b.transaction_id
+        AND c.principal_kind='account' AND c.principal_id=r.decided_by
+        AND c.command_kind='access.agent-verification.approve' AND c.epoch=b.epoch AND c.position=b.position
+      LEFT JOIN core.agent_identity_work w ON w.workflow_id=
+        'accounts.agent-verification:' || r.request_id::text || ':' || r.decision_receipt_id::text
       JOIN core.partition p ON p.partition_no=0 AND p.write_state='active'
         AND p.epoch=b.epoch AND p.position>=b.position
       WHERE r.route=0 AND r.request_id=$1 AND r.decision_receipt_id=$2
@@ -524,6 +535,10 @@ export async function readOriginalAgentIdentityDecision(pool: Pool, requestId: s
   const decision = Object.freeze(row);
   originalDecisions.add(decision);
   return decision;
+}
+export type OriginalAgentIdentityDecision = Awaited<ReturnType<typeof readOriginalAgentIdentityDecision>>;
+export function assertOriginalAgentIdentityDecision(decision: OriginalAgentIdentityDecision): void {
+  if (!originalDecisions.has(decision)) throw new TypeError('Original Global decision custody required');
 }
 const originalDecisions = new WeakSet<object>();
 const publishedUndos = new WeakSet<object>();

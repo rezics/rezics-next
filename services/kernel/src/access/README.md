@@ -583,6 +583,37 @@ An initially deferred native constraint checks the executor's exact stored recei
 in the same database transaction. Reversal insertion also rechecks its immutable prior source at the current owner
 epoch. The source guard currently refuses updates and deletion while consumer-aware minimization is unfinished.
 
+The original SDK enqueue now records two-stage native receiving custody. Initial verification binds the genuine
+committed Global request, approval receipt and native write basis before the SDK input commits. The receiver uses
+a new opaque UUID with an immutable mapping to the actual unchanged `accounts.agent-verification:<request>:<receipt>`
+workflow ID. It records the complete subject/requester/decider/principal role union. This initial approval-copy
+obligation contains no chosen release, accepted Semantic input, AccountIdentitySource or terminal proof.
+
+The unchanged `record-pending` step still chooses the accepted release and creates the account-home Source at its
+original time. That original command records its exact Source key, native tuple, digest, release and SDK custody UUID.
+After releasing the source checkout, the step associates that intent with the existing receiver before recording its
+SDK result. The receiver's original creation transaction remains unchanged. Reversal's original command records the
+same source-local intent before its existing effect; enqueue validates the exact original native reversal response.
+Both use the configured WorkClient's transactional SDK enqueue, preserving positional arguments, workflow IDs, step
+names/order/results, durable redrive and publication. Cached step replays recheck native custody outside the checkpoint.
+
+`history/agent-identity-source.ts` exports the native recording/handoff types and lookup bounded to eight keys and
+one artifact in total through the
+`lookupAgentIdentityReceivingCopies` port. `history/agent-identity-work.ts` owns the actual enqueue/association wrappers.
+Neither lookup nor initial custody seals a Source inventory or grants erasure authority. Source and receiver owner
+epochs, current History generations, writer versions, role seals and permanent native retirement are checked before
+admission/reuse. The original command's full role manifest, including acting-human and prior Undo roles, is retained
+in the SDK source association. SDK payload inspection retains
+the existing 64-operation, eight-event-key, 64-history-row, 64 KiB payload, 4 KiB metadata, 139-row and 10 MiB limits.
+
+Older SDK rows can be matched only to exact original arguments and remain marked as uncovered creation; missing old
+source-command associations remain pending. Recovery preserves its separate native transaction and does not mint a
+missing original SDK source intent. No status/string parsing supplies original Source or consumer authority. Consumer
+and technical Undo discharge remains exclusively Semantic's `identity-source-consumer-custody.ts`; its exhaustive
+closure producer is currently pending, so completed workflows retain bytes and `owner_ready=false`. Root, Source and
+shared-copy closure remain independent. Physical retirement resolves the genuine mapped SDK workflow ID before the
+existing supported cancel/delete APIs and absence probes, and never mutates foreign SDK tables directly.
+
 The existing DBOS workflows redrive source/admission/publication with durable sleep outside steps, preserving their
 original ids and receipts through retryable failures. Page writes, approval completion, reversal page removal and
 pending cleanup require indexed native mapping and both fixed participant completions. The typed adapter accepts
@@ -3259,15 +3290,13 @@ most one actual `HistoryArtifact` with the complete native role union. It releas
 a sealed native cut independently of page EOF, as described below. This does not discharge receiving or Source
 consumer custody; old unassociated copies remain pending.
 
-`history/durable.ts` exports `AGENT_IDENTITY_DURABLE_ASSOCIATION` with the exact unresolved SDK branch. The existing
-approval/reversal effect calls to `context.client.enqueue` and original `DBOS.registerStep` recordings in
-`access/agent-verification-work.ts` expose no History codec recording callback. SDK ownership is
-`DBOSClient.enqueue` / `SystemDatabase.initWorkflowStatus` / `recordWorkflowOutput`; the existing native durable
-locator accepts UUID/hex work identities, whereas these original workflow names are textual. Their returned handles
-and deterministic names do not establish an actual native recording locator or durable receiving handoff. Only
-this SDK branch remains pending; no workflow IDs, SDK rows, foreign SDK SQL or additional WorkClient are invented.
-The original DBOS steps and default WorkClient lifetime remain intact. Neither native association conversion nor
-this explicitly pending SDK branch claims family, native acceptance or Goal completion.
+The actual SDK enqueue and step boundaries use the two-stage custody protocol described above. The four-field
+`agentIdentitySourceKey` remains the original receipt/outbox lookup identity; `agentIdentityWorkSourceKey` encodes the
+closed native receipt tuple for the separate SDK association. Neither changes an existing Source key or workflow ID.
+`history/durable.ts` retains `AGENT_IDENTITY_DURABLE_ASSOCIATION` for historical executions without a captured native
+SDK recording seam. Their returned handles, deterministic names and workflow status do not establish receiving
+custody. These uncovered copies remain pending. The original DBOS steps and default WorkClient lifetime remain
+intact. Neither native association conversion nor new SDK custody claims family or original inventory closure.
 
 ### Original identity native inventory
 

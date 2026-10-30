@@ -6,15 +6,15 @@ import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { guardHistoryAccounts } from '../history/gates.ts';
 import { encodeLocator, validateLocator, validateScope, type HistoryScope } from '../history/locator.ts';
-import { enqueueWorkIntent, type WorkClient, type WorkIntent } from './client.ts';
+import { enqueueWorkIntent, hasRetainedWorkCopies, type WorkClient, type WorkIntent } from './client.ts';
 import record from '../history/record.sql';
 
 export type ScopedWorkRequest = Readonly<{ owner: string; intent: WorkIntent; scope: HistoryScope }>;
-function validate(request: ScopedWorkRequest) {
-  validateLocator('durable-work/v1', { artifactType: 'durable-work/v1', workId: request.intent.workflowId });
+function validate(request: ScopedWorkRequest, custodyId = request.intent.workflowId) {
+  validateLocator('durable-work/v1', { artifactType: 'durable-work/v1', workId: custodyId });
   // Native retired identities use UUIDs. Arbitrary SDK names and caller idempotency text are excluded.
   if (
-    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(request.intent.workflowId) ||
+    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(custodyId) ||
     !/^[a-z][a-z0-9_.-]{0,95}$/.test(request.owner)
   )
     throw new TypeError('Invalid scoped work identity');
@@ -31,26 +31,18 @@ async function persist(
   sourceTransaction: string,
   request: ScopedWorkRequest,
   digest: Buffer,
+  custodyId = request.intent.workflowId,
 ) {
   const result = await tx.query(
     `INSERT INTO core.history_work(partition_no,work_id,request_digest,owner,request,scope,source_partition,source_transaction)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(partition_no,work_id) DO NOTHING
      RETURNING work_id`,
-    [
-      partition,
-      request.intent.workflowId,
-      digest,
-      request.owner,
-      request.intent,
-      request.scope,
-      source,
-      sourceTransaction,
-    ],
+    [partition, custodyId, digest, request.owner, request.intent, request.scope, source, sourceTransaction],
   );
   const found = await tx.query(
     `SELECT request_digest,owner,request,scope,source_partition,source_transaction,state,admitted
      FROM core.history_work WHERE partition_no=$1 AND work_id=$2 FOR UPDATE`,
-    [partition, request.intent.workflowId],
+    [partition, custodyId],
   );
   const row = found.rows[0];
   if (
@@ -69,7 +61,7 @@ async function persist(
     await record.run(tx, {
       partition_no: partition,
       artifact_type: 'durable-work/v1',
-      locator: Buffer.from(encodeLocator({ artifactType: 'durable-work/v1', workId: request.intent.workflowId })),
+      locator: Buffer.from(encodeLocator({ artifactType: 'durable-work/v1', workId: custodyId })),
       accounts: request.scope.accounts,
     });
   return { retired: false, admitted: row.admitted as boolean };
@@ -85,6 +77,57 @@ export async function stageHistoryWork(tx: CommandTransaction, input: ScopedWork
   await guardHistoryAccounts(tx, command.partition, request.scope.accounts);
   await persist(tx, command.partition, command.partition, command.transactionId, request, digest);
   await recordRecordHistoryCopy(tx, { artifactType: 'durable-work/v1', workId: request.intent.workflowId });
+}
+
+/** Actual legacy-named identity SDK executions use a newly persisted native custody UUID.
+ * The owner must create the immutable mapping in this SAME receiver transaction first. */
+export async function receiveMappedHistoryWork(
+  tx: import('pg').PoolClient,
+  work: WorkClient,
+  custodyId: string,
+  source: { partition: number; transactionId: string },
+  request: ScopedWorkRequest,
+): Promise<'admitted' | 'retired'> {
+  const mapping = (
+    await tx.query(`SELECT workflow_id FROM core.agent_identity_work WHERE custody_id=$1 FOR SHARE`, [custodyId])
+  ).rows[0];
+  if (mapping?.workflow_id !== request.intent.workflowId)
+    throw new TypeError('Missing native identity SDK workflow mapping');
+  const digest = validate(request, custodyId);
+  const bound = (
+    await tx.query(
+      `UPDATE core.agent_identity_work SET request_digest=$2 WHERE custody_id=$1
+     AND (request_digest IS NULL OR request_digest=$2) RETURNING custody_id`,
+      [custodyId, digest],
+    )
+  ).rows[0];
+  if (!bound) throw new TypeError('Conflicting native identity SDK request digest');
+  const existing = (
+    await tx.query(
+      'SELECT state,request_digest FROM core.history_work WHERE partition_no=0 AND work_id=$1 FOR UPDATE',
+      [custodyId],
+    )
+  ).rows[0];
+  if (existing?.state === 'retired') {
+    if (!Buffer.from(existing.request_digest).equals(digest)) throw new TypeError('Conflicting retired identity work');
+    return 'retired';
+  }
+  await guardHistoryAccounts(tx, 0, request.scope.accounts);
+  const stored = await persist(tx, 0, source.partition, source.transactionId, request, digest, custodyId);
+  // Always re-enter the SDK's deduplicating transactional admission. Native retirement is
+  // checked first even when somebody has removed SDK dedup rows. Arguments and IDs stay exact.
+  if (!stored.retired) {
+    const legacyCopies = !existing && (await hasRetainedWorkCopies(tx, request.intent.workflowId));
+    let created: boolean | undefined;
+    await enqueueWorkIntent(work, tx, request.intent, (value) => {
+      created = value;
+    });
+    if (created === undefined) throw new TypeError('Identity SDK creation seam unavailable');
+    if (created && !existing && !legacyCopies)
+      await tx.query('UPDATE core.agent_identity_work SET creation_captured=true WHERE custody_id=$1', [custodyId]);
+    await tx.query('UPDATE core.history_work SET admitted=true WHERE partition_no=0 AND work_id=$1', [custodyId]);
+  }
+  return stored.retired ? 'retired' : 'admitted';
 }
 
 /** Kernel DBOS is schema dbos in this same configured database. Partition zero is its fixed

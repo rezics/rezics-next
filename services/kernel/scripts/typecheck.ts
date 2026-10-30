@@ -29,6 +29,7 @@ function returnedPaths(
   if (cache === undefined) return undefined;
 
   const paths = [cache];
+  if (emitSchema === 'core') paths.push('services/kernel/db/schema.sql');
   if (
     emitSchema !== undefined &&
     /^[a-z][a-z0-9_]*$/.test(emitSchema) &&
@@ -72,7 +73,7 @@ async function typecheck(env: NodeJS.ProcessEnv, emitClient: boolean, emitSchema
   // Migration work can refresh its own snapshot using this same compiler database.
   // No additional database, native check or change to other modules' snapshots is needed.
   if (emitSchema !== undefined) {
-    const path = `db/${emitSchema}/schema.sql`;
+    const path = emitSchema === 'core' ? 'db/schema.sql' : `db/${emitSchema}/schema.sql`;
     const dump = schemaDumps(env.DATABASE_URL!, directory)[path];
     if (dump === undefined) throw new Error(`Unknown schema module: ${emitSchema}`);
     await Bun.write(resolve(directory, path), dump);

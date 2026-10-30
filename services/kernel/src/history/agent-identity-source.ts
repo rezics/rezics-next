@@ -3,12 +3,16 @@ import {
   readAgentIdentityInventoryInTransaction,
   releaseAgentIdentityInventory,
 } from './agent-identity-inventory.ts';
+import canonicalize from 'canonicalize';
+import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import type { AccountIdentitySource } from '../access/agent-verification-identity.ts';
+import { ACCOUNT_ROLE_BITS } from './contracts.ts';
 import { currentCommand, currentCommandReceipt, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import { guardHistoryAccounts } from './gates.ts';
-import { decodeLocator, encodeLocator, type AccountReference } from './locator.ts';
+import { decodeLocator, encodeLocator, validateScope, type AccountReference } from './locator.ts';
 import type { HistoryArtifact, HistoryBarrier } from './registry.ts';
 import {
   historyDeadline,
@@ -302,4 +306,234 @@ export async function agentIdentityCopyRetentionGap(
     [partition, type, locator],
   );
   return copy.rows.length ? 'agent-identity-source-retention-custody-pending' : null;
+}
+
+export type AgentIdentityReceipt = AccountIdentitySource['input']['receipt'];
+/** Technical native metadata only; neither an accepted Semantic input nor a closure proof. */
+export type AgentIdentityWorkSource = Readonly<{
+  key: string;
+  partition: number;
+  epoch: number;
+  position: string;
+  transactionId: string;
+  digest: string;
+  release: string;
+  workflowId: string;
+  accounts: readonly AccountReference[];
+}>;
+export type AgentIdentitySourceHandoff = Readonly<{
+  custodyId: string;
+  source: AgentIdentityWorkSource;
+  generation: string;
+}>;
+const handoffs = new WeakMap<AgentIdentitySourceHandoff, Readonly<{ assertNative(): void; snapshot: string }>>();
+export function assertAgentIdentitySourceHandoff(handoff: AgentIdentitySourceHandoff): void {
+  const proof = handoffs.get(handoff);
+  if (!proof) throw new TypeError('Native released identity source handoff required');
+  proof.assertNative();
+  if (canonicalize(handoff.source) !== proof.snapshot) throw new TypeError('Mutated native identity source handoff');
+}
+export const agentIdentityWorkSourceKey = (receipt: AgentIdentityReceipt): string =>
+  JSON.stringify([receipt.kind, receipt.account, receipt.receipt]);
+
+export function agentIdentityAccounts(
+  subject: string,
+  requester: string,
+  decider: string | null,
+): readonly AccountReference[] {
+  const union = new Map<string, number>();
+  for (const [id, roles] of [
+    [subject, ACCOUNT_ROLE_BITS.subject],
+    [requester, ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS.principal],
+    ...(decider ? [[decider, ACCOUNT_ROLE_BITS.reviewer | ACCOUNT_ROLE_BITS.principal] as const] : []),
+  ] as const) {
+    if (routeOf(id) === null) throw new TypeError('Identity custody requires native account roles');
+    union.set(id, (union.get(id) ?? 0) | roles);
+  }
+  return [...union]
+    .map(([accountId, roles]) => ({ accountRoute: routeOf(accountId)!, accountId, roles }))
+    .sort((a, b) => a.accountRoute - b.accountRoute || a.accountId.localeCompare(b.accountId));
+}
+
+function snapshot(source: AccountIdentitySource, retained?: readonly AccountReference[]): AgentIdentityWorkSource {
+  const requester = source.roles.find((role) => role.role === 'actor')?.account_id;
+  const decider = source.roles.find((role) => role.role === 'editor')?.account_id ?? null;
+  if (!requester) throw new TypeError('Identity source requester unavailable');
+  const known = agentIdentityAccounts(source.input.receipt.account, requester, decider);
+  const accounts = retained ?? known;
+  validateScope('durable-work/v1', { artifactType: 'durable-work/v1', accounts });
+  if (
+    known.some(
+      (role) =>
+        !accounts.some(
+          (entry) =>
+            entry.accountId === role.accountId &&
+            entry.accountRoute === role.accountRoute &&
+            (entry.roles & role.roles) === role.roles,
+        ),
+    )
+  )
+    throw new TypeError('Identity source association omits original native roles');
+  return {
+    key: agentIdentityWorkSourceKey(source.input.receipt),
+    partition: source.partition,
+    epoch: source.epoch,
+    position: source.position.toString(),
+    transactionId: source.transactionId,
+    digest: source.digest,
+    release: source.input.intent.release,
+    workflowId: source.workflowId,
+    accounts,
+  };
+}
+
+/** Called only after the genuine original Source INSERT, in that SAME account-home command.
+ * An older SDK receiver keeps its creation transaction; this appends a separate source intent. */
+export async function recordAgentIdentityWorkSource(
+  tx: CommandTransaction,
+  receipt: AgentIdentityReceipt,
+  initialCustodyId: string | null,
+): Promise<void> {
+  const command = currentCommand(tx);
+  const row = (
+    await tx.query(
+      `SELECT source_partition,source_epoch,source_position::text,source_transaction_id,intent_digest,
+       release,workflow_id,requested_by,decided_by FROM access.agent_identity_intent
+     WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4 FOR SHARE`,
+      [routeOf(receipt.account), receipt.account, receipt.kind, receipt.receipt],
+    )
+  ).rows[0];
+  if (!row || row.source_partition !== command.partition || row.source_transaction_id !== command.transactionId)
+    throw new TypeError('Identity SDK source association requires the actual original command');
+  const declared = commandAgentIdentitySource(tx);
+  if (
+    !declared ||
+    declared.original.digest !== row.intent_digest ||
+    declared.original.transactionId !== command.transactionId
+  )
+    throw new TypeError('Identity SDK source association requires its native original declaration');
+  const source: AgentIdentityWorkSource = {
+    key: agentIdentityWorkSourceKey(receipt),
+    partition: row.source_partition,
+    epoch: row.source_epoch,
+    position: row.source_position,
+    transactionId: row.source_transaction_id,
+    digest: row.intent_digest,
+    release: row.release,
+    workflowId: row.workflow_id,
+    accounts: unionHistoryScope(
+      'durable-work/v1',
+      declared.accounts,
+      agentIdentityAccounts(receipt.account, row.requested_by, row.decided_by),
+    ).accounts,
+  };
+  const domain = (await tx.query('SELECT generation::text FROM core.history_family_domain WHERE singleton FOR SHARE'))
+    .rows[0];
+  if (!domain) throw new TypeError('Identity SDK source generation unavailable');
+  await tx.query(
+    `INSERT INTO core.agent_identity_work_source(partition_no,source_key,custody_id,source,source_generation)
+     VALUES($1,$2,$3,$4,$5)`,
+    [command.partition, source.key, initialCustodyId ?? randomUUID(), source, domain.generation],
+  );
+}
+
+/** Released immutable Source -> original command association. No receiver is checked out here.
+ * Old/recovered sources without the original recording seam stay precisely unavailable. */
+export async function readAgentIdentitySourceHandoff(
+  pool: Pool,
+  receipt: AgentIdentityReceipt,
+): Promise<AgentIdentitySourceHandoff | null> {
+  // Command bootstrap imports this module for original receipt/outbox serialization.
+  // Load the native owner only at the released SDK handoff boundary.
+  const { loadAccountIdentitySource, assertAccountIdentitySource } =
+    await import('../access/agent-verification-identity.ts');
+  const native = await loadAccountIdentitySource(pool, receipt);
+  assertAccountIdentitySource(native, native.input.receipt);
+  const nativeKey = snapshot(native);
+  return withConnection(pool, async (tx) => {
+    const row = (
+      await tx.query<{ custody_id: string; source: AgentIdentityWorkSource; generation: string }>(
+        `SELECT s.custody_id,s.source,s.source_generation::text AS generation FROM core.agent_identity_work_source s
+         JOIN core.history_family_domain d ON d.singleton AND d.generation=s.source_generation
+         WHERE s.partition_no=$1 AND s.source_key=$2 AND s.writer_version=1`,
+        [nativeKey.partition, nativeKey.key],
+      )
+    ).rows[0];
+    if (!row) return null;
+    // The original command's immutable declaration also retains acting-human and original
+    // undo roles. Keep that native manifest rather than reconstructing a smaller union.
+    const expected = snapshot(native, row.source.accounts);
+    if (JSON.stringify(row.source) !== JSON.stringify(expected)) {
+      // jsonb object key order differs from JavaScript. Compare the closed metadata canonically.
+      if (canonicalize(row.source) !== canonicalize(expected))
+        throw new TypeError('Identity source association mismatch');
+    }
+    const handoff = Object.freeze({ custodyId: row.custody_id, source: expected, generation: row.generation });
+    handoffs.set(handoff, {
+      assertNative: () => assertAccountIdentitySource(native, native.input.receipt),
+      snapshot: canonicalize(expected)!,
+    });
+    return handoff;
+  });
+}
+
+export type AgentIdentityReceivingLookup =
+  | Readonly<{ state: 'pending'; gap: string }>
+  | Readonly<{ state: 'associated'; artifact: import('./registry.ts').HistoryArtifact }>;
+
+/** At most eight exact original keys and one artifact in total. This is copy lookup, never inventory EOF. */
+export async function lookupAgentIdentityReceivingCopies(
+  pool: Pool,
+  receipts: readonly AgentIdentityReceipt[],
+): Promise<readonly AgentIdentityReceivingLookup[]> {
+  if (receipts.length > 8) throw new TypeError('Identity receiving lookup exceeds eight keys');
+  const result: AgentIdentityReceivingLookup[] = [];
+  let artifactIssued = false;
+  for (const receipt of receipts) {
+    if (artifactIssued) {
+      result.push({ state: 'pending', gap: 'identity-sdk-lookup-artifact-budget' });
+      continue;
+    }
+    const handoff = await readAgentIdentitySourceHandoff(pool, receipt);
+    if (!handoff) {
+      result.push({ state: 'pending', gap: 'identity-sdk-original-source-association-unavailable' });
+      continue;
+    }
+    const associated = await withConnection(pool, async (tx) => {
+      const row = (
+        await tx.query<{ source: AgentIdentityWorkSource | null; workflow_id: string; creation_captured: boolean }>(
+          `SELECT m.source,m.workflow_id,m.creation_captured FROM core.agent_identity_work m
+           JOIN core.history_work w ON w.partition_no=0 AND w.work_id=m.custody_id
+             AND w.request_digest=m.request_digest AND w.owner='access.agent-identity'
+           JOIN core.partition p ON p.partition_no=0 AND p.write_state='active' AND p.epoch=m.receiver_epoch
+           JOIN core.history_family_domain d ON d.singleton AND d.generation=m.receiver_generation
+           WHERE m.custody_id=$1 AND m.writer_version=1 AND m.receiver_generation=$2`,
+          [handoff.custodyId, handoff.generation],
+        )
+      ).rows[0];
+      return (
+        row?.creation_captured &&
+        row.workflow_id === handoff.source.workflowId &&
+        canonicalize(row.source) === canonicalize(handoff.source)
+      );
+    });
+    artifactIssued = Boolean(associated);
+    result.push(
+      associated
+        ? {
+            state: 'associated',
+            artifact: {
+              partition: 0,
+              locator: { artifactType: 'durable-work/v1', workId: handoff.custodyId },
+              accounts: handoff.source.accounts,
+            },
+          }
+        : { state: 'pending', gap: 'identity-sdk-receiver-source-handoff-pending' },
+    );
+  }
+  return result;
+}
+
+export function agentIdentityWorkLocator(custodyId: string): Buffer {
+  return Buffer.from(encodeLocator({ artifactType: 'durable-work/v1', workId: custodyId }));
 }

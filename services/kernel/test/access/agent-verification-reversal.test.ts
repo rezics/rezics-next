@@ -1115,3 +1115,213 @@ test('identity inventory rejects foreign source declarations and late native enr
     }),
   ).rejects.toThrow('late Agent identity');
 });
+
+test('Actual original account identity SDK enqueue and all retained workflow-step copies receive native original-source association before source loss while original IDs steps retry and publication remain unchanged', async () => {
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { enqueueAgentIdentityVerification } = await import('../../src/history/agent-identity-work.ts');
+  const { lookupAgentIdentityReceivingCopies } = await import('../../src/history/agent-identity-source.ts');
+  const { ACCOUNT_ROLE_BITS } = await import('../../src/history/contracts.ts');
+  const account = await seedAccount(`sdk_custody_${randomUUID().slice(0, 8)}`);
+  const token = await bearer(account);
+  await ensureAccountAgent(pool, { account: account.id, kind: 'person', name: account.displayName, language: 'en' });
+  const subject = await catalogueSubject('schema:Person', 'Original SDK custody');
+  const applied = await request(account, subject, token);
+  expect(applied.response.status).toBe(201);
+  const requestId = applied.body.verificationRequest.id as string;
+  expect((await post(`/v1/verification-requests/${requestId}:approve`, await bearer(staff), {})).response.status).toBe(
+    200,
+  );
+  const original = (await readAgentVerificationWorkflowRequest(pool, requestId))!;
+  const receiptId = original.decisionReceiptId!;
+  const workflowId = `accounts.agent-verification:${requestId}:${receiptId}`;
+  const client = await createWorkClient(databaseUrl, pool);
+  try {
+    await client.registerQueue('workflows', {});
+    expect(await enqueueAgentIdentityVerification(pool, client, requestId, receiptId)).toBe('admitted');
+    const initial = (
+      await pool.query('SELECT *,receiver_xid::text AS creation FROM core.agent_identity_work WHERE workflow_id=$1', [
+        workflowId,
+      ])
+    ).rows[0];
+    expect(initial.source).toBeNull();
+    expect(initial.approval.transactionId).toBe(receiptId);
+    expect(initial.approval.requestId).toBe(requestId);
+    expect(initial.creation_captured).toBe(true);
+    expect(initial.custody_id).not.toBe(workflowId);
+    expect(initial.accounts).toEqual(
+      expect.arrayContaining([
+        {
+          accountRoute,
+          accountId: account.id,
+          roles: ACCOUNT_ROLE_BITS.subject | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS.principal,
+        },
+        { accountRoute, accountId: staff.id, roles: ACCOUNT_ROLE_BITS.reviewer | ACCOUNT_ROLE_BITS.principal },
+      ]),
+    );
+    expect(
+      (
+        await pool.query(
+          'SELECT 1 FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 AND receipt_id=$3',
+          [accountRoute, account.id, receiptId],
+        )
+      ).rows,
+    ).toHaveLength(0);
+    const sdkInput = (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [workflowId]))
+      .rows[0].inputs;
+    expect(sdkInput).toContain(requestId);
+    expect(sdkInput).toContain(receiptId);
+
+    const program = `
+      import { createPool } from './src/database/pool.ts';
+      import { createWorkClient } from './src/work/client.ts';
+      import { composeWork } from './src/work/registry.ts';
+      import { registerAgentVerificationWork } from './src/access/agent-verification-work.ts';
+      const pool = createPool(process.env.DATABASE_URL);
+      const client = await createWorkClient(process.env.DATABASE_URL, pool);
+      const work = await composeWork([{ name: 'accounts', register: registerAgentVerificationWork }], {
+        pool, client, databaseUrl: process.env.DATABASE_URL, executorId: 'identity-sdk-custody-test',
+      });
+      try {
+        await work.launch();
+        await client.retrieveWorkflow(process.env.IDENTITY_WORKFLOW).getResult();
+      } finally { await work.shutdown(); await client.close(); await pool.end(); }
+    `;
+    const child = Bun.spawn([process.execPath, '-e', program], {
+      cwd: new URL('../..', import.meta.url).pathname,
+      env: { ...process.env, DATABASE_URL: databaseUrl, IDENTITY_WORKFLOW: workflowId },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const deadline = setTimeout(() => child.kill('SIGKILL'), 60_000);
+    try {
+      const [status, errors] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+        new Response(child.stdout).text(),
+      ]);
+      expect(status, errors).toBe(0);
+    } finally {
+      clearTimeout(deadline);
+    }
+
+    const bound = (
+      await pool.query('SELECT *,receiver_xid::text AS creation FROM core.agent_identity_work WHERE workflow_id=$1', [
+        workflowId,
+      ])
+    ).rows[0];
+    expect(bound.custody_id).toBe(initial.custody_id);
+    expect(bound.creation).toBe(initial.creation);
+    expect(bound.approval).toEqual(initial.approval);
+    const source = await loadAccountIdentitySource(pool, {
+      kind: 'account-agent.verify',
+      account: account.id,
+      receipt: receiptId,
+    });
+    expect(bound.source).toMatchObject({
+      transactionId: source.transactionId,
+      partition: source.partition,
+      epoch: source.epoch,
+      position: source.position.toString(),
+      digest: source.digest,
+      release: source.input.intent.release,
+      workflowId,
+    });
+    expect(bound.source.transactionId).not.toBe(receiptId);
+    const steps = (
+      await pool.query('SELECT function_name FROM dbos.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id', [
+        workflowId,
+      ])
+    ).rows.map((row) => row.function_name);
+    expect([...new Set(steps.filter((name) => name.startsWith('accounts.agent-verification.')))]).toEqual([
+      'accounts.agent-verification.read-decision',
+      'accounts.agent-verification.record-pending',
+      'accounts.agent-verification.merge',
+      'accounts.agent-verification.write-page',
+      'accounts.agent-verification.complete',
+      'accounts.agent-verification.finish',
+      'accounts.agent-verification.publication',
+    ]);
+    expect(await probeAccountIdentityPublication(pool, source.input.receipt)).toBeDefined();
+    expect(await lookupAgentIdentityReceivingCopies(pool, [source.input.receipt])).toEqual([
+      {
+        state: 'associated',
+        artifact: {
+          partition: 0,
+          locator: { artifactType: 'durable-work/v1', workId: initial.custody_id },
+          accounts: initial.accounts,
+        },
+      },
+    ]);
+    const retained = (
+      await pool.query('SELECT owner_ready,state FROM core.history_work WHERE partition_no=0 AND work_id=$1', [
+        initial.custody_id,
+      ])
+    ).rows[0];
+    expect(retained).toEqual({ owner_ready: false, state: 'pending' });
+    expect(await enqueueAgentIdentityVerification(pool, client, requestId, receiptId)).toBe('admitted');
+    expect(
+      (await pool.query('SELECT inputs FROM dbos.workflow_input WHERE workflow_uuid=$1', [workflowId])).rows[0].inputs,
+    ).toBe(sdkInput);
+    await expect(
+      pool.query('DELETE FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2 AND receipt_id=$3', [
+        accountRoute,
+        account.id,
+        receiptId,
+      ]),
+    ).rejects.toThrow('receiving erasure custody');
+  } finally {
+    await client.close();
+  }
+}, 90_000);
+
+test('original reversal SDK custody binds the existing exact source and rejects changed native arguments while uncovered older SDK creation stays pending', async () => {
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { enqueueAgentIdentityReversal } = await import('../../src/history/agent-identity-work.ts');
+  const { lookupAgentIdentityReceivingCopies } = await import('../../src/history/agent-identity-source.ts');
+  const { account, token } = await verified();
+  const released = await post(`/v1/accounts/${account.id}:releaseVerification`, token);
+  const decision = released.body.reversal as AgentVerificationReversal;
+  const source = await loadAccountIdentitySource(pool, {
+    kind: 'account-agent.unverify',
+    account: account.id,
+    receipt: decision.receiptId,
+  });
+  const client = await createWorkClient(databaseUrl, pool);
+  try {
+    await client.registerQueue('workflows', {});
+    await expect(
+      enqueueAgentIdentityReversal(pool, client, { ...decision, reason: 'foreign replacement' }),
+    ).rejects.toThrow('mismatched');
+    expect(await enqueueAgentIdentityReversal(pool, client, decision)).toBe('admitted');
+    const native = (
+      await pool.query('SELECT * FROM core.agent_identity_work WHERE workflow_id=$1', [source.workflowId])
+    ).rows[0];
+    expect(native.source).toMatchObject({
+      digest: source.digest,
+      transactionId: source.transactionId,
+      workflowId: source.workflowId,
+    });
+    expect(native.approval).toBeNull();
+    expect(native.creation_captured).toBe(true);
+    expect((await lookupAgentIdentityReceivingCopies(pool, [source.input.receipt]))[0]?.state).toBe('associated');
+
+    const other = await verified();
+    const legacy = (await post(`/v1/accounts/${other.account.id}:releaseVerification`, other.token)).body
+      .reversal as AgentVerificationReversal;
+    const legacyId = `accounts.agent-verification-reversal:${legacy.accountId}:${legacy.receiptId}`;
+    await client.enqueue(
+      { workflowName: 'accounts.agent-verification-reversal', queueName: 'workflows', workflowID: legacyId },
+      legacy,
+    );
+    await enqueueAgentIdentityReversal(pool, client, legacy);
+    expect(
+      (
+        await lookupAgentIdentityReceivingCopies(pool, [
+          { kind: 'account-agent.unverify', account: legacy.accountId, receipt: legacy.receiptId },
+        ])
+      )[0]?.state,
+    ).toBe('pending');
+  } finally {
+    await client.close();
+  }
+});

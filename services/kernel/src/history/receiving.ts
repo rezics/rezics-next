@@ -167,6 +167,10 @@ async function receivingGap(
     Buffer.from(encodeLocator(locator)),
   );
   if (identityGap) return identityGap;
+  if (locator.artifactType === 'durable-work/v1') {
+    const { resolveAgentIdentitySDKWork } = await import('./agent-identity-work.ts');
+    return (await resolveAgentIdentitySDKWork(tx, locator.workId))?.gap ?? null;
+  }
   if (locator.artifactType !== 'outbox-event/v1') return null;
   const consumers = await tx.query(
     `SELECT consumer FROM core.history_event_consumer

@@ -1,3 +1,10 @@
+import {
+  AGENT_IDENTITY_WORK_OWNER,
+  associateAgentIdentityWorkSource,
+  enqueueAgentIdentityReversal,
+  enqueueAgentIdentityVerification,
+  verifyAgentIdentityWorkReplay,
+} from '../history/agent-identity-work.ts';
 import { deliverAccountIdentity } from './agent-verification-identity.ts';
 import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
 import { classifyUnavailability } from './unavailable.ts';
@@ -92,7 +99,27 @@ function pending(error: unknown): WorkResult {
 /** Register the durable, receipt-bound account-agent approval workflow and its outbox effect. */
 export function registerAgentVerificationWork(context: WorkContext): void {
   const reversalWorkflow = 'accounts.agent-verification-reversal';
-  const publication = DBOS.registerStep(
+  context.history?.registerOwner({
+    name: AGENT_IDENTITY_WORK_OWNER,
+    artifactType: 'durable-work/v1',
+    version: 1,
+    async readiness() {
+      // Semantic's real exhaustive consumer/technical-undo producer remains the sole authority.
+      // It currently returns pending; SDK completion cannot discharge that obligation.
+      return { ready: false, gap: 'identity-source-consumer-custody-pending' };
+    },
+  });
+  const step = <Args extends unknown[], Result>(
+    body: (...args: Args) => Promise<Result>,
+    config: Parameters<typeof DBOS.registerStep>[1],
+  ) => {
+    const registered = DBOS.registerStep(body, config);
+    return async (...args: Args): Promise<Result> => {
+      if (DBOS.workflowID) await verifyAgentIdentityWorkReplay(context.pool, DBOS.workflowID);
+      return registered(...args);
+    };
+  };
+  const publication = step(
     async (
       accountId: string,
       receiptId: string,
@@ -108,7 +135,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     },
     { name: 'accounts.agent-verification.publication', retriesAllowed: true, maxAttempts: 10 },
   );
-  const unmerge = DBOS.registerStep(
+  const unmerge = step(
     async (decision: AgentVerificationReversal): Promise<WorkResult> => {
       try {
         await unmergeVerifiedAgent(context.pool, decision);
@@ -120,7 +147,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     },
     { name: `${reversalWorkflow}.unmerge`, retriesAllowed: true, maxAttempts: 10 },
   );
-  const removePage = DBOS.registerStep(
+  const removePage = step(
     async (decision: AgentVerificationReversal) => {
       await deliverAccountIdentity(context.pool, {
         kind: 'account-agent.unverify',
@@ -131,7 +158,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     },
     { name: `${reversalWorkflow}.remove-page`, retriesAllowed: true, maxAttempts: 10 },
   );
-  const finishReversal = DBOS.registerStep(
+  const finishReversal = step(
     async (decision: AgentVerificationReversal) => {
       await deliverAccountIdentity(context.pool, {
         kind: 'account-agent.unverify',
@@ -142,7 +169,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     },
     { name: `${reversalWorkflow}.finish`, retriesAllowed: true, maxAttempts: 10 },
   );
-  const synchronizeAgent = DBOS.registerStep(
+  const synchronizeAgent = step(
     (decision: AgentVerificationReversal) => synchronizeAccountAgent(context.pool, decision.accountId),
     { name: `${reversalWorkflow}.synchronize-agent`, retriesAllowed: true, maxAttempts: 10 },
   );
@@ -173,20 +200,12 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         if (!Value.Check(ACCESS_EVENTS['com.rezics.access.agent-verification.reversing.v1'], event.data))
           throw new TypeError('Invalid account agent verification reversal event');
         const decision = event.data as AgentVerificationReversal;
-        await context.client.enqueue(
-          {
-            workflowName: reversalWorkflow,
-            queueName: 'workflows',
-            workflowID: `${reversalWorkflow}:${decision.accountId}:${decision.receiptId}`,
-            workflowIDReusePolicy: 'return-existing',
-          },
-          decision,
-        );
+        await enqueueAgentIdentityReversal(context.pool, context.client, decision);
       },
     },
   ]);
 
-  const readDecision = DBOS.registerStep(
+  const readDecision = step(
     async (requestId: string, receiptId: string): Promise<AgentVerificationWorkflowRequest> => {
       const request = await readAgentVerificationWorkflowRequest(context.pool, requestId);
       if (!request || request.decisionReceiptId !== receiptId) throw new AgentVerificationConflictError();
@@ -197,10 +216,15 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     { name: 'accounts.agent-verification.read-decision', retriesAllowed: true, maxAttempts: 10 },
   );
 
-  const startVerification = DBOS.registerStep(
+  const startVerification = step(
     async (request: AgentVerificationWorkflowRequest, receiptId: string): Promise<WorkResult> => {
       try {
         await recordPendingAgentVerification(context.pool, { ...request, receiptId }, context.clock);
+        await associateAgentIdentityWorkSource(context.pool, {
+          kind: 'account-agent.verify',
+          account: request.accountId,
+          receipt: receiptId,
+        });
         return { ok: true };
       } catch (error) {
         if (retryable(error)) return pending(error);
@@ -212,7 +236,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     { name: 'accounts.agent-verification.record-pending', retriesAllowed: true, maxAttempts: 10 },
   );
 
-  const merge = DBOS.registerStep(
+  const merge = step(
     async (request: AgentVerificationWorkflowRequest, receiptId: string): Promise<WorkResult> => {
       try {
         await mergeVerifiedAgent(context.pool, { ...request, receiptId });
@@ -226,7 +250,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     { name: 'accounts.agent-verification.merge', retriesAllowed: true, maxAttempts: 10 },
   );
 
-  const writePage = DBOS.registerStep(
+  const writePage = step(
     async (request: AgentVerificationWorkflowRequest, receiptId: string): Promise<WorkResult> => {
       try {
         // Same registered step/position also covers an original merge whose result was already journalled.
@@ -247,7 +271,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     { name: 'accounts.agent-verification.write-page', retriesAllowed: true, maxAttempts: 10 },
   );
 
-  const complete = DBOS.registerStep(
+  const complete = step(
     async (request: AgentVerificationWorkflowRequest, receiptId: string) => {
       await deliverAccountIdentity(context.pool, {
         kind: 'account-agent.verify',
@@ -258,12 +282,12 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     },
     { name: 'accounts.agent-verification.complete', retriesAllowed: true, maxAttempts: 10 },
   );
-  const clear = DBOS.registerStep(
+  const clear = step(
     (request: AgentVerificationWorkflowRequest, receiptId: string) =>
       clearPendingAgentVerification(context.pool, { ...request, receiptId }, context.clock),
     { name: 'accounts.agent-verification.clear-pending', retriesAllowed: true, maxAttempts: 10 },
   );
-  const finish = DBOS.registerStep(
+  const finish = step(
     async (request: AgentVerificationWorkflowRequest, receiptId: string) => {
       await deliverAccountIdentity(context.pool, {
         kind: 'account-agent.verify',
@@ -274,24 +298,14 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     },
     { name: 'accounts.agent-verification.finish', retriesAllowed: true, maxAttempts: 10 },
   );
-  const fail = DBOS.registerStep(
+  const fail = step(
     (request: AgentVerificationWorkflowRequest, receiptId: string, failure: { type: string; detail: string }) =>
       failAgentVerification(context.pool, { ...request, receiptId, problem: failure }, context.clock),
     { name: 'accounts.agent-verification.fail', retriesAllowed: true, maxAttempts: 10 },
   );
 
-  const enqueue = async (requestId: string, receiptId: string) => {
-    await context.client.enqueue(
-      {
-        workflowName,
-        queueName: 'workflows',
-        workflowID: `${workflowName}:${requestId}:${receiptId}`,
-        workflowIDReusePolicy: 'return-existing',
-      },
-      requestId,
-      receiptId,
-    );
-  };
+  const enqueue = (requestId: string, receiptId: string) =>
+    enqueueAgentIdentityVerification(context.pool, context.client, requestId, receiptId);
 
   DBOS.registerWorkflow(
     async (requestId: string, receiptId: string) => {
