@@ -664,7 +664,7 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 ### Suggest
 
 - Touches: GET validates 1–64 code points (<= 128 UTF-16 units), limit 1–10 (default 8); `subjects-suggest-v1`
-  queries `names.typeahead` and its 2/3-gram fields in one alias template request. Reads <= 20 hits, then the same
+  queries `names.typeahead` and its 2/3-gram fields in one pinned physical-generation template request. Reads <= 20 hits, then the same
   partition-grouped disclosure, projection, generation and freshness paths. Grow N/P with limit, text and selected
   facts fixed.
 - Bound: One engine search, `h <= 20`, <= 20 source reads with concurrency <= 8; no own SQL. Each source read is
@@ -675,6 +675,30 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   read once each with bounded concurrency”; [test/semantic/growth-search-source.test.ts](../../test/semantic/growth-search-source.test.ts):
   “Source snapshot stays within its bound as P grows” and “Source snapshot stays within its bound as a subject's
   history grows”.
+
+### Discovery generation custody
+
+Suggestions and property/type facets resolve and admit the active native generation before querying, then admit
+that physical index's supported mapping format. Every native discovery operation uses that concrete index;
+current grouped Source disclosure and the existing freshness reader complete before a fresh, request-owned final
+alias observation. An observed generation change returns `409 search_restart_required` without discovery payload.
+Missing, malformed, partial or unsupported generation/mapping metadata returns `503 index_not_ready`. Empty native
+results retain the pinned generation; they never infer a generation from hits or read freshness for a later alias.
+`as_of` always comes from the queried generation's consumer. This does not establish physical incarnation or
+population completeness, or expand the existing preview's disclosure guarantees.
+
+- Touches: two bounded native resolve requests, one concrete mapping request, one existing suggestion/facet query,
+  existing grouped Source disclosure and one freshness observation for the pinned consumer. Start observations may
+  coalesce across concurrent calls; final observations never coalesce with them.
+- Bound: three metadata calls independent of population, at most three physical generation records per resolve;
+  charge every metadata response byte. No new SQL, Source enumeration or per-hit request. Existing per-call
+  Source256 and page point/row/block/byte/read bounds remain unchanged.
+- Growth check: [query generation tests](../../test/search/query-generation.test.ts) execute both native callers
+  with 64, 512 and 4096 unrelated documents and retained outbox history, recording every native path, metadata byte
+  count, Source key group and consumer. The same suite covers distinct real generation watermarks, empty results,
+  switches after start/query/Source/freshness, concurrent in-flight start observations, malformed actual metadata at
+  start/final and unsupported mapping formats. Controlled Source isolates this lifecycle; existing real Source
+  discovery suites remain separate evidence.
 
 ### Freshness
 

@@ -1,4 +1,5 @@
 import { subjectPartition } from './source.ts';
+import { subjectIndexName } from './indices.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 
 type RecordValue = Record<string, unknown>;
@@ -134,10 +135,21 @@ export function requireSearchOverflow(body: unknown): boolean {
   return count > 0;
 }
 
-export function admitSuggestPayload(body: unknown, size: number, prefix: string): asserts body is RecordValue {
+export function admitSuggestPayload(
+  body: unknown,
+  size: number,
+  prefix: string,
+  generation?: number,
+): asserts body is RecordValue {
   const hits = hitsOf(body, size, false);
   const physicalIndex = new RegExp(`^${prefix}subjects-g([1-9][0-9]*)$`);
-  for (const hit of hits) if (!physicalIndex.test(hit._index as string)) fail();
+  for (const hit of hits) {
+    const index = hit._index as string;
+    const match = physicalIndex.exec(index);
+    const value = match ? Number(match[1]) : NaN;
+    if (!Number.isSafeInteger(value) || value < 1 || subjectIndexName(prefix, value) !== index) fail();
+    if (generation !== undefined && index !== subjectIndexName(prefix, generation)) fail();
+  }
 }
 
 type FacetPlan = {

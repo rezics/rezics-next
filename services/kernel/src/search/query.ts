@@ -177,14 +177,14 @@ export function searchSubjects(search: OpenSearch, prefix: string, plan: SearchP
 export function suggestSubjects(
   search: OpenSearch,
   prefix: string,
-  plan: { text: string; size: number },
+  plan: { text: string; size: number; generation?: number },
 ): Promise<SubjectHit[]> {
   validateSize(plan.size, 50);
-  const alias = subjectAlias(prefix);
+  const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   return search
     .request<SearchResponse>(
       'POST',
-      `/${alias}/_search/template`,
+      `/${target}/_search/template`,
       {
         id: `${prefix}${SUGGEST_TEMPLATE}`,
         params: { text: JSON.stringify(plan.text), size: plan.size },
@@ -193,7 +193,7 @@ export function suggestSubjects(
     )
     .then(({ body }) => {
       assertCompleteSearch(body);
-      admitSuggestPayload(body, plan.size, prefix);
+      admitSuggestPayload(body, plan.size, prefix, plan.generation);
       return body.hits.hits.map(subjectHit);
     });
 }
@@ -221,10 +221,12 @@ export async function countFacets(
     filter?: Record<string, unknown>;
     /** Distinct statement properties in the admitted filter. */
     overflowProperties?: readonly string[];
+    generation?: number;
     facets: readonly Facet[];
     sample: number;
   },
 ) {
+  const target = plan.generation === undefined ? subjectAlias(prefix) : subjectIndexName(prefix, plan.generation);
   const facetAggregations = Object.fromEntries(
     plan.facets.map(({ property, size }, index) => [
       `facet_${index}`,
@@ -281,7 +283,7 @@ export async function countFacets(
   };
   const { body } = await search.request<FacetResponse>(
     'POST',
-    `/${subjectAlias(prefix)}/_search/template`,
+    `/${target}/_search/template`,
     {
       id: `${prefix}${FACET_TEMPLATE}`,
       params: {

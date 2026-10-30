@@ -27,17 +27,10 @@ import {
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
-import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
+import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
-import {
-  countFacets,
-  installTemplates,
-  searchSubjects,
-  suggestSubjects,
-  type SearchPlan,
-  type SubjectHit,
-} from './query.ts';
+import { countFacets, installTemplates, searchSubjects, suggestSubjects, type SearchPlan } from './query.ts';
 import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
@@ -284,19 +277,11 @@ export function createSearchService({
     return accepted;
   }
 
-  async function generationOf(hits: readonly SubjectHit[]): Promise<number> {
-    if (!hits.length) return indexRequest(aliasGeneration);
-    let generation: number | undefined;
-    const stem = `${prefix}subjects-g`;
-    for (const hit of hits) {
-      const suffix = hit.index.startsWith(stem) ? hit.index.slice(stem.length) : '';
-      const value = Number(suffix);
-      if (!Number.isSafeInteger(value) || value < 1 || subjectIndexName(prefix, value) !== hit.index)
-        throw indexNotReady();
-      if (generation !== undefined && value !== generation) throw new ProblemError('search_restart_required');
-      generation = value;
-    }
-    return generation!;
+  async function discoveryGeneration(): Promise<number> {
+    const generation = await indexRequest(aliasGeneration);
+    const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+    if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+    return generation;
   }
 
   async function asOf(generation: number): Promise<string> {
@@ -542,8 +527,10 @@ export function createSearchService({
       const overflowProperties = [
         ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
       ];
+      const generation = await discoveryGeneration();
       const counted = await indexRequest(() =>
         countFacets(client, prefix, {
+          generation,
           ...(text ? { query: compileText(text, { field: 'search_text', prefix: 't' }).query } : {}),
           ...(compiledFilter ? { filter: compiledFilter.query } : {}),
           ...(overflowProperties.length ? { overflowProperties } : {}),
@@ -562,7 +549,7 @@ export function createSearchService({
           ),
         ),
       );
-      return {
+      const response = {
         facets: counted.facets.map((facet, index) => ({
           property: facet.property,
           values: facet.values
@@ -585,8 +572,10 @@ export function createSearchService({
             })
             .slice(0, facets[index]!.size),
         })),
-        as_of: await asOf(await indexRequest(aliasGeneration)),
+        as_of: await asOf(generation),
       };
+      if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
+      return response;
     },
 
     async suggest(q: string, limit = 8, languages?: string[]) {
@@ -594,8 +583,8 @@ export function createSearchService({
         invalid('/q', 'out_of_range');
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const options = validateHitOptions({ languages });
-      const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit }));
-      const generation = await generationOf(hits);
+      const generation = await discoveryGeneration();
+      const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit, generation }));
       const { passed } = await sourceRequest(() =>
         checkHits(
           source,
@@ -603,10 +592,12 @@ export function createSearchService({
           new Map(),
         ),
       );
-      return {
+      const response = {
         subjects: passed.slice(0, limit).map(({ subject }) => project(subject, options.languages)),
         as_of: await asOf(generation),
       };
+      if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
+      return response;
     },
   };
 }

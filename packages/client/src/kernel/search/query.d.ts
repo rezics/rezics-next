@@ -46,12 +46,14 @@ export declare function searchSubjects(search: OpenSearch, prefix: string, plan:
 export declare function suggestSubjects(search: OpenSearch, prefix: string, plan: {
     text: string;
     size: number;
+    generation?: number;
 }): Promise<SubjectHit[]>;
 export declare function countFacets(search: OpenSearch, prefix: string, plan: {
     query?: Record<string, unknown>;
     filter?: Record<string, unknown>;
     /** Distinct statement properties in the admitted filter. */
     overflowProperties?: readonly string[];
+    generation?: number;
     facets: readonly Facet[];
     sample: number;
 }): Promise<{

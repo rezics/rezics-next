@@ -1,11 +1,15 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { newId } from '../../src/route/route.ts';
+import { subjectConsumer } from '../../src/search/runner.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { ProblemError, problemResponse } from '../../src/http/problem.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch, OpenSearchError } from '../../src/search/opensearch.ts';
 import {
+  countFacets,
+  suggestSubjects,
   FACET_TEMPLATE,
   installTemplates,
   SEARCH_TEMPLATE,
@@ -408,3 +412,547 @@ test('native caller generation switches preserve pinned requests and restart409 
     await switchAlias(1, 2);
   }
 }, 120_000);
+
+// These controls share this suite's managed database, native node and owned prefix.
+// Successful engine work always executes natively; only malformed metadata is cloned.
+describe('native discovery generation custody', () => {
+  const property = 'schema:author';
+  const release = {
+    types: { 'schema:Book': { facets: [property], labels: { en: 'Book' } } },
+    properties: { [property]: { datatype: 'wikibase-item' } },
+  };
+  const source = createFakeSource();
+  const books: IndexedSubject[] = [];
+  const authors: IndexedSubject[] = [];
+  const stamps = ['2026-01-01T00:00:01.000Z', '2026-01-01T00:00:05.000Z'];
+  const operations = ['suggest', 'facets'] as const;
+  type Operation = (typeof operations)[number];
+  const facetPlan = (empty = false) => ({
+    text: empty ? 'absentcustody' : 'custody',
+    filter: { type: { in: ['schema:Book'] } },
+    facets: [{ property, size: 1 }],
+  });
+
+  beforeAll(async () => {
+    for (const generation of [1, 2]) {
+      const author: IndexedSubject = {
+        id: newId(160),
+        type: 'schema:Person',
+        visibility: 'visible',
+        redirect: null,
+        securityRevision: 1,
+        labels: [{ language: 'en', value: `Author ${generation}` }],
+        aliases: [],
+        descriptions: [],
+        statements: [],
+      };
+      const book: IndexedSubject = {
+        ...author,
+        id: newId(160),
+        type: 'schema:Book',
+        labels: [{ language: 'en', value: `Custody ${generation}` }],
+        statements: [{ property, value: author.id, facet: { kind: 'item' } }],
+      };
+      authors.push(author);
+      books.push(book);
+      source.put(author);
+      source.put(book);
+      const result = await engine.bulk<{ errors: boolean }>(
+        bulkLines(
+          subjectIndexName(prefix, generation),
+          documentActions({ partition: 10, position: 1n, subjects: [book] }, [book.id]),
+        ),
+        { query: { refresh: 'wait_for' } },
+      );
+      expect(result.errors).toBe(false);
+      // Give each actual generation a different real consumer watermark.
+      await metadataPool.query(
+        `INSERT INTO core.consumer_checkpoint (partition_no, consumer, epoch, position)
+        SELECT partition_no, $1, CASE WHEN position = 0 THEN NULL ELSE epoch END, position FROM core.partition
+        ON CONFLICT (partition_no, consumer) DO UPDATE SET epoch = EXCLUDED.epoch, position = EXCLUDED.position`,
+        [subjectConsumer(prefix, generation)],
+      );
+    }
+    const client = await metadataPool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query<{ epoch: number; position: string }>(
+        'UPDATE core.partition SET position = position + 2 WHERE partition_no = 901 RETURNING epoch, position::text',
+      );
+      const { epoch, position } = rows[0]!;
+      for (const [offset, stamp] of stamps.entries()) {
+        await client.query(
+          `INSERT INTO core.outbox
+          (partition_no, position, event_seq, event_count, epoch, id, type, subject, data, recorded_at)
+          VALUES (901, $1, 0, 1, $2, $3, 'com.rezics.subject.created.v1', $4, '{}'::jsonb, $5)`,
+          [BigInt(position) - 1n + BigInt(offset), epoch, crypto.randomUUID(), books[offset]!.id, stamp],
+        );
+      }
+      await client.query(
+        'UPDATE core.consumer_checkpoint SET position = $1, epoch = $2 WHERE partition_no = 901 AND consumer = $3',
+        [BigInt(position) - 1n, epoch, subjectConsumer(prefix, 2)],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  afterAll(async () => {
+    await metadataPool.query('DELETE FROM core.consumer_checkpoint WHERE consumer = ANY($1::text[])', [
+      [subjectConsumer(prefix, 1), subjectConsumer(prefix, 2)],
+    ]);
+  });
+
+  function observed(
+    options: {
+      client?: OpenSearch;
+      onNative?: (path: string) => Promise<void>;
+      onSource?: () => Promise<void>;
+      onFreshness?: () => Promise<void>;
+    } = {},
+  ) {
+    const events: string[] = [];
+    const reads: { partition: number; ids: readonly string[] }[] = [];
+    const consumers: string[] = [];
+    const receipts: { path: string; bytes: number; body: unknown }[] = [];
+    const underlying = options.client ?? engine;
+    const client: OpenSearch = {
+      bulk: (...args) => underlying.bulk(...args),
+      async request<T>(...args: Parameters<OpenSearch['request']>) {
+        const response = await underlying.request<T>(...args);
+        events.push(args[1]);
+        receipts.push({ path: args[1], bytes: Buffer.byteLength(JSON.stringify(response)), body: response.body });
+        await options.onNative?.(args[1]);
+        return response;
+      },
+    };
+    const pool = new Proxy(metadataPool, {
+      get(target, key) {
+        if (key !== 'query') return Reflect.get(target, key, target);
+        return async (...args: Parameters<typeof target.query>) => {
+          const config = args[0] as unknown as { text?: string; values?: readonly string[] };
+          const parameters = typeof args[0] === 'string' ? (args[1] as unknown as readonly string[]) : config.values;
+          const text = typeof args[0] === 'string' ? args[0] : config.text;
+          const freshness = text?.includes('consumer_checkpoint') === true;
+          if (freshness) {
+            events.push('freshness');
+            consumers.push(parameters![0]!);
+          }
+          const result = await (target.query as (...args: unknown[]) => Promise<unknown>)(...args);
+          if (freshness) await options.onFreshness?.();
+          return result;
+        };
+      },
+    });
+    const service = createSearchService({
+      pool,
+      client,
+      prefix,
+      source: {
+        async read(partition, ids) {
+          events.push('source');
+          reads.push({ partition, ids: [...ids] });
+          const snapshot = await source.read(partition, ids);
+          await options.onSource?.();
+          return snapshot;
+        },
+        async count() {
+          throw new Error('Discovery must not enumerate Source');
+        },
+      },
+      release: async () => release,
+      cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
+    });
+    return { service, events, reads, consumers, receipts };
+  }
+  type Observation = ReturnType<typeof observed>;
+  function invoke(probe: Observation, operation: Operation, empty = false) {
+    return operation === 'suggest'
+      ? probe.service.suggest(empty ? 'absentcustody' : 'custody', 1, ['en'])
+      : probe.service.facets('anonymous', { ...facetPlan(empty), languages: ['en'] });
+  }
+  function assertWork(probe: Observation, generation: number, empty: boolean, operation: Operation) {
+    const resolves = probe.events.filter((path) => path.startsWith('/_resolve/index/'));
+    expect(resolves).toHaveLength(2);
+    expect(probe.events.filter((path) => path.endsWith('/_mapping'))).toEqual([
+      `/${subjectIndexName(prefix, generation)}/_mapping`,
+    ]);
+    expect(probe.events.filter((path) => path.endsWith('/_search/template'))).toEqual([
+      `/${subjectIndexName(prefix, generation)}/_search/template`,
+    ]);
+    expect(probe.events.at(-1)).toBe(resolves[1]);
+    expect(probe.events.indexOf('freshness')).toBeGreaterThan(
+      probe.events.findIndex((path) => path.endsWith('/_search/template')),
+    );
+    expect(probe.consumers).toEqual([subjectConsumer(prefix, generation)]);
+    expect(probe.reads).toEqual(
+      empty
+        ? []
+        : [
+            {
+              partition: 10,
+              ids: [(operation === 'suggest' ? books : authors)[generation - 1]!.id],
+            },
+          ],
+    );
+    if (!empty) expect(probe.events.indexOf('source')).toBeLessThan(probe.events.indexOf('freshness'));
+    const native = probe.receipts.find(({ path }) => path.endsWith('/_search/template'))!.body;
+    if (operation === 'suggest')
+      expect(native).toMatchObject({
+        hits: { hits: empty ? [] : [{ _index: subjectIndexName(prefix, generation), _id: books[generation - 1]!.id }] },
+      });
+    else
+      expect(native).toMatchObject({
+        hits: { total: { value: empty ? 0 : 1, relation: 'eq' } },
+        aggregations: {
+          facet_0: {
+            facts: {
+              property: {
+                values: { buckets: empty ? [] : [{ key: authors[generation - 1]!.id, subjects: { doc_count: 1 } }] },
+              },
+            },
+          },
+        },
+      });
+  }
+  async function discoveryProblem(promise: Promise<unknown>, code = 'index_not_ready') {
+    const error: unknown = await promise.catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(ProblemError);
+    expect(error).toMatchObject({ code });
+    const response = problemResponse(error as ProblemError, { method: 'POST', id: 'discovery' });
+    expect(response.status).toBe(code === 'index_not_ready' ? 503 : 409);
+    const body: unknown = await response.json();
+    for (const field of ['subjects', 'facets', 'values', 'next', 'total', 'as_of'])
+      expect(body).not.toHaveProperty(field);
+  }
+  async function atFirst(work: () => Promise<void>) {
+    await switchAlias(2, 1);
+    try {
+      await work();
+    } finally {
+      await switchAlias(1, 2);
+    }
+  }
+
+  test('both native discovery callers own same-generation and empty watermarks across real alias changes', async () => {
+    for (const generation of [2, 1]) {
+      if (generation === 1) await switchAlias(2, 1);
+      try {
+        for (const operation of operations)
+          for (const empty of [false, true]) {
+            const probe = observed();
+            const answer = await invoke(probe, operation, empty);
+            assertWork(probe, generation, empty, operation);
+            expect(answer.as_of).toBe(stamps[generation - 1]!);
+            if ('subjects' in answer)
+              expect(answer.subjects).toEqual(
+                empty
+                  ? []
+                  : [
+                      {
+                        id: books[generation - 1]!.id,
+                        type: 'schema:Book',
+                        labels: { en: `Custody ${generation}` },
+                      },
+                    ],
+              );
+            else
+              expect(answer).toEqual({
+                as_of: stamps[generation - 1]!,
+                facets: [
+                  {
+                    property,
+                    values: empty
+                      ? []
+                      : [
+                          {
+                            value: authors[generation - 1]!.id,
+                            labels: { en: `Author ${generation}` },
+                          },
+                        ],
+                  },
+                ],
+              });
+          }
+      } finally {
+        if (generation === 1) await switchAlias(1, 2);
+      }
+    }
+  });
+
+  test('native discovery pins before start switches and rejects switches during query, Source and freshness even with empty results', async () => {
+    await atFirst(async () => {
+      for (const operation of operations)
+        for (const boundary of ['start', 'query', 'source', 'freshness'] as const) {
+          for (const empty of boundary === 'source' ? [false] : [false, true]) {
+            let switched = false;
+            const switchOnce = async () => {
+              if (!switched) {
+                await switchAlias(1, 2);
+                switched = true;
+              }
+            };
+            const probe = observed({
+              onNative: async (path) => {
+                if (
+                  (boundary === 'start' && path.startsWith('/_resolve/index/')) ||
+                  (boundary === 'query' && path.endsWith('/_search/template'))
+                )
+                  await switchOnce();
+              },
+              ...(boundary === 'source' ? { onSource: switchOnce } : {}),
+              ...(boundary === 'freshness' ? { onFreshness: switchOnce } : {}),
+            });
+            try {
+              await discoveryProblem(invoke(probe, operation, empty), 'search_restart_required');
+              expect(switched).toBe(true);
+              assertWork(probe, 1, empty, operation);
+            } finally {
+              if (switched) await switchAlias(2, 1);
+            }
+          }
+        }
+    });
+  }, 120_000);
+
+  test('a discovery final observation cannot reuse another request’s in-flight start observation', async () => {
+    const gate = () => {
+      let open!: () => void;
+      const promise = new Promise<void>((resolve) => (open = resolve));
+      return { promise, open };
+    };
+    await atFirst(async () => {
+      for (const operation of operations) {
+        const sourceEntered = gate(),
+          sourceRelease = gate(),
+          startEntered = gate(),
+          startRelease = gate();
+        let resolves = 0,
+          sourceCalls = 0,
+          freshnessCalls = 0,
+          switched = false;
+        const probe = observed({
+          async onNative(path) {
+            if (path.startsWith('/_resolve/index/') && ++resolves === 2) {
+              startEntered.open();
+              await startRelease.promise;
+            }
+          },
+          async onSource() {
+            if (++sourceCalls === 1) {
+              sourceEntered.open();
+              await sourceRelease.promise;
+            }
+          },
+          async onFreshness() {
+            if (++freshnessCalls === 1) {
+              await switchAlias(1, 2);
+              switched = true;
+            }
+          },
+        });
+        const first = discoveryProblem(invoke(probe, operation), 'search_restart_required');
+        let second: Promise<void> | undefined;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await sourceEntered.promise;
+          second = discoveryProblem(invoke(probe, operation), 'search_restart_required');
+          await startEntered.promise;
+          sourceRelease.open();
+          await Promise.race([
+            first,
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(
+                () => reject(new Error('Final observation waited on another request’s start')),
+                5_000,
+              );
+            }),
+          ]);
+          expect(resolves).toBe(3);
+        } finally {
+          if (timeout) clearTimeout(timeout);
+          sourceRelease.open();
+          startRelease.open();
+          await Promise.allSettled([first, ...(second ? [second] : [])]);
+          if (switched) await switchAlias(2, 1);
+        }
+        expect(resolves).toBe(4);
+      }
+    });
+  }, 30_000);
+
+  test('both discovery callers reject every malformed actual native start and final receipt with no public payload', async () => {
+    await atFirst(async () => {
+      for (const operation of operations)
+        for (const control of resolveControls(prefix)) {
+          for (const boundary of ['start', 'final', 'empty final'] as const) {
+            const start = boundary === 'start',
+              empty = boundary === 'empty final';
+            const capture = captureMetadata(engine, 'resolve', control, start ? 1 : 2);
+            const probe = observed({ client: capture.client });
+            await discoveryProblem(invoke(probe, operation, empty));
+            expect(capture.calls.filter(({ changed }) => changed)).toHaveLength(1);
+            if (start) {
+              expect(probe.events.filter((path) => path.endsWith('/_search/template'))).toEqual([]);
+              expect(probe.events.filter((path) => path.endsWith('/_mapping'))).toEqual([]);
+              expect(probe.reads).toEqual([]);
+              expect(probe.consumers).toEqual([]);
+            } else {
+              // Rejections may throw before the outer recorder sees the final receipt.
+              expect(capture.calls.filter(({ path }) => path.startsWith('/_resolve/index/'))).toHaveLength(2);
+              expect(probe.consumers).toEqual([subjectConsumer(prefix, 1)]);
+              expect(probe.reads).toHaveLength(empty ? 0 : 1);
+              expect(probe.events.filter((path) => path.endsWith('/_search/template'))).toEqual([
+                `/${subjectIndexName(prefix, 1)}/_search/template`,
+              ]);
+            }
+          }
+        }
+      for (const operation of operations)
+        for (const control of mappingControls(subjectIndexName(prefix, 1))) {
+          const capture = captureMetadata(engine, 'mapping', control);
+          const probe = observed({ client: capture.client });
+          await discoveryProblem(invoke(probe, operation));
+          expect(probe.reads).toEqual([]);
+          expect(probe.consumers).toEqual([]);
+          expect(probe.events.filter((path) => path.endsWith('/_search/template'))).toEqual([]);
+        }
+    });
+  }, 180_000);
+
+  test('discovery refuses missing and unsupported native sort formats before engine or Source work', async () => {
+    await atFirst(async () => {
+      const index = subjectIndexName(prefix, 1);
+      for (const operation of operations)
+        for (const format of [undefined, 0, 2]) {
+          const capture = captureMetadata(engine, 'mapping', {
+            name: `unsupported ${format}`,
+            corrupt(receipt) {
+              const body = receipt.body as Record<string, { mappings: { _meta?: unknown } }>;
+              body[index]!.mappings._meta = format === undefined ? {} : { name_sort_format: format };
+            },
+          });
+          const probe = observed({ client: capture.client });
+          await discoveryProblem(invoke(probe, operation));
+          expect(probe.reads).toEqual([]);
+          expect(probe.consumers).toEqual([]);
+          expect(probe.events.filter((path) => path.endsWith('/_search/template'))).toEqual([]);
+        }
+    });
+  });
+
+  test('discovery native plan generation is validated before I/O and survives empty native responses', async () => {
+    for (const generation of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      const probe = transport();
+      await expect(
+        Promise.resolve().then(() =>
+          suggestSubjects(probe.search, prefix, {
+            text: 'custody',
+            size: 2,
+            generation,
+          }),
+        ),
+      ).rejects.toBeInstanceOf(RangeError);
+      await expect(
+        countFacets(probe.search, prefix, {
+          facets: [{ property, size: 1 }],
+          sample: 10,
+          generation,
+        }),
+      ).rejects.toBeInstanceOf(RangeError);
+      expect(probe.calls).toEqual([]);
+    }
+    for (const generation of [1, 2]) {
+      const probe = transport();
+      expect(await suggestSubjects(probe.search, prefix, { text: 'absentcustody', size: 2, generation })).toEqual([]);
+      const facets = await countFacets(probe.search, prefix, {
+        query: { match: { search_text: 'absentcustody' } },
+        facets: [{ property, size: 1 }],
+        sample: 10,
+        generation,
+      });
+      expect(facets.facets[0]!.values).toEqual([]);
+      expect(probe.calls.map(({ path }) => path)).toEqual(
+        Array(2).fill(`/${subjectIndexName(prefix, generation)}/_search/template`),
+      );
+    }
+  });
+
+  test('native discovery work stays fixed with 64, 512 and 4096 unrelated documents and history', async () => {
+    const unrelated: IndexedSubject[] = [];
+    const metadataBounds = new Map<Operation, { path: string; bytes: number }[]>();
+    let history = 0;
+    for (const [round, scale] of [64, 512, 4096].entries()) {
+      while (unrelated.length < scale)
+        unrelated.push({
+          ...books[1]!,
+          id: newId(160),
+          labels: [{ language: 'en', value: 'Unrelated history' }],
+          statements: [],
+        });
+      const result = await engine.bulk<{ errors: boolean }>(
+        bulkLines(
+          subjectIndexName(prefix, 2),
+          documentActions(
+            {
+              partition: 10,
+              position: BigInt(round + 1),
+              subjects: unrelated,
+            },
+            unrelated.map(({ id }) => id),
+          ),
+        ),
+        { query: { refresh: 'wait_for' } },
+      );
+      expect(result.errors).toBe(false);
+      // Actual retained outbox history grows on the same managed database.
+      await metadataPool.query(
+        `WITH head AS (
+        UPDATE core.partition SET position = position + $1 WHERE partition_no = 902 RETURNING epoch, position
+      ) INSERT INTO core.outbox
+        (partition_no, position, event_seq, event_count, epoch, id, type, subject, data, recorded_at)
+        SELECT 902, head.position - n + 1, 0, 1, head.epoch, gen_random_uuid(),
+          'com.rezics.subject.created.v1', $2, '{}'::jsonb, '2026-02-01T00:00:00Z'::timestamptz
+        FROM head, generate_series(1, $1::integer) AS n`,
+        [scale - history, books[1]!.id],
+      );
+      history = scale;
+      const { rows } = await metadataPool.query<{ count: number }>(
+        'SELECT count(*)::integer AS count FROM core.outbox WHERE partition_no = 902 AND subject = $1',
+        [books[1]!.id],
+      );
+      expect(rows[0]!.count).toBe(scale);
+      for (const operation of operations) {
+        const probe = observed();
+        await invoke(probe, operation);
+        assertWork(probe, 2, false, operation);
+        const metadata = probe.receipts.filter(
+          ({ path }) => path.startsWith('/_resolve/index/') || path.endsWith('/_mapping'),
+        );
+        expect(metadata).toHaveLength(3);
+        const charge = metadata.map(({ path, bytes }) => ({ path, bytes }));
+        const previous = metadataBounds.get(operation);
+        if (previous) expect(charge).toEqual(previous);
+        else metadataBounds.set(operation, charge);
+        expect(probe.receipts.filter(({ path }) => path.endsWith('/_search/template'))).toHaveLength(1);
+        expect(probe.reads.flatMap(({ ids }) => ids)).toHaveLength(1);
+        console.info(
+          'native discovery cost',
+          JSON.stringify({
+            operation,
+            scale,
+            metadata: charge,
+            paths: probe.receipts.map(({ path }) => path),
+            native: probe.receipts.filter(({ path }) => path.endsWith('/_search/template')),
+            reads: probe.reads,
+            consumers: probe.consumers,
+          }),
+        );
+      }
+    }
+  }, 120_000);
+});
