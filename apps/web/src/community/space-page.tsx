@@ -325,9 +325,7 @@ export function SpacePage({
     (read: RealmClaimRead) => {
       if (realmId) setClaim({ realmId, read, pageSource });
       if (read.kind === 'ready' && read.snapshot.ownershipState === 'owned') {
-        restrictRealm((previous) =>
-          previous?.state === 'orphaned' && previous.id === realmId ? null : previous,
-        );
+        restrictRealm((previous) => (previous?.state === 'orphaned' && previous.id === realmId ? null : previous));
       }
     },
     [realmId, pageSource],
