@@ -1776,6 +1776,55 @@ command prefix. The permanent native approval-binding receipt refuses changed
 business input or principal assignment. DBOS history retention therefore does
 not discard the effect authority or allow a second effect for that logical key.
 
+## Source diagnostic emission
+
+`src/diagnostics.ts` owns the nonpersonal source allowlist adopted by
+[external custody](src/external-custody-contract.md#source-admission-and-actual-receiving-lifecycle).
+Each output is exactly `{ code, operation, severity }`, with closed primitive enums.
+Membership step failures use `membership_<step>_failed` and `membership.<step>`
+for the static steps `reserve`, `publish`, `terminalize`, `release`, `finalize`
+and `cancel`. Recovery start failure uses `recovery_start_failed` / `recovery.start`.
+Invalid untyped emitter inputs use `diagnostic_input_rejected` / `diagnostics`.
+No error message, stack, cause, SQL parameters, identifiers, request context or
+credentials enter these outputs. The membership wrapper retains its existing
+thrown step error, disabled retries and compensation/denial ordering; HTTP and
+recovery error responses retain their existing behavior.
+
+The actual Better Auth instance inherits `BetterAuthOptions.logger.log` from
+`betterAuthOptions`: native logger calls project to `better_auth_diagnostic` /
+`better_auth`, retaining the existing warn threshold. The Auth workflow host
+sets `DBOSConfig.logger` and its copy writer's `DBOSClient.create({ logger })`
+to the same source policy: `dbos_diagnostic` / `workflow_runtime`. Each delegated
+SDK call emits once at its native `debug`, `info`, `warn` or `error` severity.
+DBOS custom loggers receive all levels regardless of `logLevel`; this adapter
+retains those calls, including error counts, and ignores every message/metadata
+argument. No console interception or external receiver is installed.
+
+These hooks close only their actual delegated emission paths. The pinned Better
+Auth core's `createAdapterFactory` export (`@better-auth/core/db/adapter`,
+`dist/db/adapter/factory.mjs`) still directly calls `console.error(error)` on a
+fallback-join failure and `console.log(stack)` on an unapproved supplied create
+ID. Neither uses `options.logger`; debug-adapter logging also constructs its own
+logger. The shared-runtime/Better Auth integration owner must route those actual
+calls through the existing instance logger. The core's `@better-auth/core/env`
+module logger also falls back to its default logger outside endpoint context;
+Auth's instance configuration cannot certify that foreign fallback. Browser
+client diagnostics are outside this server source closure.
+
+DBOS's installed `DBOSConfig.logger` and `DBOSClient.create` cover their delegated
+runtime and database diagnostics (including migration warnings). Optional
+`TelemetryCollector` / `TelemetryExporter` direct console emissions and the
+`ConfiguredInstance` decorator warning bypass that hook; the shared-runtime/DBOS
+owner must supply equivalent source routing there if used. Foreign hosts that
+register Auth membership steps own their DBOS configuration and must compose
+the logger policy on their existing instance. Auth does not replace their runtime.
+
+Old or external diagnostic copies, collectors, rotations, archives, exports,
+replicas and backup erasure remain unknown/pending with their receiving owners.
+This source change adopts no retention exception, copy-erasure certificate or
+Auth participant acknowledgement. Durable native workflow error/result custody
+remains governed separately by the existing erasure contracts.
+
 ## Native metadata privacy contract
 
 [Native metadata privacy and creation custody](src/metadata-privacy-contract.md) owns the adopted field

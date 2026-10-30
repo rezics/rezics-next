@@ -1,4 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { emitAuthDiagnostic } from './diagnostics.ts';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { betterAuth } from 'better-auth';
@@ -1825,7 +1826,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           const email = recoveryAddress(body);
           // Lookup, Access and delivery stay off this response. Failures are logged without the address.
           void deliverRecovery(email).catch(() => {
-            console.error('Recovery start failed');
+            emitAuthDiagnostic('recovery_start_failed');
           });
           return json({ success: true });
         }

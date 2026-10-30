@@ -12,6 +12,7 @@ export type {
   MembershipWorkflowPorts,
 } from '@rezics/auth-contract';
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { emitMembershipStepFailure, type MembershipDiagnosticStep } from './diagnostics.ts';
 
 /** Shared ordering for the Auth host and the kernel registrar. Every callback
  * is a registered durable step; this function performs no external I/O. */
@@ -55,15 +56,13 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
     if (!isMembershipAuthorizationReference(input.authorization)) throw new Error('Membership authorization denied');
     return ports.authorize(input.authorization, input);
   }
-  const step = <A extends unknown[], R>(name: string, action: (...args: A) => Promise<R>) =>
+  const step = <A extends unknown[], R>(name: MembershipDiagnosticStep, action: (...args: A) => Promise<R>) =>
     DBOS.registerStep(
       async (...args: A) => {
         try {
           return await action(...args);
-        } catch (error) {
-          console.error(
-            new Error(`Membership workflow step failed: ${name} (workflow ${DBOS.workflowID})`, { cause: error }),
-          );
+        } catch {
+          emitMembershipStepFailure(name);
           throw new Error(`Membership workflow step failed: ${name}`);
         }
       },

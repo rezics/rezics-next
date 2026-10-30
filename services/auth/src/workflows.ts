@@ -39,6 +39,7 @@ export type AccountOperation = (
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
+import { authWorkflowLogger } from './diagnostics.ts';
 import {
   installCopyRecorder,
   createCopyWriter,
@@ -1577,6 +1578,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         applicationVersion: 'accounts-v1',
         systemDatabasePoolSize: 8,
         logLevel: 'warn',
+        logger: authWorkflowLogger,
       });
       await DBOS.launch();
       if (sameDatabase) {
@@ -1587,6 +1589,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           systemDatabaseSchemaName: systemSchema,
           systemDatabasePool: options.systemDatabasePool ?? database,
           applicationName: AUTH_WORKFLOW_APPLICATION,
+          logger: authWorkflowLogger,
         });
         await copyClient.registerQueue('auth.account-copies');
         copyWriter = createCopyWriter(database, copyClient);

@@ -6,6 +6,7 @@ import { websiteProvider } from './website-provider.ts';
 import { nativeAttemptOptions } from './rate-limit.ts';
 import { nativeSessionLimits } from './session-limits.ts';
 import { nativeVerificationPlugin } from './verification-maintenance.ts';
+import { authBetterAuthLogger } from './diagnostics.ts';
 
 export const credentialOwnerSchema = {
   id: 'credential-owner-schema',
@@ -22,6 +23,7 @@ export const credentialOwnerSchema = {
 export function betterAuthOptions(database: Pool, issuer: string, secret: string) {
   return {
     ...nativeAttemptOptions(database, issuer, secret),
+    logger: authBetterAuthLogger,
     database,
     baseURL: issuer,
     basePath: '/api/auth',
