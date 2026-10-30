@@ -8,6 +8,16 @@ export declare const recentEntrySchema: import("typebox").TUnion<[import("typebo
     kind: import("typebox").TLiteral<"query">;
     text: import("typebox").TString;
     languages: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+    scope: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"realm">;
+        id: import("typebox").TString;
+    }>, import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"collection">;
+        id: import("typebox").TString;
+    }>, import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"route">;
+        route: import("typebox").TLiteral<"library">;
+    }>]>>;
 }>, import("typebox").TObject<{
     kind: import("typebox").TLiteral<"scope">;
     scope: import("typebox").TUnion<[import("typebox").TObject<{
@@ -37,6 +47,16 @@ declare const item: import("typebox").TObject<{
         kind: import("typebox").TLiteral<"query">;
         text: import("typebox").TString;
         languages: import("typebox").TOptional<import("typebox").TArray<import("typebox").TString>>;
+        scope: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+            kind: import("typebox").TLiteral<"realm">;
+            id: import("typebox").TString;
+        }>, import("typebox").TObject<{
+            kind: import("typebox").TLiteral<"collection">;
+            id: import("typebox").TString;
+        }>, import("typebox").TObject<{
+            kind: import("typebox").TLiteral<"route">;
+            route: import("typebox").TLiteral<"library">;
+        }>]>>;
     }>, import("typebox").TObject<{
         kind: import("typebox").TLiteral<"scope">;
         scope: import("typebox").TUnion<[import("typebox").TObject<{
@@ -98,6 +118,16 @@ export declare function listRecentSearches(d: RecentDependencies, inputActor: Ac
             kind: "query";
             text: string;
             languages?: string[];
+            scope?: {
+                kind: "realm";
+                id: string;
+            } | {
+                kind: "collection";
+                id: string;
+            } | {
+                kind: "route";
+                route: "library";
+            };
         } | {
             kind: "scope";
             scope: {
@@ -213,6 +243,16 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                                 kind: "query";
                                 text: string;
                                 languages?: string[];
+                                scope?: {
+                                    kind: "realm";
+                                    id: string;
+                                } | {
+                                    kind: "collection";
+                                    id: string;
+                                } | {
+                                    kind: "route";
+                                    route: "library";
+                                };
                             } | {
                                 kind: "scope";
                                 scope: {
@@ -386,6 +426,16 @@ export declare function recentSearchRoutes(app: ReturnType<typeof createApp>, co
                         kind: "query";
                         text: string;
                         languages?: string[];
+                        scope?: {
+                            kind: "realm";
+                            id: string;
+                        } | {
+                            kind: "collection";
+                            id: string;
+                        } | {
+                            kind: "route";
+                            route: "library";
+                        };
                     } | {
                         kind: "scope";
                         scope: {
