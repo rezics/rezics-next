@@ -98,7 +98,15 @@ export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 
 /** The subject read planned for this page, when that read succeeded. */
 export function subjectBody(
   page: SubjectPageData,
-): { subject: Subject; account?: SubjectRead['account']; related: Related; documents?: unknown; summary?: Summary | null } | undefined {
+):
+  | {
+      subject: Subject;
+      account?: SubjectRead['account'];
+      related: Related;
+      documents?: unknown;
+      summary?: Summary | null;
+    }
+  | undefined {
   const planned = Object.entries(
     planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads,
   ).find(([, read]) => read.kind === 'subject' && read.id === page.subject);
@@ -215,7 +223,11 @@ export function subjectPageJsonLd(
 ): string | undefined {
   const read = subjectBody(page);
   if (!read) return;
-  const documents = documentRead(page.document as CompositionDocument, page.subject, Object.keys(read.subject.statements));
+  const documents = documentRead(
+    page.document as CompositionDocument,
+    page.subject,
+    Object.keys(read.subject.statements),
+  );
   const origin = (options.origin ?? 'https://rezics.com').replace(/\/+$/, '');
   const json = subjectJsonLd({
     subject: {

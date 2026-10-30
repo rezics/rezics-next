@@ -526,15 +526,22 @@ async function pageAnswer(input: {
     if (
       input.context?.population.kind === 'realm' &&
       (descriptor.kind === 'collections' || descriptor.kind === 'reactions' || descriptor.kind === 'search')
-    ) observed.set(canonicalize(descriptor)!, { status: 503, body: { code: 'dependency_unavailable' } });
+    )
+      observed.set(canonicalize(descriptor)!, { status: 503, body: { code: 'dependency_unavailable' } });
   }
   const context = input.context ? { context: input.context.id } : {};
   const observation = observed.get(canonicalize({ kind: 'subject', id: input.subject, ...context })!);
   const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
-  const properties = isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
+  const properties =
+    isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
   const documents = documentRead(input.resolved.document, input.subject, properties, input.context?.id);
   const incoming = new Request(input.request.url, { headers: input.request.headers, signal: input.request.signal });
-  const forwarded = mergedSession(input.session.ring, input.session.scope, incoming.headers.get(SESSION_HEADER), input.probeSession);
+  const forwarded = mergedSession(
+    input.session.ring,
+    input.session.scope,
+    incoming.headers.get(SESSION_HEADER),
+    input.probeSession,
+  );
   if (forwarded !== null) incoming.headers.set(SESSION_HEADER, forwarded);
   let page;
   let releaseGuard: (() => void) | undefined;
@@ -563,7 +570,12 @@ async function pageAnswer(input: {
   const reads: Record<string, ReadResult> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
     let result = page.results[key];
-    if (result?.status === 200 && descriptor.kind === 'subject' && descriptor.id === input.subject && isRecord(result.body))
+    if (
+      result?.status === 200 &&
+      descriptor.kind === 'subject' &&
+      descriptor.id === input.subject &&
+      isRecord(result.body)
+    )
       result = { ...result, body: { ...result.body, documents: page.documents } };
     if (!result) throw new Error('Page read did not return a result');
     if (descriptor.kind === 'subject' && descriptor.id === input.subject && result.status !== 200)

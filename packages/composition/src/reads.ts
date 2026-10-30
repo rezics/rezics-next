@@ -118,5 +118,7 @@ export function documentRead(
   if ([...walkNodes(platformRegistry, document)].some((node) => node.type === 'MoreStatements')) {
     for (const property of available) selected.add(property);
   }
-  return selected.size ? { kind: 'documents', id: subject, ...(context ? { context } : {}), properties: [...selected].sort() } : null;
+  return selected.size
+    ? { kind: 'documents', id: subject, ...(context ? { context } : {}), properties: [...selected].sort() }
+    : null;
 }

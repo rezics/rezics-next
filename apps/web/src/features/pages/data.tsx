@@ -45,7 +45,15 @@ import {
   type Sources,
   type Stmt,
 } from './shared';
-import { DocumentValue, LanguageTag, MediaValue, readableDocument, SPOILER_PROPERTY, SpoilerGate, type ValueLabels } from './values';
+import {
+  DocumentValue,
+  LanguageTag,
+  MediaValue,
+  readableDocument,
+  SPOILER_PROPERTY,
+  SpoilerGate,
+  type ValueLabels,
+} from './values';
 
 type CoreMessages = {
   unknown: string;

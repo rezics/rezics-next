@@ -498,13 +498,19 @@ export async function readPage(options: {
       snapshot.kind !== 'documents' ||
       typeof snapshot.id !== 'string' ||
       !UUID_PATTERN.test(snapshot.id) ||
-      (snapshot.context !== undefined && (typeof snapshot.context !== 'string' || !UUID_PATTERN.test(snapshot.context))) ||
+      (snapshot.context !== undefined &&
+        (typeof snapshot.context !== 'string' || !UUID_PATTERN.test(snapshot.context))) ||
       !Array.isArray(snapshot.properties) ||
       snapshot.properties.length > 64 ||
       !snapshot.properties.every((property) => typeof property === 'string' && CURIE_PATTERN.test(property))
     )
       throw new PageReadError([{ pointer: '/documents', code: 'invalid_format' }]);
-    descriptor = { kind: 'documents', id: snapshot.id, ...(typeof snapshot.context === 'string' ? { context: snapshot.context } : {}), properties: snapshot.properties };
+    descriptor = {
+      kind: 'documents',
+      id: snapshot.id,
+      ...(typeof snapshot.context === 'string' ? { context: snapshot.context } : {}),
+      properties: snapshot.properties,
+    };
   }
   const nativeCost = (read: PreparedRead) =>
     read.descriptor.kind === 'search'
@@ -520,7 +526,10 @@ export async function readPage(options: {
   const forwardToken = (token: string | null) => {
     if (token === null) return;
     tokens.push(token);
-    let components = credentials.session === null ? [] : (decodeSession(options.session.ring, options.session.scope, credentials.session) ?? []);
+    let components =
+      credentials.session === null
+        ? []
+        : (decodeSession(options.session.ring, options.session.scope, credentials.session) ?? []);
     for (const component of decodeSession(options.session.ring, options.session.scope, token) ?? [])
       components = mergeSession(components, component);
     credentials.session = encodeSession(options.session.ring, options.session.scope, components);
@@ -536,14 +545,26 @@ export async function readPage(options: {
   };
   // Resolve the dependency first and release its owner connection before document.get.
   if (descriptor) {
-    const subject: PageRead = { kind: 'subject', id: descriptor.id, ...(descriptor.context ? { context: descriptor.context } : {}) };
+    const subject: PageRead = {
+      kind: 'subject',
+      id: descriptor.id,
+      ...(descriptor.context ? { context: descriptor.context } : {}),
+    };
     const canonical = canonicalize(subject)!;
     if (!observed.has(canonical)) {
       const result = await withPublicStatementReader(() => execute({ key: 'subject', descriptor: subject, canonical }));
       observed.set(canonical, result.result);
     }
   }
-  const subjectResult = descriptor ? observed.get(canonicalize({ kind: 'subject', id: descriptor.id, ...(descriptor.context ? { context: descriptor.context } : {}) })!) : undefined;
+  const subjectResult = descriptor
+    ? observed.get(
+        canonicalize({
+          kind: 'subject',
+          id: descriptor.id,
+          ...(descriptor.context ? { context: descriptor.context } : {}),
+        })!,
+      )
+    : undefined;
   const subject =
     subjectResult?.status === 200 && isObject(subjectResult.body) ? subjectResult.body.subject : undefined;
   const references =

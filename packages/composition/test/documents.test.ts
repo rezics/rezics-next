@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test';
-import { documentRead, MAX_PAGE_DOCUMENTS, pageDocumentReferences, resolveTemplate, type PresentationProfile, type CompositionDocument } from '../src/index.ts';
+import {
+  documentRead,
+  MAX_PAGE_DOCUMENTS,
+  pageDocumentReferences,
+  resolveTemplate,
+  type PresentationProfile,
+  type CompositionDocument,
+} from '../src/index.ts';
 
 import profile from '../profiles/platform.json';
 
@@ -63,11 +70,21 @@ test('document selection follows current best rank, unknown snaks and the reader
   ).toEqual([]);
 });
 
-
 test('the shipped Recipe configuration selects instructions and its shared summary without another renderer', () => {
   const page = resolveTemplate(profile as PresentationProfile, { type: 'schema:Recipe' }).document;
   expect(documentRead(page, id, [], candidate)).toEqual({
-    kind: 'documents', id, context: candidate,
-    properties: ['schema:abstract', 'schema:author', 'schema:cookTime', 'schema:datePublished', 'schema:recipeIngredient', 'schema:recipeInstructions', 'schema:recipeYield', 'schema:suitableForDiet'],
+    kind: 'documents',
+    id,
+    context: candidate,
+    properties: [
+      'schema:abstract',
+      'schema:author',
+      'schema:cookTime',
+      'schema:datePublished',
+      'schema:recipeIngredient',
+      'schema:recipeInstructions',
+      'schema:recipeYield',
+      'schema:suitableForDiet',
+    ],
   });
 });
