@@ -356,8 +356,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           // Journal an explicit native refusal before SDK error serialization.
           // Successful legacy results remain unchanged; legacy untyped errors
           // stay errors and are never inferred to be authorization refusals.
-          if (isRefusal(error))
-            return { authStepOutcome: 'refused-v1', status: error.status } satisfies StepRefusal;
+          if (isRefusal(error)) return { authStepOutcome: 'refused-v1', status: error.status } satisfies StepRefusal;
           const failure = new Error(stepFailureMessage(name));
           // Persist only unavailable status, never the command's
           // secret input, permission context or original error in a durable step.
