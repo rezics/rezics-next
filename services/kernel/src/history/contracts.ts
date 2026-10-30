@@ -276,6 +276,9 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.rating.subject-merge.page.v1': nonPersonal,
   'com.rezics.rating.vote.changed.v1': personal('voter'),
   'com.rezics.rating.voter-realm.changed.v1': personal('voter'),
+  // Operational writer notification: strict empty data and no event subject/native Account owner.
+  // Command identities and source/actor owner evidence remain independent associations.
+  'com.rezics.search.identity_writer.changed.v1': nonPersonal,
   'com.rezics.semantic.context.created.v1': nonPersonal,
   'com.rezics.semantic.composite.registered.v1': nonPersonal,
   'com.rezics.semantic.erasure.scheduled.v1': personal('subject'),

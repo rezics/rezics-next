@@ -12,7 +12,7 @@ import gateSql from './writer-guard-gate.sql';
 import dispatchSql from './writer-guard-dispatch.sql';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { documentActions, validateIndexObservation } from './document.ts';
-import { SEARCH_IDENTITY_WRITER_CHANGED } from './identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged as changed } from './identity-epoch-participant-events.ts';
 import { readIdentityIndexIncarnation, readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
 import enroll from './identity-epoch-participant-enroll.sql';
 import settle from './identity-epoch-participant-settle.sql';
@@ -22,7 +22,6 @@ import { subjectPartition, type SubjectListingSource, type SubjectSource } from 
 import { writeIndexActions } from './write-actions.ts';
 
 export const SEARCH_IDENTITY_WRITER_CHUNK = 100;
-const changed = () => [{ type: SEARCH_IDENTITY_WRITER_CHANGED, data: {} }];
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
 
 function keys(partition: number, ids: readonly string[]): string[] {

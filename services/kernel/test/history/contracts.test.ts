@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
-import { EVENT_TYPES } from '../../src/events/catalogue.ts';
+import { EVENT_TYPES, lookupEventType } from '../../src/events/catalogue.ts';
+import {
+  SEARCH_IDENTITY_WRITER_CHANGED,
+  searchIdentityWriterChanged,
+} from '../../src/search/identity-epoch-participant-events.ts';
 import {
   ACCOUNT_ROLE_BITS,
   ACCOUNT_ROLES,
@@ -300,6 +304,32 @@ test('every exact catalogue type has an explicit payload classification, includi
   expect(classifyEvent('com.rezics.access.operator.opening-authorized.v1').roles).toContain('acting-human');
   expect(classifyEvent('com.rezics.rating.vote.changed.v1').roles).toContain('voter');
   expect(classifyEvent('com.rezics.subject.created.v1').kind).toBe('non-personal');
+});
+
+test('Search writer notification has exact empty data and no subject while command identity roles remain independent', () => {
+  // This is the emitter used by every custody transition in the actual writer guard.
+  const events = searchIdentityWriterChanged();
+  expect(events).toEqual([{ type: 'com.rezics.search.identity_writer.changed.v1', data: {} }]);
+  const event = events[0]!;
+  expect(Object.hasOwn(event, 'subject')).toBe(false);
+  const validator = lookupEventType(event.type)!;
+  expect(validator.Check(event.data)).toBe(true);
+  for (const data of [{ accountId: id }, { owner: id }, { subject: id }, null, []]) {
+    expect(validator.Check(data)).toBe(false);
+  }
+  expect(classifyEvent(SEARCH_IDENTITY_WRITER_CHANGED)).toEqual({ kind: 'non-personal', roles: [] });
+
+  // Non-personal classifies only this event's payload/native owner roles. The outbox scope
+  // still accepts every independent verified command identity, including delegated/operator work.
+  const identities = ['principal', 'actor', 'acting-human', 'delegate', 'operator'] as const;
+  for (const role of identities) {
+    const scope = {
+      artifactType: 'outbox-event/v1' as const,
+      accounts: [{ accountRoute: 42, accountId: id, roles: ACCOUNT_ROLE_BITS[role] }],
+    };
+    expect(validateScope('outbox-event/v1', scope)).toEqual(scope);
+    expect(historyArtifact('outbox-event/v1').roles).toContain(role);
+  }
 });
 
 test('registry and codecs have no database dependency anywhere in their runtime import graph', async () => {
