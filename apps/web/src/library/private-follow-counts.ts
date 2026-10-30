@@ -65,12 +65,15 @@ type NativeResult = { status: number; data: unknown; error: unknown; response: R
 async function readCount(read: () => Promise<NativeResult>, target?: FollowCountTarget): Promise<FollowCountState> {
   try {
     const result = await read();
-    if (result.status !== 200 || result.error)
-      return failure(
+    if (result.status !== 200 || result.error) {
+      const failed = failure(
         result.status,
         record(result.error) ? result.error.value : undefined,
         result.response.headers.get('retry-after'),
       );
+      // Outgoing has no resource to conceal: 404 means this runtime cannot serve the delivered route.
+      return result.status === 404 && !target ? { ...failed, state: 'unavailable' } : failed;
+    }
     const body = result.data;
     const field = target ? 'followerCount' : 'followingCount';
     if (

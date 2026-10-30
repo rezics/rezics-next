@@ -87,12 +87,6 @@ export function libraryNavigationEntries(
       href: `/${locale}/library/collections`,
       current: current === 'collections',
     },
-    {
-      id: 'follow-counts',
-      label: m.library_follow_counts_heading(),
-      href: `/${locale}/library/follow-counts`,
-      current: current === 'follow-counts',
-    },
   );
   for (const collection of collections) {
     if (seen.has(collection.id)) continue;
@@ -167,7 +161,18 @@ export function LibraryNavigation({
   locale?: string;
   collectionsState?: 'loaded' | 'preparing' | 'unavailable';
 }) {
-  const { tabs, overflow } = libraryNavigationEntries(current, pins, collections, locale);
+  const destinations = libraryNavigationEntries(current, pins, collections, locale);
+  const overflow = destinations.overflow;
+  // Management destinations are additive to the existing Collection and pin model.
+  const tabs: LibraryNavigationEntry[] = [
+    ...destinations.tabs,
+    {
+      id: 'follow-counts',
+      label: m.library_follow_counts_heading(),
+      href: `/${locale}/library/follow-counts`,
+      current: current === 'follow-counts',
+    },
+  ];
   const all = [...tabs, ...overflow];
   const phonePins = tabs.filter((entry) => entry.pin).slice(0, 3);
   return (

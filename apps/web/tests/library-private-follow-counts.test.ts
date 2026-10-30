@@ -12,7 +12,7 @@ import {
 } from '../src/library/private-follow-counts';
 import { PrivateFollowCountsPageView } from '../src/library/private-follow-counts-page';
 import { privateFollowCountsHref } from '../src/library/private-follow-counts-link';
-import { libraryNavigationEntries } from '../src/library/library-nav';
+import { LibraryNavigation } from '../src/library/library-nav';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
 
@@ -73,8 +73,8 @@ test('own outgoing count and genuinely authorized contextual target counts disti
       ),
     );
     const result = await readFollowCounts(client, authorization, target);
-    expect(result.outgoing).toEqual({ state, status, code, retryAfter: '7' });
-    expect(result.target).toEqual(result.outgoing);
+    expect(result.outgoing).toEqual({ state: status === 404 ? 'unavailable' : state, status, code, retryAfter: '7' });
+    expect(result.target).toEqual({ state, status, code, retryAfter: '7' });
     expect(JSON.stringify(result)).not.toContain('"count":');
   }
 });
@@ -99,12 +99,16 @@ test('only validated current resource context requests a target; owner selectors
   expect(url.pathname).toBe('/ja/library/follow-counts');
   expect(followCountsSearch(Object.fromEntries(url.searchParams))).toEqual(target);
   expect(privateFollowCountsHref({ ...target, targetId: '' }, 'en')).toBeNull();
-  expect(libraryNavigationEntries('follow-counts', { state: 'closed' }, [], 'fr').tabs).toContainEqual({
-    id: 'follow-counts',
-    label: expect.any(String),
-    href: '/fr/library/follow-counts',
-    current: true,
-  });
+  const navigation = renderToStaticMarkup(
+    createElement(LibraryNavigation, {
+      current: 'follow-counts',
+      pins: { state: 'closed' },
+      collections: [],
+      locale: 'fr',
+    }),
+  );
+  expect(navigation).toContain('href="/fr/library/follow-counts"');
+  expect(navigation).toContain('aria-current="page"');
 });
 
 test('malformed, mismatched, unfinished and lost native responses never fabricate counts', async () => {
