@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
-import type { SourceId } from '@rezics/conversion';
+import type { SourceId } from '../../../../packages/conversion/src/index.ts';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { Statement, Subject } from '../../../../specs/semantic-driver.ts';
@@ -143,7 +143,13 @@ type Exchange = {
 
 /** One native application/Auth/worker world. Helpers only schedule and observe real operations. */
 export async function runJourney() {
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+  const runtime = await openApiRuntime({
+    batchRecords: 8,
+    maxFields: 64,
+    maxRecordBytes: 65536,
+    // The ordinary VNDB CLI requests its registered source_statistic:write scope even for metadata-only input.
+    sourceStatistics: 'vndb',
+  });
   let directory: string | undefined;
   const close = async () => {
     try {
@@ -187,6 +193,7 @@ export async function runJourney() {
 
     async function invoke(source: SourceId, version: number, absent = false) {
       const start = exchanges.length;
+      const authStart = authExchanges.length;
       let acquired = false;
       let coordinator:
         | { source: string; converter_revision: string; converterModule: string; decoderModule: string }
@@ -268,7 +275,10 @@ export async function runJourney() {
           }) as typeof fetch,
         },
       );
-      expect(result.code, JSON.stringify({ source, version, absent, ...result })).toBe(0);
+      expect(
+        result.code,
+        JSON.stringify({ source, version, absent, ...result, authExchanges: authExchanges.slice(authStart) }),
+      ).toBe(0);
       expect(result.openHandles).toBe(0);
       expect(acquired).toBe(true);
       expect(coordinator?.converter_revision).toBe(createSourceRegistration(source).converter_revision);

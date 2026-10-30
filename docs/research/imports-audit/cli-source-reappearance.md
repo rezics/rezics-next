@@ -14,14 +14,16 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 
 ## Bound journey
 
-One `openApiRuntime({batchRecords:8,maxFields:64,maxRecordBytes:65536})` owns Auth, real Access, application,
+One `openApiRuntime({batchRecords:8,maxFields:64,maxRecordBytes:65536,sourceStatistics:'vndb'})` owns Auth, real Access, application,
 database and registered worker. `identitySupport` stages, approves and applies an operator key through actual
 credential effects; the JWK and shared durable SQLite state are mode 0600 in owned tmpfs. Every invocation uses
 ordinary `--source`, `--dump -`, `--state`, `--api`, `--auth`, `--account-key`, `--account` and `--client` arguments.
 The fetch boundary forwards Auth requests to the host handler and kernel requests to `runtime.replay`; replies
 and receipts are never synthesized. `openApiObserver` creates and selects an independent editor candidate and
 sets each exact facts fence through the existing public governance route. Runtime owns the existing media boundary
-and registered worker; these metadata-only records request no media jobs.
+and registered worker; these metadata-only records request no media jobs. The existing `sourceStatistics:'vndb'`
+setup registers the ordinary VNDB CLI's required `source_statistic:write` scope through the actual fixture. It
+also performs its existing public exposure setup; the supplied zero-vote records never call the statistic route.
 
 All provider keys are explicitly synthetic: Bangumi `930001`–`930005`, VNDB `v930001`–`v930005`, Open Library
 `/works/OL930001W`–`/works/OL930005W`, Wikidata `Q930001`–`Q930005`. Titles are generated synthetic text, with only
@@ -53,7 +55,14 @@ used public camel-case fence names at the coordinator boundary and omitted Open 
 correcting those inputs preserved the assertions. Independent risk review corrected the Open Library title
 language expectation to the converter's actual `und`, and found no remaining concrete blocking issue.
 
-Implementation and binding are present. Managed native execution is pending; no native pass, promotion or
+The first managed run at `8374c9f71e` failed: kernel compilation could not resolve the new fixture's package
+import for `SourceId`; runtime then reached VNDB's first CLI invocation and received code 1 (207 assertions,
+0 pass / 1 fail). Log: `.temp/goal/checks/worker-check-2026-10-30T08-53-02.424Z-d7a8c6ab.log`.
+The fixture now uses the same relative conversion type import as adjacent native callers. Source inspection
+identified that the standard VNDB CLI requests `source_statistic:write`, so the existing runtime VNDB setup
+option is required even for a zero-vote metadata journey. No Auth/Access builder or privilege was invented.
+
+Implementation and binding are present. Managed native execution after these fixes is pending; no native pass, promotion or
 main-branch closure is claimed here. The managed log will contain `CLI source reappearance evidence` with actual
 source rows, bootstrap bytes/keys, original and removal receipt anchors, returned candidate IDs and provenance,
 converter modules/revisions, bundle revision/digest and public fence response. No credentials are logged.
