@@ -163,7 +163,8 @@ export const MixedTypes: Story = {
   },
 };
 
-export const Preparing: Story = {
+export const MembersPreparing: Story = {
+  name: 'Members preparing',
   render: () => <PageStory visitor="Signed In" path="/collections/collection-read-preparing" />,
   play: async (context) => {
     await variantReady(context, 'A collection across many kinds of work');
