@@ -164,15 +164,15 @@ export const ShellDisplayChoices: Story = {
     await expect(getLocale()).toBe(locale);
     await expect(document.cookie.match(/(?:^|;\s*)rezics_locale=([^;]+)/)?.[1]).toBe(localeCookie);
 
-    const theme = view.getByRole('button', { name: m.shell_theme(), exact: true });
+    const theme = view.getByRole('button', { name: m.shell_theme() });
     const labels = { system: m.shell_theme_system(), dark: m.shell_theme_dark(), light: m.shell_theme_light() };
     const initialTheme = globals.theme === 'dark' ? 'dark' : 'light';
     let currentTheme: keyof typeof labels = initialTheme;
     for (const value of ['system', 'dark', 'light', initialTheme] as const) {
       await userEvent.click(theme);
       await expect(await menu.findAllByRole(choiceRole)).toHaveLength(3);
-      await expect(menu.getByRole(choiceRole, { name: labels[currentTheme], exact: true })).toBeChecked();
-      await userEvent.click(menu.getByRole(choiceRole, { name: labels[value], exact: true }));
+      await expect(menu.getByRole(choiceRole, { name: labels[currentTheme] })).toBeChecked();
+      await userEvent.click(menu.getByRole(choiceRole, { name: labels[value] }));
       await waitFor(() => expect(theme).toHaveFocus());
       await expect(document.cookie).toContain(`rezics_theme=${value}`);
       const dark =

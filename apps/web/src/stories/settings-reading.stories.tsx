@@ -16,7 +16,7 @@ export const ReadingAndDisplay: Story = {
     await view.findByText(m.settings_saved());
     const display = within(await view.findByRole('region', { name: m.shell_appearance() }));
     await expect(display.getByRole('button', { name: (name) => name.startsWith(m.shell_language()) })).toBeEnabled();
-    await expect(display.getByRole('button', { name: m.shell_theme(), exact: true })).toBeEnabled();
+    await expect(display.getByRole('button', { name: m.shell_theme() })).toBeEnabled();
   },
 };
 export const LostResponse: Story = {

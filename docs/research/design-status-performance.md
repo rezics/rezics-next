@@ -4,7 +4,7 @@ Audit date: 2026-10-30. Source baseline: `5827ec24a05f57299ea50343b540eb81bd849c
 This is a backend design audit, not native acceptance or an adopted replacement contract.
 [Scope](../scope.md) gives Performance no standalone product In row: the
 [Performance Goal](../goals/performance.md) supports every In owner. Search owns discovery,
-Commerce owns Library, Accounts owns APIs, Auth-app and authentication/Access authority, Semantic
+Commerce owns Library, Accounts owns account APIs, Auth-app and authentication/Access authority, Semantic
 owns catalogue/Zone sources, and Content retains notice delivery. Performance owns the website
 account-settings, notices and preferences journeys; Web owns shell, shared patterns, Storybook
 organization and visual review. The three pages below remain cross-cutting capability audits.
