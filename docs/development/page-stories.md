@@ -257,7 +257,7 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 
 | Route                                     | State                   | Viewer           | Desktop | Phone   |
 | ----------------------------------------- | ----------------------- | ---------------- | ------- | ------- |
-| apps/web/src/routes/library/following.tsx | populated               | member           | missing | missing |
+| apps/web/src/routes/library/following.tsx | populated               | member           | apps/web/src/stories/library-following.stories.tsx#SignedIn | apps/web/src/stories/library-following.stories.tsx#SignedIn |
 | apps/web/src/routes/library/following.tsx | populated               | owner or curator | missing | missing |
 | apps/web/src/routes/library/following.tsx | populated               | suspended        | missing | missing |
 | apps/web/src/routes/library/following.tsx | empty                   | member           | missing | missing |

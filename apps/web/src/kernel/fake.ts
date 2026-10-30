@@ -270,7 +270,11 @@ function libraryRecording(
     '/v1/publishedLogs': 'library-published-logs',
   };
   const list = lists[pathname];
-  if (list) return requestedRecording(list, request, recordings);
+  if (list) {
+    if (list === 'library-follows' && new URL(request.url).searchParams.get('cursor') === 'story-hidden-target')
+      return requestedRecording('library-follows-hidden-target', request, recordings);
+    return requestedRecording(list, request, recordings);
+  }
   const collection = /^\/v1\/collections\/([^/]+)(\/members)?$/.exec(pathname);
   if (
     collection?.[1] &&

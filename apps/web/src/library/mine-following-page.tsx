@@ -1,18 +1,18 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { useSession } from '../session/query';
-import { sharedRatio } from '@rezics/ui/cover';
-import { CoverCard, CoverGrid } from '@rezics/ui/cover-card';
-import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
+import { Button } from '@rezics/ui/shadcn/button';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
+import { Menu } from '@rezics/ui/menu';
+import { EllipsisIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { coverSrc } from '../media/cover-src';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { displayLibraryTitle } from './title';
 import { PageHeading } from '../shell/page-heading';
+import { subjectHref } from '../subject/subject-href';
 import type { MineFollow, MineFollowingPage } from './mine-following';
 import { unfollow } from './mine-following-actions';
-import { coverSubject } from './subject-row';
 
 export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
   const { csrfToken } = useSession();
@@ -59,69 +59,80 @@ export function MineFollowingPageView({ page }: { page: MineFollowingPage }) {
           {groups.map(({ type, label }) => {
             const items = active.filter((follow) => follow.targetType === type);
             if (!items.length) return null;
-            const subjects = items.map((follow) =>
-              type === 'subject' ? coverSubject(follow.target) : { ...coverSubject(follow.target), types: [] },
-            );
             return (
               <section key={type} className="space-y-3" aria-labelledby={`following-${type}`}>
                 <h2 id={`following-${type}`} className="text-xl font-semibold">
                   {label}
                 </h2>
-                <CoverGrid ratio={sharedRatio(subjects)}>
-                  {items.map((follow, index) => {
-                    const subject = subjects[index]!;
+                <ul className="list-none space-y-1">
+                  {items.map((follow) => {
                     const title = follow.target
                       ? displayLibraryTitle(follow.target.label, getLocale())
-                      : { text: subject.title, lang: undefined };
-                    const path = type === 'subject' ? 'subjects' : 'collections';
+                      : { text: m.library_subject_unavailable(), lang: undefined };
+                    const href =
+                      follow.target && type === 'subject'
+                        ? subjectHref({ id: follow.target.id, label: title.text }, getLocale()).href
+                        : follow.target && type === 'collection' && canReadCollection
+                          ? `/${getLocale()}/collections/${encodeURIComponent(follow.target.id)}`
+                          : undefined;
+                    const reason =
+                      follow.reason === 'library'
+                        ? m.library_follow_reason_library()
+                        : follow.reason === 'membership'
+                          ? m.library_follow_reason_membership()
+                          : undefined;
                     return (
-                      <CoverCard
+                      <ListRow
                         key={`${type}:${follow.targetId}`}
-                        {...(follow.target && type !== 'space' && (type !== 'collection' || canReadCollection)
-                          ? { href: `/${getLocale()}/${path}/${encodeURIComponent(follow.target.id)}` }
-                          : {})}
-                        title={title.text}
-                        {...(title.lang ? { titleLang: title.lang } : {})}
-                        cover={{
-                          subject,
-                          cover: follow.target?.cover ?? null,
-                          src: coverSrc,
-                          labels: {
-                            withheld: m.thread_cover_withheld(),
-                            reveal: m.thread_cover_reveal(),
-                            credit: m.thread_cover_credit(),
-                            via: m.thread_cover_via(),
-                          },
-                        }}
-                        secondary={
-                          type === 'subject'
-                            ? follow.target?.typeLabel
-                            : type === 'collection'
-                              ? m.library_following_kind_collection()
-                              : m.library_following_kind_space()
-                        }
-                        state={
-                          follow.reason === 'library'
-                            ? m.library_follow_reason_library()
-                            : follow.reason === 'membership'
-                              ? m.library_follow_reason_membership()
-                              : undefined
-                        }
-                        menuLabel={m.library_follow_more_actions({ title: subject.title })}
-                        menu={
-                          canUnfollow ? (
-                            <DropdownMenuItem
-                              disabled={!csrfToken || pending !== null}
-                              onClick={() => void submit(follow)}
-                            >
-                              {m.library_follow_unfollow()}
-                            </DropdownMenuItem>
-                          ) : undefined
-                        }
-                      />
+                        className="flex min-h-16 items-center gap-4 rounded-xl px-4 py-3"
+                      >
+                        {href ? <ListRowLink href={href} lang={title.lang}>{title.text}</ListRowLink> : null}
+                        <div className="min-w-0 flex-1">
+                          <p
+                            aria-hidden={href ? 'true' : undefined}
+                            lang={title.lang}
+                            className="break-words font-medium"
+                          >
+                            {title.text}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {type === 'subject'
+                              ? follow.target?.typeLabel ?? label
+                              : type === 'collection'
+                                ? m.library_following_kind_collection()
+                                : m.library_following_kind_space()}
+                          </p>
+                          {reason ? <p className="text-sm text-muted-foreground">{reason}</p> : null}
+                        </div>
+                        {canUnfollow ? (
+                          <ListRowControl className="shrink-0">
+                            <Menu
+                              title={m.library_follow_more_actions({ title: title.text })}
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={m.library_follow_more_actions({ title: title.text })}
+                                  disabled={!csrfToken || pending !== null}
+                                >
+                                  <EllipsisIcon aria-hidden="true" />
+                                </Button>
+                              }
+                              entries={[
+                                {
+                                  type: 'item',
+                                  label: m.library_follow_unfollow(),
+                                  disabled: !csrfToken || pending !== null,
+                                  onSelect: () => void submit(follow),
+                                },
+                              ]}
+                            />
+                          </ListRowControl>
+                        ) : null}
+                      </ListRow>
                     );
                   })}
-                </CoverGrid>
+                </ul>
               </section>
             );
           })}

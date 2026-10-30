@@ -290,11 +290,17 @@ async function startStack(): Promise<
   };
   const memorySampler = setInterval(sampleMemory, 250);
   const accounts = new Map<string, Promise<{ accountId: string; bearer: string }>>();
+  let governorScopes: readonly string[] | undefined;
   const requests: NativeKernelRequest[] = [];
   const getAccount = (persona: string) => {
     let account = accounts.get(persona);
     if (!account) {
-      account = driver!.fixtures.person(persona);
+      account =
+        persona === 'governor'
+          ? governorScopes
+            ? driver!.fixtures.person(persona, { scopes: governorScopes })
+            : Promise.reject(new Error('Native governance credentials are not initialized'))
+          : driver!.fixtures.person(persona);
       accounts.set(persona, account);
     }
     return account;
@@ -519,7 +525,9 @@ async function startStack(): Promise<
     const kernelOrigin = server.url.origin;
     const webOrigin = `http://127.0.0.1:${await freePort()}`;
     const { actionCatalogue } = await import('../../../../services/kernel/src/http/request.ts');
-    const scopes = ['openid', 'offline_access', ...actionCatalogue(sourceApp).keys()];
+    const actionScopes = [...actionCatalogue(sourceApp).keys()];
+    governorScopes = [...actionScopes.filter((scope) => scope !== 'media:complete'), 'gate:any'];
+    const scopes = ['openid', 'offline_access', ...actionScopes];
     const key = await generateKeyPair('ES256', { extractable: true });
     const kid = `native-web-${randomBytes(8).toString('hex')}`;
     await auth.service.internal.registerWebsiteClient({
@@ -575,6 +583,7 @@ async function startStack(): Promise<
         publicOrigin,
         {
           ...authEnvironment,
+          SITE_ORIGINS: [...new Set([webOrigin, publicOrigin])].join(','),
           ...(authPageOrigin ? { AUTH_ISSUER: authPageOrigin } : {}),
         },
         (child, stateDirectory) => reportOwnedProcessGroup('web Worker', child, stateDirectory),

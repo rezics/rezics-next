@@ -448,10 +448,30 @@ export const libraryCopiesReady = libraryReady(
   () => m.library_copy_heading(),
   () => libraryCopiesRecording.copies[0]?.subject.label,
 );
-export const libraryFollowingReady = libraryReady(
-  () => m.library_following_heading(),
-  () => libraryFollowsRecording.follows[0]?.target.label,
-);
+
+async function followingActionReady(trigger: HTMLElement) {
+  trigger.focus();
+  await userEvent.keyboard('{Enter}');
+  const label = m.library_follow_unfollow();
+  if (window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches) {
+    const sheet = await within(document.body).findByRole('dialog');
+    await expect(await within(sheet).findByRole('button', { name: label })).toBeVisible();
+  } else {
+    await expect(await within(document.body).findByRole('menuitem', { name: label })).toBeVisible();
+  }
+  await userEvent.keyboard('{Escape}');
+}
+
+export async function libraryFollowingReady(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = viewOf(context);
+  const title = libraryFollowsRecording.follows[0]?.target.label;
+  if (!title) throw new Error('The recorded Following page has no available target.');
+  await view.findByRole('heading', { level: 1, name: m.library_following_heading() });
+  await view.findAllByText(title, { exact: false });
+  const trigger = await view.findByRole('button', { name: m.library_follow_more_actions({ title }) });
+  await followingActionReady(trigger);
+}
 export async function libraryProgressReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const view = viewOf(context);
