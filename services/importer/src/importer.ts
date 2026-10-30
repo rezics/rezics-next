@@ -609,7 +609,7 @@ export class Importer {
         }
       }
     }
-    if (subject && conversion?.sourceStatistic) {
+    if (subject && conversion?.sourceStatistic && !omissions.some((o) => o.field_group === 'facts')) {
       const { source, ...value } = conversion.sourceStatistic;
       const writeSourceStatistic = this.options.transport.writeSourceStatistic;
       if (!writeSourceStatistic) throw new Error('Source statistic transport is unavailable');

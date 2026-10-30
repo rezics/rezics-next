@@ -78,6 +78,22 @@ The same pipeline works for the decompressed VNDB ustar archive. VNDB table path
 
 For the pinned VNDB dump, `c_average` and `c_votecount` replace the VNDB source statistic on each visual novel through `PUT /v1/subjects/{subjectId}/source-statistics/vndb`. The mean is `c_average / 100` on a 1 to 10 scale, as of the dump date, under ODbL-1.0 with attribution `VNDB`. A statistic-only refresh can retain the same native entry revision and every semantic candidate. The completed input snapshot advances only after the required statistic write is acknowledged and bounded reconciliation retains every proposal; a failed or uncertain write leaves the prior completed baseline intact. The Bayesian `c_rating` is omitted, and no source statistic creates native votes. Bangumi's `score`, `score_details` and `rank` remain omitted because its licence covers entry information and not ratings.
 
+Before publishing a source statistic, the importer checks its already obtained current facts omission for the
+exact configured source and external ID, including previously bound VNDB records. A facts fence suppresses that
+statistic write; metadata still completes through ordinary omission/reconciliation without acknowledging a
+statistic effect. Cover and summary groups remain independent. Every refresh reads current fences before the
+unchanged shortcut, and prepared bulk dispatch retains its late fence check. This is a client publication guard:
+clearing stored statistics and enforcing final disclosure belong to Content and require separate native proof.
+The frozen [caller test](tests/source-statistic-fence.test.ts) binds first, then fences changed and unchanged
+refreshes through the production importer and source registration with a fake external transport.
+[Source-statistic tests](tests/source-statistics.test.ts) retain public-route, acknowledgement and retry coverage.
+
+### Cost: Fenced statistic refresh
+
+- Touches: the already obtained bounded facts-omission result for the exact tuple; the existing positive-statistic HTTP effect only when unfenced.
+- Bound: one in-memory omission lookup within at most three groups, no additional SQL or fence request, and zero statistic HTTP writes for the fenced tuple.
+- Growth check: the production importer/registration caller test above proves suppression; existing source-statistic native/cost suites retain their independent scope. This guard adds no native growth measurement.
+
 The native archive binding and real account-key CLI caller are exercised by
 `services/kernel/test/imports/vndb-statistics-outcomes.test.ts` and `vndb-cli-native.test.ts`.
 They use synthetic COPY rows with the pinned headers, retain the native revision and statistic fields,
