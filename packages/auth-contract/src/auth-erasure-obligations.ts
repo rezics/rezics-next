@@ -37,6 +37,7 @@ export type AuthErasureObligationPage = Readonly<{
   pending: readonly Exclude<AuthErasureObligationPoint, { state: 'ready' } | { state: 'absent' }>[];
   next: AuthErasureObligationCursor | null;
   state: 'initializing' | 'pending' | 'page' | 'partition-end';
+  reason?: 'source-unavailable' | 'original-floor-unavailable';
 }>;
 export type AuthErasureObligationVerification = Readonly<{
   cutId: string;

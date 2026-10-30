@@ -1,9 +1,11 @@
+import { createAuthErasureObligationBindings } from './auth-erasure-obligations.ts';
 import { accessClock } from './access-clock.ts';
 import { systemClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type {
   AuthErasureProofPorts,
+  AuthErasureObligationPorts,
   AccessAccount,
   ProvisioningReceiptMetadata,
   EffectAuthorization,
@@ -129,7 +131,7 @@ function translate(account: Account | null, mode: ReadMode = 'open'): AccessAcco
  */
 export function createAuthBindings(
   config: { pool: Pool; access?: Access } & AuthBindingCapabilities,
-): PasskeyTrustedAccessPorts {
+): PasskeyTrustedAccessPorts & AuthErasureObligationPorts {
   const {
     pool,
     verifyPendingIdentity,
@@ -310,6 +312,7 @@ export function createAuthBindings(
     return result;
   }
   return {
+    ...createAuthErasureObligationBindings(pool),
     passkeys: true,
     async readAuthErasureBarrier(id) {
       if (!config.readAuthErasureBarrier) throw new AuthBindingUnavailableError('readAuthErasureBarrier');

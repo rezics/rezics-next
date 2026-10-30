@@ -2967,6 +2967,54 @@ producer/minimizer closure; this implementation emits no participant ACK and
 introduces no final-ACK dependency cycle. The global participant inventory and
 Search's explicitly undelivered cleanup are preserved.
 
+### Auth obligation discovery
+
+`createAuthBindings` directly composes `createAuthErasureObligationBindings(pool)`.
+The dependency-free literal types live in
+`packages/auth-contract/src/auth-erasure-obligations.ts`. This fixed Auth capability
+accepts no actor, participant, HTTP proof or cleanup acknowledgement. The original
+barrier/source readers and their proof phases retain their existing ABI and meaning.
+
+The deferred native `access.erasure` producer captures the immutable route, account,
+version and exact PostgreSQL T together with the native tombstone receipt's original
+`minimum_authn_epoch`. Both commit atomically; later floors cannot replace that
+captured floor. All producers, including older native lifecycle callers, pass the
+same trigger. Each partition's native source owns a monotonic ordinal and retained
+index. The existing `core.partition` writer lock orders admission, bootstrap and
+cut capture; erasure does not take a global counter or mutex.
+
+A replayable cut ID locates a native header. Pages visit partitions 0–4095 in order,
+one per call, and retain each immutable high-water row at Source. Callers carry only
+`{partition,afterOrdinal}`. Bootstrap drains at most 48 preinstallation roots per
+call through the partial index of unindexed erasures, never living accounts. This
+installation-only walk uses the erasure primary key; the delivered feed always
+seeks its native ordinal. The retained native tombstone receipt supplies historical
+floor evidence. Missing/ambiguous original receipts remain permanent pending
+obligations, including their original tuple. Current floors and Auth `accepted_at`
+are never substitutes. Initializing, empty and exhausted pages alone prove nothing.
+No cut partition is sealed while a missing original floor remains.
+
+Every request has an explicit absolute deadline, including connection queueing,
+statement and lock waits. Pages contain at most 48 obligations, each at most 1 KiB,
+and at most 64 KiB overall. Point reads recheck the exact root and terminal/fenced
+account under current native ownership. Cut verification reads one retained
+partition, rechecks source generation, owner, epoch, position and live head, and
+reports current only after all 4096 partitions have native seals. Auth must retain
+its own consumed cursors and verify every partition; no header is Source proof.
+New committed erasures necessarily enter the same producer/feed before becoming
+visible. A later head invalidates current verification without changing an old cut;
+reconcile a new cut to consume that tail. Ordinary current sign-in still checks
+Access's live account fence, including during restore admission cutover.
+
+Source generation/ownership epoch and inventory/producer versions are independent
+of account barrier versions. A missing, moved, fenced or changed-epoch source stays
+pending; lineage recovery cannot relabel retained source rows or reset completed
+roots. The port assumes the independently current Access source required by the
+Auth custody contract. It does not certify recovery of an older Access database,
+physical backup/restore lineage, external receiving closure, Auth native replay,
+consent due evidence or final cleanup. Those authorities remain with their owners;
+this native discovery feed cannot release an isolated restore by itself.
+
 ## Delivered preference history coverage
 
 `createPreferenceCommands.setPreferences` is the first converted command producer. Before reading or changing

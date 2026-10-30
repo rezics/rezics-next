@@ -1,3 +1,4 @@
+import type { AuthErasureObligationPorts } from './auth-erasure-obligations.ts';
 export type * from './auth-erasure-obligations.ts';
 export * from './management';
 
@@ -228,7 +229,7 @@ export type AuthErasureProofPorts = {
 };
 
 /** Internal application ports. Never construct these results from HTTP fields. */
-interface SharedAccessPorts extends AuthErasureProofPorts {
+interface SharedAccessPorts extends AuthErasureProofPorts, Partial<AuthErasureObligationPorts> {
   /** Sign-in may expose a suspended human's state privately for a refusal after credential verification. */
   readAccount(accountId: string, purpose?: 'signin'): Promise<AccessAccount | null>;
   /** Deleted and fenced accounts only. Ordinary reads stay empty for those rows. */
