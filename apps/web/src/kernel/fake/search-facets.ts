@@ -34,19 +34,15 @@ async function storySearch(request: Request): Promise<KernelRecording | undefine
   if (body.text === emptySearch.query) return emptySearch as KernelRecording;
 }
 
-async function storyFacets(request: Request): Promise<KernelRecording | undefined> {
-  let body: { facets?: { property: string }[] };
-  try {
-    body = (await request.json()) as { facets?: { property: string }[] };
-  } catch {
-    return;
-  }
+function storyFacets(body: Record<string, unknown>): KernelRecording | undefined {
+  const requested = Array.isArray(body.facets) ? body.facets.filter(isRecord) : [];
+  if (requested.some((facet) => facet.property === 'type')) return;
   return {
     status: 200,
-    facets: (body.facets ?? []).map(({ property }) => ({
-      property,
-      values: storyValues[property] ?? [],
-    })),
+    facets: requested.map((facet) => {
+      const property = typeof facet.property === 'string' ? facet.property : '';
+      return { property, values: storyValues[property] ?? [] };
+    }),
     as_of: '2026-10-26T18:21:56.818Z',
   };
 }
@@ -93,14 +89,35 @@ function responseFromRecording(recording: KernelRecording, requested: Record<str
   } as FacetsResponse;
 }
 
-function localized(response: FacetsResponse, languages: readonly string[]): FacetsResponse {
+function definitionTypeLabels(
+  recordings: Record<string, KernelRecording>,
+  type: string,
+): Record<string, string> | undefined {
+  const release = recordings['definitions-release']?.release;
+  if (!isRecord(release) || !isRecord(release.types)) return;
+  const definition = release.types[type];
+  if (!isRecord(definition) || !isRecord(definition.labels)) return;
+  const labels = Object.fromEntries(
+    Object.entries(definition.labels).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
+  return Object.keys(labels).length > 0 ? labels : undefined;
+}
+
+function localized(
+  response: FacetsResponse,
+  languages: readonly string[],
+  recordings: Record<string, KernelRecording>,
+): FacetsResponse {
   return {
     ...response,
     facets: response.facets.map((facet) => ({
       ...facet,
       values: facet.values.map((value) => ({
         ...value,
-        labels: chosenLabels(value.labels, languages),
+        labels: chosenLabels(
+          facet.property === 'type' ? (definitionTypeLabels(recordings, value.value) ?? value.labels) : value.labels,
+          languages,
+        ),
       })),
     })),
   };
@@ -175,17 +192,17 @@ export const routes: FakeRoute[] = [
     method: 'POST',
     path: '/v1/subjects:facets',
     story: async ({ request, recordings }) => {
-      const story = await storyFacets(request);
-      if (story) return story;
       const body = await requestBody(request);
       if (!body) return undefined;
+      const story = storyFacets(body);
+      if (story) return story;
       const languages = languageList(body.languages);
       if (languages.length === 0 || !Array.isArray(body.facets)) return undefined;
       const requested = body.facets.filter(isRecord);
       if (!requested.some((facet) => facet.property === 'type')) return undefined;
       const recording = recordings['search-facets'];
       if (!recording) return undefined;
-      const response = localized(responseFromRecording(recording, requested), languages);
+      const response = localized(responseFromRecording(recording, requested), languages, recordings);
       return { ...withoutCounts(response), status: recording.status };
     },
     fixture: async ({ request, recordings, fixtures }) => {
