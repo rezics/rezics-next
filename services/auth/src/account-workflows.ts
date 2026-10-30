@@ -272,21 +272,36 @@ export function clientAuthority(
         }
         const rows = (
           await connection.query<{ account_id: string; traversal_ordinal: string }>(
-            `WITH RECURSIVE page(account_id,traversal_ordinal,depth) AS (
-               (SELECT account_id,traversal_ordinal,1 FROM auth_consent
-                WHERE client_id=$1 AND traversal_ordinal>$2
-                ORDER BY client_id,traversal_ordinal LIMIT 1)
+            `WITH RECURSIVE batches(batch_no,boundary,items) AS (
+               SELECT 1,COALESCE(batch.last_ordinal,$2::bigint),batch.items
+               FROM LATERAL (
+                 SELECT max(page.traversal_ordinal) AS last_ordinal,
+                        COALESCE(jsonb_agg(jsonb_build_array(page.account_id,page.traversal_ordinal)
+                          ORDER BY page.traversal_ordinal),'[]'::jsonb) AS items
+                 FROM (
+                   SELECT account_id,traversal_ordinal FROM auth_consent
+                   WHERE client_id=$1 AND traversal_ordinal>$2
+                   ORDER BY client_id,traversal_ordinal LIMIT 8
+                 ) page
+               ) batch
                UNION ALL
-               SELECT next.account_id,next.traversal_ordinal,page.depth+1
-               FROM page
+               SELECT batches.batch_no+1,COALESCE(batch.last_ordinal,batches.boundary),batch.items
+               FROM batches
                CROSS JOIN LATERAL (
-                 SELECT account_id,traversal_ordinal FROM auth_consent
-                 WHERE client_id=$1 AND traversal_ordinal>page.traversal_ordinal
-                 ORDER BY client_id,traversal_ordinal LIMIT 1
-               ) next
-               WHERE page.depth<$3
+                 SELECT max(page.traversal_ordinal) AS last_ordinal,
+                        COALESCE(jsonb_agg(jsonb_build_array(page.account_id,page.traversal_ordinal)
+                          ORDER BY page.traversal_ordinal),'[]'::jsonb) AS items
+                 FROM (
+                   SELECT account_id,traversal_ordinal FROM auth_consent
+                   WHERE client_id=$1 AND traversal_ordinal>batches.boundary
+                   ORDER BY client_id,traversal_ordinal LIMIT 8
+                 ) page
+               ) batch
+               WHERE batches.batch_no<(($3::integer+7)/8)
              )
-             SELECT account_id,traversal_ordinal FROM page ORDER BY traversal_ordinal`,
+             SELECT (item->>0) AS account_id,(item->>1) AS traversal_ordinal
+             FROM batches CROSS JOIN LATERAL jsonb_array_elements(batches.items) item
+             ORDER BY (item->>1)::bigint LIMIT $3`,
             [input.clientId, after, input.limit + 1],
           )
         ).rows;
