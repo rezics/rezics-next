@@ -46,7 +46,10 @@ export function patchTerms(current: Terms, input: unknown): { terms: Terms; chan
       const probe = checkSubjectStructure({
         type: '',
         labels: { en: 'Validation' },
-        [field]: { ...(field === 'labels' ? { en: 'Validation' } : {}), [language]: value ?? (field === 'aliases' ? [] : 'Validation') },
+        [field]: {
+          ...(field === 'labels' ? { en: 'Validation' } : {}),
+          [language]: value ?? (field === 'aliases' ? [] : 'Validation'),
+        },
       });
       errors.push(...probe.violations);
       const target = terms[field] as Record<string, unknown>;

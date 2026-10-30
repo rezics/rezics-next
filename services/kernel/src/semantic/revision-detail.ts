@@ -25,8 +25,23 @@ type Reading = {
 export type RevisionChange =
   | { kind: 'record' }
   | { kind: 'candidate'; candidate: string; property: string; context: string; reading: Reading }
-  | { kind: 'decision'; candidate: string; property: string; context: string; head: number; verdict: 'accept' | 'reject' | 'abstain'; reading: Reading }
-  | { kind: 'adoption'; property: string; context: string; head: number; mode: 'inherit' | 'replace' | 'suppress'; selection: Selection[] };
+  | {
+      kind: 'decision';
+      candidate: string;
+      property: string;
+      context: string;
+      head: number;
+      verdict: 'accept' | 'reject' | 'abstain';
+      reading: Reading;
+    }
+  | {
+      kind: 'adoption';
+      property: string;
+      context: string;
+      head: number;
+      mode: 'inherit' | 'replace' | 'suppress';
+      selection: Selection[];
+    };
 export type RevisionDetail = {
   subject: string;
   revision: { revision: number; kind: string; release: string };
@@ -56,23 +71,35 @@ function relatedIds(statement: unknown, release: Release): string[] {
     references?: { parts: { property: string; value: { type: string; content?: unknown } }[] }[];
   };
   const ids = new Set<string>();
-  for (const snak of [body, ...(body.qualifiers ?? []), ...(body.references ?? []).flatMap((reference) => reference.parts)]) {
-    if (snak.property && release.properties[snak.property]?.datatype === 'wikibase-item' &&
-        snak.value?.type === 'value' && typeof snak.value.content === 'string' && routeOf(snak.value.content) !== null)
+  for (const snak of [
+    body,
+    ...(body.qualifiers ?? []),
+    ...(body.references ?? []).flatMap((reference) => reference.parts),
+  ]) {
+    if (
+      snak.property &&
+      release.properties[snak.property]?.datatype === 'wikibase-item' &&
+      snak.value?.type === 'value' &&
+      typeof snak.value.content === 'string' &&
+      routeOf(snak.value.content) !== null
+    )
       ids.add(snak.value.content);
   }
   return [...ids];
 }
 
 /** Immutable change identity with current disclosure, never a historical Item or an actor/basis projection. */
-export async function readRevisionDetail(pool: Pool, input: {
-  subject: string;
-  revision: number;
-  routeKey: Uint8Array;
-  authorize: Check;
-  authorizeContext: (context: string) => Promise<Check>;
-  authorizeRelated: (subject: string) => Promise<Check>;
-}): Promise<RevisionDetail & { component: SubjectComponent }> {
+export async function readRevisionDetail(
+  pool: Pool,
+  input: {
+    subject: string;
+    revision: number;
+    routeKey: Uint8Array;
+    authorize: Check;
+    authorizeContext: (context: string) => Promise<Check>;
+    authorizeRelated: (subject: string) => Promise<Check>;
+  },
+): Promise<RevisionDetail & { component: SubjectComponent }> {
   const route = routeOf(input.subject);
   if (route === null || !Number.isSafeInteger(input.revision) || input.revision < 1 || input.revision > 2147483647)
     throw new SubjectNotFoundError();
@@ -85,8 +112,11 @@ export async function readRevisionDetail(pool: Pool, input: {
     const rows = listed(await readChange.run(client, { ...parameters, kind: revision.kind })) as ChangeRow[];
     // Multi-record or legacy metadata with no exact relation has only the nonpersonal revision skeleton.
     const change = rows.length === 1 ? rows[0]! : null;
-    const candidates = change?.candidate ? [change.candidate] : change?.kind === 'adoption'
-      ? (change.selection as Selection[]).map((entry) => entry.candidate) : [];
+    const candidates = change?.candidate
+      ? [change.candidate]
+      : change?.kind === 'adoption'
+        ? (change.selection as Selection[]).map((entry) => entry.candidate)
+        : [];
     const candidateRows = listed(await readCandidate.run(client, { ...parameters, candidate_ids: candidates }));
     if (candidateRows.length !== candidates.length) throw new SubjectNotFoundError();
     const statements = [];
@@ -110,7 +140,9 @@ export async function readRevisionDetail(pool: Pool, input: {
     if (!release) throw new SubjectNotFoundError();
     releases.set(digest, release);
   }
-  const targets = [...new Set(first.statements.flatMap((statement) => relatedIds(statement.body, releases.get(statement.release)!)))];
+  const targets = [
+    ...new Set(first.statements.flatMap((statement) => relatedIds(statement.body, releases.get(statement.release)!))),
+  ];
   if (targets.length > 256) throw new SubjectNotFoundError();
   const redirects = await withReadTransaction(pool, async (client) => {
     const states = await loadRelated({ query: client.query.bind(client) }, targets);
@@ -121,22 +153,41 @@ export async function readRevisionDetail(pool: Pool, input: {
   for (const id of new Set([...targets, ...terminals])) related.set(id, await input.authorizeRelated(id));
   return withReadTransaction(pool, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
-    if (!partition || (await readVisibility.run(client, parameters))?.visibility !== 'visible' || !(await input.authorize(client)))
+    if (
+      !partition ||
+      (await readVisibility.run(client, parameters))?.visibility !== 'visible' ||
+      !(await input.authorize(client))
+    )
       throw new SubjectNotFoundError();
-    if (contextCheck && (!await readContext.run(client, { route: routeOf(context)!, context_id: context }) || !await contextCheck(client)))
+    if (
+      contextCheck &&
+      (!(await readContext.run(client, { route: routeOf(context)!, context_id: context })) ||
+        !(await contextCheck(client)))
+    )
       throw new SubjectNotFoundError();
     for (const candidate of first.candidates)
       if (!(await readCandidateDisclosure(client, { subject: input.subject, candidate }))?.disclosed)
         throw new SubjectNotFoundError();
-    const sources = await candidateSources(client, first.candidates.map((candidate) => ({ route, subject_id: input.subject, candidate_id: candidate })));
-    if ((await fencedIds(client, input.routeKey, first.candidates.map((id) => ({ id, source: sources.get(`${input.subject}\n${id}`) ?? null })))).size)
+    const sources = await candidateSources(
+      client,
+      first.candidates.map((candidate) => ({ route, subject_id: input.subject, candidate_id: candidate })),
+    );
+    if (
+      (
+        await fencedIds(
+          client,
+          input.routeKey,
+          first.candidates.map((id) => ({ id, source: sources.get(`${input.subject}\n${id}`) ?? null })),
+        )
+      ).size
+    )
       throw new SubjectNotFoundError();
     const relatedClient = { query: client.query.bind(client) };
     const states = await loadRelated(relatedClient, targets);
     const terminalStates = await loadRelated(relatedClient, terminals);
     for (const [id, check] of related) {
       const state = states.get(id) ?? terminalStates.get(id);
-      if (state?.visibility !== 'visible' || !await check(client)) throw new SubjectNotFoundError();
+      if (state?.visibility !== 'visible' || !(await check(client))) throw new SubjectNotFoundError();
       if (targets.includes(id) ? state.redirect !== redirects.get(id) : state.redirect !== null)
         throw new SubjectNotFoundError();
     }
@@ -147,13 +198,33 @@ export async function readRevisionDetail(pool: Pool, input: {
       const decision = await currentAcceptance(client, input.subject, candidate, context);
       const view = await slotView(client, input.subject, row.property, context, {}, row.slot);
       const current = view.facts.find((fact) => fact.statement_id === candidate);
-      const reading: Reading = { decision, selected: current !== undefined, rank: current ? (current.body as { rank: Reading['rank'] }).rank ?? 'normal' : null };
-      change = row.kind === 'candidate'
-        ? { kind: 'candidate', candidate, property: row.property, context, reading }
-        : { kind: 'decision', candidate, property: row.property, context, head: row.head!, verdict: row.verdict as 'accept' | 'reject' | 'abstain', reading };
+      const reading: Reading = {
+        decision,
+        selected: current !== undefined,
+        rank: current ? ((current.body as { rank: Reading['rank'] }).rank ?? 'normal') : null,
+      };
+      change =
+        row.kind === 'candidate'
+          ? { kind: 'candidate', candidate, property: row.property, context, reading }
+          : {
+              kind: 'decision',
+              candidate,
+              property: row.property,
+              context,
+              head: row.head!,
+              verdict: row.verdict as 'accept' | 'reject' | 'abstain',
+              reading,
+            };
     } else if (row?.kind === 'adoption') {
       // The immutable selection describes this adoption only; it never asserts it is the current reading.
-      change = { kind: 'adoption', property: row.property, context, head: row.head!, mode: row.mode as 'inherit' | 'replace' | 'suppress', selection: row.selection as Selection[] };
+      change = {
+        kind: 'adoption',
+        property: row.property,
+        context,
+        head: row.head!,
+        mode: row.mode as 'inherit' | 'replace' | 'suppress',
+        selection: row.selection as Selection[],
+      };
     }
     return {
       subject: input.subject,

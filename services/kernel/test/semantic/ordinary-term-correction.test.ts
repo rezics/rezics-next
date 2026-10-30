@@ -9,22 +9,36 @@ const f = await createDeletionFixture();
 beforeAll(f.setup);
 afterAll(f.close);
 
-async function patch(subject: string, revision: number, body: unknown, key = `"${randomUUID()}"`, persona: 'owner' | 'stranger' = 'owner') {
-  const response = await f.kernel.handle(new Request(`http://kernel.test/v1/subjects/${subject}/terms`, {
-    method: 'PATCH',
-    headers: {
-      authorization: `Bearer ${await f.bearer(f.accounts[persona], f.actions)}`,
-      'content-type': 'application/json', 'idempotency-key': key, 'if-match': `"${revision}"`,
-    },
-    body: JSON.stringify(body),
-  }));
+async function patch(
+  subject: string,
+  revision: number,
+  body: unknown,
+  key = `"${randomUUID()}"`,
+  persona: 'owner' | 'stranger' = 'owner',
+) {
+  const response = await f.kernel.handle(
+    new Request(`http://kernel.test/v1/subjects/${subject}/terms`, {
+      method: 'PATCH',
+      headers: {
+        authorization: `Bearer ${await f.bearer(f.accounts[persona], f.actions)}`,
+        'content-type': 'application/json',
+        'idempotency-key': key,
+        'if-match': `"${revision}"`,
+      },
+      body: JSON.stringify(body),
+    }),
+  );
   return { status: response.status, headers: response.headers, body: await response.json() };
 }
 
 test('term patch omission, null and alias replacement reuse native validation and strong revision syntax', () => {
   const current = { labels: { en: 'Book', ja: '本' }, descriptions: { en: 'Description' }, aliases: { en: ['Old'] } };
   const result = patchTerms(current, { labels: { ja: null, fr: 'Livre' }, aliases: { en: ['New'] } });
-  expect(result.terms).toEqual({ labels: { en: 'Book', fr: 'Livre' }, descriptions: current.descriptions, aliases: { en: ['New'] } });
+  expect(result.terms).toEqual({
+    labels: { en: 'Book', fr: 'Livre' },
+    descriptions: current.descriptions,
+    aliases: { en: ['New'] },
+  });
   expect(current.labels.ja).toBe('本');
   expect(() => patchTerms(current, { labels: { en: null, ja: null } })).toThrow();
   expect(() => patchTerms(current, { descriptions: { INVALID: null } })).toThrow();
@@ -37,7 +51,10 @@ test('term patch omission, null and alias replacement reuse native validation an
 
 test('Ordinary multilingual term correction and safe change explanation connect the catalogue editor back to the real reader', async () => {
   const created = await f.call('POST', '/v1/subjects', 'owner', {
-    type: 'schema:Book', labels: { en: 'Book', ja: '本' }, descriptions: { en: 'Description' }, aliases: { en: ['Old'] },
+    type: 'schema:Book',
+    labels: { en: 'Book', ja: '本' },
+    descriptions: { en: 'Description' },
+    aliases: { en: ['Old'] },
   });
   f.status(created, 201);
   const subject = created.body.subject.id as string;
@@ -50,7 +67,13 @@ test('Ordinary multilingual term correction and safe change explanation connect 
   expect(changed.headers.get('rezics-session-token')).toBeTruthy();
   await f.caughtUp(subject);
   const current = await f.current(subject);
-  expect(current).toMatchObject({ revision: 2, type: 'schema:Book', labels: { en: 'Book', fr: 'Livre' }, descriptions: { en: 'Description' }, aliases: { en: ['New', 'Another'] } });
+  expect(current).toMatchObject({
+    revision: 2,
+    type: 'schema:Book',
+    labels: { en: 'Book', fr: 'Livre' },
+    descriptions: { en: 'Description' },
+    aliases: { en: ['New', 'Another'] },
+  });
   expect(current.labels).not.toHaveProperty('ja');
   expect((await patch(subject, 1, { descriptions: { en: null } })).status).toBe(412);
   expect((await patch(subject, 2, {})).body).toEqual({ subject, revision: 2 });
@@ -62,9 +85,13 @@ test('Ordinary multilingual term correction and safe change explanation connect 
   expect((await f.current(subject)).revision).toBe(3);
   const detail = await f.call('GET', `/v1/subjects/${subject}/revisions/2`, 'owner');
   f.status(detail, 200);
-  expect(detail.body.change).toEqual({ kind: 'terms', fields: [
-    { field: 'labels', languages: ['fr', 'ja'] }, { field: 'aliases', languages: ['en'] },
-  ] });
+  expect(detail.body.change).toEqual({
+    kind: 'terms',
+    fields: [
+      { field: 'labels', languages: ['fr', 'ja'] },
+      { field: 'aliases', languages: ['en'] },
+    ],
+  });
 });
 
 test('term correction conceals nonvisible subjects, rejects derived Account terms and reauthorizes replay', async () => {
@@ -74,7 +101,9 @@ test('term correction conceals nonvisible subjects, rejects derived Account term
   expect((await patch(subject, 1, body, key)).status).toBe(200);
   expect((await patch(subject, 2, body, undefined, 'stranger')).status).toBe(403);
   await ensureAccountAgent(f.pool, { account: f.accounts.owner, kind: 'person', name: 'Account name' });
-  expect((await patch(accountAgentId(f.accounts.owner), 1, { descriptions: { en: 'Not ordinary terms' } })).status).toBe(403);
+  expect(
+    (await patch(accountAgentId(f.accounts.owner), 1, { descriptions: { en: 'Not ordinary terms' } })).status,
+  ).toBe(403);
   const hidden = await f.call('POST', `/v1/subjects/${subject}:takedown`, 'platform', {
     notice: { complaint: 'Subject removal', received_at: f.clock().toISOString(), scope: '/' },
   });

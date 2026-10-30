@@ -54,7 +54,12 @@ import {
   readStatementCandidate,
   readSubjectVisibility,
 } from '../moderation.ts';
-import { ContextNotFoundError, editorialContextAnchor, globalContextAnchor, publicContextEligibility } from '../context.ts';
+import {
+  ContextNotFoundError,
+  editorialContextAnchor,
+  globalContextAnchor,
+  publicContextEligibility,
+} from '../context.ts';
 import type { CommandAuthorization } from '../../command/command.ts';
 import { REACTION_KINDS } from '../../content/events.ts';
 import { readReactionCounts, type ReactionKind } from '../../content/reaction-projection.ts';
@@ -124,37 +129,71 @@ export const ItemInputSchema = t.Object(
   { additionalProperties: false },
 );
 
-const revisionSelection = t.Object({
-  candidate: t.String({ format: 'uuid' }),
-  rank: t.Union([t.Literal('normal'), t.Literal('preferred')]),
-}, { additionalProperties: false });
-const revisionReading = t.Object({
-  decision: t.Union([t.Null(), t.Object({
-    head: t.Integer({ minimum: 1 }),
-    verdict: t.Union([t.Literal('accept'), t.Literal('reject'), t.Literal('abstain')]),
-    revision: t.Integer({ minimum: 1 }),
-  }, { additionalProperties: false })]),
-  selected: t.Boolean(),
-  rank: t.Union([t.Null(), t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
-}, { additionalProperties: false });
+const revisionSelection = t.Object(
+  {
+    candidate: t.String({ format: 'uuid' }),
+    rank: t.Union([t.Literal('normal'), t.Literal('preferred')]),
+  },
+  { additionalProperties: false },
+);
+const revisionReading = t.Object(
+  {
+    decision: t.Union([
+      t.Null(),
+      t.Object(
+        {
+          head: t.Integer({ minimum: 1 }),
+          verdict: t.Union([t.Literal('accept'), t.Literal('reject'), t.Literal('abstain')]),
+          revision: t.Integer({ minimum: 1 }),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+    selected: t.Boolean(),
+    rank: t.Union([t.Null(), t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
+  },
+  { additionalProperties: false },
+);
 const revisionCandidateFields = {
-  candidate: t.String({ format: 'uuid' }), property: t.String(), context: t.String({ format: 'uuid' }), reading: revisionReading,
+  candidate: t.String({ format: 'uuid' }),
+  property: t.String(),
+  context: t.String({ format: 'uuid' }),
+  reading: revisionReading,
 };
-export const RevisionDetailSchema = t.Object({
-  subject: t.String({ format: 'uuid' }),
-  revision: t.Object({ revision: t.Integer({ minimum: 1 }), kind: t.String(), release: t.String() }, { additionalProperties: false }),
-  change: t.Union([
-    t.Object({ kind: t.Literal('record') }, { additionalProperties: false }),
-    t.Object({ kind: t.Literal('candidate'), ...revisionCandidateFields }, { additionalProperties: false }),
-    t.Object({ kind: t.Literal('decision'), ...revisionCandidateFields, head: t.Integer({ minimum: 1 }),
-      verdict: t.Union([t.Literal('accept'), t.Literal('reject'), t.Literal('abstain')]),
-    }, { additionalProperties: false }),
-    t.Object({ kind: t.Literal('adoption'), property: t.String(), context: t.String({ format: 'uuid' }),
-      head: t.Integer({ minimum: 1 }), mode: t.Union([t.Literal('inherit'), t.Literal('replace'), t.Literal('suppress')]),
-      selection: t.Array(revisionSelection, { maxItems: 32 }),
-    }, { additionalProperties: false }),
-  ]),
-}, { additionalProperties: false });
+export const RevisionDetailSchema = t.Object(
+  {
+    subject: t.String({ format: 'uuid' }),
+    revision: t.Object(
+      { revision: t.Integer({ minimum: 1 }), kind: t.String(), release: t.String() },
+      { additionalProperties: false },
+    ),
+    change: t.Union([
+      t.Object({ kind: t.Literal('record') }, { additionalProperties: false }),
+      t.Object({ kind: t.Literal('candidate'), ...revisionCandidateFields }, { additionalProperties: false }),
+      t.Object(
+        {
+          kind: t.Literal('decision'),
+          ...revisionCandidateFields,
+          head: t.Integer({ minimum: 1 }),
+          verdict: t.Union([t.Literal('accept'), t.Literal('reject'), t.Literal('abstain')]),
+        },
+        { additionalProperties: false },
+      ),
+      t.Object(
+        {
+          kind: t.Literal('adoption'),
+          property: t.String(),
+          context: t.String({ format: 'uuid' }),
+          head: t.Integer({ minimum: 1 }),
+          mode: t.Union([t.Literal('inherit'), t.Literal('replace'), t.Literal('suppress')]),
+          selection: t.Array(revisionSelection, { maxItems: 32 }),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+  },
+  { additionalProperties: false },
+);
 
 const pageQuery = {
   limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
@@ -1612,7 +1651,9 @@ function subjectRoutes(
         params: t.Object({ id: t.String(), revision: t.Numeric({ minimum: 1, maximum: 2147483647, multipleOf: 1 }) }),
         response: { 200: withHeaders(RevisionDetailSchema, cacheControl), ...listingErrors },
         detail: {
-          operationId: 'subject.read_revision', 'x-exposure': 'public', 'x-action': 'subject:read',
+          operationId: 'subject.read_revision',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },
       },
@@ -1622,25 +1663,36 @@ function subjectRoutes(
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
-          const { component, ...result } = await admission.run('normal', job, () => readStatementAs(
-            pool, access(), actor, job.deadline,
-            () => readRevisionDetail(pool, {
-              subject: params.id, revision: params.revision, routeKey, authorize: check,
-              authorizeContext: async (context) => {
-                const target = { route: routeOf(context)!, id: context };
-                return accessCheck(access(), actor, 'context:read',
-                  { ...target, eligibility: publicContextEligibility(target) }, { pool, deadline: job.deadline });
-              },
-              authorizeRelated: async (id) => {
-                const target = { route: routeOf(id)!, id };
-                return authorize({ ...target, eligibility: subjectReadEligibility(target) });
-              },
-            }),
-          ));
+          const { component, ...result } = await admission.run('normal', job, () =>
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              readRevisionDetail(pool, {
+                subject: params.id,
+                revision: params.revision,
+                routeKey,
+                authorize: check,
+                authorizeContext: async (context) => {
+                  const target = { route: routeOf(context)!, id: context };
+                  return accessCheck(
+                    access(),
+                    actor,
+                    'context:read',
+                    { ...target, eligibility: publicContextEligibility(target) },
+                    { pool, deadline: job.deadline },
+                  );
+                },
+                authorizeRelated: async (id) => {
+                  const target = { route: routeOf(id)!, id };
+                  return authorize({ ...target, eligibility: subjectReadEligibility(target) });
+                },
+              }),
+            ),
+          );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
           return result;
-        } catch (error) { return candidateError(error); }
+        } catch (error) {
+          return candidateError(error);
+        }
       },
     )
     .get(
