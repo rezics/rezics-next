@@ -145,10 +145,6 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
         row.actor_id !== data.actorId ||
         row.thread_id !== data.threadId ||
         row.revision_id !== data.revisionId ||
-        row.visibility !== 'published' ||
-        row.availability !== 'available' ||
-        !['published', 'protected'].includes(row.thread_visibility) ||
-        row.thread_availability !== 'available' ||
         (event.type === threadCreated && row.first_post_id !== row.post_id)
       )
         return;
@@ -156,13 +152,21 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
       const recipients = uniqueMentions(row.body).filter((id) => !excluded.has(id));
       if (recipients.length === 0) return;
       const board = await readBoardMetadata(pool, row.board_id, deadline);
-      if (!board || board.board_id !== row.board_id || !['published', 'protected'].includes(board.visibility)) return;
+      const sourceReadable =
+        row.visibility === 'published' &&
+        row.availability === 'available' &&
+        ['published', 'protected'].includes(row.thread_visibility) &&
+        row.thread_availability === 'available' &&
+        board?.board_id === row.board_id &&
+        ['published', 'protected'].includes(board.visibility);
       for (const recipientId of recipients) {
         const recipientRoute = routeOf(recipientId);
         if (recipientRoute === null) continue;
-        const readable = await postReadableByAccount({ pool, access }, recipientId, row.thread_id, row.post_id, {
-          deadline,
-        });
+        const readable =
+          sourceReadable &&
+          (await postReadableByAccount({ pool, access }, recipientId, row.thread_id, row.post_id, {
+            deadline,
+          }));
         await finalizeOptionalNotice(
           pool,
           {
