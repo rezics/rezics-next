@@ -58,7 +58,7 @@ type Command = Readonly<{
   target: Target;
   effect: 'retract' | 'restore';
 }>;
-const handles = new WeakSet<object>();
+const handles = new WeakMap<object, Pick<CommandAuthorization, 'action' | 'resource'>>();
 const held = new WeakMap<CommandTransaction, DiscoveryOperation>();
 const restoration = new WeakMap<AuthoritativeTime, boolean>();
 
@@ -148,7 +148,7 @@ export async function prepareDiscoveryMutation(
     await abortDiscoveryMutation(deps.pool, ref);
     throw error;
   }
-  handles.add(ref);
+  handles.set(ref, { action: input.authorization.action, resource: input.authorization.resource });
   return ref;
 }
 
@@ -210,7 +210,18 @@ export function discoveryMutationAuthorization(
  */
 export async function lockDiscoveryMutation(tx: CommandTransaction, ref: DiscoveryOperationReference | null) {
   if (!ref) return;
-  if (!handles.has(ref) || currentCommand(tx).partition !== partitionOf(ref.route)) throw new GrantDeniedError();
+  const expected = handles.get(ref);
+  const command = currentCommand(tx);
+  const authority = command.authorization;
+  if (
+    !expected ||
+    command.partition !== partitionOf(ref.route) ||
+    authority?.mode !== 'execute' ||
+    authority.action !== expected.action ||
+    authority.resource.route !== expected.resource.route ||
+    authority.resource.id !== expected.resource.id
+  )
+    throw new GrantDeniedError();
   const row = await read.run(tx, ref);
   if (!row || row.phase !== 'ready' || row.fence_generation === null) throw new GrantDeniedError();
   const source = await native(tx, { kind: row.target_kind as Target['kind'], id: row.target_id });
