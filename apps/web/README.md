@@ -1195,6 +1195,22 @@ admitted batch-summary transport here, so provenance retains stable recorded IDs
 need no private vote read. `Patterns/Community/Exact revision` and its Page stories share the product reading region;
 constructed native DTO examples do not establish native acceptance. The two focused outcomes live in
 `tests/exact-revision.test.ts`.
+The reusable [Moderation report queue](src/stories/patterns/board-report-queue/board-report-queue.mdx) is the
+actual report review region. It separates submitted evidence, the exact ordinarily readable revision and the
+current target. Review actions open on demand; one nonempty takedown reason is capped at 1,024 characters, while
+dismissal needs no reason. Failed commands keep the draft and unchanged command intent. Pending and confirmed
+commands remain visible; a takedown confirmation does not claim that projected report outcomes have finished.
+Confirmed takedowns hide both body surfaces for that target throughout the returned page without another read.
+Native outcomes and resolution times stay visible until navigation. Empty pages retain native continuation.
+The route supplies Back to board from its known board ID without a header lookup or invented community metadata.
+Loading/error states expose no report details. Appeal and reporter-status destinations remain separate.
+
+Use the same `patterns-moderation-queue--open`, `--resolved`, `--target-unavailable`, `--revision-differs`,
+`--native-denied`, `--uncertain-retry`, `--retry-confirmed`, `--confirmed-takedown`, `--confirmed-dismissal`,
+`--empty-with-next`, `--loading` and `--error` IDs at phone390/desktop1280 with locale/theme toolbar globals.
+Pages keep `pages-community-moderation-reports--open-reports` and `--resolved-reports`, and provide
+`--target-unavailable`, `--revision-differs`, `--native-denied`, `--uncertain-retry`, `--empty-with-next`, `--loading`
+and `--error`. These are interface review inputs; native proof and visual approval remain separate.
 
 ### Post edit
 

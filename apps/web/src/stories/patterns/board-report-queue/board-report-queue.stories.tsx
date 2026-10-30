@@ -1,108 +1,250 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, mocked, userEvent, waitFor, within } from 'storybook/test';
-import { BoardReportQueue } from './board-report-queue';
 import type { ReportActionInput } from '../../../moderation/actions';
 import { m } from '../../../paraglide/messages.js';
+import { BoardReportQueue } from './board-report-queue';
+import {
+  moderationQueueFixture,
+  resolvedQueueFixture,
+  postReport,
+  currentText,
+  revisionText,
+  reason,
+  queueViewports,
+} from './fixture';
 
-const report = {
-  id: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
-  target: { kind: 'post' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000050' },
-  revisionId: '0192f3a0-6c1e-7b2a-9d4e-000000000051',
-  reason: 'other',
-  evidence: 'The original post disclosed a private address.',
-  createdAt: '2026-10-28T15:30:00.000Z',
-  outcome: null,
-  resolvedAt: null,
-};
-const targets = [
-  {
-    key: `post:${report.target.id}`,
-    kind: 'post' as const,
-    value: { post: { body: 'Edited current text with the address removed.' } },
-  },
-];
-const revisions = [{ reportId: report.id, value: { post: { body: 'Original reported text.' } } }];
 const meta = {
   title: 'Patterns/Moderation Queue',
   component: BoardReportQueue,
   parameters: {
     layout: 'padded',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+    viewport: { options: queueViewports },
   },
   args: {
-    reports: [report],
-    targets,
-    revisions,
+    ...moderationQueueFixture,
+    reports: [postReport],
     onAction: fn(async (_input: ReportActionInput): Promise<void> => {
-      throw new Error('Service unavailable');
+      throw new TypeError('Failed to fetch');
     }),
   },
 } satisfies Meta<typeof BoardReportQueue>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const EditedTarget: Story = {
+async function submit(canvasElement: HTMLElement) {
+  const view = within(canvasElement);
+  await userEvent.click(view.getByRole('button', { name: m.moderation_queue_review() }));
+  await userEvent.type(view.getByRole('textbox', { name: m.moderation_reason_label() }), reason);
+  await userEvent.click(view.getByRole('button', { name: m.moderation_take_down() }));
+  return view;
+}
+
+export const Open: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await expect(view.getByText(m.moderation_current_target_label())).toBeVisible();
-    await expect(view.getByText('Original reported text.')).toBeVisible();
-    await expect(view.getByText('Edited current text with the address removed.')).toBeVisible();
-    await userEvent.type(
-      view.getByRole('textbox', { name: m.moderation_reason_label() }),
-      'Private address disclosure.',
-    );
+    await expect(view.getByText(currentText)).toBeVisible();
+    await expect(view.getByText(revisionText)).toBeVisible();
+    await expect(view.getByText(postReport.evidence!, { exact: false })).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_review() }));
+    await expect(view.getAllByRole('textbox')).toHaveLength(1);
+    await userEvent.type(view.getByRole('textbox', { name: m.moderation_reason_label() }), reason);
+    await expect(view.getByRole('button', { name: m.moderation_dismiss() })).toBeEnabled();
   },
 };
-export const UnavailableRevision: Story = {
-  args: { revisions: [{ reportId: report.id, value: null }] },
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    await expect(view.getByText(m.moderation_target_unavailable())).toBeVisible();
-    await expect(view.queryByText('Original reported text.')).toBeNull();
-  },
-};
-export const AuthorityLost: Story = {
+
+export const Empty: Story = {
   args: { reports: [], targets: [], revisions: [] },
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await expect(view.getByText(m.moderation_reports_empty())).toBeVisible();
     await expect(view.queryByRole('textbox')).toBeNull();
-    await expect(view.queryByText(report.evidence)).toBeNull();
   },
 };
-export const RetryAction: Story = {
+
+export const PendingSubmission: Story = {
+  args: { onAction: fn((_input: ReportActionInput) => new Promise<void>(() => {})) },
   play: async ({ canvasElement, args }) => {
-    const view = within(canvasElement);
-    const reason = view.getByRole('textbox', { name: m.moderation_reason_label() });
-    await userEvent.type(reason, 'Private address disclosure.');
-    const submit = view.getByRole('button', { name: m.moderation_take_down() });
-    await userEvent.click(submit);
-    await view.findByRole('alert');
-    await userEvent.click(submit);
+    const view = await submit(canvasElement);
+    await expect(view.getByRole('button', { name: m.moderation_take_down() })).toBeDisabled();
+    await expect(view.getByRole('button', { name: m.moderation_dismiss() })).toBeDisabled();
+    await expect(view.getByRole('textbox')).toHaveValue(reason);
+    await expect(args.onAction).toHaveBeenCalledTimes(1);
+  },
+};
+
+export const UncertainRetry: Story = {
+  play: async ({ canvasElement, args }) => {
+    const view = await submit(canvasElement);
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
+    const takeDown = view.getByRole('button', { name: m.moderation_take_down() });
+    await userEvent.click(takeDown);
     await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(2));
     const calls = mocked(args.onAction).mock.calls;
-    await expect(calls[0]![0]).toEqual(calls[1]![0]);
-    await expect(calls[0]![0]).toMatchObject({ action: 'take-down', reason: 'Private address disclosure.' });
-    await userEvent.type(reason, ' More context.');
-    await userEvent.click(submit);
+    await expect(calls[1]![0]).toEqual(calls[0]![0]);
+    await expect(calls[0]![0]).toMatchObject({ action: 'take-down', reason });
+    await userEvent.type(view.getByRole('textbox'), ' Additional context.');
+    await userEvent.click(takeDown);
     await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(3));
     await expect(calls[2]![0].idempotencyKey).not.toBe(calls[0]![0].idempotencyKey);
+    const dismiss = view.getByRole('button', { name: m.moderation_dismiss() });
+    await userEvent.click(dismiss);
+    await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(4));
+    await userEvent.click(dismiss);
+    await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(5));
+    await expect(calls[4]![0]).toEqual(calls[3]![0]);
+    await expect(calls[3]![0]).toMatchObject({ action: 'dismiss', reportId: postReport.id });
+    await expect(calls[3]![0].idempotencyKey).not.toBe(calls[2]![0].idempotencyKey);
   },
 };
-export const PendingAction: Story = {
-  args: { onAction: fn((_input: ReportActionInput) => new Promise<void>(() => {})) },
+
+async function refused(canvasElement: HTMLElement) {
+  const view = await submit(canvasElement);
+  await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
+  await expect(view.getByRole('textbox')).toHaveValue(reason);
+  await expect(view.getByRole('button', { name: m.moderation_take_down() })).toBeEnabled();
+  await expect(view.queryByRole('status')).toBeNull();
+}
+
+export const StaleConflict: Story = {
+  args: {
+    onAction: fn(async (_input: ReportActionInput) => {
+      throw Object.assign(new Error('Already resolved'), { status: 409 });
+    }),
+  },
+  play: async ({ canvasElement }) => refused(canvasElement),
+};
+
+export const Resolved: Story = {
+  args: resolvedQueueFixture,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await userEvent.type(
-      view.getByRole('textbox', { name: m.moderation_reason_label() }),
-      'Private address disclosure.',
+    await expect(view.getByText(m.moderation_actioned())).toBeVisible();
+    await expect(view.getByText(m.moderation_dismissed())).toBeVisible();
+    await expect(view.queryByRole('textbox')).toBeNull();
+    await expect(view.queryByRole('button')).toBeNull();
+  },
+};
+
+export const TargetUnavailable: Story = {
+  args: {
+    targets: [{ key: `post:${postReport.target.id}`, kind: 'post', value: null }],
+    revisions: [{ reportId: postReport.id, value: null }],
+    onAction: fn(async (_input: ReportActionInput) => {
+      throw Object.assign(new Error('Service unavailable'), { status: 503 });
+    }),
+  },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getAllByText(m.moderation_target_unavailable())).toHaveLength(2);
+    await expect(view.queryByText(currentText)).toBeNull();
+    await expect(view.queryByText(revisionText)).toBeNull();
+  },
+};
+
+export const NativeDenied: Story = {
+  args: {
+    onAction: fn(async (_input: ReportActionInput) => {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }),
+  },
+  play: async ({ canvasElement }) => refused(canvasElement),
+};
+
+export const ReasonValidation: Story = {
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_review() }));
+    const input = view.getByRole('textbox', { name: m.moderation_reason_label() });
+    const takeDown = view.getByRole('button', { name: m.moderation_take_down() });
+    await userEvent.click(takeDown);
+    await expect(input).toBeInvalid();
+    await expect(args.onAction).not.toHaveBeenCalled();
+    await userEvent.type(input, '   ');
+    await userEvent.click(takeDown);
+    await view.findByRole('alert');
+    await expect(input).toHaveValue('   ');
+    await expect(args.onAction).not.toHaveBeenCalled();
+    await userEvent.clear(input);
+    await userEvent.type(input, 'R'.repeat(1025), { delay: null });
+    await expect(input).toHaveValue('R'.repeat(1024));
+    await userEvent.click(takeDown);
+    await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(1));
+    await expect(mocked(args.onAction).mock.calls[0]![0]).toMatchObject({ reason: 'R'.repeat(1024) });
+    await userEvent.clear(input);
+    await userEvent.type(input, `  ${reason}  `);
+    await userEvent.click(takeDown);
+    await waitFor(() => expect(args.onAction).toHaveBeenCalledTimes(2));
+    await expect(mocked(args.onAction).mock.calls[1]![0]).toMatchObject({ reason });
+  },
+};
+
+export const RevisionDiffers: Story = {
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByText(currentText)).toBeVisible();
+    await expect(view.getByText(revisionText)).toBeVisible();
+  },
+};
+export const ConfirmedTakedown: Story = {
+  args: { onAction: fn(async (_input: ReportActionInput): Promise<void> => {}) },
+  play: async ({ canvasElement, args }) => {
+    const view = await submit(canvasElement);
+    await expect(await view.findByRole('status')).toHaveTextContent(m.moderation_queue_takedown_confirmed());
+    await expect(view.getByRole('status')).toHaveTextContent(reason);
+    await expect(view.queryByText(currentText)).toBeNull();
+    await expect(view.queryByText(revisionText)).toBeNull();
+    await expect(view.queryByRole('textbox')).toBeNull();
+    await expect(mocked(args.onAction).mock.calls[0]![0]).toMatchObject({ action: 'take-down', reason });
+    await expect(view.getByText(postReport.evidence!, { exact: false })).toBeVisible();
+  },
+};
+export const ConfirmedDismissal: Story = {
+  args: { onAction: fn(async (_input: ReportActionInput): Promise<void> => {}) },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_review() }));
+    await userEvent.click(view.getByRole('button', { name: m.moderation_dismiss() }));
+    await expect(await view.findByRole('status')).toHaveTextContent(m.moderation_dismissed());
+    await expect(view.queryByRole('textbox')).toBeNull();
+    await expect(args.onAction).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'dismiss', reportId: postReport.id }),
     );
+  },
+};
+export const RetryConfirmed: Story = {
+  args: {
+    onAction: fn<(input: ReportActionInput) => Promise<void>>()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValue(undefined),
+  },
+  play: async ({ canvasElement, args }) => {
+    const view = await submit(canvasElement);
+    await view.findByRole('alert');
+    await expect(view.getByRole('textbox')).toHaveValue(reason);
     await userEvent.click(view.getByRole('button', { name: m.moderation_take_down() }));
-    await expect(view.getByRole('button', { name: m.moderation_dismiss() })).toBeDisabled();
+    await expect(await view.findByRole('status')).toHaveTextContent(m.moderation_queue_takedown_confirmed());
+    const calls = mocked(args.onAction).mock.calls;
+    await expect(calls).toHaveLength(2);
+    await expect(calls[1]![0]).toEqual(calls[0]![0]);
+  },
+};
+export const EmptyWithNext: Story = {
+  args: { reports: [], targets: [], revisions: [], next: 'sealed+continuation==', onNext: fn() },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await expect(view.getByText(m.moderation_reports_empty())).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.threads_next_page() }));
+    await expect(args.onNext).toHaveBeenCalledWith('sealed+continuation==');
+  },
+};
+export const Loading: Story = { args: { state: 'loading' } };
+export const Error: Story = {
+  args: { state: 'error', onRetry: fn() },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('alert')).toHaveTextContent(m.moderation_queue_error());
+    await expect(view.queryByText(postReport.evidence!)).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.moderation_queue_retry() }));
+    await expect(args.onRetry).toHaveBeenCalledTimes(1);
   },
 };

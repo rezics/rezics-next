@@ -343,3 +343,25 @@ test('a duplicate appeal resolution crosses the server boundary as a conflict ra
   expect(result).toEqual({ state: 'conflict' });
   expect(commands).toBe(1);
 });
+
+test('the report page retains board context and native continuation when its authorized page has no rows', () => {
+  const markup = renderToStaticMarkup(
+    createElement(ModerationReportsView, {
+      boardId: id(1),
+      threadId: id(2),
+      postId: id(3),
+      reports: [],
+      targets: [],
+      revisions: [],
+      next: 'sealed+native/cursor==',
+    }),
+  );
+  expect(markup).toContain('Back to board');
+  expect(markup).toContain(`/boards/${id(1)}`);
+  expect(markup).toContain('Reports for this post');
+  expect(markup).toContain(`?tab=appeals&amp;thread=${id(2)}&amp;post=${id(3)}`);
+  expect(markup).toContain('There may be more reports on the next page.');
+  expect(markup).toContain('Next page');
+  expect(markup).not.toContain('sealed+native/cursor==');
+  expect(markup).not.toContain('<textarea');
+});

@@ -3,6 +3,7 @@ import { csrfHeaders } from '../threads/composer';
 import { actionOnReport } from './actions';
 import { BoardReportQueue, type ReportQueueAction } from '../stories/patterns/board-report-queue/board-report-queue';
 import type { Report, ReportedRevision, ResolvedReportTarget } from './reports-read';
+import { localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 
 export { moderationTargetContent } from '../stories/patterns/board-report-queue/target-content';
@@ -10,7 +11,6 @@ export type ModerationTarget = ResolvedReportTarget;
 
 const submitReportAction: ReportQueueAction = async (data) => {
   await actionOnReport({ data, headers: csrfHeaders() });
-  location.reload();
 };
 
 export function ModerationReportsView({
@@ -23,7 +23,13 @@ export function ModerationReportsView({
   postId,
   onNext,
   onAction = submitReportAction,
+  boardId,
+  state = 'ready',
+  onRetry,
 }: {
+  boardId?: string;
+  state?: 'ready' | 'loading' | 'error';
+  onRetry?: () => void;
   reports: Report[];
   targets: ModerationTarget[];
   revisions?: ReportedRevision[];
@@ -43,10 +49,24 @@ export function ModerationReportsView({
   const reportsHref = filters ? `?${filters}` : '?';
   const appealsHref = `?tab=appeals${filters ? `&${filters}` : ''}`;
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
+    <article className="mx-auto w-full max-w-4xl space-y-6 text-foreground">
       <header className="space-y-3">
-        <p className="text-sm text-muted-foreground">{m.moderation_reports_tab()}</p>
+        {boardId ? (
+          <a
+            className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:underline"
+            href={localizeHref(`/boards/${encodeURIComponent(boardId)}`)}
+          >
+            {m.moderation_queue_back()}
+          </a>
+        ) : null}
         <PageHeading>{m.moderation_reports_heading()}</PageHeading>
+        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+          {postId
+            ? m.moderation_queue_post_scope()
+            : threadId
+              ? m.moderation_thread_filter()
+              : m.moderation_queue_board_scope()}
+        </p>
       </header>
       <nav aria-label={m.moderation_tabs_label()} className="flex gap-4 border-b pb-2">
         {tab === 'reports' ? (
@@ -64,13 +84,16 @@ export function ModerationReportsView({
           <a href={appealsHref}>{m.moderation_appeals_tab()}</a>
         )}
       </nav>
-      {threadId ? <p className="text-sm text-muted-foreground">{m.moderation_thread_filter()}</p> : null}
-      <BoardReportQueue reports={reports} targets={targets} revisions={revisions} onAction={onAction} />
-      {next ? (
-        <button type="button" className="rounded-md border px-4 py-2" onClick={() => onNext?.(next)}>
-          {m.threads_next_page()}
-        </button>
-      ) : null}
+      <BoardReportQueue
+        reports={reports}
+        targets={targets}
+        revisions={revisions}
+        onAction={onAction}
+        next={next}
+        onNext={onNext}
+        state={state}
+        onRetry={onRetry}
+      />
     </article>
   );
 }

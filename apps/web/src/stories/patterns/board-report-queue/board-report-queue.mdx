@@ -1,20 +1,49 @@
 import { Meta, Canvas } from '@storybook/addon-docs/blocks';
 import * as Queue from './board-report-queue.stories';
 
-<Meta of={Queue} name="Revision context" />
+<Meta of={Queue} />
 
-# Board report queue
+# Moderation report queue
 
-The board moderation page reuses this region. Submitted evidence, an ordinarily readable reported revision and
-current content stay distinct. An unavailable exact revision is neutral; report inspection grants no body access.
-The form has one 1,024-character reason. An unchanged intent retains its command key after a failed request;
-editing the reason creates a new intent. Pending actions disable both controls.
+`BoardReportQueue` renders the real board moderation page's bounded report page. Each review card separates the
+submitted reason and evidence from the ordinarily readable reported revision and current target. Report inspection
+never unlocks either body. Missing, refused and removed content stays neutral; there are no reporter identities,
+other-report summaries, copied bodies, raw identifier headings or per-card detail requests.
 
-Use the same states with the phone390 and desktop1280 viewport globals, locale and theme controls.
-These component fixtures exercise presentation and interactions; native API cases own authority proof.
+Open **Review report** to enter one takedown reason, or dismiss without a reason. The shared controls keep the draft
+when the panel closes. A request disables the form and announces submission. An unchanged retry retains its command
+key; edits and action changes create a new intent. Native denial, conflict and uncertain transport errors preserve
+the draft and never confirm success. The current action interface exposes the same generic refusal for these errors;
+these stories do not invent a permission flag or a new backend error contract.
 
-<Canvas of={Queue.EditedTarget} />
-<Canvas of={Queue.UnavailableRevision} />
-<Canvas of={Queue.AuthorityLost} />
-<Canvas of={Queue.RetryAction} />
-<Canvas of={Queue.PendingAction} />
+A confirmed command stays visible until navigation. Takedown confirmation is distinct from a projected report
+outcome: the page does not claim that asynchronous report resolution has finished. It hides the current and revision
+bodies for that target across the returned page after a confirmed takedown. Dismissal preserves current content.
+Resolved read rows show the native disposition and resolution time. Appeal statements remain in the separate tab.
+
+An empty page with a continuation still offers Next page. It does not imply a total count or an exhausted queue.
+Loading and error states show no report details. The page uses its known board route for Back to board; it does not
+invent a community name or fetch one merely for the heading.
+
+<Canvas of={Queue.Open} />
+<Canvas of={Queue.Resolved} />
+<Canvas of={Queue.TargetUnavailable} />
+<Canvas of={Queue.RevisionDiffers} />
+<Canvas of={Queue.NativeDenied} />
+<Canvas of={Queue.UncertainRetry} />
+<Canvas of={Queue.RetryConfirmed} />
+<Canvas of={Queue.ConfirmedTakedown} />
+<Canvas of={Queue.ConfirmedDismissal} />
+<Canvas of={Queue.EmptyWithNext} />
+<Canvas of={Queue.Loading} />
+<Canvas of={Queue.Error} />
+
+Use the same IDs with the phone390 and desktop1280 viewport globals, light/dark theme and locale globals. Pattern
+IDs use `patterns-moderation-queue--` with suffixes `open`, `resolved`, `target-unavailable`, `revision-differs`,
+`native-denied`, `uncertain-retry`, `retry-confirmed`, `confirmed-takedown`, `confirmed-dismissal`, `empty-with-next`,
+`loading`, `error`, `empty`, `pending-submission`, `stale-conflict` and `reason-validation`.
+
+Page IDs use `pages-community-moderation-reports--` with suffixes `open-reports`, `resolved-reports`,
+`target-unavailable`, `revision-differs`, `native-denied`, `uncertain-retry`, `empty-with-next`, `loading`, `error`
+and `appeals`. Pages reuse this composition inside the site shell. These fixtures and plays support Web review and
+Root screenshots at 390/1280; they establish neither native acceptance nor visual approval.

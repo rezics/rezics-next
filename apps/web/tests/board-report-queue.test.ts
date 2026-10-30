@@ -76,3 +76,53 @@ test('unknown post identity and refused exact revision stay neutrally unavailabl
   expect(markup).not.toContain('href=');
   expect(markup).not.toContain('Original readable revision');
 });
+
+test('review cards keep submitted evidence and native resolution times separate from readable content', () => {
+  const markup = renderToStaticMarkup(
+    createElement(BoardReportQueue, {
+      reports: [{ ...report, outcome: 'dismissed', resolvedAt: '2026-10-31T09:00:00.000Z' }],
+      revisions: [{ reportId: report.id, value: { post: { availability: 'unavailable', body: 'Private revision' } } }],
+      targets: [{ key: 'post:known-post', kind: 'post', value: { post: { removed: true, body: 'Removed body' } } }],
+      onAction: async () => {},
+    }),
+  );
+  expect(markup).toContain('Submitted evidence text');
+  expect(markup).toContain('Submitted report');
+  expect(markup).toContain('Reported revision');
+  expect(markup).toContain('Current target');
+  expect(markup).toContain('Dismissed');
+  expect(markup).toContain('dateTime="2026-10-31T09:00:00.000Z"');
+  expect(markup).not.toContain('Private revision');
+  expect(markup).not.toContain('Removed body');
+  expect(markup).not.toContain('original-revision');
+  expect(markup).not.toContain('<textarea');
+});
+
+test('an empty native page keeps continuation while preparation states disclose no report details', () => {
+  const empty = renderToStaticMarkup(
+    createElement(BoardReportQueue, {
+      reports: [],
+      targets: [],
+      revisions: [],
+      next: 'sealed+continuation==',
+      onAction: async () => {},
+    }),
+  );
+  expect(empty).toContain('Next page');
+  expect(empty).toContain('There may be more reports on the next page.');
+  expect(empty).not.toContain('sealed+continuation==');
+  for (const state of ['loading', 'error'] as const) {
+    const markup = renderToStaticMarkup(
+      createElement(BoardReportQueue, {
+        reports: [report],
+        targets: [],
+        next: 'sealed+continuation==',
+        state,
+        onAction: async () => {},
+      }),
+    );
+    expect(markup).not.toContain(report.evidence!);
+    expect(markup).not.toContain('Next page');
+    expect(markup).not.toContain('<textarea');
+  }
+});

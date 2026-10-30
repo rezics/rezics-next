@@ -3,22 +3,35 @@ import { expect, fn, userEvent, within } from 'storybook/test';
 import { ModerationAppealsView } from '../moderation/appeals-tab';
 import { ModerationReportsView } from '../moderation/reports-page';
 import type { ReportActionInput } from '../moderation/actions';
+import { AppShell } from '../shell/shell';
+import { PatternStory } from './page';
+import * as Queue from './patterns/board-report-queue/board-report-queue.stories';
 import { m } from '../paraglide/messages.js';
-import { moderationQueueFixture, resolvedQueueFixture } from './patterns/moderation-queue.stories';
+import {
+  moderationQueueFixture,
+  resolvedQueueFixture,
+  postReport,
+  queueViewports,
+} from './patterns/board-report-queue/fixture';
 
 const meta = {
   title: 'Pages/Community/Moderation reports',
   component: ModerationReportsView,
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
+    viewport: { options: queueViewports },
   },
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path="/boards/community/moderation">
+        <AppShell>
+          <Story />
+        </AppShell>
+      </PatternStory>
+    ),
+  ],
   args: {
+    boardId: 'community',
     ...moderationQueueFixture,
     next: 'cursor-next',
     onNext: fn(),
@@ -34,8 +47,9 @@ export const OpenReports: Story = {
   name: 'Open reports',
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    await expect(view.getByRole('navigation', { name: m.moderation_tabs_label() })).toBeVisible();
-    await expect(view.getAllByRole('textbox', { name: m.moderation_reason_label() })).toHaveLength(2);
+    await expect(await view.findByRole('navigation', { name: m.moderation_tabs_label() })).toBeVisible();
+    await userEvent.click(view.getAllByRole('button', { name: m.moderation_queue_review() })[0]!);
+    await expect(view.getAllByRole('textbox', { name: m.moderation_reason_label() })).toHaveLength(1);
     await userEvent.type(view.getAllByRole('textbox')[0]!, 'Private address disclosure.');
     await userEvent.click(view.getAllByRole('button', { name: m.moderation_take_down() })[0]!);
     await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
@@ -50,10 +64,10 @@ export const ResolvedReports: Story = {
   args: { ...resolvedQueueFixture, next: null },
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await expect(view.getByText(m.moderation_actioned())).toBeVisible();
+    await expect(await view.findByText(m.moderation_actioned())).toBeVisible();
     await expect(view.getByText(m.moderation_dismissed())).toBeVisible();
     await expect(view.queryByRole('textbox')).toBeNull();
-    await expect(view.queryByRole('button')).toBeNull();
+    await expect(view.queryByRole('button', { name: m.moderation_queue_review() })).toBeNull();
   },
 };
 
@@ -73,3 +87,41 @@ const appeal = {
 export const Appeals: Story = {
   render: () => <ModerationAppealsView appeals={[appeal]} targets={moderationQueueFixture.targets} next={null} />,
 };
+
+export const TargetUnavailable: Story = {
+  args: { ...Queue.TargetUnavailable.args, reports: [postReport], next: null },
+};
+export const RevisionDiffers: Story = { args: { reports: [postReport], next: null } };
+export const NativeDenied: Story = {
+  args: { ...Queue.NativeDenied.args, reports: [postReport], next: null },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.moderation_queue_review() }));
+    await userEvent.type(
+      view.getByRole('textbox', { name: m.moderation_reason_label() }),
+      'Private address disclosure.',
+    );
+    await userEvent.click(view.getByRole('button', { name: m.moderation_take_down() }));
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
+    await expect(view.getByRole('textbox')).toHaveValue('Private address disclosure.');
+  },
+};
+export const UncertainRetry: Story = {
+  args: { reports: [postReport], next: null },
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await userEvent.click(await view.findByRole('button', { name: m.moderation_queue_review() }));
+    await userEvent.type(
+      view.getByRole('textbox', { name: m.moderation_reason_label() }),
+      'Private address disclosure.',
+    );
+    const submit = view.getByRole('button', { name: m.moderation_take_down() });
+    await userEvent.click(submit);
+    await view.findByRole('alert');
+    await userEvent.click(submit);
+    await expect(args.onAction).toHaveBeenCalledTimes(2);
+  },
+};
+export const EmptyWithNext: Story = { args: { reports: [], targets: [], revisions: [] } };
+export const Loading: Story = { args: { state: 'loading', next: null } };
+export const Error: Story = { args: { state: 'error', next: null, onRetry: fn() } };

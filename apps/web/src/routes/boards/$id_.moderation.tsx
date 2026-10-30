@@ -1,4 +1,7 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
+import { PendingPage } from '../../shell/pending';
+import { ClosedErrorPage } from '../../shell/closed';
+import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
@@ -35,6 +38,8 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
       },
       pageHeadContext(match.pathname),
     ),
+  pendingComponent: ModerationReportsPending,
+  errorComponent: ModerationReportsError,
   component: ModerationReportsRoute,
 });
 
@@ -62,6 +67,8 @@ function ModerationReportsRoute() {
     />
   ) : (
     <ModerationReportsView
+      key={`${id}:${thread ?? ''}:${post ?? ''}:${cursor ?? ''}`}
+      boardId={id}
       reports={reportPage.reports}
       revisions={reportPage.revisions}
       targets={reportPage.targets}
@@ -70,6 +77,44 @@ function ModerationReportsRoute() {
       {...(thread ? { threadId: thread } : {})}
       {...(post ? { postId: post } : {})}
       onNext={onNext}
+    />
+  );
+}
+
+function ModerationReportsPending() {
+  const { id } = Route.useParams();
+  const { tab, thread, post } = Route.useSearch();
+  if (tab === 'appeals') return <PendingPage />;
+  return (
+    <ModerationReportsView
+      boardId={id}
+      threadId={thread}
+      postId={post}
+      reports={[]}
+      targets={[]}
+      next={null}
+      state="loading"
+    />
+  );
+}
+
+function ModerationReportsError({ reset, error }: ErrorComponentProps) {
+  const { id } = Route.useParams();
+  const router = useRouter();
+  const { tab, thread, post } = Route.useSearch();
+  if (tab === 'appeals' || isPlatformClosedError(error)) return <ClosedErrorPage error={error} />;
+  return (
+    <ModerationReportsView
+      threadId={thread}
+      postId={post}
+      boardId={id}
+      reports={[]}
+      targets={[]}
+      next={null}
+      state="error"
+      onRetry={() => {
+        void router.invalidate().then(reset);
+      }}
     />
   );
 }
