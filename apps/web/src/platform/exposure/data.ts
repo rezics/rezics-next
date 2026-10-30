@@ -66,7 +66,10 @@ export async function readCurrentExposure(
       Object.keys(value).length !== 2 ||
       !Array.isArray(value.exposureGroups) ||
       value.exposureGroups.length > limit ||
-      !(value.next === null || (typeof value.next === 'string' && /^[A-Za-z0-9_-]{1,4096}$/.test(value.next)))
+      !(
+        value.next === null ||
+        (typeof value.next === 'string' && /^[A-Za-z0-9_-]{1,4096}$/.exec(value.next)?.[0] === value.next)
+      )
     )
       return unavailable;
     const exposureGroups: Extract<CurrentExposure, { status: 'available' }>['exposureGroups'] = [];
@@ -81,7 +84,7 @@ export async function readCurrentExposure(
         typeof row.open !== 'boolean' ||
         typeof row.at !== 'string' ||
         row.at.length > 64 ||
-        !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)$/.test(row.at) ||
+        /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)$/.exec(row.at)?.[0] !== row.at ||
         !Number.isFinite(Date.parse(row.at)) ||
         (at !== undefined && row.at !== at)
       )
