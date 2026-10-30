@@ -42,6 +42,7 @@ export function repository() {
     branch(name: string, file: string, content = file) {
       const worker = join(temporary.path, name);
       repositoryGit(main, 'worktree', 'add', '-b', name, worker, 'main');
+      mkdirSync(dirname(join(worker, file)), { recursive: true });
       writeFileSync(join(worker, file), content);
       repositoryGit(worker, 'add', '.');
       repositoryGit(worker, 'commit', '-m', `Change ${file}`);
@@ -53,7 +54,10 @@ export function repository() {
 /** A real-Git landing train fixture for tests that need to inspect candidate publication boundaries. */
 export function mergeTrainHarness() {
   const repo = repository();
-  const db = openDb(join(repo.path, 'state.sqlite'));
+  const stateDirectory = join(repo.path, 'state');
+  mkdirSync(stateDirectory, { recursive: true });
+  const db = openDb(join(stateDirectory, 'goal.sqlite'));
+  const store = new WorkerStore(db);
   let current = 1;
   const fence: AttemptFence = {
     assertCurrent(ref) {
@@ -70,11 +74,10 @@ export function mergeTrainHarness() {
   };
   const queue = new SqliteLandingQueue(db, fence);
   const outcomes: GateOutcome[] = [];
-  const stateDirectory = join(repo.path, 'state');
-  mkdirSync(stateDirectory, { recursive: true });
   return {
     ...repo,
     db,
+    store,
     fence,
     queue,
     outcomes,

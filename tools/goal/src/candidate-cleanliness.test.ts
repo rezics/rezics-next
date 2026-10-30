@@ -2,8 +2,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
 import { MergeTrain, type CandidateGitRunner } from './merge-train.ts';
+import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { git } from './merge.ts';
-import { mergeTrainHarness } from './test-support.ts';
+import { markdown, mergeTrainHarness } from './test-support.ts';
 
 function candidate() {
   const h = mergeTrainHarness();
@@ -54,6 +55,54 @@ test('a clean real candidate passes unchanged checks, publishes its commit, and 
     );
   } finally {
     s.h.close();
+  }
+});
+
+test('the real control-plane check boundary records a dirty candidate before baseline comparison or publication', async () => {
+  const h = mergeTrainHarness();
+  const file = 'tools/goal/src/candidate-fixture.ts';
+  const task = h.branch('control-plane-candidate', file, 'candidate bytes\n');
+  const expected = git(task.worktree, 'rev-parse', 'HEAD');
+  const mainBefore = git(h.main, 'rev-parse', 'main');
+  const brief = parseBrief(
+    markdown.replace('goal: fixture', 'goal: control-plane'),
+    readRiskOwnership(join(import.meta.dir, '../risk-areas.json')),
+  );
+  const commands: string[][] = [];
+  try {
+    git(h.main, 'branch', 'dev', 'main');
+    h.store.createTask(
+      brief,
+      { briefPath: join(h.path, 'control-plane.md'), worktree: task.worktree, branch: task.branch, base: mainBefore },
+      'implementation',
+      task.taskId,
+    );
+    h.queue.enqueue(task);
+
+    await new MergeTrain({
+      ...h.options,
+      integrationBranch: 'dev',
+      affectedTests: [],
+      runGate: async (command, cwd) => {
+        commands.push([...command]);
+        if (command.at(-1) === 'tools/goal/src') writeFileSync(join(cwd, file), 'mutated by control-plane suite\n');
+        return { passed: true, output: '', timedOut: false };
+      },
+    }).run();
+
+    const outcome = h.outcomes[0]!;
+    const log = readFileSync(outcome.logPath, 'utf8');
+    expect(outcome.passed).toBe(false);
+    expect(outcome.firstFailure?.assertion).toContain(
+      'Candidate integrity violation phase=control-plane typecheck and test suite',
+    );
+    expect(log).toContain(`expected HEAD=${expected}`);
+    expect(log).toContain(`unstaged paths: ["${file}"]`);
+    expect(commands).toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src']);
+    expect(git(h.main, 'rev-parse', 'main')).toBe(mainBefore);
+    expect(readFileSync(join(task.worktree, file), 'utf8')).toBe('candidate bytes\n');
+  } finally {
+    h.close();
   }
 });
 
