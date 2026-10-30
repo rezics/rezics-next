@@ -15,6 +15,8 @@ import { routeOf, partitionOf } from '../route/route.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
 
+export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
+
 /** Lookup hints only. Native records, not possession of this value, establish custody. */
 export type NativeSourceIdentity = Readonly<{
   route: number;
