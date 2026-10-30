@@ -6,9 +6,10 @@ import { UI_LOCALES, type CompositionDocument } from '@rezics/composition';
 import { createFakeKernelFetch } from '../src/kernel/fake';
 import fixtures from '../src/kernel/fixtures.json';
 import { staticZoneHomeFake, staticZoneOwnerFake } from '../src/zones/static-fakes';
-import { RoutePage, type RoutePageData } from '../src/features/pages/route';
+import type { RoutePageData } from '../src/features/pages/route';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { RoutePage } = await import('../src/features/pages/route');
 const { readZonePageForRoute } = await import('../src/zones/zone-read');
 const { ZoneShell, ZonePageSurface, ZoneReadBoundary } = await import('../src/zones/zone-shell');
 
