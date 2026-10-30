@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { realmClaimStatusResponse, type RealmClaimStatus, type RealmClaimStatusRead } from './realm-claim-status';
 
 type NativeRealm = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['realms']>['get']>>['data']>['realm'];
 export type RealmClaimSnapshot = Pick<
@@ -29,6 +30,7 @@ export type RealmClaimResult =
 export type RealmClaimAdapter = {
   read: (realmId: string) => Promise<RealmClaimRead>;
   request: (input: RealmClaimInput) => Promise<RealmClaimResult>;
+  mine?: (realmId: string) => Promise<RealmClaimStatusRead>;
 };
 export type RealmClaimIntent = Readonly<RealmClaimInput & { source: RealmClaimSnapshot }>;
 export type RealmClaimState = {
@@ -38,6 +40,8 @@ export type RealmClaimState = {
   outcome: 'idle' | 'sending' | 'uncertain' | 'conflict' | 'refused' | 'pending';
   busy: boolean;
   reviewed: boolean;
+  recovered: RealmClaimStatus | null;
+  recovery: 'unchecked' | 'none' | 'found' | 'unavailable' | 'unused';
 };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -96,6 +100,7 @@ export function mayRequestRealmClaim(state: RealmClaimState) {
   return (
     !state.busy &&
     !state.intent &&
+    (state.recovery === 'none' || state.recovery === 'unused') &&
     state.outcome === 'idle' &&
     state.read.kind === 'ready' &&
     state.read.admission === 'allowed' &&
@@ -127,7 +132,10 @@ export function createRealmClaim(
     outcome: 'idle',
     busy: false,
     reviewed: false,
+    recovered: null,
+    recovery: adapter.mine ? 'unchecked' : 'unused',
   };
+  let generation = 0;
   const listeners = new Set<() => void>();
   function update(change: Partial<RealmClaimState>) {
     state = { ...state, ...change };
@@ -135,6 +143,7 @@ export function createRealmClaim(
   }
   async function refresh() {
     if (state.busy) return;
+    const version = ++generation;
     update({ busy: true });
     let read: RealmClaimRead;
     try {
@@ -142,10 +151,39 @@ export function createRealmClaim(
     } catch {
       read = { kind: 'unavailable' };
     }
+    if (version !== generation) return;
     if (read.kind === 'ready' && read.snapshot.realmId !== realmId) read = { kind: 'unavailable' };
-    update({ read, busy: false, reviewed: read.kind === 'ready' });
+    let recovered: RealmClaimStatus | null = null;
+    let recovery: RealmClaimState['recovery'] = adapter.mine ? 'unchecked' : 'unused';
+    if (
+      adapter.mine &&
+      read.kind === 'ready' &&
+      read.admission === 'allowed' &&
+      read.snapshot.ownershipState === 'orphaned'
+    ) {
+      let mine: RealmClaimStatusRead;
+      try {
+        mine = await adapter.mine(realmId);
+      } catch {
+        mine = { kind: 'unavailable' };
+      }
+      if (version !== generation) return;
+      recovery = 'unavailable';
+      if (mine.kind === 'ready' && sameRealmClaimSource(mine.source, read.snapshot)) {
+        const receipt = realmClaimStatusResponse({ claimRequest: mine.claimRequest }, { realmId });
+        if (receipt === null) recovery = 'none';
+        else if (receipt && receipt.orphanedAt === read.snapshot.orphanedAt) {
+          recovered = receipt;
+          recovery = 'found';
+        }
+      } else if (mine.kind === 'denied' || mine.kind === 'closed') read = { kind: mine.kind };
+      else if (mine.kind === 'signed-out') read = { ...read, admission: 'signed-out' };
+      else if (mine.kind === 'ready') read = { kind: 'unavailable' };
+    }
+    update({ read, recovered, recovery, busy: false, reviewed: read.kind === 'ready' });
   }
   async function send(intent: RealmClaimIntent) {
+    const version = ++generation;
     update({ busy: true, outcome: 'sending', reviewed: false });
     let result: RealmClaimResult;
     try {
@@ -172,11 +210,13 @@ export function createRealmClaim(
         outcome: result.kind === 'conflict' ? 'conflict' : 'refused',
         busy: false,
         read:
-          result.kind === 'conflict'
-            ? { kind: 'unavailable' }
-            : result.kind === 'signed-out'
-              ? { kind: 'ready', snapshot: intent.source, admission: 'signed-out' }
-              : { kind: result.kind },
+          version !== generation
+            ? state.read
+            : result.kind === 'conflict'
+              ? { kind: 'unavailable' }
+              : result.kind === 'signed-out'
+                ? { kind: 'ready', snapshot: intent.source, admission: 'signed-out' }
+                : { kind: result.kind },
       });
     }
   }
@@ -196,7 +236,18 @@ export function createRealmClaim(
       )
         return;
       // A new page payload updates the native source but supplies no personal admission or replacement intent.
-      update({ read: { kind: 'ready', snapshot, admission: 'unavailable' }, reviewed: false });
+      generation++;
+      update({
+        read: { kind: 'ready', snapshot, admission: 'unavailable' },
+        reviewed: false,
+        busy: false,
+        recovered: null,
+        recovery: adapter.mine ? 'unchecked' : 'unused',
+      });
+    },
+    observeUnavailable(read: Exclude<RealmClaimRead, { kind: 'ready' }>) {
+      generation++;
+      update({ read, reviewed: false, busy: false, recovered: null, recovery: adapter.mine ? 'unchecked' : 'unused' });
     },
     async submit() {
       if (!mayRequestRealmClaim(state) || state.read.kind !== 'ready') return;

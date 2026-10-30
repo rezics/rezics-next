@@ -1183,9 +1183,10 @@ the home panel.
 An updated native page payload replaces the displayed source while preserving its saved intent and requiring
 current personal admission again.
 
-One read runs after hydration, then only explicit manual refreshes. Each signed-in refresh makes exactly two
-Realm point reads and one participation check, independent of board, member or request count; an anonymous refresh
-uses one Realm read. Each request or explicit retry makes one native POST. No list, per-row admission, refill or
+One read runs after hydration, then only explicit manual refreshes. The existing admission read makes two
+Realm point reads and one participation check; an anonymous refresh uses one Realm read. For a signed-in readable
+orphan, the panel also makes the bounded own-request recovery read described below, independent of board, member
+or request count. Each request or explicit retry makes one native POST. No list, per-row admission, refill or
 repeated polling is added. `tests/realm-claim.test.ts` covers the native client boundary, retained page source,
 refusal, missing metadata, closure, uncertain retry and before/final binding; integration runs its acceptance.
 
@@ -1195,6 +1196,52 @@ story reuses AppShell and the same Space page and controls. Explicit transport f
 recording; they do not prove native approval or visual acceptance. New messages use English base-locale fallback.
 No external reference-project source was needed. Native, browser, regression and visual proof remain integration
 work under the minimal verification policy.
+
+### Own Realm claim request status
+
+`/realms/{id}/claim-requests/{requestId}` renders `RealmClaimStatusView` in the existing AppShell main.
+The same `RealmClaimControls` that displays the native submission receipt links its actual request ID to this
+page. It also links a recovered native own receipt after reload. No public owned state, role, profile or Space
+address creates a request reference. The only return link is the ordinary Realm route.
+
+The declared producer reads are `GET /v1/realms/{realmId}/claimRequests/{requestId}` and
+`GET /v1/realms/{realmId}/claimRequests/mine`, returning the closed `{claimRequest}` response. The point requires
+a request; only mine permits null, meaning known no current own request. The exact request fields are `realmId`,
+`requestId`, `state: pending|approved`, `orphanedAt`, `requestedAt`, `approvedAt: string|null`, and `currentEpisode`.
+The original producer owns current claimant identity and episode selection. These GETs are absent from the
+current generated client, so `realm-claim-status-native.ts` supplies an isolated typed consumer transport to those
+exact routes using `KERNEL_ORIGIN`. The original generated reader takes its place when integrated. Missing source,
+503, malformed responses and transport errors remain unavailable; none become an empty successful lookup.
+
+Each invocation prepares the current real session, forwards only its bearer credential and performs two fixed
+Realm/participation rounds around one exact own-request GET. Matching native Realm/head, Space, Context and
+continuity are required before disclosure. Closure, revoked reads and revoked participation conceal the receipt.
+The original native GET must enforce own-request identity before/final; the consumer adds no claimant store or
+permission authority. Reads are private no-store, omit cookies and redirect following, and never call the
+platform review queue. Approval is historical request outcome only. Current ownership and management still use
+ordinary Access; the page offers no ownership mutation. All dates render the original native values in UTC.
+An older pending episode is explicitly separate from current pending and approved outcomes. No approval timer,
+new waiting period, new claim, enqueue, regrant or inferred approval is introduced.
+
+On the existing panel's mount or explicit refresh, a signed-in readable orphan gets at most one current-episode
+mine lookup. A matching native receipt blocks a duplicate start; null enables an explicit new request only under
+the existing admission rules. Unknown recovery blocks a new start while preserving the original uncertain
+submission's exact intent and key for native retry. A late lookup cannot replace a newer page source, episode,
+intent or query. Updated unreadable page data also fences in-flight reads. Recovery is one bounded point, with
+no request history, list, refill, drain or per-row reads. Status pages read once on mount and then only on manual
+Check again: zero automatic settling refreshes, within the four-refresh maximum. There is no polling or progress count.
+The existing empty-body native POST and platform approval component remain the sole writers.
+
+Review IDs are `pages-community-realm-claim-status--pending`, `--approved`, `--unrelated`, `--unavailable`,
+`--reload`, `--obsolete-episode`, and the matching `patterns-community-realm-claim-status--…` IDs. The Reload
+Pattern exercises the existing receipt controls; the Page reload reads the same status component. Fixtures are
+explicit declared response examples based on the existing Realm recording, not native outcome recordings.
+Web owns ordinary 390/1280 light/dark review and screenshots. No native or visual pass is claimed here.
+`tests/realm-claim-status.test.ts` adds the named return journey and focused identity, recovery, stale-response,
+unknown/null, historical outcome and privacy cases; it is intentionally not run under the current verification policy.
+Only local Web typing is run for this delivery. No external reference-project source was needed; this surface
+uses the native community continuity contract, existing claim controls and existing platform-review transport pattern.
+Original permission/privacy/replay/erasure and physical/growth proof remain deferred, never waived.
 
 ### Platform Realm claim review
 

@@ -3377,5 +3377,21 @@
   "library_rule_conflict": "The rule changed elsewhere. Load its current version before saving again. Your draft is retained.",
   "library_rule_reloaded": "Current version loaded. Review your retained draft before saving.",
   "library_rule_members": "View collection members",
-  "library_rule_hint": "Combine catalogue conditions and private Library facts. Every condition is checked when you save."
+  "library_rule_hint": "Combine catalogue conditions and private Library facts. Every condition is checked when you save.",
+  "realm_claim_status_heading": "Your Realm claim request",
+  "realm_claim_status_open": "View request status",
+  "realm_claim_status_back": "Return to Realm",
+  "realm_claim_status_authority": "This is the outcome of your request. Current ownership and management actions follow the Realm’s ordinary access checks.",
+  "realm_claim_status_approved": "Request approved",
+  "realm_claim_status_approved_help": "This request was approved at the recorded time. Approval does not establish that you still own or can manage this Realm.",
+  "realm_claim_status_approved_at": "Approved at",
+  "realm_claim_status_old_pending": "This request remains recorded as pending from an earlier orphan episode. It does not request ownership for the current episode.",
+  "realm_claim_status_old_episode": "This request belongs to an earlier orphan episode.",
+  "realm_claim_status_signed_out": "Sign in to check your own request.",
+  "realm_claim_status_denied": "This request cannot be read with your current access.",
+  "realm_claim_status_closed": "Realm claim requests are currently closed.",
+  "realm_claim_status_unavailable": "The current request status is unavailable. Check again to read the native outcome.",
+  "realm_claim_status_recovery_unknown": "Your current request could not be confirmed. Refresh to check for an existing request before starting another. An unconfirmed submission keeps its original retry.",
+  "realm_claim_status_checking": "Checking request…",
+  "realm_claim_status_check_again": "Check again"
 }

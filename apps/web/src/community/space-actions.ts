@@ -1,5 +1,7 @@
 import { notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
+import { validateRealmClaimStatusRead, type RealmClaimStatusInput } from './realm-claim-status';
+import { readRealmClaimStatus, type RealmClaimStatusEnv } from './realm-claim-status-native';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../kernel/client';
@@ -158,6 +160,13 @@ export const readRealmClaimState = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return readRealmClaim(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const readOwnRealmClaimStatus = createServerFn({ method: 'GET' })
+  .validator((input: RealmClaimStatusInput) => validateRealmClaimStatusRead(input))
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return readRealmClaimStatus(kernelClient(), getRequest(), env as RealmClaimStatusEnv, data);
   });
 
 export const submitRealmClaim = createServerFn({ method: 'POST' })

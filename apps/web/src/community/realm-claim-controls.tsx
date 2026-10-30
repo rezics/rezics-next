@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import {
   createRealmClaim,
   mayRequestRealmClaim,
@@ -46,7 +46,8 @@ export function RealmClaimControls({
   const pageSnapshot = initial.kind === 'ready' ? initial.snapshot : null;
   useEffect(() => {
     if (pageSnapshot) control.observePage(pageSnapshot);
-  }, [control, pageSnapshot]);
+    else if (initial.kind !== 'ready') control.observeUnavailable(initial);
+  }, [control, initial]);
   useEffect(() => {
     if (load) void control.refresh();
   }, [control, load]);
@@ -56,8 +57,8 @@ export function RealmClaimControls({
   const current = state.read.kind === 'ready' ? state.read : null;
   const orphan = current?.snapshot.ownershipState === 'orphaned' ? current.snapshot : null;
   const request =
-    orphan && state.request?.orphanedAt === orphan.orphanedAt && current?.admission === 'allowed'
-      ? state.request
+    orphan && (state.request ?? state.recovered)?.orphanedAt === orphan.orphanedAt && current?.admission === 'allowed'
+      ? (state.request ?? state.recovered)
       : null;
   const owned = current?.snapshot.ownershipState === 'owned';
   return (
@@ -92,10 +93,17 @@ export function RealmClaimControls({
           {m.realm_claim_admission_unavailable()}
         </p>
       ) : null}
+      {orphan && current?.admission === 'allowed' && ['unchecked', 'unavailable'].includes(state.recovery) ? (
+        <p role="status" className="text-sm">
+          {m.realm_claim_status_recovery_unknown()}
+        </p>
+      ) : null}
       {request ? (
         <div role="status" className="space-y-3 rounded-xl bg-muted p-4 text-sm">
-          <p className="font-semibold">{m.realm_claim_pending()}</p>
-          <p>{m.realm_claim_review_help()}</p>
+          <p className="font-semibold">
+            {request.state === 'approved' ? m.realm_claim_status_approved() : m.realm_claim_pending()}
+          </p>
+          <p>{request.state === 'approved' ? m.realm_claim_status_approved_help() : m.realm_claim_review_help()}</p>
           <dl className="space-y-2">
             <div>
               <dt className="text-muted-foreground">{m.realm_claim_reference()}</dt>
@@ -120,6 +128,12 @@ export function RealmClaimControls({
             }}
           >
             {m.realm_claim_copy()}
+          </Button>
+          <Button
+            variant="outline"
+            render={<a href={localizeHref(`/realms/${realmId}/claim-requests/${request.requestId}`)} />}
+          >
+            {m.realm_claim_status_open()}
           </Button>
           {copyState !== 'idle' ? (
             <p>{copyState === 'copied' ? m.realm_claim_copied() : m.realm_claim_copy_failed()}</p>

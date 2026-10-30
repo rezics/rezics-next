@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { useSession } from '../session/query';
-import { readRealmClaimState, submitRealmClaim } from './space-actions';
+import { readRealmClaimState, readOwnRealmClaimStatus, submitRealmClaim } from './space-actions';
 import { RealmClaimControls } from './realm-claim-controls';
 import type { RealmClaimAdapter, RealmClaimRead, RealmClaimSnapshot } from './realm-claim';
 
@@ -33,6 +33,10 @@ export function RealmClaimPanel({
       request: (data) =>
         latest.current.state === 'signed-in' && latest.current.csrfToken
           ? submitRealmClaim({ data, headers: { 'X-CSRF-Token': latest.current.csrfToken } })
+          : Promise.resolve({ kind: 'signed-out' }),
+      mine: (realmId) =>
+        latest.current.state === 'signed-in'
+          ? readOwnRealmClaimStatus({ data: { realmId } })
           : Promise.resolve({ kind: 'signed-out' }),
     }),
     [],
