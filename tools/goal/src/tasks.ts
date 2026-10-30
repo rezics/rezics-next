@@ -12,6 +12,7 @@ import { pace, readCodexSchedule } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { awaitHostCapacity, launch, startsFirst, workerPrompt, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
+import { completeRebaseConflictContext } from './conflict-progress.ts';
 import { terminateProcessGroup } from './process.ts';
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -37,6 +38,17 @@ function normalizedBriefText(markdown: string): string {
 
 function briefHash(markdown: string): string {
   return createHash('sha256').update(normalizedBriefText(markdown)).digest('hex');
+}
+
+function priorRebaseConflict(store: WorkerStore, taskId: string, attempt: number) {
+  const event = store.events(taskId, attempt).findLast((candidate) => candidate.kind === 'gate-outcome');
+  if (!event) return undefined;
+  try {
+    const body = JSON.parse(event.body) as { stage?: unknown; rebaseConflict?: unknown };
+    return body.stage === 'rebase' ? completeRebaseConflictContext(body.rebaseConflict) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function sameBriefText(left: string, right: string): boolean {
@@ -777,6 +789,10 @@ export class WorkerTasks {
       this.ensureWorktree(task);
       const pools = this.poolPolicies.read();
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
+      const previousConflict =
+        options.escalation === 'rebase-conflict' && old
+          ? priorRebaseConflict(this.store, taskId, old.attempt)
+          : undefined;
       const oldConfigDirectory = old
         ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
@@ -972,6 +988,7 @@ export class WorkerTasks {
         setupStep = `rebasing onto current ${this.taskBaseBranch(task.brief)}`;
         const integration = this.taskBaseHead(task.brief);
         const tip = git(task.worktree, ['rev-parse', 'HEAD']);
+        const workerCommit = previousConflict?.workerCommit ?? tip;
         const rebaseLog = `${next.logPath}.rebase`;
         mkdirSync(dirname(rebaseLog), { recursive: true });
         let files: string[] = [];
@@ -1000,6 +1017,10 @@ export class WorkerTasks {
         task = this.store.updateTask(next, (current) => {
           current.base = integration;
         });
+        if (options.escalation === 'rebase-conflict') {
+          const controllerHead = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`]);
+          this.store.event(next, 'worker-source-baseline', { workerCommit, controllerHead });
+        }
         if (!files.length && (changedBase || options.escalation === 'rebase-conflict') && !regeneratedLockfile) {
           setupStep = 'installing worktree dependencies';
           installWorktreeDependencies(task.worktree);

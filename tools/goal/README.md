@@ -71,7 +71,8 @@ Briefs can carry frozen acceptance files in fenced blocks whose info string incl
 configured `formatCommand` on exactly these files before committing them and records their formatted SHA-256 hashes. If
 the formatter rejects a file, the controller restores the brief's original bytes, commits those, and reports the
 formatter output so the manager can repair the brief. The train checks hashes before formatting a landing and refuses
-integration if a worker changes a frozen file.
+integration if a worker changes a frozen file. This immutable-input refusal names the changed paths and goes directly
+to the manager as a specification conflict; it does not enter the Git rebase conflict retry path.
 When a retry reshapes a brief and drops a previously frozen path, the controller restores that file from the task's base
 commit when it existed there; it removes the file only when it was absent from the base. Paths still frozen by the new
 brief continue to be written and formatted from that brief.
@@ -143,10 +144,15 @@ changes belong to it and whether all its commits are on dev; those tasks become 
 commits cannot finish by claiming a peer's work. A failing landing returns to the tasks identified by the failing
 acceptance or changed files. Main promotion retains its existing workflow.
 
-A dev rebase conflict enters the existing rebase-conflict retry path with its conflict files and evidence. A batch
-drops members already integrated before advancing dev, so one completed member cannot refuse the others. The
-manager-host sweep also repairs a current `landing` task that has no pending queue entry after both train lanes are
-idle: it records a durable retry and sends one environment notice to the supermanager.
+A rebase conflict enters the existing same-profile retry path with its conflict files and evidence. The train
+records the full effective target commit, source worker commit and sorted unresolved path set at the conflict. A
+bounded no-progress guard stops only when the current conflict and two of the six most recent prior conflicts have
+the same complete Git context; redacted failure fingerprints and legacy outcomes without that context do not count.
+The single stop notice records the target, source and paths durably. A batch uses the cumulative target commit after
+earlier members, so a target advanced within the batch counts as progress. A batch drops members already integrated
+before advancing dev, so one completed member cannot refuse the others. The manager-host sweep also repairs a current
+`landing` task that has no pending queue entry after both train lanes are idle: it records a durable retry and sends
+one environment notice to the supermanager.
 
 The controller merges dev into the workspace only while no worker runs there, under the same short lease used for
 launch. Pending launches also block that merge. Dirty work is preserved and defers the merge until a later idle
@@ -593,8 +599,10 @@ exhaustion chooses another allowed pool. Repeating the same first assertion afte
 the original profile receives its answer in a fresh session. Scope growth, stalls, failure after consultation and the
 two-fix-round limit reach the owning manager. An early success claim followed by a failed gate is recorded and continued.
 Generated files marked `linguist-generated=true` are excluded from estimate totals, while every changed file remains subject to declared-path checks.
-Rebase-stage conflicts with the integration branch receive one same-profile resolution attempt after the control plane starts that rebase in
-the task worktree; a second conflict goes to the manager as a specification conflict.
+Rebase-stage conflicts with the integration branch receive same-profile resolution attempts after the control plane
+starts that rebase in the task worktree. Controller-only rebase commits do not count as worker progress. The bounded
+guard sends one specification-conflict notice only after the same source worker commit, effective target commit and
+sorted conflict paths recur without progress; a newer target, changed paths or a new worker commit remains retryable.
 
 Attempts persist the driver process identity alongside the worker identity. Orphan recovery waits for the worker group to exit, then settles its run log under the task lifecycle lease; unexpected driver exceptions are recorded as environment failures and delivered to the manager.
 

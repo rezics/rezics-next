@@ -151,7 +151,7 @@ export const MANAGER_INCIDENT_REGRESSIONS: readonly RegressionCase[] = [
     incident: 'Landing train: a conflict loops hundreds of retries instead of bounded recovery',
     file: 'tools/goal/src/rebase-conflict.test.ts',
     testName:
-      'a rebase conflict starts a resolution attempt, not a fix round or a consultation, and the second goes to the manager',
+      'a rebase conflict starts a same-profile resolution attempt and legacy outcomes without Git context keep retrying',
   },
   {
     id: 'landing-unfreeze-retains-file',
