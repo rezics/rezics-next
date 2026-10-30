@@ -82,7 +82,7 @@ test('actual UTF-8 bytes are counted across HTTP chunks, including split multiby
     expect(new TextDecoder().decode(bytes)).toContain('水🙂é');
     expect(bytes.length).toBeGreaterThan(new TextDecoder().decode(bytes).length);
     await withServer(
-      (request) => new URL(request.url).pathname === '/wire' ? chunked(bytes, [1, 2, 5, 17]) : forward(request),
+      (request) => (new URL(request.url).pathname === '/wire' ? chunked(bytes, [1, 2, 5, 17]) : forward(request)),
       async (address) => {
         const exact = createOpenSearch(address, { maxResponseBytes: bytes.length });
         expect((await exact.request('GET', '/wire')).body).toMatchObject({ _source: { label: '水🙂é' } });
@@ -103,9 +103,12 @@ test('the production 4 MiB budget accepts exact bytes and rejects boundary plus 
   await withServer(
     (request) => {
       switch (new URL(request.url).pathname) {
-        case '/exact': return chunked(exact, [65535, 1, 131072]);
-        case '/over': return chunked(over, [65535, 1, 131072]);
-        default: return forward(request);
+        case '/exact':
+          return chunked(exact, [65535, 1, 131072]);
+        case '/over':
+          return chunked(over, [65535, 1, 131072]);
+        default:
+          return forward(request);
       }
     },
     async (address) => {
@@ -123,14 +126,18 @@ test('an oversized never-ending producer is cancelled before EOF and the same cl
   await withServer(
     (request) => {
       if (new URL(request.url).pathname !== '/endless') return forward(request);
-      return new Response(new ReadableStream<Uint8Array>({
-        async pull(controller) {
-          produced += 1024;
-          controller.enqueue(new Uint8Array(1024).fill(32));
-          await Bun.sleep(5);
-        },
-        cancel() { cancelled.resolve(); },
-      }));
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            produced += 1024;
+            controller.enqueue(new Uint8Array(1024).fill(32));
+            await Bun.sleep(5);
+          },
+          cancel() {
+            cancelled.resolve();
+          },
+        }),
+      );
     },
     async (address) => {
       const client = createOpenSearch(address, { maxResponseBytes: 4096 });
@@ -147,9 +154,17 @@ test('an oversized never-ending producer is cancelled before EOF and the same cl
 test('an honest oversized Content-Length refuses at headers and cancels a body that never sends bytes', async () => {
   const cancelled = Promise.withResolvers<void>();
   await withServer(
-    (request) => new URL(request.url).pathname === '/large' ? new Response(new ReadableStream({
-      cancel() { cancelled.resolve(); },
-    }), { headers: { 'content-length': String(MAX_BYTES + 1) } }) : forward(request),
+    (request) =>
+      new URL(request.url).pathname === '/large'
+        ? new Response(
+            new ReadableStream({
+              cancel() {
+                cancelled.resolve();
+              },
+            }),
+            { headers: { 'content-length': String(MAX_BYTES + 1) } },
+          )
+        : forward(request),
     async (address) => {
       const client = createOpenSearch(address, { timeoutMs: 2000 });
       const error = await unavailable(client.request('GET', '/large'));
@@ -161,10 +176,7 @@ test('an honest oversized Content-Length refuses at headers and cancels a body t
 });
 
 // Raw HTTP is necessary for conflicting/invalid lengths, truncated framing and peer disconnects.
-async function withWire(
-  write: (socket: Socket) => void,
-  run: (address: string) => Promise<void>,
-) {
+async function withWire(write: (socket: Socket) => void, run: (address: string) => Promise<void>) {
   const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
@@ -179,7 +191,7 @@ async function withWire(
     await run(`http://127.0.0.1:${address.port}`);
   } finally {
     for (const socket of sockets) socket.destroy();
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 }
 
@@ -211,10 +223,19 @@ test('timeout remains active after headers and after partial body bytes and rele
   for (const partial of [false, true]) {
     const cancelled = Promise.withResolvers<void>();
     await withServer(
-      (request) => new URL(request.url).pathname === '/slow' ? new Response(new ReadableStream<Uint8Array>({
-        start(controller) { if (partial) controller.enqueue(encoder.encode('{"waiting":')); },
-        cancel() { cancelled.resolve(); },
-      })) : forward(request),
+      (request) =>
+        new URL(request.url).pathname === '/slow'
+          ? new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  if (partial) controller.enqueue(encoder.encode('{"waiting":'));
+                },
+                cancel() {
+                  cancelled.resolve();
+                },
+              }),
+            )
+          : forward(request),
       async (address) => {
         const client = createOpenSearch(address);
         const error = await unavailable(client.request('GET', '/slow', undefined, { timeoutMs: 100 }));
@@ -236,7 +257,9 @@ test('abort from the HTTP peer during body consumption is unavailable and a subs
         socket.write('HTTP/1.1 200 OK\r\nContent-Length: 10000\r\n\r\n{"partial":');
         setTimeout(() => socket.destroy(), 10);
       } else {
-        socket.end(`HTTP/1.1 200 OK\r\nContent-Length: ${root.length}\r\nConnection: close\r\n\r\n${new TextDecoder().decode(root)}`);
+        socket.end(
+          `HTTP/1.1 200 OK\r\nContent-Length: ${root.length}\r\nConnection: close\r\n\r\n${new TextDecoder().decode(root)}`,
+        );
       }
     },
     async (address) => {
@@ -271,10 +294,19 @@ test('bounded native 4xx diagnostics survive while oversized errors and gateway 
   await withServer(
     (request) => {
       const path = new URL(request.url).pathname;
-      if (path === '/oversized-error') return chunked(encoder.encode(JSON.stringify({
-        error: { type: 'private_error', reason: 'private-wire-payload'.repeat(1024) },
-      })), [127, 1024], undefined, 400);
-      if (/^\/gateway\//.test(path)) return new Response('private-wire-payload', { status: Number(path.split('/')[2]) });
+      if (path === '/oversized-error')
+        return chunked(
+          encoder.encode(
+            JSON.stringify({
+              error: { type: 'private_error', reason: 'private-wire-payload'.repeat(1024) },
+            }),
+          ),
+          [127, 1024],
+          undefined,
+          400,
+        );
+      if (/^\/gateway\//.test(path))
+        return new Response('private-wire-payload', { status: Number(path.split('/')[2]) });
       if (path === '/plain-error') return new Response('private-wire-payload', { status: 400 });
       return forward(request);
     },
@@ -317,8 +349,12 @@ test('real query, bulk, query parameters, native errors and HEAD semantics survi
   const captures: { method: string; path: string; body: string; contentType: string | null }[] = [];
   await withServer(
     async (request) => {
-      captures.push({ method: request.method, path: new URL(request.url).pathname + new URL(request.url).search,
-        body: await request.clone().text(), contentType: request.headers.get('content-type') });
+      captures.push({
+        method: request.method,
+        path: new URL(request.url).pathname + new URL(request.url).search,
+        body: await request.clone().text(),
+        contentType: request.headers.get('content-type'),
+      });
       return forward(request);
     },
     async (address) => {
@@ -336,11 +372,18 @@ test('real query, bulk, query parameters, native errors and HEAD semantics survi
         });
         expect(bulk.errors).toBe(true);
         expect(bulk.items.map((item) => item.index.status)).toEqual([201, 409]);
-        expect(captures.at(-1)).toEqual({ method: 'POST', path: '/_bulk?refresh=wait_for',
-          body: lines.map((line) => JSON.stringify(line)).join('\n') + '\n', contentType: 'application/x-ndjson' });
+        expect(captures.at(-1)).toEqual({
+          method: 'POST',
+          path: '/_bulk?refresh=wait_for',
+          body: lines.map((line) => JSON.stringify(line)).join('\n') + '\n',
+          contentType: 'application/x-ndjson',
+        });
         const query = { query: { match: { name: 'lantern' } }, size: 1 };
         const result = await client.request<{ hits: { hits: { _id: string; _source: { name: string } }[] } }>(
-          'POST', `/${index}/_search`, query, { query: { track_total_hits: false, preference: 'wire & utf8 水' } },
+          'POST',
+          `/${index}/_search`,
+          query,
+          { query: { track_total_hits: false, preference: 'wire & utf8 水' } },
         );
         expect(result.body.hits.hits).toMatchObject([{ _id: 'a', _source: { name: '水 lantern' } }]);
         expect(captures.at(-1)?.body).toBe(JSON.stringify(query));
@@ -373,9 +416,17 @@ test('streamed byte accounting and one native query stay fixed across three unre
       async (request) => {
         requests++;
         const response = await forward(request);
-        return new Response(response.body!.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-          transform(chunk, controller) { bytes += chunk.byteLength; controller.enqueue(chunk); },
-        })), { status: response.status });
+        return new Response(
+          response.body!.pipeThrough(
+            new TransformStream<Uint8Array, Uint8Array>({
+              transform(chunk, controller) {
+                bytes += chunk.byteLength;
+                controller.enqueue(chunk);
+              },
+            }),
+          ),
+          { status: response.status },
+        );
       },
       async (address) => {
         const client = createOpenSearch(address, { maxResponseBytes: 1024 });
@@ -383,17 +434,28 @@ test('streamed byte accounting and one native query stay fixed across three unre
         for (const population of [0, 37, 211]) {
           if (population > previous) {
             const lines = Array.from({ length: population - previous }, (_, n) => [
-              { index: { _index: index, _id: `unrelated-${n + previous}` } }, { selected: false, padding: 'x'.repeat(128) },
+              { index: { _index: index, _id: `unrelated-${n + previous}` } },
+              { selected: false, padding: 'x'.repeat(128) },
             ]).flat();
-            expect((await native.bulk<{ errors: boolean }>(lines, { query: { refresh: 'wait_for' } })).errors).toBe(false);
+            expect((await native.bulk<{ errors: boolean }>(lines, { query: { refresh: 'wait_for' } })).errors).toBe(
+              false,
+            );
           }
           previous = population;
           requests = 0;
           bytes = 0;
-          const response = await client.request<{ hits: { hits: { _id: string }[] } }>('POST', `/${index}/_search`, {
-            query: { term: { selected: true } }, size: 1,
-          }, { query: { filter_path: 'hits.hits._id,hits.hits._source' } });
-          expect(response.body.hits.hits).toMatchObject([{ _id: 'selected', _source: { selected: true, label: '水🙂' } }]);
+          const response = await client.request<{ hits: { hits: { _id: string }[] } }>(
+            'POST',
+            `/${index}/_search`,
+            {
+              query: { term: { selected: true } },
+              size: 1,
+            },
+            { query: { filter_path: 'hits.hits._id,hits.hits._source' } },
+          );
+          expect(response.body.hits.hits).toMatchObject([
+            { _id: 'selected', _source: { selected: true, label: '水🙂' } },
+          ]);
           expect(bytes).toBe(encoder.encode(JSON.stringify(response.body)).length);
           observations.push({ requests, bytes });
         }

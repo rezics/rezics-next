@@ -80,7 +80,10 @@ function unavailableMessage(error: unknown): string {
 
 export function createOpenSearch(
   url: string,
-  options: { timeoutMs?: number; /** Internal tests may only lower the hard ceiling. */ maxResponseBytes?: number } = {},
+  options: {
+    timeoutMs?: number;
+    /** Internal tests may only lower the hard ceiling. */ maxResponseBytes?: number;
+  } = {},
 ): OpenSearch {
   const base = new URL(url.endsWith('/') ? url : `${url}/`);
   const defaultTimeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
