@@ -298,6 +298,7 @@ export function SettingsPageView({
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useSession();
+  const managedTarget = managedAccountTarget(location.publicHref);
   const signedOut = !page.signedIn && (session.state === 'unknown' || session.state === 'signed-out');
   const ready =
     page.signedIn && session.state === 'signed-in' && !!session.subject && page.accountId === session.subject;
@@ -337,6 +338,11 @@ export function SettingsPageView({
           <section id="display" aria-labelledby="settings-display-heading" className="scroll-mt-6">
             <DisplayPreferences />
           </section>
+          {page.signedIn && managedTarget !== undefined ? (
+            <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
+              <ManagedAccountDetail accountId={managedTarget} backHref={managedAccountsBackHref(location.publicHref)} />
+            </section>
+          ) : null}
         </div>
       )}
     </article>

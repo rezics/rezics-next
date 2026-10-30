@@ -25,6 +25,7 @@ function SettingsExample() {
       <SettingsPageView
         page={{
           signedIn: true,
+          accountId: managedViewer,
           preferences: { spoilerLevel: 1, suitability: 'blur', version: 1 },
           notifications: { reply: true, mention: true },
           csrfToken: 'story-csrf-token',
