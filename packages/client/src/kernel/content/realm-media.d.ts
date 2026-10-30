@@ -30,6 +30,37 @@ export type RealmPresentationImage = Readonly<{
     }> | null;
     credit: import('@rezics/definitions/media-import').MediaImportRequest['credit'] | null;
 }>;
+export declare const RealmPresentationImageSchema: import("typebox").TObject<{
+    id: import("typebox").TString;
+    containerId: import("typebox").TString;
+    digest: import("typebox").TString;
+    width: import("typebox").TInteger;
+    height: import("typebox").TInteger;
+    variants: import("typebox").TArray<import("typebox").TObject<{
+        format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+        width: import("typebox").TInteger;
+        height: import("typebox").TInteger;
+    }>>;
+    placeholder: import("typebox").TUnion<[import("typebox").TObject<{
+        thumbhash: import("typebox").TString;
+        color: import("typebox").TString;
+    }>, import("typebox").TNull]>;
+    focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+        x: import("typebox").TNumber;
+        y: import("typebox").TNumber;
+    }>, import("typebox").TNull]>;
+    credit: import("typebox").TUnion<[import("typebox").TObject<{
+        rightsHolder: import("typebox").TString;
+        via: import("typebox").TObject<{
+            name: import("typebox").TString;
+            url: import("typebox").TString;
+        }>;
+        license: import("typebox").TString;
+        obligations: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"cc:Attribution">, import("typebox").TLiteral<"cc:ShareAlike">, import("typebox").TLiteral<"cc:Notice">, import("typebox").TLiteral<"cc:SourceCode">]>>;
+    }>, import("typebox").TNull]>;
+}>;
+/** Exact JSON summary shared by native presentation consumers; never download authority. */
+export declare function exactRealmPresentationImage(value: RealmPresentationImage): import('typebox').Static<typeof RealmPresentationImageSchema> | null;
 /** Called after the native settings revision/head writes, within their authorized command.
  * Null slots never undo claims made by an immutable earlier Realm revision. */
 export declare function claimRealmPresentationMedia(tx: CommandTransaction, input: Readonly<{

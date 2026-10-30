@@ -4913,7 +4913,35 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 spaceId: string;
                                 name: string;
                                 description: string;
-                                avatar: null;
+                                avatar: {
+                                    id: string;
+                                    containerId: string;
+                                    digest: string;
+                                    width: number;
+                                    height: number;
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                        height: number;
+                                    }[];
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    } | null;
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                    } | null;
+                                } | null;
                             }[];
                             next: string | null;
                         };

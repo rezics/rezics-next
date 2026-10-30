@@ -130189,7 +130189,176 @@
                         "additionalProperties": false,
                         "properties": {
                           "avatar": {
-                            "type": "null"
+                            "additionalProperties": false,
+                            "properties": {
+                              "containerId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "credit": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "license": {
+                                    "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]{0,79}$",
+                                    "type": "string"
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "enum": [
+                                        "cc:Attribution",
+                                        "cc:ShareAlike",
+                                        "cc:Notice",
+                                        "cc:SourceCode"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "maxItems": 4,
+                                    "type": "array",
+                                    "uniqueItems": true
+                                  },
+                                  "rightsHolder": {
+                                    "maxLength": 1024,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "via": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "name": {
+                                        "maxLength": 1024,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "url": {
+                                        "maxLength": 1024,
+                                        "minLength": 1,
+                                        "pattern": "^https://[^\\s]+(?![\\s\\S])",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "url"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "rightsHolder",
+                                  "via",
+                                  "license",
+                                  "obligations"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "digest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "focalPoint": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "x": {
+                                    "maximum": 1,
+                                    "minimum": 0,
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "maximum": 1,
+                                    "minimum": 0,
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "x",
+                                  "y"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "height": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "id": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "placeholder": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "color": {
+                                    "type": "string"
+                                  },
+                                  "thumbhash": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "thumbhash",
+                                  "color"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "variants": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "format": {
+                                      "enum": [
+                                        "avif",
+                                        "webp"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "height": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "width": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "format",
+                                    "width",
+                                    "height"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 12,
+                                "minItems": 1,
+                                "type": "array"
+                              },
+                              "width": {
+                                "minimum": 1,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "containerId",
+                              "digest",
+                              "width",
+                              "height",
+                              "variants",
+                              "placeholder",
+                              "focalPoint",
+                              "credit"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "description": {
                             "maxLength": 160,

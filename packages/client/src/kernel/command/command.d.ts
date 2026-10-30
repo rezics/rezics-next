@@ -165,6 +165,11 @@ export declare function hasOwnCommandCompletion(tx: CommandTransaction, receipt:
 export declare function authoritativeTimeValue(time: AuthoritativeTime): string;
 /** Read-only context is unavailable before authorization or after the attempt. */
 export declare function currentCommand(tx: CommandTransaction): CurrentCommand;
+/** Trusted owner factories reuse the live executor resources; this grants no second checkout. */
+export declare function currentCommandResources(tx: CommandTransaction): Readonly<{
+    pool: Pool;
+    deadline: number;
+}>;
 /** Allows existing Access checks in a mutation to reuse the same attempt time. */
 export declare function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined;
 /** Executor-owned budget for source preparation; copied attempts have no budget. */
