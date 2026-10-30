@@ -18,6 +18,8 @@ import { undoToast } from '@rezics/ui/undo-toast';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ListRow } from '@rezics/ui/list-row';
 import { DocumentBody, type DocumentMentions } from '../../document-body';
+import { NativeDocumentImage } from '../../threads/document-media';
+import { documentImageForPost, type ThreadDocumentMedia } from '../../threads/document-media-read';
 import { ContentActions } from '@rezics/ui/content-actions';
 import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
@@ -184,6 +186,7 @@ export function ThreadReadingPost({
   post,
   authors,
   mentions,
+  documentMedia,
   now,
   viewerId,
   personalReady,
@@ -208,6 +211,7 @@ export function ThreadReadingPost({
   post: ThreadPost;
   authors: PageAuthors;
   mentions: DocumentMentions;
+  documentMedia?: ThreadDocumentMedia | undefined;
   now: string;
   viewerId: string | undefined;
   personalReady: boolean;
@@ -446,6 +450,13 @@ export function ThreadReadingPost({
           <DocumentBody
             className="mx-0! w-full overflow-x-auto [overflow-wrap:anywhere] [&_img]:rounded-lg"
             document={post.body}
+            renderImage={({ mediaId, alt }) => (
+              <NativeDocumentImage
+                image={documentImageForPost(documentMedia, post, mediaId)}
+                alt={alt}
+                locale={getLocale()}
+              />
+            )}
             mentions={mentions}
             locale={getLocale()}
             labels={{ revealSpoiler: m.thread_reveal_spoiler() }}

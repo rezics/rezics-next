@@ -2317,6 +2317,42 @@ parent selection/cancellation, deleted and withheld posts, a deleted organizatio
 both recorded history versions, reporting, loading, unavailable and current denial states. These are review inputs;
 typing alone establishes no native or visual pass.
 
+### Current document images
+
+`threads/document-media.ts` is Web's sole document image consumer. It exports `loadDocumentMedia(client, ids,
+authorization?)`, `DocumentImagePresentation`, `DocumentMediaPage`, `DocumentMediaRead` and the re-exported
+`NativeDocumentImage({ image, alt, locale })`. The declared native source is `POST /v1/media/presentations`, with
+strict `{ ids: string[] }`, at most 32 unique original IDs, and a closed `{ images }` response. The producer module
+`services/kernel/src/content/media-presentation.ts` is absent in this checkout, so its exact declared DTO is isolated
+in this consumer until the original declaration is delivered. The adapter uses the original client's transport;
+an absent source, a failed read or an invalid response is typed unavailable. An omitted image means unavailable,
+without an explanation or any inference about its existence or the viewer's rights.
+
+The existing authorized thread page read collects a union from available current post bodies only, intersecting
+actual image node references with each post's declared `mediaIds`. It makes one media batch for that delivered page,
+using the same current server credential and no-store transport. The server function retains private/no-store
+responses; no credential enters page data. Over 32 distinct references makes every image on that page unavailable,
+preserving every document body and making no media request. No truncation, refill, per-image read or automatic retry
+is used. Summaries are bound to the exact returned post, thread, revision and document digest. Local edits and newly
+returned replies remain unavailable until an ordinary page refresh supplies summaries for their current documents.
+
+The ordinary post's existing Web `DocumentBody` wrapper receives an explicit `NativeDocumentImage` callback. Only
+actual returned derivative formats, widths and dimensions select `picture`/`img` sources through `coverSrc`. There
+are no original, external or object-store image sources and no rendering-time reads. Missing or failed images retain
+their accessible alternative; delivered credit remains visible after a byte failure. The Worker download route
+retains independent current media authorization, and media metadata grants no document or paid-content rights.
+Exact revisions, history and editions can reuse these same exports with their own independent document authority.
+
+Review `src/stories/thread-media.stories.tsx`: `pages-community-thread--available`,
+`pages-community-thread--unavailable`, `pages-community-thread--overflow` and
+`pages-community-thread--image-failure`. These mount the actual thread reading region and post component in
+the existing AppShell, using normal 390/1280 light/dark globals. They are constructed interface DTO examples using
+the existing recorded derivative asset, not native disclosure or visual approval. The focused acceptance lives in
+`tests/document-media.test.ts`; it is deferred to integration under the current minimal verification policy.
+Source read: the native post/media contracts, shared document renderer, Web read/credential/download boundaries and
+the existing thread recordings and Storybook fixture contract. No external reference source is needed for this
+remaining connection.
+
 ### Author erasure in a thread
 
 `threads/author-erasure-entry.tsx` is the narrow author action region mounted by `ThreadReading`. Opening its

@@ -8,6 +8,7 @@ import type { ReadCredentialMode } from '../kernel/credential';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';
+import { readThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
 
 type ThreadResource = ReturnType<KernelClient['threads']>;
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -27,6 +28,7 @@ export type LoadedThreadPage = {
   realm?: BoardRealm;
   posts: PostPage;
   mentions: DocumentMentions;
+  documentMedia?: ThreadDocumentMedia;
   viewerId?: string;
   verification: VerificationConfig;
 };
@@ -117,12 +119,16 @@ export async function loadThreadPage(
   const [pageContext, postsResult] = await Promise.all([readContext(), postsRead]);
   context = pageContext;
   posts = checkRead<PostPage>(postsResult, 'thread posts');
-  const mentions = await readDocumentMentions(
-    client,
-    posts.posts.map((post) => post.body),
-  );
+  const [mentions, documentMedia] = await Promise.all([
+    readDocumentMentions(
+      client,
+      posts.posts.map((post) => post.body),
+    ),
+    readThreadDocumentMedia(client, posts.posts, authorization),
+  ]);
   return {
     mentions,
+    documentMedia,
     thread: thread.thread,
     ...context,
     posts,

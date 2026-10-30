@@ -52,6 +52,7 @@ export function ThreadReading({
   const { thread, realm, posts: loadedPosts, authors, provenanceSubjects, verification, mentions, now } = page;
   const [posts, setPosts] = useState(loadedPosts);
   const [currentMentions, setCurrentMentions] = useState(mentions);
+  const [documentMedia, setDocumentMedia] = useState(page.documentMedia);
   const [displayTitle, setDisplayTitle] = useState(thread.title);
   const [replyTarget, setReplyTarget] = useState<{ parentId: string | null; focusRequest: number }>({
     parentId: null,
@@ -70,6 +71,7 @@ export function ThreadReading({
   const summary = realm?.summary?.trim();
   useEffect(() => setPosts(loadedPosts), [loadedPosts]);
   useEffect(() => setCurrentMentions(mentions), [mentions]);
+  useEffect(() => setDocumentMedia(page.documentMedia), [page.documentMedia]);
   useEffect(() => setDisplayTitle(thread.title), [thread.id, thread.title]);
   useEffect(() => onPostIdsChange?.(posts.posts.map((post) => post.id)), [posts.posts, onPostIdsChange]);
 
@@ -85,6 +87,7 @@ export function ThreadReading({
     if (!updated) return;
     setPosts(updated.posts);
     setCurrentMentions(updated.mentions);
+    setDocumentMedia(updated.documentMedia);
     setDisplayTitle(updated.thread.title);
   }
 
@@ -124,6 +127,7 @@ export function ThreadReading({
                       post={post}
                       authors={authors}
                       mentions={currentMentions}
+                      documentMedia={documentMedia}
                       now={now}
                       viewerId={currentPersonal?.viewerId ?? undefined}
                       personalReady={session !== 'signed-in' || currentPersonal !== undefined}

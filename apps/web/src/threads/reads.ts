@@ -24,6 +24,7 @@ import {
   revisionDocumentImageIds,
   type RevisionDocumentMedia,
 } from './exact-revision-media';
+import type { ThreadDocumentMedia } from './document-media-read';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -292,6 +293,7 @@ export const readThreadPage = createServerFn({ method: 'GET' })
           authors: PageAuthors;
           subjects: ThreadSubject[];
           provenanceSubjects: ThreadSubject[];
+          documentMedia?: ThreadDocumentMedia;
           now: string;
         }
       | ThreadSlugRedirect
