@@ -193,7 +193,10 @@ export async function writeIndexActions<Document extends SearchDocument>(
   options: { rejectConflicts?: boolean; writeAlias?: string } = {},
 ): Promise<void> {
   const response = await search.bulk<BulkResponse>(bulkLines(options.writeAlias ?? index, actions), {
-    query: { ...(options.writeAlias ? { require_alias: true, wait_for_active_shards: 'all' } : {}), refresh: 'wait_for' },
+    query: {
+      ...(options.writeAlias ? { require_alias: true, wait_for_active_shards: 'all' } : {}),
+      refresh: 'wait_for',
+    },
   });
   const hasConflict = validateBulkResponse(response, index, actions);
 

@@ -8,15 +8,21 @@ const index = 'guard-subjects-g1';
 const alias = `${index}-writer-${'a'.repeat(32)}`;
 function engine(body: unknown): OpenSearch {
   return {
-    async request<T>() { return { status: 200, body: body as T }; },
-    async bulk<T>() { return body as T; },
+    async request<T>() {
+      return { status: 200, body: body as T };
+    },
+    async bulk<T>() {
+      return body as T;
+    },
   };
 }
 
 test('writer requires its native allocation alias and rejects legacy, ambiguous and routed aliases', async () => {
   const metadata = (aliases: unknown) => ({ [index]: { settings: { index: { uuid: 'uuid' } }, aliases } });
-  expect(await readSearchWriterPhysicalTarget(engine(metadata({ [alias]: { is_write_index: true } })), index))
-    .toEqual({ incarnation: 'uuid', writeAlias: alias });
+  expect(await readSearchWriterPhysicalTarget(engine(metadata({ [alias]: { is_write_index: true } })), index)).toEqual({
+    incarnation: 'uuid',
+    writeAlias: alias,
+  });
   for (const aliases of [
     {},
     { [alias]: {} },
@@ -24,7 +30,8 @@ test('writer requires its native allocation alias and rejects legacy, ambiguous 
     { [alias]: { is_write_index: true, routing: 'other' } },
     { [alias]: { is_write_index: true }, [`${index}-writer-${'b'.repeat(32)}`]: { is_write_index: true } },
     { [`${alias}\n`]: { is_write_index: true } },
-  ]) await expect(readSearchWriterPhysicalTarget(engine(metadata(aliases)), index)).rejects.toThrow();
+  ])
+    await expect(readSearchWriterPhysicalTarget(engine(metadata(aliases)), index)).rejects.toThrow();
 });
 
 test('physical allocation installs a new write alias atomically on every creation attempt', async () => {
@@ -42,7 +49,9 @@ test('physical allocation installs a new write alias atomically on every creatio
       aliases.push(names[0]!);
       return { status: 200, body: {} as T };
     },
-    async bulk<T>() { throw new Error('No bulk during allocation'); },
+    async bulk<T>() {
+      throw new Error('No bulk during allocation');
+    },
   };
   await createSubjectIndex(search, 'guard-', 1);
   await createSubjectIndex(search, 'guard-', 1);
@@ -54,14 +63,30 @@ test('guarded bulk requires its allocation alias while validating the physical r
     async bulk<T>(lines, options) {
       expect(lines).toEqual([{ delete: { _index: alias, _id: 'key', version: 2, version_type: 'external' } }]);
       expect(options?.query).toEqual({ require_alias: true, wait_for_active_shards: 'all', refresh: 'wait_for' });
-      return { errors: false, items: [{ delete: {
-        _index: index, _id: 'key', _version: 2, _seq_no: 1, _primary_term: 1,
-        status: 200, result: 'deleted', _shards: { total: 1, successful: 1, failed: 0 },
-      } }] } as T;
+      return {
+        errors: false,
+        items: [
+          {
+            delete: {
+              _index: index,
+              _id: 'key',
+              _version: 2,
+              _seq_no: 1,
+              _primary_term: 1,
+              status: 200,
+              result: 'deleted',
+              _shards: { total: 1, successful: 1, failed: 0 },
+            },
+          },
+        ],
+      } as T;
     },
-    async request<T>() { throw new Error('Successful visible writes do not need another engine request'); },
+    async request<T>() {
+      throw new Error('Successful visible writes do not need another engine request');
+    },
   };
   await writeIndexActions(search, index, [{ op: 'delete', id: 'key', version: 2n }], {
-    rejectConflicts: true, writeAlias: alias,
+    rejectConflicts: true,
+    writeAlias: alias,
   });
 });
