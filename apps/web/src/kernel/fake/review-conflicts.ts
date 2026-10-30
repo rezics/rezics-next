@@ -8,13 +8,16 @@ async function conflict(request: Request) {
   return {
     status: 409,
     headers: { 'content-type': 'application/problem+json' },
-    type: 'https://rezics.com/problems/conflict',
-    title: 'Conflict',
-    code: 'conflict',
-    retryable: false,
-    effect_status: 'not_applied',
-    request_id: 'fake-review-conflict',
-    ...(!request.headers.has('x-fake-omit-existing-thread-id') ? { existingThreadId } : {}),
+    __responseBody: {
+      type: 'https://rezics.com/problems/conflict',
+      title: 'Conflict',
+      status: 409,
+      code: 'conflict',
+      retryable: false,
+      effect_status: 'not_applied',
+      request_id: 'fake-review-conflict',
+      ...(!request.headers.has('x-fake-omit-existing-thread-id') ? { existingThreadId } : {}),
+    },
   };
 }
 

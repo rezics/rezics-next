@@ -208,7 +208,7 @@ function recordedResponse(recording: KernelRecording): Response {
   if (Object.hasOwn(recording, '__responseBody'))
     return Response.json(recording.__responseBody, {
       status: recording.status,
-      headers: { 'content-type': recording.status === 404 ? 'application/problem+json' : 'application/json' },
+      headers: recordedHeaders,
     });
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(recording)) {
