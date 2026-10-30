@@ -1,3 +1,4 @@
+import { registerAccountDiscoveryWork } from './account-discovery-work.ts';
 import { registerOrganizationCloseWork } from './organization-close-work.ts';
 import { registerOperatorFenceWork } from './operator-fence-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
@@ -206,6 +207,7 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
       const config = options.authorize ? undefined : readMembershipWorkConfig(context.env);
       const { registerAgentVerificationWork } = await import('./agent-verification-work.ts');
       registerAgentVerificationWork(context);
+      registerAccountDiscoveryWork(context);
       registerAccounts(context, membershipWorkPorts(context, options, config));
       context.addEffects([createAccountAgentEffect(context.pool)]);
       if (config) registerOperatorFenceWork(context, config.referenceKeys);

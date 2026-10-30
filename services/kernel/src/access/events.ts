@@ -395,4 +395,9 @@ export const ACCESS_EVENTS = {
     { continuationId: identity, expiresAt: iso, receiptId: identity },
     { additionalProperties: false },
   ),
+  'com.rezics.access.account-discovery-changed.v1': Type.Object(
+    { route: Type.Integer({ minimum: 0, maximum: 65535 }), accountId: identity, revision: epoch,
+      source: Type.Union([Type.Literal('account'), Type.Literal('claim')]) },
+    { additionalProperties: false },
+  ),
 } as const;

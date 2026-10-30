@@ -1,37 +1,55 @@
 # Account discovery source and Search handoff
 
-This is the Accounts-owned concrete source contract and a **co-owner ABI proposal**. Root and Search must adopt
-its shared types, planner integration and wire before production callers use them. This specification installs
-no runtime export, query endpoint, registry entry, index mapping or permission grant. The native suites beside
-it contain current primitive proofs and future native red handoff cases, not evidence of delivered discovery.
-[Universal search](../../../../docs/search-conditions.md) and [facets](../../../../docs/search-facets.md) are the
-single Search policy; their condition, ordering, privacy, count and physical budgets apply without alteration.
+This is the adopted Accounts-owned native boundary for mixed discovery. [Universal
+search](../../../../docs/search-conditions.md) and [facets](../../../../docs/search-facets.md) remain the single
+Search policy. Native Account production does not grant query admission or certify a physical Search generation.
 
-## Delivered evidence and precise gap
+## Delivered native boundary and remaining Search connection
 
-Read these implementations when adopting the proposal:
+`account-discovery-source.ts` exports:
 
-- `access/account-data.ts`: `readPublicIdentities` is requested-ID attribution; `readPublicAccountByHandle` can
-  forward former handles. Neither enumerates discovery. `readAgentPages` enumerates sitemap handles, not text
-  results, current exact handle claims or kind counts.
-- `access/active-account-page.ts` and `.sql`: deployment enumeration only, active AND not fenced, at most 100
-  `(route, accountId)` keys. `account_active_pages` is its native partial index. Handleless accounts participate.
-- `access/account-public-read.sql`, `public-identity-page.sql`, `account-views-read.sql`, `account-handle-read.sql`
-  and `agent-pages-page.sql`: different allowlists/predicates; do not substitute one for another.
-- `semantic/search-source.ts`: actual `subjectSource(pool, routeKey?)` returns `SubjectSource`; `read(partition, ids)`
-  accepts at most 256 routable Subject IDs and returns `SubjectSnapshot`. `count(partition)` counts visible,
-  nonredirected Subjects with partition position in one repeatable-read snapshot. Relation facets are Subject-only.
-- `search/source.ts`: `IndexedSubject` has Semantic type, visibility, redirect, securityRevision, labels, aliases,
-  descriptions and statements. An account ID, handle or public identity is not an `IndexedSubject`.
-- `search/http/routes.ts` hydrates through `readSubjectSummaries`; `semantic/summaries.ts` supplies only
-  `SubjectSummary`, including Semantic types, creativeWork and cover. No Account summary union exists.
-- `search/work.ts` assembles only `subjectSource` and Subject listing counts. `indexer.ts`, `document.ts`,
-  `generations.ts`, `runner.ts`, `disclosure/check.ts`, `service.ts`, `facets.ts` and `live-facets.ts` consume that
-  Subject-only shape. There is no Account source, writer, query/count population or mixed-kind native assembler.
+- `accountDiscoverySource(pool)` with the adopted `read`, `page` and generation-census `count` shapes below.
+  The factory needs no route key or caller policy. Text contains only current displayName and an exact active
+  current handle claim. Each source call uses one database snapshot, including its foreign-key claim probes.
+- `readAccountDiscoverySummaries(deps, ids, options?)`, using actual Semantic `SummaryReaderDependencies`,
+  Content `readAvatarSummaries` and Semantic `readSubjectSummaries`. Account revision and exact claim are
+  revalidated after foreign hydration; an intervening change withholds the whole candidate.
+- `readAccountDiscoveryWitness(pool, partitions)` returns native `{revision, claimRevision}` heads for up to
+  100 partitions, including empty/excluded populations. Observe all participating Account AND claim partitions
+  before query execution and compare after counts and hydration. Never use only returned IDs as the guard.
+- `readAccountDiscoveryBindings(pool, partition, ids)` returns native Account revision, the exact live claim's
+  route/revision and consumed claim revision. A writer must match its snapshot's Account revision and consume
+  at least that claim revision, otherwise redrive then resnapshot. These bindings are internal, not public wire.
 
-The attempt brief's `.temp/goal/search/accounts-discovery-current-interface-status.md` was absent in this
-checkout. The implementations above establish the interface status directly; absence of that report does not
-turn a proposed export into an implemented one.
+`account-discovery-work.ts` exports `consumeAccountDiscoveryClaim({pool, clock?}, intent)`,
+`redriveAccountDiscovery({pool, clock?}, partition, limit?)` and `registerAccountDiscoveryWork(context)`.
+An intent is `{route, accountId, revision}` with a decimal revision string; foreign consumption verifies its
+persisted source obligation before starting the separate Account-anchor command. The ordinary Accounts work
+module installs event wakeups and a bounded partition sweep by default. Source delivery emits the real durable
+`com.rezics.access.account-discovery-changed.v1` event with `{route, accountId, revision, source:'account'|'claim'}`.
+Delivery atomically replaces the exact pending obligation with that event; it is never a Search repair ACK.
+
+Migration `20261030161528_account_discovery.sql` takes an exclusive Account/claim/preferences install cut,
+initializes all 4096 census rows and existing source revisions, queues existing source keys, then installs native
+hooks before releasing writers. Every Account writer, preferences writer and claim writer participates, including
+internal commands and direct native maintenance. Census and heads advance transactionally; sequence allocation
+is nontransactional, survives row purge and consumes rolled-back allocations. Claim changes write only their own
+anchor's intent/head; the Account command permanently records consumed claim-partition high water. New rows
+contain keys/revisions only and are registered with the existing Access erasure discovery owner. Source intent
+rows coalesce and are drained into the existing event log. Census rows contain no Account identity.
+
+The shared Search type home `services/kernel/src/search/discovery.ts` is absent in this checkout. Accounts
+therefore exports the concrete inferred structural shapes, with no duplicate shared type home. Search must
+supply its single `AccountDiscoverySource` and `AccountDiscoverySummary` exports before Accounts can import them.
+Search must connect this source, bindings, event and both native heads to its actual mixed producer, projection,
+whole-query reduction admission, generation and physical-incarnation restore handling. No such Account reduction
+admission primitive or mixed native assembler is currently exported by Search here. Accounts supplies no fake
+adapter/ACK and changes no SubjectSource or Search runtime. A restored database must receive Search's new physical
+incarnation and external revision high water before activation; restoring sequence state from an old backup alone
+is insufficient. These are real remaining foreign-code seams, not another Accounts research prerequisite.
+
+Existing attribution (`readPublicIdentities`), former-handle lookup (`readPublicAccountByHandle`), active deployment
+paging (`pageActiveAccounts`) and sitemap (`readAgentPages`) keep their distinct contracts and are not discovery.
 
 ## Population and text
 
@@ -85,10 +103,10 @@ also requires non-null handle but does not prove claim validity. Neither is a te
 Source must validate route/partition and owner before I/O. Unknown owner/kind is an admission error, never routed
 by trying Semantic then Accounts or interpreted as zero. Missing/unknown full keys are omitted uniformly.
 
-## Proposed minimal typed boundary
+## Adopted minimal typed boundary
 
-These definitions belong to the eventual shared Search boundary after Root/Search adoption. Names below are
-proposed, not imports callers can use today. Reuse actual `IndexedSubject`, `SubjectSummary`, `AvatarSummary`,
+These definitions belong to the one shared Search boundary. The concrete native Account shapes are delivered;
+the shared Search type module must supply the imports. Reuse actual `IndexedSubject`, `SubjectSummary`, `AvatarSummary`,
 `SubjectSource`, `SubjectSnapshot`, `KeyRing` and verified request/deadline types rather than shadowing them.
 All internal bigint positions/revisions stay off JSON. This is a discriminated union, not an extension of
 Semantic `type` or a fabricated Account-as-Subject.
@@ -165,7 +183,7 @@ per-database snapshot alone is insufficient across a rename. `page` is worker bo
 partition-bounded partial-index keyset, limit 1..100, lookahead charged, next proves remaining eligible input.
 If a candidate's claim is invalid it still contributes an eligible handleless row; do not lose the page frontier.
 The new `count(partition)` is exclusively the Account generation census required by today's `generations.ts`
-consumer, read from the proposed fixed native population row with `core.partition.position` in the same snapshot.
+consumer, read from the fixed native population row with `core.partition.position` in the same snapshot.
 Native writers maintain +1/-1 only when active/unfenced membership changes; replay and rollback cannot double-apply.
 Bootstrap initializes this finite census and catches up deltas before activation. It is not a general query count:
 handle/displayName predicates require Search's separately certified population evidence. No discovery kind count
@@ -200,7 +218,7 @@ cannot populate `KindCountEvidence`. Preserve exact zero, positive lower bound a
 never add a public total. Small exhausted mixed native populations must have exact counts; large populations
 may use admitted maintained evidence or capped witnesses, never a match-linear aggregation.
 
-## Writer and caller adoption inventory
+## Writer and caller integration inventory
 
 | Owner and actual surface                                                                                                                                                       | Required change before activation                                                                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -216,7 +234,7 @@ may use admitted maintained evidence or capped witnesses, never a match-linear a
 | Web `search/search.tsx`, `search/results.tsx`, `search/suggestions.ts`, `search/search-queries.ts`, `search/search-params.ts`, `search/search-request.ts`, `routes/search.tsx` | consume adopted wire, key by kind+ID, render generic unknown kinds and Account identities, preserve one query/cursor, count unavailable vs zero       |
 | Web `media/summary.ts`, `features/pages/account-read.ts`, `features/pages/account.tsx`, `routes/@{$handle}.tsx`; generated `packages/client`                                   | Account summary adapter/current handle navigation; no extra per-hit profile lookup, no Subject cover/type assumptions or former-handle search aliases |
 
-These are adoption obligations, not assertions those files already support Accounts. Search suggestion results
+These are integration obligations; native Account hooks and hydration above are delivered, while Search and Web retain their own connection work. Search suggestion results
 must apply the same native Account truth if Accounts are enabled there. Account-only sitemap/speakers remain
 native consumers of their existing contracts, not replacement query producers. Search owns the test-only native
 handoff assembly described below; Web owns real recorded API stories after that assembly exists.
@@ -313,7 +331,7 @@ and client scopes independently. It can seed catalogue Person via ordinary Seman
 remain Accounts native writes. Its source read is the adopted native Account source, not `readPublicIdentities`.
 Each case's assertions require useful settled output; a permanently unavailable implementation cannot pass.
 
-Root/Search adoption decisions: shared discriminated registry/source/document/summary/count types; the proposed `discovery-v1` wire; native comparable sort/seek/rank implementation; whole-query Account/claim/target reduction
+Remaining Root/Search delivery: shared discriminated registry/source/document/summary/count types; the adopted `discovery-v1` wire; native comparable sort/seek/rank implementation; whole-query Account/claim/target reduction
 custody; writer/activation/rollback and erasure participation; test assembler plus Web/generated-client migration.
 Accounts selects the population, text, exact-claim guards, version and native key inventory here. There is no
 remaining Accounts product-policy question and no new research prerequisite.
