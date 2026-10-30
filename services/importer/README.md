@@ -107,9 +107,10 @@ revision/digest. A second removal followed by a public facts fence must suppress
 receipt/candidate disclosure. Independent editor selections and every other source's claims and receipts survive;
 unchanged reopen sends no public writes. VNDB uses a tar archive of native COPY tables, not scalar JSON.
 Run `bun run --cwd services/kernel check test/imports/cli-source-reappearance.test.ts` through the managed worker
-check. [Evidence and limits](../../docs/research/imports-audit/cli-source-reappearance.md) distinguish binding,
-local protocol proof and native execution. This adds no sourceRecords migration, asset, summary, discovery or
-new PostgreSQL growth claim.
+check. The selected native case passed at `669e18e5bff87837e8368e7c0ea9f562cb2f3188` with 3,443 assertions;
+[evidence and limits](../../docs/research/imports-audit/cli-source-reappearance.md) record its managed log,
+source/converter revisions and receipt anchors. Local protocol proof and broader imports promotion remain
+separate. This adds no sourceRecords migration, asset, summary, discovery or new PostgreSQL growth claim.
 
 Limits follow the exports in `src/dumps-bytes.ts`, `src/vndb-tables.ts`, `src/import-fetch.ts`, and `src/import-client.ts`: dump chunks default to 256 KiB (1 MiB maximum), records default to 256 KiB (1 MiB maximum), VNDB archives default to 16 GiB and 512 entries (64 GiB and 2,048 entries maximum), and VNDB source pages contain at most 16 records. HTTP request bodies are capped at 2 MiB, public batch bodies at 64 KiB, responses at 1 MiB, and scheduled HTTP retry waits at 30 seconds per attempt and 60 seconds total with a 120-second request deadline. Each HTTP transport invocation defaults to three counted attempts and permits at most five, plus its existing one-time 401 renewal. Alongside ordinary GET/HEAD and eligible POST retries, the exact `/v1/subjects/{UUID}/source-statistics/vndb` PUT retries only with a valid quoted structured-field `Idempotency-Key`. Other PUT routes and missing or malformed keys remain ineligible. Retried requests preserve their original bytes, headers and bearer except for the existing explicit 401 renewal rule; all attempt, wait, body and deadline ceilings remain unchanged. Cover resolution handles at most 64 assets per record, with one POST and one status GET per invocation and no inline polling wait.
 

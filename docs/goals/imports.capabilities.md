@@ -37,8 +37,10 @@ The ordinary provider row also has the frozen
 one native world runs five synthetic metadata records per launch source through 5 → 4 → 5 → 4 → 5 membership,
 changed-title return, immutable tuple/bootstrap receipts, independent editor selection, exact facts fencing while
 absent and unchanged reopen. The source and execution status are recorded in
-[its audit](../research/imports-audit/cli-source-reappearance.md). Registration alone does not close that outcome;
-this slice adds no sourceRecords migration, discovery surface, media/summary matrix or new growth series.
+[its audit](../research/imports-audit/cli-source-reappearance.md). Selected native execution passed at
+`669e18e5bff87837e8368e7c0ea9f562cb2f3188`: one exact child, 3,443 assertions, zero skips/todos. That receipt
+closes this bounded outcome at that revision; broader imports integration and promotion remain separate.
+This slice adds no sourceRecords migration, discovery surface, media/summary matrix or new growth series.
 
 ## Released definitions and fixture delivery
 
