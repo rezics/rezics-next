@@ -139,5 +139,25 @@ Production, cached and iterating statements are not finalized by instrumentation
 The local measured case directly attaches the real evidence producer and exercises
 ordinary publication after measured staging and paging at 2, 4 and 8 titles.
 
-Current local and managed native results are recorded below after execution.
-Historical failures above remain scoped to their recorded revisions.
+At `88e1f661d7`, the exact directly affected local command
+`node_modules/.bin/bun test services/importer/tests/vndb-materialization.test.ts`
+passed all four unchanged cases, zero failures and 26 assertions on Bun
+`1.4.4-canary.1` (`a0cc096ce`). This includes successful measured stage/page and
+ordinary publication for child counts 2, 4 and 8. There was no current local first
+failure. The fixtures use `os.tmpdir()`, not the worktree's btrfs temporary area.
+The raw output is `.temp/vndb-plan-cleanup/local.log`.
+
+Edited-file `oxfmt --check` passed. The directly affected compiler command
+`node_modules/.bin/bun check --no-script -p services/importer/tsconfig.json`
+passed with no type errors in 149 files. Their logs are
+`.temp/vndb-plan-cleanup/format.log` and `.temp/vndb-plan-cleanup/compiler.log`.
+No root typecheck or regression gate is inferred from these local results.
+
+The original managed native materialization wrapper is the remaining acceptance:
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-materialization-native.test.ts
+```
+
+Its new receipt is recorded after execution. Historical failures above remain
+scoped to their recorded revisions.
