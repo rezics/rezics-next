@@ -29,10 +29,19 @@ The controller rebases detached candidates onto the integration branch (by defau
 fast-forwards that branch without running a gate. Promotion to `main` is a separate step. A passing attempt record is
 finalized through the real integration outcome sink.
 
-Workers run only their acceptance command, once after their last relevant edit. When the branch has
-`scripts/worker-check.ts`, the command runs through that wrapper; otherwise it runs in the foreground from the worktree
-root. Workers do not run the root typecheck, affected checks or other regression checks. The task's acceptance command
-defines when its work is done.
+Workers run their acceptance command once after their last relevant edit. When the branch has
+`scripts/worker-check.ts`, the wrapper starts the check and returns its UUID. If the check is still running, the worker
+returns the required `waiting` exit object with that UUID as a bare string in `checks`, then ends its turn. It does not
+invoke `--wait`, poll status, inspect logs or processes, or start a duplicate. Goal owns check continuation: it waits for
+the terminal result or records that the run ended without one, then resumes the same session with the actual result
+records. The waiting result has the shape `{"status":"waiting","checks":["<bare UUID>"]}`; replace the placeholder with
+the exact UUID and do not add a label or prefix to that string. A resumed worker does not return another waiting result
+for the same check ids; it uses the supplied records as evidence and runs a new acceptance check only after relevant
+edits when the current contract requires it. A terminal success result has an empty `checks` array; only still-running
+checks appear in a waiting result. If `scripts/worker-check.ts` is absent from the worktree and the contract
+does not name another existing wrapper path, the worker runs the command in the foreground from the worktree root and
+does not add a wrapper. Workers do not run the root typecheck, affected checks or other
+regression checks. The task's acceptance command defines when its work is done.
 
 The dev landing train runs regression checks against the combined batch candidate. It runs the root typecheck once,
 each configured affected check whose path patterns match any changed path once, and matching sibling tests once. The
@@ -82,8 +91,10 @@ one per ten minutes. Requests retry transient socket absence during handoff, and
 small batches so manager requests continue to be serviced. Watchdog and settlement scans read at most the last 256 KiB
 of an attempt log, beginning at a complete line boundary; the recent commands and final failure events remain visible.
 
-Check slots remain shared across workers and the landing train. A queued check stays in the foreground until it
-finishes, so workers do not poll or return while a check is still running. Landing checks are grouped around the batch
+Check slots remain shared across workers and the landing train. A detached check's terminal result stays controller
+owned: a worker returns while it is running, and Goal wakes that session after reading its result record. The wrapper's
+single permitted infrastructure rerun remains inside that acceptance invocation; an infrastructure failure after
+that rerun stays a failure, not a pass or a reason for an extra worker rerun. Landing checks are grouped around the batch
 candidate to avoid duplicate regression runs while preserving acceptance as each task's definition of done.
 
 Each launch records the byte offset where its output starts in the appended attempt log. Exit-result parsing uses only
@@ -323,7 +334,8 @@ Goal writes the current priority to `.temp/goal/task-priority` in the task workt
 `goal priority <task> critical|normal` changes it. Performance's `worker-check` reads this file and passes
 `REMOTE_CHECK_PRIORITY=critical` for remaining checks when its contents are `critical`.
 It writes command output to `.temp/goal/checks/`, records the check duration for the worker deadline and silence monitor,
-then prints the exit status, a short failure summary when needed, and the log path. See the
+then prints the check UUID and, when available, the exit status, a short failure summary and the log path. Goal uses
+the recorded result to wake a waiting worker. See the
 [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) for unified exec and
 `background_terminal_max_timeout` behavior.
 The `integration` layer exposes `gateTimeoutMs`, `gateConcurrency`,
@@ -507,6 +519,11 @@ both systemd-scoped launches. This catches provider schema refusals, start-form 
 fake-agent tests cannot expose. It uses the cheapest configured Codex model at low effort, with the configured service
 tier (Fast is refused), a five-minute deadline, and a prompt budget of 2000 generated tokens. Fake-agent protocol tests
 use actual detached checks without provider calls. A failed step is returned to the task with its step output.
+Before disposable cleanup, the real smoke retains a bounded, sanitized per-run record under
+`.temp/launch-smoke-evidence/`: candidate, actual attempt/session/profile/pool, adapter argv and configured feature
+booleans, current structured result, current-run event suffix, and check identities/results. Prompts, account settings,
+raw tool arguments and tool output are omitted. Resuming clears the recorded current result until that turn exits;
+an older waiting result cannot stand in for the current failure. Cleanup does not discard this evidence.
 
 New tasks and retries branch from the integration branch, except control-plane tasks, which branch from `main`. The
 landing train routes control-plane changes under `tools/goal/` to `main` and measures their change set from their fork

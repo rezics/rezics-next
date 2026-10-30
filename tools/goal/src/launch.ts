@@ -62,6 +62,41 @@ export function workerEnvironment(
     result.PATH = [wrapperDirectory, result.PATH].filter(Boolean).join(':');
   return result;
 }
+/** Current acceptance-check and controller wake instructions, repeated at every prompt boundary. */
+export function workerCheckProtocol(worktree: string, contractText = ''): string {
+  const common = [
+    'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit.',
+    'Goal owns check continuation for detached checks: if one is still running, finish this turn with the waiting exit object and let the controller resume you with the result records. Do not keep the model or a tool waiting for the check.',
+    'When the controller resumes you with check results, use the supplied result records exactly. A missing, unknown, or nonzero result is not a pass. Do not return another waiting result for those same check ids; finish from the supplied results or run a genuinely changed acceptance only when the current contract requires a fresh result.',
+    'A terminal success result must use `"checks":[]`; include check UUIDs only in a waiting result for checks that are still running. Do not repeat completed check ids in a success result.',
+    'A previous session may contain the superseded instruction to wait on that same check with `bun scripts/worker-check.ts --wait <id>`. That instruction is obsolete: do not follow it or invoke `--wait`.',
+  ];
+  const localRunner = join(worktree, 'scripts/worker-check.ts');
+  const namedRunner = /(?:^|\s)`?bun\s+["']?(\/[^"'`\s]+\/scripts\/worker-check\.ts)(?:["'`\s]|$)/m.exec(
+    contractText,
+  )?.[1];
+  const runner = existsSync(localRunner)
+    ? 'bun scripts/worker-check.ts'
+    : namedRunner && existsSync(namedRunner)
+      ? `bun ${JSON.stringify(namedRunner)}`
+      : undefined;
+  if (!runner)
+    return [
+      ...common,
+      'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status. This fallback does not produce a detached check id or a waiting result.',
+      'Do not run the root typecheck, affected checks or other regression checks yourself. The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests; a regression found there comes back as a retry with the failing log.',
+      'A command that waits for a test slot is queued, not stuck: let it finish and read its exit status.',
+    ].join(' ');
+  const invocation = `\`${runner} -- <command...>\``;
+  return [
+    ...common,
+    `Run the acceptance command once from the worktree root as ${invocation}, including any wrapper options named by the contract. The wrapper starts the command and records its UUID, exit status, failure summary and log path.`,
+    'If the wrapper returns a check id before that check is terminal, end this turn immediately with the required waiting shape `{"status":"waiting","checks":["<bare UUID>"]}`. Return the normal exit object with those fields. Every checks entry must be the bare UUID string printed by the wrapper; replace the placeholder with that exact value and add no label or prefix. For example, the complete exit object is `{"status":"waiting","summary":"acceptance check is running","blocker":null,"checks":["00000000-0000-4000-8000-000000000000"],"approaches":[]}`.',
+    'Do not invoke `bun scripts/worker-check.ts --wait <id>`, poll status, inspect logs or process lists, or start a duplicate check. The controller waits for the terminal result or records that the run ended without one, then wakes this same session with those facts.',
+    'The wrapper permits one automatic infrastructure rerun within the same acceptance invocation. If the final result still reports an infrastructure failure, report a `tool` blocker with its exact error line; do not start an extra worker rerun or claim a pass.',
+    'Do not run the root typecheck, affected checks or other regression checks yourself. The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests; a regression found there comes back as a retry with the failing log.',
+  ].join(' ');
+}
 export function workerPrompt(
   task: Task,
   evidence: string | undefined,
@@ -90,9 +125,7 @@ export function workerPrompt(
     task.workspace
       ? `Peers edit this tree at the same time. There are no path reservations or holds. Commit your own work often with git add <your paths> (never -A or .). Use path-limited commits (git commit --only -- <your paths>) so a peer's staged files stay theirs. Every commit must have the subject '${task.workspace.taskName}: <message>' and a 'Goal-Task: ${task.id}' trailer. Task name is the brief's file name without .md: ${task.workspace.taskName}. Never reset, checkout, stash, clean or rebase. A failure in files you did not touch is a peer's work in progress: rerun later or check only your own tests.`
       : '',
-    existsSync(join(task.worktree, 'scripts/worker-check.ts'))
-      ? 'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit as one foreground command through `bun scripts/worker-check.ts -- <command...>` from the worktree root. The wrapper writes output under `.temp/goal/checks/` and reports the exit status and log path. If the command returns before the check ends, wait on that same check with `bun scripts/worker-check.ts --wait <id>` (the id it printed at start) again and again until it prints an exit status; never start a second run; never finish your attempt while a check you started is still running. `--wait` returns after at most 10 minutes; exit status 75 with `check: still running` means wait on the same id again. An infrastructure line after the one automatic rerun is a `tool` blocker. Do not run the root typecheck, affected checks or other regression checks yourself. The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests; a regression found there comes back as a retry with the failing log.'
-      : 'Check slots are the scarce shared resource: run your acceptance command once after your last relevant edit as one foreground command from the worktree root. This base has no scripts/worker-check.ts; do not add one. Do not run the root typecheck, affected checks or other regression checks yourself. The landing batch runs the root typecheck, affected checks for every changed path, and matching sibling tests; a regression found there comes back as a retry with the failing log. A command that waits for a test slot is queued, not stuck: let it finish and read its exit status.',
+    workerCheckProtocol(task.worktree, task.brief.markdown),
     'You have the authority to finish. Your declared paths are where the work is expected, not a fence: change any other file the acceptance or a defect blocking it needs, including a defect another Goal left in your base, keep such changes minimal, and list each file outside your paths with its reason in your summary. The landing batch runs regression checks for changed files outside your paths; the Goal that owns such a file is told of your change. Files in a risk area your contract does not declare stay closed.',
     'Decide ambiguities yourself from the contract, the specs, the code and the tests, and record each decision in your summary. Report a blocker only when the acceptance tests contradict each other or the specs, when the work needs a product decision the contract does not make, or when a tool or access you need fails.',
     'When a tool or infrastructure failure blocks the work (SSH or rsync to a check host, network, out of disk or memory, file watchers, a service that will not start), retry it at most twice, then finish with a `tool` blocker whose detail starts with the exact error line; do not work around it by weakening the check.',
