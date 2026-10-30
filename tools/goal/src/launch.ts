@@ -106,7 +106,7 @@ export function workerCheckProtocol(
   const runner = existsSync(localRunner)
     ? 'bun scripts/worker-check.ts'
     : namedRunner && existsSync(namedRunner)
-      ? `bun ${shellQuote(namedRunner)}`
+      ? `bun ${placement === 'local' ? shellQuote(namedRunner) : JSON.stringify(namedRunner)}`
       : undefined;
   if (placement === 'local') {
     const exactCommand = command?.map(shellQuote).join(' ') ?? '<the declared acceptance argv>';
