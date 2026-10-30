@@ -48,12 +48,15 @@ function workerStream(stream: ReadableStream<Uint8Array> | number | undefined): 
   return stream;
 }
 
+const workerIdentities = new WeakMap<ContentSystem, string>();
 async function startWorker(system: ContentSystem): Promise<{
   child: Bun.Subprocess;
   failure(): string | undefined;
   output(): string;
   stop(): Promise<void>;
 }> {
+  const executorId = workerIdentities.get(system) ?? `community-${crypto.randomUUID()}`;
+  workerIdentities.set(system, executorId);
   const databaseUrl = system.database.pool.options.connectionString;
   if (!databaseUrl) throw new Error('Content fixture database URL is missing');
   const routeKey = Buffer.from(system.routeKey).toString('base64url');
@@ -72,7 +75,7 @@ async function startWorker(system: ContentSystem): Promise<{
       DATABASE_URL: databaseUrl,
       KERNEL_ROUTE_KEY: routeKey,
       KERNEL_SESSION_KEYS: sessionKeys,
-      KERNEL_EXECUTOR_ID: `community-${crypto.randomUUID()}`,
+      KERNEL_EXECUTOR_ID: executorId,
       KERNEL_WORKER_POOL_SIZE: '6',
       KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
       AUTH_ISSUER: 'https://community-worker.auth.test',
