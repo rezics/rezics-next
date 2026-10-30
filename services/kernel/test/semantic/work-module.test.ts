@@ -25,6 +25,18 @@ const program = `
   import { DBOS } from '@dbos-inc/dbos-sdk';
   import { spyOn } from 'bun:test';
   import * as relayModule from './src/events/relays.ts';
+  let identityRegistrations = 0;
+  let launches = 0;
+  const registerWorkflow = DBOS.registerWorkflow;
+  spyOn(DBOS, 'registerWorkflow').mockImplementation((workflow, config) => {
+    if (config?.name === 'semantic.identityEpoch') identityRegistrations++;
+    return registerWorkflow.call(DBOS, workflow, config);
+  });
+  const launch = DBOS.launch;
+  spyOn(DBOS, 'launch').mockImplementation((...args) => {
+    launches++;
+    return launch.apply(DBOS, args);
+  });
   const startRelays = relayModule.startRelays;
   let projectors = 0;
   spyOn(relayModule, 'startRelays').mockImplementation((nativePool, relays, ...rest) => {
@@ -53,6 +65,9 @@ const program = `
         const erasure = effects.find(effect => effect.name === 'semantic_erasure');
         assert.ok(erasure, 'Semantic registers its account tombstone effect even when no local data applies');
         assert.deepEqual(erasure.types, ['com.rezics.access.account-tombstoned.v1']);
+        const identity = effects.find(effect => effect.name === 'identity_epoch_admission');
+        assert.ok(identity, 'Semantic registers durable resumption of the saved identity job');
+        assert.deepEqual(identity.types, ['com.rezics.semantic.identity-epoch.admitted.v1']);
         context.addEffects(effects);
       }, addService(start) {
         context.addService(async () => {
@@ -77,6 +92,8 @@ const program = `
     const worker = await startWorker(readWorkerConfig(process.env), modules);
     assert.equal(fail, false);
     assert.equal(registrations, 1);
+    assert.equal(identityRegistrations, 1);
+    assert.equal(launches, 1);
     assert.equal(starts, 1);
     assert.equal(projectors, 1);
     console.log('semantic-ready');
@@ -94,6 +111,8 @@ const program = `
   } catch (error) {
     assert.equal(fail, true);
     assert.match(error.message, /later starter failed/);
+    assert.equal(identityRegistrations, 1);
+    assert.equal(launches, 1);
     assert.equal(starts, 1);
     assert.equal(projectors, 1);
     assert.equal(stops, 1);
