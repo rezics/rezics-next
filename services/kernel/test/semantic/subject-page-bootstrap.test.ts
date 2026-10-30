@@ -75,8 +75,11 @@ test('bootstrap durably queues a newly discovered legacy subject before advancin
     expect(await store.read(subject)).toBeNull();
     await subjectPagePublicationFor(app).step({ limit: 32 });
     expect(
-      (await db.admin.query('SELECT state FROM semantic.subject_page_repair WHERE route=0 AND subject_id=$1', [subject.id]))
-        .rows,
+      (
+        await db.admin.query('SELECT state FROM semantic.subject_page_repair WHERE route=0 AND subject_id=$1', [
+          subject.id,
+        ])
+      ).rows,
     ).toEqual([{ state: 'pending' }]);
 
     // Reconstruction must resume the committed handoff without a GET or explicit rebuild.

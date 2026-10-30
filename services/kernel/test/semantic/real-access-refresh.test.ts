@@ -16,7 +16,9 @@ test('refreshed fixture credentials preserve native identity and lifetime while 
   const account = newId(29000);
   const actions = ['subject:read', 'subject:merge'];
   let issuanceTime = new Date(Date.now() - 301_000);
-  const real = await createRealAccess(db.admin, { importer: account }, actions, { credentialClock: () => issuanceTime });
+  const real = await createRealAccess(db.admin, { importer: account }, actions, {
+    credentialClock: () => issuanceTime,
+  });
   const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
   const context = { pool: db.pool, deadline: Date.now() + 10_000 };
 
