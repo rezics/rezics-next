@@ -105,6 +105,7 @@ export function workerCheckProtocol(
     return [
       'Verification is minimal for now: do not run the acceptance command in the brief, and do not run any native, database, browser, host or remote check, worker-check or remote-check.',
       'Before finishing, run only the type check of the workspaces you changed, locally in the foreground from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several), and fix every error it reports.',
+      "The type check of services/kernel or services/auth needs a compiler database: run it as the workspace's own typecheck command (or `bun scripts/typecheck.ts`), which starts that database itself or places itself on a check host; that is allowed, and it is the only database or check-host use allowed.",
       'Unit tests you wrote that need no database may be run directly with `bun test <file>` if they take seconds; nothing else.',
       'Then commit and finish with the normal exit object and `"checks":[]`. The acceptance command runs after integration; a failure there comes back to you as a fix.',
       'A previous session may contain instructions to start or wait on checks; they are superseded by this one.',
