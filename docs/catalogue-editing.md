@@ -97,3 +97,25 @@ Choosing another work never copies credits. Existing native candidate decisions,
 source-or-consent behavior remain authoritative. Invalid input, stale metadata, denial and unavailability retain
 drafts. Uncertain requests freeze the original body and key for retry; changing metadata or session state hides
 the retained workspace until it can be read again.
+
+## Browser flow: work parts
+
+The Contents view links to `/{locale}/subjects/{id}/{slug}/work-parts`. This private, noindex editor reads one
+bounded native part stream at a time, with its own opaque continuation, current count semantics and projection
+freshness. Rows retain native stream order; neither a first page nor its array indices describes a complete
+composition. Contents, volumes, episodes and tracks use only existing emitted canonical relations. A missing
+relation profile or qualified assertion stays unavailable for editing.
+
+Inverse rows belong to the individual part, not the displayed parent. Corrections keep that exact holder,
+property, target or external address, and optional native slot key. The existing relation editor supplies target
+discovery, citations, native validation, exact-slot competition and explicit decision/selection controls. Only an
+admitted `schema:position` on a relation declaring position order is editable; all other qualifiers remain intact.
+An emitted relation without that qualifier remains readable without an invented order field. Choosing a new
+containment target opens its separate slot and does not remove the original assertion.
+
+Each opened assertion retains an independent draft and native idempotency key. Proposing creates a candidate;
+acceptance and selection are separate explicit actions. No atomic composition save, automatic adoption, identity
+merge or work/edition/release conversion exists. Selection rereads the actual current stream; an incomplete or
+uncaught-up result remains labelled. Denied or failed page reads conceal the previous page while retaining mounted
+drafts for recovery. Ordinary forms send statement references, never ingestion Source metadata. These controls do
+not infer rights or replace the existing disclosure and source-or-consent rules.

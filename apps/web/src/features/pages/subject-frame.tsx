@@ -4,6 +4,7 @@ import { SubjectChangesLink } from '../catalogue/subject-changes-link';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
+import { WorkPartsEntry } from '../catalogue/work-parts-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
@@ -271,6 +272,7 @@ export function SubjectFrame({
             <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
             {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
             <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
+            {view === 'contents' && <WorkPartsEntry id={frame.id} label={title} locale={locale} />}
             <SubjectChangesLink id={frame.id} title={title} locale={locale} />
           </EditorialEntry>
         </div>

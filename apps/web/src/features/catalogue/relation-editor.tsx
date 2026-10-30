@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useId } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { StatementConsentLink } from './statement-consent-view';
@@ -45,6 +46,7 @@ export function RelationEditor({
   search,
   initial,
   onSelected,
+  composition,
 }: {
   id: string;
   locale: string;
@@ -52,8 +54,11 @@ export function RelationEditor({
   search: EntityPickerSearch;
   initial?: RelationRead;
   onSelected?: () => void | Promise<void>;
+  /** A composition correction keeps every non-order qualifier and native slot key intact. */
+  composition?: { statement: RelationDraft; slot?: RelationSlot; positionEditable: boolean; session?: string | undefined };
 }) {
   const options = { locale: locale as never };
+  const formId = useId();
   const [read, setRead] = useState(initial);
   const [draft, setDraft] = useState<RelationDraft>(() => blankDraft(''));
   const [slot, setSlot] = useState<RelationSlot>();
@@ -65,12 +70,22 @@ export function RelationEditor({
   const [confirmation, setConfirmation] = useState<'propose' | 'accept' | 'reject' | 'adopt'>();
   const [result, setResult] = useState<Extract<RelationResult, { ok: true }>>();
   const [proposed, setProposed] = useState(false);
+  const [proposedId, setProposedId] = useState<string>();
+  const [compositionSeed, setCompositionSeed] = useState<typeof composition>();
+  // Reset only for a different explicit seed; ordinary rerenders preserve the editor's draft and key.
+  if (composition && composition !== compositionSeed) {
+    setCompositionSeed(composition);
+    setDraft(structuredClone(composition.statement));
+    setSlot(composition.slot);
+  }
   const [ownConsent, setOwnConsent] = useState(false);
   const [consentEntry, setConsentEntry] = useState<ConsentAddress>();
   const nativeSession = useRef<string | undefined>(undefined);
+  if (!nativeSession.current && composition?.session) nativeSession.current = composition.session;
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
   const pageCursor = useRef<string | undefined>(undefined);
   const running = useRef(false);
+  const proposedCandidate = useRef<string | undefined>(undefined);
   const picked = useRef<Record<string, EntityPickerSubject>>({});
   const remember = (items: EntityPickerSubject[]) => {
     for (const item of items) picked.current[item.id] = item;
@@ -134,6 +149,8 @@ export function RelationEditor({
     setCandidate(undefined);
     setResult(undefined);
     setProposed(false);
+    setProposedId(undefined);
+    proposedCandidate.current = undefined;
     setFailure(undefined);
     request.current = undefined;
     pageCursor.current = undefined;
@@ -158,6 +175,8 @@ export function RelationEditor({
       setSlot(address);
       setResult(undefined);
       setCandidate((previous) => next.page?.candidates.find((item) => item.id === previous?.id));
+      if (proposedCandidate.current)
+        setCandidate(next.page?.candidates.find((item) => item.id === proposedCandidate.current));
     } catch {
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
@@ -180,6 +199,7 @@ export function RelationEditor({
             head: confirmation !== 'adopt' ? candidate!.head : (current?.page?.adoption?.head ?? null),
             rank,
             ...(pageCursor.current ? { cursor: pageCursor.current } : {}),
+            ...(nativeSession.current ? { session: nativeSession.current } : {}),
             key: crypto.randomUUID(),
           };
     running.current = true;
@@ -194,6 +214,8 @@ export function RelationEditor({
           return;
         }
         setProposed(true);
+        setProposedId(next.candidate);
+        proposedCandidate.current = next.candidate;
         nativeSession.current = next.session ?? nativeSession.current;
         if (field.disclosure === 'sourceOrConsent' && !pending.statement.references.length)
           setConsentEntry(
@@ -220,6 +242,7 @@ export function RelationEditor({
           return;
         }
         setResult(next);
+        if ('session' in next) nativeSession.current = next.session ?? nativeSession.current;
         setConfirmation(undefined);
         request.current = undefined;
         if (next.kind === 'selected') await onSelected?.();
@@ -250,7 +273,9 @@ export function RelationEditor({
   return (
     <section aria-label={m.relation_title({}, options)} className="min-w-0 space-y-6" aria-busy={busy}>
       <header className="space-y-2">
+        {composition ? <h2 className="font-sans text-2xl font-semibold">{m.relation_title({}, options)}</h2> : <>
         <h1 className="text-2xl font-semibold">{m.relation_title({}, options)}</h1>
+        </>}
         <p className="text-sm text-muted-foreground">{m.relation_intro({}, options)}</p>
       </header>
       {consentEntry && (
@@ -276,7 +301,9 @@ export function RelationEditor({
                 <fieldset disabled={frozen} className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4">
                   <legend className="px-1 font-semibold">{m.relation_draft({}, options)}</legend>
                   <Field>
+                    {composition ? <FieldLabel htmlFor={`${formId}-property`}>{m.relation_property({}, options)}</FieldLabel> : <>
                     <FieldLabel htmlFor="relation-property">{m.relation_property({}, options)}</FieldLabel>
+                    </>}
                     <DefinitionGuideLink
                       locale={locale}
                       field={!!field}
@@ -288,6 +315,8 @@ export function RelationEditor({
                     />
                     <NativeSelect
                       id="relation-property"
+                      {...(composition ? { id: `${formId}-property` } : {})}
+                      disabled={!!composition}
                       value={draft.property.id}
                       onChange={(event) => {
                         edit(blankDraft(event.target.value));
@@ -304,6 +333,7 @@ export function RelationEditor({
                   </Field>
                   {field && (
                     <>
+                      {!composition && <>
                       {!!current.public.subject.statements[field.id]?.length && (
                         <div className="space-y-2">
                           <p className="text-sm font-medium">{m.relation_existing({}, options)}</p>
@@ -328,11 +358,13 @@ export function RelationEditor({
                           ))}
                         </div>
                       )}
+                      </>}
                       <EntityPicker
                         label={m.relation_target({}, options)}
                         search={search}
                         src={coverSrc}
                         disabled={frozen}
+                        {...(composition ? { disabled: true } : {})}
                         value={draft.value.type === 'value' ? target(draft.value.content) : []}
                         onValueChange={(items) => {
                           remember(items);
@@ -349,11 +381,13 @@ export function RelationEditor({
                         {draft.qualifiers.map((snak, index) => (
                           <div key={`${snak.property.id}:${index}`} className="flex min-w-0 items-end gap-2">
                             <div className="min-w-0 flex-1">
+                              <fieldset disabled={!!composition && (!composition.positionEditable || snak.property.id !== 'schema:position' || !field.qualifiers.some((item) => item.id === 'schema:position'))}>
                               <QualifierInput
                                 definition={field.qualifiers.find((item) => item.id === snak.property.id)}
                                 snak={snak}
                                 index={index}
                                 label={name(snak.property.id)}
+                                scope={composition ? formId : undefined}
                                 search={search}
                                 target={target}
                                 remember={remember}
@@ -367,9 +401,11 @@ export function RelationEditor({
                                   })
                                 }
                               />
+                              </fieldset>
                             </div>
                             <Button
                               variant="outline"
+                              disabled={!!composition}
                               aria-label={`${m.relation_remove({}, options)}: ${name(snak.property.id)}`}
                               onClick={() =>
                                 edit({ ...draft, qualifiers: draft.qualifiers.filter((_, at) => at !== index) })
@@ -380,9 +416,13 @@ export function RelationEditor({
                           </div>
                         ))}
                         <Field>
+                          {composition ? <FieldLabel htmlFor={`${formId}-add-qualifier`}>{m.relation_qualifier({}, options)}</FieldLabel> : <>
                           <FieldLabel htmlFor="relation-add-qualifier">{m.relation_qualifier({}, options)}</FieldLabel>
+                          </>}
                           <NativeSelect
                             id="relation-add-qualifier"
+                            {...(composition ? { id: `${formId}-add-qualifier` } : {})}
+                            disabled={!!composition && (!composition.positionEditable || draft.qualifiers.some((part) => part.property.id === 'schema:position'))}
                             value=""
                             onChange={(event) => {
                               const definition = field.qualifiers.find((item) => item.id === event.target.value);
@@ -401,6 +441,7 @@ export function RelationEditor({
                           >
                             <NativeSelectOption value="">{m.relation_add_qualifier({}, options)}</NativeSelectOption>
                             {field.qualifiers
+                              .filter((item) => !composition || item.id === 'schema:position')
                               .filter((item) =>
                                 ['string', 'external-id', 'url', 'wikibase-item'].includes(item.datatype),
                               )
@@ -425,9 +466,12 @@ export function RelationEditor({
                         </div>
                       )}
                       <Field>
+                        {composition ? <FieldLabel htmlFor={`${formId}-citation`}>{m.relation_citation({}, options)}</FieldLabel> : <>
                         <FieldLabel htmlFor="relation-citation">{m.relation_citation({}, options)}</FieldLabel>
+                        </>}
                         <Input
                           id="relation-citation"
+                          {...(composition ? { id: `${formId}-citation` } : {})}
                           type="url"
                           value={citation}
                           onChange={(event) => setCitation(event.target.value)}
@@ -439,12 +483,15 @@ export function RelationEditor({
                           <Field orientation="horizontal">
                             <Checkbox
                               id="relation-own-consent"
+                              {...(composition ? { id: `${formId}-own-consent` } : {})}
                               checked={ownConsent}
                               onCheckedChange={(checked) => setOwnConsent(checked === true)}
                             />
+                            {composition ? <FieldLabel htmlFor={`${formId}-own-consent`}>{m.statement_consent_own({}, options)}</FieldLabel> : <>
                             <FieldLabel htmlFor="relation-own-consent">
                               {m.statement_consent_own({}, options)}
                             </FieldLabel>
+                            </>}
                           </Field>
                         </div>
                       )}
@@ -488,6 +535,7 @@ export function RelationEditor({
                       </div>
                     </>
                   )}
+                  {composition && !field && <p role="status">{m.work_parts_not_admitted({}, options)}</p>}
                 </fieldset>
                 {slot && field && current.page && (
                   <section className="space-y-4" aria-label={m.relation_review_slot({}, options)}>
@@ -496,6 +544,7 @@ export function RelationEditor({
                       <p>{m.relation_unresolved_selection({}, options)}</p>
                     )}
                     <p className="text-sm text-muted-foreground">{m.relation_slot_hint({}, options)}</p>
+                    {composition && <p className="break-all text-xs">{id} · {slot.property} · {slot.target ?? slot.sameAs} {slot.key ?? ''}</p>}
                     {!current.page.candidates.length && <p>{m.candidate_empty({}, options)}</p>}
                     <ul className="space-y-3">
                       {current.page.candidates.map((item) => (
@@ -617,9 +666,12 @@ export function RelationEditor({
                             <>
                               {candidate.decision === 'accepted' && (
                                 <Field>
+                                  {composition ? <FieldLabel htmlFor={`${formId}-rank`}>{m.relation_rank({}, options)}</FieldLabel> : <>
                                   <FieldLabel htmlFor="relation-rank">{m.relation_rank({}, options)}</FieldLabel>
+                                  </>}
                                   <NativeSelect
                                     id="relation-rank"
+                                    {...(composition ? { id: `${formId}-rank` } : {})}
                                     value={rank}
                                     disabled={frozen}
                                     onChange={(event) => setRank(event.target.value as 'normal' | 'preferred')}
@@ -669,6 +721,7 @@ export function RelationEditor({
         )
       )}
       {proposed && <p role="status">{m.relation_proposed({}, options)}</p>}
+      {composition && proposedId && <p className="break-all text-sm">{m.work_parts_candidate({ candidate: proposedId }, options)}</p>}
       {confirmation && !concealed && (
         <div
           role="group"
@@ -685,6 +738,7 @@ export function RelationEditor({
                   ? m.relation_confirm_reject({}, options)
                   : m.relation_confirm_propose({}, options)}
           </p>
+          {composition && confirmation === 'propose' && current && <Statement statement={draft} publicRead={current.public} names={current.names} locale={locale} />}
           <div className="flex flex-wrap gap-2">
             <Button disabled={busy || (!!failure && failure.reason !== 'unavailable')} onClick={confirm}>
               {action}
@@ -709,6 +763,7 @@ function QualifierInput({
   snak,
   index,
   label,
+  scope,
   search,
   target,
   remember,
@@ -719,6 +774,7 @@ function QualifierInput({
   snak: Snak;
   index: number;
   label: string;
+  scope?: string | undefined;
   search: EntityPickerSearch;
   target: (value: unknown) => EntityPickerSubject[];
   remember: (items: EntityPickerSubject[]) => void;
@@ -742,9 +798,13 @@ function QualifierInput({
     );
   return (
     <Field>
+      {scope ? <FieldLabel htmlFor={`${scope}-qualifier-${index}`}>{label}</FieldLabel> : <>
       <FieldLabel htmlFor={`relation-qualifier-${index}`}>{label}</FieldLabel>
+      </>}
       <Input
         id={`relation-qualifier-${index}`}
+        {...(scope ? { id: `${scope}-qualifier-${index}` } : {})}
+        disabled={disabled}
         value={typeof value === 'string' ? value : ''}
         readOnly={typeof value !== 'string'}
         onChange={(event) => onChange({ type: 'value', content: event.target.value })}

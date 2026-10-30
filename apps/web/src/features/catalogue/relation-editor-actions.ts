@@ -130,6 +130,7 @@ export const confirmSubjectRelation = createServerFn({ method: 'POST', strict: f
       operation: value.operation,
       head: value.head as number | null,
       ...(checked.cursor ? { cursor: checked.cursor } : {}),
+      ...(checked.session ? { session: checked.session } : {}),
       ...(value.rank ? { rank: value.rank as 'normal' | 'preferred' } : {}),
     };
   })

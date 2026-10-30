@@ -1,0 +1,288 @@
+import { useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { pickText } from '@rezics/composition';
+import { Button } from '@rezics/ui/shadcn/button';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
+import { CandidateValue } from '../pages/data';
+import { ViewHeading } from '../pages/view-heading';
+import { coverSrc } from '../../media/cover-src';
+import { subjectHref } from '../../subject/subject-href';
+import type { RelationTransport, RelationDraft, RelationSlot } from '../../subject/relation-candidates';
+import { m } from '../../paraglide/messages.js';
+import { RelationEditor } from './relation-editor';
+import { partCorrection, type WorkPartsRead, type PartStream, type PartRow } from './work-parts';
+
+export type WorkPartsTransport = {
+  read: (stream?: string, cursor?: string, session?: string) => Promise<WorkPartsRead>;
+  relation: (holder: string) => RelationTransport;
+};
+type Correction = {
+  key: string;
+  id: string;
+  statement: RelationDraft;
+  slot?: RelationSlot;
+  positionEditable: boolean;
+  session?: string | undefined;
+};
+
+/** Each opened assertion owns the existing editor's independent draft, request key and exact-slot review. */
+export function WorkPartsPage({
+  id,
+  locale,
+  transport,
+  search,
+  initial,
+}: {
+  id: string;
+  locale: string;
+  transport: WorkPartsTransport;
+  search: EntityPickerSearch;
+  initial?: WorkPartsRead | undefined;
+}) {
+  const o = { locale: locale as never };
+  const query = useQuery({
+    queryKey: ['work-parts', id, locale],
+    queryFn: () => transport.read(),
+    initialData: initial,
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const [page, setPage] = useState<Extract<WorkPartsRead, { ok: true }>>();
+  const [failure, setFailure] = useState<Extract<WorkPartsRead, { ok: false }>>();
+  const [busy, setBusy] = useState(false);
+  const [drafts, setDrafts] = useState<Correction[]>([]);
+  const [part, setPart] = useState<EntityPickerSubject[]>([]);
+  const running = useRef(false);
+  const session = useRef<string | undefined>(undefined);
+  const cursor = useRef<string | undefined>(undefined);
+  const read = page ?? (query.data?.ok ? query.data : undefined);
+  const error = failure ?? (!page && query.data && !query.data.ok ? query.data : undefined);
+  const concealed = !!error || (!page && query.isError);
+  const stream = read?.stream;
+  const title = pickText(read?.public.subject.labels ?? {}, locale);
+  async function load(key = stream?.key, next?: string) {
+    if (running.current) return;
+    running.current = true;
+    setBusy(true);
+    try {
+      const value = await transport.read(
+        key,
+        next,
+        session.current ?? (query.data?.ok ? query.data.session : undefined),
+      );
+      if (!value.ok) {
+        setFailure(value);
+        return;
+      }
+      setPage(value);
+      session.current = value.session ?? session.current;
+      cursor.current = next;
+      setFailure(undefined);
+      setPart([]);
+    } catch {
+      setFailure({ ok: false, reason: 'unavailable' });
+    } finally {
+      running.current = false;
+      setBusy(false);
+    }
+  }
+  function open(row: PartRow, selected: PartStream) {
+    const correction = partCorrection(row, selected);
+    if (!correction) return;
+    const key = `${row.holder}:${row.statementId}`;
+    setDrafts((previous) =>
+      previous.some((draft) => draft.key === key)
+        ? previous
+        : [...previous, { ...correction, key, session: read?.session }],
+    );
+  }
+  function add() {
+    if (!stream || !part[0]) return;
+    const holder = stream.direction === 'forward' ? id : part[0].id;
+    const target = stream.direction === 'forward' ? part[0].id : id;
+    const key = `${holder}:${stream.property}:${target}`;
+    setDrafts((previous) =>
+      previous.some((draft) => draft.key === key)
+        ? previous
+        : [
+            ...previous,
+            {
+              key,
+              id: holder,
+              positionEditable: stream.positionEditable,
+              session: read?.session,
+              statement: {
+                property: { id: stream.property, data_type: 'wikibase-item' },
+                value: { type: 'value', content: target },
+                qualifiers: [],
+                references: [],
+              },
+            },
+          ],
+    );
+  }
+  const failed =
+    error?.reason === 'denied'
+      ? m.candidate_denied({}, o)
+      : error?.reason === 'stale'
+        ? m.relation_stale({}, o)
+        : error?.reason === 'invalid'
+          ? m.candidate_invalid({}, o)
+          : m.candidate_unavailable({}, o);
+  return (
+    <article className="mx-auto w-full max-w-4xl space-y-6" aria-busy={busy || query.isPending}>
+      <ViewHeading label={m.work_parts_title({}, o)} headingClassName="font-sans" />
+      <p className="max-w-prose text-muted-foreground">{m.work_parts_intro({}, o)}</p>
+      {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {concealed && <p role="alert">{failed}</p>}
+      <div hidden={concealed} className="space-y-6">
+        {read && (
+          <>
+            <a
+              className="font-serif text-xl underline"
+              lang={title.lang ?? undefined}
+              href={subjectHref({ id, label: title.text }, locale).href}
+            >
+              {title.text || m.subject_value_unlabelled({}, o)}
+            </a>
+            <p className="break-all text-sm text-muted-foreground">
+              {read.public.subject.type} · {id}
+            </p>
+            {!read.streams.length && <p>{m.work_parts_no_stream({}, o)}</p>}
+            {stream && (
+              <>
+                <Field>
+                  <FieldLabel htmlFor="work-parts-stream">{m.work_parts_relation({}, o)}</FieldLabel>
+                  <NativeSelect
+                    id="work-parts-stream"
+                    value={stream.key}
+                    disabled={busy}
+                    onChange={(event) => void load(event.target.value)}
+                  >
+                    {read.streams.map((item) => (
+                      <NativeSelectOption key={item.key} value={item.key} lang={item.label.lang ?? undefined}>
+                        {item.label.text || item.property}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <p role="status">
+                  {m.work_parts_slice({}, o)}{' '}
+                  {read.count &&
+                    m.work_parts_count(
+                      {
+                        count: read.count.value,
+                        accuracy: read.count.exact ? m.work_parts_exact({}, o) : m.work_parts_at_least({}, o),
+                      },
+                      o,
+                    )}
+                </p>
+                {!read.caughtUp && <p role="status">{m.work_parts_pending({}, o)}</p>}
+                {!stream.positionEditable && (
+                  <p className="text-sm text-muted-foreground">{m.work_parts_order_readonly({}, o)}</p>
+                )}
+                {!read.rows.length && <p>{m.work_parts_empty({}, o)}</p>}
+                <ul className="divide-y divide-border">
+                  {read.rows.map((row) => (
+                    <li key={`${row.holder}:${row.statementId}`} className="min-w-0 space-y-3 py-4">
+                      {row.summary ? (
+                        <a
+                          lang={row.summary.label?.language}
+                          href={subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href}
+                          className="font-serif text-lg underline"
+                        >
+                          {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
+                        </a>
+                      ) : (
+                        <p>{m.work_parts_unresolved({}, o)}</p>
+                      )}
+                      <p className="break-all text-xs text-muted-foreground">
+                        {row.holder} · {stream.property} · {row.statementId}
+                      </p>
+                      {row.statement ? (
+                        <div className="space-y-1 text-sm">
+                          <CandidateValue snak={row.statement} related={row.related} locale={locale} />
+                          {row.statement.qualifiers.map((snak, index) => (
+                            <div key={index}>
+                              <span className="text-muted-foreground">{snak.property.id}: </span>
+                              <CandidateValue snak={snak} related={row.related} locale={locale} />
+                            </div>
+                          ))}
+                          {row.statement.references.map((reference, index) => (
+                            <div key={index}>
+                              {reference.parts.map((snak, at) => (
+                                <CandidateValue key={at} snak={snak} related={row.related} locale={locale} />
+                              ))}
+                            </div>
+                          ))}
+                          {partCorrection(row, stream) && (
+                            <Button variant="outline" onClick={() => open(row, stream)}>
+                              {m.work_parts_correct({}, o)}
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <p>{m.work_parts_assertion_unavailable({}, o)}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex flex-wrap gap-2">
+                  {read.next && (
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void load(stream.key, read.next ?? undefined)}
+                    >
+                      {m.work_parts_more({}, o)}
+                    </Button>
+                  )}
+                  <Button variant="outline" disabled={busy} onClick={() => void load(stream.key)}>
+                    {m.work_parts_restart({}, o)}
+                  </Button>
+                </div>
+                <section className="space-y-3 rounded-lg border border-border p-4">
+                  <h2 className="font-sans text-lg font-semibold">{m.work_parts_add({}, o)}</h2>
+                  <EntityPicker
+                    label={m.work_parts_pick({}, o)}
+                    search={search}
+                    src={coverSrc}
+                    value={part}
+                    onValueChange={setPart}
+                  />
+                  <Button variant="outline" disabled={!part.length} onClick={add}>
+                    {m.work_parts_draft({}, o)}
+                  </Button>
+                </section>
+              </>
+            )}
+          </>
+        )}
+        {drafts.map((draft) => (
+          <section key={draft.key} className="space-y-3 border-t border-border pt-6">
+            <p className="break-all text-sm">
+              {m.work_parts_holder({}, o)}: {draft.id}
+            </p>
+            <RelationEditor
+              id={draft.id}
+              locale={locale}
+              transport={transport.relation(draft.id)}
+              search={search}
+              composition={draft}
+              onSelected={() => load(stream?.key, cursor.current)}
+            />
+          </section>
+        ))}
+      </div>
+      {(read || concealed) && (
+        <Button variant="outline" disabled={busy} onClick={() => void load(stream?.key, cursor.current)}>
+          {m.candidate_reload({}, o)}
+        </Button>
+      )}
+    </article>
+  );
+}
