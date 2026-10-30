@@ -108,12 +108,28 @@ test('a legitimate deleted creator keeps a pending registration secret-free unti
   expect(expiredStage.operator_reservation_id).toBeString();
   // This is a real approved self deletion. The creator holds no membership or
   // operator responsibility; the separate organization legitimately keeps its hold.
-  void f.delete(creator).catch(() => {});
-  await eventually(
-    async () =>
-      (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [creator.accountId])).rows[0]
-        ?.pending_code === 'native-stage',
-  );
+  const creatorHandle = (await f.bindings.workflowPorts.readAccount(creator.accountId))!.handle;
+  const redirect = f.bindings.workflowPorts.redirectHandle;
+  let redirected: Parameters<typeof redirect>[0] | undefined;
+  f.bindings.workflowPorts.redirectHandle = async (input) => {
+    const result = await redirect(input);
+    redirected = input;
+    return result;
+  };
+  try {
+    void f.delete(creator).catch(() => {});
+    await eventually(
+      async () =>
+        (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [creator.accountId]))
+          .rows[0]?.pending_code === 'native-stage',
+    );
+  } finally {
+    f.bindings.workflowPorts.redirectHandle = redirect;
+  }
+  // The actual source result precedes the long native wait; no expired
+  // continuation or replacement approval is needed after registration expiry.
+  expect(redirected?.accountId).toBe(creator.accountId);
+  expect(redirected?.handle).toBe(creatorHandle);
   expect((await f.bindings.workflowPorts.readAccount(creator.accountId))!.state).toBe('deleted');
   expect((await f.bindings.workflowPorts.readAccount(operatorId))!.state).toBe('active');
   expect((await f.bindings.workflowPorts.readAccount(expiredStage.account_id))!.state).toBe('pending');
@@ -404,6 +420,9 @@ test('an unknown historical native request keeps its exact witness and applicabi
 
 test('real recovery establishment survives a lost committed source reply and obtains terminal source proof before its native witness is removed', async () => {
   const subject = await f.person('native-recovery-subject');
+  // Native recovery establishes a human whose existing source fence must be
+  // cleared. Use the real command, as in Access's recovery-completion contract.
+  await f.bindings.workflowPorts.raiseFence({ accountId: subject.accountId, key: randomUUID() });
   expect((await f.call('/recovery/start', { email: subject.email })).status).toBe(200);
   await eventually(async () => f.deliveries.some((message) => message.accountId === subject.accountId));
   const token = f.deliveries.find((message) => message.accountId === subject.accountId)!.token;
@@ -423,6 +442,7 @@ test('real recovery establishment survives a lost committed source reply and obt
     f.bindings.trustedAccess.completeRecovery = complete;
   }
   expect(reference).toBeString();
+  expect(reference.length).toBe(64);
   const witness = (
     await f.pool.query(
       'SELECT reference,receipt_id,account_id,establishment_id,effect_commitment,authn_epoch FROM auth_recovery_establishment WHERE reference=$1',

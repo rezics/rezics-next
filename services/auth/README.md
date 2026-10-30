@@ -1508,6 +1508,14 @@ default deletion caller and maintenance scheduler compose the same native consum
 continuation. Its held key and pending reason checkpoint before the Auth connection
 is released; foreign source commands finish before another connection is acquired.
 Neither a session nor a renewed approval supplies mechanical release authority.
+Confirmed deletion first commits its permanent Auth obligation, then finishes the
+original source responsibility releases and deleted-handle redirect under that
+same committed continuation before waiting on native Auth pages. A registration's
+source deadline can outlive the continuation; waiting does not renew its authority
+or postpone those already authorized source consumers.
+The pinned SDK's workflow patch preserves the old step order for existing
+histories. An old continuation that already expired before its source release
+remains refused; this path never restores its former authority.
 
 - Registration records its original workflow/activation keys before source work,
   and its actual operator reservation when that command returns. Erasure removes

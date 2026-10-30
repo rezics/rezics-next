@@ -530,15 +530,18 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       auth.internal.startAccountErasure(accountId),
     );
     const erasurePage = step('native-erasure-page', (id: string) => nativeErasurePage(database, id, nativeConsumers));
-    const erase = async (accountId: string, request?: AccountOperation, operationKey?: string) => {
-      // Old histories stored void at erase-auth-owner. Recover the same native
-      // obligation rather than replaying the former user cascade.
-      const id = (await acceptErasure(accountId, request, operationKey)) ?? (await recoverErasure(accountId));
+    const drainErasure = async (id: string) => {
       for (;;) {
         const page = await erasurePage(id);
         if (page.state === 'consent') return;
         if (page.state === 'pending') await DBOS.sleep(60_000);
       }
+    };
+    const erase = async (accountId: string, request?: AccountOperation, operationKey?: string) => {
+      // Old histories stored void at erase-auth-owner. Recover the same native
+      // obligation rather than replaying the former user cascade.
+      const id = (await acceptErasure(accountId, request, operationKey)) ?? (await recoverErasure(accountId));
+      await drainErasure(id);
     };
     const expired = step('registration-terminal', async (id: string) => {
       await database.query(
@@ -1067,12 +1070,23 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         const barrier = await tombstone(input);
         const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
         if (operationKey) {
-          await erase(input.accountId, undefined, operationKey);
+          // Commit Auth's permanent obligation before releasing source custody.
+          // Finish the already authorized source consumers while the exact
+          // continuation is live; native erasure may wait for a registration's
+          // thirty-minute deadline beyond that continuation's authority.
+          const releaseBeforeWait = await DBOS.patch('deletion-source-consumers-before-native-wait');
+          let id: string | undefined;
+          if (releaseBeforeWait)
+            id =
+              (await acceptErasure(input.accountId, undefined, operationKey)) ??
+              (await recoverErasure(input.accountId));
+          else await erase(input.accountId, undefined, operationKey);
           if (input.responsibility) {
             await retireOperator(input.responsibility, undefined, operationKey);
             await releaseOperator(input.responsibility, undefined, operationKey);
           }
           if (account.handle) await redirectDeleted(account.accountId, account.handle, undefined, operationKey);
+          if (id) await drainErasure(id);
           return { accountId: input.accountId };
         }
         await erase(input.accountId, input);

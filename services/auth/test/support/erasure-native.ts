@@ -189,11 +189,12 @@ export async function nativeFixture() {
     },
     routeOf: modules.routeOf,
     async person(name: string): Promise<Person> {
-      const requestKey = `${name}-${randomUUID()}`;
+      const id = randomUUID();
+      const requestKey = `${name}-${id}`;
       const email = `${requestKey}@native-erasure.test`;
       const { accountId } = await host.workflows.register({
         key: requestKey,
-        handle: requestKey.replaceAll('-', '_'),
+        handle: `native_${id.replaceAll('-', '')}`,
         email,
         password,
       });
