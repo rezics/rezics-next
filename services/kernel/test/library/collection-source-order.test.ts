@@ -27,7 +27,10 @@ type ConsumerContract = [
     Equal<
       NativeOrdinalRow,
       Readonly<
-        Pick<CollectionMemberRow, 'memberId' | 'subjectId' | 'ordinalKey' | 'deletionId' | 'deletedAt' | 'memberRevision'>
+        Pick<
+          CollectionMemberRow,
+          'memberId' | 'subjectId' | 'ordinalKey' | 'deletionId' | 'deletedAt' | 'memberRevision'
+        >
       >
     >
   >,
