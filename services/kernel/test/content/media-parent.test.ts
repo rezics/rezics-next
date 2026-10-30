@@ -49,7 +49,7 @@ async function grant(resource: string, action: string) {
     [routeOf(resource), resource, actor.accountId, action],
   );
 }
-async function fixture(visibility = 'published') {
+async function fixture(visibility = 'published', threadBoardId?: string) {
   const board = newId(boardRoute),
     thread = newId(containerRoute);
   await db.admin.query(
@@ -60,7 +60,7 @@ async function fixture(visibility = 'published') {
   await db.admin.query(
     `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
     VALUES ($1,$2,$3,$4,'Images','published',1,$3)`,
-    [containerRoute, thread, actor.accountId, board],
+    [containerRoute, thread, actor.accountId, threadBoardId ?? board],
   );
   await grant(thread, 'media:create');
   return { board, thread };
@@ -459,17 +459,8 @@ test('deadline, missing references, route mismatch and reply depth cap deny with
   await denied(() => reserveMedia(dependencies(), actor, input(newId(containerRoute)), request()));
   await expect(post(f, newId(containerRoute + 1))).rejects.toMatchObject({ code: '23514' });
   const wrongRoute = newId(containerRoute + 1);
-  await db.admin.query('UPDATE content.thread SET board_id=$3 WHERE route=$1 AND thread_id=$2', [
-    containerRoute,
-    f.thread,
-    wrongRoute,
-  ]);
-  await denied(() => reserveMedia(dependencies(), actor, input(f.thread), request()));
-  await db.admin.query('UPDATE content.thread SET board_id=$3 WHERE route=$1 AND thread_id=$2', [
-    containerRoute,
-    f.thread,
-    f.board,
-  ]);
+  const mismatched = await fixture('published', wrongRoute);
+  await denied(() => reserveMedia(dependencies(), actor, input(mismatched.thread), request()));
   let target: string | null = null;
   for (let depth = 0; depth < 33; depth++) target = await post(f, target);
   await grant(target!, 'media:create');
