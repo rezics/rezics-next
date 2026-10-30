@@ -644,7 +644,6 @@ test('statements per follow, membership step and page stay equal as unrelated fo
   expect(pageStatements).toEqual([pageCost, pageCost, pageCost]);
 }, 120_000);
 
-
 test('owner removal keeps original identity and negative replay after the target becomes unavailable', async () => {
   const subjectId = await createReadableSubject('Removed while hidden');
   const target = { targetId: subjectId, targetType: 'subject' as const };
@@ -652,7 +651,13 @@ test('owner removal keeps original identity and negative replay after the target
   await denyOwnerRead(subjectId);
   const key = requestKey();
   const removed = await followCommands.unfollow(owner, subjectId, key);
-  expect(removed.follow).toMatchObject({ targetId: subjectId, targetType: 'subject', state: 'unfollowed', reason: 'explicit', createdAt: first.follow.createdAt });
+  expect(removed.follow).toMatchObject({
+    targetId: subjectId,
+    targetType: 'subject',
+    state: 'unfollowed',
+    reason: 'explicit',
+    createdAt: first.follow.createdAt,
+  });
   const events = await followEventRows(subjectId);
   expect(events).toHaveLength(2);
   const replay = await followCommands.unfollow(owner, target, key);
@@ -662,7 +667,9 @@ test('owner removal keeps original identity and negative replay after the target
   expect(await followCommands.readFollow(owner, subjectId)).toEqual(removed.follow);
   expect(await followEventRows(subjectId)).toEqual(events);
   expect(await refusal(() => followCommands.follow(owner, target, requestKey()))).toBeInstanceOf(LibraryNotFoundError);
-  expect(await refusal(() => followCommands.unfollow(other, subjectId, requestKey()))).toBeInstanceOf(LibraryNotFoundError);
+  expect(await refusal(() => followCommands.unfollow(other, subjectId, requestKey()))).toBeInstanceOf(
+    LibraryNotFoundError,
+  );
   expect(await followCommands.readFollow(other, subjectId)).toBeNull();
 });
 
@@ -673,5 +680,7 @@ test('a stored Collection edge can be removed after target deletion without refo
   await tombstone(shelf.id);
   expect((await followCommands.unfollow(owner, target, requestKey())).follow.state).toBe('unfollowed');
   expect(await refusal(() => followCommands.follow(owner, target, requestKey()))).toBeInstanceOf(LibraryNotFoundError);
-  expect(await refusal(() => followCommands.unfollow(other, shelf.id, requestKey()))).toBeInstanceOf(LibraryNotFoundError);
+  expect(await refusal(() => followCommands.unfollow(other, shelf.id, requestKey()))).toBeInstanceOf(
+    LibraryNotFoundError,
+  );
 });

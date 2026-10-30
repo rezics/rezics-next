@@ -111,8 +111,12 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     const identity = principalCommandIdentity(owner);
     const native = config.access
       ? await accessCommandAuthorization(
-          config.access, owner, request.action, { route, id: owner.accountId },
-          { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) }, () => new GrantDeniedError(),
+          config.access,
+          owner,
+          request.action,
+          { route, id: owner.accountId },
+          { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+          () => new GrantDeniedError(),
         )
       : undefined;
     const authorization: CommandAuthorization = {

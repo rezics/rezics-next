@@ -66,15 +66,21 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
     },
     { name: 'library.purgeErasureFactsPage', ...COMMAND_STEP_RETRIES },
   );
-  const countPage = DBOS.registerStep(
-    async (accountId: string) => purgeFollowCountsPage({ pool, client }, accountId),
-    { name: 'library.purgeErasureFollowCountsPage', ...COMMAND_STEP_RETRIES },
-  );
+  const countPage = DBOS.registerStep(async (accountId: string) => purgeFollowCountsPage({ pool, client }, accountId), {
+    name: 'library.purgeErasureFollowCountsPage',
+    ...COMMAND_STEP_RETRIES,
+  });
   const graphPage = DBOS.registerStep(
     async (input: Parameters<typeof purgeOwnedGraphPage>[1]) => purgeOwnedGraphPage(pool, input),
     { name: 'library.purgeErasureOwnedPage', ...COMMAND_STEP_RETRIES },
   );
-  type Continuation = { countsComplete?: boolean; segment: number; factKind: number; factAfter: FactInput['after']; graph: GraphCheckpoint };
+  type Continuation = {
+    countsComplete?: boolean;
+    segment: number;
+    factKind: number;
+    factAfter: FactInput['after'];
+    graph: GraphCheckpoint;
+  };
   const continueErasure = DBOS.registerStep(
     async (accountId: string, next: Continuation) => {
       await client.enqueue(
@@ -129,7 +135,9 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
           : null;
       if (graph) cursor.graph = graph.cursor;
       const continuation =
-        !cursor.countsComplete || cursor.factKind < kinds.length || !graph?.exhausted ? { ...cursor, segment: cursor.segment + 1 } : null;
+        !cursor.countsComplete || cursor.factKind < kinds.length || !graph?.exhausted
+          ? { ...cursor, segment: cursor.segment + 1 }
+          : null;
       if (continuation) await continueErasure(accountId, continuation);
       const final = await inspect(accountId);
       if (final.outcome !== null) return { state: 'acknowledged', outcome: final.outcome };

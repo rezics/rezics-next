@@ -53,10 +53,16 @@ async function resolveMappedSubject(
     const route = routeOf(id);
     if (route === null) return null;
     const resource = { route, id, eligibility: subjectReadEligibility({ route, id }) };
-    const check = await accessCheck(deps.access, actor, 'subject:read', resource, context ?? {
-      pool: deps.pool,
-      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-    });
+    const check = await accessCheck(
+      deps.access,
+      actor,
+      'subject:read',
+      resource,
+      context ?? {
+        pool: deps.pool,
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+      },
+    );
     return (client: Parameters<typeof check>[0]) => check(client, at);
   }
   if (mapping.state === 'absent') return null;

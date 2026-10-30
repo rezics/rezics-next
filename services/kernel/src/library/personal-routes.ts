@@ -609,12 +609,17 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/followCounts/outgoing',
       {
         query: t.Object({}, closed),
-        response: { 200: t.Object({ followingCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }, closed),
-          ...failures, 503: problemSchema('dependency_unavailable') },
+        response: {
+          200: t.Object({ followingCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }, closed),
+          ...failures,
+          503: problemSchema('dependency_unavailable'),
+        },
         detail: detail('follow_count.outgoing', 'follow:list'),
       },
       async ({ actor, admission, job, set }) => {
-        const result = await admission.run('normal', job, () => createFollowCountReads(config()).outgoing(actor, job.deadline));
+        const result = await admission.run('normal', job, () =>
+          createFollowCountReads(config()).outgoing(actor, job.deadline),
+        );
         set.headers['Cache-Control'] = 'private, no-store';
         return result;
       },
@@ -623,14 +628,28 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/followCounts/:targetType/:targetId',
       {
         query: t.Object({}, closed),
-        params: t.Object({ targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]), targetId: id }, closed),
-        response: { 200: t.Object({ targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]),
-          targetId: id, followerCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }, closed),
-          ...failures, 503: problemSchema('dependency_unavailable') },
+        params: t.Object(
+          { targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]), targetId: id },
+          closed,
+        ),
+        response: {
+          200: t.Object(
+            {
+              targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]),
+              targetId: id,
+              followerCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+            },
+            closed,
+          ),
+          ...failures,
+          503: problemSchema('dependency_unavailable'),
+        },
         detail: detail('follow_count.target', 'follow:list'),
       },
       async ({ actor, params, admission, job, set }) => {
-        const result = await admission.run('normal', job, () => createFollowCountReads(config()).target(actor, params, job.deadline));
+        const result = await admission.run('normal', job, () =>
+          createFollowCountReads(config()).target(actor, params, job.deadline),
+        );
         set.headers['Cache-Control'] = 'private, no-store';
         return result;
       },

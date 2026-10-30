@@ -2,7 +2,13 @@ import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, mintReadTime, type CommandAttempt, type CommandEvent, type CommandOutcome } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  type CommandAttempt,
+  type CommandEvent,
+  type CommandOutcome,
+} from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { readSpace, spaceReadEligibility } from '../community/space.ts';
 import { withConnection } from '../database/pool.ts';
@@ -87,10 +93,14 @@ export function createFollowCommands(config: FollowDeps) {
     return account;
   }
 
-  async function readable(actor: AccountActor, target: FollowTarget, attempt?: CommandAttempt): Promise<FollowTarget | null> {
+  async function readable(
+    actor: AccountActor,
+    target: FollowTarget,
+    attempt?: CommandAttempt,
+  ): Promise<FollowTarget | null> {
     const base = { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) };
     const context = attempt ? commandAccessContext(base, attempt) : base;
-    const time = attempt?.time ?? await withConnection(pool, client => mintReadTime(client, clock));
+    const time = attempt?.time ?? (await withConnection(pool, (client) => mintReadTime(client, clock)));
     const route = routeOf(target.targetId);
     if (route === null) return null;
     if (target.targetType === 'space') {
@@ -124,7 +134,11 @@ export function createFollowCommands(config: FollowDeps) {
       : null;
   }
 
-  async function resolveTarget(actor: AccountActor, input: FollowTarget | string, attempt?: CommandAttempt): Promise<FollowTarget> {
+  async function resolveTarget(
+    actor: AccountActor,
+    input: FollowTarget | string,
+    attempt?: CommandAttempt,
+  ): Promise<FollowTarget> {
     const candidates: FollowTarget[] =
       typeof input === 'string'
         ? (['collection', 'subject', 'space'] as const).map((targetType) => ({ targetId: input, targetType }))
@@ -173,45 +187,51 @@ export function createFollowCommands(config: FollowDeps) {
     const existing = await load(actor.accountId, targetId);
     const target = existing
       ? { targetId: existing.targetId, targetType: existing.targetType }
-      : typeof input === 'string' ? await resolveTarget(actor, input) : asTarget(input);
+      : typeof input === 'string'
+        ? await resolveTarget(actor, input)
+        : asTarget(input);
     return finish(
-      () => runner.ownAccountPrepared(
-        actor,
-        {
-          action, kind, requestKey, input: target ?? { targetId },
-          async prepare(attempt) {
-            // Business failure is deferred until AFTER current owner admission and
-            // exact receipt replay. A stored removal never visits the target home.
-            if (intent === 'unfollow' && existing) return { target, error: null };
-            try {
-              return { target: await resolveTarget(actor, target ?? input, attempt), error: null };
-            } catch (error) {
-              return { target: null, error };
-            }
+      () =>
+        runner.ownAccountPrepared(
+          actor,
+          {
+            action,
+            kind,
+            requestKey,
+            input: target ?? { targetId },
+            async prepare(attempt) {
+              // Business failure is deferred until AFTER current owner admission and
+              // exact receipt replay. A stored removal never visits the target home.
+              if (intent === 'unfollow' && existing) return { target, error: null };
+              try {
+                return { target: await resolveTarget(actor, target ?? input, attempt), error: null };
+              } catch (error) {
+                return { target: null, error };
+              }
+            },
           },
-        },
-        async (tx, command, prepared) => {
-          if (prepared.error) throw prepared.error;
-          if (!prepared.target) throw new LibraryNotFoundError();
-          const route = routeOf(actor.accountId)!;
-          const stored = await readStoredFollow(tx, route, actor.accountId, targetId);
-          if (stored && stored.targetType !== prepared.target.targetType) throw new LibraryNotFoundError();
-          if (intent === 'unfollow' && existing && !stored) throw new LibraryNotFoundError();
-          const changed = await applyFollow(tx, route, {
-            accountId: actor.accountId,
-            targetId,
-            targetType: stored?.targetType ?? prepared.target.targetType,
-            intent,
-            reason: 'explicit',
-            transactionId: command.transactionId,
-            time: authoritativeTimeValue(command.time),
-          });
-          if (!changed) throw new UnchangedFollow();
-          const follow = await readStoredFollow(tx, route, actor.accountId, targetId);
-          if (!follow) throw new Error('Follow write did not leave a row');
-          return { value: follow, events: [followEvent(actor.accountId, targetId)] };
-        },
-      ),
+          async (tx, command, prepared) => {
+            if (prepared.error) throw prepared.error;
+            if (!prepared.target) throw new LibraryNotFoundError();
+            const route = routeOf(actor.accountId)!;
+            const stored = await readStoredFollow(tx, route, actor.accountId, targetId);
+            if (stored && stored.targetType !== prepared.target.targetType) throw new LibraryNotFoundError();
+            if (intent === 'unfollow' && existing && !stored) throw new LibraryNotFoundError();
+            const changed = await applyFollow(tx, route, {
+              accountId: actor.accountId,
+              targetId,
+              targetType: stored?.targetType ?? prepared.target.targetType,
+              intent,
+              reason: 'explicit',
+              transactionId: command.transactionId,
+              time: authoritativeTimeValue(command.time),
+            });
+            if (!changed) throw new UnchangedFollow();
+            const follow = await readStoredFollow(tx, route, actor.accountId, targetId);
+            if (!follow) throw new Error('Follow write did not leave a row');
+            return { value: follow, events: [followEvent(actor.accountId, targetId)] };
+          },
+        ),
       actor.accountId,
       targetId,
     );
