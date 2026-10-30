@@ -61,8 +61,7 @@ function CollectionCover({ collection, subject }: { collection: MineCollection; 
       <Cover
         subject={{ id: subject.id, title: label, types: subject.types }}
         cover={subject.cover}
-        size="md"
-        className="w-24 sm:w-40"
+        size="fill"
         ratio={collectionMemberRatio(subject)}
         src={coverSrc}
         decorative
@@ -179,8 +178,8 @@ function PreviewStrip({ members }: { members: readonly LibrarySubject[] }) {
             <Cover
               subject={{ id: subject.id, title, types: subject.types }}
               cover={subject.cover}
-              size="sm"
-              className="w-full max-w-40"
+              size="fill"
+              className="max-w-40"
               ratio={collectionMemberRatio(subject)}
               src={coverSrc}
               decorative

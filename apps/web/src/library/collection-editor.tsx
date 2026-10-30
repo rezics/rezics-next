@@ -38,12 +38,9 @@ export function CollectionSubjectList({
             key={subject?.id ?? `unavailable-${index}`}
             className="flex min-w-0 items-center gap-3 rounded-xl p-3 sm:gap-4 sm:p-4"
           >
-            <SubjectCover
-              subject={subject}
-              ratio={collectionMemberRatio(subject, typeRatios)}
-              size="md"
-              className="w-24 sm:w-40"
-            />
+            <div className="w-24 shrink-0 sm:w-40">
+              <SubjectCover subject={subject} ratio={collectionMemberRatio(subject, typeRatios)} size="fill" />
+            </div>
             <div className="min-w-24 flex-1 space-y-1">
               <div className="line-clamp-2 font-medium leading-snug">
                 {href ? (
@@ -216,7 +213,9 @@ export function CollectionMemberList({
                 />
               </ListRowControl>
             ) : null}
-            <SubjectCover subject={member.subject} ratio={rowRatio} size="md" className="w-24 sm:w-40" />
+            <div className="w-24 shrink-0 sm:w-40">
+              <SubjectCover subject={member.subject} ratio={rowRatio} size="fill" />
+            </div>
             <div className="min-w-24 flex-1 space-y-1">
               <div className="line-clamp-2 font-medium leading-snug">
                 {href ? (

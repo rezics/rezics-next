@@ -84,7 +84,7 @@ test('at-rest member rows retain real Type, links and notes without exposing edi
       onCopy: () => {},
     }),
   );
-  expect(html).toContain('/en/subjects/subject-0/member-0');
+  expect(html).toContain('/subjects/subject-0/member-0');
   expect(html).toContain('A visible note');
   expect(html).toContain('Movie');
   expect(html).toContain('MusicAlbum');
@@ -134,7 +134,7 @@ test('browse rows preserve the native total and privacy while previewing only th
   const preview = await render(createElement(CollectionPreview, { collection: browse }));
   expect(preview).toContain(m.library_collection_item_count({ count: 40 }));
   for (const member of members.slice(0, 3)) expect(preview).toContain(`>${member.subject!.label}<`);
-  expect(preview).not.toContain('/en/subjects/subject-3/');
+  expect(preview).not.toContain('/subjects/subject-3/');
   const unavailable = await render(
     createElement(CollectionPreview, { collection: { ...browse, memberCount: 0, preview: { state: 'unavailable' } } }),
   );

@@ -18,6 +18,9 @@ import { setCollectionFollow } from './collection-edit';
 import { csrfHeaders } from '../threads/composer';
 import { CollectionSubjectList } from './collection-editor';
 import { AccountRef } from './account-ref';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Menu } from '@rezics/ui/menu';
+import { EllipsisIcon, Share2Icon } from 'lucide-react';
 
 export function DynamicCollectionPage({
   page,
@@ -32,6 +35,7 @@ export function DynamicCollectionPage({
   const [following, setFollowing] = useState(page.following ?? null);
   const [followPending, setFollowPending] = useState(false);
   const [followFailure, setFollowFailure] = useState(false);
+  const [copyFailure, setCopyFailure] = useState(false);
   const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
   const pins = current.pins ?? navigation.data?.pins ?? { state: 'closed' as const };
   const collections = current.navigationCollections ?? navigation.data?.collections ?? [];
@@ -43,6 +47,7 @@ export function DynamicCollectionPage({
     setRetrying(false);
     setFollowing(page.following ?? null);
     setFollowFailure(false);
+    setCopyFailure(false);
   }, [page]);
   useEffect(() => {
     if (!current.preparing || retries >= 3 || retrying || !readMembers) return;
@@ -94,15 +99,44 @@ export function DynamicCollectionPage({
       setFollowPending(false);
     }
   }
+  function copyLink(href: string) {
+    setCopyFailure(false);
+    void navigator.clipboard.writeText(`${location.origin}${href}`).catch(() => setCopyFailure(true));
+  }
   const locale = getLocale();
   return (
     <div className="w-full min-w-0 space-y-6 text-foreground">
       <LibraryNavigation current={{ collectionId: current.id }} pins={pins} collections={collections} />
       <article className="w-full min-w-0 space-y-6 text-foreground">
         <header className="rounded-2xl bg-card p-4 sm:p-6">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <PageHeading>{current.title}</PageHeading>
-            <PinControl collectionId={current.id} pins={pins} mode="collection" />
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <PinControl collectionId={current.id} pins={pins} mode="collection" />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => copyLink(`/${locale}/collections/${encodeURIComponent(current.id)}`)}
+              >
+                <Share2Icon aria-hidden="true" />
+                {m.library_collection_copy()}
+              </Button>
+              <Menu
+                title={m.library_collection_actions()}
+                trigger={
+                  <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+                    <EllipsisIcon aria-hidden="true" />
+                  </Button>
+                }
+                entries={[
+                  {
+                    type: 'item',
+                    label: m.library_collection_copy(),
+                    onSelect: () => copyLink(`/${locale}/collections/${encodeURIComponent(current.id)}`),
+                  },
+                ]}
+              />
+            </div>
           </div>
           {current.curator ? (
             <div className="mt-3">
@@ -127,6 +161,7 @@ export function DynamicCollectionPage({
             </Exposure>
           ) : null}
         </header>
+        {copyFailure ? <p role="alert">{m.error_message()}</p> : null}
         <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>
         {current.filterProperties && current.filterParams ? (
           <CollectionFilters
@@ -158,9 +193,7 @@ export function DynamicCollectionPage({
             typeRatios={current.typeRatios}
             onCopy={(subject) => {
               const title = displayLibraryTitle(subject.label, locale).text;
-              void navigator.clipboard
-                .writeText(`${location.origin}${subjectHref({ id: subject.id, label: title }, locale).href}`)
-                .catch(() => undefined);
+              copyLink(subjectHref({ id: subject.id, label: title }, locale).href);
             }}
           />
         ) : null}
