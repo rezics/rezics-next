@@ -27,23 +27,215 @@ SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
-CREATE TABLE search.identity_writer_gate (
-  partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-  physical_target text COLLATE "C" NOT NULL CHECK (octet_length(physical_target) BETWEEN 1 AND 255),
-  consumer text COLLATE "C" NOT NULL CHECK (consumer ~ '^[a-z][a-z0-9_]{0,62}$'),
-  incarnation text NOT NULL CHECK (octet_length(incarnation) BETWEEN 1 AND 128),
-  write_alias text NOT NULL CHECK (octet_length(write_alias) BETWEEN 1 AND 255),
-  owner_epoch integer NOT NULL CHECK (owner_epoch > 0),
-  enrollment_generation bigint NOT NULL DEFAULT 0 CHECK (enrollment_generation >= 0),
-  fence_generation bigint NOT NULL DEFAULT 0 CHECK (fence_generation >= 0),
-  closed_token uuid,
-  closed_transaction_id uuid,
-  closed_position bigint CHECK (closed_position > 0),
-  PRIMARY KEY (partition_no, physical_target),
-  CHECK ((closed_token IS NULL) = (closed_transaction_id IS NULL)),
-  CHECK ((closed_token IS NULL) = (closed_position IS NULL)),
-  CHECK ((closed_token IS NULL) = (fence_generation = 0))
+--
+-- Name: discovery_copy; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.discovery_copy (
+    route integer NOT NULL,
+    source_id uuid NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    generation bigint NOT NULL,
+    kind text NOT NULL COLLATE pg_catalog."C",
+    "position" bigint DEFAULT 0 NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    deleted boolean DEFAULT false NOT NULL,
+    settled boolean DEFAULT false NOT NULL,
+    CONSTRAINT discovery_copy_check CHECK ((route = ((get_byte(uuid_send(source_id), 10) * 256) + get_byte(uuid_send(source_id), 11)))),
+    CONSTRAINT discovery_copy_position_check CHECK (("position" >= 0)),
+    CONSTRAINT discovery_copy_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT discovery_copy_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
+
+
+--
+-- Name: discovery_erasure; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.discovery_erasure (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    CONSTRAINT discovery_erasure_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11))))
+);
+
+
+--
+-- Name: discovery_generation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.discovery_generation (
+    partition_no integer DEFAULT 0 NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    generation bigint NOT NULL,
+    index_uuid text COLLATE pg_catalog."C",
+    incarnation uuid NOT NULL,
+    kinds text[] NOT NULL,
+    state text NOT NULL,
+    activated_at timestamp with time zone,
+    CONSTRAINT discovery_generation_generation_check CHECK ((generation > 0)),
+    CONSTRAINT discovery_generation_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT discovery_generation_state_check CHECK ((state = ANY (ARRAY['allocated'::text, 'populating'::text, 'replaying'::text, 'reconciling'::text, 'ready'::text, 'active'::text, 'retiring'::text, 'retired'::text, 'quarantined'::text])))
+);
+
+
+--
+-- Name: discovery_population; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.discovery_population (
+    partition_no integer NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    generation bigint NOT NULL,
+    owner text NOT NULL,
+    after_route integer,
+    after_id uuid,
+    complete boolean DEFAULT false NOT NULL,
+    certified boolean DEFAULT false NOT NULL,
+    indexed bigint DEFAULT 0 NOT NULL,
+    census bigint DEFAULT 0 NOT NULL,
+    reconcile_position bigint,
+    "position" bigint DEFAULT 0 NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    claim_revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT discovery_population_check CHECK (((after_route IS NULL) = (after_id IS NULL))),
+    CONSTRAINT discovery_population_check1 CHECK (((after_route IS NULL) OR ((after_route / 16) = partition_no))),
+    CONSTRAINT discovery_population_claim_revision_check CHECK ((claim_revision >= 0)),
+    CONSTRAINT discovery_population_owner_check CHECK ((owner = ANY (ARRAY['accounts'::text, 'semantic'::text]))),
+    CONSTRAINT discovery_population_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT discovery_population_position_check CHECK (("position" >= 0)),
+    CONSTRAINT discovery_population_revision_check CHECK ((revision >= 0))
+);
+
+
+--
+-- Name: facet_generation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.facet_generation (
+    partition_no integer NOT NULL,
+    definition text NOT NULL COLLATE pg_catalog."C",
+    generation text NOT NULL COLLATE pg_catalog."C",
+    property text NOT NULL,
+    observation text NOT NULL,
+    state text NOT NULL,
+    phase text NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    lease_until bigint DEFAULT 0 NOT NULL,
+    expires_at bigint NOT NULL,
+    frontier text,
+    population_complete boolean DEFAULT false NOT NULL,
+    subject text,
+    terminal text,
+    subject_type text,
+    security_revision text,
+    projection jsonb,
+    accumulator jsonb DEFAULT '[]'::jsonb NOT NULL,
+    contribution_after text COLLATE pg_catalog."C",
+    as_of text,
+    CONSTRAINT facet_generation_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT facet_generation_phase_check CHECK ((phase = ANY (ARRAY['population'::text, 'projection'::text, 'contribute'::text, 'seal'::text]))),
+    CONSTRAINT facet_generation_state_check CHECK ((state = ANY (ARRAY['building'::text, 'ready'::text, 'retired'::text])))
+);
+
+
+--
+-- Name: facet_stage; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.facet_stage (
+    partition_no integer NOT NULL,
+    definition text NOT NULL COLLATE pg_catalog."C",
+    generation text NOT NULL COLLATE pg_catalog."C",
+    subject text NOT NULL COLLATE pg_catalog."C",
+    key text NOT NULL COLLATE pg_catalog."C",
+    value text NOT NULL COLLATE pg_catalog."C",
+    labels jsonb NOT NULL,
+    target_original text,
+    target_terminal text
+);
+
+
+--
+-- Name: facet_value; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.facet_value (
+    partition_no integer NOT NULL,
+    definition text NOT NULL COLLATE pg_catalog."C",
+    generation text NOT NULL COLLATE pg_catalog."C",
+    value text NOT NULL COLLATE pg_catalog."C",
+    labels jsonb NOT NULL,
+    contributor_original text NOT NULL,
+    contributor_terminal text NOT NULL,
+    target_original text,
+    target_terminal text
+);
+
+
+--
+-- Name: generation_publication; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.generation_publication (
+    partition_no integer DEFAULT 0 NOT NULL,
+    job uuid NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    consumer jsonb NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    generation bigint NOT NULL,
+    family text NOT NULL,
+    native_incarnation text NOT NULL,
+    pass bigint DEFAULT 1 NOT NULL,
+    activated_at text NOT NULL,
+    kinds text[] NOT NULL,
+    source_home integer NOT NULL,
+    binding jsonb NOT NULL,
+    phase text DEFAULT 'subject'::text NOT NULL,
+    home integer DEFAULT 0 NOT NULL,
+    after_route integer,
+    after_id uuid,
+    engine_after jsonb,
+    pit text,
+    fence text,
+    fenced_pass boolean DEFAULT false NOT NULL,
+    observation text,
+    previous_target text,
+    previous_uuid text,
+    revision bigint DEFAULT 1 NOT NULL,
+    CONSTRAINT generation_publication_binding_check CHECK ((octet_length((binding)::text) <= 8192)),
+    CONSTRAINT generation_publication_check CHECK (((after_route IS NULL) = (after_id IS NULL))),
+    CONSTRAINT generation_publication_consumer_check CHECK ((octet_length((consumer)::text) <= 8192)),
+    CONSTRAINT generation_publication_engine_after_check CHECK ((octet_length((engine_after)::text) <= 8192)),
+    CONSTRAINT generation_publication_family_check CHECK ((family = ANY (ARRAY['subjects'::text, 'discovery'::text]))),
+    CONSTRAINT generation_publication_fence_check CHECK ((octet_length(fence) <= 8192)),
+    CONSTRAINT generation_publication_generation_check CHECK (((generation >= 1) AND (generation <= '9007199254740991'::bigint))),
+    CONSTRAINT generation_publication_home_check CHECK (((home >= 0) AND (home <= 4096))),
+    CONSTRAINT generation_publication_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT generation_publication_pass_check CHECK ((pass > 0)),
+    CONSTRAINT generation_publication_phase_check CHECK ((phase = ANY (ARRAY['subject'::text, 'account'::text, 'engine'::text, 'validate'::text, 'reconciled'::text, 'fencing'::text, 'intent'::text, 'active'::text]))),
+    CONSTRAINT generation_publication_pit_check CHECK ((octet_length(pit) <= 65536)),
+    CONSTRAINT generation_publication_revision_check CHECK ((revision > 0)),
+    CONSTRAINT generation_publication_source_home_check CHECK (((source_home >= 0) AND (source_home <= 4095)))
+);
+
+
+--
+-- Name: generation_publication_home; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.generation_publication_home (
+    partition_no integer NOT NULL,
+    job uuid NOT NULL,
+    pass bigint NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    account_revision bigint DEFAULT 0 NOT NULL,
+    claim_revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT generation_publication_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT generation_publication_home_pass_check CHECK ((pass > 0)),
+    CONSTRAINT generation_publication_home_position_check CHECK (("position" >= 0))
+);
+
 
 --
 -- Name: identity_writer; Type: TABLE; Schema: search; Owner: -
@@ -56,35 +248,85 @@ CREATE TABLE search.identity_writer (
     incarnation text NOT NULL,
     owner_epoch integer NOT NULL,
     writer_token uuid,
-    dispatch_state text DEFAULT 'enrolled'::text NOT NULL,
     writer_transaction_id uuid,
     writer_position bigint,
     settled_transaction_id uuid,
     settled_position bigint,
     source_position bigint,
-    visible_transaction_id uuid,
-    visible_position bigint CHECK (visible_position > 0),
-    CHECK ((visible_transaction_id IS NULL) = (visible_position IS NULL)),
     closed_job uuid,
     closed_epoch bigint,
     closed_transaction_id uuid,
     closed_position bigint,
-    CONSTRAINT identity_writer_dispatch_state_check CHECK ((dispatch_state = ANY (ARRAY['enrolled'::text, 'dispatched'::text, 'settled'::text, 'cancelled'::text]))),
+    dispatch_state text DEFAULT 'enrolled'::text NOT NULL,
+    visible_transaction_id uuid,
+    visible_position bigint,
+    repair_locator text,
+    repair_action text,
+    repair_receipt text,
     CONSTRAINT identity_writer_check CHECK (((writer_transaction_id IS NULL) = (writer_position IS NULL))),
     CONSTRAINT identity_writer_check1 CHECK (((writer_token IS NULL) OR (writer_transaction_id IS NOT NULL))),
     CONSTRAINT identity_writer_check2 CHECK (((settled_transaction_id IS NULL) = (settled_position IS NULL))),
     CONSTRAINT identity_writer_check3 CHECK (((closed_job IS NULL) = (closed_epoch IS NULL))),
     CONSTRAINT identity_writer_check4 CHECK (((closed_job IS NULL) = (closed_transaction_id IS NULL))),
     CONSTRAINT identity_writer_check5 CHECK (((closed_job IS NULL) = (closed_position IS NULL))),
+    CONSTRAINT identity_writer_check6 CHECK (((visible_transaction_id IS NULL) = (visible_position IS NULL))),
     CONSTRAINT identity_writer_closed_epoch_check CHECK ((closed_epoch > 0)),
     CONSTRAINT identity_writer_closed_position_check CHECK ((closed_position > 0)),
+    CONSTRAINT identity_writer_dispatch_state_check CHECK ((dispatch_state = ANY (ARRAY['enrolled'::text, 'dispatched'::text, 'settled'::text, 'cancelled'::text]))),
     CONSTRAINT identity_writer_incarnation_check CHECK (((octet_length(incarnation) >= 1) AND (octet_length(incarnation) <= 128))),
     CONSTRAINT identity_writer_owner_epoch_check CHECK ((owner_epoch > 0)),
     CONSTRAINT identity_writer_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT identity_writer_physical_target_check CHECK (((octet_length(physical_target) >= 1) AND (octet_length(physical_target) <= 255))),
+    CONSTRAINT identity_writer_repair_action_check CHECK ((octet_length(repair_action) <= 1048576)),
+    CONSTRAINT identity_writer_repair_locator_check CHECK ((octet_length(repair_locator) <= 8192)),
+    CONSTRAINT identity_writer_repair_receipt_check CHECK ((octet_length(repair_receipt) <= 1048576)),
     CONSTRAINT identity_writer_settled_position_check CHECK ((settled_position > 0)),
     CONSTRAINT identity_writer_source_position_check CHECK ((source_position >= 0)),
+    CONSTRAINT identity_writer_visible_position_check CHECK ((visible_position > 0)),
     CONSTRAINT identity_writer_writer_position_check CHECK ((writer_position > 0))
+);
+
+
+--
+-- Name: identity_writer_gate; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_writer_gate (
+    partition_no integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    consumer text NOT NULL COLLATE pg_catalog."C",
+    incarnation text NOT NULL,
+    write_alias text NOT NULL,
+    owner_epoch integer NOT NULL,
+    enrollment_generation bigint DEFAULT 0 NOT NULL,
+    fence_generation bigint DEFAULT 0 NOT NULL,
+    closed_token uuid,
+    closed_transaction_id uuid,
+    closed_position bigint,
+    publication_job uuid,
+    publication_consumer jsonb,
+    publication_fence uuid,
+    publication_released_fence uuid,
+    publication_home integer DEFAULT 0 NOT NULL,
+    publication_after uuid,
+    publication_revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT identity_writer_gate_check CHECK (((closed_token IS NULL) = (closed_transaction_id IS NULL))),
+    CONSTRAINT identity_writer_gate_check1 CHECK (((closed_token IS NULL) = (closed_position IS NULL))),
+    CONSTRAINT identity_writer_gate_check2 CHECK (((closed_token IS NULL) = (fence_generation = 0))),
+    CONSTRAINT identity_writer_gate_check3 CHECK (((publication_fence IS NULL) OR ((publication_job IS NOT NULL) AND (publication_consumer IS NOT NULL)))),
+    CONSTRAINT identity_writer_gate_check4 CHECK (((partition_no = 0) OR (publication_job IS NULL))),
+    CONSTRAINT identity_writer_gate_closed_position_check CHECK ((closed_position > 0)),
+    CONSTRAINT identity_writer_gate_consumer_check CHECK ((consumer ~ '^[a-z][a-z0-9_]{0,62}$'::text)),
+    CONSTRAINT identity_writer_gate_enrollment_generation_check CHECK ((enrollment_generation >= 0)),
+    CONSTRAINT identity_writer_gate_fence_generation_check CHECK ((fence_generation >= 0)),
+    CONSTRAINT identity_writer_gate_incarnation_check CHECK (((octet_length(incarnation) >= 1) AND (octet_length(incarnation) <= 128))),
+    CONSTRAINT identity_writer_gate_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT identity_writer_gate_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_writer_gate_physical_target_check CHECK (((octet_length(physical_target) >= 1) AND (octet_length(physical_target) <= 255))),
+    CONSTRAINT identity_writer_gate_publication_consumer_check CHECK ((octet_length((publication_consumer)::text) <= 8192)),
+    CONSTRAINT identity_writer_gate_publication_home_check CHECK (((publication_home >= 0) AND (publication_home <= 4096))),
+    CONSTRAINT identity_writer_gate_publication_revision_check CHECK ((publication_revision >= 0)),
+    CONSTRAINT identity_writer_gate_write_alias_check CHECK (((octet_length(write_alias) >= 1) AND (octet_length(write_alias) <= 255)))
 );
 
 
@@ -175,11 +417,13 @@ CREATE TABLE search.public_filter_execution (
     observation text NOT NULL COLLATE pg_catalog."C",
     id text NOT NULL COLLATE pg_catalog."C",
     execution text NOT NULL,
-    CONSTRAINT public_filter_execution_execution_check CHECK ((octet_length(execution) <= 1048576)),
     consumer_repair text,
-    CONSTRAINT public_filter_execution_consumer_repair_check CHECK ((octet_length(consumer_repair) <= 1048576)),
     consumer_window text,
-    CONSTRAINT public_filter_execution_consumer_window_check CHECK ((octet_length(consumer_window) <= 1048576))
+    repair_settlement text,
+    CONSTRAINT public_filter_execution_consumer_repair_check CHECK ((octet_length(consumer_repair) <= 1048576)),
+    CONSTRAINT public_filter_execution_consumer_window_check CHECK ((octet_length(consumer_window) <= 1048576)),
+    CONSTRAINT public_filter_execution_execution_check CHECK ((octet_length(execution) <= 1048576)),
+    CONSTRAINT public_filter_execution_repair_settlement_check CHECK ((octet_length(repair_settlement) <= 16384))
 );
 
 
@@ -197,15 +441,15 @@ CREATE TABLE search.public_filter_observation (
     state text NOT NULL,
     revision bigint DEFAULT 1 NOT NULL,
     prepared_rows text,
+    consumer_work text,
+    consumer_bootstrap text,
+    CONSTRAINT public_filter_observation_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
     CONSTRAINT public_filter_observation_covered_check CHECK ((octet_length(covered) <= 4096)),
     CONSTRAINT public_filter_observation_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT public_filter_observation_prepared_rows_check CHECK ((octet_length(prepared_rows) <= 1048576)),
     CONSTRAINT public_filter_observation_queried_check CHECK ((octet_length(queried) <= 65536)),
     CONSTRAINT public_filter_observation_revision_check CHECK ((revision > 0)),
-    CONSTRAINT public_filter_observation_state_check CHECK ((state = ANY (ARRAY['open'::text, 'closing'::text, 'closed'::text]))),
-    consumer_work text,
-    consumer_bootstrap text,
-    CONSTRAINT public_filter_observation_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576))
+    CONSTRAINT public_filter_observation_state_check CHECK ((state = ANY (ARRAY['open'::text, 'closing'::text, 'closed'::text])))
 );
 
 
@@ -262,13 +506,45 @@ CREATE TABLE search.public_filter_registration (
     consumer text NOT NULL,
     definition text NOT NULL,
     state text NOT NULL,
-    CONSTRAINT public_filter_registration_consumer_check CHECK ((octet_length(consumer) <= 8192)),
-    CONSTRAINT public_filter_registration_definition_check CHECK ((octet_length(definition) <= 1048576)),
-    CONSTRAINT public_filter_registration_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT public_filter_registration_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text]))),
     consumer_work text,
     consumer_bootstrap text,
-    CONSTRAINT public_filter_registration_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576))
+    CONSTRAINT public_filter_registration_consumer_check CHECK ((octet_length(consumer) <= 8192)),
+    CONSTRAINT public_filter_registration_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576)),
+    CONSTRAINT public_filter_registration_definition_check CHECK ((octet_length(definition) <= 1048576)),
+    CONSTRAINT public_filter_registration_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT public_filter_registration_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text])))
+);
+
+
+--
+-- Name: public_filter_repair_effect; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_repair_effect (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    execution text NOT NULL COLLATE pg_catalog."C",
+    page integer NOT NULL,
+    item integer NOT NULL,
+    receipt text NOT NULL,
+    CONSTRAINT public_filter_repair_effect_item_check CHECK ((item >= 0)),
+    CONSTRAINT public_filter_repair_effect_receipt_check CHECK ((octet_length(receipt) <= 1048576))
+);
+
+
+--
+-- Name: public_filter_repair_page; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_filter_repair_page (
+    partition_no integer NOT NULL,
+    observation text NOT NULL COLLATE pg_catalog."C",
+    execution text NOT NULL COLLATE pg_catalog."C",
+    ordinal integer NOT NULL,
+    has_repairs boolean NOT NULL,
+    intent text NOT NULL,
+    CONSTRAINT public_filter_repair_page_intent_check CHECK ((octet_length(intent) <= 1048576)),
+    CONSTRAINT public_filter_repair_page_ordinal_check CHECK ((ordinal >= 0))
 );
 
 
@@ -281,6 +557,27 @@ CREATE TABLE search.public_filter_target (
     physical_target text NOT NULL COLLATE pg_catalog."C",
     incarnation text NOT NULL,
     CONSTRAINT public_filter_target_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: public_preparation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.public_preparation (
+    partition_no integer NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    id uuid NOT NULL,
+    kind text NOT NULL,
+    locator jsonb NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    due_at bigint NOT NULL,
+    lease_until bigint DEFAULT 0 NOT NULL,
+    expires_at bigint NOT NULL,
+    CONSTRAINT public_preparation_kind_check CHECK ((kind = ANY (ARRAY['population'::text, 'repair'::text]))),
+    CONSTRAINT public_preparation_locator_check CHECK ((octet_length((locator)::text) <= 131072)),
+    CONSTRAINT public_preparation_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT public_preparation_revision_check CHECK ((revision > 0))
 );
 
 
@@ -316,32 +613,200 @@ CREATE TABLE search.recent_search_state (
     CONSTRAINT recent_search_state_check CHECK ((partition_no = (route >> 4))),
     CONSTRAINT recent_search_state_revision_check CHECK ((revision >= 0))
 );
+
+
+--
+-- Name: scope_preparation; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.scope_preparation (
+    partition_no integer DEFAULT 0 NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    scope_id text NOT NULL COLLATE pg_catalog."C",
+    definition jsonb NOT NULL,
+    frontier jsonb NOT NULL,
+    observation jsonb,
+    ordinal_membership_progress jsonb,
+    leaf_progress jsonb,
+    ordinal_frontier jsonb,
+    ordinal_complete boolean DEFAULT false NOT NULL,
+    state text DEFAULT 'capture'::text NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    lease_until bigint DEFAULT 0 NOT NULL,
+    due_at bigint NOT NULL,
+    expires_at bigint NOT NULL,
+    CONSTRAINT scope_preparation_definition_check CHECK ((octet_length((definition)::text) <= 262144)),
+    CONSTRAINT scope_preparation_frontier_check CHECK ((octet_length((frontier)::text) <= 8192)),
+    CONSTRAINT scope_preparation_leaf_progress_check CHECK ((octet_length((leaf_progress)::text) <= 4096)),
+    CONSTRAINT scope_preparation_observation_check CHECK ((octet_length((observation)::text) <= 8192)),
+    CONSTRAINT scope_preparation_ordinal_frontier_check CHECK ((octet_length((ordinal_frontier)::text) <= 1024)),
+    CONSTRAINT scope_preparation_ordinal_membership_progress_check CHECK ((octet_length((ordinal_membership_progress)::text) <= 8192)),
+    CONSTRAINT scope_preparation_partition_no_check CHECK ((partition_no = 0)),
+    CONSTRAINT scope_preparation_revision_check CHECK ((revision > 0)),
+    CONSTRAINT scope_preparation_scope_id_check CHECK ((scope_id ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT scope_preparation_state_check CHECK ((state = ANY (ARRAY['capture'::text, 'ready'::text, 'retained'::text])))
+);
+
+
+--
+-- Name: scope_preparation_ordinal; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.scope_preparation_ordinal (
+    partition_no integer DEFAULT 0 NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    scope_id text NOT NULL COLLATE pg_catalog."C",
+    cut text NOT NULL COLLATE pg_catalog."C",
+    subject uuid NOT NULL,
+    ordinal_key text NOT NULL COLLATE pg_catalog."C",
+    member_id uuid NOT NULL,
+    CONSTRAINT scope_preparation_ordinal_cut_check CHECK ((cut ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT scope_preparation_ordinal_ordinal_key_check CHECK ((octet_length(ordinal_key) <= 256)),
+    CONSTRAINT scope_preparation_ordinal_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: trending_blocked; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.trending_blocked (
+    route integer NOT NULL,
+    kind text NOT NULL,
+    identity uuid NOT NULL,
+    CONSTRAINT trending_blocked_kind_check CHECK ((kind = ANY (ARRAY['account'::text, 'source'::text]))),
+    CONSTRAINT trending_blocked_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: trending_member; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.trending_member (
+    route integer NOT NULL,
+    term_key text NOT NULL COLLATE pg_catalog."C",
+    account_id uuid NOT NULL,
+    day date NOT NULL,
+    contributed_at timestamp with time zone NOT NULL,
+    CONSTRAINT trending_member_route_check CHECK ((route = 0))
+);
+
+
+--
+-- Name: trending_term; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.trending_term (
+    route integer NOT NULL,
+    term_key text NOT NULL COLLATE pg_catalog."C",
+    language text NOT NULL,
+    source_id uuid NOT NULL,
+    display text NOT NULL,
+    rank integer NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT trending_term_display_check CHECK (((octet_length(display) >= 1) AND (octet_length(display) <= 256))),
+    CONSTRAINT trending_term_language_check CHECK ((octet_length(language) <= 35)),
+    CONSTRAINT trending_term_rank_check CHECK (((rank >= 0) AND (rank <= 16))),
+    CONSTRAINT trending_term_route_check CHECK ((route = 0)),
+    CONSTRAINT trending_term_term_key_check CHECK ((term_key ~ '^[0-9a-f]{64}$'::text))
+);
+
+
+--
+-- Name: discovery_copy discovery_copy_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.discovery_copy
+    ADD CONSTRAINT discovery_copy_pkey PRIMARY KEY (route, source_id, prefix, generation, kind);
+
+
+--
+-- Name: discovery_erasure discovery_erasure_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.discovery_erasure
+    ADD CONSTRAINT discovery_erasure_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: discovery_generation discovery_generation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.discovery_generation
+    ADD CONSTRAINT discovery_generation_pkey PRIMARY KEY (partition_no, prefix, generation);
+
+
+--
+-- Name: discovery_population discovery_population_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.discovery_population
+    ADD CONSTRAINT discovery_population_pkey PRIMARY KEY (partition_no, prefix, generation, owner);
+
+
+--
+-- Name: facet_generation facet_generation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.facet_generation
+    ADD CONSTRAINT facet_generation_pkey PRIMARY KEY (partition_no, definition, generation);
+
+
+--
+-- Name: facet_stage facet_stage_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.facet_stage
+    ADD CONSTRAINT facet_stage_pkey PRIMARY KEY (partition_no, definition, generation, subject, key);
+
+
+--
+-- Name: facet_value facet_value_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.facet_value
+    ADD CONSTRAINT facet_value_pkey PRIMARY KEY (partition_no, definition, generation, value);
+
+
+--
+-- Name: generation_publication_home generation_publication_home_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.generation_publication_home
+    ADD CONSTRAINT generation_publication_home_pkey PRIMARY KEY (partition_no, job);
+
+
+--
+-- Name: generation_publication generation_publication_partition_no_physical_target_consume_key; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.generation_publication
+    ADD CONSTRAINT generation_publication_partition_no_physical_target_consume_key UNIQUE (partition_no, physical_target, consumer);
+
+
+--
+-- Name: generation_publication generation_publication_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.generation_publication
+    ADD CONSTRAINT generation_publication_pkey PRIMARY KEY (partition_no, job);
+
+
+--
+-- Name: identity_writer_gate identity_writer_gate_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_writer_gate
+    ADD CONSTRAINT identity_writer_gate_pkey PRIMARY KEY (partition_no, physical_target);
+
+
+--
 -- Name: identity_writer identity_writer_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
 ALTER TABLE ONLY search.identity_writer
     ADD CONSTRAINT identity_writer_pkey PRIMARY KEY (partition_no, physical_target, original_id);
-
-
---
--- Name: public_preparation; Type: TABLE; Schema: search; Owner: -
---
-
-CREATE TABLE search.public_preparation (
-    partition_no integer NOT NULL,
-    prefix text NOT NULL COLLATE pg_catalog."C",
-    id uuid NOT NULL,
-    kind text NOT NULL,
-    locator jsonb NOT NULL,
-    revision bigint DEFAULT 1 NOT NULL,
-    due_at bigint NOT NULL,
-    lease_until bigint DEFAULT 0 NOT NULL,
-    expires_at bigint NOT NULL,
-    CONSTRAINT public_preparation_kind_check CHECK ((kind = ANY (ARRAY['population'::text, 'repair'::text]))),
-    CONSTRAINT public_preparation_locator_check CHECK ((octet_length((locator)::text) <= 131072)),
-    CONSTRAINT public_preparation_partition_no_check CHECK ((partition_no = 0)),
-    CONSTRAINT public_preparation_revision_check CHECK ((revision > 0))
-);
 
 
 --
@@ -425,11 +890,35 @@ ALTER TABLE ONLY search.public_filter_registration
 
 
 --
+-- Name: public_filter_repair_effect public_filter_repair_effect_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_effect
+    ADD CONSTRAINT public_filter_repair_effect_pkey PRIMARY KEY (partition_no, observation, execution, page, item);
+
+
+--
+-- Name: public_filter_repair_page public_filter_repair_page_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_page
+    ADD CONSTRAINT public_filter_repair_page_pkey PRIMARY KEY (partition_no, observation, execution, ordinal);
+
+
+--
 -- Name: public_filter_target public_filter_target_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
 ALTER TABLE ONLY search.public_filter_target
     ADD CONSTRAINT public_filter_target_pkey PRIMARY KEY (partition_no, physical_target);
+
+
+--
+-- Name: public_preparation public_preparation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_preparation
+    ADD CONSTRAINT public_preparation_pkey PRIMARY KEY (partition_no, id);
 
 
 --
@@ -457,11 +946,92 @@ ALTER TABLE ONLY search.recent_search_state
 
 
 --
--- Name: public_preparation public_preparation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+-- Name: scope_preparation_ordinal scope_preparation_ordinal_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
-ALTER TABLE ONLY search.public_preparation
-    ADD CONSTRAINT public_preparation_pkey PRIMARY KEY (partition_no, id);
+ALTER TABLE ONLY search.scope_preparation_ordinal
+    ADD CONSTRAINT scope_preparation_ordinal_pkey PRIMARY KEY (partition_no, prefix, scope_id, cut, subject);
+
+
+--
+-- Name: scope_preparation scope_preparation_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.scope_preparation
+    ADD CONSTRAINT scope_preparation_pkey PRIMARY KEY (partition_no, prefix, scope_id);
+
+
+--
+-- Name: trending_blocked trending_blocked_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.trending_blocked
+    ADD CONSTRAINT trending_blocked_pkey PRIMARY KEY (route, kind, identity);
+
+
+--
+-- Name: trending_member trending_member_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.trending_member
+    ADD CONSTRAINT trending_member_pkey PRIMARY KEY (route, term_key, account_id);
+
+
+--
+-- Name: trending_term trending_term_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.trending_term
+    ADD CONSTRAINT trending_term_pkey PRIMARY KEY (route, term_key);
+
+
+--
+-- Name: discovery_copy_generation; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX discovery_copy_generation ON search.discovery_copy USING btree (prefix, generation, route, source_id, kind);
+
+
+--
+-- Name: discovery_population_pending; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX discovery_population_pending ON search.discovery_population USING btree (prefix, generation, partition_no, owner) WHERE (NOT complete);
+
+
+--
+-- Name: facet_expiry; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX facet_expiry ON search.facet_generation USING btree (expires_at, partition_no, definition, generation);
+
+
+--
+-- Name: facet_one_building; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX facet_one_building ON search.facet_generation USING btree (partition_no, definition) WHERE (state = 'building'::text);
+
+
+--
+-- Name: facet_one_ready; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX facet_one_ready ON search.facet_generation USING btree (partition_no, definition) WHERE (state = 'ready'::text);
+
+
+--
+-- Name: generation_publication_home_frontier; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX generation_publication_home_frontier ON search.generation_publication_home USING btree (job, pass, partition_no);
+
+
+--
+-- Name: identity_writer_pending; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX identity_writer_pending ON search.identity_writer USING btree (partition_no, physical_target, original_id) WHERE (writer_token IS NOT NULL);
 
 
 --
@@ -469,6 +1039,20 @@ ALTER TABLE ONLY search.public_preparation
 --
 
 CREATE INDEX index_home_coverage_retire ON search.index_home_coverage USING btree (consumer, index_uuid, partition_no);
+
+
+--
+-- Name: public_filter_observation_bootstrap; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_observation_bootstrap ON search.public_filter_observation USING btree (partition_no, consumer_bootstrap) WHERE (consumer_bootstrap IS NOT NULL);
+
+
+--
+-- Name: public_filter_observation_publication; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_observation_publication ON search.public_filter_observation USING btree (partition_no, registration, observation DESC) WHERE (state = 'open'::text);
 
 
 --
@@ -486,17 +1070,24 @@ CREATE INDEX public_filter_reference_expiry ON search.public_filter_reference US
 
 
 --
--- Name: recent_search_expiry; Type: INDEX; Schema: search; Owner: -
+-- Name: public_filter_registration_bootstrap; Type: INDEX; Schema: search; Owner: -
 --
 
-CREATE INDEX recent_search_expiry ON search.recent_search USING btree (partition_no, expires_at, route, account_id, id);
+CREATE UNIQUE INDEX public_filter_registration_bootstrap ON search.public_filter_registration USING btree (partition_no, consumer_bootstrap) WHERE (consumer_bootstrap IS NOT NULL);
 
 
 --
--- Name: recent_search_page; Type: INDEX; Schema: search; Owner: -
+-- Name: public_filter_registration_publication; Type: INDEX; Schema: search; Owner: -
 --
 
-CREATE INDEX recent_search_page ON search.recent_search USING btree (partition_no, route, account_id, last_used DESC, id DESC);
+CREATE INDEX public_filter_registration_publication ON search.public_filter_registration USING btree (physical_target, md5(consumer), partition_no) WHERE (state = 'active'::text);
+
+
+--
+-- Name: public_filter_repair_page_effects; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX public_filter_repair_page_effects ON search.public_filter_repair_page USING btree (partition_no, observation, execution, ordinal) WHERE has_repairs;
 
 
 --
@@ -511,6 +1102,78 @@ CREATE INDEX public_preparation_due ON search.public_preparation USING btree (pa
 --
 
 CREATE UNIQUE INDEX public_preparation_locator ON search.public_preparation USING btree (partition_no, prefix, kind, ((locator ->> 'key'::text)));
+
+
+--
+-- Name: recent_search_expiry; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX recent_search_expiry ON search.recent_search USING btree (partition_no, expires_at, route, account_id, id);
+
+
+--
+-- Name: recent_search_page; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX recent_search_page ON search.recent_search USING btree (partition_no, route, account_id, last_used DESC, id DESC);
+
+
+--
+-- Name: scope_preparation_due; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX scope_preparation_due ON search.scope_preparation USING btree (prefix, due_at, scope_id) WHERE (state = 'capture'::text);
+
+
+--
+-- Name: scope_preparation_ordinal_page; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX scope_preparation_ordinal_page ON search.scope_preparation_ordinal USING btree (partition_no, prefix, scope_id, cut, ordinal_key, member_id);
+
+
+--
+-- Name: trending_member_account; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX trending_member_account ON search.trending_member USING btree (route, account_id, term_key);
+
+
+--
+-- Name: trending_term_expiry; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX trending_term_expiry ON search.trending_term USING btree (route, expires_at, term_key);
+
+
+--
+-- Name: trending_term_rank; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX trending_term_rank ON search.trending_term USING btree (route, language, rank DESC, term_key);
+
+
+--
+-- Name: trending_term_source; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX trending_term_source ON search.trending_term USING btree (route, source_id, term_key);
+
+
+--
+-- Name: facet_stage facet_stage_partition_no_definition_generation_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.facet_stage
+    ADD CONSTRAINT facet_stage_partition_no_definition_generation_fkey FOREIGN KEY (partition_no, definition, generation) REFERENCES search.facet_generation(partition_no, definition, generation);
+
+
+--
+-- Name: facet_value facet_value_partition_no_definition_generation_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.facet_value
+    ADD CONSTRAINT facet_value_partition_no_definition_generation_fkey FOREIGN KEY (partition_no, definition, generation) REFERENCES search.facet_generation(partition_no, definition, generation);
 
 
 --
@@ -570,6 +1233,22 @@ ALTER TABLE ONLY search.public_filter_registration
 
 
 --
+-- Name: public_filter_repair_effect public_filter_repair_effect_partition_no_observation_execu_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_effect
+    ADD CONSTRAINT public_filter_repair_effect_partition_no_observation_execu_fkey FOREIGN KEY (partition_no, observation, execution, page) REFERENCES search.public_filter_repair_page(partition_no, observation, execution, ordinal);
+
+
+--
+-- Name: public_filter_repair_page public_filter_repair_page_partition_no_observation_executi_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.public_filter_repair_page
+    ADD CONSTRAINT public_filter_repair_page_partition_no_observation_executi_fkey FOREIGN KEY (partition_no, observation, execution) REFERENCES search.public_filter_execution(partition_no, observation, id);
+
+
+--
 -- Name: recent_search recent_search_partition_no_route_account_id_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -577,169 +1256,16 @@ ALTER TABLE ONLY search.recent_search
     ADD CONSTRAINT recent_search_partition_no_route_account_id_fkey FOREIGN KEY (partition_no, route, account_id) REFERENCES search.recent_search_state(partition_no, route, account_id) ON DELETE CASCADE;
 
 
--- Private bounded projection, never public eligibility evidence. Current owner bindings gate activation.
-CREATE TABLE search.trending_term (
-  route integer NOT NULL CHECK (route = 0),
-  term_key text COLLATE "C" NOT NULL CHECK (term_key ~ '^[0-9a-f]{64}$'),
-  language text NOT NULL CHECK (octet_length(language) <= 35),
-  source_id uuid NOT NULL,
-  display text NOT NULL CHECK (octet_length(display) BETWEEN 1 AND 256),
-  rank integer NOT NULL CHECK (rank BETWEEN 0 AND 16),
-  expires_at timestamptz NOT NULL,
-  PRIMARY KEY (route, term_key)
-);
-CREATE INDEX trending_term_rank ON search.trending_term(route, language, rank DESC, term_key);
-CREATE INDEX trending_term_expiry ON search.trending_term(route, expires_at, term_key);
-CREATE INDEX trending_term_source ON search.trending_term(route, source_id, term_key);
-CREATE TABLE search.trending_member (
-  route integer NOT NULL CHECK (route = 0),
-  term_key text COLLATE "C" NOT NULL,
-  account_id uuid NOT NULL,
-  day date NOT NULL,
-  contributed_at timestamptz NOT NULL,
-  PRIMARY KEY (route, term_key, account_id),
-  FOREIGN KEY (route, term_key) REFERENCES search.trending_term ON DELETE CASCADE
-);
-CREATE INDEX trending_member_account ON search.trending_member(route, account_id, term_key);
-CREATE TABLE search.trending_blocked (
-  route integer NOT NULL CHECK (route = 0),
-  kind text NOT NULL CHECK (kind IN ('account', 'source')),
-  identity uuid NOT NULL,
-  PRIMARY KEY (route, kind, identity)
-);
+--
+-- Name: trending_member trending_member_route_term_key_fkey; Type: FK CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.trending_member
+    ADD CONSTRAINT trending_member_route_term_key_fkey FOREIGN KEY (route, term_key) REFERENCES search.trending_term(route, term_key) ON DELETE CASCADE;
 
 
+--
 -- PostgreSQL database dump complete
 --
 
-
-
-CREATE INDEX identity_writer_pending ON search.identity_writer USING btree (partition_no, physical_target, original_id) WHERE (writer_token IS NOT NULL);
-
--- Retained bounded publication work over the existing native generation authorities.
-CREATE TABLE search.generation_publication (
-    partition_no integer DEFAULT 0 NOT NULL CHECK (partition_no = 0),
-    job uuid NOT NULL,
-    physical_target text COLLATE pg_catalog."C" NOT NULL,
-    consumer jsonb NOT NULL CHECK (octet_length(consumer::text) <= 8192),
-    prefix text COLLATE pg_catalog."C" NOT NULL,
-    generation bigint NOT NULL CHECK (generation BETWEEN 1 AND 9007199254740991),
-    family text NOT NULL CHECK (family IN ('subjects', 'discovery')),
-    native_incarnation text NOT NULL,
-    pass bigint DEFAULT 1 NOT NULL CHECK (pass > 0),
-    activated_at text NOT NULL,
-    kinds text[] NOT NULL,
-    source_home integer NOT NULL CHECK (source_home BETWEEN 0 AND 4095),
-    binding jsonb NOT NULL CHECK (octet_length(binding::text) <= 8192),
-    phase text DEFAULT 'subject' NOT NULL CHECK (phase IN ('subject','account','engine','validate','reconciled','fencing','intent','active')),
-    home integer DEFAULT 0 NOT NULL CHECK (home BETWEEN 0 AND 4096),
-    after_route integer,
-    after_id uuid,
-    engine_after jsonb CHECK (octet_length(engine_after::text) <= 8192),
-    pit text CHECK (octet_length(pit) <= 65536),
-    fence text CHECK (octet_length(fence) <= 8192),
-    fenced_pass boolean DEFAULT false NOT NULL,
-    observation text,
-    previous_target text,
-    previous_uuid text,
-    revision bigint DEFAULT 1 NOT NULL CHECK (revision > 0),
-    PRIMARY KEY (partition_no,job),
-    UNIQUE (partition_no,physical_target,consumer),
-    CHECK ((after_route IS NULL) = (after_id IS NULL))
-);
-CREATE TABLE search.generation_publication_home (
-    partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-    job uuid NOT NULL,
-    pass bigint NOT NULL CHECK (pass > 0),
-    epoch integer NOT NULL,
-    position bigint NOT NULL CHECK (position >= 0),
-    account_revision bigint DEFAULT 0 NOT NULL,
-    claim_revision bigint DEFAULT 0 NOT NULL,
-    PRIMARY KEY (partition_no,job)
-);
-CREATE INDEX generation_publication_home_frontier
-  ON search.generation_publication_home(job,pass,partition_no);
-CREATE INDEX public_filter_registration_publication ON search.public_filter_registration USING btree
-    (physical_target,md5(consumer),partition_no) WHERE state = 'active';
-CREATE INDEX public_filter_observation_publication ON search.public_filter_observation USING btree
-    (partition_no,registration,observation DESC) WHERE state = 'open';
-
-ALTER TABLE search.identity_writer_gate
-  ADD COLUMN publication_job uuid,
-  ADD COLUMN publication_consumer jsonb CHECK (octet_length(publication_consumer::text)<=8192),
-  ADD COLUMN publication_fence uuid,
-  ADD COLUMN publication_released_fence uuid,
-  ADD COLUMN publication_home integer NOT NULL DEFAULT 0 CHECK (publication_home BETWEEN 0 AND 4096),
-  ADD COLUMN publication_after uuid,
-  ADD COLUMN publication_revision bigint NOT NULL DEFAULT 0 CHECK (publication_revision>=0),
-  ADD CHECK (publication_fence IS NULL OR (publication_job IS NOT NULL AND publication_consumer IS NOT NULL)),
-  ADD CHECK (partition_no=0 OR publication_job IS NULL);
-
-CREATE UNIQUE INDEX public_filter_observation_bootstrap ON search.public_filter_observation(partition_no,consumer_bootstrap) WHERE consumer_bootstrap IS NOT NULL;
-CREATE UNIQUE INDEX public_filter_registration_bootstrap ON search.public_filter_registration(partition_no,consumer_bootstrap) WHERE consumer_bootstrap IS NOT NULL;
-CREATE TABLE search.scope_preparation (
-  partition_no integer NOT NULL DEFAULT 0 CHECK (partition_no=0),
-  prefix text COLLATE "C" NOT NULL,
-  scope_id text COLLATE "C" NOT NULL CHECK (scope_id ~ '^[0-9a-f]{64}$'),
-  definition jsonb NOT NULL CHECK (octet_length(definition::text)<=262144),
-  frontier jsonb NOT NULL CHECK (octet_length(frontier::text)<=8192),
-  observation jsonb CHECK (octet_length(observation::text)<=8192),
-  ordinal_membership_progress jsonb CHECK (octet_length(ordinal_membership_progress::text)<=8192),
-  leaf_progress jsonb CHECK (octet_length(leaf_progress::text)<=4096),
-  ordinal_frontier jsonb CHECK (octet_length(ordinal_frontier::text)<=1024),
-  ordinal_complete boolean NOT NULL DEFAULT false,
-  state text NOT NULL DEFAULT 'capture' CHECK (state IN ('capture','ready','retained')),
-  revision bigint NOT NULL DEFAULT 1 CHECK (revision>0),
-  lease_until bigint NOT NULL DEFAULT 0,
-  due_at bigint NOT NULL,
-  expires_at bigint NOT NULL,
-  PRIMARY KEY (partition_no,prefix,scope_id)
-);
-CREATE INDEX scope_preparation_due ON search.scope_preparation(prefix,due_at,scope_id) WHERE state='capture';
-
-
-CREATE TABLE search.scope_preparation_ordinal (
-  partition_no integer NOT NULL DEFAULT 0 CHECK (partition_no=0),
-  prefix text COLLATE "C" NOT NULL,
-  scope_id text COLLATE "C" NOT NULL,
-  cut text COLLATE "C" NOT NULL CHECK (cut ~ '^[0-9a-f]{64}$'),
-  subject uuid NOT NULL,
-  ordinal_key text COLLATE "C" NOT NULL CHECK (octet_length(ordinal_key)<=256),
-  member_id uuid NOT NULL,
-  PRIMARY KEY (partition_no,prefix,scope_id,cut,subject)
-);
-CREATE INDEX scope_preparation_ordinal_page ON search.scope_preparation_ordinal
-  (partition_no,prefix,scope_id,cut,ordinal_key,member_id);
-
--- Children of the existing retained execution, not a second consumer registry.
-ALTER TABLE search.public_filter_execution ADD COLUMN repair_settlement text
-  CHECK (octet_length(repair_settlement)<=16384);
-CREATE TABLE search.public_filter_repair_page (
-  partition_no integer NOT NULL,
-  observation text COLLATE "C" NOT NULL,
-  execution text COLLATE "C" NOT NULL,
-  ordinal integer NOT NULL CHECK (ordinal>=0),
-  has_repairs boolean NOT NULL,
-  intent text NOT NULL CHECK (octet_length(intent)<=1048576),
-  PRIMARY KEY (partition_no,observation,execution,ordinal),
-  FOREIGN KEY (partition_no,observation,execution)
-    REFERENCES search.public_filter_execution(partition_no,observation,id)
-);
-CREATE TABLE search.public_filter_repair_effect (
-  partition_no integer NOT NULL,
-  observation text COLLATE "C" NOT NULL,
-  execution text COLLATE "C" NOT NULL,
-  page integer NOT NULL,
-  item integer NOT NULL CHECK (item>=0),
-  receipt text NOT NULL CHECK (octet_length(receipt)<=1048576),
-  PRIMARY KEY (partition_no,observation,execution,page,item),
-  FOREIGN KEY (partition_no,observation,execution,page)
-    REFERENCES search.public_filter_repair_page(partition_no,observation,execution,ordinal)
-);
-CREATE INDEX public_filter_repair_page_effects ON search.public_filter_repair_page
-  (partition_no,observation,execution,ordinal) WHERE has_repairs;
--- The actual writer retains its exact pre-dispatch body and recovery locator in its own home.
-ALTER TABLE search.identity_writer ADD COLUMN repair_locator text CHECK (octet_length(repair_locator)<=8192),
-  ADD COLUMN repair_action text CHECK (octet_length(repair_action)<=1048576),
-  ADD COLUMN repair_receipt text CHECK (octet_length(repair_receipt)<=1048576);
 

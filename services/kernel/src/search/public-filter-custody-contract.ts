@@ -100,7 +100,8 @@ export type RetainedRepairSettlement = Readonly<{
   id: string;
   bootstrap: string;
   covered: PrivacyReductionStart;
-  execution: CustodyExecution;
+  /** Same immutable parent execution; start and ownRows remain solely in its existing record. */
+  execution: string;
   pages: number;
   frontier: string | null;
   closed: boolean;

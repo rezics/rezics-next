@@ -1553,6 +1553,7 @@ recreation and lost alias response recovery; existing generation growth bounds r
 
 Native consumer repair settlement is retained under the existing custody execution. The exact storage is:
 `public_filter_execution.repair_settlement` holds `{id, bootstrap, covered, execution, pages, frontier, closed, fence}`;
+`execution` is the immutable parent id, whose existing record retains the original start and own rows.
 `public_filter_repair_page`, keyed by `(partition_no, observation, execution, ordinal)`, holds immutable
 `{sourceStep, predecessor, frontier, complete, repairs}` (each repair retains kind, locator, own-home Source observation
 and projection, without serializing Source's private receipt brand). `public_filter_repair_effect`, keyed by the same execution plus page/item, retains each actual native

@@ -1525,9 +1525,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       let previous = current.repair_settlement;
       let state: RetainedRepairSettlement = previous ? decodeNative(previous) : {
         id: randomUUID(), bootstrap: work.bootstrap.id, covered: work.bootstrap.covered,
-        execution: retained.execution, pages: 0, frontier: null, closed: false, fence: null,
+        execution: retained.execution.id, pages: 0, frontier: null, closed: false, fence: null,
       };
-      if (!isDeepStrictEqual(state.execution, retained.execution) ||
+      if (state.execution !== retained.execution.id ||
         !isDeepStrictEqual(state.covered, retained.covered) || state.bootstrap !== work.bootstrap.id)
         return m.unavailable('observation_lost');
       if (!previous) {

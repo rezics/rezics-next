@@ -467,7 +467,7 @@ export async function readPublicFilterRepairSettlement(
         const retained = await read(db, input, context, meter);
         if (!retained.execution || !state.closed || state.pages < 1 || state.frontier !== null)
           throw new Failure('owner_unavailable');
-        if (!isDeepStrictEqual(state.execution, retained.execution) ||
+        if (state.execution !== retained.execution.id ||
           !isDeepStrictEqual(state.covered, retained.covered) || state.bootstrap !== retained.covered.observation ||
           stateRow.consumer_bootstrap !== state.bootstrap) throw new Failure('binding_mismatch');
         const work = decode<{ bootstrap: { id: string; covered: unknown }; execution: string;
