@@ -14,6 +14,19 @@ const response = t.Object(
       t.Object(
         {
           id: t.String({ format: 'uuid' }),
+          target: t.Optional(
+            t.Union([
+              t.Object(
+                { family: t.Literal('subject'), subjectId: t.String({ format: 'uuid' }) },
+                { additionalProperties: false },
+              ),
+              t.Object(
+                { family: t.Literal('account'), accountId: t.String({ format: 'uuid' }), canonicalPath: t.String() },
+                { additionalProperties: false },
+              ),
+            ]),
+          ),
+          views: t.Optional(t.Array(t.String())),
           originalLanguage: t.Optional(t.String()),
           lastModified: t.Optional(t.String({ format: 'date-time', pattern: 'Z$' })),
           labels: t.Array(t.Object({ language: t.String(), value: t.String() }, { additionalProperties: false })),

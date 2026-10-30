@@ -13,13 +13,10 @@ import {
   platformRegistry,
   PROFILE_ROUTE_MAX_LENGTH,
   PROFILE_ROUTE_PATTERN,
-  definedViews,
   isView,
   resolveTemplate,
-  resolveView,
   type PageRead,
   type ResolvedTemplate,
-  type TemplateTarget,
   type View,
 } from '@rezics/composition';
 import { t } from 'elysia';
@@ -42,6 +39,7 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
+import { semanticPageView } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -412,16 +410,10 @@ export function pageRoutes<App>(
             : automated
               ? 'schema:SoftwareApplication'
               : 'schema:Person');
-        const definition = release?.release.types[type];
-        const template: TemplateTarget = {
-          type,
-          ...(definition === undefined ? {} : { bases: definition.bases }),
-        };
-        // A view no template of the order defines does not exist for this page.
-        const found = resolveView(active.profile, template, target.view ?? 'overview');
-        if (found === null) throw new ProblemError('not_found');
-        resolved = found;
-        views = definedViews(active.profile, template);
+        const page = semanticPageView(active.profile, release?.release, type, target.view ?? 'overview');
+        if (page === null) throw new ProblemError('not_found');
+        resolved = page.resolved;
+        views = page.views;
       }
 
       probeSession = mergedSession(

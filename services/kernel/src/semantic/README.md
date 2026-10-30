@@ -1343,6 +1343,53 @@ language wins; otherwise the same rank/order rule applies to `schema:inLanguage`
 `apps/web/src/subject/language.ts`. Unknown language is omitted. Labels, locale and source kind cannot supply it;
 this display metadata adds neither inclusion evidence nor a publication clock and does not reorder labels.
 
+### Current native navigation projection
+
+`readPublicSubjectPageCandidates(deps: SummaryReaderDependencies, subjectIds: readonly string[])` in
+`subject-page-navigation.ts` accepts at most 100 raw keys and returns
+`Promise<Map<string, PublicSubjectPageCandidate | null>>`. Its closed data declaration is:
+
+```ts
+type PublicSubjectPageCandidate = {
+  id: string;
+  target: { family: 'subject'; subjectId: string } | { family: 'account'; accountId: string; canonicalPath: string };
+  views: readonly string[];
+};
+```
+
+The existing native feed factory uses this projection in batches of at most 100 within its original raw window
+of at most 1,000 candidates plus the unchanged key-only lookahead. It brackets the existing `store.readCurrent`
+proof with released native page observations. Every emitted entry has `target` and `views`; these fields are
+optional in the HTTP wire schema for compatibility. The wire remains `{ subjectPages, next }`, with unchanged
+`id`, sorted `labels`, optional `originalLanguage` and optional `lastModified`. No readiness or revision is exposed.
+Native missing-time evidence still omits `lastModified`; navigation supplies no time or inclusion evidence.
+
+`presentation/semantic-page.ts` shares `semanticPageView` with ordinary `pages.read`. It resolves actual offered
+views through the current active production profile and definitions after fresh anonymous native Subject and
+presentation Access. It does not render documents or dispatch a request per row. Missing profile/release readiness,
+changed native source state, redirects, hidden originals and denied Access withhold the projection. Original keys
+never borrow a terminal's eligibility. Source homes are read and released separately, and current home, revision,
+security, type, Account-association and profile/release guards are rechecked after dependencies. Equality rejects
+changed data; it never grants permission. Missing or moved native home authority remains an error. All work,
+including rejected keys and failed native work, shares the caller deadline and original raw window; this adds no
+scan, free native-work allowance, raised SQL/row/point/byte/time budget or new physical-cost claim.
+
+Account family and canonical navigation come only from the delivered Accounts
+`readPublicAccountCanonicalTargets` reader with current reciprocal verification, publication mappings, Account
+and exact handle-claim guards, in the same bounded batch. A valid Account whose `canonicalPath` is null is omitted;
+no immutable profile URL or handle is invented. An Account association without a proven current canonical target
+also withholds independent Subject fallback. An ordinary unassociated Subject uses its own native page destination.
+No family is inferred from labels, types, key shape or the legacy verification flag. These are navigation data,
+not permission/custody, whole-query Account exclusion or ordering authority.
+
+Integration handoff for the Semantic manager and Web: consume `target` as the canonical family/address and `views`
+as the current native offered view names. Preserve the original feed id and metadata; do not hydrate each row,
+construct handleless URLs or treat bare id/labels as a complete projection. The kernel feed already passes its
+actual composed native Access and route key to the reader. `test/semantic/subject-page-feed-targets.test.ts` adds
+focused native current-target scenarios; `subject-page-http.test.ts` retains its original publication assertions
+and bootstraps the real production presentation profile. Consumer integration and native acceptance run after
+landing; this declaration does not claim Web delivery or physical cost acceptance.
+
 Native creation, identity labels, Global selection and selected rank changes, selected moderation, bulk retraction,
 consent disclosure, account-agent labels, verification reversal and merge gates record bounded component deltas.
 Proposals, unselected decisions, private Context activity, unchanged imports and physical expansion add no public

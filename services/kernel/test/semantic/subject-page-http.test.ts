@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { setupPresentation } from '../../src/presentation/setup.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -125,6 +126,7 @@ async function select(id: string, candidate: string, context = GLOBAL_CONTEXT, a
 beforeAll(async () => {
   db = await openGrowthDatabase();
   await bootstrapRelease(db.pool, bundledRelease);
+  await setupPresentation(db.pool);
   real = await createRealAccess(db.admin, { editor }, actions, { clock });
   await db.admin.query("UPDATE access.account SET rate_tier='trusted' WHERE route=$1 AND account_id=$2", [
     routeOf(editor),
@@ -238,6 +240,8 @@ async function page(limit?: number, cursor?: string, headers?: Record<string, st
       'labels',
       ...(Object.hasOwn(entry, 'lastModified') ? ['lastModified'] : []),
       ...(Object.hasOwn(entry, 'originalLanguage') ? ['originalLanguage'] : []),
+      'target',
+      'views',
     ]);
     expect(entry.labels).toEqual([...entry.labels].sort((a, b) => a.language.localeCompare(b.language, 'en')));
     for (const label of entry.labels) expect(Object.keys(label).sort()).toEqual(['language', 'value']);
@@ -266,6 +270,8 @@ test('independent real HTTP traversal needs only native store and source primiti
   expect(whole.subjectPages.map((s) => s.id)).toContain(subjects.public.id);
   expect(whole.subjectPages.find((s) => s.id === subjects.public.id)).toEqual({
     id: subjects.public.id,
+    target: { family: 'subject', subjectId: subjects.public.id },
+    views: ['overview', 'editions', 'characters', 'credits', 'relations', 'reviews', 'discussion', 'lists', 'details'],
     labels: [
       { language: 'en', value: 'Public' },
       { language: 'ja', value: 'Public 日本語' },
