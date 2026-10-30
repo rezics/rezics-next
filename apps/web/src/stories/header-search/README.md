@@ -49,8 +49,8 @@ Implementation decisions: unsupported scopes stay visibly unavailable until expl
 filters keep their own forms and named concept choices; new query submission retains the route's supported
 Type/facet/sort conditions and drops its cursor. Suggestions use each member's own `coverRatio`, with an additive
 per-member ratio hook for a presentation already supplied by a read. The former isolated initial-open filter story
-is replaced by the canonical FiltersOpen interaction; shell navigation uses viewport globals without pinning a
-phone export. No sibling source or risk-owned file changed.
+is replaced by the canonical FiltersOpen interaction. Existing account and navigation stories remain intact.
+No sibling source or risk-owned file changed.
 
 Worker verification follows the maintainer's minimal override: only `bun run --cwd apps/web typecheck`; focused
 acceptance, unit execution, native/browser/remote checks, publication and screenshots are deferred. Written

@@ -92,5 +92,6 @@ export const Navigation: Story = {
       await expect(await canvas.findByRole('navigation', { name: m.shell_navigation() })).toBeVisible();
     }
   },
+  globals: { viewport: { value: 'phone' } },
   render: () => <ShellPattern visitor="Signed In" />,
 };
