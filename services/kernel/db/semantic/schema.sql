@@ -365,6 +365,117 @@ END; $_$;
 
 
 --
+-- Name: capture_erasure_source_record(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_erasure_source_record() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE v_present boolean:=false; v_original uuid; v_old_terminal uuid; v_identity_version bigint; v_mapped_terminal uuid;
+ v_slot uuid; v_candidate uuid; v_property_id text; v_release_id text; v_context uuid; v_source_name text; v_external_id text; v_field_group text;
+BEGIN
+ -- Closing an empty native home and admitting a late role serialize on its actual command gate.
+ IF EXISTS(SELECT 1 FROM semantic.erasure_source_seal s WHERE s.partition_no=NEW.partition_no AND s.account_id=NEW.account_id) THEN
+  RAISE EXCEPTION 'Semantic erased Source role admission is sealed' USING ERRCODE='23514';
+ END IF;
+ CASE NEW.store
+ WHEN 'release_composite' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.release_composite r WHERE r.erasure_key=NEW.record_key AND extension_route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'fact' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.statement_id,r.property,r.release,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.fact r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'revision' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,r.release,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.revision r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'candidate' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.candidate_id,r.property,r.release,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.candidate r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'acceptance' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.acceptance r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'acceptance_current' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.candidate_id,NULL::text,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.acceptance_current r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'adoption' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,NULL::uuid,NULL::text,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.adoption r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'retraction' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.retraction r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'hidden_candidate' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.hidden_candidate r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'moderation' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.moderation r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'context' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.context r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'context_extension' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.context_extension r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'context_extension_activation' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.context_extension_activation r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'definition_release' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.definition_release r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'definition_activation' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.definition_activation r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'external_claim' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.external_claim r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'source_candidate' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,NULL::uuid,r.source,r.external_id,r.field_group INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.source_candidate r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'provider_review_queue_key' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.provider_review_queue_key r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'provider_review_queue_entry' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.provider_review_queue_entry r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'statement_disclosure' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,r.candidate_id,r.property,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.statement_disclosure r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'subject' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.subject r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'redirect' THEN SELECT true,r.subject_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.redirect r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'account_agent_subject' THEN SELECT true,r.agent_id,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.account_agent_subject r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'account_agent_moved_link' THEN SELECT true,r.source_subject_id,NULL::uuid,NULL::uuid,r.statement_id,r.property,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.account_agent_moved_link r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'outbound_link' THEN SELECT true,r.subject_id,NULL::uuid,r.slot_id,r.statement_id,r.property,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.outbound_link r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'inbound_link' THEN SELECT true,r.source_subject_id,NULL::uuid,NULL::uuid,r.statement_id,r.property,NULL::text,r.context_id,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.inbound_link r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'identity_epoch_job' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_job r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_home_gate' THEN SELECT true,r.original,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_home_gate r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'identity_epoch_mapping' THEN SELECT true,r.original,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_mapping r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'identity_epoch_ack' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_ack r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_admission_attempt' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_admission_attempt r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_admission_plan' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_admission_plan r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_admission_receipt' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_admission_receipt r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_admission_source' THEN SELECT true,r.original,r.terminal,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_admission_source r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_change' THEN SELECT true,r.original,r.previous_terminal,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_change r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_effect_receipt' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_effect_receipt r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_input' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_input r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_step' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.identity_epoch_step r WHERE r.erasure_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'zone' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM zones.zone r WHERE r.erasure_key=NEW.record_key AND route BETWEEN NEW.partition_no*16 AND NEW.partition_no*16+15;
+ WHEN 'write_basis' THEN SELECT true,NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::uuid,NULL::text,NULL::text,NULL::text INTO v_present,v_original,v_old_terminal,v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group FROM semantic.erasure_provenance r WHERE r.record_key=NEW.record_key AND partition_no=NEW.partition_no;
+ WHEN 'identity_epoch_receiving_plan' THEN SELECT true INTO v_present FROM semantic.identity_epoch_receiving_plan WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_receiving_record' THEN SELECT true INTO v_present FROM semantic.identity_epoch_receiving_record WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_receiving_effect' THEN SELECT true INTO v_present FROM semantic.identity_epoch_receiving_effect WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ WHEN 'identity_epoch_receiving_custody' THEN SELECT true INTO v_present FROM semantic.identity_epoch_receiving_custody WHERE partition_no=NEW.partition_no AND erasure_key=NEW.record_key;
+ ELSE v_present:=false;
+ END CASE;
+ IF v_candidate IS NOT NULL AND v_original IS NOT NULL AND
+ (get_byte(uuid_send(v_original),10)*256+get_byte(uuid_send(v_original),11))/16=NEW.partition_no THEN
+  SELECT coalesce(v_slot,c.slot_id),coalesce(v_property_id,c.property),coalesce(v_release_id,c.release)
+  INTO v_slot,v_property_id,v_release_id FROM semantic.candidate c
+  WHERE c.route=(get_byte(uuid_send(v_original),10)*256+get_byte(uuid_send(v_original),11)) AND c.subject_id=v_original AND c.candidate_id=v_candidate;
+ END IF;
+ IF v_original IS NOT NULL AND (get_byte(uuid_send(v_original),10)*256+get_byte(uuid_send(v_original),11))/16=NEW.partition_no THEN
+  SELECT m.terminal,m.epoch INTO v_mapped_terminal,v_identity_version
+  FROM semantic.identity_epoch_mapping m WHERE m.route=(get_byte(uuid_send(v_original),10)*256+get_byte(uuid_send(v_original),11)) AND m.original=v_original;
+  v_old_terminal:=coalesce(v_old_terminal,v_mapped_terminal);
+ END IF;
+ INSERT INTO semantic.erasure_source_record(partition_no,account_id,role,store,record_key,delivery_position,
+ source_transaction_id,source_position,native_present,original,previous_terminal,identity_epoch,
+ slot_id,candidate_id,property,release,context_id,source_name,external_id,field_group)
+ VALUES(NEW.partition_no,NEW.account_id,NEW.role,NEW.store,NEW.record_key,NEW.delivery_position,
+ NEW.source_transaction_id,NEW.source_position,coalesce(v_present,false),v_original,v_old_terminal,v_identity_version,
+ v_slot,v_candidate,v_property_id,v_release_id,v_context,v_source_name,v_external_id,v_field_group)
+ ON CONFLICT DO NOTHING;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: capture_erasure_source_removal(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_erasure_source_removal() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE native_home integer; native_tx uuid;
+BEGIN
+ IF TG_TABLE_NAME='release_composite' THEN native_home:=OLD.extension_route/16;
+ ELSIF TG_TABLE_NAME LIKE 'identity_epoch_%' AND TG_TABLE_NAME NOT IN ('identity_epoch_mapping','identity_epoch_home_gate') THEN native_home:=OLD.partition_no;
+ ELSE native_home:=OLD.route/16;
+ END IF;
+ SELECT b.transaction_id INTO native_tx FROM core.partition p JOIN editorial.write_basis b
+ ON b.partition_no=p.partition_no AND b.position=p.position
+ WHERE p.partition_no=native_home AND b.xmin::text=pg_current_xact_id()::text;
+ IF current_setting('semantic.erasure_cleanup',true)='on' THEN RETURN OLD; END IF;
+ IF native_tx IS NULL THEN RAISE EXCEPTION 'Semantic source removal requires native command custody' USING ERRCODE='23514'; END IF;
+ INSERT INTO semantic.erasure_source_commit(partition_no,transaction_id,epoch,position)
+ SELECT native_home,native_tx,epoch,position FROM core.partition WHERE partition_no=native_home
+ ON CONFLICT DO NOTHING;
+ INSERT INTO semantic.erasure_source_disposition(partition_no,store,record_key,disposition,transaction_id)
+ VALUES(native_home,TG_TABLE_NAME,OLD.erasure_key,'removed',native_tx)
+ ON CONFLICT(partition_no,store,record_key) DO UPDATE SET disposition=EXCLUDED.disposition,transaction_id=EXCLUDED.transaction_id,native_xmin=NULL;
+ RETURN OLD;
+END; $$;
+
+
+--
 -- Name: capture_external_claim_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -780,6 +891,42 @@ END; $$;
 
 
 --
+-- Name: capture_record_retention(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.capture_record_retention() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE kind text; owner_id uuid; record_id uuid; at timestamptz; deleted boolean; restarted boolean;
+BEGIN
+ IF TG_TABLE_NAME='record_lifecycle' THEN
+  kind:='candidate';owner_id:=NEW.subject_id;record_id:=NEW.candidate_id;
+  at:=NEW.deleted_at;deleted:=NEW.state IN ('deleted','purging');
+ ELSIF TG_TABLE_NAME='context' THEN
+  kind:='context';owner_id:=NEW.context_id;record_id:=NEW.context_id;
+  at:=NEW.deleted_at;deleted:=NEW.state='deleted';
+ ELSE
+  kind:='zone';owner_id:=NEW.zone_id;record_id:=NEW.zone_id;
+  at:=NEW.deleted_at;deleted:=NEW.state='deleted';
+ END IF;
+ restarted:=TG_OP='INSERT';
+ IF TG_OP='UPDATE' THEN restarted:=NEW.state='deleted' AND OLD.state='active'; END IF;
+ IF deleted THEN
+  INSERT INTO semantic.record_retention_home(partition_no) VALUES(NEW.route/16) ON CONFLICT DO NOTHING;
+  INSERT INTO semantic.record_retention_key(partition_no,route,kind,owner_id,record_id,deleted_at)
+   VALUES(NEW.route/16,NEW.route,kind,owner_id,record_id,at)
+   ON CONFLICT(route,kind,owner_id,record_id) DO UPDATE SET
+    generation=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN gen_random_uuid() ELSE record_retention_key.generation END,
+    phase=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN 'local' ELSE record_retention_key.phase END,
+    fragment_store=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN 0 ELSE record_retention_key.fragment_store END,
+    fragment_key=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN 0 ELSE record_retention_key.fragment_key END,
+    deleted_at=EXCLUDED.deleted_at;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: capture_redirect_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1180,7 +1327,9 @@ END; $$;
 -- Name: prevent_fact_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
-CREATE FUNCTION semantic.prevent_fact_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION semantic.prevent_fact_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
  IF TG_OP IN ('UPDATE','DELETE') AND semantic.erasure_mutation_allowed(TG_TABLE_NAME,OLD.route,OLD.erasure_key) THEN
   IF TG_OP='DELETE' THEN RETURN OLD; END IF;
@@ -1200,7 +1349,9 @@ END; $$;
 -- Name: prevent_moderation_mutation(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
-CREATE FUNCTION semantic.prevent_moderation_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION semantic.prevent_moderation_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
  IF TG_OP='UPDATE' AND (semantic.erasure_mutation_allowed(TG_TABLE_NAME,OLD.route,OLD.erasure_key)
   OR semantic.record_retention_mutation_allowed(TG_TABLE_NAME,OLD.route,OLD.erasure_key))
@@ -1286,6 +1437,16 @@ END; $$;
 
 
 --
+-- Name: protect_record_retention_commit(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.protect_record_retention_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN RAISE EXCEPTION 'record_retention_commit_is_immutable'; END; $$;
+
+
+--
 -- Name: read_identity_epoch_installation(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -1355,6 +1516,12 @@ CREATE FUNCTION semantic.record_erasure_locator(p_home integer, p_account uuid, 
     AS $$
 DECLARE delivery bigint; is_global boolean:=false;
 BEGIN
+ IF EXISTS(SELECT 1 FROM semantic.erasure_source_seal s WHERE s.partition_no=p_home AND s.account_id=p_account) THEN
+  -- Re-reporting unchanged provenance of a survivor's existing row creates no new role.
+  IF EXISTS(SELECT 1 FROM semantic.erasure_locator l WHERE l.partition_no=p_home AND l.account_id=p_account
+    AND l.role=p_role AND l.store=p_store AND l.record_key=p_key AND l.source_transaction_id IS NOT DISTINCT FROM p_tx) THEN RETURN; END IF;
+  RAISE EXCEPTION 'Semantic erased Source role admission is sealed' USING ERRCODE='23514';
+ END IF;
  SELECT position INTO delivery FROM core.partition WHERE partition_no=p_home;
  IF p_position IS NULL THEN SELECT position INTO p_position FROM core.partition WHERE partition_no=p_home; END IF;
  IF p_store='outbound_link' THEN SELECT context_id='00000000-0000-8000-8000-000000000000' INTO is_global FROM semantic.outbound_link WHERE route BETWEEN p_home*16 AND p_home*16+15 AND erasure_key=p_key;
@@ -1367,6 +1534,133 @@ BEGIN
  state=CASE WHEN semantic.erasure_locator.delivery_position IS DISTINCT FROM EXCLUDED.delivery_position THEN 'pending' ELSE semantic.erasure_locator.state END;
  -- A new native local obligation invalidates a previously empty local page. Late resolution uses the account-home inbox.
  UPDATE semantic.erasure_home SET state='local' WHERE partition_no=p_home AND account_id=p_account AND state='complete' AND EXISTS (SELECT 1 FROM semantic.erasure_locator l WHERE l.partition_no=p_home AND l.account_id=p_account AND l.role=p_role AND l.store=p_store AND l.record_key=p_key AND l.state='pending');
+END; $$;
+
+
+--
+-- Name: record_retention_mutation_allowed(text, integer, bigint); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.record_retention_mutation_allowed(p_store text, p_route integer, p_key bigint) RETURNS boolean
+    LANGUAGE plpgsql STABLE
+    AS $$
+DECLARE work semantic.record_retention_key; valid boolean;
+BEGIN
+ IF current_setting('semantic.record_retention_store',true) IS DISTINCT FROM p_store OR
+    nullif(current_setting('semantic.record_retention_fragment',true),'')::bigint IS DISTINCT FROM p_key THEN RETURN false; END IF;
+ SELECT * INTO work FROM semantic.record_retention_key WHERE partition_no=p_route/16
+  AND key=nullif(current_setting('semantic.record_retention_key',true),'')::bigint AND phase='local' AND route=p_route;
+ IF NOT FOUND THEN RETURN false; END IF;
+ IF work.kind='candidate' THEN
+  SELECT l.state IN ('deleted','purging') AND NOT l.held AND l.deleted_at=work.deleted_at
+   AND l.purge_after<=nullif(current_setting('semantic.record_retention_at',true),'')::timestamptz
+   AND NOT EXISTS(SELECT 1 FROM semantic.hidden_candidate h WHERE h.route=l.route AND h.subject_id=l.subject_id
+    AND h.candidate_id=l.candidate_id AND h.visibility='taken_down') INTO valid
+   FROM semantic.record_lifecycle l WHERE l.route=p_route AND l.subject_id=work.owner_id AND l.candidate_id=work.record_id;
+ ELSE
+  SELECT c.state='deleted' AND NOT c.held AND c.deleted_at=work.deleted_at
+   AND c.purge_after<=nullif(current_setting('semantic.record_retention_at',true),'')::timestamptz INTO valid
+   FROM semantic.context c WHERE c.route=p_route AND c.context_id=work.record_id AND c.kind='community';
+ END IF;
+ IF NOT coalesce(valid,false) THEN RETURN false; END IF;
+ CASE p_store
+ WHEN 'candidate' THEN RETURN EXISTS(SELECT 1 FROM semantic.candidate WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
+ WHEN 'revision' THEN RETURN EXISTS(SELECT 1 FROM semantic.revision r JOIN semantic.record_lifecycle l
+  ON (l.route,l.subject_id,l.revision)=(r.route,r.subject_id,r.revision) WHERE r.route=p_route AND r.subject_id=work.owner_id AND l.candidate_id=work.record_id AND r.erasure_key=p_key);
+ WHEN 'fact' THEN RETURN EXISTS(SELECT 1 FROM semantic.fact WHERE route=p_route AND subject_id=work.owner_id AND statement_id=work.record_id AND erasure_key=p_key);
+ WHEN 'retraction' THEN RETURN EXISTS(SELECT 1 FROM semantic.retraction WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
+ WHEN 'moderation' THEN RETURN EXISTS(SELECT 1 FROM semantic.moderation WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
+ WHEN 'source_candidate' THEN RETURN EXISTS(SELECT 1 FROM semantic.source_candidate WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
+ WHEN 'statement_disclosure' THEN RETURN EXISTS(SELECT 1 FROM semantic.statement_disclosure WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
+ WHEN 'context' THEN RETURN work.kind='context' AND EXISTS(SELECT 1 FROM semantic.context WHERE route=p_route AND context_id=work.record_id AND erasure_key=p_key);
+ WHEN 'context_extension' THEN RETURN work.kind='context' AND EXISTS(SELECT 1 FROM semantic.context_extension WHERE route=p_route AND context_id=work.record_id AND erasure_key=p_key);
+ ELSE RETURN false;
+ END CASE;
+END; $$;
+
+
+--
+-- Name: subject_page_bootstrap_population(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_bootstrap_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.visible>0 AND (TG_OP='INSERT' OR OLD.visible=0) THEN
+    UPDATE semantic.subject_page_bootstrap
+    SET version=version+1, source_key=NULL, state='pending', available_at=now(), worker=NULL, lease_until=NULL
+    WHERE partition_no=NEW.partition_no AND state='done';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: subject_page_valid_witnesses(jsonb); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_valid_witnesses(value jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT
+    AS $$
+  SELECT jsonb_typeof(value) = 'array' AND jsonb_array_length(value) <= 8
+    AND (SELECT count(*) = count(DISTINCT (entry->>'kind', entry->>'key'))
+         AND coalesce(bool_and(coalesce(entry->>'kind' IN ('fact','cover','relation')
+             AND jsonb_typeof(entry->'key') = 'string', false)), true)
+         FROM jsonb_array_elements(value) entry)
+$$;
+
+
+--
+-- Name: subject_page_work_home_changed(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.subject_page_work_home_changed() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE home integer; delta integer;
+BEGIN
+  IF TG_TABLE_NAME='subject_page_bootstrap' THEN home := NEW.partition_no; ELSE home := NEW.route >> 4; END IF;
+  delta := CASE WHEN NEW.state<>'done' THEN 1 ELSE 0 END;
+  IF TG_OP='UPDATE' THEN delta := delta-CASE WHEN OLD.state<>'done' THEN 1 ELSE 0 END; END IF;
+  IF delta<>0 THEN UPDATE semantic.subject_page_work_home SET pending=pending+delta WHERE partition_no=home; END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: validate_erasure_source_commit(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_erasure_source_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM editorial.write_basis b
+   WHERE b.partition_no=NEW.partition_no AND b.transaction_id=NEW.transaction_id
+     AND b.epoch=NEW.epoch AND b.position=NEW.position AND b.xmin::text=pg_current_xact_id()::text) THEN
+  RAISE EXCEPTION 'Semantic Source receipt lacks same-command native custody' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: validate_record_deletion_commit(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.validate_record_deletion_commit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='UPDATE' AND NEW.deletion_generation=OLD.deletion_generation THEN RETURN NEW; END IF;
+ INSERT INTO semantic.record_retention_commit(route,subject_id,candidate_id,deletion_generation,
+   transaction_id,epoch,position,deleted_at,purge_after)
+ SELECT NEW.route,NEW.subject_id,NEW.candidate_id,NEW.deletion_generation,b.transaction_id,b.epoch,b.position,
+   NEW.deleted_at,NEW.purge_after FROM editorial.write_basis b WHERE b.partition_no=NEW.route/16
+   AND b.transaction_id=NEW.deletion_transaction_id AND b.xmin=pg_current_xact_id()::xid;
+ IF NOT FOUND THEN RAISE EXCEPTION 'record_deletion_requires_same_native_commit'; END IF;
+ RETURN NEW;
 END; $$;
 
 
@@ -1755,6 +2049,8 @@ CREATE TABLE semantic.erasure_progress (
     state text DEFAULT 'local'::text NOT NULL,
     applied boolean DEFAULT false NOT NULL,
     workflow_id text,
+    source_protocol integer DEFAULT 0 NOT NULL,
+    source_version integer,
     CONSTRAINT erasure_progress_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4096))),
     CONSTRAINT erasure_progress_state_check CHECK ((state = ANY (ARRAY['local'::text, 'pending-shared-custody'::text])))
 );
@@ -1788,6 +2084,139 @@ CREATE TABLE semantic.erasure_shared_custody (
 
 
 --
+-- Name: erasure_source_commit; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_source_commit (
+    partition_no integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL
+);
+
+
+--
+-- Name: erasure_source_disposition; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_source_disposition (
+    partition_no integer NOT NULL,
+    store text NOT NULL,
+    record_key bigint NOT NULL,
+    disposition text NOT NULL,
+    transaction_id uuid NOT NULL,
+    native_xmin text,
+    CONSTRAINT erasure_source_disposition_disposition_check CHECK ((disposition = ANY (ARRAY['removed'::text, 'retained-nonpersonal'::text])))
+);
+
+
+--
+-- Name: erasure_source_hold; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_source_hold (
+    partition_no integer NOT NULL,
+    id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL,
+    store text NOT NULL,
+    record_key bigint NOT NULL,
+    role text NOT NULL,
+    delivery_position bigint NOT NULL,
+    transaction_id uuid NOT NULL,
+    original uuid,
+    previous_terminal uuid,
+    current_terminal uuid,
+    source_home integer,
+    source_revision integer,
+    source_security_revision bigint,
+    source_release text,
+    slot_id uuid,
+    candidate_id uuid,
+    property text,
+    tuple_route integer,
+    source_name text,
+    external_id text,
+    field_group text,
+    disposition text,
+    CONSTRAINT erasure_source_hold_disposition_check CHECK ((disposition = ANY (ARRAY['remove'::text, 'replace'::text, 'retain_deidentified'::text])))
+);
+
+
+--
+-- Name: erasure_source_page; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_source_page (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL,
+    id uuid NOT NULL,
+    previous_id uuid,
+    source_partition integer,
+    store text,
+    record_key bigint,
+    role text,
+    delivery_position bigint,
+    source_epoch integer,
+    source_position bigint,
+    source_transaction_id uuid,
+    role_epoch integer,
+    role_position bigint,
+    role_transaction_id uuid,
+    transfer_transaction_id uuid,
+    original uuid,
+    previous_terminal uuid,
+    current_terminal uuid,
+    source_home integer,
+    source_revision integer,
+    source_security_revision bigint,
+    source_release text,
+    slot_id uuid,
+    candidate_id uuid,
+    property text,
+    tuple_route integer,
+    source_name text,
+    external_id text,
+    field_group text,
+    disposition text,
+    complete boolean NOT NULL,
+    consumed boolean DEFAULT false NOT NULL,
+    CONSTRAINT erasure_source_page_disposition_check CHECK ((disposition = ANY (ARRAY['remove'::text, 'replace'::text, 'retain_deidentified'::text])))
+);
+
+
+--
+-- Name: erasure_source_record; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_source_record (
+    partition_no integer NOT NULL,
+    account_id uuid NOT NULL,
+    role text NOT NULL,
+    store text NOT NULL,
+    record_key bigint NOT NULL,
+    delivery_position bigint NOT NULL,
+    source_transaction_id uuid,
+    source_position bigint,
+    native_present boolean NOT NULL,
+    original uuid,
+    previous_terminal uuid,
+    identity_epoch bigint,
+    slot_id uuid,
+    candidate_id uuid,
+    property text,
+    release text,
+    context_id uuid,
+    source_name text,
+    external_id text,
+    field_group text
+);
+
+
+--
 -- Name: erasure_source_role; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -1796,6 +2225,62 @@ CREATE TABLE semantic.erasure_source_role (
     transaction_id uuid NOT NULL,
     account_id uuid NOT NULL,
     role text NOT NULL
+);
+
+
+--
+-- Name: erasure_source_seal; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_source_seal (
+    partition_no integer NOT NULL,
+    account_id uuid NOT NULL,
+    version integer NOT NULL,
+    at timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: erasure_source_terminal; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.erasure_source_terminal (
+    route integer CONSTRAINT erasure_source_page_route_not_null NOT NULL,
+    account_id uuid CONSTRAINT erasure_source_page_account_id_not_null NOT NULL,
+    version integer CONSTRAINT erasure_source_page_version_not_null NOT NULL,
+    at timestamp with time zone CONSTRAINT erasure_source_page_at_not_null NOT NULL,
+    id uuid CONSTRAINT erasure_source_page_id_not_null NOT NULL,
+    previous_id uuid,
+    source_partition integer,
+    store text,
+    record_key bigint,
+    role text,
+    delivery_position bigint,
+    source_epoch integer,
+    source_position bigint,
+    source_transaction_id uuid,
+    role_epoch integer,
+    role_position bigint,
+    role_transaction_id uuid,
+    transfer_transaction_id uuid,
+    original uuid,
+    previous_terminal uuid,
+    current_terminal uuid,
+    source_home integer,
+    source_revision integer,
+    source_security_revision bigint,
+    source_release text,
+    slot_id uuid,
+    candidate_id uuid,
+    property text,
+    tuple_route integer,
+    source_name text,
+    external_id text,
+    field_group text,
+    disposition text,
+    complete boolean CONSTRAINT erasure_source_page_complete_not_null NOT NULL,
+    consumed boolean DEFAULT false CONSTRAINT erasure_source_page_consumed_not_null NOT NULL,
+    CONSTRAINT erasure_source_page_disposition_check CHECK ((disposition = ANY (ARRAY['remove'::text, 'replace'::text, 'retain_deidentified'::text])))
 );
 
 
@@ -1811,6 +2296,25 @@ CREATE TABLE semantic.external_claim (
     recorded_transaction_id uuid NOT NULL,
     erasure_key bigint DEFAULT nextval('semantic.erasure_record_key'::regclass) NOT NULL,
     CONSTRAINT external_claim_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: facet_population_frontier; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.facet_population_frontier (
+    partition_no integer NOT NULL,
+    frontier uuid NOT NULL,
+    predecessor uuid,
+    observation text NOT NULL,
+    binding text NOT NULL,
+    capture text NOT NULL,
+    state jsonb NOT NULL,
+    subjects jsonb NOT NULL,
+    complete boolean NOT NULL,
+    expires bigint NOT NULL,
+    CONSTRAINT facet_population_frontier_subjects_check CHECK (((jsonb_typeof(subjects) = 'array'::text) AND (jsonb_array_length(subjects) <= 256)))
 );
 
 
@@ -2638,6 +3142,7 @@ CREATE TABLE semantic.merge_member (
     member_id uuid NOT NULL,
     phase text DEFAULT 'links'::text NOT NULL,
     cursor jsonb DEFAULT '[]'::jsonb NOT NULL,
+    publication_origin jsonb,
     CONSTRAINT merge_member_phase_check CHECK ((phase = ANY (ARRAY['links'::text, 'outbound'::text, 'members'::text, 'done'::text])))
 );
 
@@ -2819,6 +3324,137 @@ CREATE TABLE semantic.provider_review_queue_ready (
 
 
 --
+-- Name: record_lifecycle; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.record_lifecycle (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    revision integer NOT NULL,
+    state text NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    deletion_generation uuid NOT NULL,
+    deletion_transaction_id uuid NOT NULL,
+    deleted_at timestamp with time zone NOT NULL,
+    purge_after timestamp with time zone NOT NULL,
+    held boolean DEFAULT false NOT NULL,
+    CONSTRAINT record_lifecycle_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT record_lifecycle_check1 CHECK ((route = ((get_byte(uuid_send(candidate_id), 10) * 256) + get_byte(uuid_send(candidate_id), 11)))),
+    CONSTRAINT record_lifecycle_check2 CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
+    CONSTRAINT record_lifecycle_revision_check CHECK ((revision > 0)),
+    CONSTRAINT record_lifecycle_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'purging'::text, 'purged'::text]))),
+    CONSTRAINT record_lifecycle_version_check CHECK ((version > 0))
+);
+
+
+--
+-- Name: record_retention_commit; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.record_retention_commit (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    deletion_generation uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    epoch integer NOT NULL,
+    "position" bigint NOT NULL,
+    deleted_at timestamp with time zone NOT NULL,
+    purge_after timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: record_retention_document; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.record_retention_document (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    deletion_generation uuid NOT NULL,
+    document_id uuid NOT NULL,
+    minimized boolean DEFAULT false NOT NULL
+);
+
+
+--
+-- Name: record_retention_home; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.record_retention_home (
+    partition_no integer NOT NULL,
+    after_key bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT record_retention_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
+-- Name: record_retention_key; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.record_retention_key (
+    partition_no integer NOT NULL,
+    key bigint NOT NULL,
+    route integer NOT NULL,
+    kind text NOT NULL,
+    owner_id uuid NOT NULL,
+    record_id uuid NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    deleted_at timestamp with time zone NOT NULL,
+    phase text DEFAULT 'local'::text NOT NULL,
+    fragment_store integer DEFAULT 0 NOT NULL,
+    fragment_key bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT record_retention_key_check CHECK (((route / 16) = partition_no)),
+    CONSTRAINT record_retention_key_fragment_key_check CHECK ((fragment_key >= 0)),
+    CONSTRAINT record_retention_key_fragment_store_check CHECK (((fragment_store >= 0) AND (fragment_store <= 9))),
+    CONSTRAINT record_retention_key_kind_check CHECK ((kind = ANY (ARRAY['candidate'::text, 'context'::text, 'zone'::text]))),
+    CONSTRAINT record_retention_key_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT record_retention_key_phase_check CHECK ((phase = ANY (ARRAY['local'::text, 'shared'::text, 'complete'::text])))
+);
+
+
+--
+-- Name: record_retention_key_key_seq; Type: SEQUENCE; Schema: semantic; Owner: -
+--
+
+ALTER TABLE semantic.record_retention_key ALTER COLUMN key ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME semantic.record_retention_key_key_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: record_retention_page; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.record_retention_page (
+    partition_no integer NOT NULL,
+    key text NOT NULL,
+    input_limit integer NOT NULL,
+    result jsonb NOT NULL,
+    CONSTRAINT record_retention_page_input_limit_check CHECK (((input_limit >= 1) AND (input_limit <= 100))),
+    CONSTRAINT record_retention_page_key_check CHECK (((octet_length(key) >= 1) AND (octet_length(key) <= 255)))
+);
+
+
+--
+-- Name: record_retention_schedule; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.record_retention_schedule (
+    partition_no integer NOT NULL,
+    after_home integer DEFAULT '-1'::integer NOT NULL,
+    CONSTRAINT record_retention_schedule_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
 -- Name: redirect; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -2974,6 +3610,270 @@ CREATE TABLE semantic.subject (
     CONSTRAINT subject_security_revision_check CHECK ((security_revision >= 0)),
     CONSTRAINT subject_type_check CHECK ((type ~ '^[a-z][a-z0-9_]*:[A-Za-z][A-Za-z0-9_]*$'::text)),
     CONSTRAINT subject_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text, 'taken_down'::text])))
+);
+
+
+--
+-- Name: subject_page_bootstrap; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_bootstrap (
+    partition_no integer NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    source_key jsonb,
+    state text DEFAULT 'pending'::text NOT NULL,
+    available_at timestamp with time zone DEFAULT now() NOT NULL,
+    worker text,
+    lease_until timestamp with time zone,
+    CONSTRAINT subject_page_bootstrap_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT subject_page_bootstrap_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
+);
+
+
+--
+-- Name: subject_page_change; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_change (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    "position" bigint NOT NULL,
+    change_id text NOT NULL,
+    component_kind text,
+    component_key text,
+    before_state jsonb NOT NULL,
+    after_state jsonb NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_change_check CHECK (((component_kind IS NULL) = (component_key IS NULL))),
+    CONSTRAINT subject_page_change_check1 CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_change_component_kind_check CHECK ((component_kind = ANY (ARRAY['label'::text, 'fact'::text, 'cover'::text, 'relation'::text]))),
+    CONSTRAINT subject_page_change_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_change_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: subject_page_component; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_component (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    component_kind text NOT NULL,
+    component_key text NOT NULL,
+    generation bigint NOT NULL,
+    shown boolean NOT NULL,
+    digest text,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    last_change_position bigint NOT NULL,
+    source_version bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT subject_page_component_check CHECK ((shown = (digest IS NOT NULL))),
+    CONSTRAINT subject_page_component_check1 CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_component_component_kind_check CHECK ((component_kind = ANY (ARRAY['label'::text, 'fact'::text, 'cover'::text, 'relation'::text]))),
+    CONSTRAINT subject_page_component_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_component_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: subject_page_continuation; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_continuation (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    kind text NOT NULL,
+    change_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_continuation_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_continuation_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_continuation_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: subject_page_delivery; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_delivery (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    owner_kind text NOT NULL,
+    owner_route integer NOT NULL,
+    owner_key text NOT NULL,
+    change_id text NOT NULL,
+    event_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_delivery_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_delivery_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_delivery_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_delivery_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT subject_page_delivery_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: subject_page_dependency; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_dependency (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    owner_kind text NOT NULL,
+    owner_route integer NOT NULL,
+    owner_key text NOT NULL,
+    component_key text NOT NULL,
+    source_version bigint NOT NULL,
+    present boolean NOT NULL,
+    event_id text NOT NULL,
+    CONSTRAINT subject_page_dependency_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_dependency_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT subject_page_dependency_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: subject_page_fanout; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_fanout (
+    route integer NOT NULL,
+    owner_kind text NOT NULL,
+    owner_key text NOT NULL,
+    change_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    source_key text[] DEFAULT '{}'::text[] NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    available_at timestamp with time zone DEFAULT now() NOT NULL,
+    worker text,
+    lease_until timestamp with time zone,
+    CONSTRAINT subject_page_fanout_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_fanout_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_fanout_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_fanout_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_page_fanout_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
+);
+
+
+--
+-- Name: subject_page_owner; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_owner (
+    route integer NOT NULL,
+    owner_kind text NOT NULL,
+    owner_key text NOT NULL,
+    change_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_owner_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_owner_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_owner_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_owner_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: subject_page_owner_dependency; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_owner_dependency (
+    route integer NOT NULL,
+    owner_kind text NOT NULL,
+    owner_key text NOT NULL,
+    source_route integer NOT NULL,
+    source_subject_id uuid NOT NULL,
+    component_key text NOT NULL,
+    source_version bigint NOT NULL,
+    present boolean NOT NULL,
+    event_id text NOT NULL,
+    effective_at timestamp with time zone,
+    evidence text NOT NULL,
+    CONSTRAINT subject_page_owner_dependency_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_owner_dependency_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_owner_dependency_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
+    CONSTRAINT subject_page_owner_dependency_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_page_owner_dependency_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535)))
+);
+
+
+--
+-- Name: subject_page_publication; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_publication (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    readiness text DEFAULT 'cold'::text NOT NULL,
+    completed_position bigint DEFAULT 0 NOT NULL,
+    change_position bigint DEFAULT 0 NOT NULL,
+    public_effective_at timestamp with time zone,
+    evidence text DEFAULT 'missing'::text NOT NULL,
+    witnesses jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT subject_page_publication_check CHECK (((evidence = 'known'::text) = (public_effective_at IS NOT NULL))),
+    CONSTRAINT subject_page_publication_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
+    CONSTRAINT subject_page_publication_generation_check CHECK ((generation > 0)),
+    CONSTRAINT subject_page_publication_readiness_check CHECK ((readiness = ANY (ARRAY['cold'::text, 'repairing'::text, 'ready'::text]))),
+    CONSTRAINT subject_page_publication_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_page_publication_witnesses_check CHECK (semantic.subject_page_valid_witnesses(witnesses))
+);
+
+
+--
+-- Name: subject_page_repair; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_repair (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    generation bigint NOT NULL,
+    phase text DEFAULT 'descriptive'::text NOT NULL,
+    source_key text[] DEFAULT '{}'::text[] NOT NULL,
+    high_water bigint DEFAULT 0 NOT NULL,
+    replay_position bigint DEFAULT 0 NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    available_at timestamp with time zone DEFAULT now() NOT NULL,
+    worker text,
+    lease_until timestamp with time zone,
+    dirty boolean DEFAULT false NOT NULL,
+    CONSTRAINT subject_page_repair_phase_check CHECK ((phase = ANY (ARRAY['bootstrap'::text, 'descriptive'::text, 'relations'::text, 'evidence'::text, 'replay'::text, 'done'::text]))),
+    CONSTRAINT subject_page_repair_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT subject_page_repair_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
+);
+
+
+--
+-- Name: subject_page_source; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_source (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    owner_route integer NOT NULL,
+    owner_key text NOT NULL,
+    CONSTRAINT subject_page_source_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
+    CONSTRAINT subject_page_source_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: subject_page_work_home; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.subject_page_work_home (
+    partition_no integer NOT NULL,
+    pending integer NOT NULL,
+    CONSTRAINT subject_page_work_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT subject_page_work_home_pending_check CHECK ((pending >= 0))
 );
 
 
@@ -3162,6 +4062,54 @@ ALTER TABLE ONLY semantic.erasure_shared_custody
 
 
 --
+-- Name: erasure_source_commit erasure_source_commit_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_commit
+    ADD CONSTRAINT erasure_source_commit_pkey PRIMARY KEY (partition_no, transaction_id);
+
+
+--
+-- Name: erasure_source_disposition erasure_source_disposition_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_disposition
+    ADD CONSTRAINT erasure_source_disposition_pkey PRIMARY KEY (partition_no, store, record_key);
+
+
+--
+-- Name: erasure_source_hold erasure_source_hold_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_hold
+    ADD CONSTRAINT erasure_source_hold_pkey PRIMARY KEY (partition_no, id);
+
+
+--
+-- Name: erasure_source_page erasure_source_page_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_page
+    ADD CONSTRAINT erasure_source_page_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: erasure_source_page erasure_source_page_route_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_page
+    ADD CONSTRAINT erasure_source_page_route_id_key UNIQUE (route, id);
+
+
+--
+-- Name: erasure_source_record erasure_source_record_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_record
+    ADD CONSTRAINT erasure_source_record_pkey PRIMARY KEY (partition_no, account_id, role, store, record_key, delivery_position);
+
+
+--
 -- Name: erasure_source_role erasure_source_role_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -3170,11 +4118,43 @@ ALTER TABLE ONLY semantic.erasure_source_role
 
 
 --
+-- Name: erasure_source_seal erasure_source_seal_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_seal
+    ADD CONSTRAINT erasure_source_seal_pkey PRIMARY KEY (partition_no, account_id);
+
+
+--
+-- Name: erasure_source_terminal erasure_source_terminal_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_terminal
+    ADD CONSTRAINT erasure_source_terminal_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: erasure_source_terminal erasure_source_terminal_route_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.erasure_source_terminal
+    ADD CONSTRAINT erasure_source_terminal_route_id_key UNIQUE (route, id);
+
+
+--
 -- Name: external_claim external_claim_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
 ALTER TABLE ONLY semantic.external_claim
     ADD CONSTRAINT external_claim_pkey PRIMARY KEY (route, source, external_id);
+
+
+--
+-- Name: facet_population_frontier facet_population_frontier_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.facet_population_frontier
+    ADD CONSTRAINT facet_population_frontier_pkey PRIMARY KEY (partition_no, frontier);
 
 
 --
@@ -3642,6 +4622,70 @@ ALTER TABLE ONLY semantic.provider_review_queue_ready
 
 
 --
+-- Name: record_lifecycle record_lifecycle_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_lifecycle
+    ADD CONSTRAINT record_lifecycle_pkey PRIMARY KEY (route, subject_id, candidate_id);
+
+
+--
+-- Name: record_retention_commit record_retention_commit_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_retention_commit
+    ADD CONSTRAINT record_retention_commit_pkey PRIMARY KEY (route, subject_id, candidate_id, deletion_generation);
+
+
+--
+-- Name: record_retention_document record_retention_document_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_retention_document
+    ADD CONSTRAINT record_retention_document_pkey PRIMARY KEY (route, subject_id, candidate_id, deletion_generation, document_id);
+
+
+--
+-- Name: record_retention_home record_retention_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_retention_home
+    ADD CONSTRAINT record_retention_home_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: record_retention_key record_retention_key_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_retention_key
+    ADD CONSTRAINT record_retention_key_pkey PRIMARY KEY (partition_no, key);
+
+
+--
+-- Name: record_retention_key record_retention_key_route_kind_owner_id_record_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_retention_key
+    ADD CONSTRAINT record_retention_key_route_kind_owner_id_record_id_key UNIQUE (route, kind, owner_id, record_id);
+
+
+--
+-- Name: record_retention_page record_retention_page_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_retention_page
+    ADD CONSTRAINT record_retention_page_pkey PRIMARY KEY (partition_no, key);
+
+
+--
+-- Name: record_retention_schedule record_retention_schedule_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_retention_schedule
+    ADD CONSTRAINT record_retention_schedule_pkey PRIMARY KEY (partition_no);
+
+
+--
 -- Name: redirect redirect_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -3703,6 +4747,118 @@ ALTER TABLE ONLY semantic.source_record
 
 ALTER TABLE ONLY semantic.statement_disclosure
     ADD CONSTRAINT statement_disclosure_pkey PRIMARY KEY (route, candidate_id);
+
+
+--
+-- Name: subject_page_bootstrap subject_page_bootstrap_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_bootstrap
+    ADD CONSTRAINT subject_page_bootstrap_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: subject_page_change subject_page_change_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_change
+    ADD CONSTRAINT subject_page_change_pkey PRIMARY KEY (route, subject_id, "position");
+
+
+--
+-- Name: subject_page_change subject_page_change_route_subject_id_change_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_change
+    ADD CONSTRAINT subject_page_change_route_subject_id_change_id_key UNIQUE (route, subject_id, change_id);
+
+
+--
+-- Name: subject_page_component subject_page_component_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_component
+    ADD CONSTRAINT subject_page_component_pkey PRIMARY KEY (route, subject_id, component_kind, component_key);
+
+
+--
+-- Name: subject_page_continuation subject_page_continuation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_continuation
+    ADD CONSTRAINT subject_page_continuation_pkey PRIMARY KEY (route, subject_id, kind);
+
+
+--
+-- Name: subject_page_delivery subject_page_delivery_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_delivery
+    ADD CONSTRAINT subject_page_delivery_pkey PRIMARY KEY (route, subject_id, owner_kind, owner_route, owner_key, change_id, event_id);
+
+
+--
+-- Name: subject_page_dependency subject_page_dependency_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_dependency
+    ADD CONSTRAINT subject_page_dependency_pkey PRIMARY KEY (route, subject_id, owner_kind, owner_route, owner_key, component_key);
+
+
+--
+-- Name: subject_page_fanout subject_page_fanout_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_fanout
+    ADD CONSTRAINT subject_page_fanout_pkey PRIMARY KEY (route, owner_kind, owner_key, change_id);
+
+
+--
+-- Name: subject_page_owner_dependency subject_page_owner_dependency_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_owner_dependency
+    ADD CONSTRAINT subject_page_owner_dependency_pkey PRIMARY KEY (route, owner_kind, owner_key, source_route, source_subject_id, component_key);
+
+
+--
+-- Name: subject_page_owner subject_page_owner_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_owner
+    ADD CONSTRAINT subject_page_owner_pkey PRIMARY KEY (route, owner_kind, owner_key);
+
+
+--
+-- Name: subject_page_publication subject_page_publication_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_publication
+    ADD CONSTRAINT subject_page_publication_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: subject_page_repair subject_page_repair_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_repair
+    ADD CONSTRAINT subject_page_repair_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: subject_page_source subject_page_source_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_source
+    ADD CONSTRAINT subject_page_source_pkey PRIMARY KEY (route, subject_id, candidate_id);
+
+
+--
+-- Name: subject_page_work_home subject_page_work_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.subject_page_work_home
+    ADD CONSTRAINT subject_page_work_home_pkey PRIMARY KEY (partition_no);
 
 
 --
@@ -3826,6 +4982,13 @@ CREATE UNIQUE INDEX definition_release_erasure_key ON semantic.definition_releas
 
 
 --
+-- Name: erasure_inbox_source_page; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX erasure_inbox_source_page ON semantic.erasure_inbox USING btree (route, account_id, source_partition, store, record_key, role, delivery_position);
+
+
+--
 -- Name: erasure_inbox_unsettled; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -3861,10 +5024,31 @@ CREATE INDEX erasure_locator_work ON semantic.erasure_locator USING btree (parti
 
 
 --
+-- Name: erasure_source_record_key; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX erasure_source_record_key ON semantic.erasure_source_record USING btree (partition_no, account_id, store, record_key, role, delivery_position);
+
+
+--
 -- Name: external_claim_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
 CREATE UNIQUE INDEX external_claim_erasure_key ON semantic.external_claim USING btree (erasure_key, route);
+
+
+--
+-- Name: facet_population_expiry; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX facet_population_expiry ON semantic.facet_population_frontier USING btree (partition_no, expires, frontier);
+
+
+--
+-- Name: facet_population_successor; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX facet_population_successor ON semantic.facet_population_frontier USING btree (partition_no, predecessor) WHERE (predecessor IS NOT NULL);
 
 
 --
@@ -3886,6 +5070,34 @@ CREATE UNIQUE INDEX fact_erasure_key ON semantic.fact USING btree (erasure_key, 
 --
 
 CREATE INDEX fact_label ON semantic.fact USING btree (route, subject_id, language) WHERE ((kind = 'label'::text) AND (operation = 'assert'::text));
+
+
+--
+-- Name: fact_publication_descriptive; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_publication_descriptive ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE (NOT relation);
+
+
+--
+-- Name: fact_publication_relations; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_publication_relations ON semantic.fact USING btree (route, subject_id, slot_id, log_seq) WHERE relation;
+
+
+--
+-- Name: fact_statement_identity; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_statement_identity ON semantic.fact USING btree (route, subject_id, statement_id, log_seq DESC) WHERE ((kind = 'statement'::text) AND (statement_id IS NOT NULL));
+
+
+--
+-- Name: fact_subject_slot_order; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_subject_slot_order ON semantic.fact USING btree (route, subject_id, slot_id, log_seq);
 
 
 --
@@ -4260,6 +5472,76 @@ CREATE INDEX provider_review_queue_key_pending ON semantic.provider_review_queue
 
 
 --
+-- Name: record_retention_activation; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_activation ON semantic.context_extension_activation USING btree (route, context_id, erasure_key);
+
+
+--
+-- Name: record_retention_composite; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_composite ON semantic.release_composite USING btree (extension_route, extension_context_id, erasure_key);
+
+
+--
+-- Name: record_retention_disclosure; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_disclosure ON semantic.statement_disclosure USING btree (route, subject_id, candidate_id, erasure_key);
+
+
+--
+-- Name: record_retention_document_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_document_pending ON semantic.record_retention_document USING btree (route, subject_id, candidate_id, deletion_generation, document_id) WHERE (NOT minimized);
+
+
+--
+-- Name: record_retention_extension; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_extension ON semantic.context_extension USING btree (route, context_id, erasure_key);
+
+
+--
+-- Name: record_retention_fact; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_fact ON semantic.fact USING btree (route, subject_id, statement_id, erasure_key);
+
+
+--
+-- Name: record_retention_moderation; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_moderation ON semantic.moderation USING btree (route, subject_id, candidate_id, erasure_key);
+
+
+--
+-- Name: record_retention_pending; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_pending ON semantic.record_retention_key USING btree (partition_no, key) WHERE (phase <> 'complete'::text);
+
+
+--
+-- Name: record_retention_retraction; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_retraction ON semantic.retraction USING btree (route, subject_id, candidate_id, erasure_key);
+
+
+--
+-- Name: record_retention_source; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX record_retention_source ON semantic.source_candidate USING btree (route, subject_id, candidate_id, erasure_key);
+
+
+--
 -- Name: redirect_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -4362,6 +5644,41 @@ CREATE INDEX statement_disclosure_outbound ON semantic.statement_disclosure USIN
 --
 
 CREATE UNIQUE INDEX subject_erasure_key ON semantic.subject USING btree (erasure_key, route);
+
+
+--
+-- Name: subject_page_component_witness; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_component_witness ON semantic.subject_page_component USING btree (route, subject_id, generation, component_kind, component_key) WHERE (shown AND (component_kind <> 'label'::text));
+
+
+--
+-- Name: subject_page_dependency_component; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_dependency_component ON semantic.subject_page_dependency USING btree (route, subject_id, component_key, owner_kind, owner_route, owner_key) WHERE present;
+
+
+--
+-- Name: subject_page_fanout_runnable; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_fanout_runnable ON semantic.subject_page_fanout USING btree (route, state, available_at, owner_kind, owner_key, change_id);
+
+
+--
+-- Name: subject_page_owner_dependency_present; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_owner_dependency_present ON semantic.subject_page_owner_dependency USING btree (route, owner_kind, owner_key, source_route, source_subject_id, component_key) WHERE present;
+
+
+--
+-- Name: subject_page_repair_runnable; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX subject_page_repair_runnable ON semantic.subject_page_repair USING btree (route, state, available_at, subject_id);
 
 
 --
@@ -4470,6 +5787,13 @@ CREATE CONSTRAINT TRIGGER context_extension_erasure_capture AFTER INSERT OR UPDA
 
 
 --
+-- Name: context context_record_retention; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER context_record_retention AFTER INSERT OR UPDATE OF state, deleted_at ON semantic.context FOR EACH ROW EXECUTE FUNCTION semantic.capture_record_retention();
+
+
+--
 -- Name: definition_activation definition_activation_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -4481,6 +5805,321 @@ CREATE CONSTRAINT TRIGGER definition_activation_erasure_capture AFTER INSERT OR 
 --
 
 CREATE CONSTRAINT TRIGGER definition_release_erasure_capture AFTER INSERT OR UPDATE ON semantic.definition_release DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_definition_release_erasure();
+
+
+--
+-- Name: erasure_source_commit erasure_source_native_commit; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_native_commit AFTER INSERT ON semantic.erasure_source_commit DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_erasure_source_commit();
+
+
+--
+-- Name: erasure_source_commit erasure_source_native_commit_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER erasure_source_native_commit_immutable BEFORE DELETE OR UPDATE ON semantic.erasure_source_commit FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: erasure_locator erasure_source_record_capture; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER erasure_source_record_capture AFTER INSERT OR UPDATE OF source_transaction_id, source_position, delivery_position ON semantic.erasure_locator FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_record();
+
+
+--
+-- Name: acceptance erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.acceptance DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: acceptance_current erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.acceptance_current DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: account_agent_moved_link erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.account_agent_moved_link DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: account_agent_subject erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.account_agent_subject DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: adoption erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.adoption DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: candidate erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.candidate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: context erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.context DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: context_extension erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.context_extension DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: context_extension_activation erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.context_extension_activation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: definition_activation erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.definition_activation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: definition_release erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.definition_release DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: external_claim erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.external_claim DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: fact erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.fact DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: hidden_candidate erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.hidden_candidate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_ack erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_ack DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_admission_attempt erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_admission_attempt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_admission_plan erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_admission_plan DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_admission_receipt erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_admission_receipt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_admission_source erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_admission_source DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_change erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_change DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_effect_receipt erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_effect_receipt DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_home_gate erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_home_gate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_input erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_input DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_job erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_job DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_mapping erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_mapping DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_receiving_custody erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_receiving_custody DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_receiving_effect erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_receiving_effect DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_receiving_plan erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_receiving_plan DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_receiving_record erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_receiving_record DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: identity_epoch_step erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.identity_epoch_step DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: inbound_link erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.inbound_link DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: moderation erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.moderation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: outbound_link erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.outbound_link DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: provider_review_queue_entry erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.provider_review_queue_entry DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: provider_review_queue_key erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.provider_review_queue_key DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: redirect erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.redirect DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: release_composite erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.release_composite DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: retraction erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.retraction DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: revision erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.revision DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: source_candidate erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.source_candidate DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: statement_disclosure erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.statement_disclosure DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
+
+
+--
+-- Name: subject erasure_source_removed; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER erasure_source_removed AFTER DELETE ON semantic.subject DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_erasure_source_removal();
 
 
 --
@@ -4523,6 +6162,13 @@ CREATE TRIGGER fact_immutable BEFORE DELETE OR UPDATE ON semantic.fact FOR EACH 
 --
 
 CREATE TRIGGER fact_immutable_truncate BEFORE TRUNCATE ON semantic.fact FOR EACH STATEMENT EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: subject follow_count_new_subject; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER follow_count_new_subject AFTER INSERT ON semantic.subject FOR EACH ROW EXECUTE FUNCTION library.initialize_follow_count_total();
 
 
 --
@@ -4892,6 +6538,27 @@ CREATE CONSTRAINT TRIGGER provider_review_queue_capture AFTER INSERT OR UPDATE O
 
 
 --
+-- Name: record_lifecycle record_lifecycle_native_commit; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER record_lifecycle_native_commit AFTER INSERT OR UPDATE ON semantic.record_lifecycle DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_record_deletion_commit();
+
+
+--
+-- Name: record_lifecycle record_lifecycle_retention; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER record_lifecycle_retention AFTER INSERT OR UPDATE ON semantic.record_lifecycle FOR EACH ROW EXECUTE FUNCTION semantic.capture_record_retention();
+
+
+--
+-- Name: record_retention_commit record_retention_commit_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER record_retention_commit_immutable BEFORE DELETE OR UPDATE ON semantic.record_retention_commit FOR EACH ROW EXECUTE FUNCTION semantic.protect_record_retention_commit();
+
+
+--
 -- Name: redirect redirect_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -4973,6 +6640,41 @@ CREATE CONSTRAINT TRIGGER statement_disclosure_erasure_capture AFTER INSERT OR U
 --
 
 CREATE CONSTRAINT TRIGGER subject_erasure_capture AFTER INSERT OR UPDATE ON semantic.subject DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_subject_erasure();
+
+
+--
+-- Name: partition_subjects subject_page_bootstrap_population; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_bootstrap_population AFTER INSERT OR UPDATE OF visible ON semantic.partition_subjects FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_bootstrap_population();
+
+
+--
+-- Name: subject_page_bootstrap subject_page_bootstrap_work_home; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_bootstrap_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_bootstrap FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
+
+
+--
+-- Name: subject_page_change subject_page_change_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_change_immutable BEFORE DELETE OR UPDATE ON semantic.subject_page_change FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
+
+
+--
+-- Name: subject_page_fanout subject_page_fanout_work_home; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_fanout_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_fanout FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
+
+
+--
+-- Name: subject_page_repair subject_page_repair_work_home; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_page_repair_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_repair FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
 
 
 --
@@ -5092,6 +6794,22 @@ ALTER TABLE ONLY semantic.erasure_progress
 
 ALTER TABLE ONLY semantic.external_claim
     ADD CONSTRAINT external_claim_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: facet_population_frontier facet_population_frontier_partition_no_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.facet_population_frontier
+    ADD CONSTRAINT facet_population_frontier_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: facet_population_frontier facet_population_frontier_partition_no_predecessor_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.facet_population_frontier
+    ADD CONSTRAINT facet_population_frontier_partition_no_predecessor_fkey FOREIGN KEY (partition_no, predecessor) REFERENCES semantic.facet_population_frontier(partition_no, frontier);
 
 
 --
@@ -5359,6 +7077,22 @@ ALTER TABLE ONLY semantic.moderation
 
 
 --
+-- Name: record_lifecycle record_lifecycle_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_lifecycle
+    ADD CONSTRAINT record_lifecycle_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.candidate(route, subject_id, candidate_id);
+
+
+--
+-- Name: record_retention_document record_retention_document_route_subject_id_candidate_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.record_retention_document
+    ADD CONSTRAINT record_retention_document_route_subject_id_candidate_id_fkey FOREIGN KEY (route, subject_id, candidate_id) REFERENCES semantic.record_lifecycle(route, subject_id, candidate_id);
+
+
+--
 -- Name: redirect redirect_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -5419,723 +7153,3 @@ ALTER TABLE ONLY semantic.statement_disclosure
 --
 
 
-
--- Derived preparation frontiers only. Source and immutable consumer registration remain owner data.
-CREATE TABLE semantic.facet_population_frontier (
-  partition_no integer NOT NULL REFERENCES core.partition (partition_no),
-  frontier uuid NOT NULL,
-  predecessor uuid,
-  observation text NOT NULL,
-  binding text NOT NULL,
-  capture text NOT NULL,
-  state jsonb NOT NULL,
-  subjects jsonb NOT NULL CHECK (jsonb_typeof(subjects) = 'array' AND jsonb_array_length(subjects) <= 256),
-  complete boolean NOT NULL,
-  expires bigint NOT NULL,
-  PRIMARY KEY (partition_no, frontier),
-  FOREIGN KEY (partition_no, predecessor) REFERENCES semantic.facet_population_frontier (partition_no, frontier)
-);
-CREATE UNIQUE INDEX facet_population_successor ON semantic.facet_population_frontier (partition_no, predecessor)
-WHERE predecessor IS NOT NULL;
-CREATE INDEX facet_population_expiry ON semantic.facet_population_frontier (partition_no, expires, frontier);
--- Native ordinary contribution lifecycle. A tombstone is independent of editorial selection/moderation.
-CREATE TABLE semantic.record_lifecycle (
- route integer NOT NULL, subject_id uuid NOT NULL, candidate_id uuid NOT NULL,
- revision integer NOT NULL CHECK(revision>0),
- state text NOT NULL CHECK(state IN ('active','deleted','purging','purged')),
- version bigint NOT NULL DEFAULT 1 CHECK(version>0),
- deletion_generation uuid NOT NULL, deletion_transaction_id uuid NOT NULL,
- deleted_at timestamptz NOT NULL, purge_after timestamptz NOT NULL,
- held boolean NOT NULL DEFAULT false,
- PRIMARY KEY(route,subject_id,candidate_id),
- FOREIGN KEY(route,subject_id,candidate_id) REFERENCES semantic.candidate(route,subject_id,candidate_id),
- CHECK(route=((get_byte(uuid_send(subject_id),10)*256)+get_byte(uuid_send(subject_id),11))),
- CHECK(route=((get_byte(uuid_send(candidate_id),10)*256)+get_byte(uuid_send(candidate_id),11))),
- CHECK(purge_after=deleted_at+interval '720 hours')
-);
-CREATE TABLE semantic.record_retention_commit (
- route integer NOT NULL, subject_id uuid NOT NULL, candidate_id uuid NOT NULL, deletion_generation uuid NOT NULL,
- transaction_id uuid NOT NULL, epoch integer NOT NULL, position bigint NOT NULL,
- deleted_at timestamptz NOT NULL, purge_after timestamptz NOT NULL,
- PRIMARY KEY(route,subject_id,candidate_id,deletion_generation)
-);
-CREATE TABLE semantic.record_retention_document (
- route integer NOT NULL, subject_id uuid NOT NULL, candidate_id uuid NOT NULL,
- deletion_generation uuid NOT NULL, document_id uuid NOT NULL,
- minimized boolean NOT NULL DEFAULT false,
- PRIMARY KEY(route,subject_id,candidate_id,deletion_generation,document_id),
- FOREIGN KEY(route,subject_id,candidate_id) REFERENCES semantic.record_lifecycle(route,subject_id,candidate_id)
-);
--- A bounded rotating work index, never lifecycle/permission or shared-copy completion authority.
-CREATE TABLE semantic.record_retention_key (
- partition_no integer NOT NULL CHECK(partition_no BETWEEN 0 AND 4095),
- key bigint GENERATED ALWAYS AS IDENTITY,
- route integer NOT NULL, kind text NOT NULL CHECK(kind IN ('candidate','context','zone')),
- owner_id uuid NOT NULL, record_id uuid NOT NULL,
- generation uuid NOT NULL DEFAULT gen_random_uuid(), deleted_at timestamptz NOT NULL,
- phase text NOT NULL DEFAULT 'local' CHECK(phase IN ('local','shared','complete')),
- fragment_store integer NOT NULL DEFAULT 0 CHECK(fragment_store BETWEEN 0 AND 9),
- fragment_key bigint NOT NULL DEFAULT 0 CHECK(fragment_key>=0),
- PRIMARY KEY(partition_no,key), UNIQUE(route,kind,owner_id,record_id), CHECK(route/16=partition_no)
-);
-CREATE INDEX record_retention_pending ON semantic.record_retention_key(partition_no,key) WHERE phase<>'complete';
-CREATE TABLE semantic.record_retention_home (
- partition_no integer PRIMARY KEY CHECK(partition_no BETWEEN 0 AND 4095), after_key bigint NOT NULL DEFAULT 0
-);
-CREATE TABLE semantic.record_retention_schedule (
- partition_no integer PRIMARY KEY CHECK(partition_no=0), after_home integer NOT NULL DEFAULT -1
-);
-
-CREATE TABLE semantic.record_retention_page (
- partition_no integer NOT NULL, key text NOT NULL CHECK(octet_length(key) BETWEEN 1 AND 255),
- input_limit integer NOT NULL CHECK(input_limit BETWEEN 1 AND 100), result jsonb NOT NULL,
- PRIMARY KEY(partition_no,key)
-);
-CREATE FUNCTION semantic.capture_record_retention() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE kind text; owner_id uuid; record_id uuid; at timestamptz; deleted boolean; restarted boolean;
-BEGIN
- IF TG_TABLE_NAME='record_lifecycle' THEN
-  kind:='candidate';owner_id:=NEW.subject_id;record_id:=NEW.candidate_id;
-  at:=NEW.deleted_at;deleted:=NEW.state IN ('deleted','purging');
- ELSIF TG_TABLE_NAME='context' THEN
-  kind:='context';owner_id:=NEW.context_id;record_id:=NEW.context_id;
-  at:=NEW.deleted_at;deleted:=NEW.state='deleted';
- ELSE
-  kind:='zone';owner_id:=NEW.zone_id;record_id:=NEW.zone_id;
-  at:=NEW.deleted_at;deleted:=NEW.state='deleted';
- END IF;
- restarted:=TG_OP='INSERT';
- IF TG_OP='UPDATE' THEN restarted:=NEW.state='deleted' AND OLD.state='active'; END IF;
- IF deleted THEN
-  INSERT INTO semantic.record_retention_home(partition_no) VALUES(NEW.route/16) ON CONFLICT DO NOTHING;
-  INSERT INTO semantic.record_retention_key(partition_no,route,kind,owner_id,record_id,deleted_at)
-   VALUES(NEW.route/16,NEW.route,kind,owner_id,record_id,at)
-   ON CONFLICT(route,kind,owner_id,record_id) DO UPDATE SET
-    generation=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN gen_random_uuid() ELSE record_retention_key.generation END,
-    phase=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN 'local' ELSE record_retention_key.phase END,
-    fragment_store=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN 0 ELSE record_retention_key.fragment_store END,
-    fragment_key=CASE WHEN restarted OR record_retention_key.deleted_at<>EXCLUDED.deleted_at THEN 0 ELSE record_retention_key.fragment_key END,
-    deleted_at=EXCLUDED.deleted_at;
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER record_lifecycle_retention AFTER INSERT OR UPDATE ON semantic.record_lifecycle
- FOR EACH ROW EXECUTE FUNCTION semantic.capture_record_retention();
-CREATE TRIGGER context_record_retention AFTER INSERT OR UPDATE OF state,deleted_at ON semantic.context
- FOR EACH ROW EXECUTE FUNCTION semantic.capture_record_retention();
--- Prefixes bound fragments independently of unrelated history, before any payload filtering.
-CREATE INDEX record_retention_fact ON semantic.fact(route,subject_id,statement_id,erasure_key);
-CREATE INDEX record_retention_moderation ON semantic.moderation(route,subject_id,candidate_id,erasure_key);
-CREATE INDEX record_retention_retraction ON semantic.retraction(route,subject_id,candidate_id,erasure_key);
-CREATE INDEX record_retention_source ON semantic.source_candidate(route,subject_id,candidate_id,erasure_key);
-CREATE INDEX record_retention_extension ON semantic.context_extension(route,context_id,erasure_key);
-CREATE INDEX record_retention_activation ON semantic.context_extension_activation(route,context_id,erasure_key);
-CREATE INDEX record_retention_composite ON semantic.release_composite(extension_route,extension_context_id,erasure_key);
-
--- This narrow guard lends exactly one native payload row to the existing owner minimizers. It never
--- authorizes identity/decision changes, Content/Core writes, an account-T or a shared custody ACK.
-CREATE FUNCTION semantic.record_retention_mutation_allowed(p_store text,p_route integer,p_key bigint)
- RETURNS boolean LANGUAGE plpgsql STABLE AS $$
-DECLARE work semantic.record_retention_key; valid boolean;
-BEGIN
- IF current_setting('semantic.record_retention_store',true) IS DISTINCT FROM p_store OR
-    nullif(current_setting('semantic.record_retention_fragment',true),'')::bigint IS DISTINCT FROM p_key THEN RETURN false; END IF;
- SELECT * INTO work FROM semantic.record_retention_key WHERE partition_no=p_route/16
-  AND key=nullif(current_setting('semantic.record_retention_key',true),'')::bigint AND phase='local' AND route=p_route;
- IF NOT FOUND THEN RETURN false; END IF;
- IF work.kind='candidate' THEN
-  SELECT l.state IN ('deleted','purging') AND NOT l.held AND l.deleted_at=work.deleted_at
-   AND l.purge_after<=nullif(current_setting('semantic.record_retention_at',true),'')::timestamptz
-   AND NOT EXISTS(SELECT 1 FROM semantic.hidden_candidate h WHERE h.route=l.route AND h.subject_id=l.subject_id
-    AND h.candidate_id=l.candidate_id AND h.visibility='taken_down') INTO valid
-   FROM semantic.record_lifecycle l WHERE l.route=p_route AND l.subject_id=work.owner_id AND l.candidate_id=work.record_id;
- ELSE
-  SELECT c.state='deleted' AND NOT c.held AND c.deleted_at=work.deleted_at
-   AND c.purge_after<=nullif(current_setting('semantic.record_retention_at',true),'')::timestamptz INTO valid
-   FROM semantic.context c WHERE c.route=p_route AND c.context_id=work.record_id AND c.kind='community';
- END IF;
- IF NOT coalesce(valid,false) THEN RETURN false; END IF;
- CASE p_store
- WHEN 'candidate' THEN RETURN EXISTS(SELECT 1 FROM semantic.candidate WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
- WHEN 'revision' THEN RETURN EXISTS(SELECT 1 FROM semantic.revision r JOIN semantic.record_lifecycle l
-  ON (l.route,l.subject_id,l.revision)=(r.route,r.subject_id,r.revision) WHERE r.route=p_route AND r.subject_id=work.owner_id AND l.candidate_id=work.record_id AND r.erasure_key=p_key);
- WHEN 'fact' THEN RETURN EXISTS(SELECT 1 FROM semantic.fact WHERE route=p_route AND subject_id=work.owner_id AND statement_id=work.record_id AND erasure_key=p_key);
- WHEN 'retraction' THEN RETURN EXISTS(SELECT 1 FROM semantic.retraction WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
- WHEN 'moderation' THEN RETURN EXISTS(SELECT 1 FROM semantic.moderation WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
- WHEN 'source_candidate' THEN RETURN EXISTS(SELECT 1 FROM semantic.source_candidate WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
- WHEN 'statement_disclosure' THEN RETURN EXISTS(SELECT 1 FROM semantic.statement_disclosure WHERE route=p_route AND subject_id=work.owner_id AND candidate_id=work.record_id AND erasure_key=p_key);
- WHEN 'context' THEN RETURN work.kind='context' AND EXISTS(SELECT 1 FROM semantic.context WHERE route=p_route AND context_id=work.record_id AND erasure_key=p_key);
- WHEN 'context_extension' THEN RETURN work.kind='context' AND EXISTS(SELECT 1 FROM semantic.context_extension WHERE route=p_route AND context_id=work.record_id AND erasure_key=p_key);
- ELSE RETURN false;
- END CASE;
-END; $$;
--- Extend the existing exact immutable guards; the account authority and field allowlists stay intact.
-
-
--- The revision guard is extended below, preserving every existing account-erasure allowance.
-
-
-
-CREATE FUNCTION semantic.validate_record_deletion_commit() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='UPDATE' AND NEW.deletion_generation=OLD.deletion_generation THEN RETURN NEW; END IF;
- INSERT INTO semantic.record_retention_commit(route,subject_id,candidate_id,deletion_generation,
-   transaction_id,epoch,position,deleted_at,purge_after)
- SELECT NEW.route,NEW.subject_id,NEW.candidate_id,NEW.deletion_generation,b.transaction_id,b.epoch,b.position,
-   NEW.deleted_at,NEW.purge_after FROM editorial.write_basis b WHERE b.partition_no=NEW.route/16
-   AND b.transaction_id=NEW.deletion_transaction_id AND b.xmin=pg_current_xact_id()::xid;
- IF NOT FOUND THEN RAISE EXCEPTION 'record_deletion_requires_same_native_commit'; END IF;
- RETURN NEW;
-END; $$;
-CREATE CONSTRAINT TRIGGER record_lifecycle_native_commit AFTER INSERT OR UPDATE ON semantic.record_lifecycle
- DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.validate_record_deletion_commit();
-CREATE FUNCTION semantic.protect_record_retention_commit() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN RAISE EXCEPTION 'record_retention_commit_is_immutable'; END; $$;
-CREATE TRIGGER record_retention_commit_immutable BEFORE UPDATE OR DELETE ON semantic.record_retention_commit
- FOR EACH ROW EXECUTE FUNCTION semantic.protect_record_retention_commit();
-CREATE INDEX record_retention_document_pending ON semantic.record_retention_document
- (route,subject_id,candidate_id,deletion_generation,document_id) WHERE NOT minimized;
--- Existing deleted keys are enrolled once during migration; each later step remains key/fragment bounded.
-
-CREATE INDEX record_retention_disclosure ON semantic.statement_disclosure(route,subject_id,candidate_id,erasure_key);
-
-
--- Subject page publication objects from the worker schema.
--- Name: subject_page_bootstrap_population(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.subject_page_bootstrap_population() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF NEW.visible>0 AND (TG_OP='INSERT' OR OLD.visible=0) THEN
-    UPDATE semantic.subject_page_bootstrap
-    SET version=version+1, source_key=NULL, state='pending', available_at=now(), worker=NULL, lease_until=NULL
-    WHERE partition_no=NEW.partition_no AND state='done';
-  END IF;
-  RETURN NEW;
-END $$;
-
-
---
-
--- Name: subject_page_valid_witnesses(jsonb); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.subject_page_valid_witnesses(value jsonb) RETURNS boolean
-    LANGUAGE sql IMMUTABLE STRICT
-    AS $$
-  SELECT jsonb_typeof(value) = 'array' AND jsonb_array_length(value) <= 8
-    AND (SELECT count(*) = count(DISTINCT (entry->>'kind', entry->>'key'))
-         AND coalesce(bool_and(coalesce(entry->>'kind' IN ('fact','cover','relation')
-             AND jsonb_typeof(entry->'key') = 'string', false)), true)
-         FROM jsonb_array_elements(value) entry)
-$$;
-
-
---
-
--- Name: subject_page_work_home_changed(); Type: FUNCTION; Schema: semantic; Owner: -
---
-
-CREATE FUNCTION semantic.subject_page_work_home_changed() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE home integer; delta integer;
-BEGIN
-  IF TG_TABLE_NAME='subject_page_bootstrap' THEN home := NEW.partition_no; ELSE home := NEW.route >> 4; END IF;
-  delta := CASE WHEN NEW.state<>'done' THEN 1 ELSE 0 END;
-  IF TG_OP='UPDATE' THEN delta := delta-CASE WHEN OLD.state<>'done' THEN 1 ELSE 0 END; END IF;
-  IF delta<>0 THEN UPDATE semantic.subject_page_work_home SET pending=pending+delta WHERE partition_no=home; END IF;
-  RETURN NEW;
-END $$;
-
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
---
-
--- Name: subject_page_bootstrap; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_bootstrap (
-    partition_no integer NOT NULL,
-    version bigint DEFAULT 1 NOT NULL,
-    source_key jsonb,
-    state text DEFAULT 'pending'::text NOT NULL,
-    available_at timestamp with time zone DEFAULT now() NOT NULL,
-    worker text,
-    lease_until timestamp with time zone,
-    CONSTRAINT subject_page_bootstrap_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT subject_page_bootstrap_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
-);
-
-
---
-
--- Name: subject_page_change; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_change (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    "position" bigint NOT NULL,
-    change_id text NOT NULL,
-    component_kind text,
-    component_key text,
-    before_state jsonb NOT NULL,
-    after_state jsonb NOT NULL,
-    effective_at timestamp with time zone,
-    evidence text NOT NULL,
-    CONSTRAINT subject_page_change_check CHECK (((component_kind IS NULL) = (component_key IS NULL))),
-    CONSTRAINT subject_page_change_check1 CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
-    CONSTRAINT subject_page_change_component_kind_check CHECK ((component_kind = ANY (ARRAY['label'::text, 'fact'::text, 'cover'::text, 'relation'::text]))),
-    CONSTRAINT subject_page_change_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
-    CONSTRAINT subject_page_change_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
-
--- Name: subject_page_component; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_component (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    component_kind text NOT NULL,
-    component_key text NOT NULL,
-    generation bigint NOT NULL,
-    shown boolean NOT NULL,
-    digest text,
-    effective_at timestamp with time zone,
-    evidence text NOT NULL,
-    last_change_position bigint NOT NULL,
-    source_version bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT subject_page_component_check CHECK ((shown = (digest IS NOT NULL))),
-    CONSTRAINT subject_page_component_check1 CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
-    CONSTRAINT subject_page_component_component_kind_check CHECK ((component_kind = ANY (ARRAY['label'::text, 'fact'::text, 'cover'::text, 'relation'::text]))),
-    CONSTRAINT subject_page_component_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
-    CONSTRAINT subject_page_component_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
-
--- Name: subject_page_continuation; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_continuation (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    kind text NOT NULL,
-    change_id text NOT NULL,
-    effective_at timestamp with time zone,
-    evidence text NOT NULL,
-    CONSTRAINT subject_page_continuation_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
-    CONSTRAINT subject_page_continuation_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
-    CONSTRAINT subject_page_continuation_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
-
--- Name: subject_page_delivery; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_delivery (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    owner_kind text NOT NULL,
-    owner_route integer NOT NULL,
-    owner_key text NOT NULL,
-    change_id text NOT NULL,
-    event_id text NOT NULL,
-    effective_at timestamp with time zone,
-    evidence text NOT NULL,
-    CONSTRAINT subject_page_delivery_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
-    CONSTRAINT subject_page_delivery_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
-    CONSTRAINT subject_page_delivery_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
-    CONSTRAINT subject_page_delivery_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
-    CONSTRAINT subject_page_delivery_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
-
--- Name: subject_page_dependency; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_dependency (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    owner_kind text NOT NULL,
-    owner_route integer NOT NULL,
-    owner_key text NOT NULL,
-    component_key text NOT NULL,
-    source_version bigint NOT NULL,
-    present boolean NOT NULL,
-    event_id text NOT NULL,
-    CONSTRAINT subject_page_dependency_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
-    CONSTRAINT subject_page_dependency_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
-    CONSTRAINT subject_page_dependency_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
-
--- Name: subject_page_fanout; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_fanout (
-    route integer NOT NULL,
-    owner_kind text NOT NULL,
-    owner_key text NOT NULL,
-    change_id text NOT NULL,
-    effective_at timestamp with time zone,
-    evidence text NOT NULL,
-    version bigint DEFAULT 1 NOT NULL,
-    source_key text[] DEFAULT '{}'::text[] NOT NULL,
-    state text DEFAULT 'pending'::text NOT NULL,
-    available_at timestamp with time zone DEFAULT now() NOT NULL,
-    worker text,
-    lease_until timestamp with time zone,
-    CONSTRAINT subject_page_fanout_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
-    CONSTRAINT subject_page_fanout_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
-    CONSTRAINT subject_page_fanout_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
-    CONSTRAINT subject_page_fanout_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_page_fanout_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
-);
-
-
---
-
--- Name: subject_page_owner; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_owner (
-    route integer NOT NULL,
-    owner_kind text NOT NULL,
-    owner_key text NOT NULL,
-    change_id text NOT NULL,
-    effective_at timestamp with time zone,
-    evidence text NOT NULL,
-    CONSTRAINT subject_page_owner_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
-    CONSTRAINT subject_page_owner_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
-    CONSTRAINT subject_page_owner_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
-    CONSTRAINT subject_page_owner_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
-
--- Name: subject_page_owner_dependency; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_owner_dependency (
-    route integer NOT NULL,
-    owner_kind text NOT NULL,
-    owner_key text NOT NULL,
-    source_route integer NOT NULL,
-    source_subject_id uuid NOT NULL,
-    component_key text NOT NULL,
-    source_version bigint NOT NULL,
-    present boolean NOT NULL,
-    event_id text NOT NULL,
-    effective_at timestamp with time zone,
-    evidence text NOT NULL,
-    CONSTRAINT subject_page_owner_dependency_check CHECK (((evidence = 'known'::text) = (effective_at IS NOT NULL))),
-    CONSTRAINT subject_page_owner_dependency_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
-    CONSTRAINT subject_page_owner_dependency_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['subject'::text, 'source-fence'::text]))),
-    CONSTRAINT subject_page_owner_dependency_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_page_owner_dependency_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535)))
-);
-
-
---
-
--- Name: subject_page_publication; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_publication (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    generation bigint DEFAULT 1 NOT NULL,
-    readiness text DEFAULT 'cold'::text NOT NULL,
-    completed_position bigint DEFAULT 0 NOT NULL,
-    change_position bigint DEFAULT 0 NOT NULL,
-    public_effective_at timestamp with time zone,
-    evidence text DEFAULT 'missing'::text NOT NULL,
-    witnesses jsonb DEFAULT '[]'::jsonb NOT NULL,
-    CONSTRAINT subject_page_publication_check CHECK (((evidence = 'known'::text) = (public_effective_at IS NOT NULL))),
-    CONSTRAINT subject_page_publication_evidence_check CHECK ((evidence = ANY (ARRAY['known'::text, 'missing'::text]))),
-    CONSTRAINT subject_page_publication_generation_check CHECK ((generation > 0)),
-    CONSTRAINT subject_page_publication_readiness_check CHECK ((readiness = ANY (ARRAY['cold'::text, 'repairing'::text, 'ready'::text]))),
-    CONSTRAINT subject_page_publication_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_page_publication_witnesses_check CHECK (semantic.subject_page_valid_witnesses(witnesses))
-);
-
-
---
-
--- Name: subject_page_repair; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_repair (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    version bigint DEFAULT 1 NOT NULL,
-    generation bigint NOT NULL,
-    phase text DEFAULT 'descriptive'::text NOT NULL,
-    source_key text[] DEFAULT '{}'::text[] NOT NULL,
-    high_water bigint DEFAULT 0 NOT NULL,
-    replay_position bigint DEFAULT 0 NOT NULL,
-    state text DEFAULT 'pending'::text NOT NULL,
-    available_at timestamp with time zone DEFAULT now() NOT NULL,
-    worker text,
-    lease_until timestamp with time zone,
-    dirty boolean DEFAULT false NOT NULL,
-    CONSTRAINT subject_page_repair_phase_check CHECK ((phase = ANY (ARRAY['bootstrap'::text, 'descriptive'::text, 'relations'::text, 'evidence'::text, 'replay'::text, 'done'::text]))),
-    CONSTRAINT subject_page_repair_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT subject_page_repair_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'leased'::text, 'done'::text])))
-);
-
-
---
-
--- Name: subject_page_source; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_source (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    candidate_id uuid NOT NULL,
-    owner_route integer NOT NULL,
-    owner_key text NOT NULL,
-    CONSTRAINT subject_page_source_owner_route_check CHECK (((owner_route >= 0) AND (owner_route <= 65535))),
-    CONSTRAINT subject_page_source_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
-
--- Name: subject_page_work_home; Type: TABLE; Schema: semantic; Owner: -
---
-
-CREATE TABLE semantic.subject_page_work_home (
-    partition_no integer NOT NULL,
-    pending integer NOT NULL,
-    CONSTRAINT subject_page_work_home_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT subject_page_work_home_pending_check CHECK ((pending >= 0))
-);
-
-
---
-
--- Name: subject_page_bootstrap subject_page_bootstrap_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_bootstrap
-    ADD CONSTRAINT subject_page_bootstrap_pkey PRIMARY KEY (partition_no);
-
-
---
-
--- Name: subject_page_change subject_page_change_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_change
-    ADD CONSTRAINT subject_page_change_pkey PRIMARY KEY (route, subject_id, "position");
-
-
---
-
--- Name: subject_page_change subject_page_change_route_subject_id_change_id_key; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_change
-    ADD CONSTRAINT subject_page_change_route_subject_id_change_id_key UNIQUE (route, subject_id, change_id);
-
-
---
-
--- Name: subject_page_component subject_page_component_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_component
-    ADD CONSTRAINT subject_page_component_pkey PRIMARY KEY (route, subject_id, component_kind, component_key);
-
-
---
-
--- Name: subject_page_continuation subject_page_continuation_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_continuation
-    ADD CONSTRAINT subject_page_continuation_pkey PRIMARY KEY (route, subject_id, kind);
-
-
---
-
--- Name: subject_page_delivery subject_page_delivery_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_delivery
-    ADD CONSTRAINT subject_page_delivery_pkey PRIMARY KEY (route, subject_id, owner_kind, owner_route, owner_key, change_id, event_id);
-
-
---
-
--- Name: subject_page_dependency subject_page_dependency_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_dependency
-    ADD CONSTRAINT subject_page_dependency_pkey PRIMARY KEY (route, subject_id, owner_kind, owner_route, owner_key, component_key);
-
-
---
-
--- Name: subject_page_fanout subject_page_fanout_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_fanout
-    ADD CONSTRAINT subject_page_fanout_pkey PRIMARY KEY (route, owner_kind, owner_key, change_id);
-
-
---
-
--- Name: subject_page_owner_dependency subject_page_owner_dependency_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_owner_dependency
-    ADD CONSTRAINT subject_page_owner_dependency_pkey PRIMARY KEY (route, owner_kind, owner_key, source_route, source_subject_id, component_key);
-
-
---
-
--- Name: subject_page_owner subject_page_owner_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_owner
-    ADD CONSTRAINT subject_page_owner_pkey PRIMARY KEY (route, owner_kind, owner_key);
-
-
---
-
--- Name: subject_page_publication subject_page_publication_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_publication
-    ADD CONSTRAINT subject_page_publication_pkey PRIMARY KEY (route, subject_id);
-
-
---
-
--- Name: subject_page_repair subject_page_repair_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_repair
-    ADD CONSTRAINT subject_page_repair_pkey PRIMARY KEY (route, subject_id);
-
-
---
-
--- Name: subject_page_source subject_page_source_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_source
-    ADD CONSTRAINT subject_page_source_pkey PRIMARY KEY (route, subject_id, candidate_id);
-
-
---
-
--- Name: subject_page_work_home subject_page_work_home_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
---
-
-ALTER TABLE ONLY semantic.subject_page_work_home
-    ADD CONSTRAINT subject_page_work_home_pkey PRIMARY KEY (partition_no);
-
-
---
-
--- Name: subject_page_component_witness; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX subject_page_component_witness ON semantic.subject_page_component USING btree (route, subject_id, generation, component_kind, component_key) WHERE (shown AND (component_kind <> 'label'::text));
-
-
---
-
--- Name: subject_page_dependency_component; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX subject_page_dependency_component ON semantic.subject_page_dependency USING btree (route, subject_id, component_key, owner_kind, owner_route, owner_key) WHERE present;
-
-
---
-
--- Name: subject_page_fanout_runnable; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX subject_page_fanout_runnable ON semantic.subject_page_fanout USING btree (route, state, available_at, owner_kind, owner_key, change_id);
-
-
---
-
--- Name: subject_page_owner_dependency_present; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX subject_page_owner_dependency_present ON semantic.subject_page_owner_dependency USING btree (route, owner_kind, owner_key, source_route, source_subject_id, component_key) WHERE present;
-
-
---
-
--- Name: subject_page_repair_runnable; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX subject_page_repair_runnable ON semantic.subject_page_repair USING btree (route, state, available_at, subject_id);
-
-
---
-
--- Name: partition_subjects subject_page_bootstrap_population; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER subject_page_bootstrap_population AFTER INSERT OR UPDATE OF visible ON semantic.partition_subjects FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_bootstrap_population();
-
-
---
-
--- Name: subject_page_bootstrap subject_page_bootstrap_work_home; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER subject_page_bootstrap_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_bootstrap FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
-
-
---
-
--- Name: subject_page_change subject_page_change_immutable; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER subject_page_change_immutable BEFORE DELETE OR UPDATE ON semantic.subject_page_change FOR EACH ROW EXECUTE FUNCTION semantic.prevent_revision_mutation();
-
-
---
-
--- Name: subject_page_fanout subject_page_fanout_work_home; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER subject_page_fanout_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_fanout FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
-
-
---
-
--- Name: subject_page_repair subject_page_repair_work_home; Type: TRIGGER; Schema: semantic; Owner: -
---
-
-CREATE TRIGGER subject_page_repair_work_home AFTER INSERT OR UPDATE OF state ON semantic.subject_page_repair FOR EACH ROW EXECUTE FUNCTION semantic.subject_page_work_home_changed();
-
-
---

@@ -267,6 +267,45 @@ verification receipt text. An erased receipt is an observation, never an admissi
 - Growth check: `growth-account-erasure-local.test.ts` measures the same account neighbourhood under unrelated
   64/512/4096 population, then separately increases native owned roles and payload bytes.
 
+### Sealed Subject Source inventory and terminal custody
+
+`account-erasure-source-contract.ts` owns the closed Search inventory types. The callable producer is
+`account-erasure-source.ts:createSubjectErasureSource`, with the exact public-filter factory configuration and
+the History owner's `HistoryBarrier`. Its raw frontier precedes visibility and eligibility filtering. A record
+names its actual historical native role, original, previous and current terminal, selected slot/candidate and
+native tuple dependencies. A hidden original receives `remove` even when its terminal remains visible.
+Neither an Access scalar-role page nor structural identity membership supplies this population.
+
+The existing producer locators enroll historical roles before minimization, including former Context owners,
+derived agents, native dependency copies and receiving records. Each native home seals admission under its
+command gate only after local minimization. Empty homes also commit that seal; one home's EOF cannot certify
+another home. A sealed provenance replay for the same existing record and transaction enrolls nothing. New
+erased-account roles or first applies are refused. Surviving owners can continue their ordinary work; a changed
+native row is rechecked through the existing exact-record owner minimizer before a new Source hold is issued.
+
+Source dispositions bind the real native row version (`xmin`) independently of partition position and identity
+epoch. Removed rows require an actual native removal receipt. Deferred constraints bind minimizer, hold and
+account-home transfer receipts to the executor's real same-transaction epoch/position/write basis. Before
+transfer, the producer resolves the source and role holds in their respective current homes, releasing each
+before visiting another. Receipts identify the durable transferred custody, with no payload, caller-supplied
+boolean, object-identity cache or user-granted permission authority. Receiving skeletons additionally require
+native accepted-effect/released-gate or control-custody evidence. Missing, changed, pending or unknown native
+evidence cannot become an empty or complete page.
+
+Search consumes one retained page through `verifySubjectErasureSourcePage` in its actual account-home command.
+`readSubjectErasureSourceProof({pool,clock?},barrier,context)` independently advances a Source-owned terminal
+chain. Only after every sealed home and historical role has transferred native custody can it produce a proof
+accepted by `verifySubjectErasureSourceProof`. Local discovery completion and Search page consumption cannot
+mint this proof. Neither chain depends on Search's final copy ACK, shared-history coverage or Semantic's final
+participant ACK. History coverage and copied histories remain separate obligations.
+
+Every call shares the shorter of the caller deadline and 5000 ms, at most 100 examined inputs including native
+metadata and lookahead, and the existing 65536-byte native work bound. SQL, failed points, command fences,
+rows, wire bytes and replay work are charged. The retained frontier is one UUID within the existing 8-scalar /
+2048-byte frontier and 4096-byte workflow-reference bounds. Bodies stay at their actual owners. Focused native
+fixture scenarios are in `test/semantic/subject-erasure-source.test.ts`; their privacy, absence and cost evidence
+is to be run after integration, separately from the local Kernel compiler check.
+
 ### Pending custody and launch coverage
 
 After all local homes complete, progress is durable `pending-shared-custody` and further local steps are idle.

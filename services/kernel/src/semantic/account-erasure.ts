@@ -7,6 +7,7 @@ import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure
 import { SEMANTIC_ERASURE_STORES } from './account-erasure-stores.ts';
 import { SEMANTIC_EVENTS } from './events.ts';
 import type { Effect } from '../events/effects.ts';
+import { recordSemanticSourceDisposition, SEMANTIC_RECEIVING_ERASURE_STORES } from './erasure-producer.ts';
 
 export const SEMANTIC_ERASURE_SCHEDULED = 'com.rezics.semantic.erasure.scheduled.v1';
 export const SEMANTIC_LOCATOR_SCHEDULED = 'com.rezics.semantic.erasure.locator-scheduled.v1';
@@ -17,7 +18,12 @@ const platform = {
   clientId: 'internal-semantic-erasure',
   requestedBy: null,
 };
-const allowedStores = new Set<string>([...SEMANTIC_ERASURE_STORES, 'zone', 'write_basis']);
+const allowedStores = new Set<string>([
+  ...SEMANTIC_ERASURE_STORES,
+  ...SEMANTIC_RECEIVING_ERASURE_STORES,
+  'zone',
+  'write_basis',
+]);
 export const SEMANTIC_ERASURE_LIMITS = Object.freeze({
   rawKeys: 100,
   bytes: 65536,
@@ -28,6 +34,8 @@ export type SemanticErasureProgress = {
   state: 'local' | 'pending-shared-custody';
   partition: number;
   applied: boolean;
+  sourceProtocol: number;
+  sourceVersion: number | null;
 };
 export type SemanticErasureStep = {
   changed: boolean;
@@ -125,7 +133,7 @@ export async function readSemanticErasure(pool: Pool, accountId: string): Promis
   const { route } = home(accountId);
   const result = await indexedRead(pool, (client) =>
     client.query(
-      `SELECT at::text,state,partition_no,applied FROM semantic.erasure_progress WHERE route=$1 AND account_id=$2`,
+      `SELECT at::text,state,partition_no,applied,source_protocol,source_version FROM semantic.erasure_progress WHERE route=$1 AND account_id=$2`,
       [route, accountId],
     ),
   );
@@ -136,6 +144,8 @@ export async function readSemanticErasure(pool: Pool, accountId: string): Promis
         state: row.state,
         partition: row.partition_no,
         applied: row.applied,
+        sourceProtocol: row.source_protocol,
+        sourceVersion: row.source_version,
       }
     : null;
 }
@@ -145,7 +155,7 @@ export async function beginSemanticErasure(pool: Pool, accountId: string): Promi
   const { route, partition } = home(accountId);
   await runCommand(pool, { partition, basis: platform }, async (tx) => {
     const obligation = await tx.query(
-      'SELECT at::text FROM access.erasure WHERE route=$1 AND account_id=$2 FOR SHARE',
+      'SELECT at::text,version FROM access.erasure WHERE route=$1 AND account_id=$2 FOR SHARE',
       [route, accountId],
     );
     if (!obligation.rowCount) throw new TypeError('No committed account erasure obligation');
@@ -159,11 +169,10 @@ export async function beginSemanticErasure(pool: Pool, accountId: string): Promi
       ON CONFLICT(route,account_id) DO UPDATE SET at=EXCLUDED.at`,
       [route, accountId, obligation.rows[0].at],
     );
-    await tx.query('INSERT INTO semantic.erasure_progress(route,account_id,at) VALUES($1,$2,$3)', [
-      route,
-      accountId,
-      obligation.rows[0].at,
-    ]);
+    await tx.query(
+      'INSERT INTO semantic.erasure_progress(route,account_id,at,source_protocol,source_version) VALUES($1,$2,$3,1,$4)',
+      [route, accountId, obligation.rows[0].at, obligation.rows[0].version],
+    );
     return { value: null, events: wake(accountId) };
   });
 }
@@ -235,7 +244,7 @@ async function minimizeProjection(tx: CommandTransaction, partition: number, loc
 }
 
 /** One physical record only. No account graph, payload search, cascade or implicit child page. */
-async function minimize(
+async function minimizePayload(
   tx: CommandTransaction,
   partition: number,
   accountId: string,
@@ -381,6 +390,7 @@ async function minimize(
         AND semantic.erasure_mutation_allowed('context',$1,$3)`,
         [context.route, child.erasure_key, key],
       );
+      recordSemanticSourceDisposition(tx, childStore, child.erasure_key, 'removed');
       return { defer: true, rawKeys: 1, bytes };
     }
     await tx.query(
@@ -481,6 +491,97 @@ async function minimize(
   // Their personal source and attribution are separate child locators and are minimized first.
 }
 
+/** A disappeared record is never evidence. Reuse only an actual earlier owner deletion receipt;
+ * otherwise leave the native locator pending. Duplicate historical roles can share that exact receipt.
+ */
+async function minimize(
+  tx: CommandTransaction,
+  partition: number,
+  accountId: string,
+  locator: Locator,
+  retain = false,
+): Promise<{ defer: true; rawKeys: number; bytes: number } | undefined> {
+  const { store, record_key: key } = locator;
+  if (!allowedStores.has(store)) throw new TypeError('Unknown Semantic erasure store');
+  const table =
+    store === 'zone' ? 'zones.zone' : store === 'write_basis' ? 'semantic.erasure_provenance' : `semantic.${store}`;
+  const keyColumn = store === 'write_basis' ? 'record_key' : 'erasure_key';
+  const partitioned =
+    store.startsWith('identity_epoch_') && !['identity_epoch_mapping', 'identity_epoch_home_gate'].includes(store);
+  const nativeHome =
+    partitioned || store === 'write_basis'
+      ? 'partition_no=$1'
+      : `${store === 'release_composite' ? 'extension_route' : 'route'} BETWEEN $1*16 AND $1*16+15`;
+  const exists = async () =>
+    (await tx.query(`SELECT 1 FROM ${table} WHERE ${nativeHome} AND ${keyColumn}=$2`, [partition, key])).rowCount === 1;
+  if (!(await exists())) {
+    const removed = await tx.query(
+      `SELECT 1 FROM semantic.erasure_source_disposition WHERE partition_no=$1 AND store=$2 AND record_key=$3 AND disposition='removed'`,
+      [partition, store, key],
+    );
+    if (!removed.rowCount) return { defer: true, rawKeys: 1, bytes: 0 };
+  }
+  const result = await minimizePayload(tx, partition, accountId, locator, retain);
+  if (!result?.defer)
+    recordSemanticSourceDisposition(tx, store, key, (await exists()) ? 'retained-nonpersonal' : 'removed');
+  return result;
+}
+
+/** Revalidate one sealed historical role after a surviving owner changed its native row.
+ * Reuses the actual local minimizer; it neither enrolls roles nor advances account discovery.
+ */
+export async function refreshSemanticErasureSourceRecord(
+  pool: Pool,
+  accountId: string,
+  partition: number,
+  key: Readonly<{ store: string; recordKey: string; role: string; deliveryPosition: string }>,
+): Promise<void> {
+  const locator = await indexedRead(
+    pool,
+    async (tx) =>
+      (
+        await tx.query<Locator>(
+          `SELECT store,record_key::text,role,source_transaction_id::text,source_position::text,delivery_position::text
+     FROM semantic.erasure_locator WHERE partition_no=$1 AND account_id=$2 AND store=$3 AND record_key=$4 AND role=$5`,
+          [partition, accountId, key.store, key.recordKey, key.role],
+        )
+      ).rows[0],
+  );
+  if (!locator) return;
+  const retain = await retainProjection(pool, partition, locator);
+  await runCommand(pool, { partition, basis: platform }, async (tx) => {
+    const seal = await tx.query(
+      'SELECT 1 FROM semantic.erasure_source_seal WHERE partition_no=$1 AND account_id=$2 FOR SHARE',
+      [partition, accountId],
+    );
+    if (!seal.rowCount) return noEffect(null);
+    await tx.query(
+      "SELECT set_config('semantic.erasure_cleanup','on',true),set_config('semantic.erasure_account',$1,true)",
+      [accountId],
+    );
+    await tx.query("UPDATE semantic.erasure_home SET state='local' WHERE partition_no=$1 AND account_id=$2", [
+      partition,
+      accountId,
+    ]);
+    await tx.query(
+      "UPDATE semantic.erasure_locator SET state='pending' WHERE partition_no=$1 AND account_id=$2 AND store=$3 AND record_key=$4 AND role=$5",
+      [partition, accountId, locator.store, locator.record_key, locator.role],
+    );
+    const child = await minimize(tx, partition, accountId, locator, retain);
+    if (!child?.defer) {
+      await tx.query(
+        "UPDATE semantic.erasure_locator SET state='minimized' WHERE partition_no=$1 AND account_id=$2 AND store=$3 AND record_key=$4 AND role=$5",
+        [partition, accountId, locator.store, locator.record_key, locator.role],
+      );
+      await tx.query("UPDATE semantic.erasure_home SET state='complete' WHERE partition_no=$1 AND account_id=$2", [
+        partition,
+        accountId,
+      ]);
+    }
+    return { value: null, events: event(accountId) };
+  });
+}
+
 /** One owning home, at most two locator keys and one inherited child, including rejected/absent native records.
  * The owning mutation and local checkpoint commit together. No connection crosses a home or service call.
  */
@@ -539,6 +640,12 @@ export async function stepSemanticErasure(
     );
     const locator = page.rows[0];
     if (!locator) {
+      if (progress.sourceProtocol === 1)
+        await tx.query(
+          `INSERT INTO semantic.erasure_source_seal(partition_no,account_id,version,at)
+           VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+          [partition, accountId, progress.sourceVersion, progress.at],
+        );
       await tx.query("UPDATE semantic.erasure_home SET state='complete' WHERE partition_no=$1 AND account_id=$2", [
         partition,
         accountId,
@@ -650,18 +757,31 @@ async function advanceEmptyHome(
   continuation: 'event' | 'workflow',
 ): Promise<SemanticErasureStep> {
   const partition = progress.partition;
-  if (partition === 4095) {
-    // The terminal home has a native committed receipt before the separate account-home checkpoint.
-    await runCommand(pool, { partition, basis: platform }, async (tx) => {
+  if (progress.sourceProtocol === 1 || partition === 4095) {
+    // Every examined empty home closes actual late-role admission before the account cursor moves.
+    const sealed = await runCommand(pool, { partition, basis: platform }, async (tx) => {
       await tx.query('SET LOCAL enable_seqscan=off');
+      const pending = await tx.query(
+        `SELECT 1 FROM semantic.erasure_locator WHERE partition_no=$1 AND account_id=$2 AND state='pending'
+         ORDER BY priority,store,record_key,role LIMIT 1 FOR UPDATE`,
+        [partition, accountId],
+      );
+      if (pending.rowCount) return noEffect(false);
+      if (progress.sourceProtocol === 1)
+        await tx.query(
+          `INSERT INTO semantic.erasure_source_seal(partition_no,account_id,version,at)
+           VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+          [partition, accountId, progress.sourceVersion, progress.at],
+        );
       await tx.query(
         `INSERT INTO semantic.erasure_home(partition_no,account_id,at,state,applied)
           VALUES($1,$2,$3,'complete',$4) ON CONFLICT(partition_no,account_id)
           DO UPDATE SET state='complete',applied=semantic.erasure_home.applied OR EXCLUDED.applied`,
         [partition, accountId, progress.at, applied],
       );
-      return { value: null, events: event(accountId) };
+      return { value: true, events: event(accountId) };
     });
+    if (!sealed.value) return { changed: false, localComplete: false, rawKeys: 2, bytes: 0 };
   }
   await advanceLocalProgress(pool, accountId, partition, partition + 1, applied, continuation);
   return { changed: true, localComplete: partition === 4095, rawKeys: 1, bytes: 0 };
