@@ -1,4 +1,34 @@
 Run the site locally with `bun run dev` from `apps/web`. Run `bun run check` to generate, type-check, test, and build.
+
+## Creator edition return page
+
+`/editions` uses the ordinary AppShell, shared buttons and full available main width. It reads one bounded own-account
+page from the declared `GET /v1/accounts/:accountId/editions`, with `limit=20` and an unchanged optional `cursor`.
+Only the current native session chooses the account and credential. Responses and native requests are private/no-store;
+the page never uses the development kernel fixture transport. Missing native delivery is typed unavailable, never an
+empty success. The consumer-local adapter in `content-editions/creator-editions.ts` consumes the producer's closed
+`ContentEditionView` metadata from `services/kernel/src/content/edition-model.ts`; it adds no producer implementation.
+The producer remains responsible for current native listing admission and disclosure. The account listing route is
+declared for this consumer but is not implemented in this checkout yet.
+
+Next, refresh and retry each request one native page. Sparse and empty pages with a continuation retain Next; there is
+no refill, count, per-row read, body fetch or title enrichment. The rows display the native edition reference, state,
+edition version, fixed revision, licence and plain subject identifier. Drafts link to the declared resume destination
+`/editions/new?editionId=…`. Published editions link separately to buyer reading `/editions/{id}` and the declared
+Commerce destination `/creator/offers/new?editionId=…`. The resume consumer and Commerce form own those destination
+implementations; this page sends only the real edition ID. Withdrawn editions expose neither action. Listing metadata
+never grants reading or sale permission; native delivery and sale validate current authority independently on use.
+
+Interface review uses `Pages/Content/CreatorEditions` and `Patterns/Content/CreatorEditions`: `Editions`, `Sparse`,
+`Denied`, `Unavailable`, `Empty`, `Loading` and `SignIn`. The Pages stories mount the actual route component inside
+AppShell; Patterns render the same view. Constructed closed DTOs are explicitly interface fixtures, not native proof.
+Web owns ordinary 390/1280 light/dark review using these stories; no separate width, locale or theme story variants
+are exported. The focused contract is `tests/creator-editions.test.ts`. Minimal delivery runs only the Web workspace
+typecheck; acceptance, native execution and screenshots remain integration evidence.
+
+Source read for this surface: the native edition model, routes, reads and fixed-edition README contract; the existing
+edition publication route/controls and shell-integrated stories; and the existing creator-offer list transport/view.
+No external reference-project source applies to this metadata list.
 Local Worker values are opt-in: `bun run check --prepare-only` creates ignored `.dev.vars` from `.dev.vars.example` only when absent. Normal checks and isolated test startup leave it untouched.
 Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load.
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
