@@ -196,7 +196,6 @@ export function CollectionPrivacyView({
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);
   useEffect(() => {
     void pager.load();
-    return pager.dispose;
   }, [pager]);
   return (
     <section id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">

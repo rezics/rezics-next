@@ -1,5 +1,6 @@
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { readLibraryResult } from '../library/reads';
+import { MediaProblem } from '../media/kernel';
 
 export type CollectionPrivacyFailure = 'closed' | 'forbidden' | 'unavailable';
 export type CollectionPrivacyRead<T> = { ok: true; value: T } | { ok: false; reason: CollectionPrivacyFailure };
@@ -16,6 +17,8 @@ export function readCollectionPrivacyResult<T>(result: { data?: T | null; error?
 export function collectionPrivacyFailure(error: unknown): CollectionPrivacyFailure {
   if (isPlatformClosedError(error) || (error instanceof Error && error.message === 'Collection privacy closed'))
     return 'closed';
+  if (error instanceof MediaProblem && (error.problem.status === 401 || error.problem.status === 403))
+    return 'forbidden';
   return error instanceof Error && error.message === 'Collection privacy forbidden' ? 'forbidden' : 'unavailable';
 }
 

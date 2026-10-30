@@ -79,8 +79,9 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       if (generation !== this.generation) return;
       if (!answer.ok) {
         this.update(
-          answer.reason === 'unavailable'
-            ? { phase: 'uncertain', failure: 'unavailable' }
+          answer.reason === 'unavailable' || (recovering && answer.reason !== 'conflict')
+            ? // A refused replay cannot establish whether the earlier transport-ambiguous command committed.
+              { phase: 'uncertain', failure: answer.reason }
             : {
                 attempt: null,
                 phase: answer.reason === 'conflict' ? 'conflict' : 'refused',

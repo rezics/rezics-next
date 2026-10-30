@@ -171,3 +171,21 @@ test('first-page refusal is distinct from genuine empty, and a disposed account 
   expect(previous.snapshot().collections).toEqual([]);
   expect(empty.snapshot().collections).toEqual([]);
 });
+
+test('a replay refused before receipt lookup cannot discard an earlier unknown-outcome command', async () => {
+  for (const reason of ['closed', 'forbidden', 'invalid'] as const) {
+    let calls = 0;
+    const editor = new CollectionPrivacyEditor(initial, {
+      save: async () => (++calls === 1 ? { ok: false, reason: 'unavailable' } : { ok: false, reason }),
+      read: async () => ({ ok: true, value: receipt }),
+    });
+    await editor.edit('public');
+    const attempt = editor.snapshot().attempt;
+    await editor.edit('unlisted');
+    await editor.retry();
+    expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', desired: 'unlisted', failure: reason });
+    expect(editor.snapshot().attempt).toBe(attempt);
+    await editor.reload();
+    expect(editor.snapshot()).toMatchObject({ phase: 'idle', current: receipt, desired: 'public', attempt: null });
+  }
+});
