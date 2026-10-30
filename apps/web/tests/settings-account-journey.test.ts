@@ -163,7 +163,14 @@ test('the signed-out Settings account journey renders its real main content and 
     expect(main).toContain(m.settings_account_heading());
     expect(main).toContain(m.settings_account_sign_in_text());
     expect(hrefs(main!)).toEqual(['/auth/sign-in?return_to=%2Fen%2Fsettings%23account']);
-    for (const privateSection of ['reading', 'notifications', 'privacy', 'verification', 'profile', 'public-activity']) {
+    for (const privateSection of [
+      'reading',
+      'notifications',
+      'privacy',
+      'verification',
+      'profile',
+      'public-activity',
+    ]) {
       expect(main).not.toContain(`id="${privateSection}"`);
     }
     expect(main).not.toMatch(/<nav\b|<form\b|role="(?:radio|switch)"/);
