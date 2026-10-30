@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import recording from '../kernel/recorded/library-collection.json';
 import { m } from '../paraglide/messages.js';
 import { CollectionPrivacyView } from '../settings/collection-privacy';
@@ -92,7 +92,7 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
 async function choosePrivate(canvasElement: HTMLElement) {
   const view = within(canvasElement);
   const select = await view.findByRole('combobox', { name: m.settings_privacy_visibility_label() });
-  await expect(select).toBeEnabled();
+  await waitFor(() => expect(select).toBeEnabled());
   await userEvent.selectOptions(select, 'private');
   return view;
 }
@@ -136,7 +136,7 @@ export const ConflictReload: Story = {
     await view.findByText(m.settings_privacy_conflict_title());
     await expect(view.getByRole('combobox')).toHaveValue('private');
     await userEvent.click(view.getByRole('button', { name: m.settings_privacy_reload_row() }));
-    await expect(view.getByRole('combobox')).toHaveValue('unlisted');
+    await waitFor(() => expect(view.getByRole('combobox')).toHaveValue('unlisted'));
     await view.findByText(m.settings_privacy_current({ visibility: m.settings_privacy_unlisted() }));
   },
 };
