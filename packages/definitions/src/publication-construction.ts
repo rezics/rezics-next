@@ -4,76 +4,51 @@ import schema from '../schema/release.json';
 
 const at = (pointer: string, key: string | number) =>
   `${pointer}/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`;
-type Schema = {
-  $ref?: string;
-  uniqueItems?: boolean;
-  properties?: Record<string, Schema>;
-  patternProperties?: Record<string, Schema>;
-  items?: Schema;
-  anyOf?: Schema[];
-  [key: string]: unknown;
+// Keep TypeBox's original schema engine as the diagnostic authority, including
+// branch-local contexts, traversal order and its eight-node diagnostic budget.
+// In pinned TypeBox 1.4.3 the only reduction over an input array is uniqueItems'
+// duplicate-index collector. Its repeated accumulator spreads are quadratic.
+// A private diagnostic view supplies those exact indices with a linear Set walk;
+// the engine still decides whether that keyword runs and whether its error fits.
+const validator = Compile(schema);
+
+function duplicateIndices(value: unknown[]): number[] {
+  const duplicates: number[] = [];
+  const seen = new Set<string>();
+  let index = 0;
+  for (const member of value) {
+    const hash = Hash(member);
+    if (seen.has(hash)) duplicates.push(index);
+    seen.add(hash);
+    index++;
+  }
+  return duplicates;
+}
+
+function diagnosticView(value: unknown): unknown {
+  // A privately owned JSON copy keeps ordinary engine property reads fast and
+  // also supports frozen caller graphs. Array hashes inspect indexed members,
+  // so this non-enumerable engine method cannot change structural identity.
+  const copy: unknown = structuredClone(value);
+  const pending: [unknown, unknown][] = [[value, copy]];
+  const visited = new WeakSet<object>();
+  while (pending.length) {
+    const [original, view] = pending.pop()!;
+    if (original === null || typeof original !== 'object') continue;
+    if (visited.has(original)) continue;
+    visited.add(original);
+    if (Array.isArray(original)) Object.defineProperty(view, 'reduce', { value: () => duplicateIndices(original) });
+    for (const [key, child] of Object.entries(original))
+      if (child !== null && typeof child === 'object') pending.push([child, (view as Record<string, unknown>)[key]]);
+  }
+  return copy;
+}
+
+export const constructionValidator = {
+  // The native Check uniqueness predicate already uses linear map/Set hashing.
+  Check: (value: unknown) => validator.Check(value),
+  Errors: (value: unknown) => validator.Errors(diagnosticView(value)),
 };
-
-// Only error production changes. Every disabled uniqueness site is supplied by
-// the schema-derived walk below; the published schema and format stay untouched.
-const diagnosticSchema = structuredClone(schema);
-function disableUniqueness(value: unknown): void {
-  if (!value || typeof value !== 'object') return;
-  if ('uniqueItems' in value && value.uniqueItems === true) value.uniqueItems = false;
-  for (const child of Object.values(value)) disableUniqueness(child);
-}
-disableUniqueness(diagnosticSchema);
-export const constructionValidator = Compile(diagnosticSchema);
-
-// Resolve the frozen schema once, including the schema's one recursive value ref.
-const walks = new Map<Schema, (value: unknown, pointer: string, add: (pointer: string) => void) => void>();
-function walker(node: Schema): (value: unknown, pointer: string, add: (pointer: string) => void) => void {
-  const known = walks.get(node);
-  if (known) return known;
-  let run: ReturnType<typeof walker>;
-  const visit: ReturnType<typeof walker> = (value, pointer, add) => run(value, pointer, add);
-  walks.set(node, visit);
-  const ref = node.$ref
-    ? walker(
-        node.$ref
-          .split('/')
-          .slice(1)
-          .reduce((part: any, key) => part[key], schema),
-      )
-    : undefined;
-  const properties = Object.entries(node.properties ?? {}).map(([key, child]) => [key, walker(child)] as const);
-  const patterns = Object.entries(node.patternProperties ?? {}).map(
-    ([key, child]) => [new RegExp(key), walker(child)] as const,
-  );
-  const items = node.items ? walker(node.items) : undefined;
-  const alternatives = (node.anyOf ?? []).map(walker);
-  run = (value, pointer, add) => {
-    if (ref) ref(value, pointer, add);
-    for (const alternative of alternatives) alternative(value, pointer, add);
-    if (Array.isArray(value)) {
-      if (node.uniqueItems === true) {
-        const seen = new Set<string>();
-        for (const member of value) {
-          // Use the pinned TypeBox identity, including structural object key
-          // ordering, IEEE754 -0 and its hash collision semantics, not JS identity.
-          const hash = Hash(member);
-          if (seen.has(hash)) add(pointer);
-          seen.add(hash);
-        }
-      }
-      if (items) for (let index = 0; index < value.length; index++) items(value[index], at(pointer, index), add);
-    } else if (value !== null && typeof value === 'object') {
-      const fields = value as Record<string, unknown>;
-      for (const [key, child] of properties) if (Object.hasOwn(fields, key)) child(fields[key], at(pointer, key), add);
-      if (patterns.length)
-        for (const key of Object.keys(fields)) {
-          for (const [pattern, child] of patterns) if (pattern.test(key)) child(fields[key], at(pointer, key), add);
-        }
-    }
-  };
-  return visit;
-}
-export const constructionUniqueness = walker(schema as Schema);
 
 export const PUBLICATION_LIMITS = Object.freeze({ bases: 4096, mappings: 256, qualifiers: 4096 });
 

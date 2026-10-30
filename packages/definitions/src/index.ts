@@ -3,7 +3,7 @@ import { createFilterConstruction, type FilterDocument, type FilterValidationErr
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { safePattern } from './pattern-safety.ts';
-import { constructionValidator, constructionUniqueness } from './publication-construction.ts';
+import { constructionValidator } from './publication-construction.ts';
 export { publicationLimits, PUBLICATION_LIMITS } from './publication-construction.ts';
 import schema from '../schema/release.json';
 import {
@@ -548,7 +548,6 @@ export function validateRelease(value: unknown): ReleaseViolation[] {
         }
       }
     }
-    constructionUniqueness(value, '', add);
     if (violations.size || !schemaValid) {
       if (!violations.size) add('');
       return result();

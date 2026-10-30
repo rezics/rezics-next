@@ -6,6 +6,7 @@ import { publicationLimits, releaseDigest, validateRelease } from '@rezics/defin
 import { constructionFixture } from '../../../../packages/definitions/test/support/publication-construction.ts';
 import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
 import { effectsSnapshot } from './support/definition-publication-work.ts';
+import historicalIdentity from '../../../../packages/definitions/test/fixtures/definition-historical-construction.json';
 
 let driver: SemanticOutcomeDriver;
 let directory: string;
@@ -26,13 +27,10 @@ beforeAll(async () => {
     script,
     `
 const input = await Bun.stdin.json();
+let historical;
 if (input.original) {
-  const historicalSource = await Bun.file('${root}/services/kernel/test/semantic/fixtures/definitions-pre-caps.source').text();
-  Bun.plugin({ name: 'historical-publication-caller', setup(build) {
-    build.onLoad({ filter: /\\/services\\/kernel\\/src\\/semantic\\/definitions\\.ts$/ }, () => ({
-      contents: historicalSource, loader: 'ts'
-    }));
-  }});
+  const { mountHistoricalConstruction } = await import('${root}/packages/definitions/test/support/historical-construction.ts');
+  historical = mountHistoricalConstruction();
 }
 const { createPool } = await import('${root}/services/kernel/src/database/pool.ts');
 const { createKernel } = await import('${root}/services/kernel/src/http/kernel.ts');
@@ -64,7 +62,7 @@ try {
   }));
   console.log(JSON.stringify({ status: response.status, body: await response.json(),
     etag: response.headers.get('etag'), session: response.headers.get('rezics-session-token'),
-    validation, digest, points }));
+    validation, digest, points, historical }));
 } finally { await pool.end(); }
 `,
   );
@@ -82,12 +80,15 @@ async function cold(options: {
   body?: unknown;
   original?: boolean;
 }) {
-  const child = Bun.spawn([process.execPath, script], {
-    cwd: resolve(root, 'services/kernel'),
-    stdin: 'pipe',
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+  const child = Bun.spawn(
+    [process.execPath, '--preload', Bun.resolveSync('reylo/register', resolve(root, 'services/kernel')), script],
+    {
+      cwd: root,
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
   child.stdin.write(JSON.stringify({ runtime: driver.fixtures.runtime, ...options }));
   child.stdin.end();
   const [stdout, stderr, exit] = await Promise.all([
@@ -105,6 +106,7 @@ async function cold(options: {
     validation?: unknown;
     digest?: string;
     points: number;
+    historical?: { revision: string; loaded: string[]; expected: string[] };
   };
 }
 
@@ -113,7 +115,7 @@ async function cold(options: {
 // The original CPU HTTP test and package checkpoint schedule remain unchanged.
 test('new publication shape boundaries are accepted exactly and refused without effects', async () => {
   const author = await driver.fixtures.person('construction-boundary-author');
-  await driver.fixtures.grantAccount(author, ['definitions:publish']);
+  await driver.fixtures.grantAccount(author, ['definitions:publish', 'gate:definition_publication']);
   const boundary = constructionFixture(4096, 4096);
   const mappings = Array.from({ length: 256 }, (_, i) => `grow:M${String(i).padStart(4, '0')}`);
   boundary.types['grow:Root']!.mappings = mappings;
@@ -167,13 +169,20 @@ test('new publication shape boundaries are accepted exactly and refused without 
 
 test('a native historically accepted over-cap pin is cold-readable byte-identically and retains replay/new-key/current-denial behavior', async () => {
   const author = await driver.fixtures.person('construction-historical-author');
-  await driver.fixtures.grantAccount(author, ['definitions:publish']);
-  const historical = constructionFixture(0, 4096);
+  await driver.fixtures.grantAccount(author, ['definitions:publish', 'gate:definition_publication']);
+  const historical = constructionFixture(4097);
   historical.catalogue.version = 'historical-construction';
   historical.types['grow:Root']!.mappings = Array.from(
     { length: 257 },
     (_, i) => `grow:M${String(i).padStart(4, '0')}`,
   );
+  expect(Buffer.byteLength(JSON.stringify(historical))).toBeLessThan(4 * 1024 * 1024);
+  expect(publicationLimits(historical)).toEqual([
+    { pointer: '/types/grow:Root/bases', code: 'limit' },
+    { pointer: '/types/grow:Root/mappings', code: 'limit' },
+  ]);
+  expect(validateRelease(historical)).toEqual([]);
+  const before = await effectsSnapshot(driver.fixtures.pool);
   const headers = key();
   const request = {
     method: 'POST',
@@ -184,15 +193,25 @@ test('a native historically accepted over-cap pin is cold-readable byte-identica
   };
   const created = await cold({ ...request, original: true });
   expect(created.validation).toEqual([]);
+  expect(created.historical?.revision).toBe(historicalIdentity.revision);
+  expect(created.historical?.loaded.toSorted()).toEqual([
+    'packages/definitions/src/index.ts',
+    'packages/filter/src/filter.ts',
+    'services/kernel/src/semantic/definitions.ts',
+  ]);
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const digest = releaseDigest(historical);
   expect(created.digest).toBe(digest);
   expect(created.body).toEqual({ digest });
   const applied = await effectsSnapshot(driver.fixtures.pool);
+  for (const table of ['semantic.definition_release', 'core.receipt', 'core.outbox', 'editorial.write_basis'])
+    expect((applied[table] as unknown[]).length - (before[table] as unknown[]).length, table).toBe(1);
   const read = await cold({ method: 'GET', path: `/v1/definitions/releases/${digest}` });
   expect(read.status, JSON.stringify(read.body)).toBe(200);
   expect(read.body).toEqual({ digest, release: historical });
   expect(read.etag).toBe(JSON.stringify(digest));
+  expect(read.historical).toBeUndefined();
+  expect(await effectsSnapshot(driver.fixtures.pool)).toEqual(applied);
   const replay = await cold(request);
   expect(replay.status, JSON.stringify(replay.body)).toBe(201);
   expect(replay.body).toEqual({ digest });
@@ -206,6 +225,46 @@ test('a native historically accepted over-cap pin is cold-readable byte-identica
   expect(after['semantic.definition_release']).toEqual(applied['semantic.definition_release']);
   for (const table of ['core.receipt', 'core.outbox', 'editorial.write_basis'])
     expect((after[table] as unknown[]).length - (applied[table] as unknown[]).length, table).toBe(1);
+  const mismatch = structuredClone(historical);
+  mismatch.catalogue.version += '-mismatch';
+  mismatch.types['grow:Root']!.bases = [];
+  mismatch.types['grow:Root']!.mappings = [];
+  const conflict = await cold({ ...request, body: { release: mismatch } });
+  expect(conflict.status, JSON.stringify(conflict.body)).toBe(422);
+  expect(conflict.body).toMatchObject({ code: 'idempotency_conflict', effect_status: 'not_applied' });
+  expect(await effectsSnapshot(driver.fixtures.pool)).toEqual(after);
+  const unpublished = structuredClone(historical);
+  unpublished.catalogue.version += '-unpublished';
+  const refused = await cold({ ...request, headers: key(), body: { release: unpublished } });
+  expect(refused.status, JSON.stringify(refused.body)).toBe(400);
+  expect(refused.body).toMatchObject({
+    code: 'invalid_request',
+    effect_status: 'not_applied',
+    errors: [
+      { pointer: '/release/types/grow:Root/bases', code: 'out_of_range' },
+      { pointer: '/release/types/grow:Root/mappings', code: 'out_of_range' },
+    ],
+  });
+  expect(refused.points).toBe(1);
+  expect(await effectsSnapshot(driver.fixtures.pool)).toEqual(after);
+  console.log(
+    'historical construction native receipt',
+    JSON.stringify({
+      historical: created.historical,
+      digest,
+      bases: historical.types['grow:Root']!.bases.length,
+      mappings: historical.types['grow:Root']!.mappings.length,
+      created: created.status,
+      read: read.status,
+      etag: read.etag,
+      replay: replay.status,
+      replayPoints: replay.points,
+      existing: existing.status,
+      existingPoints: existing.points,
+      mismatch: conflict.status,
+      unpublished: refused.status,
+    }),
+  );
   // Native self-renunciation uses the public grant command, without SQL authority.
   const revoke = await driver.fixtures.send(
     author,
@@ -226,4 +285,8 @@ test('a native historically accepted over-cap pin is cold-readable byte-identica
   expect(denied.body).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
   expect(denied.body).not.toHaveProperty('digest');
   expect(await effectsSnapshot(driver.fixtures.pool)).toEqual(deniedBefore);
+  console.log(
+    'historical construction denied receipt',
+    JSON.stringify({ digest, status: denied.status, effects: 'unchanged' }),
+  );
 }, 180_000);

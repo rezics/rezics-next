@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { bundledRelease } from '../../src/bundled.ts';
 import { RELEASE_LIMITS, validateRelease, valueSchema, type Release } from '../../src/index.ts';
 import { analyzePattern } from '../../src/pattern-safety.ts';
+import { historicalConstructionSources } from './historical-construction.ts';
 import { admitFilter, parseFilter, validateFilter, type FilterDocument } from '../../../filter/src/filter.ts';
 
 export const scales = [64, 512, 4096] as const;
@@ -211,11 +212,11 @@ async function probe(): Promise<Evidence> {
     unique = replaceOnce(unique, 'return [...result, index];', `return [...publicationSpread(result), index];`);
     unique += `\nfunction* publicationSpread(result) {\n  ${counter}.duplicateAppends++;\n  for (const item of result) { ${counter}.duplicateCopies++; yield item; }\n}\n`;
     copy('typebox-uniqueItems', uniquePath, unique, join(directory, 'typebox/build/schema/engine/uniqueItems.mjs'));
-    const baseRevision = '2c86ce30ef';
+    const originals = historicalConstructionSources();
     const originalSource = (path: string) => {
-      const result = Bun.spawnSync(['git', 'show', `${baseRevision}:${path}`], { cwd: root });
-      if (result.exitCode !== 0) throw new Error(result.stderr.toString());
-      return result.stdout.toString();
+      const source = originals.get(resolve(root, path));
+      if (source === undefined) throw new Error(`Missing pinned construction source: ${path}`);
+      return source;
     };
     const originalFilterPath = join(directory, 'original-filter.ts');
     writeFileSync(originalFilterPath, imports(originalSource('packages/filter/src/filter.ts'), dirname(filterPath)));
@@ -289,6 +290,10 @@ async function probe(): Promise<Evidence> {
       Bun.resolveSync('typebox/value', dirname(constructionPath)),
       join(directory, 'typebox/build/value/index.mjs'),
     );
+    construction = construction.replace(
+      Bun.resolveSync('typebox/schema', dirname(constructionPath)),
+      join(directory, 'typebox/build/schema/index.mjs'),
+    );
     construction = replaceOnce(
       construction,
       'for (const member of value) {',
@@ -297,8 +302,8 @@ async function probe(): Promise<Evidence> {
     );
     construction = replaceOnce(
       construction,
-      'if (seen.has(hash)) add(pointer);',
-      `if ((${counter}.uniqueArrays.has(value) && ${counter}.duplicateProbes++, seen.has(hash))) add(pointer);`,
+      'if (seen.has(hash)) duplicates.push(index);',
+      `if ((${counter}.uniqueArrays.has(value) && ${counter}.duplicateProbes++, seen.has(hash))) duplicates.push(index);`,
     );
     construction = replaceOnce(construction, 'const hash = Hash(member);', 'const hash = Hash(member);');
     construction = replaceOnce(

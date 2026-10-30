@@ -470,7 +470,7 @@ test('Editor anonymous and suspended cannot publish or activate definitions and 
   const compiled = await music();
   for (const [persona, status, code] of [
     ['editor', 403, 'forbidden'],
-    ['anonymous', 401, 'authentication_required'],
+    ['anonymous', 403, 'platform_closed'],
     ['suspended', 401, 'invalid_credentials'],
   ] as const) {
     problem(await write(persona, 'POST', '/v1/definitions/releases', { release: compiled.release }), status, code);
@@ -989,7 +989,11 @@ test('Persona denials and invalid proposals append no revisions and leave public
         status,
         code,
       );
-      problem(await write(persona, 'POST', mergePath, { subjects: [book.id, other.id] }), status, code);
+      problem(
+        await write(persona, 'POST', mergePath, { subjects: [book.id, other.id] }),
+        persona === 'anonymous' ? 403 : status,
+        persona === 'anonymous' ? 'platform_closed' : code,
+      );
       if (persona !== 'editor') {
         problem(
           await write(persona, 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } }),

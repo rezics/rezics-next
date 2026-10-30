@@ -233,7 +233,8 @@ async function startDriver(
     });
 
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
-    const knownScopes = new Set(scopes);
+    const governanceScopes = [...scopes, 'gate:any'];
+    const knownScopes = new Set(governanceScopes);
     const registration = createRegistrationProofBindings({ pool, referenceKeys: sessionKeys });
     const { ports: registrationPorts } = createRegistrationPorts({
       pool,
@@ -249,7 +250,7 @@ async function startDriver(
       }),
       access: registrationPorts,
     });
-    await auth.registerClient(clientId, scopes);
+    await auth.registerClient(clientId, governanceScopes);
     timer.mark('auth side');
 
     async function issue(email: string, scopes: readonly string[]): Promise<string> {
@@ -335,7 +336,7 @@ async function startDriver(
     }
 
     const [governor, editor, acceptor, steward, suspended] = await Promise.all([
-      person('governor'),
+      person('governor', { scopes: governanceScopes }),
       person('editor'),
       person('acceptor'),
       person('steward'),

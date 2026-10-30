@@ -1,0 +1,78 @@
+{
+  "revision": "2c86ce30efc2aabc94a7683bfea367a69263aa39",
+  "files": [
+    {
+      "path": "packages/definitions/src/index.ts",
+      "gitBlob": "861a6fd4513b9c62009531cb25ef64b801b4ae82",
+      "sha256": "0717ecf05f578ac5b6247689c79223bd846bedeb17ba5f860fcc55ecd517e21a",
+      "snapshot": "packages/definitions/test/fixtures/definitions-historical-construction.source"
+    },
+    {
+      "path": "packages/filter/src/filter.ts",
+      "gitBlob": "3953a0fbc4819956b5f7cdac17996def4482946d",
+      "sha256": "55397ea0c07c997a8ad59535c7490dbef7f3a68461e03080890442b0509b52a0",
+      "snapshot": "packages/definitions/test/fixtures/filter-historical-construction.source"
+    },
+    {
+      "path": "services/kernel/src/semantic/definitions.ts",
+      "gitBlob": "433a2dc5ff7f3617feda647196c441b16d768e74",
+      "sha256": "6340ceacb5a8dbc233f973434835df6d13a1cb0298a83d2e49794993a41c686f",
+      "snapshot": "services/kernel/test/semantic/fixtures/definitions-pre-caps.source"
+    },
+    {
+      "path": "packages/definitions/src/pattern-safety.ts",
+      "gitBlob": "40afdcf1281f6ca01c496c9c96f41aea1bf0dfea",
+      "sha256": "89d1491ccb6c79f3e30fa35ad3e0a2df278be197cc2665081d86b360b4e1390b"
+    },
+    {
+      "path": "packages/definitions/src/library-profile.ts",
+      "gitBlob": "ed06fac88c79fbb6c082ef156a57d2afa7a29f8d",
+      "sha256": "09ceb8f8d7edd792ebfd9b8899361a57b916208f6aaa552a4fe1cfa522e1e0b6"
+    },
+    {
+      "path": "packages/definitions/schema/release.json",
+      "gitBlob": "104d7b136e779b6c2004cfe7557bd43c0cb0a52d",
+      "sha256": "890c2f1e9a400380947efe843f58943517cc3b706eacd9954a56d0882e3233bd"
+    },
+    {
+      "path": "packages/definitions/src/extension.ts",
+      "gitBlob": "b00d79bbed0f352f06e415be281e0f9da54401c4",
+      "sha256": "fce39ce5186b7529f61ca97590ded8414bfce4ba2c62f408ac2459e6642e459d"
+    },
+    {
+      "path": "services/kernel/src/semantic/extensions.ts",
+      "gitBlob": "e4b0ec6186f5dfd40e80a774426558fa6f8da9ce",
+      "sha256": "4b26524a52d3b387ea5dcc4231a3610b302e8b6511b74b88625e025a8a105244"
+    },
+    {
+      "path": "services/kernel/src/semantic/definitions-activate.sql",
+      "gitBlob": "d94ae496826c310eb182ae04ea53437c348c2cf1",
+      "sha256": "68024b82390de06dcb20764428d8fdb955b2807fa4d30e1906727994ba959c18"
+    },
+    {
+      "path": "services/kernel/src/semantic/definitions-active.sql",
+      "gitBlob": "5d5f25ffe8cfb4be6da32cbe8bb338045433bbcc",
+      "sha256": "0cc63ead938ab306fbaa84a8067f753fac6554b66aa4f9e5bb78b2eec36978ba"
+    },
+    {
+      "path": "services/kernel/src/semantic/definitions-exists.sql",
+      "gitBlob": "0e242cb7bf7a10a5ace346823545c5773ec429b1",
+      "sha256": "b65c99ca87901066bca3736dc62a520750151fe58ffcd47b4d7dd0dafa4b698e"
+    },
+    {
+      "path": "services/kernel/src/semantic/definitions-publish.sql",
+      "gitBlob": "40d20a8e78051839d9610727c0b456a970e52034",
+      "sha256": "33643f15c5440edc99dc7789aa96e3ca6155519af8ddef392bb0f0cb7c208c44"
+    },
+    {
+      "path": "services/kernel/src/semantic/definitions-read.sql",
+      "gitBlob": "7acfc26fe1cfe7ce4d7d3c5ea44766facc0fcab8",
+      "sha256": "2855372ac650bf7556192d6fc180376d1a7d8b68f766cfea5db78e9529ede1a8"
+    }
+  ],
+  "dependencies": {
+    "canonicalize": "5.1.0",
+    "typebox": "1.4.3",
+    "recheck": "4.5.0"
+  }
+}

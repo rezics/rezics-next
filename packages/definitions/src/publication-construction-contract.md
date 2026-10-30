@@ -13,13 +13,21 @@ inherited data, cycles and sparse arrays are rejected without evaluating getters
 retain their `limit` precedence over schema/pattern defects. Canonical JSON remains capped at 4 MiB.
 
 The unchanged release schema determines every uniqueness site, including library import record kinds, CURIE
-lists, facets, relation filters, targets and units. One schema-derived walk supplies array-pointer errors with a
-Set of pinned TypeBox hashes. This preserves TypeBox's structural object ordering, malformed JSON-member
-identity, numeric representation (including -0) and hash-collision behavior. Arrays are never deduplicated or
-renumbered. The once-derived diagnostic schema disables only those uniqueness sites. Its remaining Check/Errors
-operate on the original input, preserving child errors, first code, lexical pointer order and the 64-error cap.
-There is no quadratic dependency Errors fallback on duplicates. Hash traversal, encoded bytes and object key
-sorting remain real work; a hash is not treated as a constant-cost opaque value.
+lists, facets, relation filters, targets and units. The pinned TypeBox engine retains its original schema,
+branch applicability, traversal order and eight-node diagnostic-context budget. Its Check predicate already uses
+linear map/Set hashing. For Errors, a private, call-local diagnostic view supplies the duplicate indices with
+one Set/hash walk and append per member instead of the native reducer's repeated accumulator spreads. The pinned
+engine alone decides when to request those indices and whether its uniqueness error fits the current context.
+No submitted array, installed dependency or schema is modified. The view retains original key order and indices;
+TypeBox hash identity preserves malformed structural/numeric members, including -0 and collisions. All actual
+native Check and replacement collector hashing is included in instrumentation. There is no quadratic Errors
+fallback and no replacement schema engine.
+
+The outer pointer map still preserves first code, lexical pointer order and its 64-result ceiling. The malformed
+crowded witness reaches the original eight schema diagnostics; a separate schema-valid population of semantic
+IRI faults reaches exactly 64 sorted results in both original and delivered validation. Malformed null units
+retain the original child errors without adding an array pointer after the native context budget is exhausted.
+Hash traversal, encoded bytes, diagnostic view copies and object key sorting remain real work.
 
 ## Construction lifetime and Filter callers
 
@@ -60,17 +68,30 @@ processing. There is no caller exemption, alternate digest, composed-release aut
 Current command authorization at fresh T precedes receipt disclosure. Existing exact replay, existing-digest/new-key,
 key conflict and command effects remain unchanged. A missing digest receives the new-cap refusal without writes.
 
-The native mounted HTTP test establishes a historically valid cap-exceeding pin by executing the unchanged original
-validator and publication route in an isolated process against real Auth/Access/DB rows. A new process running the
-delivered core reads that pin exactly, including its ETag, and exercises historical replay/new-key and denied replay.
-The fixture exceeds bases and mappings caps; a valid historical qualifier list above 4096 is impossible under the
-existing unique-reference and 4096-property rules. This is runtime-pin evidence, not shipped-Git headroom.
+The native mounted HTTP test exercises a historically valid cap-exceeding pin by executing the unchanged original
+Definitions/Filter validator and pre-cap publication caller in one isolated module graph against the mounted
+routes and real Auth/Access/DB rows. Each author receives the existing `gate:definition_publication` account
+grant through native grant administration, alongside its resource authority; the development group remains closed.
+The shared fixture's governor token includes the existing internal `gate:any` scope needed to administer that
+native grant. Ordinary fixture people retain their mounted-action scopes and receive no extra resource grants.
+Tracked verbatim source snapshots are pinned to
+`2c86ce30efc2aabc94a7683bfea367a69263aa39`; their manifest records Git blob identities and SHA-256 hashes.
+The loader verifies those bytes and the unchanged relative pattern/profile/schema and semantic dependencies,
+with pinned TypeBox, canonicalize and recheck versions. It needs no runtime Git, network or invocation directory;
+SQL imports retain the kernel's native Reylo loader. Assertions record all three actually loaded old modules.
+A distinct fresh process running the delivered core reads that pin exactly, including its ETag, and exercises
+201 replay, existing-digest/new-key 200 bookkeeping, mismatch 422, unpublished-cap 400 and revoked-authority 403
+without denied effects. Replay and new-key each observe one actual same-pool published-existence probe.
+The byte-admissible mounted fixture has 4097 bases and 257 mappings; a valid historical qualifier list above 4096
+is impossible under the existing unique-reference and 4096-property rules. This is runtime-pin coverage, not
+shipped-Git headroom.
 
 ## Native evidence and compatibility witnesses
 
 The original comparison fixtures and assertions remain intact. The serial disposable probe loads the unchanged
 original Definitions/Filter code, then instrumented delivered code, preserving every original catalogue entry and
-fixture scale. Its 117 rows compare complete validator errors and normalized admitted filters/typed refusals.
+fixture scale. Its 119 current equality rows compare complete validator errors and normalized admitted filters/typed
+refusals.
 Filter measurements share one explicit owned construction session for their validation and direct admission calls;
 this is the actual exported lifetime used by Definitions. Raw-call freshness has separate native tests.
 
@@ -80,13 +101,39 @@ comparisons and facet probes. Snapshot identity tracking follows the actual copi
 scales, assertions, equality witnesses and reports are retained. Installed dependencies and frozen schema bytes
 are never edited; isolation/cleanup discards all module caches. New malformed-member tests compare all uniqueness
 sites, escaped pointers, child indices, precedence and the 64 cap against the unchanged original validator.
-Intentional cap differences are checked separately from unchanged historical validation outcomes.
+The archive-portable compatibility caller executes the same pinned original core for every existing malformed
+member, escaped/child pointer, first-code, 64-cap and historical-cap witness. Intentional cap differences are
+checked separately from unchanged historical validation outcomes. The mutable Filter caller retains every raw
+entry-point edit and accessor/inherited/sparse negative; the construction counter and pattern witnesses are unchanged.
 
 The original measured defects at 64/512/4096 were duplicate accumulated-index copies 1953/130305/8382465,
 crossed base reads and expansions 64/4096/262144 each, and qualifier scans 1500/98016/6289152. All original
-117 complete original/instrumented outcomes and four pattern outcomes were equal. Those observations remain
-starting evidence, not a claim that a cap repaired the algorithms. The delivered probe reports actual replacement
-counts independently for duplicate, base, qualifier and crossed shapes.
+117 historical starting rows and four pattern outcomes were equal. The delivered comparison has 119 equality
+rows; the 117 historical rows remain distinct starting evidence, not a claim that a cap repaired the algorithms.
+The delivered probe reports actual replacement counts independently for duplicate, base, qualifier and crossed shapes.
+
+The malformed-member matrix retains all 72 independent comparisons: nine sites crossed with eight member cases.
+Each named case runs delivered and unchanged pinned validation on its own fresh graph under the existing five-second
+per-test deadline. Source integrity/module setup is shared with cleanup; validation outputs are never cached.
+Crowded malformed children, cheap-limit precedence and schema-valid semantic 64-cap witnesses run separately.
+The earlier monolithic case exceeded its deadline despite no reported assertion mismatch; its scheduling split
+does not relax payloads, comparisons, growth bounds or product/request deadlines.
+
+The combined check passed in the real managed archive without Git metadata: 97 package tests with 1019 assertions,
+including all 72 malformed-member comparisons, all 119 construction equalities, unchanged pattern outcomes and raw
+mutable callers; then two mounted kernel tests with 79 assertions. The historical creator actually loaded all three
+pinned modules and published the byte-admissible 4097-base/257-mapping body with digest
+`sha256:74f5814c8b818b28e763d6bf77e74f29f4922de7f4c3d9196f1f2275a4756ad6`.
+Delivered fresh processes returned exact body/ETag on GET 200, original-key replay 201, existing-digest/new-key 200,
+mismatch 422, unpublished-cap 400 and revoked-authority 403. Replay and new-key each observed exactly one real
+same-pool existence point. Creation added one release/receipt/outbox/write-basis row; replay, reads and denials
+preserved their snapshots, while new-key added native receipt/outbox/write-basis bookkeeping without another release.
+The earlier scoped receipt printed an existing Commerce `stripe.ts` TS2379 diagnostic; landing subsequently
+failed while generating client declarations on that same optional-property mismatch. The Stripe caller now omits
+an absent cancellation signal, preserving the transport's existing optional contract and supplied-signal behaviour.
+Repeated combined acceptance passed with the same 97/1019 package and 2/79 kernel counts, including native
+compilation without that diagnostic. This receipt does not claim a passing root typecheck, whole-kernel check or
+landing regeneration; the landing batch owns those checks.
 
 Inspected sources include full Definitions validation/schema/compile, Filter parsing/admission/display and pinned
 TypeBox uniqueItems/hash implementations; actual kernel read/publication/bootstrap and mounted routes; Search
@@ -99,7 +146,7 @@ No external reference project or external research was required.
 ### Definition construction and admission
 
 - Touches: one bounded release's own JSON nodes/edges/bytes, schema-selected unique members, hash nodes/bytes and
-  key comparisons, one owned snapshot, direct base/facet edges, declaration Set inserts, selected-type/qualifier
+  key comparisons, one owned snapshot, call-local diagnostic views, direct base/facet edges, declaration Set inserts, selected-type/qualifier
   probes, emitted display facets, canonical serialization/digests and unchanged actual checker checkpoints.
   A capped historical publication adds one same-pool `definition_release_pkey(route,digest)` existence point;
   cold reads verify one stored body and its exact digest. No history scan is introduced.
