@@ -27,8 +27,11 @@ The page distinguishes loading, missing preparation, preparing, complete empty, 
 unavailable/retry outcomes. Prepare, retry and continuation are explicit interactions, with no empty polling loop.
 Authenticated queue data stays in the private session BFF and browser state, outside public SSR/query caches.
 Rows use emitted definition labels and native values/evidence, link to the ordinary Subject journey and retain
-the selected Context. Decisions use existing endpoints, current heads and original idempotency keys on uncertain
-retries; selection requires its independent `context:adopt` authority and exact slot workflow.
+the selected Context. The existing visible-row toolbar seals at most 20 explicitly checked suggestions; changing
+scope clears selection while preserving earlier uncertain attempts. Decisions use existing endpoints, current
+heads and original idempotency keys on uncertain retries. Queue refresh and current Subject readings start in
+parallel, with individual results retained on refresh failure. Selection requires its independent `context:adopt`
+authority and exact slot workflow.
 
 Native exports belong to `semantic/provider-review-queue.ts`; route schemas and action/exposure metadata belong
 to `semantic/http/provider-review-queue.ts`. Generated `KernelClient` endpoints are `review-candidates.get` and

@@ -1,4 +1,11 @@
-import type { ProviderDecisionRow, ProviderFailure, ProviderScope } from './provider-review-actions';
+import {
+  providerFailure,
+  type ProviderDecisionRow,
+  type ProviderFailure,
+  type ProviderScope,
+  type ProviderDecision,
+  type ProviderReading,
+} from './provider-review-actions';
 import type { KernelClient } from '@rezics/client';
 import type { Release } from '../../subject/definitions';
 import { candidateFailure, type CandidateFailure } from '../../subject/candidates';
@@ -21,7 +28,7 @@ type QueueResponse = NonNullable<Awaited<ReturnType<KernelClient['review-candida
 export type QueuePage = Extract<QueueResponse, { candidates: unknown }>;
 export type QueueRow = QueuePage['candidates'][number];
 export type QueueState =
-  | { state: 'idle' | 'loading' | 'denied' | 'invalid' | 'unavailable' }
+  | { state: 'idle' | 'loading' | 'denied' | 'missing' | 'invalid' | 'unavailable' }
   | { state: 'preparing'; next?: string }
   | { state: 'ready'; page: QueuePage; names: Record<string, Record<string, string>>; session?: string };
 export type QueueDecision = QueueScope & {
@@ -32,11 +39,12 @@ export type QueueDecision = QueueScope & {
   key: string;
   session?: string;
 };
-export type QueueDecisionResult = CandidateFailure | { ok: true; session?: string };
+export type QueueDecisionResult = ProviderFailure | { ok: true; session?: string };
 export type QueueTransport = {
   read(scope: QueueScope, cursor?: string, session?: string): Promise<QueueState>;
   prepare(scope: QueueScope): Promise<QueueState>;
   decide(command: QueueDecision): Promise<QueueDecisionResult>;
+  readings(commands: ProviderDecision[]): Promise<ProviderReading[]>;
 };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -72,6 +80,7 @@ export function validQueueDecision(value: unknown): value is QueueDecision {
   );
 }
 const stateFor = (status: number): QueueState => {
+  if (status === 404) return { state: 'missing' };
   const reason = candidateFailure(status).reason;
   return { state: reason === 'stale' ? 'invalid' : reason };
 };
@@ -165,10 +174,10 @@ export async function decideProviderCandidate(
       input.operation === 'accept'
         ? await endpoint.$accept.post(body, options)
         : await endpoint.$reject.post(body, options);
-    if (result.status !== 200 || !result.data) return candidateFailure(result.status);
+    if (result.status !== 200 || !result.data) return providerFailure(result.status, result.headers);
     const session = new Headers(result.headers).get('rezics-session-token') ?? input.session;
     return { ok: true, ...(session ? { session } : {}) };
   } catch {
-    return candidateFailure(503);
+    return providerFailure(503);
   }
 }

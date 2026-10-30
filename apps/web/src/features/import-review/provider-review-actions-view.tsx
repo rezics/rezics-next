@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -28,6 +28,8 @@ import {
   type ProviderDecisionResult,
   type ProviderFailure,
   type ProviderReading,
+  type ProviderDecisionRow,
+  type ProviderScope,
 } from './provider-review-actions';
 import type { ProviderQueuePage, ProviderQueueRead } from './provider-queue';
 
@@ -58,15 +60,22 @@ export function ProviderReviewActions({
   transport,
   onRefresh,
   concealRows = false,
+  disabled = false,
+  renderDetails,
+  currentScope,
 }: {
   page?: ProviderQueuePage | undefined;
   locale: string;
   transport: ProviderReviewTransport;
   onRefresh: (read: ProviderQueueRead) => void;
   concealRows?: boolean;
+  disabled?: boolean;
+  renderDetails?: (row: ProviderDecisionRow) => ReactNode;
+  currentScope?: ProviderScope;
 }) {
   const o = { locale: locale as never };
-  const scope = page ? providerScopeKey(page.scope) : '';
+  const selectedScope = currentScope ?? page?.scope;
+  const scope = selectedScope ? providerScopeKey(selectedScope) : '';
   const [selection, setSelection] = useState<{ scope: string; ids: string[] }>({ scope, ids: [] });
   const [batch, setBatch] = useState<ProviderBatch>();
   const [confirmation, setConfirmation] = useState<ProviderBatch>();
@@ -75,7 +84,7 @@ export function ProviderReviewActions({
   const [refreshFailed, setRefreshFailed] = useState(false);
   const running = useRef(false);
   const lastScope = useRef(scope);
-  if (page) lastScope.current = scope;
+  if (selectedScope) lastScope.current = scope;
   // A changed source, Context or status clears checkboxes before the new scope can be acted on.
   if (selection.scope !== scope) setSelection({ scope, ids: [] });
   if (confirmation && providerScopeKey(confirmation.scope) !== scope) setConfirmation(undefined);
@@ -87,7 +96,7 @@ export function ProviderReviewActions({
     (attempt) => attempt.result && !attempt.result.ok && attempt.result.reason === 'unavailable',
   );
   const failed = batch?.attempts.some((attempt) => !attempt.result?.ok);
-  const locked = busy || !!batch || !!confirmation;
+  const locked = disabled || busy || !!batch || !!confirmation;
 
   function review(operation: ProviderDecision['operation']) {
     if (!page || locked) return;
@@ -200,6 +209,7 @@ export function ProviderReviewActions({
                     <ListRowControl>
                       <CandidateValue snak={row.candidate.statement} related={row.related} locale={locale} />
                     </ListRowControl>
+                    {renderDetails?.(row)}
                   </div>
                 </ListRow>
               );
@@ -229,7 +239,7 @@ export function ProviderReviewActions({
             </Button>
             <Button
               className="min-h-11"
-              disabled={busy || !confirmation || providerScopeKey(confirmation.scope) !== scope}
+              disabled={disabled || busy || !confirmation || providerScopeKey(confirmation.scope) !== scope}
               onClick={() => {
                 if (confirmation) void execute(confirmation);
               }}
@@ -306,7 +316,7 @@ export function ProviderReviewActions({
               <Button
                 variant="outline"
                 className="min-h-11"
-                disabled={busy || !sameScope}
+                disabled={disabled || busy || !sameScope}
                 onClick={() => void execute(batch)}
               >
                 {m.provider_retry_failed({}, o)}
@@ -316,7 +326,7 @@ export function ProviderReviewActions({
               <Button
                 variant="outline"
                 className="min-h-11"
-                disabled={busy || !sameScope}
+                disabled={disabled || busy || !sameScope}
                 onClick={() => void refresh(batch)}
               >
                 {m.provider_refresh({}, o)}

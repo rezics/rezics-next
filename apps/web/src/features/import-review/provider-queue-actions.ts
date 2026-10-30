@@ -5,6 +5,7 @@ import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { readRelease } from '../../subject/definitions';
+import { providerDecisionInput, readProviderDecisionSubjects } from './provider-review-actions';
 import {
   decideProviderCandidate,
   prepareProviderQueue,
@@ -60,4 +61,16 @@ export const decideProviderCandidateAction = createServerFn({ method: 'POST' })
     return authorization
       ? decideProviderCandidate(kernelClient(), authorization, data)
       : { ok: false as const, reason: 'denied' as const };
+  });
+
+export const readProviderQueueSubjectsAction = createServerFn({ method: 'POST', strict: false })
+  .validator((value: unknown) => {
+    if (!Array.isArray(value) || value.length > 20) throw new Error('Invalid provider refresh');
+    return value.map(providerDecisionInput);
+  })
+  .handler(async ({ data }) => {
+    const authorization = await viewer();
+    return authorization
+      ? readProviderDecisionSubjects(kernelClient(), authorization, data)
+      : data.map(({ subject }) => ({ subject, result: { ok: false as const, reason: 'denied' as const } }));
   });

@@ -74,8 +74,10 @@ export const Loading: Story = { args: { scenario: 'loading' } };
 export const Decision: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('checkbox'));
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
-    await userEvent.click(canvas.getByRole('button', { name: m.prq_confirm() }));
-    expect(await canvas.findByText(m.prq_decided())).toBeTruthy();
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: m.provider_confirm_accept() }));
+    expect(await canvas.findByText(m.provider_accepted())).toBeTruthy();
   },
 };

@@ -6,7 +6,6 @@ import {
   type ProviderReviewTransport,
 } from './provider-review-actions-view';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -17,7 +16,6 @@ import { subjectHref } from '../../subject/subject-href';
 import {
   globalReviewContext,
   validQueueScope,
-  type QueueDecision,
   type QueueScope,
   type QueueState,
   type QueueTransport,
@@ -47,21 +45,18 @@ export function ProviderQueue({
   );
   const [page, setPage] = useState<QueueState>(initial);
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<'accepted' | 'rejected' | 'stale' | 'invalid' | 'unavailable' | 'denied'>();
-  const [draft, setDraft] = useState<QueueDecision>();
-  const attempt = useRef<QueueDecision | undefined>(undefined);
+  const refreshed = useRef<QueueState | undefined>(undefined);
   const running = useRef(false);
   const session = useRef<string | undefined>(initial.state === 'ready' ? initial.session : undefined);
-  const locked = busy || !!attempt.current || !!draft;
+  const locked = busy;
   async function read(nextScope = scope, cursor?: string) {
-    if (running.current || attempt.current) return;
+    if (running.current) return;
     running.current = true;
     setBusy(true);
+    setScope(nextScope);
     setPage({ state: 'loading' });
-    setFeedback(undefined);
     try {
       const result = await transport.read(nextScope, cursor, session.current);
-      setScope(nextScope);
       setPage(result);
       if (result.state === 'ready') session.current = result.session;
     } catch {
@@ -72,7 +67,7 @@ export function ProviderQueue({
     }
   }
   async function prepare() {
-    if (running.current || attempt.current) return;
+    if (running.current) return;
     running.current = true;
     setBusy(true);
     try {
@@ -84,45 +79,47 @@ export function ProviderQueue({
       setBusy(false);
     }
   }
-  async function confirm() {
-    const command = attempt.current ?? draft;
-    if (!command || running.current) return;
-    attempt.current = command;
-    running.current = true;
-    setBusy(true);
-    try {
-      const result = await transport.decide(command);
-      if (!result.ok) {
-        setFeedback(result.reason);
-        if (result.reason !== 'unavailable') {
-          attempt.current = undefined;
-          setDraft(undefined);
-        }
-        if (result.reason === 'denied') setPage({ state: 'denied' });
-        return;
-      }
-      session.current = result.session;
-      attempt.current = undefined;
-      setDraft(undefined);
-      setFeedback(command.operation === 'accept' ? 'accepted' : 'rejected');
-      // A committed decision is not adoption. Reread only on the reviewer's next explicit refresh.
-      setPage({ state: 'idle' });
-    } catch {
-      setFeedback('unavailable');
-    } finally {
-      running.current = false;
-      setBusy(false);
-    }
-  }
   const names =
     page.state === 'ready'
       ? Object.fromEntries(Object.entries(page.names).map(([key, labels]) => [key, { labels }]))
       : {};
+  function prepared(state: QueueState, current: QueueScope): ProviderQueueRead {
+    if (state.state !== 'ready')
+      return {
+        ok: false,
+        reason:
+          state.state === 'denied' || state.state === 'missing'
+            ? state.state
+            : state.state === 'invalid'
+              ? 'invalid'
+              : 'unavailable',
+      };
+    return {
+      ok: true,
+      page: {
+        scope: current,
+        sourceLabel: current.source,
+        contextLabel: current.context === globalReviewContext ? m.prq_global() : m.prq_context(),
+        statusLabel: current.status === 'pending' ? m.prq_pending() : m.prq_accepted(),
+        rows: state.page.candidates.map(({ subject, candidate }) => ({
+          subject,
+          candidate,
+          label: m.prq_subject(),
+          href: subjectHref({ id: subject, label: '' }, locale).href,
+          propertyLabel: pageText(state.names[candidate.statement.property.id], locale).text || m.candidate_field(),
+          related: Object.fromEntries(Object.entries(state.names).map(([key, labels]) => [key, { labels }])),
+        })),
+        ...(state.session ? { session: state.session } : {}),
+      },
+    };
+  }
+  const presentation = prepared(page, scope);
   const messages = {
     idle: m.prq_start,
     loading: m.prq_loading,
     preparing: m.prq_preparing,
     denied: m.prq_denied,
+    missing: m.prq_unavailable,
     invalid: m.prq_invalid,
     unavailable: m.prq_unavailable,
   };
@@ -185,34 +182,6 @@ export function ProviderQueue({
         </div>
       </form>
       <p className="text-sm text-muted-foreground">{m.prq_context_help()}</p>
-      {feedback && (
-        <p role="status">
-          {{
-            accepted: m.prq_decided,
-            rejected: m.prq_decided,
-            stale: m.prq_stale,
-            invalid: m.prq_invalid,
-            unavailable: m.prq_uncertain,
-            denied: m.prq_denied,
-          }[feedback]()}
-        </p>
-      )}
-      {draft && (
-        <div className="space-y-3 rounded-xl border border-border p-5" role="group" aria-label={m.prq_confirm()}>
-          <p>{draft.operation === 'accept' ? m.candidate_accept() : m.candidate_reject()}</p>
-          <p className="text-sm text-muted-foreground">{m.prq_selection_help()}</p>
-          <div className="flex flex-wrap gap-3">
-            <Button type="button" disabled={busy || !canWrite} onClick={() => void confirm()}>
-              {attempt.current ? m.prq_retry() : m.prq_confirm()}
-            </Button>
-            {!attempt.current && (
-              <Button type="button" variant="outline" disabled={busy} onClick={() => setDraft(undefined)}>
-                {m.prq_cancel()}
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
       {page.state !== 'ready' ? (
         <div className="space-y-3 rounded-xl border border-border p-5">
           <p role={page.state === 'invalid' || page.state === 'unavailable' ? 'alert' : 'status'}>
@@ -256,88 +225,6 @@ export function ProviderQueue({
               {m.prq_empty()}
             </p>
           )}
-          {page.page.candidates.map(({ subject, candidate }) => {
-            const field = pageText(page.names[candidate.statement.property.id], locale);
-            return (
-              <Card key={`${subject}:${candidate.id}`}>
-                <CardHeader>
-                  <CardTitle>
-                    <h2 lang={field.lang}>{field.text || m.candidate_field()}</h2>
-                  </CardTitle>
-                  <a
-                    className="text-primary underline underline-offset-4"
-                    href={subjectHref({ id: subject, label: '' }, locale).href}
-                  >
-                    {m.prq_subject()}
-                  </a>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <CandidateValue snak={candidate.statement} related={names} locale={locale} />
-                  <p className="text-sm text-muted-foreground">
-                    {candidate.decision === 'accepted' ? m.prq_accepted() : m.prq_pending()}
-                  </p>
-                  {candidate.statement.qualifiers.map((snak, index) => (
-                    <div key={index}>
-                      <span className="font-medium">
-                        {pageText(page.names[snak.property.id], locale).text || m.candidate_field()}:{' '}
-                      </span>
-                      <CandidateValue snak={snak} related={names} locale={locale} />
-                    </div>
-                  ))}
-                  <details>
-                    <summary className="cursor-pointer py-2 text-primary">{m.candidate_provenance()}</summary>
-                    <div className="space-y-3 py-3">
-                      {candidate.statement.references.map((reference, index) => (
-                        <div key={index} className="space-y-2">
-                          {reference.parts.map((snak, part) => (
-                            <div key={part}>
-                              <CandidateValue snak={snak} related={names} locale={locale} />
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                      {candidate.source && 'source' in candidate.source && (
-                        <dl className="grid gap-2 text-sm">
-                          <dt>{m.prq_source()}</dt>
-                          <dd>{candidate.source.source}</dd>
-                          <dt>{m.prq_record()}</dt>
-                          <dd className="break-words">{candidate.source.external_id}</dd>
-                          <dt>{m.prq_revision()}</dt>
-                          <dd>{candidate.source.record_revision}</dd>
-                          <dt>{m.prq_converter()}</dt>
-                          <dd>{candidate.source.converter_revision}</dd>
-                        </dl>
-                      )}
-                    </div>
-                  </details>
-                  <div className="flex flex-wrap gap-3">
-                    {(['accept', 'reject'] as const).map((operation) => (
-                      <Button
-                        key={operation}
-                        type="button"
-                        variant={operation === 'accept' ? 'default' : 'outline'}
-                        disabled={locked || !canWrite || (operation === 'accept' && candidate.decision === 'accepted')}
-                        onClick={() =>
-                          setDraft({
-                            ...scope,
-                            subject,
-                            candidate: candidate.id,
-                            head: candidate.head,
-                            key: crypto.randomUUID(),
-                            operation,
-                            ...(session.current ? { session: session.current } : {}),
-                          })
-                        }
-                      >
-                        {operation === 'accept' ? m.candidate_accept() : m.candidate_reject()}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-sm text-muted-foreground">{m.prq_selection_help()}</p>
-                </CardContent>
-              </Card>
-            );
-          })}
           {page.page.next && (
             <Button type="button" variant="outline" disabled={locked} onClick={() => void read(scope, page.page.next!)}>
               {m.prq_continue()}
@@ -345,6 +232,83 @@ export function ProviderQueue({
           )}
         </>
       )}
+      <ProviderReviewActions
+        page={presentation.ok ? presentation.page : undefined}
+        currentScope={scope}
+        locale={locale}
+        disabled={!canWrite}
+        concealRows={page.state === 'denied' || page.state === 'missing'}
+        transport={{
+          confirm: async (command) => {
+            const result = await transport.decide({ ...scope, ...command });
+            return result.ok
+              ? { ...result, kind: command.operation === 'accept' ? 'accepted' : 'rejected' }
+              : result;
+          },
+          refresh: async (batch) => {
+            const commands = batch.attempts.map(({ command, result }) => ({
+              ...command,
+              ...(result?.ok && result.session ? { session: result.session } : {}),
+            }));
+            const nextScope = { ...batch.scope, status: batch.scope.status as QueueScope['status'] };
+            const observed = commands.findLast((command) => command.session)?.session;
+            const [next, readings] = await Promise.all([
+              transport.read(nextScope, undefined, observed),
+              transport.readings(commands),
+            ]);
+            refreshed.current = next;
+            return { queue: prepared(next, nextScope), readings };
+          },
+        }}
+        onRefresh={() => {
+          const next = refreshed.current;
+          if (!next) return;
+          setPage(next);
+          if (next.state === 'ready') session.current = next.session;
+        }}
+        renderDetails={({ candidate }) => (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {candidate.decision === 'accepted' ? m.prq_accepted() : m.prq_pending()}
+            </p>
+            {candidate.statement.qualifiers.map((snak, index) => (
+              <div key={index}>
+                <span className="font-medium">
+                  {pageText(page.state === 'ready' ? page.names[snak.property.id] : undefined, locale).text || m.candidate_field()}:{' '}
+                </span>
+                <CandidateValue snak={snak} related={names} locale={locale} />
+              </div>
+            ))}
+            <details>
+              <summary className="cursor-pointer py-2 text-primary">{m.candidate_provenance()}</summary>
+              <div className="space-y-3 py-3">
+                {candidate.statement.references.map((reference, index) => (
+                  <div key={index} className="space-y-2">
+                    {reference.parts.map((snak, part) => (
+                      <div key={part}>
+                        <CandidateValue snak={snak} related={names} locale={locale} />
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {candidate.source && 'source' in candidate.source && (
+                  <dl className="grid gap-2 text-sm">
+                    <dt>{m.prq_source()}</dt>
+                    <dd>{candidate.source.source}</dd>
+                    <dt>{m.prq_record()}</dt>
+                    <dd className="break-words">{candidate.source.external_id}</dd>
+                    <dt>{m.prq_revision()}</dt>
+                    <dd>{candidate.source.record_revision}</dd>
+                    <dt>{m.prq_converter()}</dt>
+                    <dd>{candidate.source.converter_revision}</dd>
+                  </dl>
+                )}
+              </div>
+            </details>
+            <p className="text-sm text-muted-foreground">{m.prq_selection_help()}</p>
+          </div>
+        )}
+      />
     </section>
   );
 }

@@ -4,6 +4,7 @@ import {
   readProviderQueueAction,
   prepareProviderQueueAction,
   decideProviderCandidateAction,
+  readProviderQueueSubjectsAction,
 } from './provider-queue-actions';
 import { ProviderQueue } from './provider-queue-view';
 import type { QueueTransport } from './provider-queue';
@@ -13,6 +14,7 @@ const transport: QueueTransport = {
     readProviderQueueAction({ data: { scope, ...(cursor ? { cursor } : {}), ...(session ? { session } : {}) } }),
   prepare: (data) => prepareProviderQueueAction({ data, headers: csrfHeaders() }),
   decide: (data) => decideProviderCandidateAction({ data, headers: csrfHeaders() }),
+  readings: (data) => readProviderQueueSubjectsAction({ data, headers: csrfHeaders() }),
 };
 export function ProviderQueueJourney() {
   const session = useSession();

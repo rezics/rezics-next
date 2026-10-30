@@ -2,6 +2,7 @@ import { createKernelClient } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { candidateFixture } from './subject-candidates';
 import definitions from '../recorded/definitions-release.json';
+import { readProviderDecisionSubjects } from '../../features/import-review/provider-review-actions';
 import {
   globalReviewContext,
   readProviderQueue,
@@ -88,6 +89,7 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
       ),
     prepare: (scope) => prepareProviderQueue(client, 'Bearer fixture', scope),
     decide: (command) => decideProviderCandidate(client, 'Bearer fixture', command),
+    readings: (commands) => readProviderDecisionSubjects(client, 'Bearer fixture', commands),
   };
   const initial: QueueState =
     scenario === 'loaded' || scenario === 'empty'
