@@ -29,6 +29,8 @@ let observedRows = 0,
   observedStatements = 0,
   observedRequestBytes = 0,
   observedResponseBytes = 0;
+const jsonBytes = (value: unknown) =>
+  Buffer.byteLength(JSON.stringify(value, (_key, item: unknown) => (typeof item === 'bigint' ? item.toString() : item)));
 beforeAll(async () => {
   db = await openGrowthDatabase();
   f = await createProfileEntryFixture({ pool: db.pool, clock, projectLinks: false });
@@ -40,8 +42,8 @@ beforeAll(async () => {
   await observeRetentionQueries(db.pool, ({ connection, sql, values, result }) => {
     observedRows += result.rows?.length ?? 0;
     observedStatements++;
-    observedRequestBytes += Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values));
-    observedResponseBytes += Buffer.byteLength(JSON.stringify(result.rows ?? []));
+    observedRequestBytes += Buffer.byteLength(sql) + jsonBytes(values);
+    observedResponseBytes += jsonBytes(result.rows ?? []);
     if (/INSERT INTO "dbos"\.workflow_output\b/i.test(sql)) pending.set(connection, String(values[0]));
     if (/^COMMIT$/i.test(sql.trim())) {
       const id = pending.get(connection);
@@ -232,6 +234,10 @@ test('selected child graph grows linearly while every default worker page stays 
     },
     async prepare(_db, scale) {
       await prepareGraph(scale);
+    },
+    async warmup(_db, scale) {
+      await prepareGraph(scale);
+      await workerRun();
     },
     async operation(_db, scale) {
       const pages = await workerRun();
