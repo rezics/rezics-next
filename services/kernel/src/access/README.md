@@ -29,6 +29,11 @@ response. The viewer request releases its time only after preparation, owner rea
 finish. The default never replaces a trusted supplied full `semantic.context` reader, and other duplicate
 registrations still fail. Existence supplies ordinary Context read eligibility, never mutation authority.
 
+The native fixed-binding fixture supplies a trusted Context reader through `viewerActionResources` so it can
+attest a real non-Global Context using Semantic's `editorialContextAnchor(id)` and the same live viewer time.
+Only `ContextNotFoundError` means absence; other Source failures propagate. This fixture composition leaves
+the production Global-only default and the missing/private resource outcomes unchanged.
+
 ## Native work admission
 
 `access/work.ts` owns the additive accounting port. It has no dependency on the Source interpreter and no
