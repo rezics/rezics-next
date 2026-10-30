@@ -106,7 +106,9 @@ export function libraryLabels(profile: ProfileData, locale: (typeof LIBRARY_LOCA
               Object.fromEntries(
                 m.units.map((u: ProfileData) => {
                   const label = unitWords[u.id]?.[n] ?? u.id;
-                  const forms = (countForms[locale] as Record<string, unknown>)[u.id];
+                  const forms = Object.hasOwn(countForms[locale], u.id)
+                    ? (countForms[locale] as Record<string, unknown>)[u.id]
+                    : undefined;
                   return [u.id, forms ? { label, countForms: forms } : label];
                 }),
               ),
