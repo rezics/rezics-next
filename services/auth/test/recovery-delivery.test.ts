@@ -352,9 +352,7 @@ test('actual native recovery INSERT commits typed Source before hooks and disclo
         code,
       });
       const page = await readRecoveryCopySourcePage(database, { accountId, role: 'account_id' });
-      expect(page).toEqual([
-        { deliveryId, status: 'unknown', custody: 'unknown', code },
-      ]);
+      expect(page).toEqual([{ deliveryId, status: 'unknown', custody: 'unknown', code }]);
       expect(Buffer.byteLength(JSON.stringify(page[0]))).toBeLessThanOrEqual(1024);
       expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(65536);
       // Native cleanup/TTL does not remove a potentially retained external copy.
