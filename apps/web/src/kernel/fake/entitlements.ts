@@ -32,7 +32,6 @@ export const activeEntitlement: BuyerEntitlement = {
   grantedAt: paid.order.createdAt,
   revokedAt: null,
   revokeReason: null,
-  contentEdition: null,
 };
 export const revokedEntitlement: BuyerEntitlement = {
   ...activeEntitlement,
