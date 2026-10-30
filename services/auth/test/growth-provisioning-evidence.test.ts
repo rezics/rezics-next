@@ -165,7 +165,9 @@ test('checkGrowth native idempotent password and credentialless commits have con
   for (const automated of [false, true]) {
     const targets = consumableGrowth({
       name: automated ? 'robot' : 'person',
-      async setup(_database, _scale, id) { pending(id, automated); },
+      async setup(_database, _scale, id) {
+        pending(id, automated);
+      },
       async run(_database, _scale, id) {
         const commit = () =>
           automated
@@ -251,72 +253,71 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
       expect((await db.admin.query('SELECT id FROM account WHERE "userId"=$1', [id])).rowCount).toBe(0);
     },
   });
-    const report = await checkGrowth(db, {
-      name: 'native provisioning proof erasure',
-      bounds,
-      async grow(database, scale) {
-        const count = Number(
-          (await database.admin.query('SELECT count(*) FROM "user" WHERE id LIKE $1', ['decoy-%'])).rows[0].count,
-        );
-        if (count > scale * 1024) {
-          await database.admin.query('DELETE FROM "user" WHERE id LIKE $1 AND substring(id from 7)::int>$2', [
-            'decoy-%',
-            scale * 1024,
-          ]);
-          await database.admin.query(
-            'DELETE FROM auth_registration_stage WHERE registration_id LIKE $1 AND substring(registration_id from 7)::int>$2',
-            ['decoy-%', scale * 1024],
-          );
-        } else if (count < scale * 1024) await grow(database, scale, count / 1024);
-        await database.admin.query('VACUUM (ANALYZE)');
-      },
-      ...targets.hooks,
-    });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-    for (const { cost, repetitions, occurrenceRepetitions } of report.samples) {
-      // Only accepted measured captures enter the report. Native producer ownership
-      // retains nested FK/cascade documents on their actual source occurrence.
-      const runs = occurrenceRepetitions.map(({ statements: occurrences }) => {
-        expect(occurrences.map(({ statement }) => statement)).toEqual([
-          'BEGIN',
-          'DELETE FROM "user" WHERE id=?',
-          'INSERT INTO auth_consent_erasure (account_id,due_at) VALUES (?,clock_timestamp()+interval ?) ON CONFLICT (account_id) DO NOTHING',
-          'COMMIT',
+  const report = await checkGrowth(db, {
+    name: 'native provisioning proof erasure',
+    bounds,
+    async grow(database, scale) {
+      const count = Number(
+        (await database.admin.query('SELECT count(*) FROM "user" WHERE id LIKE $1', ['decoy-%'])).rows[0].count,
+      );
+      if (count > scale * 1024) {
+        await database.admin.query('DELETE FROM "user" WHERE id LIKE $1 AND substring(id from 7)::int>$2', [
+          'decoy-%',
+          scale * 1024,
         ]);
-        return occurrences.flatMap(({ planDocuments }) => planDocuments) as NativePlan[];
-      });
-      expect(runs).toHaveLength(repetitions.length);
-      for (const documents of runs) {
-        expect(documents.map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
-        expect(documents.find(({ Plan }) => Plan['Relation Name'] === 'user')!['Query Text']).toBe(statements[1]);
-        expect(documents.find(({ Plan }) => Plan['Relation Name'] === 'auth_consent_erasure')!['Query Text']).toBe(
-          statements[2],
+        await database.admin.query(
+          'DELETE FROM auth_registration_stage WHERE registration_id LIKE $1 AND substring(registration_id from 7)::int>$2',
+          ['decoy-%', scale * 1024],
         );
-      }
-      for (const measured of [cost, ...repetitions]) {
-        expect(measured.statements).toBe(2);
-        expect(measured.controlStatements).toBe(2);
-        expect(measured.plans).toBe(relations.length);
-        expect(measured.rows).toBeLessThanOrEqual(5);
-        expect(measured.relations['public.auth_consent']).toBeUndefined();
-        expect(measured.relations['public.auth_registration_stage']).toBeUndefined();
-      }
+      } else if (count < scale * 1024) await grow(database, scale, count / 1024);
+      await database.admin.query('VACUUM (ANALYZE)');
+    },
+    ...targets.hooks,
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+  for (const { cost, repetitions, occurrenceRepetitions } of report.samples) {
+    // Only accepted measured captures enter the report. Native producer ownership
+    // retains nested FK/cascade documents on their actual source occurrence.
+    const runs = occurrenceRepetitions.map(({ statements: occurrences }) => {
+      expect(occurrences.map(({ statement }) => statement)).toEqual([
+        'BEGIN',
+        'DELETE FROM "user" WHERE id=?',
+        'INSERT INTO auth_consent_erasure (account_id,due_at) VALUES (?,clock_timestamp()+interval ?) ON CONFLICT (account_id) DO NOTHING',
+        'COMMIT',
+      ]);
+      return occurrences.flatMap(({ planDocuments }) => planDocuments) as NativePlan[];
+    });
+    expect(runs).toHaveLength(repetitions.length);
+    for (const documents of runs) {
+      expect(documents.map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
+      expect(documents.find(({ Plan }) => Plan['Relation Name'] === 'user')!['Query Text']).toBe(statements[1]);
+      expect(documents.find(({ Plan }) => Plan['Relation Name'] === 'auth_consent_erasure')!['Query Text']).toBe(
+        statements[2],
+      );
     }
-    pending('index-erasure', true);
-    await service.internal.provisionCredentialless({ authorization: 'index-erasure' });
-    Object.assign(accounts.get('index-erasure')!, { state: 'deleted', fenced: true });
-    const actual = await capture(db, () => service.internal.eraseAccount('index-erasure'));
-    const plan = nodes(actual.capture.plans);
-    expect(
-      plan.some((node) => node['Relation Name'] === 'auth_provisioning_receipt' && node['Node Type'] === 'Seq Scan'),
-    ).toBe(false);
-    for (const index of ['auth_provisioning_receipt_owner_idx', 'auth_provisioning_receipt_credential_idx'])
-      expect(plan.some((node) => node['Index Name'] === index)).toBe(true);
-    expect(actual.capture.statements).toEqual(statements);
-    expect((actual.capture.plans as NativePlan[]).map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
-    expect(costOf(actual.capture).statements).toBe(2);
-    expect(costOf(actual.capture).controlStatements).toBe(2);
-
+    for (const measured of [cost, ...repetitions]) {
+      expect(measured.statements).toBe(2);
+      expect(measured.controlStatements).toBe(2);
+      expect(measured.plans).toBe(relations.length);
+      expect(measured.rows).toBeLessThanOrEqual(5);
+      expect(measured.relations['public.auth_consent']).toBeUndefined();
+      expect(measured.relations['public.auth_registration_stage']).toBeUndefined();
+    }
+  }
+  pending('index-erasure', true);
+  await service.internal.provisionCredentialless({ authorization: 'index-erasure' });
+  Object.assign(accounts.get('index-erasure')!, { state: 'deleted', fenced: true });
+  const actual = await capture(db, () => service.internal.eraseAccount('index-erasure'));
+  const plan = nodes(actual.capture.plans);
+  expect(
+    plan.some((node) => node['Relation Name'] === 'auth_provisioning_receipt' && node['Node Type'] === 'Seq Scan'),
+  ).toBe(false);
+  for (const index of ['auth_provisioning_receipt_owner_idx', 'auth_provisioning_receipt_credential_idx'])
+    expect(plan.some((node) => node['Index Name'] === index)).toBe(true);
+  expect(actual.capture.statements).toEqual(statements);
+  expect((actual.capture.plans as NativePlan[]).map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
+  expect(costOf(actual.capture).statements).toBe(2);
+  expect(costOf(actual.capture).controlStatements).toBe(2);
 }, 120000);
 
 // A second native service uses the admin pool only for unmeasured erasure setup.

@@ -11,7 +11,12 @@ import { composeWork } from '../../kernel/src/work/registry.ts';
 import { createWorkClient } from '../../kernel/src/work/client.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
-import { consumableGrowth, prepareMaintenanceTarget, protocolRows, protocolTables } from './support/consumable-growth.ts';
+import {
+  consumableGrowth,
+  prepareMaintenanceTarget,
+  protocolRows,
+  protocolTables,
+} from './support/consumable-growth.ts';
 
 const child = process.argv.find((arg) => arg.startsWith('--consumable-child='))?.split('=')[1];
 if (child) {
@@ -28,22 +33,28 @@ if (child) {
       try {
         const runner = Bun.spawn([process.execPath, import.meta.path, `--consumable-child=${kind}`], {
           env: { ...process.env, CONSUMABLE_DATABASE_URL: fixture.url },
-          stdout: 'pipe', stderr: 'pipe',
+          stdout: 'pipe',
+          stderr: 'pipe',
         });
         const [stdout, stderr, code] = await Promise.all([
-          new Response(runner.stdout).text(), new Response(runner.stderr).text(), runner.exited,
+          new Response(runner.stdout).text(),
+          new Response(runner.stderr).text(),
+          runner.exited,
         ]);
         if (stdout) console.log(stdout);
         if (stderr) console.error(stderr);
         expect(code).toBe(0);
-      } finally { fixture.close(); }
+      } finally {
+        fixture.close();
+      }
     }, 240000);
 }
 
 async function completed(db: GrowthDatabase, schema: string, id: string) {
   const deadline = Date.now() + 60000;
   while (true) {
-    const status = (await db.admin.query(`SELECT status FROM ${schema}.workflow_status WHERE workflow_uuid=$1`, [id])).rows[0]?.status;
+    const status = (await db.admin.query(`SELECT status FROM ${schema}.workflow_status WHERE workflow_uuid=$1`, [id]))
+      .rows[0]?.status;
     if (['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'].includes(status)) return;
     if (Date.now() > deadline) throw new Error(`Native fixture workflow did not complete: ${id}`);
     await Bun.sleep(10);
@@ -73,26 +84,58 @@ async function nativeFixture(db: GrowthDatabase, website: boolean) {
   let shutdown: () => Promise<void>;
   let schema: string;
   if (website) {
-    await db.admin.query(`INSERT INTO "user" (id,name,"emailVerified") VALUES ('protocol-hot','',false),('protocol-other','',false);
+    await db.admin
+      .query(`INSERT INTO "user" (id,name,"emailVerified") VALUES ('protocol-hot','',false),('protocol-other','',false);
       INSERT INTO auth_client (client_id,first_party,scopes) VALUES ('protocol-hot',true,ARRAY['read']),('protocol-other',true,ARRAY['read'])`);
     await protocolRows(db, 'backlog-', 1, 1000, new Date('2000-01-01'));
     await protocolRows(db, 'live-', 1, 1000, new Date('2099-01-01'));
     await DBOS.migrate(db.url);
     const client = await createWorkClient(db.url, system);
-    const work = await composeWork([websiteMaintenanceModule({ pruneExpiredProtocolState: (batch) => pruneExpiredProtocolState(db.pool, batch) })], { databaseUrl: db.url, pool: system, client });
+    const work = await composeWork(
+      [websiteMaintenanceModule({ pruneExpiredProtocolState: (batch) => pruneExpiredProtocolState(db.pool, batch) })],
+      { databaseUrl: db.url, pool: system, client },
+    );
     await client.pauseSchedule(WEBSITE_MAINTENANCE_WORKFLOW);
     await work.launch();
     schema = 'dbos';
     dispatch = async (id) => {
-      const handle = await client.enqueue({ workflowName: WEBSITE_MAINTENANCE_WORKFLOW, queueName: 'maintenance', workflowID: id }, new Date(0), null);
+      const handle = await client.enqueue(
+        { workflowName: WEBSITE_MAINTENANCE_WORKFLOW, queueName: 'maintenance', workflowID: id },
+        new Date(0),
+        null,
+      );
       await completed(db, schema, id);
       expect(await handle.getResult()).toBe(5000);
     };
-    shutdown = async () => { await work.shutdown(); await client.close(); };
+    shutdown = async () => {
+      await work.shutdown();
+      await client.close();
+    };
   } else {
-    const key = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)), kid: 'current' };
-    const auth = await createAuthService({ database: db.pool, issuer: 'https://fixture.auth.test', audience: 'https://fixture.api.test', secret: 'consumable-native-fixture-secret-at-least-32-bytes', signing: { activeKid: key.kid, privateKeys: [key] }, trustedAccess: trustedAccessPorts({ readAccount: async () => null, authorizeProvisioning: async () => { throw new Error('Not used'); } }) });
-    DBOS.setConfig({ name: AUTH_WORKFLOW_APPLICATION, systemDatabaseUrl: db.url, systemDatabaseSchemaName: AUTH_SYSTEM_SCHEMA, systemDatabasePool: system, logLevel: 'warn' });
+    const key = {
+      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
+      kid: 'current',
+    };
+    const auth = await createAuthService({
+      database: db.pool,
+      issuer: 'https://fixture.auth.test',
+      audience: 'https://fixture.api.test',
+      secret: 'consumable-native-fixture-secret-at-least-32-bytes',
+      signing: { activeKid: key.kid, privateKeys: [key] },
+      trustedAccess: trustedAccessPorts({
+        readAccount: async () => null,
+        authorizeProvisioning: async () => {
+          throw new Error('Not used');
+        },
+      }),
+    });
+    DBOS.setConfig({
+      name: AUTH_WORKFLOW_APPLICATION,
+      systemDatabaseUrl: db.url,
+      systemDatabaseSchemaName: AUTH_SYSTEM_SCHEMA,
+      systemDatabasePool: system,
+      logLevel: 'warn',
+    });
     const maintenance = registerAuthMaintenance(auth);
     await DBOS.launch();
     await maintenance.start('0 0 1 1 *');
@@ -102,29 +145,58 @@ async function nativeFixture(db: GrowthDatabase, website: boolean) {
     const schedule = (await DBOS.getSchedule(AUTH_MAINTENANCE_SCHEDULE))!;
     expect(schedule.queueName).toBe(AUTH_MAINTENANCE_SCHEDULE);
     dispatch = async (id) => {
-      const handle = await DBOS.enqueueWorkflowWithOptions({ workflowName: schedule.workflowName, queueName: schedule.queueName!, workflowID: id }, new Date(0), schedule.context);
+      const handle = await DBOS.enqueueWorkflowWithOptions(
+        { workflowName: schedule.workflowName, queueName: schedule.queueName!, workflowID: id },
+        new Date(0),
+        schedule.context,
+      );
       await completed(db, schema, id);
       await handle.getResult();
     };
     shutdown = () => DBOS.shutdown();
   }
-  const tables = website ? protocolTables.map((table) => [table, table === 'auth_recent_oidc_session' ? 'session_id' : 'id'] as const) : [
-    ['auth_consent', 'account_id'], ['auth_consent_erasure', 'account_id'], ['session', 'id'], ['verification', 'id'],
-  ] as const;
+  const tables = website
+    ? protocolTables.map((table) => [table, table === 'auth_recent_oidc_session' ? 'session_id' : 'id'] as const)
+    : ([
+        ['auth_consent', 'account_id'],
+        ['auth_consent_erasure', 'account_id'],
+        ['session', 'id'],
+        ['verification', 'id'],
+      ] as const);
   async function counts(tag: string) {
-    return Promise.all(tables.map(async ([table, key]) => (await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${key} LIKE $1`, [`${tag}%`])).rows[0].n as number));
+    return Promise.all(
+      tables.map(
+        async ([table, key]) =>
+          (await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${key} LIKE $1`, [`${tag}%`])).rows[0]
+            .n as number,
+      ),
+    );
   }
-  const setup = (database: GrowthDatabase, _scale: number, id: string) => website ? protocolRows(database, `${id}-`, 1, 1000, new Date('1990-01-01')) : prepareMaintenanceTarget(database, id, 'history-', 16);
-  const full = website ? [1000,1000,1000,1000,1000] : [1600,100,1000,1000];
-  const targets = consumableGrowth({ name: 'fixture', setup, async run(_database, _scale, id) {
-    expect(await counts(`${id}-`)).toEqual(full);
-    await dispatch(id);
-    expect(await counts(`${id}-`)).toEqual(full.map(() => 0));
-    const outputs = (await db.admin.query(`SELECT output FROM ${schema}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`, [id])).rows;
-    expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual(website ? [5000] : [1000,0,1000,100]);
-    expect(await counts(website ? 'live-' : 'history-')).toEqual(website ? [1000,1000,1000,1000,1000] : [1000,1000,1000,1000]);
-    expect(await counts('backlog-')).toEqual(website ? [1000,1000,1000,1000,1000] : [0,0,1000,1000]);
-  } });
+  const setup = (database: GrowthDatabase, _scale: number, id: string) =>
+    website
+      ? protocolRows(database, `${id}-`, 1, 1000, new Date('1990-01-01'))
+      : prepareMaintenanceTarget(database, id, 'history-', 16);
+  const full = website ? [1000, 1000, 1000, 1000, 1000] : [1600, 100, 1000, 1000];
+  const targets = consumableGrowth({
+    name: 'fixture',
+    setup,
+    async run(_database, _scale, id) {
+      expect(await counts(`${id}-`)).toEqual(full);
+      await dispatch(id);
+      expect(await counts(`${id}-`)).toEqual(full.map(() => 0));
+      const outputs = (
+        await db.admin.query(
+          `SELECT output FROM ${schema}.operation_outputs WHERE workflow_uuid=$1 ORDER BY function_id`,
+          [id],
+        )
+      ).rows;
+      expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual(website ? [5000] : [1000, 0, 1000, 100]);
+      expect(await counts(website ? 'live-' : 'history-')).toEqual(
+        website ? [1000, 1000, 1000, 1000, 1000] : [1000, 1000, 1000, 1000],
+      );
+      expect(await counts('backlog-')).toEqual(website ? [1000, 1000, 1000, 1000, 1000] : [0, 0, 1000, 1000]);
+    },
+  });
   try {
     await expect(targets.hooks.operation(db, 1, 0)).rejects.toThrow('Fresh native target required');
     // Two explicit warm-ups, followed by seven physical measured invocations:
@@ -149,8 +221,14 @@ async function nativeFixture(db: GrowthDatabase, website: boolean) {
     expect(await counts(`${replayTarget}-`)).toEqual(full);
     await dispatch('fresh-after-replay');
     expect(await counts(`${replayTarget}-`)).toEqual(full.map(() => 0));
-    const completedRuns = (await db.admin.query(`SELECT count(*)::int AS n FROM ${schema}.workflow_status WHERE status='SUCCESS' AND (workflow_uuid LIKE 'fixture-%' OR workflow_uuid='fresh-after-replay')`)).rows[0].n;
+    const completedRuns = (
+      await db.admin.query(
+        `SELECT count(*)::int AS n FROM ${schema}.workflow_status WHERE status='SUCCESS' AND (workflow_uuid LIKE 'fixture-%' OR workflow_uuid='fresh-after-replay')`,
+      )
+    ).rows[0].n;
     expect(completedRuns).toBe(11);
     expect(await counts('fixture-')).toEqual(full.map(() => 0));
-  } finally { await shutdown(); }
+  } finally {
+    await shutdown();
+  }
 }

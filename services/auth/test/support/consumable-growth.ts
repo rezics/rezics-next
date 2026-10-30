@@ -47,19 +47,25 @@ export async function prepareMaintenanceTarget(db: GrowthDatabase, id: string, h
   // neighbourhood is due; no real user's 310-second deadline is changed.
   await db.admin.query(
     `INSERT INTO auth_consent_erasure (account_id,due_at)
-     SELECT $1||i,$2 FROM generate_series(1,100) i`, [tag, date]);
+     SELECT $1||i,$2 FROM generate_series(1,100) i`,
+    [tag, date],
+  );
   await db.admin.query(
     `INSERT INTO auth_consent (account_id,client_id,scopes)
      SELECT $1||i,$2||j,ARRAY['read'] FROM generate_series(1,100) i CROSS JOIN generate_series(1,$3::int) j`,
-    [tag, history, clients]);
+    [tag, history, clients],
+  );
   await db.admin.query(
     `INSERT INTO session
      (id,token,"userId","clientId","expiresAt","updatedAt","grantedScope","authnEpoch","authTime","authMethods")
      SELECT $1||i,$1||i,$2||i,$2||i,$3,now(),'read',1,1,'pwd' FROM generate_series(1,1000) i`,
-    [tag, history, date]);
+    [tag, history, date],
+  );
   await db.admin.query(
     `INSERT INTO verification (id,identifier,value,"expiresAt")
-     SELECT $1||i,$1||i,'due',$2 FROM generate_series(1,1000) i`, [tag, date]);
+     SELECT $1||i,$1||i,'due',$2 FROM generate_series(1,1000) i`,
+    [tag, date],
+  );
 }
 
 export const protocolTables = [
@@ -101,4 +107,3 @@ export async function protocolRows(db: GrowthDatabase, tag: string, from: number
     range,
   );
 }
-

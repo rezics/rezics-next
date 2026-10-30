@@ -19,7 +19,12 @@ import {
   type GrowthSample,
 } from '../../kernel/test/support/growth.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
-import { consumableGrowth, prepareMaintenanceTarget, protocolRows, protocolTables } from './support/consumable-growth.ts';
+import {
+  consumableGrowth,
+  prepareMaintenanceTarget,
+  protocolRows,
+  protocolTables,
+} from './support/consumable-growth.ts';
 
 const issuer = 'https://growth-revoke.auth.test';
 const secret = 'growth-revoke-maintenance-secret-at-least-32-bytes';
@@ -186,21 +191,21 @@ async function revokeGrowth(db: GrowthDatabase) {
       await authHistory(db, 'unrelated-', previous * 1000 + 1, scale * 1000);
     },
     ...targets.hooks,
-
   });
-  for (const sample of report.samples) for (const cost of [sample.cost, ...sample.repetitions]) {
-    expect(cost.statements).toBeGreaterThanOrEqual(5);
-    expect(cost.rows).toBeLessThanOrEqual(32);
-    for (const table of [
-      'session',
-      'user',
-      'auth_client',
-      'auth_client_coverage',
-      'auth_client_reduction',
-      'auth_consent',
-    ])
-      expect(cost.relations[`public.${table}`]?.sequentialScans ?? 0).toBe(0);
-  }
+  for (const sample of report.samples)
+    for (const cost of [sample.cost, ...sample.repetitions]) {
+      expect(cost.statements).toBeGreaterThanOrEqual(5);
+      expect(cost.rows).toBeLessThanOrEqual(32);
+      for (const table of [
+        'session',
+        'user',
+        'auth_client',
+        'auth_client_coverage',
+        'auth_client_reduction',
+        'auth_consent',
+      ])
+        expect(cost.relations[`public.${table}`]?.sequentialScans ?? 0).toBe(0);
+    }
 }
 
 async function durableHistory(
@@ -262,7 +267,8 @@ async function maintenanceGrowth(db: GrowthDatabase) {
       const scales = axis === 'history' ? ([1, 8, 64] as const) : ([1, 4, 16] as const);
       const targets = consumableGrowth({
         name: `maintenance-${axis}`,
-        setup: (database, scale, id) => prepareMaintenanceTarget(database, id, `${axis}-history-`, axis === 'history' ? 16 : scale),
+        setup: (database, scale, id) =>
+          prepareMaintenanceTarget(database, id, `${axis}-history-`, axis === 'history' ? 16 : scale),
         async run(_database, scale, id) {
           // Dispatch the registered schedule's native workflow with a fresh
           // explicit ID. Automatic schedule IDs are background in the harness.
@@ -303,8 +309,13 @@ async function maintenanceGrowth(db: GrowthDatabase) {
             ['session', 'id', scale * 2000],
             ['verification', 'id', scale * 2000],
           ] as const)
-            expect((await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${key} LIKE $1`, [`${axis}-history-%`])).rows[0].n).toBe(count);
-
+            expect(
+              (
+                await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${key} LIKE $1`, [
+                  `${axis}-history-%`,
+                ])
+              ).rows[0].n,
+            ).toBe(count);
         },
       });
       const report = await growth(db, {
@@ -351,10 +362,11 @@ async function maintenanceGrowth(db: GrowthDatabase) {
         },
         ...targets.hooks,
       });
-      for (const sample of report.samples) for (const cost of [sample.cost, ...sample.repetitions]) {
-        expect(cost.relations['public.auth_consent']!.rows).toBeGreaterThanOrEqual(100);
-        expect(cost.relations[`${AUTH_SYSTEM_SCHEMA}.operation_outputs`]!.nodes).toBeGreaterThan(0);
-      }
+      for (const sample of report.samples)
+        for (const cost of [sample.cost, ...sample.repetitions]) {
+          expect(cost.relations['public.auth_consent']!.rows).toBeGreaterThanOrEqual(100);
+          expect(cost.relations[`${AUTH_SYSTEM_SCHEMA}.operation_outputs`]!.nodes).toBeGreaterThan(0);
+        }
     }
   } finally {
     await DBOS.shutdown();
@@ -396,11 +408,14 @@ async function websiteGrowth(db: GrowthDatabase) {
         expect(outputs.map((row) => JSON.parse(row.output).json)).toEqual([5000]);
         for (const table of protocolTables) {
           const key = table === 'auth_recent_oidc_session' ? 'session_id' : 'id';
-          expect(
-            (await db.admin.query(`SELECT ${key} FROM ${table} WHERE ${key} LIKE $1`, [`${id}-%`])).rowCount,
-          ).toBe(0);
+          expect((await db.admin.query(`SELECT ${key} FROM ${table} WHERE ${key} LIKE $1`, [`${id}-%`])).rowCount).toBe(
+            0,
+          );
           for (const prefix of ['expired-', 'live-'])
-            expect((await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${key} LIKE $1`, [`${prefix}%`])).rows[0].n).toBe(scale * 1000);
+            expect(
+              (await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${key} LIKE $1`, [`${prefix}%`]))
+                .rows[0].n,
+            ).toBe(scale * 1000);
         }
       },
     });
@@ -415,20 +430,20 @@ async function websiteGrowth(db: GrowthDatabase) {
         await durableHistory(db, 'dbos', 'maintenance', 'website-history-', previous * 1000 + 1, scale * 1000);
       },
       ...targets.hooks,
-
     });
-    for (const sample of report.samples) for (const cost of [sample.cost, ...sample.repetitions]) {
-      expect(cost.statements).toBeGreaterThan(5);
-      for (const table of [
-        'oauthAccessToken',
-        'oauthRefreshToken',
-        'oauthRefreshFamily',
-        'oauthClientAssertion',
-        'auth_recent_oidc_session',
-      ])
-        expect(cost.relations[`public.${table}`]!.rows).toBeGreaterThanOrEqual(1000);
-      expect(cost.relations['dbos.operation_outputs']!.nodes).toBeGreaterThan(0);
-    }
+    for (const sample of report.samples)
+      for (const cost of [sample.cost, ...sample.repetitions]) {
+        expect(cost.statements).toBeGreaterThan(5);
+        for (const table of [
+          'oauthAccessToken',
+          'oauthRefreshToken',
+          'oauthRefreshFamily',
+          'oauthClientAssertion',
+          'auth_recent_oidc_session',
+        ])
+          expect(cost.relations[`public.${table}`]!.rows).toBeGreaterThanOrEqual(1000);
+        expect(cost.relations['dbos.operation_outputs']!.nodes).toBeGreaterThan(0);
+      }
   } finally {
     await work.shutdown();
     await client.close();
