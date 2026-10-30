@@ -2,6 +2,7 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -37,8 +38,7 @@ const SOURCE_STATISTIC_EVENT = 'com.rezics.rating.source_statistic.changed.v1';
 const SOURCE_STATISTIC_OPERATION = 'rating.source_statistic.write';
 const SOURCE_STATISTIC_CLEAR_OPERATION = 'rating.source_statistic.clear';
 const root = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
-const sourceAliasSchema = SourceFenceQuerySchema.properties.source;
-const sourceAliasPattern = new RegExp(sourceAliasSchema.pattern!);
+const sourceAliasValidator = Compile(SourceFenceQuerySchema.properties.source);
 const sourceRecordControls = /[\u0000-\u001f\u007f-\u009f]/u;
 
 type SourceStatistic = {
@@ -145,11 +145,7 @@ function effectiveAlias(source: string, value: { sourceAlias?: string }): string
 function validateAlias(value: { sourceAlias?: string }): void {
   const alias = value.sourceAlias;
   if (alias === undefined) return;
-  if (
-    typeof alias !== 'string' ||
-    sourceAliasPattern.exec(alias)?.[0] !== alias ||
-    Buffer.byteLength(alias, 'utf8') > sourceAliasSchema.maxLength!
-  )
+  if (typeof alias !== 'string' || !sourceAliasValidator.Check(alias) || sourceRecordControls.test(alias))
     throw new SourceStatisticInvalidError('sourceAlias');
 }
 
