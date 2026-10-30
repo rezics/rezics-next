@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
+import { appendImportPostgresCapture } from '../imports/api-capture.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
 import { catalogStatementBound, costOf, isControlStatement, withoutCatalogTexts } from './growth-cost.ts';
 import { statementOccurrences } from './growth-report.ts';
@@ -348,4 +349,88 @@ test('catalog projection keeps native occurrence links, documents, errors and ba
     [1, '42P01', []],
     [2, null, [1]],
   ]);
+});
+
+test('native nested documents keep their producer through catalog projection and existing append offsets', async () => {
+  const growthDb = database!;
+  await growthDb.admin.query(`
+    CREATE TABLE ${schema}.merge_rows (id integer PRIMARY KEY);
+    INSERT INTO ${schema}.merge_rows VALUES (1), (2);
+    CREATE FUNCTION ${schema}.merge_count() RETURNS integer LANGUAGE plpgsql AS $$
+    DECLARE matched integer;
+    BEGIN
+      SELECT count(*) INTO matched FROM ${schema}.merge_rows;
+      RETURN matched;
+    END $$;
+  `);
+  const prefix = await capture(growthDb, () => growthDb.pool.query('SELECT 17 AS prefix'), {
+    includeBackends: true,
+  });
+  const catalog = 'SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2';
+  const producer = `SELECT ${schema}.merge_count() AS matched`;
+  const missing = `SELECT * FROM ${schema}.merge_missing`;
+  const measured = await capture(
+    growthDb,
+    () =>
+      withConnection(growthDb.pool, async (client) => {
+        const metadata = client.query(catalog, [schema, 'merge_rows']);
+        const counted = client.query<{ matched: number }>(producer);
+        const failed = client.query(missing).catch((error: Error & { code?: string }) => error.code);
+        const [columns, result, code] = await Promise.all([metadata, counted, failed]);
+        return { columns: columns.rowCount, rows: result.rows, code };
+      }),
+    { includeBackends: true },
+  );
+  expect(measured.value).toEqual({ columns: 1, rows: [{ matched: 2 }], code: '42P01' });
+  const raw = measured.capture;
+  expect(raw.statements).toEqual([catalog, producer, missing]);
+  expect(raw.planStatements).toEqual([0, 1, 1]);
+  expect(raw.plans).toHaveLength(3);
+  const nested = raw.plans[1];
+  expect(nested).toEqual(expect.objectContaining({ 'Query Text': expect.stringContaining(`${schema}.merge_rows`) }));
+  expect(raw.statements).not.toContain((nested as { 'Query Text': string })['Query Text']);
+  const projected = withoutCatalogTexts(raw, catalogStatementBound(raw));
+  expect(projected.statements).toEqual([producer, missing]);
+  expect(projected.planStatements).toEqual([0, 0]);
+  expect(projected.plans).toEqual(raw.plans.slice(1));
+  expect(projected.plans[0]).toBe(nested);
+  expect(costOf(projected).relations[`${schema}.merge_rows`]?.rows).toBe(2);
+  expect(costOf(projected).relations[`${schema}.merge_rows`]?.blocks).toBeGreaterThan(0);
+  expect(costOf(projected)).toMatchObject({
+    rows: costOf(raw).rows,
+    blocks: costOf(raw).blocks,
+    plans: costOf(raw).plans,
+  });
+
+  const first = appendImportPostgresCapture({ statements: [], plans: [] }, prefix.capture, 'auth');
+  const merged = appendImportPostgresCapture(first, projected, 'kernel');
+  expect(merged.statements).toEqual([...prefix.capture.statements, producer, missing]);
+  expect(merged.planStatements).toEqual([0, 1, 1]);
+  expect(merged.plans).toEqual([...prefix.capture.plans, ...projected.plans]);
+  expect(merged.plans[1]).toBe(nested);
+  expect(merged.importStatementOwners).toEqual(['auth', 'kernel', 'kernel']);
+  expect(merged.importPlanOwners).toEqual(['auth', 'kernel', 'kernel']);
+  expect(merged.statementErrors).toEqual([null, null, '42P01']);
+  expect(merged.statementErrorMessages).toEqual([
+    ...prefix.capture.statementErrorMessages!,
+    ...projected.statementErrorMessages!,
+  ]);
+  expect(merged.statementBackends).toEqual([...prefix.capture.statementBackends!, ...projected.statementBackends!]);
+  expect(merged.planBackends).toEqual([...prefix.capture.planBackends!, ...projected.planBackends!]);
+  expect(merged.requestBytes).toEqual([...prefix.capture.requestBytes!, ...projected.requestBytes!]);
+  expect(merged.responseBytes).toEqual([...prefix.capture.responseBytes!, ...projected.responseBytes!]);
+  const occurrences = statementOccurrences(merged).statements;
+  expect(occurrences.map(({ plans, error }) => [plans, error?.code ?? null])).toEqual([
+    [[0], null],
+    [[1, 2], null],
+    [[], '42P01'],
+  ]);
+  expect(occurrences[1]!.planDocuments).toEqual(projected.plans);
+  expect(occurrences[1]!.rows).toBe(statementOccurrences(projected).statements[0]!.rows);
+  expect(occurrences[1]!.blocks).toBe(statementOccurrences(projected).statements[0]!.blocks);
+  expect(costOf(merged)).toMatchObject({
+    rows: costOf(first).rows + costOf(projected).rows,
+    blocks: costOf(first).blocks + costOf(projected).blocks,
+    plans: first.plans.length + projected.plans.length,
+  });
 });
