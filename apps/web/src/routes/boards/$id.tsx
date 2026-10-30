@@ -83,13 +83,15 @@ function BoardPage() {
         page={threads}
         authors={authors}
         now={now}
-        actions={session === 'signed-in' ? (
+        actions={
+          session === 'signed-in' ? (
             <a className={buttonVariants({ size: 'lg' })} href={`/${locale}/boards/${id}/new`}>
               {m.board_start_thread()}
             </a>
           ) : session !== 'unavailable' ? (
             <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />
-          ) : null}
+          ) : null
+        }
       />
     </article>
   );

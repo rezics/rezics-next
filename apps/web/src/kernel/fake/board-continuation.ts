@@ -20,7 +20,13 @@ export const routes: FakeRoute[] = [
       const continued = id === continuationBoardId && query.get('cursor') === continuationCursor;
       return {
         ...threads,
-        threads: continued ? threads.threads.map((thread) => ({ ...thread, boardId: id })) : [],
+        threads: continued
+          ? threads.threads.map((thread) => ({
+              ...thread,
+              boardId: id,
+              firstPost: { ...thread.firstPost, boardId: id },
+            }))
+          : [],
         next: !continued && id === continuationBoardId ? continuationCursor : null,
         rankRefreshedAt: continued && query.get('sort') !== null ? rankRefreshedAt : null,
       };

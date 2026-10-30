@@ -671,7 +671,7 @@ Each server render and browser session has its own query cache. Public reads sta
   an absent timestamp supplies no freshness claim. New shows no rank freshness. Rows use only returned activity data.
   The Patterns/Community/Board Continuation folder documents empty, terminal and keyboard continuation behavior.
   Review the same IDs at phone390/desktop1280 using locale and theme globals:
-  `patterns-community-board-continuation--empty-page`, `--continue-active`, `--continue-hot`, `--continue-newest`,
+  `patterns-community-board-continuation--empty-page`, `--continue-hot`,
   `--terminal-empty`; the composed page is `pages-community-board-continuation--continue-hot`.
   `tests/board-continuation.test.ts` covers traversal and current board/page read failures; native integration and
   Root screenshot review remain separate proof.

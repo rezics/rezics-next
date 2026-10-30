@@ -46,9 +46,10 @@ function threadOpeningWords(body: unknown): string | undefined {
  */
 export function BoardThreads({ boardId, sort, page, authors, now, actions }: Props) {
   const locale = getLocale();
-  const refreshedAt = sort !== 'new' && page.rankRefreshedAt && !Number.isNaN(Date.parse(page.rankRefreshedAt))
-    ? page.rankRefreshedAt
-    : null;
+  const refreshedAt =
+    sort !== 'new' && page.rankRefreshedAt && !Number.isNaN(Date.parse(page.rankRefreshedAt))
+      ? page.rankRefreshedAt
+      : null;
   return (
     <section className="flex flex-col gap-4" aria-labelledby="board-threads-heading">
       <h2 id="board-threads-heading" className="text-xl font-semibold">
@@ -65,64 +66,66 @@ export function BoardThreads({ boardId, sort, page, authors, now, actions }: Pro
           </time>
         </p>
       ) : null}
-        {page.threads.length ? (
-          <ul className="space-y-1">
-            {page.threads.map((thread) => {
-              const { replyCount, lastActivityAt } = threadActivity(thread);
-              const title = thread.title ?? threadOpeningWords(thread.firstPost.body) ?? m.threads_untitled();
-              return (
-                <ListRow key={thread.id} className="flex flex-col items-start gap-2 py-4 sm:flex-row sm:items-center">
-                  <ListRowLink href={threadLocation(locale, { id: thread.id, title: threadTitle(thread) })}>
+      {page.threads.length ? (
+        <ul className="space-y-1">
+          {page.threads.map((thread) => {
+            const { replyCount, lastActivityAt } = threadActivity(thread);
+            const title = thread.title ?? threadOpeningWords(thread.firstPost.body) ?? m.threads_untitled();
+            return (
+              <ListRow key={thread.id} className="flex flex-col items-start gap-2 py-4 sm:flex-row sm:items-center">
+                <ListRowLink href={threadLocation(locale, { id: thread.id, title: threadTitle(thread) })}>
+                  {title}
+                </ListRowLink>
+                <div className="min-w-0 flex-1">
+                  <h3 aria-hidden="true" className="text-lg font-semibold tracking-tight text-balance">
                     {title}
-                  </ListRowLink>
-                  <div className="min-w-0 flex-1">
-                    <h3 aria-hidden="true" className="text-lg font-semibold tracking-tight text-balance">
-                      {title}
-                    </h3>
-                    <ListRowControl className="w-fit">
-                      <Byline
-                        author={authors?.[thread.authorId]}
-                        createdAt={thread.createdAt}
-                        now={now}
-                        showAuthor={authors !== null}
-                        size="sm"
-                      />
-                    </ListRowControl>
-                  </div>
-                  {replyCount !== null || lastActivityAt ? (
-                    <ListRowControl className="flex flex-wrap gap-x-4 text-sm text-muted-foreground sm:justify-end">
-                      {replyCount !== null ? (
-                        <span className="inline-flex items-center gap-1.5 tabular-nums">
-                          <MessageSquareIcon aria-hidden="true" className="size-4" />
-                          {m.board_thread_replies({ count: replyCount })}
-                        </span>
-                      ) : null}
-                      {lastActivityAt ? (
-                        <time dateTime={lastActivityAt} title={fullDateTime(lastActivityAt, locale)}>
-                          {m.board_thread_last_activity({ time: timeText(lastActivityAt, now, locale) })}
-                        </time>
-                      ) : null}
-                    </ListRowControl>
-                  ) : null}
-                </ListRow>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground">{page.next === null ? m.board_threads_empty() : m.board_threads_page_empty()}</p>
-        )}
-        {page.next !== null ? (
-          <nav aria-label={m.board_threads_heading()}>
-            <Link
-              to="/boards/$id"
-              params={{ id: boardId }}
-              search={{ cursor: page.next, ...(sort === 'active' ? {} : { sort }) }}
-              className={buttonVariants({ variant: 'outline', size: 'lg' })}
-            >
-              {m.threads_next_page()}
-            </Link>
-          </nav>
-        ) : null}
+                  </h3>
+                  <ListRowControl className="w-fit">
+                    <Byline
+                      author={authors?.[thread.authorId]}
+                      createdAt={thread.createdAt}
+                      now={now}
+                      showAuthor={authors !== null}
+                      size="sm"
+                    />
+                  </ListRowControl>
+                </div>
+                {replyCount !== null || lastActivityAt ? (
+                  <ListRowControl className="flex flex-wrap gap-x-4 text-sm text-muted-foreground sm:justify-end">
+                    {replyCount !== null ? (
+                      <span className="inline-flex items-center gap-1.5 tabular-nums">
+                        <MessageSquareIcon aria-hidden="true" className="size-4" />
+                        {m.board_thread_replies({ count: replyCount })}
+                      </span>
+                    ) : null}
+                    {lastActivityAt ? (
+                      <time dateTime={lastActivityAt} title={fullDateTime(lastActivityAt, locale)}>
+                        {m.board_thread_last_activity({ time: timeText(lastActivityAt, now, locale) })}
+                      </time>
+                    ) : null}
+                  </ListRowControl>
+                ) : null}
+              </ListRow>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">
+          {page.next === null ? m.board_threads_empty() : m.board_threads_page_empty()}
+        </p>
+      )}
+      {page.next !== null ? (
+        <nav aria-label={m.board_threads_heading()}>
+          <Link
+            to="/boards/$id"
+            params={{ id: boardId }}
+            search={{ cursor: page.next, ...(sort === 'active' ? {} : { sort }) }}
+            className={buttonVariants({ variant: 'outline', size: 'lg' })}
+          >
+            {m.threads_next_page()}
+          </Link>
+        </nav>
+      ) : null}
     </section>
   );
 }
