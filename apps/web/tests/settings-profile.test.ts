@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
+import type { EditableProfile } from '../src/settings/editable-profile-source';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 
 const account = {
@@ -61,24 +62,49 @@ test('profile story responses accept the relative URL used by PageStory and incl
   }
 });
 
-test('profile reads the signed-in identity by id, then loads editable values by handle', async () => {
-  const { client, calls } = clientFor((request) =>
-    new URL(request.url).searchParams.has('ids')
-      ? Response.json({ accounts: [{ id: 'alice', kind: 'actor', handle: 'alice', displayName: 'Alice' }] })
-      : Response.json({ accounts: [account] }),
-  );
-  const profile = await loadProfileRecord(client, 'Bearer page-token', 'alice');
+test('profile reads editable values once by immutable id through the authenticated private no-store endpoint', async () => {
+  const nativeProfile: EditableProfile = {
+    id: '019a0000-0000-7000-8000-000000000001',
+    kind: 'actor',
+    handle: account.handle,
+    displayName: account.displayName,
+    bio: account.bio,
+    avatar: {
+      media: account.avatar.id,
+      width: 80,
+      height: 80,
+      placeholder: { thumbhash: 'hash', color: '#123456' },
+      variants: [{ format: 'webp', width: 80 }],
+      focalPoint: null,
+      credit: null,
+    },
+    links: account.links,
+    publicViews: account.publicViews,
+  };
+  const { client, calls } = clientFor((request) => {
+    expect(request.headers.get('authorization')).toBe('Bearer page-token');
+    expect(request.headers.get('cache-control')).toBe('no-store');
+    expect(request.cache).toBe('no-store');
+    return Response.json({ profile: nativeProfile }, { headers: { 'cache-control': 'private, no-store' } });
+  });
+  const profile = await loadProfileRecord(client, 'Bearer page-token', nativeProfile.id);
   expect(profile).toMatchObject({
-    accountId: 'alice',
+    accountId: '019a0000-0000-7000-8000-000000000001',
     kind: 'actor',
     displayName: 'Alice',
     biography: 'A short bio',
-    avatar: { id: 'media-old' },
+    avatar: { media: 'media-old' },
     links: [{ label: 'Home', url: 'https://example.test' }],
+    publicViews: { posts: true, reviews: true, collections: true, realms: true },
   });
+  expect(profile.avatar).toEqual(nativeProfile.avatar);
   expect(calls).toEqual([
-    { method: 'GET', url: '/v1/accounts?ids=alice', body: null, key: null },
-    { method: 'GET', url: '/v1/accounts?handle=alice', body: null, key: null },
+    {
+      method: 'GET',
+      url: '/v1/accounts/019a0000-0000-7000-8000-000000000001/profile',
+      body: null,
+      key: null,
+    },
   ]);
   expect(profile).not.toHaveProperty('speakersListed');
 });
