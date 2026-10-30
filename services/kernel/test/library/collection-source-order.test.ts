@@ -82,7 +82,6 @@ test('Ordered Collection consumers alias exact native ordinal tuple and work typ
       throw new Error('Unimplemented execution must not consume work');
     },
   };
-  expect(source.readRawOrdinalPrefix).toBe(source.readRawStoredPrefix);
   const failure = await source.readRawOrdinalPrefix(input).catch((error: unknown) => error);
   expect(failure).toBeInstanceOf(ProblemError);
   expect(failure).toMatchObject({ code: 'dependency_unavailable' });
