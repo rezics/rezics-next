@@ -664,6 +664,17 @@ Each server render and browser session has its own query cache. Public reads sta
 
 ### Board page (`/<locale>/boards/<id>`)
 
+- `BoardThreads` in `src/threads/board-continuation/` renders one returned page. An empty page with `next` says
+  no discussions are visible on this page and retains Next; only `next: null` uses the terminal empty-board copy.
+  Next preserves the opaque cursor and current Active, Hot or New choice. It never fetches more pages automatically.
+  Active and Hot show the supplied `rankRefreshedAt` as a refresh time, with an exact timestamp available on the time;
+  an absent timestamp supplies no freshness claim. New shows no rank freshness. Rows use only returned activity data.
+  The Patterns/Community/Board Continuation folder documents empty, terminal and keyboard continuation behavior.
+  Review the same IDs at phone390/desktop1280 using locale and theme globals:
+  `patterns-community-board-continuation--empty-page`, `--continue-active`, `--continue-hot`, `--continue-newest`,
+  `--terminal-empty`; the composed page is `pages-community-board-continuation--continue-hot`.
+  `tests/board-continuation.test.ts` covers traversal and current board/page read failures; native integration and
+  Root screenshot review remain separate proof.
 - **Touches:** Root preferences/D and public board plus thread-page K reads started together, then one batched
   identity read for the page's authors; preserve kernel thread order and pass `next` as the paging cursor. Each row
   is compact: author, reply count and last activity come from the thread row itself, with no read per thread. The
