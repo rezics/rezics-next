@@ -160,6 +160,26 @@ State, labels, progress and holdings never enter public Search. The shared pure 
 reference; mandatory request-time raw-fact replay is superseded. Typed, parameterized SQL ranges/qualifiers may
 execute the same released semantics. Same-statement qualifiers, datatypes/units and unknown under NOT remain.
 
+`current-filter-plan.ts` exports the pure native hook `compileCurrentOwnerFilter(filter: FilterDocument):
+CurrentOwnerFilterPlan`. `CurrentNativeLeaf` is `Readonly<{ kind: 'catalogue'; clause: FactClause }> |
+Readonly<{ kind: 'owner'; leaf: OwnerLeaf }>`; the plan exposes `leaves: CurrentNativeLeaf[]`,
+`indices: Map<string, number>`, `positive: Set<number>` and
+`evaluate(values: readonly RelationFacetMatch[]): RelationFacetMatch`. It shares the catalogue compiler's one
+three-valued AND/OR/NOT interpreter. Both accept already admitted, saved-expanded filters, reject remaining saved
+nodes and require one exact native `true`, `false` or `not_proven` per deduplicated leaf before evaluation.
+Wrong cardinality, holes and unsupported evidence reject even with a true OR branch; unknown under NOT stays
+`not_proven`. First occurrence orders leaves; `positive` records any occurrence under an even number of NOT nodes.
+
+`currentOwnerClauseKey(leaf: CurrentNativeLeaf): string` tags catalogue and owner namespaces. Catalogue keys reuse
+`currentClauseKey`; owner presence/state/label/session/holding keys retain every exact profile, state-set, lifecycle,
+kind, status and ID pin, normalizing only the set-valued `state.in`. Existing `compileCurrentFilter`, its `FactClause`
+leaves and keys stay compatible and reject every owner predicate before I/O. Neither compiler reads a Source,
+SQL, an engine or raw private fields. Scalar owner evidence is not permission: native callers must bind viewer-self,
+current source and identity, resolve and authorize every leaf before evaluation, and supply definitive false only
+from complete native absence. Commerce owns native matchers; full scoped70/excluded/order/population observations
+remain required. Compilation changes no HTTP grammar/admission, public Source scope, owner source/preparation
+readiness, scope guard or execution budget, and implies no readiness.
+
 Membership uses a complete, identified index observation for the admitted population/predicate, not a sample or
 possible-witness hint. Ordinary catalogue edits become filterable within 60 seconds in healthy operation. More than
 five minutes of actual source-to-searchable lag gives readiness. Engine refresh alone is not pipeline freshness.

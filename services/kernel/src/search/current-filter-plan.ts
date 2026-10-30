@@ -1,16 +1,24 @@
-import type { FilterDocument, FilterQualifier } from '@rezics/filter';
+import type { FilterDocument, FilterQualifier, OwnerLeaf } from '@rezics/filter';
 import type { FactClause } from './disclosure/check.ts';
 import type { RelationFacetMatch } from './source.ts';
 
-/** The current Boolean expression over deduplicated, first-occurrence-ordered fact leaves. */
-export type CurrentFilterPlan = {
-  leaves: FactClause[];
+/** The current Boolean expression over deduplicated, first-occurrence-ordered leaves. */
+type CurrentPlan<Leaf> = {
+  leaves: Leaf[];
   indices: Map<string, number>;
   /** Leaves with at least one occurrence under an even number of NOT nodes. */
   positive: Set<number>;
   /** Require exactly one true/false/not_proven result per leaf before evaluating any Boolean node. */
   evaluate(values: readonly RelationFacetMatch[]): RelationFacetMatch;
 };
+
+export type CurrentFilterPlan = CurrentPlan<FactClause>;
+
+export type CurrentNativeLeaf =
+  | Readonly<{ kind: 'catalogue'; clause: FactClause }>
+  | Readonly<{ kind: 'owner'; leaf: OwnerLeaf }>;
+
+export type CurrentOwnerFilterPlan = CurrentPlan<CurrentNativeLeaf>;
 
 const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
 
@@ -47,9 +55,49 @@ export function currentClauseKey(clause: FactClause): string {
   ]);
 }
 
-/** Accept only already admitted, expanded filters; saved nodes must reject. No source reads occur here. */
+/** Tagged native keys preserve exact owner pins; only state.in has set semantics. */
+export function currentOwnerClauseKey(leaf: CurrentNativeLeaf): string {
+  if (leaf.kind === 'catalogue') return JSON.stringify(['catalogue', currentClauseKey(leaf.clause)]);
+  const owner = leaf.leaf.owner;
+  if ('presence' in owner) return JSON.stringify(['owner', 'presence', owner.presence]);
+  if ('state' in owner)
+    return JSON.stringify([
+      'owner',
+      'state',
+      owner.state.profileId,
+      owner.state.stateSetId,
+      sortedValues(owner.state.in),
+    ]);
+  if ('label' in owner) return JSON.stringify(['owner', 'label', owner.label.id]);
+  if ('session' in owner)
+    return JSON.stringify(['owner', 'session', owner.session.profileId, owner.session.lifecycle]);
+  return JSON.stringify(['owner', 'holding', owner.holding.profileId, owner.holding.kind, owner.holding.status]);
+}
+
+/** Catalogue compilation rejects owner predicates at every depth, before any source I/O. */
 export function compileCurrentFilter(filter: FilterDocument): CurrentFilterPlan {
-  const leaves: FactClause[] = [];
+  return compileCurrentPlan(
+    filter,
+    (leaf) => {
+      if (leaf.kind === 'owner') throw new Error('Catalogue filters do not support owner predicates');
+      return leaf.clause;
+    },
+    currentClauseKey,
+  );
+}
+
+/** Native callers authorize and resolve every leaf; scalar evidence is not permission. No source reads. */
+export function compileCurrentOwnerFilter(filter: FilterDocument): CurrentOwnerFilterPlan {
+  return compileCurrentPlan(filter, (leaf) => leaf, currentOwnerClauseKey);
+}
+
+/** One interpreter for already admitted, expanded filters. */
+function compileCurrentPlan<Leaf>(
+  filter: FilterDocument,
+  select: (leaf: CurrentNativeLeaf) => Leaf,
+  keyOf: (leaf: Leaf) => string,
+): CurrentPlan<Leaf> {
+  const leaves: Leaf[] = [];
   const indices = new Map<string, number>();
   const positive = new Set<number>();
   type Evaluate = (values: readonly RelationFacetMatch[]) => RelationFacetMatch;
@@ -69,27 +117,33 @@ export function compileCurrentFilter(filter: FilterDocument): CurrentFilterPlan 
         return result === 'not_proven' ? result : !result;
       };
     }
-    if ('owner' in node) throw new Error('Catalogue filters do not support owner predicates');
     if ('saved' in node) throw new Error('Disclose only admitted, expanded filters');
-    const clause: FactClause =
-      'type' in node
-        ? { facet: 'type', values: node.type.in }
+    const native: CurrentNativeLeaf =
+      'owner' in node
+        ? { kind: 'owner', leaf: node }
         : {
-            facet: 'statement',
-            property: node.statement.property,
-            ...(node.statement.qualifiers ? { qualifiers: node.statement.qualifiers } : {}),
-            ...('in' in node.statement ? { values: node.statement.in } : { range: node.statement.range }),
+            kind: 'catalogue',
+            clause:
+              'type' in node
+                ? { facet: 'type', values: node.type.in }
+                : {
+                    facet: 'statement',
+                    property: node.statement.property,
+                    ...(node.statement.qualifiers ? { qualifiers: node.statement.qualifiers } : {}),
+                    ...('in' in node.statement ? { values: node.statement.in } : { range: node.statement.range }),
+                  },
           };
-    const key = currentClauseKey(clause);
+    const leaf = select(native);
+    const key = keyOf(leaf);
     let index = indices.get(key);
     if (index === undefined) {
       index = leaves.length;
       indices.set(key, index);
-      leaves.push(clause);
+      leaves.push(leaf);
     }
     if (!negated) positive.add(index);
-    const leaf = index;
-    return (values) => values[leaf]!;
+    const position = index;
+    return (values) => values[position]!;
   }
   const evaluate = visit(filter);
   return {
