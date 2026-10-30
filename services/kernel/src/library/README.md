@@ -233,7 +233,6 @@ Unresolved producer dependencies are specific:
   Library and financial Commerce are separate participants; payment retention stays with financial Commerce.
 - **Web:** shared members rendering, preparation/restart UI, Collection navigation and bounded Continue consumption.
 
-
 ## Explicit legacy profile migration runtime
 
 The callable owner binding is [Native runtime binding](../../../../docs/library-profile-consumers.md#native-runtime-binding).

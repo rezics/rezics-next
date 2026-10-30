@@ -111,10 +111,7 @@ async function readSource(deps: Dependencies, subjectId: string): Promise<Librar
  * historical fact only before that owner's live-fact cutover. A missing job never
  * prevents reading a current pinned fact, and reads never create owner metadata.
  */
-export async function assertPreProfileLibraryRead(
-  client: Pick<PoolClient, 'query'>,
-  accountId: string,
-): Promise<void> {
+export async function assertPreProfileLibraryRead(client: Pick<PoolClient, 'query'>, accountId: string): Promise<void> {
   const route = routeOf(accountId);
   if (route === null) throw new TypeError('Invalid Library owner');
   const migration = await migrationProgress.run(client, { route, account_id: accountId });

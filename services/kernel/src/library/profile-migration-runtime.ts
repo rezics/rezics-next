@@ -48,8 +48,13 @@ function ownerKey(accountId: string) {
   return { route: routeOf(accountId)!, account_id: accountId };
 }
 function closed(input: object, keys: string[]) {
-  if (!input || typeof input !== 'object' || Array.isArray(input) ||
-      Object.keys(input).length !== keys.length || keys.some((key) => !Object.hasOwn(input, key)))
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    Object.keys(input).length !== keys.length ||
+    keys.some((key) => !Object.hasOwn(input, key))
+  )
     throw new TypeError('Invalid Library profile migration control');
   if (Buffer.byteLength(JSON.stringify(input)) > 4096)
     throw new RangeError('Library profile migration control exceeds 4096 bytes');
@@ -58,8 +63,12 @@ function progress(accountId: string, row: Checkpoint | null): LibraryProfileMigr
   const phase = row?.phase ?? 'legacy';
   if (phase !== 'legacy' && phase !== 'ready' && !phases.includes(phase as LibraryProfileMigrationPhase))
     throw new Error('Invalid stored Library profile migration phase');
-  return { accountId, phase: phase as LibraryProfileMigrationProgress['phase'],
-    releaseDigest: row?.digest ?? null, after: row?.after ?? null };
+  return {
+    accountId,
+    phase: phase as LibraryProfileMigrationProgress['phase'],
+    releaseDigest: row?.digest ?? null,
+    after: row?.after ?? null,
+  };
 }
 function locator(state: LibraryProfileMigrationProgress): Locator {
   if (!state.releaseDigest || state.phase === 'legacy' || state.phase === 'ready')
@@ -71,8 +80,12 @@ function parseLocator(input: Locator): Locator {
   if (!Array.isArray(input.accounts) || input.accounts.length !== 1)
     throw new TypeError('Library profile migration requires one owner');
   ownerKey(input.accounts[0]);
-  if (!digest.test(input.releaseDigest) || !phases.includes(input.phase) ||
-      (input.after !== null && (typeof input.after !== 'string' || !uuid.test(input.after) || routeOf(input.after) === null)))
+  if (
+    !digest.test(input.releaseDigest) ||
+    !phases.includes(input.phase) ||
+    (input.after !== null &&
+      (typeof input.after !== 'string' || !uuid.test(input.after) || routeOf(input.after) === null))
+  )
     throw new TypeError('Invalid Library profile migration checkpoint');
   return input;
 }
@@ -81,18 +94,27 @@ async function enqueue(tx: OperationalTransaction, state: LibraryProfileMigratio
   const input = locator(state);
   parseLocator(input);
   await enqueueIntent(tx, {
-    queue: 'maintenance', workflowName: LIBRARY_PROFILE_MIGRATION_WORKFLOW,
+    queue: 'maintenance',
+    workflowName: LIBRARY_PROFILE_MIGRATION_WORKFLOW,
     workflowId: `${LIBRARY_PROFILE_MIGRATION_WORKFLOW}:${state.accountId}:${state.releaseDigest}:${state.phase}:${state.after ?? 'start'}`,
     input,
   });
 }
 function transaction<T>(deps: Dependencies, accountId: string, body: (tx: OperationalTransaction) => Promise<T>) {
   const key = ownerKey(accountId);
-  return runOperationalTransaction(deps.pool, {
-    mode: 'work-step', partition: partitionOf(key.route), kind: LIBRARY_PROFILE_MIGRATION_WORKFLOW,
-    accounts: [accountId], workClient: deps.client, deadline: workStepDeadline(),
-    ...(deps.clock === undefined ? {} : { clock: deps.clock }),
-  }, body);
+  return runOperationalTransaction(
+    deps.pool,
+    {
+      mode: 'work-step',
+      partition: partitionOf(key.route),
+      kind: LIBRARY_PROFILE_MIGRATION_WORKFLOW,
+      accounts: [accountId],
+      workClient: deps.client,
+      deadline: workStepDeadline(),
+      ...(deps.clock === undefined ? {} : { clock: deps.clock }),
+    },
+    body,
+  );
 }
 
 /** One owner-home transaction: raw source allowance is shared across every phase.
@@ -111,7 +133,11 @@ async function step(deps: Dependencies, input: Locator): Promise<LibraryProfileM
     let remaining = 100;
     while (state.phase !== 'ready' && remaining > 0) {
       const page = await pinLegacyFactsPage(tx, {
-        accountId, kind: state.phase, releaseDigest: input.releaseDigest, after: state.after, limit: remaining,
+        accountId,
+        kind: state.phase,
+        releaseDigest: input.releaseDigest,
+        after: state.after,
+        limit: remaining,
       });
       remaining -= page.examined;
       state.after = page.after;
@@ -156,8 +182,10 @@ export function createLibraryProfileMigrationRuntime(deps: Dependencies): Librar
       // composed:false is essential: only an actually published immutable release
       // can authorize this operation, never an unpersisted composition or Global head.
       const release = await readRelease(deps.pool, input.releaseDigest, { composed: false });
-      if (!release?.libraryProfiles?.['legacy-fixed-v1'] ||
-          Object.values(release.types).some((type) => type.library?.profileId === 'legacy-fixed-v1'))
+      if (
+        !release?.libraryProfiles?.['legacy-fixed-v1'] ||
+        Object.values(release.types).some((type) => type.library?.profileId === 'legacy-fixed-v1')
+      )
         throw new TypeError('Destination must publish unattached legacy-fixed-v1');
       return transaction(deps, input.accountId, async (tx) => {
         await ensureHead.run(tx, key);
@@ -167,7 +195,12 @@ export function createLibraryProfileMigrationRuntime(deps: Dependencies): Librar
           throw new TypeError('Library profile migration destination is already captured');
         if (state.phase === 'legacy') state.phase = 'entry';
         state.releaseDigest = input.releaseDigest;
-        await advanceCheckpoint.run(tx, { ...key, phase: state.phase, digest: input.releaseDigest, after: state.after });
+        await advanceCheckpoint.run(tx, {
+          ...key,
+          phase: state.phase,
+          digest: input.releaseDigest,
+          after: state.after,
+        });
         await enqueue(tx, state);
         return state;
       });
@@ -185,8 +218,16 @@ export function createLibraryProfileMigrationRuntime(deps: Dependencies): Librar
 
 /** Installed by the one Library WorkModule; deliberately no schedule/activation hook. */
 export function registerLibraryProfileMigrationWork(context: WorkContext): void {
-  const page = DBOS.registerStep(async (input: Locator) => { await step(context, input); },
-    { name: 'library.profileMigrationPage', ...COMMAND_STEP_RETRIES });
-  DBOS.registerWorkflow(async (input: Locator) => { await page(input); },
-    { name: LIBRARY_PROFILE_MIGRATION_WORKFLOW });
+  const page = DBOS.registerStep(
+    async (input: Locator) => {
+      await step(context, input);
+    },
+    { name: 'library.profileMigrationPage', ...COMMAND_STEP_RETRIES },
+  );
+  DBOS.registerWorkflow(
+    async (input: Locator) => {
+      await page(input);
+    },
+    { name: LIBRARY_PROFILE_MIGRATION_WORKFLOW },
+  );
 }
