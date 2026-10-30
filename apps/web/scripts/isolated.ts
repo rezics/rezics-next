@@ -23,6 +23,9 @@ if (command.length === 0) {
         )
       : command;
   const stateRoot = process.env.WEB_TEST_STATE_DIR;
+  const returnedPaths = appCommand.some((argument) => argument.endsWith('/post-delete.test.ts'))
+    ? ['.temp/post-delete-visuals']
+    : undefined;
 
   process.exitCode = await stackRun(
     {
@@ -32,6 +35,7 @@ if (command.length === 0) {
       command: ['bun', 'scripts/isolated.ts', ...command],
       // A state directory or a report the caller names is read back from this machine.
       keepsFiles: stateRoot !== undefined || testKeepsFiles(appCommand),
+      ...(returnedPaths === undefined ? {} : { returns: returnedPaths }),
     },
     async (slotEnvironment) => {
       if (appCommand[0] === 'bun' && appCommand[1] === 'test') {
