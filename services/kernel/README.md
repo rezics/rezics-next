@@ -373,14 +373,19 @@ configuration from changing a query plan; disabling per-query parallel workers a
 from changing the work counted by a capture. `admin` connections are for setup and assertions and are not measured. A
 test can still use `SET LOCAL` for a planner option inside its transaction.
 
-Use `includeBackends` for captures spanning multiple connections; it matches each plan to statements from the same
-backend PID.
+Use `includeBackends` for captures spanning multiple connections; it records the backend PID on every statement and
+plan so reports can retain connection identity.
 Each captured statement is also an occurrence: one execution of a client statement, including failed executions.
-Plans, including nested statement plans, are linked to the occurrence executing when the notice arrives. Growth reports
-keep these ordered per-run records in `occurrenceRepetitions`, with foreground and background statement lists kept
-separate. Use these records for checks that must prove the cost of each attempt, such as an aborted transaction and
-its successful retry. `statementRepetitions` and grouped statement attributions remain useful for overall profiles;
-they combine matching SQL across runs and must not be split by attempt.
+The harness attaches that occurrence at node-postgres's wire dispatch boundary: simple queries at `Connection.query`,
+and extended queries at `Parse` or `Bind`/`Execute`, including named prepared statement reuse. It retains custody
+through `ReadyForQuery`, so promise or callback completion order cannot move a plan to another queued query. Plans,
+including nested trigger and function plans, belong to the dispatched producer even when their Query Text matches a
+later queued client query. SQL text is report data, never occurrence identity. Queue operations and per-capture plan
+association process statements and notices in linear time; pending wire state is bounded by each client's outstanding
+queries. Growth reports keep these ordered per-run records in `occurrenceRepetitions`, with foreground and background
+statement lists kept separate. Use these records for checks that must prove the cost of each attempt, such as an
+aborted transaction and its successful retry. `statementRepetitions` and grouped statement attributions remain useful
+for overall profiles; they combine matching SQL across runs and must not be split by attempt.
 Checks may declare `attempts: { commands }` to count top-level transaction attempts per backend. Reports retain
 inclusive statement, row and block totals and the failed-statement SQLSTATE ledger, while also listing committed and
 aborted attempts by SQLSTATE for each scale and repetition. Attempts add evidence and never replace the universal

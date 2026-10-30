@@ -87,6 +87,59 @@ test('counts prepared request values and protocol response payloads exactly', as
   });
 });
 
+test('queued callback and promise executions keep their prepared request and response bytes', async () => {
+  const database = db!;
+  const query = 'SELECT $1::text AS value';
+  const name = 'growth_bytes_queued_named';
+  const measured = await capture(
+    database,
+    () =>
+      withConnection(database.pool, async (client) => {
+        const first = client.query<{ value: string }>(query, ['é']).then(({ rows }) => rows[0]?.value);
+        const second = new Promise<string>((resolve, reject) => {
+          client.query<{ value: string }>(query, ['x'], (error, response) => {
+            if (error) reject(error);
+            else resolve(response!.rows[0]!.value);
+          });
+        });
+        const third = client
+          .query<{ value: string }>({ name, text: query, values: ['a'] })
+          .then(({ rows }) => rows[0]?.value);
+        const fourth = new Promise<string>((resolve, reject) => {
+          client.query<{ value: string }>({ name, text: query, values: ['雪'] }, (error, response) => {
+            if (error) reject(error);
+            else resolve(response!.rows[0]!.value);
+          });
+        });
+        return Promise.all([first, second, third, fourth]);
+      }),
+    { includeBackends: true },
+  );
+
+  expect(measured.value).toEqual(['é', 'x', 'a', '雪']);
+  expect(measured.capture.statements).toEqual([query, query, query, query]);
+  expect(measured.capture.requestBytes).toEqual([
+    Buffer.byteLength(query, 'utf8') + Buffer.byteLength('é', 'utf8'),
+    Buffer.byteLength(query, 'utf8') + Buffer.byteLength('x', 'utf8'),
+    Buffer.byteLength(query, 'utf8') + Buffer.byteLength('a', 'utf8'),
+    Buffer.byteLength('雪', 'utf8'),
+  ]);
+  expect(measured.capture.responseBytes).toEqual([
+    Buffer.byteLength('é', 'utf8'),
+    Buffer.byteLength('x', 'utf8'),
+    Buffer.byteLength('a', 'utf8'),
+    Buffer.byteLength('雪', 'utf8'),
+  ]);
+  expect(measured.capture.statementErrors).toEqual([null, null, null, null]);
+  expect(measured.capture.planStatements).toEqual([0, 1, 2, 3]);
+  expect(new Set(measured.capture.statementBackends).size).toBe(1);
+  expect(measured.capture.planBackends).toEqual(measured.capture.statementBackends);
+  expect(costOf(measured.capture)).toMatchObject({
+    requestBytes: measured.capture.requestBytes!.reduce((sum, value) => sum + value, 0),
+    responseBytes: measured.capture.responseBytes!.reduce((sum, value) => sum + value, 0),
+  });
+});
+
 test('records bytes per statement for every instrumented pool and separates background work', async () => {
   const database = db!;
   const libraryPool = database.openPool({ max: 1 });

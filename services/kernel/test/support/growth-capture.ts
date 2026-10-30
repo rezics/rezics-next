@@ -20,6 +20,8 @@ export type SeedingCount = { statements: number; rowsWritten: number };
 type ActiveCapture = {
   readonly mode: 'measured' | 'warmup';
   statementRecords: StatementRecord[];
+  foregroundStatementCount: number;
+  backgroundStatementCount: number;
   plans: unknown[];
   planDatabases: string[];
   planStatements: (number | undefined)[];
@@ -39,15 +41,25 @@ type StatementRecord = {
   readonly index: number;
   requestBytes: number;
   responseBytes: number;
-  failed: boolean;
   errorCode: string | null;
   errorMessage: string | null;
-  planCount: number;
 };
 type WireStatement = {
   readonly record: StatementRecord | undefined;
+  readonly attribution: Attribution | undefined;
   parsed: boolean;
   bound: boolean;
+  queued: boolean;
+  queueNode: WireStatementNode | undefined;
+};
+type WireStatementNode = {
+  readonly statement: WireStatement;
+  previous: WireStatementNode | undefined;
+  next: WireStatementNode | undefined;
+};
+type WireStatementQueue = {
+  head: WireStatementNode | undefined;
+  tail: WireStatementNode | undefined;
 };
 type Attribution = {
   readonly capture: ActiveCapture;
@@ -70,11 +82,10 @@ type RunCapture = Map<GrowthDatabase, Set<string>> & {
   readonly backends: Set<number>;
 };
 const measuredRun = new AsyncLocalStorage<RunCapture>();
-const clientAttribution = new WeakMap<PoolClient, Attribution>();
-const clientStatement = new WeakMap<PoolClient, StatementRecord | undefined>();
 // pg can submit the next queued query before the previous query's promise settles.
-const clientWireQueue = new WeakMap<PoolClient, WireStatement[]>();
+const clientWireQueue = new WeakMap<PoolClient, WireStatementQueue>();
 const clientWireStatement = new WeakMap<PoolClient, WireStatement | undefined>();
+const clientExecutingStatement = new WeakMap<PoolClient, WireStatement | undefined>();
 const clientRowDescription = new WeakMap<PoolClient, readonly { readonly dataTypeID: number }[]>();
 const scheduledWorkflowID = /^sched-.+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z(?:-\d+)*$/;
 
@@ -128,17 +139,45 @@ function statementText(query: unknown): string | undefined {
   return typeof query.text === 'string' ? query.text : undefined;
 }
 
-function planQueryTexts(document: unknown): string[] {
-  const roots = Array.isArray(document) ? document : [document];
-  return roots.flatMap((root) =>
-    typeof root === 'object' && root !== null && 'Query Text' in root && typeof root['Query Text'] === 'string'
-      ? [root['Query Text']]
-      : [],
-  );
+function nextWireStatement(client: PoolClient): WireStatement | undefined {
+  const queue = clientWireQueue.get(client);
+  const node = queue?.head;
+  if (!node) {
+    clientWireStatement.set(client, undefined);
+    return undefined;
+  }
+  const statement = node.statement;
+  detachWireStatement(client, statement);
+  clientWireStatement.set(client, statement);
+  return statement;
 }
 
-function normalizedStatement(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+function queueWireStatement(client: PoolClient, statement: WireStatement): void {
+  let queue = clientWireQueue.get(client);
+  if (!queue) {
+    queue = { head: undefined, tail: undefined };
+    clientWireQueue.set(client, queue);
+  }
+  const node: WireStatementNode = { statement, previous: queue.tail, next: undefined };
+  if (queue.tail) queue.tail.next = node;
+  else queue.head = node;
+  queue.tail = node;
+  statement.queueNode = node;
+  statement.queued = true;
+}
+
+function detachWireStatement(client: PoolClient, statement: WireStatement): void {
+  if (!statement.queued) return;
+  statement.queued = false;
+  const queue = clientWireQueue.get(client);
+  const node = statement.queueNode;
+  statement.queueNode = undefined;
+  if (!queue || !node) return;
+  if (node.previous) node.previous.next = node.next;
+  else queue.head = node.next;
+  if (node.next) node.next.previous = node.previous;
+  else queue.tail = node.previous;
+  if (!queue.head) clientWireQueue.delete(client);
 }
 
 function backendPid(client: PoolClient): number | undefined {
@@ -199,22 +238,18 @@ function byteaPayloadLength(value: string | Buffer): number {
 
 function instrumentBytes(client: PoolClient): void {
   const connection = client.connection;
-  const nextWireStatement = (): WireStatement | undefined => {
-    const statement = clientWireQueue.get(client)?.shift();
-    clientWireStatement.set(client, statement);
-    return statement;
-  };
   const query = connection.query.bind(connection);
   connection.query = ((text: string) => {
-    const record = nextWireStatement()?.record;
+    const wireStatement = nextWireStatement(client);
+    clientExecutingStatement.set(client, wireStatement);
     const result = query(text);
-    if (record) record.requestBytes += Buffer.byteLength(text, 'utf8');
+    if (wireStatement?.record) wireStatement.record.requestBytes += Buffer.byteLength(text, 'utf8');
     return result;
   }) as typeof connection.query;
 
   const parse = connection.parse.bind(connection);
   connection.parse = ((statement, more) => {
-    const wireStatement = nextWireStatement();
+    const wireStatement = nextWireStatement(client);
     if (wireStatement) wireStatement.parsed = true;
     const record = wireStatement?.record;
     const result = parse(statement, more);
@@ -225,7 +260,7 @@ function instrumentBytes(client: PoolClient): void {
   const bind = connection.bind.bind(connection);
   connection.bind = ((config, more) => {
     let wireStatement = clientWireStatement.get(client);
-    if (!wireStatement?.parsed || wireStatement.bound) wireStatement = nextWireStatement();
+    if (!wireStatement?.parsed || wireStatement.bound) wireStatement = nextWireStatement(client);
     if (wireStatement) wireStatement.bound = true;
     const record = wireStatement?.record;
     if (config?.values && config.valueMapper) {
@@ -247,6 +282,20 @@ function instrumentBytes(client: PoolClient): void {
     }
     return bind(config, more);
   }) as typeof connection.bind;
+
+  const execute = connection.execute.bind(connection);
+  connection.execute = ((config, more) => {
+    clientExecutingStatement.set(client, clientWireStatement.get(client));
+    return execute(config, more);
+  }) as typeof connection.execute;
+
+  // pg emits ReadyForQuery after a query's notices and before it dispatches the next queued query. Clear the prior
+  // owner first, so the next query's connection.query/execute hook can install its own wire occurrence.
+  connection.prependListener('readyForQuery', () => {
+    clientExecutingStatement.delete(client);
+    clientWireStatement.delete(client);
+    clientRowDescription.delete(client);
+  });
 
   connection.on('message', (message) => {
     const protocolMessage = message as {
@@ -287,18 +336,11 @@ function instrumentBytes(client: PoolClient): void {
  */
 function intercept(client: PoolClient, state: CaptureState, explain: boolean): (statement: string) => unknown {
   const query = client.query.bind(client) as PoolClient['query'];
-  const pending: Array<Attribution | undefined> = [];
-  const pendingStatements: Array<StatementRecord | undefined> = [];
+  // This count controls only setting reassertion. Native plan custody is attached at the pg wire dispatch boundary.
+  let pendingQueries = 0;
   let suppressAttribution = false;
   // Whether auto_explain is on for this connection; undefined when a rollback or a failure may have undone it.
   let explaining: boolean | undefined = false;
-
-  const refreshAttribution = (): void => {
-    const attribution = pending[0];
-    if (attribution) clientAttribution.set(client, attribution);
-    else clientAttribution.delete(client);
-    clientStatement.set(client, pendingStatements[0]);
-  };
 
   const queryWithoutAttribution = (statement: string): unknown => {
     suppressAttribution = true;
@@ -333,17 +375,16 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     let record: StatementRecord | undefined;
     if (explain && !suppressAttribution && text !== undefined && attribution) {
       const capture = attribution.capture;
+      const index = attribution.background ? capture.backgroundStatementCount++ : capture.foregroundStatementCount++;
       record = {
         text,
         background: attribution.background,
         backend: capture.includeBackends ? backendPid(client) : undefined,
-        index: capture.statementRecords.filter((item) => item.background === attribution.background).length,
+        index,
         requestBytes: 0,
         responseBytes: 0,
-        failed: false,
         errorCode: null,
         errorMessage: null,
-        planCount: 0,
       };
       capture.statementRecords.push(record);
     }
@@ -353,29 +394,29 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         const wanted = state.active !== undefined;
         // A pg client queues concurrent queries. A preceding queued query may fail or roll back the transaction after
         // this call observes `explaining`, so reassert the setting between queued statements as well as on transitions.
-        if (explaining !== wanted || pending.length > 0) switchTo(wanted);
+        if (explaining !== wanted || pendingQueries > 0) switchTo(wanted);
       }
       // COMMIT can roll back an already-failed transaction, which also rolls back SET changes. Treat every end as
       // unknown and reassert on the next query; a successful commit simply repeats the harmless session setting.
       if (text !== undefined && MAY_RESET_SETTING.test(text)) explaining = undefined;
     }
-    const wireStatement: WireStatement = { record, parsed: false, bound: false };
-    const wireQueue = clientWireQueue.get(client) ?? [];
-    wireQueue.push(wireStatement);
-    clientWireQueue.set(client, wireQueue);
-    pending.push(attribution);
-    pendingStatements.push(record);
-    refreshAttribution();
+    const wireStatement: WireStatement = {
+      record,
+      attribution,
+      parsed: false,
+      bound: false,
+      queued: false,
+      queueNode: undefined,
+    };
+    queueWireStatement(client, wireStatement);
+    pendingQueries++;
 
     let completed = false;
     const done = (failed: boolean, result?: unknown, error?: unknown): void => {
       if (completed) return;
       completed = true;
-      const wireQueue = clientWireQueue.get(client);
-      const queuedIndex = wireQueue?.indexOf(wireStatement) ?? -1;
-      if (queuedIndex >= 0) wireQueue!.splice(queuedIndex, 1);
+      detachWireStatement(client, wireStatement);
       if (record) {
-        record.failed = failed;
         if (failed) {
           const code = (error as { code?: unknown } | null)?.code;
           record.errorCode = typeof code === 'string' && code.length > 0 ? code : 'unknown';
@@ -384,9 +425,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       }
       if (!failed) countWrites(state.seeding, result);
       else if (explain) explaining = undefined;
-      pending.shift();
-      pendingStatements.shift();
-      refreshAttribution();
+      pendingQueries--;
     };
     const callback = args.at(-1);
     const track = (task: Promise<void>): void => {
@@ -459,7 +498,8 @@ function instrument(client: PoolClient, state: CaptureState): void {
   instrumentBytes(client);
 
   client.on('notice', (notice) => {
-    const attribution = clientAttribution.get(client);
+    const wireStatement = clientExecutingStatement.get(client);
+    const attribution = wireStatement?.attribution;
     const message = notice.message;
     const marker = 'plan:\n';
     if (!attribution || typeof message !== 'string' || !message.startsWith('duration:') || !message.includes(marker))
@@ -468,17 +508,13 @@ function instrument(client: PoolClient, state: CaptureState): void {
     try {
       const plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length)) as unknown;
       const capture = attribution.capture;
-      const statement = clientStatement.get(client);
-      if (
-        statement &&
-        planQueryTexts(plan).some((text) => normalizedStatement(text) === normalizedStatement(statement.text))
-      )
-        statement.planCount++;
       (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
       (attribution.background ? capture.backgroundPlanDatabases : capture.planDatabases).push(
         connectedDatabase(client) ?? '',
       );
-      (attribution.background ? capture.backgroundPlanStatements : capture.planStatements).push(statement?.index);
+      (attribution.background ? capture.backgroundPlanStatements : capture.planStatements).push(
+        wireStatement?.record?.index,
+      );
       if (capture.includeBackends)
         (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
     } catch (error) {
@@ -602,6 +638,8 @@ async function captureInternal<T>(
   const active: ActiveCapture = {
     mode,
     statementRecords: [],
+    foregroundStatementCount: 0,
+    backgroundStatementCount: 0,
     plans: [],
     planDatabases: [],
     planStatements: [],

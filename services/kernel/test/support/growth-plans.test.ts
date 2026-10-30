@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
+import { withConnection } from '../../src/database/pool.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
 import { catalogStatementBound, costOf, isControlStatement, withoutCatalogTexts } from './growth-cost.ts';
+import { statementOccurrences } from './growth-report.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -274,4 +276,64 @@ test('catalog classification does not match a plan from another backend', () => 
     statementBackends: [202, 303],
     planBackends: [202, 303],
   });
+});
+
+test('catalog projection keeps native occurrence links, documents, errors and backends aligned', async () => {
+  const growthDb = database!;
+  const first = `SELECT 'first'::text AS value`;
+  const catalog = `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`;
+  const failed = `SELECT * FROM ${schema}.missing_projection_relation`;
+  const last = `SELECT 'last'::text AS value`;
+  const measured = await capture(
+    growthDb,
+    () =>
+      withConnection(growthDb.pool, async (client) => {
+        await client.query(first);
+        await client.query(catalog, [schema, 'subject']);
+        await expect(client.query(failed)).rejects.toMatchObject({ code: '42P01' });
+        await client.query(last);
+      }),
+    { includeBackends: true },
+  );
+  const raw = measured.capture;
+
+  expect(raw.statements).toEqual([first, catalog, failed, last]);
+  expect(raw.statementErrors).toEqual([null, null, '42P01', null]);
+  expect(raw.planStatements).toEqual([0, 1, 3]);
+  expect(raw.plans).toHaveLength(3);
+  expect(raw.statementBackends).toHaveLength(4);
+  expect(raw.planBackends).toHaveLength(3);
+  expect(catalogStatementBound(raw)).toMatchObject({ catalogStatements: 1, allowedStatements: 3 });
+
+  const beforePlans = [...raw.plans];
+  const projected = withoutCatalogTexts(raw, catalogStatementBound(raw));
+  expect(projected.statements).toEqual([first, failed, last]);
+  expect(projected.statementErrors).toEqual([null, '42P01', null]);
+  expect(projected.planStatements).toEqual([0, 2]);
+  expect(projected.plans).toEqual([beforePlans[0], beforePlans[2]]);
+  expect(projected.plans[0]).toBe(raw.plans[0]);
+  expect(projected.plans[1]).toBe(raw.plans[2]);
+  expect(projected.planBackends).toEqual([raw.planBackends![0], raw.planBackends![2]]);
+  expect(projected.statementBackends).toEqual([
+    raw.statementBackends![0],
+    raw.statementBackends![2],
+    raw.statementBackends![3],
+  ]);
+  expect(projected.requestBytes).toEqual([raw.requestBytes![0], raw.requestBytes![2], raw.requestBytes![3]]);
+  expect(projected.responseBytes).toEqual([raw.responseBytes![0], raw.responseBytes![2], raw.responseBytes![3]]);
+  expect(raw.statements).toHaveLength(4);
+  expect(raw.plans).toEqual(beforePlans);
+
+  const rawOccurrences = statementOccurrences(raw).statements;
+  expect(rawOccurrences.map(({ index, error, plans, backend }) => [index, error?.code ?? null, plans, backend])).toEqual([
+    [0, null, [0], raw.statementBackends![0]],
+    [1, null, [1], raw.statementBackends![1]],
+    [2, '42P01', [], raw.statementBackends![2]],
+    [3, null, [2], raw.statementBackends![3]],
+  ]);
+  expect(statementOccurrences(projected).statements.map(({ index, error, plans }) => [index, error?.code ?? null, plans])).toEqual([
+    [0, null, [0]],
+    [1, '42P01', []],
+    [2, null, [1]],
+  ]);
 });

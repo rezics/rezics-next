@@ -215,19 +215,23 @@ function isCatalogQuery(classification: CatalogClassification, text: string, bac
   return classification.catalogKeys.has(catalogKey(classification.backendAware, backend, text));
 }
 
-function hasMatchingStatement(
+function statementKeys(
   statements: readonly string[],
   statementBackends: readonly (number | undefined)[] | undefined,
-  planBackends: readonly (number | undefined)[] | undefined,
+  backendAware: boolean,
+): Set<string> {
+  return new Set(statements.map((statement, index) => catalogKey(backendAware, statementBackends?.[index], statement)));
+}
+
+function hasMatchingStatement(
+  keys: ReadonlySet<string>,
+  backendAware: boolean,
   queryText: string | undefined,
   backend: number | undefined,
 ): boolean {
-  if (statementBackends === undefined || planBackends === undefined) return true;
+  if (!backendAware) return true;
   if (queryText === undefined) return false;
-  return statements.some(
-    (statement, index) =>
-      catalogKey(true, statementBackends[index], statement) === catalogKey(true, backend, queryText),
-  );
+  return keys.has(catalogKey(true, backend, queryText));
 }
 
 export function catalogStatementBound(capture: Capture): CatalogClassification {
@@ -254,13 +258,21 @@ export function withoutCatalogTexts(
   const statements = capture.statements.flatMap((statement, index) =>
     !isCatalogQuery(catalog, statement, capture.statementBackends?.[index]) ? [index] : [],
   );
+  const remappedStatements = new Map<number, number>();
+  statements.forEach((original, index) => remappedStatements.set(original, index));
+  const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
+  const matchingStatements = statementKeys(capture.statements, capture.statementBackends, backendAware);
   const plans = capture.plans.flatMap((document, index) => {
     const backend = capture.planBackends?.[index];
     const owner = capture.planStatements?.[index];
-    if (owner !== undefined && !statements.includes(owner)) return [];
+    if (capture.planStatements !== undefined) {
+      if (owner === undefined || owner < 0 || owner >= capture.statements.length) return [index];
+      return remappedStatements.has(owner) ? [index] : [];
+    }
+    if (owner !== undefined && !remappedStatements.has(owner)) return [];
     return documentEntries(document).some(
       ({ queryText }) =>
-        hasMatchingStatement(capture.statements, capture.statementBackends, capture.planBackends, queryText, backend) &&
+        hasMatchingStatement(matchingStatements, backendAware, queryText, backend) &&
         (queryText === undefined || !isCatalogQuery(catalog, queryText, backend)),
     )
       ? [index]
@@ -291,8 +303,7 @@ export function withoutCatalogTexts(
           planStatements: plans.map((index) => {
             const original = capture.planStatements![index];
             if (original === undefined) return undefined;
-            const mapped = statements.indexOf(original);
-            return mapped < 0 ? undefined : mapped;
+            return remappedStatements.get(original);
           }),
         }),
     ...(capture.backgroundStatements === undefined ? {} : { backgroundStatements: capture.backgroundStatements }),
@@ -405,18 +416,30 @@ export function costOf(capture: Capture): Cost {
   let sharedRead = 0;
   const catalog = classifyCatalogStatements(capture);
   const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
+  const matchingStatements = statementKeys(capture.statements, capture.statementBackends, backendAware);
   let plans = 0;
 
   for (let index = 0; index < capture.plans.length; index++) {
     const document = capture.plans[index];
     const backend = capture.planBackends?.[index];
     for (const { queryText, plan } of documentEntries(document)) {
-      if (
-        backendAware &&
-        !hasMatchingStatement(capture.statements, capture.statementBackends, capture.planBackends, queryText, backend)
-      )
-        continue;
-      if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
+      const owner = capture.planStatements?.[index];
+      if (capture.planStatements !== undefined) {
+        if (
+          owner !== undefined &&
+          owner >= 0 &&
+          owner < capture.statements.length &&
+          isCatalogQuery(catalog, capture.statements[owner]!, capture.statementBackends?.[owner])
+        )
+          continue;
+      } else {
+        if (
+          backendAware &&
+          !hasMatchingStatement(matchingStatements, true, queryText, backend)
+        )
+          continue;
+        if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) continue;
+      }
       plans++;
       const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
       const totals = costNode(plan, true, relations, ctes);
@@ -438,21 +461,18 @@ export function costOf(capture: Capture): Cost {
   let backgroundBlocks = 0;
   const backgroundBackendAware =
     capture.backgroundStatementBackends !== undefined && capture.backgroundPlanBackends !== undefined;
+  const backgroundStatementKeys = statementKeys(
+    capture.backgroundStatements ?? [],
+    capture.backgroundStatementBackends,
+    backgroundBackendAware,
+  );
   for (let index = 0; index < (capture.backgroundPlans ?? []).length; index++) {
     const document = capture.backgroundPlans![index];
     const backend = capture.backgroundPlanBackends?.[index];
     for (const entry of documentEntries(document)) {
-      if (
+      if (capture.backgroundPlanStatements === undefined &&
         backgroundBackendAware &&
-        !hasMatchingStatement(
-          capture.backgroundStatements ?? [],
-          capture.backgroundStatementBackends,
-          capture.backgroundPlanBackends,
-          entry.queryText,
-          backend,
-        )
-      )
-        continue;
+        !hasMatchingStatement(backgroundStatementKeys, true, entry.queryText, backend)) continue;
       const key = entry.queryText ?? '<unknown background statement>';
       const planCost = costOf({
         statements: [],

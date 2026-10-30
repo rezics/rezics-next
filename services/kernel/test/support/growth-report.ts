@@ -131,14 +131,23 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
     backends: readonly (number | undefined)[] | undefined,
     plans: readonly unknown[],
     planStatements: readonly (number | undefined)[] | undefined,
-  ): StatementOccurrence[] =>
-    statements.map((statement, index) => {
-      const planIndices: number[] = [];
+  ): StatementOccurrence[] => {
+    const plansByStatement = Array.from({ length: statements.length }, () => [] as number[]);
+    for (let planIndex = 0; planIndex < plans.length; planIndex++) {
+      const statementIndex = planStatements?.[planIndex];
+      if (
+        statementIndex !== undefined &&
+        Number.isInteger(statementIndex) &&
+        statementIndex >= 0 &&
+        statementIndex < statements.length
+      )
+        plansByStatement[statementIndex]!.push(planIndex);
+    }
+    return statements.map((statement, index) => {
+      const planIndices = plansByStatement[index]!;
       let rows = 0;
       let blocks = 0;
-      for (let planIndex = 0; planIndex < plans.length; planIndex++) {
-        if (planStatements?.[planIndex] !== index) continue;
-        planIndices.push(planIndex);
+      for (const planIndex of planIndices) {
         for (const entry of planEntries(plans[planIndex])) {
           const cost = planCost(entry.plan);
           rows += cost.rows;
@@ -157,6 +166,7 @@ export function statementOccurrences(capture: Capture): StatementOccurrences {
         blocks,
       };
     });
+  };
   return {
     statements: occurrences(
       capture.statements,

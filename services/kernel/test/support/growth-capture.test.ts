@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
+import type { Capture } from './growth-cost.ts';
+import { statementOccurrences } from './growth-report.ts';
 import { checkGrowth } from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -10,14 +12,36 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 let db: GrowthDatabase | undefined;
 let dbClosed = false;
 
+function nativePlanEntries(capture: Capture) {
+  return capture.plans.flatMap((document, planIndex) => {
+    const roots = Array.isArray(document) ? document : [document];
+    return roots.flatMap((root) => {
+      if (typeof root !== 'object' || root === null || Array.isArray(root) || !('Plan' in root)) return [];
+      const plan = root.Plan;
+      if (typeof plan !== 'object' || plan === null || Array.isArray(plan)) return [];
+      return [
+        {
+          owner: capture.planStatements?.[planIndex],
+          queryText: 'Query Text' in root && typeof root['Query Text'] === 'string' ? root['Query Text'] : undefined,
+          plan: plan as Record<string, unknown>,
+        },
+      ];
+    });
+  });
+}
+
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
   await db.admin.query('DROP SCHEMA IF EXISTS growth_capture_test CASCADE');
   await db.admin.query('CREATE SCHEMA growth_capture_test');
   await db.admin.query('CREATE TABLE growth_capture_test.lookup (id integer PRIMARY KEY)');
   await db.admin.query('INSERT INTO growth_capture_test.lookup (id) VALUES (1)');
+  await db.admin.query('CREATE TABLE growth_capture_test.binding_rows (id integer PRIMARY KEY)');
+  await db.admin.query('INSERT INTO growth_capture_test.binding_rows (id) VALUES (1), (2)');
+  await db.admin.query('CREATE TABLE growth_capture_test.future_input (id integer PRIMARY KEY)');
   await db.admin.query('CREATE TABLE growth_capture_test.trigger_input (id integer PRIMARY KEY)');
   await db.admin.query('CREATE SEQUENCE growth_capture_test.retry_sequence');
+  await db.admin.query('CREATE SEQUENCE growth_capture_test.failure_sequence');
   await db.admin.query(`
     CREATE FUNCTION growth_capture_test.serialization_retry() RETURNS integer
     LANGUAGE plpgsql AS $function$
@@ -44,6 +68,33 @@ beforeAll(async () => {
   await db.admin.query(`
     CREATE TRIGGER observe_insert AFTER INSERT ON growth_capture_test.trigger_input
     FOR EACH ROW EXECUTE FUNCTION growth_capture_test.observe_insert()
+  `);
+  await db.admin.query(`
+    CREATE FUNCTION growth_capture_test.observe_future_lookup() RETURNS trigger
+    LANGUAGE plpgsql AS $function$
+    DECLARE matched integer;
+    BEGIN
+      EXECUTE format('SELECT id FROM growth_capture_test.future_input WHERE id = %s', NEW.id) INTO matched;
+      RETURN NEW;
+    END
+    $function$
+  `);
+  await db.admin.query(`
+    CREATE TRIGGER observe_future_lookup BEFORE INSERT ON growth_capture_test.future_input
+    FOR EACH ROW EXECUTE FUNCTION growth_capture_test.observe_future_lookup()
+  `);
+  await db.admin.query(`
+    CREATE FUNCTION growth_capture_test.fail_after_nested(wanted integer) RETURNS integer
+    LANGUAGE plpgsql AS $function$
+    DECLARE matched integer;
+    BEGIN
+      SELECT id INTO matched FROM growth_capture_test.binding_rows WHERE id = wanted;
+      IF nextval('growth_capture_test.failure_sequence') = 1 THEN
+        RAISE EXCEPTION 'failure after nested read' USING ERRCODE = '40001';
+      END IF;
+      RETURN matched;
+    END
+    $function$
   `);
 });
 
@@ -115,6 +166,120 @@ test('plans point to the queued statement occurrence that produced them', async 
   );
   expect(result.capture.statements).toEqual(['SELECT 71 AS queued', 'SELECT 72 AS queued']);
   expect(result.capture.planStatements).toEqual([0, 1]);
+});
+
+test('queued distinct simple statements retain their native plan rows and query text', async () => {
+  const database = db!;
+  const result = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      const first = client.query<{ queued: number }>('SELECT 71 AS queued');
+      const second = client.query<{ queued: number }>('SELECT 72 AS queued');
+      return Promise.all([first, second]);
+    }),
+  );
+
+  expect(result.value.map(({ rows }) => rows[0]?.queued)).toEqual([71, 72]);
+  expect(nativePlanEntries(result.capture).map(({ owner, queryText, plan }) => [owner, queryText, plan['Actual Rows']])).toEqual([
+    [0, 'SELECT 71 AS queued', 1],
+    [1, 'SELECT 72 AS queued', 1],
+  ]);
+});
+
+test('native plans follow dispatched occurrences across queued promise, callback, parameter and prepared queries', async () => {
+  const database = db!;
+  const query = 'SELECT id FROM growth_capture_test.binding_rows WHERE id <= $1::integer ORDER BY id';
+  const missing = 'SELECT id FROM growth_capture_test.missing_queued_rows';
+  const prepared = 'growth_capture_queued_named';
+  const result = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      const firstPromise = client.query<{ id: number }>(query, [1]).then(({ rows }) => rows.map(({ id }) => id));
+      const secondCallback = new Promise<number[]>((resolve, reject) => {
+        client.query<{ id: number }>(query, [2], (error, response) => {
+          if (error) reject(error);
+          else resolve(response!.rows.map(({ id }) => id));
+        });
+      });
+      const thirdPromise = client
+        .query<{ id: number }>({ name: prepared, text: query, values: [1] })
+        .then(({ rows }) => rows.map(({ id }) => id));
+      const fourthCallback = new Promise<number[]>((resolve, reject) => {
+        client.query<{ id: number }>({ name: prepared, text: query, values: [2] }, (error, response) => {
+          if (error) reject(error);
+          else resolve(response!.rows.map(({ id }) => id));
+        });
+      });
+      const failedCallback = new Promise<string>((resolve, reject) => {
+        client.query(missing, (error) => {
+          if (error) {
+            const code = (error as Error & { code?: unknown }).code;
+            resolve(typeof code === 'string' ? code : 'unknown');
+          } else reject(new Error('The queued missing-table query unexpectedly succeeded'));
+        });
+      });
+      const afterFailure = client
+        .query<{ after_failure: number }>('SELECT 55 AS after_failure')
+        .then(({ rows }) => rows[0]?.after_failure);
+      return Promise.all([firstPromise, secondCallback, thirdPromise, fourthCallback, failedCallback, afterFailure]);
+    }),
+  );
+
+  expect(result.value).toEqual([[1], [1, 2], [1], [1, 2], '42P01', 55]);
+  expect(result.capture.statements).toEqual([query, query, query, query, missing, 'SELECT 55 AS after_failure']);
+  expect(result.capture.statementErrors).toEqual([null, null, null, null, '42P01', null]);
+  expect(result.capture.plans).toHaveLength(5);
+  expect(result.capture.planStatements).toEqual([0, 1, 2, 3, 5]);
+  const entries = nativePlanEntries(result.capture);
+  expect(entries.map(({ owner, queryText, plan }) => [owner, queryText, plan['Actual Rows']])).toEqual([
+    [0, query, 1],
+    [1, query, 2],
+    [2, query, 1],
+    [3, query, 2],
+    [5, 'SELECT 55 AS after_failure', 1],
+  ]);
+
+  const occurrences = statementOccurrences(result.capture).statements;
+  expect(occurrences.map(({ error, plans, rows }) => [error?.code ?? null, plans, rows])).toEqual([
+    [null, [0], 1],
+    [null, [1], 2],
+    [null, [2], 1],
+    [null, [3], 2],
+    ['42P01', [], 0],
+    [null, [4], 0],
+  ]);
+});
+
+test('nested plans from failed and successful same-SQL producers keep their own occurrence custody', async () => {
+  const database = db!;
+  await database.admin.query('ALTER SEQUENCE growth_capture_test.failure_sequence RESTART WITH 1');
+  const query = 'SELECT growth_capture_test.fail_after_nested($1::integer) AS result';
+  const result = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      const failed = client.query<{ result: number }>(query, [99]).then(
+        () => null,
+        (error: Error & { code?: string }) => error.code ?? 'unknown',
+      );
+      const successful = client.query<{ result: number }>(query, [2]).then(({ rows }) => rows[0]?.result);
+      return Promise.all([failed, successful]);
+    }),
+    { includeBackends: true },
+  );
+
+  expect(result.value).toEqual(['40001', 2]);
+  expect(result.capture.statements).toEqual([query, query]);
+  expect(result.capture.statementErrors).toEqual(['40001', null]);
+  expect(result.capture.statementBackends).toHaveLength(2);
+  expect(result.capture.planBackends).toHaveLength(result.capture.plans.length);
+  const nested = nativePlanEntries(result.capture).filter(({ queryText }) =>
+    queryText?.includes('growth_capture_test.binding_rows'),
+  );
+  expect(nested.map(({ owner, plan }) => [owner, plan['Actual Rows']])).toEqual([
+    [0, 0],
+    [1, 1],
+  ]);
+  const occurrences = statementOccurrences(result.capture).statements;
+  expect(occurrences).toHaveLength(2);
+  expect(occurrences[0]).toMatchObject({ index: 0, error: { code: '40001' }, plans: [0], rows: 1 });
+  expect(occurrences[1]).toMatchObject({ index: 1, error: null, plans: expect.arrayContaining([1]), rows: 1 });
 });
 
 test('failed and unplanned statements retain backend and error details without plans', async () => {
@@ -279,6 +444,48 @@ test('captures nested statements run by a trigger function', async () => {
   ).toEqual([0]);
 });
 
+test('a nested plan matching a queued future query stays with its actual trigger producer', async () => {
+  const database = db!;
+  const insert = 'INSERT INTO growth_capture_test.future_input (id) VALUES (1)';
+  const future = 'SELECT id FROM growth_capture_test.future_input WHERE id = 1';
+  const result = await capture(database, () =>
+    withConnection(database.pool, async (client) => {
+      const insertPromise = client.query(insert);
+      const futurePromise = client.query<{ id: number }>(future);
+      const [write, read] = await Promise.all([insertPromise, futurePromise]);
+      return { inserted: write.rowCount, selected: read.rows.map(({ id }) => id) };
+    }),
+  );
+
+  expect(result.value).toEqual({ inserted: 1, selected: [1] });
+  expect(result.capture.statements).toEqual([insert, future]);
+  expect(result.capture.statementErrors).toEqual([null, null]);
+  expect(result.capture.requestBytes).toEqual([Buffer.byteLength(insert), Buffer.byteLength(future)]);
+  expect(result.capture.responseBytes).toEqual([0, 1]);
+  expect(result.capture.plans).toHaveLength(3);
+  expect(result.capture.planStatements).toEqual([0, 0, 1]);
+
+  const repeatedText = nativePlanEntries(result.capture).filter(({ queryText }) => queryText === future);
+  expect(repeatedText.map(({ owner, plan }) => [owner, plan['Actual Rows']])).toEqual([
+    [0, 0],
+    [1, 1],
+  ]);
+  const occurrences = statementOccurrences(result.capture).statements;
+  expect(occurrences[0]!.planDocuments).toHaveLength(2);
+  expect(occurrences[0]!.planDocuments).toContainEqual(
+    expect.objectContaining({
+      'Query Text': future,
+      Plan: expect.objectContaining({ 'Actual Rows': 0 }),
+    }),
+  );
+  expect(occurrences[1]!.planDocuments).toEqual([
+    expect.objectContaining({
+      'Query Text': future,
+      Plan: expect.objectContaining({ 'Actual Rows': 1 }),
+    }),
+  ]);
+});
+
 test('captures statements from every connection the operation checks out', async () => {
   const database = db!;
   const result = await capture(database, async () => {
@@ -296,6 +503,124 @@ test('captures statements from every connection the operation checks out', async
   expect(result.value).toEqual([51, 52]);
   expect(result.capture.statements).toEqual(['SELECT 51 AS answer', 'SELECT 52 AS answer']);
   expect(result.capture.plans).toHaveLength(2);
+});
+
+test('separate databases keep foreground, background, error, backend, plan and byte custody apart', async () => {
+  const database = db!;
+  const secondaryName = `growth_capture_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  await database.admin.query(`CREATE DATABASE "${secondaryName}"`);
+  let secondary: GrowthDatabase | undefined;
+  try {
+    const secondaryUrl = new URL(database.url);
+    secondaryUrl.pathname = `/${secondaryName}`;
+    secondary = await openGrowthDatabase(secondaryUrl.toString());
+
+    const mainName = new URL(database.url).pathname.slice(1);
+    const foregroundSql = `SELECT current_database() AS database, 'primary'::text AS marker`;
+    const missingSql = 'SELECT * FROM growth_capture_test.missing_cross_database';
+    const afterSql = `SELECT current_database() AS database, 'after'::text AS marker`;
+    const backgroundSql = `SELECT current_database() AS database, 'background'::text AS marker`;
+    const secondarySql = `SELECT current_database() AS database, 'secondary'::text AS marker`;
+    const backgroundPool = database.openPool({ max: 1 });
+    let startBackground!: () => void;
+    let finishBackground!: (value: { database: string; marker: string }) => void;
+    const backgroundStart = new Promise<void>((resolve) => (startBackground = resolve));
+    const backgroundFinished = new Promise<{ database: string; marker: string }>((resolve) => {
+      finishBackground = resolve;
+    });
+    const backgroundWork = (async () => {
+      await backgroundStart;
+      const response = await backgroundPool.query<{ database: string; marker: string }>(backgroundSql);
+      finishBackground(response.rows[0]!);
+    })();
+
+    const [primary, other] = await Promise.all([
+      capture(
+        database,
+        async () => {
+          const foreground = await database.pool.query<{ database: string; marker: string }>(foregroundSql);
+          startBackground();
+          await expect(database.pool.query(missingSql)).rejects.toMatchObject({ code: '42P01' });
+          const after = await database.pool.query<{ database: string; marker: string }>(afterSql);
+          const background = await backgroundFinished;
+          return { foreground: foreground.rows[0], after: after.rows[0], background };
+        },
+        { includeBackends: true },
+      ),
+      capture(
+        secondary,
+        async () => (await secondary!.pool.query<{ database: string; marker: string }>(secondarySql)).rows[0],
+        { includeBackends: true },
+      ),
+    ]);
+    await backgroundWork;
+
+    expect(primary.value).toEqual({
+      foreground: { database: mainName, marker: 'primary' },
+      after: { database: mainName, marker: 'after' },
+      background: { database: mainName, marker: 'background' },
+    });
+    expect(other.value).toEqual({ database: secondaryName, marker: 'secondary' });
+    expect(primary.capture.statements).toEqual([foregroundSql, missingSql, afterSql]);
+    expect(primary.capture.statementErrors).toEqual([null, '42P01', null]);
+    expect(primary.capture.planStatements).toEqual([0, 2]);
+    expect(primary.capture.requestBytes).toEqual(
+      [foregroundSql, missingSql, afterSql].map((sql) => Buffer.byteLength(sql, 'utf8')),
+    );
+    expect(primary.capture.responseBytes).toEqual([
+      Buffer.byteLength(mainName, 'utf8') + Buffer.byteLength('primary', 'utf8'),
+      0,
+      Buffer.byteLength(mainName, 'utf8') + Buffer.byteLength('after', 'utf8'),
+    ]);
+    expect(primary.capture.backgroundStatements).toEqual([backgroundSql]);
+    expect(primary.capture.backgroundPlanStatements).toEqual([0]);
+    expect(primary.capture.backgroundRequestBytes).toEqual([Buffer.byteLength(backgroundSql, 'utf8')]);
+    expect(primary.capture.backgroundResponseBytes).toEqual([
+      Buffer.byteLength(mainName, 'utf8') + Buffer.byteLength('background', 'utf8'),
+    ]);
+    expect(primary.capture.statementBackends).toHaveLength(3);
+    expect(primary.capture.planBackends).toHaveLength(2);
+    expect(primary.capture.backgroundStatementBackends).toHaveLength(1);
+    expect(primary.capture.backgroundPlanBackends).toEqual(primary.capture.backgroundStatementBackends);
+    expect(other.capture.statements).toEqual([secondarySql]);
+    expect(other.capture.planStatements).toEqual([0]);
+    expect(other.capture.requestBytes).toEqual([Buffer.byteLength(secondarySql, 'utf8')]);
+    expect(other.capture.responseBytes).toEqual([
+      Buffer.byteLength(secondaryName, 'utf8') + Buffer.byteLength('secondary', 'utf8'),
+    ]);
+    expect(other.capture.statementBackends).toEqual(other.capture.planBackends);
+    expect(
+      new Set([
+        primary.capture.statementBackends![0],
+        primary.capture.backgroundStatementBackends![0],
+        other.capture.statementBackends![0],
+      ]).size,
+    ).toBe(3);
+    expect(nativePlanEntries(primary.capture).map(({ owner, queryText }) => [owner, queryText])).toEqual([
+      [0, foregroundSql],
+      [2, afterSql],
+    ]);
+    expect(nativePlanEntries(primary.capture).map(({ queryText }) => queryText)).not.toContain(secondarySql);
+    expect(nativePlanEntries(other.capture).map(({ owner, queryText }) => [owner, queryText])).toEqual([
+      [0, secondarySql],
+    ]);
+
+    const primaryOccurrences = statementOccurrences(primary.capture);
+    expect(primaryOccurrences.statements.map(({ backend, error, plans }) => [backend, error?.code ?? null, plans])).toEqual([
+      [primary.capture.statementBackends![0], null, [0]],
+      [primary.capture.statementBackends![1], '42P01', []],
+      [primary.capture.statementBackends![2], null, [1]],
+    ]);
+    expect(primaryOccurrences.backgroundStatements).toMatchObject([
+      { index: 0, backend: primary.capture.backgroundStatementBackends![0], error: null, plans: [0] },
+    ]);
+    expect(statementOccurrences(other.capture).statements).toMatchObject([
+      { index: 0, backend: other.capture.statementBackends![0], error: null, plans: [0] },
+    ]);
+  } finally {
+    await secondary?.close();
+    await database.admin.query(`DROP DATABASE "${secondaryName}"`);
+  }
 });
 
 test('records nothing outside a capture and refuses overlapping captures', async () => {
