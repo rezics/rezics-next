@@ -5,12 +5,14 @@ import { type Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
+import type { SearchService } from '../search/service-scope.ts';
 type Dependencies = {
     pool: Pool;
     access: () => Access;
     tokens: KeyRing;
     clock: KernelClock;
     routeKey: Uint8Array;
+    search?: SearchService;
     workClient?: () => Promise<WorkClient>;
 };
 export declare const collectionSchema: import("typebox").TObject<{

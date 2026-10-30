@@ -33,6 +33,8 @@ Web handoff modules are `checkout/subject-purchase.ts` (`subjectPurchaseRegions`
 `unknown-mapping` and `actual-adapter-unavailable` under that same prefix. All eight locales use current shared rows
 and the signed-in mount seam. The ordinary Web 390/1280 review remains pending. The added
 `apps/web/tests/subject-purchase.test.ts` is focused interface acceptance source, not an executed native campaign.
+The local `bun run --cwd apps/web typecheck` passes with no type errors in 1,155 files after narrowing the shared
+locale at the region boundary. No acceptance, unit, browser, native or remote checks ran for this slice.
 Actual native producer binding, whole-journey, privacy/protected-use and promoted-main proof remain pending.
 
 Known-ID `/offers/$id` now presents the actual sanitized `contentEdition` capture: one fixed version, quantity one,

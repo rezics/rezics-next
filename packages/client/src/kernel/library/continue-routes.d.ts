@@ -3,6 +3,7 @@ import type { KernelClock } from '../clock.ts';
 import { type Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { SearchService } from '../search/service-scope.ts';
 export declare const continuePageSchema: import("typebox").TObject<{
     subjects: import("typebox").TArray<import("typebox").TObject<{
         subjectId: import("typebox").TString;
@@ -33,6 +34,8 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
     access: () => Access;
     clock: KernelClock;
     tokens: KeyRing;
+    routeKey?: Uint8Array;
+    search?: SearchService;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{

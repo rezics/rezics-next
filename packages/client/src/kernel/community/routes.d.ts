@@ -6570,6 +6570,201 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
     v1: {
         realms: {
             ":realmId": {
+                presentation: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            realmId: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                community: {
+                                    realmId: string;
+                                    spaceId: string;
+                                    contextId: string;
+                                    name: string;
+                                    description: string;
+                                    avatar: {
+                                        state: "available";
+                                        value: {
+                                            id: string;
+                                            containerId: string;
+                                            digest: string;
+                                            width: number;
+                                            height: number;
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                                height: number;
+                                            }[];
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            } | null;
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    banner: {
+                                        state: "available";
+                                        value: {
+                                            id: string;
+                                            containerId: string;
+                                            digest: string;
+                                            width: number;
+                                            height: number;
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                                height: number;
+                                            }[];
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            } | null;
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: ("cc:Attribution" | "cc:Notice" | "cc:ShareAlike" | "cc:SourceCode")[];
+                                            } | null;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    members: {
+                                        state: "current";
+                                        count: number;
+                                        version: string;
+                                    } | {
+                                        state: "unknown";
+                                        count: null;
+                                        version: null;
+                                    };
+                                    rules: {
+                                        state: "available";
+                                        value: {
+                                            postId: string;
+                                            revisionId: string;
+                                            body: unknown;
+                                            licence: string;
+                                            sha256: string;
+                                        };
+                                    } | {
+                                        state: "none" | "unavailable";
+                                        value: null;
+                                    };
+                                    join: {
+                                        membership: "member" | "nonmember" | "unknown";
+                                        action: "join" | "leave" | "sign-in" | null;
+                                    };
+                                };
+                            };
+                            400: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            401: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            500: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            503: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        realms: {
+            ":realmId": {
                 participation: {
                     get: {
                         body: unknown;
