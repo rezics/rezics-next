@@ -1,5 +1,6 @@
 import { admitFilter, FilterError, walkFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
+import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from './source.ts';
 
 export type FacetRequest = {
@@ -139,27 +140,21 @@ export async function discloseFacetValues(source: SubjectSource, values: readonl
     ids.add(value);
   }
   const visible = new Map<string, IndexedSubject>();
-  const partitions = [...groups].map(([partition, ids]) => ({
-    partition,
-    chunks: Array.from({ length: Math.ceil(ids.size / 256) }, (_, index) =>
-      [...ids].slice(index * 256, (index + 1) * 256),
-    ),
-  }));
+  const partitions = [...groups].map(([partition, ids]) => ({ partition, ids: [...ids] }));
   let next = 0;
   async function worker() {
     while (next < partitions.length) {
       const home = partitions[next++];
       if (!home) return;
-      for (const chunk of home.chunks) {
-        const requested = new Set(chunk);
+      for (let offset = 0; offset < home.ids.length; offset += REQUEST_SOURCE_KEYS) {
+        const chunk = home.ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
         const snapshot = await source.read(home.partition, chunk);
-        for (const subject of snapshot.subjects) {
-          if (requested.has(subject.id) && subject.visibility === 'visible' && subject.redirect === null)
-            visible.set(subject.id, subject);
+        for (const subject of validateRequestSourceSnapshot(snapshot, home.partition, chunk).values()) {
+          if (subject.visibility === 'visible' && subject.redirect === null) visible.set(subject.id, subject);
         }
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(8, partitions.length) }, () => worker()));
-  return visible;
+  return new Map([...new Set(values)].filter((id) => visible.has(id)).map((id) => [id, visible.get(id)!]));
 }

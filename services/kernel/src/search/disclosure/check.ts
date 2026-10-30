@@ -1,6 +1,7 @@
 import type { FilterDocument, FilterQualifier, FilterRange } from '@rezics/filter';
 import { anyCurrentMatch, compileCurrentFilter, currentClauseKey } from '../current-filter-plan.ts';
 import { holdsCurrentStatements, holdsCurrentType } from '../current-leaf.ts';
+import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from '../request-source-snapshot.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   subjectPartition,
@@ -68,8 +69,14 @@ export async function checkHits(
   const partitions = groups.entries();
   async function worker(): Promise<void> {
     for (const [partition, group] of partitions) {
-      const snapshot = await source.read(partition, [...group.ids]);
-      const subjects = new Map(snapshot.subjects.map((subject) => [subject.id, subject]));
+      const ids = [...group.ids];
+      const subjects = new Map<string, IndexedSubject>();
+      for (let offset = 0; offset < ids.length; offset += REQUEST_SOURCE_KEYS) {
+        const chunk = ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
+        const snapshot = await source.read(partition, chunk);
+        for (const [id, subject] of validateRequestSourceSnapshot(snapshot, partition, chunk))
+          subjects.set(id, subject);
+      }
       type Point = { probe: RelationFacetProbe; result?: RelationFacetMatch };
       const points = new Map<string, Point>();
       const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();

@@ -400,3 +400,42 @@ test('fixed truncated snapshots keep exact disclosure read and probe counts cons
   }
   expect(counts).toEqual(Array.from({ length: 3 }, () => ({ reads: 1, batches: [256, 64], probes: 320 })));
 });
+
+test('257 same-home candidates keep bounded reads, reject accounting, Boolean probes and stable duplicates', async () => {
+  const { fake, source, reads, calls } = fixture();
+  const subjects = Array.from({ length: 257 }, (_, index) => book(index + 1));
+  for (const subject of subjects) {
+    subject.statements.push(relation(target));
+    fake.put(subject);
+  }
+  fake.put({ ...subjects[255]!, visibility: 'hidden' });
+  const filter: FilterDocument = { or: [value([target]), { not: type }] };
+  const result = await checkHits(source, [...subjects.map((s) => hit(s)), hit(subjects[0]!)], named(filter).clauses, {
+    filter,
+    concurrency: 1,
+  });
+  expect(result.passed.map(({ subject }) => subject.id)).toEqual([
+    ...subjects.filter((_, index) => index !== 255).map((s) => s.id),
+    subjects[0]!.id,
+  ]);
+  expect(result.dropped).toBe(1);
+  expect(reads.map((read) => read.ids.length)).toEqual([256, 1]);
+  expect(calls.map((call) => call.probes.length)).toEqual([256]);
+  expect(calls[0]!.probes.map((probe) => probe.subject)).toEqual(subjects.filter((_, i) => i !== 255).map((s) => s.id));
+});
+
+test('invalid overflow observation rejects before a point probe even when its candidate would be dropped', async () => {
+  const { fake, source, calls } = fixture();
+  const a = book(1),
+    b = book(2);
+  a.statements.push(relation(target));
+  fake.put(a);
+  fake.put({ ...b, visibility: 'hidden' });
+  const read = source.read;
+  source.read = async (partition, ids) => {
+    const snapshot = await read(partition, ids);
+    return { ...snapshot, subjects: [...snapshot.subjects, { ...b, securityRevision: -1 }] };
+  };
+  await expect(checkHits(source, [hit(a), hit(b)], named(value()).clauses, { filter: value() })).rejects.toThrow();
+  expect(calls).toEqual([]);
+});

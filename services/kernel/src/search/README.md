@@ -394,6 +394,30 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   This is request/observation custody, not permission by UUID, foreign Source provenance, complete query privacy,
   physical index incarnation safety, erasure or identity proof. The native Semantic Source and current-disclosure
   producers retain their own obligations; sink response validation remains in the shared receipt writer.
+- Request hydration uses `request-source-snapshot.ts` for both `checkHits` and facet value labels. Each observation
+  must name the actual requested home and a native nonnegative bigint position. All returned IDs must be unique,
+  routable and exactly requested by that call; extra keys, duplicate bodies and malformed metadata reject even
+  when the record would otherwise be hidden or rejected. Custody, visibility, routable redirect and nonnegative
+  safe-integer security revision are validated for the entire observation before current facts are used. Terms,
+  statements, facets and overflow markers must have their existing Source shapes. A valid observation may omit
+  requested IDs: only that is ordinary absence. Request validation imposes no indexer envelope obligation or
+  external-version upper bound on the native position. `SearchUnavailableError` crosses `sourceRequest` as retryable
+  503 `index_not_ready`; a later invalid observation fails the whole response, without publishing a partial page.
+  The service's overflow/rating observer validates before examining any facts too.
+- Request cost: for `k` distinct routable keys grouped into homes, each helper makes exactly
+  `sum(ceil(keys_in_home/256))` Source calls, zero for empty input. Chunks in one home are sequential; home concurrency
+  remains bounded (eight by default). Validation keeps an O(k) requested-key set and examines the bounded returned
+  payload without another Source, SQL or engine operation. Hits retain input order and duplicate candidates; facet
+  labels retain first-requested order. Missing and rejected candidates remain in the actual read charge, while
+  existing full Boolean rechecks deduplicate and charge every required relation probe in batches of at most 256.
+  No per-hit read, enumeration, count restoration, permission mirror or identity authority is introduced.
+  [Request boundary coverage](../../test/search/disclosure.test.ts) uses real Access writes and native semantic
+  observations, cloning executed snapshots only for corruption controls. Fixed-key native hydration measures
+  SQL plans, examined rows, statements, blocks and wire bytes with the shared growth harness at 64/512/4096 unrelated
+  records and history; it counts actual calls, keys, rejects and probes. These adapter controls do not establish
+  whole-query privacy, Source runtime or default composition closure. The frozen wrong-home negative and the
+  original real-source batching suite remain independent acceptance input.
+
 - Touches: Indexing calls `SubjectSource.read(partition, ids)` in chunks of at most 256 deduplicated IDs in one
   partition. For `u` requested anchors, `c = ceil(u/256)` calls are made, with zero calls for `u = 0`; the ordinary
   64-envelope/1,000-event command bounds give at most 64,000 event anchors and 250 source calls per batch. Every

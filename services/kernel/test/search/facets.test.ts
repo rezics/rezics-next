@@ -128,3 +128,38 @@ test('facet counts use one request and mark inexact totals', async () => {
   expect(answer.facets[0]!.values.map(({ value }) => value)).toEqual([id(1), id(2)]);
   expect(requests).toHaveLength(1);
 });
+
+test('facet hydration preserves requested order across reverse records, chunks and concurrent homes', async () => {
+  const values = Array.from({ length: 257 }, (_, index) => id(index + 10));
+  values.splice(1, 0, '018f0000-0000-7000-8000-012300000001');
+  const reads: string[][] = [];
+  const source: SubjectSource = {
+    async read(partition, selected) {
+      reads.push([...selected]);
+      expect(selected.length).toBeLessThanOrEqual(256);
+      if (partition === 10) await Bun.sleep(5);
+      return {
+        partition,
+        position: 0n,
+        subjects: [...selected]
+          .reverse()
+          .map((id) => ({
+            id,
+            type: 'schema:Person',
+            visibility: 'visible',
+            redirect: null,
+            securityRevision: 0,
+            labels: [{ language: 'en', value: id }],
+            aliases: [],
+            descriptions: [],
+            statements: [],
+          })),
+      };
+    },
+    async count() {
+      throw new Error('No catalogue scan');
+    },
+  };
+  expect([...(await discloseFacetValues(source, [...values, values[0]!, 'bad-id'])).keys()]).toEqual(values);
+  expect(reads.map((ids) => ids.length).sort((a, b) => a - b)).toEqual([1, 1, 256]);
+});

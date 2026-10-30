@@ -15,6 +15,7 @@ import { compileKinds, kindDigest, type KindSnapshot } from './query.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding } from './cursor.ts';
+import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
 import {
   admitFacets,
@@ -70,6 +71,7 @@ async function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
     return await operation();
   } catch (error) {
     if (error instanceof ProblemError) throw error;
+    if (error instanceof SearchUnavailableError) throw indexNotReady();
     throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
   }
 }
@@ -454,6 +456,7 @@ export function createSearchService({
           ? {
               async read(partition, ids) {
                 const snapshot = await source.read(partition, ids);
+                validateRequestSourceSnapshot(snapshot, partition, ids);
                 if (rating) {
                   const previous = sourcePositions.get(partition);
                   if (previous !== undefined && previous !== snapshot.position) throw indexNotReady();
