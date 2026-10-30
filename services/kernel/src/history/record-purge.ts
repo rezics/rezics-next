@@ -112,7 +112,10 @@ function receivingTarget(saved: Binding, copy: RecordHistoryCopy) {
   // The native custody target is a UUID. Keep deterministic restart identity while using
   // its actual declared codec, rather than the provisional 64-character digest.
   const id = hash.digest('hex').slice(0, 32);
-  return { partition: copy.partition_no, receivingId: `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}` };
+  return {
+    partition: copy.partition_no,
+    receivingId: `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`,
+  };
 }
 
 /** Release requires Source's verified native receiving completion. Neither the returned
@@ -212,7 +215,12 @@ export async function minimizeRecordHistoryPurge(
   const custody = await nativeRecordPurgeCustody();
   const inventory = await custody?.sealRecordPurgeSourceInventory(deps, saved.authority, boundedContext);
   const setPage = await prepareRecordHistorySourceSetPage(
-    deps, saved.authority, saved.source, saved.key, saved.partition, boundedContext,
+    deps,
+    saved.authority,
+    saved.source,
+    saved.key,
+    saved.partition,
+    boundedContext,
   );
   const outcome = await runCommand(
     deps.pool,
@@ -225,12 +233,7 @@ export async function minimizeRecordHistoryPurge(
         `SELECT source_key FROM core.record_history_purge WHERE source_key=$1 AND deletion_generation=$2 FOR UPDATE`,
         [saved.key, source.reference.deletionGeneration],
       );
-      const setGap = await enrollRecordHistorySourceSets(
-        tx,
-        saved.key,
-        source.reference.deletionGeneration,
-        setPage,
-      );
+      const setGap = await enrollRecordHistorySourceSets(tx, saved.key, source.reference.deletionGeneration, setPage);
       const page = await tx.query<RecordHistoryCopy>(
         `SELECT partition_no,artifact_type,locator,gap FROM core.record_history_locator
          WHERE source_key=$1 AND (state='pending' OR gap='record-source-native-release-pending') AND next_attempt<=now()

@@ -58,11 +58,7 @@ export async function lockRecordHistoryCopy(
       `SELECT original_transaction,member_count,native_revision,snapshot_digest FROM core.record_history_purge_set
        WHERE source_key=$1 AND deletion_generation=$2 AND source_partition=$3
          AND set_locator=$4 AND set_revision=$5 FOR SHARE`,
-      [
-        purgeSourceKey(source),
-        source.reference.deletionGeneration,
-        ...recordSourceSetStorageKey(set.locator),
-      ],
+      [purgeSourceKey(source), source.reference.deletionGeneration, ...recordSourceSetStorageKey(set.locator)],
     );
     if (
       enrolled.rows[0]?.original_transaction !== set.locator.transactionId ||
@@ -71,7 +67,10 @@ export async function lockRecordHistoryCopy(
       enrolled.rows[0]?.snapshot_digest !== set.digest
     )
       return false;
-    if (!job.receivingHold && !(await nativeRecordSourceSetProducer().verifySemanticRecordSourceSet(tx, set.locator, set.digest)))
+    if (
+      !job.receivingHold &&
+      !(await nativeRecordSourceSetProducer().verifySemanticRecordSourceSet(tx, set.locator, set.digest))
+    )
       return false;
     const found = await tx.query(
       `SELECT producer_version,original_transaction,original_position FROM core.record_history_source_set_copy

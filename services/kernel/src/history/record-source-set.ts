@@ -16,15 +16,25 @@ const sets = new WeakMap<CommandTransaction, Declaration>();
 export function validateNativeRecordSourceSetLocator(locator: SemanticRecordSourceSetLocator): void {
   if (
     Object.keys(locator).length !== 3 ||
-    !Number.isInteger(locator.partition) || locator.partition < 0 || locator.partition > 4095 ||
+    !Number.isInteger(locator.partition) ||
+    locator.partition < 0 ||
+    locator.partition > 4095 ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(locator.transactionId) ||
-    !Number.isSafeInteger(locator.revision) || locator.revision < 1
-  ) throw new TypeError('Invalid native record source set locator');
+    !Number.isSafeInteger(locator.revision) ||
+    locator.revision < 1
+  )
+    throw new TypeError('Invalid native record source set locator');
 }
 export function validateNativeRecordSourceSetSnapshot(set: SemanticRecordSourceSetSnapshot): void {
   validateNativeRecordSourceSetLocator(set.locator);
-  if (Object.keys(set).length !== 3 || typeof set.digest !== 'string' || !set.digest.length ||
-      !Number.isInteger(set.members) || set.members < 0 || set.members > MAX_NATIVE_RECORD_SOURCE_SET_MEMBERS)
+  if (
+    Object.keys(set).length !== 3 ||
+    typeof set.digest !== 'string' ||
+    !set.digest.length ||
+    !Number.isInteger(set.members) ||
+    set.members < 0 ||
+    set.members > MAX_NATIVE_RECORD_SOURCE_SET_MEMBERS
+  )
     throw new TypeError('Invalid native record source set snapshot');
 }
 
@@ -53,11 +63,23 @@ export function rememberCommandRecordSourceSet(tx: CommandTransaction, sourceSet
   const locator = commandLocator(tx, sourceSet);
   sets.set(tx, { handle: sourceSet, locator });
 }
-export function hasCommandRecordSourceSet(tx: CommandTransaction): boolean { return sets.has(tx); }
-export function releaseCommandRecordSourceSet(tx: CommandTransaction): void { sets.delete(tx); }
+export function hasCommandRecordSourceSet(tx: CommandTransaction): boolean {
+  return sets.has(tx);
+}
+export function releaseCommandRecordSourceSet(tx: CommandTransaction): void {
+  sets.delete(tx);
+}
 
 /** Validation of persisted provisional metadata only. Never used as native producer evidence. */
-export function validateRecordSourceSetCommitment(set: Readonly<{ sourcePartition: number; locator: Uint8Array; revision: Uint8Array; originalTransaction: string; memberCount: number }>): void {
+export function validateRecordSourceSetCommitment(
+  set: Readonly<{
+    sourcePartition: number;
+    locator: Uint8Array;
+    revision: Uint8Array;
+    originalTransaction: string;
+    memberCount: number;
+  }>,
+): void {
   if (
     Object.keys(set).length !== 5 ||
     !Number.isInteger(set.sourcePartition) ||
@@ -99,12 +121,17 @@ export async function recordCommandRecordSourceSetCopy(
   );
   const original = await tx.query(
     `SELECT original_transaction,original_position,native_revision,metadata_state FROM core.record_history_source_set
-     WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3 FOR SHARE`, key,
+     WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3 FOR SHARE`,
+    key,
   );
   const row = original.rows[0];
-  if (!row || row.original_transaction !== set.transactionId || row.native_revision !== set.revision ||
-      row.metadata_state === 'legacy' ||
-      (row.original_position !== null && position !== null && BigInt(row.original_position) !== position))
+  if (
+    !row ||
+    row.original_transaction !== set.transactionId ||
+    row.native_revision !== set.revision ||
+    row.metadata_state === 'legacy' ||
+    (row.original_position !== null && position !== null && BigInt(row.original_position) !== position)
+  )
     throw new TypeError('Conflicting immutable native record source set');
   const encoded = Buffer.from(encodeLocator(locator));
   await tx.query(
@@ -120,10 +147,15 @@ export async function recordCommandRecordSourceSetCopy(
     [command.partition, locator.artifactType, encoded],
   );
   const copy = accepted.rows[0];
-  if (!copy || copy.source_partition !== key[0] || !Buffer.from(copy.set_locator).equals(key[1]) ||
-      !Buffer.from(copy.set_revision).equals(key[2]) || copy.original_transaction !== command.transactionId ||
-      copy.producer_version !== 1 ||
-      (copy.original_position !== null && position !== null && BigInt(copy.original_position) !== position))
+  if (
+    !copy ||
+    copy.source_partition !== key[0] ||
+    !Buffer.from(copy.set_locator).equals(key[1]) ||
+    !Buffer.from(copy.set_revision).equals(key[2]) ||
+    copy.original_transaction !== command.transactionId ||
+    copy.producer_version !== 1 ||
+    (copy.original_position !== null && position !== null && BigInt(copy.original_position) !== position)
+  )
     throw new TypeError('Conflicting native record source set copy');
 }
 

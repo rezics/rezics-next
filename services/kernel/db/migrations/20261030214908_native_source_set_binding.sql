@@ -1,3 +1,4 @@
+-- migrate:up
 -- Preserve provisional rows and their copy keys; only new native rows carry a structured revision.
 ALTER TABLE core.record_history_source_set
  ALTER COLUMN member_count DROP NOT NULL,
@@ -41,3 +42,5 @@ BEGIN
  END IF;
  RETURN NEW;
 END; $$;
+-- migrate:down
+-- Forward only: retain original source and copy provenance.

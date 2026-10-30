@@ -56,9 +56,11 @@ export function pageSemanticRecordSourceSets(
         language: string;
       }>,
   options: Readonly<{ frontier: string | null; limit: number; deadline: number }>,
-): Promise<Readonly<{
-  state: 'progress' | 'complete';
-  sets: readonly SemanticRecordSourceSetSnapshot[];
-  frontier: string | null;
-  examined: number;
-}>>;
+): Promise<
+  Readonly<{
+    state: 'progress' | 'complete';
+    sets: readonly SemanticRecordSourceSetSnapshot[];
+    frontier: string | null;
+    examined: number;
+  }>
+>;
