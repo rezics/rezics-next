@@ -2,6 +2,7 @@ import { viteNonceMarker } from './src/security/headers.ts';
 import { realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
@@ -56,7 +57,16 @@ export default defineConfig({
       name: 'generate-localization',
       async config(_config, { command }) {
         // Create generated localization modules before Vite scans the browser routes.
-        if (command === 'serve') await import('./scripts/generate.ts');
+        if (command === 'serve') {
+          await new Promise<void>((resolve, reject) => {
+            const child = spawn('bun', ['scripts/generate.ts'], { stdio: 'inherit' });
+            child.once('error', reject);
+            child.once('exit', (code, signal) => {
+              if (code === 0) resolve();
+              else reject(new Error(`Paraglide generation exited with ${signal ?? code}`));
+            });
+          });
+        }
       },
     },
     paraglideVitePlugin({ project: './project.inlang' }),

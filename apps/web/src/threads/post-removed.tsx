@@ -47,6 +47,7 @@ export function RemovedPost({
   };
 
   if (post.availability === 'withheld') {
+    const author = authors?.[post.authorId];
     return (
       <li {...common}>
         <div className="mb-3 flex items-start justify-between gap-3">

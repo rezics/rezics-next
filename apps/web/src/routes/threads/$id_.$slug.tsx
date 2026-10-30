@@ -404,14 +404,15 @@ function PostSlot({
     );
   }
 
+  const authorId = 'authorId' in post ? post.authorId : undefined;
   return (
     <li id={anchorId} ref={itemElement} tabIndex={-1} className="scroll-mt-24 py-5 target:bg-muted/50">
       <div className="mb-3 flex items-start justify-between gap-3">
         <Byline
-          author={authors?.[post.authorId]}
+          author={authorId === undefined ? undefined : authors?.[authorId]}
           createdAt={post.createdAt}
           now={now}
-          showAuthor={authors !== null}
+          showAuthor={authors !== null && authorId !== undefined}
           className="min-h-8 flex-1"
         >
           {post.revisedAt && new Date(post.revisedAt).getTime() > new Date(post.createdAt).getTime() ? (
