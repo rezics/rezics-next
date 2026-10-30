@@ -17,7 +17,7 @@ function CopiesStory({ mode }: { mode: CopiesStoryMode }) {
 }
 
 const ready = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-  await within(canvasElement).findByRole('heading', { level: 1, name: /Copies|复本/ });
+  await within(canvasElement).findByRole('heading', { level: 1, name: m.library_copy_heading() });
 };
 
 export const ManyCopies: Story = {
@@ -34,8 +34,11 @@ export const ManyCopies: Story = {
     const kokoro = (await canvas.findByText(recordedCopy.note, { exact: true })).closest('li');
     if (!kokoro) throw new globalThis.Error('The recorded Kokoro copy did not render in the list.');
     expect(kokoro.textContent).toContain('Kokoro');
-    expect(kokoro?.textContent).toContain('Digital');
-    expect(kokoro?.textContent).not.toContain('Physical');
+    // No historical profile labels accompany this recording; preserve the raw kind and status.
+    expect(kokoro.textContent).toContain('digital');
+    expect(kokoro.textContent).not.toContain('physical');
+    expect(kokoro.textContent).toContain(recordedCopy.status);
+    expect(within(kokoro).getByText(m.library_history_unavailable(), { exact: true })).toBeVisible();
     const image = kokoro.querySelector('[data-slot="cover"] img');
     if (!image?.getAttribute('src')?.includes(`/media/${coverMedia}/`)) {
       throw new globalThis.Error('The recorded Kokoro copy cover did not render from its /media/ fixture.');
