@@ -1,6 +1,6 @@
 # Commerce design status
 
-2026-10-30. Desk/web status of every Commerce-owned **In** system in [scope](../scope.md), on the current worker base.
+Desk status of every Commerce-owned **In** system in [scope](../scope.md), with separate purchase and Library owner briefs.
 This is evidence and handoff, not another authority. **Designed**, **implemented**, **exposed**, **native-outcome-proven** and **promoted** are separate; implementation/exposure below means source presence.
 Native whole-journey proof and promotion are **not established** here. MINIMAL landings/promotion pause do not establish full-row/main completion. Points and user-saved dynamic queries remain deferred.
 
@@ -11,28 +11,38 @@ Stripe's [Entitlements API guide](https://docs.stripe.com/billing/entitlements?d
 [Zotero](https://www.zotero.org/support/collections_and_tags) documents overlapping collections, independent tags and automatically updated saved searches.
 **Inference:** these support separating facts from views, not REZICS's exact membership/privacy/pin rules. Existing decisions remain local constraints, not vendor evidence.
 
-**Commerce / offers / orders.** Sole financial authority: [Commerce README](../../services/kernel/src/commerce/README.md);
-Web owns presentation, Accounts admission, Semantic subject identity. Offers use seller routes; captured orders/settlement/entitlements buyer routes; royalty statements creator routes. Writes stay single-partition.
-Research delivered: [integrated review](commerce-integrated-done-review.md) and [refresh recovery](commerce-session-refresh-recovery-current.md)
-([second investigation](commerce-session-refresh-recovery-deep.md)) cover narrower evidence/recovery seams, not the whole purchase model.
-`docs/research/commerce-ownership-entitlements-benefits.md` and `docs/research/commerce-payment-evidence-settlement.md`
-are **pending: absent on this base**. Separation of the mixed [Commerce/Library Goal](../goals/commerce.md) and Commerce contract rewrite remain pending after those two explicitly dispatched reports.
-Designed payment evidence is substantial; [actual routes](../../services/kernel/src/commerce/routes.ts) implement known-ID
-offer reads/mutations, `POST /v1/orders`, `GET /v1/orders[/:orderId]`, and signed webhook intake.
-Web exposes `/offers/$id`, `/orders/$id` and now [buyer history `/orders`](../../apps/web/src/routes/orders/index.tsx)
-through the generated client and gated [shell navigation](../../apps/web/src/shell/shell.tsx). Older README claims of absent revise HTTP/history navigation are stale; routes conceal delisted offers and revise intent includes its target.
-Owner-reported refresh serialization/growth reds and financial erasure/custody gaps remain; historical review defects are not all current defects.
+**Commerce / offers / orders.** Sole purchase authority: [Commerce README](../../services/kernel/src/commerce/README.md);
+[Commerce Goal](../goals/commerce.md) owns purchase completion, and [Library Goal](../goals/library.md) separately
+retains personal-space completion under the same commerce manager, all original tasks and native/main requirements.
+Both [ownership/benefits](commerce-ownership-entitlements-benefits.md) and
+[payment evidence/settlement](commerce-payment-evidence-settlement.md) reports are delivered and adopted through
+that owner contract; [future modules](../commerce-modules.md) remains the sole future financial map.
+Commerce owns API/storage/journey pages. Web owns shell/navigation, shared patterns and visual review; existing Web
+checkout/history and Library interface producers remain handoffs, not duplicate rewrites. Offers use creator homes;
+orders/evidence/entitlements buyer homes; statements creator homes. Writes remain single-partition.
+Existing [routes](../../services/kernel/src/commerce/routes.ts) provide known-ID offer reads/create/revise/delist,
+order creation/read/history and entitlement read/list. Web supplies `/offers/$id`, `/orders/$id`,
+[history `/orders`](../../apps/web/src/routes/orders/index.tsx) and shell navigation. Old claims of absent revise HTTP,
+delisted concealment or history navigation are superseded by source presence, not a new acceptance result.
+The four payment-fix directions are creation uncertainty, complete evidence, immutable movement economics and
+bounded signature/secret inputs; this document does not certify their owner delivery or native/main proof.
+Financial erasure/custody and actual native/DBOS growth gaps remain open.
 
-**Entitlements and actual use.** Same Commerce authority: private `GET /v1/entitlements[/:entitlementId]`, buyer equality,
-purchase gates/scopes, settlement grant/revoke rules and terminal-account barrier are designed; records/readers exist.
-Whole journey remains incomplete: **subject benefit entry → active offer → Checkout → find owned benefit → use it**.
-Subject-to-active-offer discovery, benefit identity/consumer enforcement and an owned-benefit use surface are missing;
-history's recorded entitlement ID proves neither active access nor consumption. Purchasing creates no Library holding.
-**Handoff:** the two pending research producers must resolve benefit identity/discovery/consumer authorization and supported payment movements, settlement and royalties; orders need the resulting captured-benefit compatibility contract.
+**Entitlements and actual use.** The owner contract adopts one-time account-bound acquisition of one immutable
+fixed-version benefit/quantity one, separate from subject/payment/Library/future item identities. Historic subject-only
+orders retain UNKNOWN benefit mapping until explicit authorized mapping. Partial-refund compatibility and terminal
+no-restoration remain. Root/Content/Accounts, with Semantic discovery participation, still must bind the first exact
+target/action/version, creator sale authority, current-use Access integration and bounded subject-discovery port.
+Content's image endpoint has no delivered paid-version/sale-authority port and is not a paid file origin.
+The complete subject entry → offer → Checkout → owned benefit → protected use journey remains required, not proved.
+Benefit capture, discovery, owned navigation, actual use enforcement and minimal creator offer/sales views remain
+product deliveries. Shared signatures are pending; independent payment fixes proceed without inventing them.
+Tax/unit, reserves/carry/payability, richer external attestation and authenticated recovery require the explicit
+owner/Root commercial/shared adoption recorded in the purchase contract before runtime bodies.
 
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,
-Web pages, Semantic profiles/identity and Accounts Access. [Abstraction research](library-abstraction.md) is delivered,
+Commerce journey pages with Web shell/patterns/review, Semantic profiles/identity and Accounts Access. [Abstraction research](library-abstraction.md) is delivered,
 primary-source-backed but explicitly incomplete for MAL; it supports distinctions, not full runtime acceptance.
 Designed subject actions and `/library` call `/v1/libraryEntries`; state set/clear/Undo and owner write sequence exist.
 Full fact union, canonical browsing, scoped search and terminal whole-graph/shared-payload cleanup remain incomplete.
@@ -86,14 +96,14 @@ Accounts owns management evaluation, account-agent resolution/state and effects 
 Semantic identity/kernel health are prerequisites. Proposed `/v1/followCounts/:targetType/:targetId`, aggregate/readiness, lifecycle and native driver remain pending.
 **Handoff:** where should eligible managers see private ready/unready counts with current grants and suspension/erasure updates, without another person's outgoing list or a public total?
 
-**Recommendations awaiting manager adoption.** Commerce/Web/Semantic/Accounts should select the smallest benefit-consumer
-port after the two pending reports; prefer local captured benefit identity/enforcement over adopting Stripe Billing Entitlements
-without a subscription/catalogue migration decision. Compatibility impact: new discovery/use contracts, existing order terms retained.
-Library/Web should compose the existing Collection journey and keep payment ownership separate. These are recommendations, not adopted API/schema changes; per-system handoffs above need manager dispatch, beyond the two already dispatched reports.
+**Shared handoff.** Bind the purchase contract's exact pending first-benefit/discovery choice through existing
+Access; do not introduce a second permission engine or label research sketches as delivered signatures. Library
+journeys continue under their existing sole behavior authorities and the separate owner brief. These ownership
+changes preserve the commerce manager scope and every original native/interface/main obligation.
 
 **Limits and custody.** Read owner deliveries and route/UI seams only; no independent native/code audit, tests, typecheck,
-generator, runtime or promotion check. Live producer registration is unknown: local manager task state/audit attachment is absent;
-named owners are contract owners, not claimed active workers. No research index was present; linked reports were read directly.
+generator, runtime or promotion check. Named owners and existing Web producers are handoff responsibilities, not claims of live task registration or delivery proof.
+The delivered reports and existing owner sources supply the design evidence; no new audit is introduced.
 The linked Stripe fulfillment variant could not be fetched; no fulfillment-detail claim relies on it. REZICS eligibility is unknown.
 Read-only references: main `.reference/INDEX.md`; `shelves/bookwyrm/bookwyrm/models/shelf.py`, `LICENSE.md` (Anti-Capitalist Software License 1.4);
 `shelves/bangumi-server/openapi/components/user_subject_collection{,_modify_payload}.yaml`, `LICENSE.txt` (AGPL-3.0), at indexed revisions. Shelf/tag evidence only; nothing copied/executed.

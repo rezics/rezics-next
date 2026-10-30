@@ -3,7 +3,10 @@
 A person's library and their lists are one capability. Every vertical (books, anime, games, visual novels, recipes,
 records) configures it through definitions; no vertical has kernel code of its own. This document adopts required
 first-public behavior, not a claim of runtime completion. The [Library module](../services/kernel/src/library/README.md)
-records actual implementation and remaining gaps. [Scope](scope.md) defers user-saved dynamic queries.
+records actual implementation and remaining gaps. The [Library Goal](goals/library.md) owns delivery under the
+commerce manager, separately from the [purchase contract](../services/kernel/src/commerce/README.md). Purchasing
+does not silently create Library facts; Library presence or Undo never grants or reverses payment/benefit rights.
+[Scope](scope.md) defers user-saved dynamic queries.
 
 The shared owner contracts are [Dynamic Collections](dynamic-collections.md), [Collection source](collection-source.md),
 [filtered lists](filtered-lists.md), [Collection presentation and editor](collection-presentation.md),

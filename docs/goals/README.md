@@ -9,10 +9,14 @@ The active definitions are:
 - [Semantic catalogue and Zones](semantic.md)
 - [Search and composition](search.md)
 - [Content and communities](content.md)
-- [Commerce and personal library](commerce.md)
+- [Commerce](commerce.md)
+- [Library and Collections](library.md) — same commerce manager; separate owner documentation
 - [Imports](imports.md)
 - [Web and Auth interfaces](web.md)
 - [Performance](performance.md)
+
+Commerce and Library retain the original combined manager scope, tasks and native/main completion requirements.
+The separate documents do not create a new control-plane Goal.
 
 The completed kernel foundation is described by its [module contract](../../services/kernel/README.md), not a second
 active Goal. Catalogue work is included in semantic. Interoperability has no separate active definition until its
