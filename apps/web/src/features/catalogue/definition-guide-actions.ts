@@ -31,7 +31,7 @@ export const readDefinitionGuide = createServerFn({ method: 'GET' })
       const authorization = viewerCredential(request);
       const headers = authorization ? { authorization } : {};
       const client = kernelClient();
-      return readGuide(data, (digest) => readReleaseForCaller({ client, digest, headers }));
+      return readGuide(data, (digest) => readReleaseForCaller({ client, ...(digest ? { digest } : {}), headers }));
     } catch {
       return { ok: false, reason: 'unavailable' };
     }

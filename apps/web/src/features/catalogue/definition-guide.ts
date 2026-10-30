@@ -4,7 +4,12 @@ import type { Release } from '@rezics/definitions';
 import { createTypes } from './create-subject';
 
 export type GuideRelease = Pick<Release, 'types' | 'properties'> & { digest: string };
-export type GuideAddress = { type?: string; property?: string; release?: string; returnTo?: string };
+export type GuideAddress = {
+  type?: string | undefined;
+  property?: string | undefined;
+  release?: string | undefined;
+  returnTo?: string | undefined;
+};
 export type GuideFailure = 'denied' | 'concealed' | 'invalid' | 'unavailable';
 export type GuideRead =
   | { ok: false; reason: GuideFailure }

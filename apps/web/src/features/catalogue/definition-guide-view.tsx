@@ -18,7 +18,7 @@ import {
   type GuideTransport,
 } from './definition-guide';
 
-function Meaning({ values, locale }: { values?: Record<string, string>; locale: string }) {
+function Meaning({ values, locale }: { values?: Record<string, string> | undefined; locale: string }) {
   const chosen = definitionText(values, locale);
   const o = { locale: locale as never };
   return chosen.text ? (
@@ -230,7 +230,7 @@ export function DefinitionGuideContent({
 }: {
   address: GuideAddress;
   locale: string;
-  read?: GuideRead;
+  read?: GuideRead | undefined;
   retry: () => void;
 }) {
   const o = { locale: locale as never };
