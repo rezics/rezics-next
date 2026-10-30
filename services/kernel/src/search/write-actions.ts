@@ -190,6 +190,7 @@ export async function writeIndexActions<Document extends SearchDocument>(
   search: OpenSearch,
   index: string,
   actions: readonly IndexAction<Document>[],
+  options: { rejectConflicts?: boolean } = {},
 ): Promise<void> {
   const response = await search.bulk<BulkResponse>(bulkLines(index, actions), {
     query: { refresh: 'wait_for' },
@@ -197,6 +198,8 @@ export async function writeIndexActions<Document extends SearchDocument>(
   const hasConflict = validateBulkResponse(response, index, actions);
 
   if (hasConflict) {
+    // A refresh proves visibility, not which current Source/native writer won.
+    if (options.rejectConflicts) throw new IndexWriteError([response]);
     const refresh = await search.request<RefreshResponse>('POST', `/${index}/_refresh`);
     validateRefreshResponse(refresh.status, refresh.body);
   }

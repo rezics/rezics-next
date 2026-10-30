@@ -9,6 +9,7 @@ import { REPORT_LOCATOR_EVENTS } from '../content/report-locator-events.ts';
 import { LIBRARY_EVENTS } from '../library/events.ts';
 import { RATING_EVENTS } from '../rating/events.ts';
 import { SEMANTIC_EVENTS } from '../semantic/events.ts';
+import { SEARCH_IDENTITY_EVENTS } from '../search/identity-epoch-participant-events.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const digest = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });
@@ -22,6 +23,7 @@ const productEventTypes = {
   ...LIBRARY_EVENTS,
   ...RATING_EVENTS,
   ...SEMANTIC_EVENTS,
+  ...SEARCH_IDENTITY_EVENTS,
   'com.rezics.definitions.published.v1': Type.Object({ digest }, { additionalProperties: false }),
   'com.rezics.definitions.activated.v1': Type.Object(
     { digest, head: Type.Integer({ minimum: 1 }) },

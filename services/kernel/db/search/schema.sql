@@ -28,6 +28,44 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: identity_writer; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.identity_writer (
+    partition_no integer NOT NULL,
+    physical_target text NOT NULL COLLATE pg_catalog."C",
+    original_id uuid NOT NULL,
+    incarnation text NOT NULL,
+    owner_epoch integer NOT NULL,
+    writer_token uuid,
+    writer_transaction_id uuid,
+    writer_position bigint,
+    settled_transaction_id uuid,
+    settled_position bigint,
+    source_position bigint,
+    closed_job uuid,
+    closed_epoch bigint,
+    closed_transaction_id uuid,
+    closed_position bigint,
+    CONSTRAINT identity_writer_check CHECK (((writer_transaction_id IS NULL) = (writer_position IS NULL))),
+    CONSTRAINT identity_writer_check1 CHECK (((writer_token IS NULL) OR (writer_transaction_id IS NOT NULL))),
+    CONSTRAINT identity_writer_check2 CHECK (((settled_transaction_id IS NULL) = (settled_position IS NULL))),
+    CONSTRAINT identity_writer_check3 CHECK (((closed_job IS NULL) = (closed_epoch IS NULL))),
+    CONSTRAINT identity_writer_check4 CHECK (((closed_job IS NULL) = (closed_transaction_id IS NULL))),
+    CONSTRAINT identity_writer_check5 CHECK (((closed_job IS NULL) = (closed_position IS NULL))),
+    CONSTRAINT identity_writer_closed_epoch_check CHECK ((closed_epoch > 0)),
+    CONSTRAINT identity_writer_closed_position_check CHECK ((closed_position > 0)),
+    CONSTRAINT identity_writer_incarnation_check CHECK (((octet_length(incarnation) >= 1) AND (octet_length(incarnation) <= 128))),
+    CONSTRAINT identity_writer_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT identity_writer_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_writer_physical_target_check CHECK (((octet_length(physical_target) >= 1) AND (octet_length(physical_target) <= 255))),
+    CONSTRAINT identity_writer_settled_position_check CHECK ((settled_position > 0)),
+    CONSTRAINT identity_writer_source_position_check CHECK ((source_position >= 0)),
+    CONSTRAINT identity_writer_writer_position_check CHECK ((writer_position > 0))
+);
+
+
+--
 -- Name: index_home_coverage; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -245,6 +283,11 @@ CREATE TABLE search.recent_search_state (
     CONSTRAINT recent_search_state_check CHECK ((partition_no = (route >> 4))),
     CONSTRAINT recent_search_state_revision_check CHECK ((revision >= 0))
 );
+-- Name: identity_writer identity_writer_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.identity_writer
+    ADD CONSTRAINT identity_writer_pkey PRIMARY KEY (partition_no, physical_target, original_id);
 
 
 --

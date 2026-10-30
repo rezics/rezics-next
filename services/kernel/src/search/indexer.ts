@@ -9,16 +9,10 @@ import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import type { Relay } from '../events/relays.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
-import { documentActions } from './document.ts';
+import { documentActions, validateIndexObservation } from './document.ts';
+import { SEARCH_IDENTITY_WRITER_CHUNK, type SearchIdentityWriter } from './identity-epoch-participant.ts';
 import type { OpenSearch } from './opensearch.ts';
-import { normalizePublicRatingFigure } from './rating-source.ts';
-import {
-  subjectPartition,
-  type IndexedSubject,
-  type SubjectListingSource,
-  type SubjectSnapshot,
-  type SubjectSource,
-} from './source.ts';
+import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
 
 export { IndexWriteError } from './write-actions.ts';
@@ -128,6 +122,8 @@ export function createSubjectIndexer(options: {
   index: string;
   consumer: string;
   aroundApply?: SubjectApplyGuard;
+  /** Trusted native runner composition; independent of aroundApply/privacy repair. */
+  writer?: SearchIdentityWriter;
 }): Relay {
   return {
     consumer: options.consumer,
@@ -178,10 +174,15 @@ export function createSubjectIndexer(options: {
 
             // Every chunk must cover the entire captured batch that this apply will acknowledge.
             const obligation = envelopes.at(-1)!.position;
-            for (let offset = 0; offset < ids.length; offset += 256) {
-              const chunk = ids.slice(offset, offset + 256);
+            const chunkSize = options.writer ? SEARCH_IDENTITY_WRITER_CHUNK : 256;
+            for (let offset = 0; offset < ids.length; offset += chunkSize) {
+              const chunk = ids.slice(offset, offset + chunkSize);
+              if (options.writer) {
+                await options.writer.write(partition, chunk, obligation);
+                continue;
+              }
               const snapshot = await options.source.read(partition, chunk);
-              const subjects = validateObservation(snapshot, partition, chunk, obligation);
+              const subjects = validateIndexObservation(snapshot, partition, chunk, obligation);
               const indexIds = chunk.filter((id) => {
                 const subject = subjects.get(id);
                 return subject?.visibility === 'visible' && subject.redirect === null;
