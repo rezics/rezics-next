@@ -16,10 +16,14 @@ export type RecordPurgeReference = Readonly<{
   documentId: string | null;
   deletionGeneration: string;
 }>;
+export type ResourceRecordPurgeReference =
+  | Readonly<{ kind: 'context'; contextId: string; deletionGeneration: string }>
+  | Readonly<{ kind: 'zone'; zoneId: string; deletionGeneration: string }>;
+export type NativeRecordPurgeReference = RecordPurgeReference | ResourceRecordPurgeReference;
 declare const recordPurgeAuthority: unique symbol;
 export type RecordPurgeAuthority = { readonly [recordPurgeAuthority]: true };
 export type RecordPurgeSource = Readonly<{
-  reference: RecordPurgeReference;
+  reference: NativeRecordPurgeReference;
   disposition: 'ordinary-deletion';
   sourceVersion: string;
   deletionTransactionId: string;
@@ -115,7 +119,7 @@ async function source(tx: CommandTransaction, ref: RecordPurgeReference): Promis
 
 export async function prepareRecordPurgeAuthority(
   deps: Readonly<{ pool: Pool; clock?: () => Date }>,
-  ref: RecordPurgeReference,
+  ref: NativeRecordPurgeReference,
   context: Readonly<{ deadline: number }>,
 ): Promise<RecordPurgeAuthority | null> {
   const copied = reference(ref);
