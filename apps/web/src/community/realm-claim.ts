@@ -202,13 +202,13 @@ export function createRealmClaim(
     )
       result = { kind: 'unavailable' };
     if (result.kind === 'pending') {
-      update({ request: result.request, outcome: 'pending', busy: false });
+      update({ request: result.request, outcome: 'pending', busy: version === generation ? false : state.busy });
     } else if (result.kind === 'unavailable') {
-      update({ outcome: 'uncertain', busy: false });
+      update({ outcome: 'uncertain', busy: version === generation ? false : state.busy });
     } else {
       update({
         outcome: result.kind === 'conflict' ? 'conflict' : 'refused',
-        busy: false,
+        busy: version === generation ? false : state.busy,
         read:
           version !== generation
             ? state.read

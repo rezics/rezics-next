@@ -44,10 +44,11 @@ export function RealmClaimControls({
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const pageSnapshot = initial.kind === 'ready' ? initial.snapshot : null;
+  const pageKind = initial.kind;
   useEffect(() => {
     if (pageSnapshot) control.observePage(pageSnapshot);
-    else if (initial.kind !== 'ready') control.observeUnavailable(initial);
-  }, [control, initial]);
+    else if (pageKind !== 'ready') control.observeUnavailable({ kind: pageKind });
+  }, [control, pageSnapshot, pageKind]);
   useEffect(() => {
     if (load) void control.refresh();
   }, [control, load]);
@@ -56,9 +57,10 @@ export function RealmClaimControls({
   }, [control, state.read, onRead, pageSnapshot]);
   const current = state.read.kind === 'ready' ? state.read : null;
   const orphan = current?.snapshot.ownershipState === 'orphaned' ? current.snapshot : null;
+  const receipt = state.recovered ?? state.request;
   const request =
-    orphan && (state.request ?? state.recovered)?.orphanedAt === orphan.orphanedAt && current?.admission === 'allowed'
-      ? (state.request ?? state.recovered)
+    !state.busy && orphan && receipt?.orphanedAt === orphan.orphanedAt && current?.admission === 'allowed'
+      ? receipt
       : null;
   const owned = current?.snapshot.ownershipState === 'owned';
   return (
@@ -139,6 +141,14 @@ export function RealmClaimControls({
             <p>{copyState === 'copied' ? m.realm_claim_copied() : m.realm_claim_copy_failed()}</p>
           ) : null}
         </div>
+      ) : null}
+      {!state.busy && !request && receipt && current?.admission === 'allowed' ? (
+        <Button
+          variant="outline"
+          render={<a href={localizeHref(`/realms/${realmId}/claim-requests/${receipt.requestId}`)} />}
+        >
+          {m.realm_claim_status_open()}
+        </Button>
       ) : null}
       {state.outcome === 'uncertain' ? (
         <p role="alert" className="text-sm">
