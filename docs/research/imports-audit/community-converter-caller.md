@@ -96,6 +96,28 @@ reported no errors in 60 files, and edited-file oxfmt passed for all six changed
 files. The first local run reached a missing required Open Library
 `last_modified` in the new unit input; supplying the fixture's native timestamp
 fixed that input before native admission. No production defect was inferred.
+
+After the controller returned the native pass, local conversion workspace typing
+again passed with `bun run --cwd packages/conversion typecheck` (60 files).
+The requested local-only kernel typing could not be completed under the
+simultaneous prohibition on database and remote checks. Its declared
+`services/kernel/scripts/typecheck.ts` uses the database-backed SQL mapper
+(`tsc --runExternalCode`) and invokes check-host placement or a throwaway
+database. Neither was started. The database-free attempt,
+`node_modules/.bin/bun check --no-script -p services/kernel/tsconfig.json`,
+exited 1; its first diagnostic was:
+
+```text
+services/kernel/scripts/ensure-account-agents.ts(3,32): error TS2307: Cannot find module '../src/access/account-agent-active-page.sql' or its corresponding type declarations.
+```
+
+The remaining diagnostics include unresolved SQL imports and consequent missing
+row types. No SQL declarations, mapper configuration or existing checks were
+weakened to conceal that tooling limitation. The earlier passed managed native
+command did supply its SQL compiler database and recorded 911 Reylo analyses;
+that receipt does not substitute for the newly requested local workspace check.
+No new native, database, host or remote check was run on this continuation.
+
 The pure child names are:
 
 - `<source>: public example rebinds the same normalized export without trusting the source body`
