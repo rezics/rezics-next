@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import sharp from 'sharp';
-import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { BatchWriteRequest } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { MediaImportAccepted } from '@rezics/definitions/media-import';
 import { converter_revision } from '../../../../packages/conversion/src/bangumi.ts';

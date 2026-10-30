@@ -66,7 +66,7 @@ test('Bangumi CLI sends separately licensed summary and cover through its ordina
       if (url.pathname === '/v1/sourceFences:check') {
         return Response.json({
           fenced: fenced && url.searchParams.get('fieldGroup') === 'cover',
-          securityRevision: fenced && url.searchParams.get('fieldGroup') === 'cover' ? 'wire-cover-fence' : null,
+          securityRevision: fenced && url.searchParams.get('fieldGroup') === 'cover' ? '1' : null,
         });
       }
       if (url.pathname === '/v1/media:importFromUrl') {
