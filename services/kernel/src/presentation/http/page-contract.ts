@@ -9,6 +9,19 @@ export const PageResponseSchema = t.Object(
   {
     subject: t.Optional(t.String()),
     account: t.Optional(t.String()),
+    context: t.Optional(
+      t.Object(
+        {
+          id: t.String(),
+          population: t.Union([
+            t.Object({ kind: t.Literal('global') }, closed),
+            t.Object({ kind: t.Literal('realm'), id: t.String(), title: t.String() }, closed),
+          ]),
+        },
+        closed,
+      ),
+    ),
+    continuation: t.Optional(t.Object({ node: t.String(), cursor: t.String() }, closed)),
     profile: t.String(),
     template: t.Object(
       {

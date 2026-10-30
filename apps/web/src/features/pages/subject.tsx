@@ -1,5 +1,12 @@
 import type { KernelClient } from '@rezics/client';
-import { planReads, platformRegistry, type CompositionDocument, type View } from '@rezics/composition';
+import {
+  planReads,
+  platformRegistry,
+  type CompositionDocument,
+  type View,
+  type SelectedContext,
+  type PageContinuation,
+} from '@rezics/composition';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ComponentProps, ReactNode } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
@@ -26,6 +33,8 @@ export type SubjectPageData = {
   subject: string | null;
   /** The account an agent page is for, as the page read named it. */
   account?: { id: string; handle: string };
+  context?: SelectedContext;
+  continuation?: PageContinuation;
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
   document: PageDocument;
@@ -72,8 +81,13 @@ function problemError(value: unknown): Error {
 }
 
 /** The context the page's reads are planned in. */
-export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account'>) {
-  return { subject: page.subject, account: page.account ?? null };
+export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation'>) {
+  return {
+    subject: page.subject,
+    account: page.account ?? null,
+    ...(page.context ? { context: page.context } : {}),
+    ...(page.continuation ? { continuation: page.continuation } : {}),
+  };
 }
 
 /** The subject read planned for this page, when that read succeeded. */
@@ -106,12 +120,17 @@ export async function loadSubjectPage(
   id: string,
   view?: View,
   locale = 'en',
+  options: { realm?: string; continuation?: PageContinuation; authorization?: string } = {},
 ): Promise<SubjectPageLoad> {
   if (!subjectIdPattern.test(id)) return { kind: 'missing' };
-  const result = await client.pages.$read.post({
-    target: { subject: id, ...(view ? { view } : {}) },
-    languages: requestLanguages(locale),
-  });
+  const result = await client.pages.$read.post(
+    {
+      target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
+      ...(options.continuation ? { continuation: options.continuation } : {}),
+      languages: requestLanguages(locale),
+    },
+    options.authorization ? { headers: { authorization: options.authorization } } : {},
+  );
   if (result.status === 404) return { kind: 'missing' };
   if (result.status === 308) {
     const response = result as unknown as { data?: unknown; error?: { value?: unknown } | null };
@@ -309,6 +328,7 @@ export function SubjectPage({
             locale,
           ).href
         }
+        realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
         labels={tabLabels}
       />
     ) : null;
@@ -340,6 +360,8 @@ export function SubjectPage({
           {...(base ? { base } : {})}
           document={page.document}
           reads={page.reads}
+          context={page.context}
+          continuation={page.continuation}
           messages={messages}
           {...(link ? { link } : {})}
           {...(reader ? { reader } : {})}
@@ -360,6 +382,9 @@ export function SubjectPage({
                   {heading.label}
                 </h1>
               </header>
+            )}
+            {page.context?.population.kind === 'realm' && (
+              <p data-slot="page-context">{page.context.population.title}</p>
             )}
             {!overview && bar}
             {overview && !header && afterHeader}

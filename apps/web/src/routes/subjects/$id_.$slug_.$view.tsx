@@ -17,7 +17,7 @@ import {
 import { useSession } from '../../session/query';
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { defaultReader } from '../../subject/reader';
-import { validateViewCursor } from '../../features/pages/view-cursor';
+import { validateViewCursor, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { WriteReviewAction } from '../../subject/write-review';
@@ -81,10 +81,14 @@ const readView = createServerFn({ method: 'GET', strict: false })
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
-  staticData: { publicCache: true },
+  staticData: { publicCache: false },
   // Validate the cursor in the loader so invalid input answers the not-found document.
-  validateSearch: (search: Record<string, unknown>): { cursor?: unknown } => ({ cursor: search.cursor }),
-  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    cursor: search.cursor,
+    realm: validatePageRealm(search.realm),
+    node: validatePageNode(search.node),
+  }),
+  loaderDeps: ({ search }) => ({ cursor: search.cursor, realm: search.realm, node: search.node }),
   loader: async ({ params, location, context, deps }) => {
     if (!isView(params.view) || params.view === 'overview') throw notFound();
     const cursor = validateViewCursor(deps.cursor);
@@ -99,7 +103,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       },
     });
     const loaded = await context.queryClient.ensureQueryData(
-      subjectViewPagesQuery(params.id, getLocale(), params.view, cursor),
+      subjectViewPagesQuery(params.id, getLocale(), params.view, cursor, deps.realm, deps.node),
     );
     if (loaded.kind === 'missing') throw notFound();
     if (loaded.kind === 'redirect') {
@@ -130,7 +134,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     const typeData = type ? await context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : {};
     const nextHref =
       loaded.next !== undefined
-        ? `${canonical.href}/${encodeURIComponent(params.view)}?cursor=${encodeURIComponent(loaded.next)}`
+        ? `${canonical.href}/${encodeURIComponent(params.view)}?node=${encodeURIComponent(loaded.node ?? '')}&cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}`
         : undefined;
     return {
       ...canonical,
@@ -142,6 +146,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       title: frame.title.text,
       cursor,
       nextHref,
+      realm: deps.realm,
+      node: deps.node,
     };
   },
   head: ({ loaderData, match }) =>
@@ -161,10 +167,10 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
 });
 
 function SubjectViewRoute() {
-  const { type, frame, tabs, view, cursor, nextHref } = Route.useLoaderData();
+  const { type, frame, tabs, view, cursor, nextHref, realm, node } = Route.useLoaderData();
   const { state: session } = useSession();
   const { id } = Route.useParams();
-  const { data: loaded } = useSuspenseQuery(subjectViewPagesQuery(id, getLocale(), view, cursor));
+  const { data: loaded } = useSuspenseQuery(subjectViewPagesQuery(id, getLocale(), view, cursor, realm, node));
   const page = loaded.kind === 'page' ? loaded.page : undefined;
   if (!page) throw notFound();
   const { data: reader } = useQuery({
@@ -202,6 +208,7 @@ function SubjectViewRoute() {
       frame={
         <SubjectFrame
           frame={frame}
+          realm={realm}
           locale={locale}
           link={SubjectLink}
           reader={reader ?? defaultReader}

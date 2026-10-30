@@ -1,3 +1,4 @@
+import { validatePageRealm } from '../../features/pages/view-cursor';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
@@ -93,7 +94,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug')({
-  staticData: { publicCache: true },
+  staticData: { publicCache: false },
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -167,6 +168,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   validateSearch: (
     search: Record<string, unknown>,
   ): {
+    realm?: string;
     slot?: 'collections';
     slotResult?: string;
     ratingFailure?: true;
@@ -175,6 +177,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     undoAssignmentId?: string;
     undoRevision?: number;
   } => ({
+    realm: validatePageRealm(search.realm),
     ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
     ...(typeof search.slotResult === 'string' ? { slotResult: search.slotResult } : {}),
     ...(search.ratingFailure === '1' ? { ratingFailure: true as const } : {}),
@@ -187,6 +190,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       : {}),
   }),
   loaderDeps: ({ search }) => ({
+    realm: search.realm,
     slot: search.slot,
     slotResult: search.slotResult,
     labelResult: search.labelResult,
@@ -207,7 +211,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       },
     });
     const view = isView(params.slug) && params.slug !== 'overview' ? params.slug : 'overview';
-    const pageQuery = subjectPageQuery(params.id, getLocale(), view);
+    const pageQuery = subjectPageQuery(params.id, getLocale(), view, deps.realm);
     const page = await context.queryClient.ensureQueryData(pageQuery);
     if (page.kind === 'redirect') {
       const survivor = await context.queryClient.ensureQueryData(subjectCanonicalQuery(page.id, getLocale()));
@@ -244,13 +248,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
 
 function SubjectRoute() {
   const { tabs, verification } = Route.useLoaderData();
-  const { slot, ratingFailure, labelResult, undoLabelId, undoAssignmentId, undoRevision } = Route.useSearch();
+  const { realm, slot, ratingFailure, labelResult, undoLabelId, undoAssignmentId, undoRevision } = Route.useSearch();
   const { state: session } = useSession();
   const queryClient = useQueryClient();
   const locale = getLocale();
   const { id: routeId, slug } = Route.useParams();
   const view = isView(slug) && slug !== 'overview' ? slug : 'overview';
-  const { data: loaded } = useSuspenseQuery(subjectPageQuery(routeId, locale, view));
+  const { data: loaded } = useSuspenseQuery(subjectPageQuery(routeId, locale, view, realm));
   const page = loaded.kind === 'page' ? loaded.page : undefined;
   if (!page) throw notFound();
   const id = page.subject!;

@@ -28,6 +28,12 @@ export interface PageReadPlan {
   nodes: Record<string, string>;
 }
 
+export class PageContinuationError extends Error {
+  constructor(readonly field: 'node' | 'cursor') {
+    super(`Invalid continuation ${field}`);
+  }
+}
+
 export class PageReadLimitError extends Error {
   constructor() {
     super(`A page may need at most ${MAX_PAGE_READS} distinct reads`);
@@ -56,8 +62,21 @@ export function planReads(
   const keys = new Map<string, string>();
   const reads: Record<string, PageRead> = {};
   const nodes = new Map<string, string>();
+  let continued = false;
   for (const node of walkNodes(registry, document)) {
-    const read = components.get(node.type)!.read?.(node.props, page);
+    let read = components.get(node.type)!.read?.(node.props, page);
+    if (page.continuation?.node === node.props.id) {
+      if (
+        node.props.paged !== true ||
+        !read ||
+        (read.kind !== 'links' && read.kind !== 'relations' && read.kind !== 'subjectThreads')
+      )
+        throw new PageContinuationError('node');
+      if (!page.continuation.cursor || (read.kind === 'subjectThreads' && page.continuation.cursor.length > 4096))
+        throw new PageContinuationError('cursor');
+      read = { ...read, cursor: page.continuation.cursor };
+      continued = true;
+    }
     if (read === undefined || read === null) continue;
     const canonical = canonicalize(read)!;
     let key = keys.get(canonical);
@@ -69,6 +88,7 @@ export function planReads(
     }
     nodes.set(node.props.id, key);
   }
+  if (page.continuation && !continued) throw new PageContinuationError('node');
   return { reads, nodes: Object.fromEntries(nodes) };
 }
 

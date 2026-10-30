@@ -8,11 +8,14 @@ export type {
   CompositionViolationCode,
   ComponentDefinition,
   PageContext,
+  SelectedContext,
+  PageContinuation,
   PageFilter,
   PageRead,
 } from './registry.ts';
 export {
   APPEARANCE,
+  PAGE_GLOBAL_CONTEXT,
   MAX_COMPOSITION_BYTES,
   MAX_COMPOSITION_DEPTH,
   MAX_COMPOSITION_NODES,
@@ -24,7 +27,15 @@ export { curie, href, localeChain, localizedText, pickLanguage, pickText, plainT
 export { compositionSchema } from './schema.ts';
 export { validateComposition } from './validate.ts';
 export { MAX_ZONE_PAGES, MAX_ZONE_SCOPE, UI_LOCALES, validateZoneStarter, type ZoneStarter } from './zone.ts';
-export { MAX_PAGE_COST, MAX_PAGE_READS, planReads, readCost, shownProperties, type PageReadPlan } from './reads.ts';
+export {
+  MAX_PAGE_COST,
+  MAX_PAGE_READS,
+  PageContinuationError,
+  planReads,
+  readCost,
+  shownProperties,
+  type PageReadPlan,
+} from './reads.ts';
 export type {
   GenericTemplate,
   PresentationProfile,

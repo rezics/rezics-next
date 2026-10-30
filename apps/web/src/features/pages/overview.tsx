@@ -1,3 +1,5 @@
+import { threadLocation } from '../../threads/thread-href';
+import type { SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
 import { pickLanguage, type PageRead } from '@rezics/composition';
@@ -40,6 +42,7 @@ export type Section = { ok: false } | { ok: true; read: PageRead; body: Record<s
 
 export type OverviewValue = {
   locale: string;
+  context?: SelectedContext;
   subject: string | null;
   subjectLabel?: string;
   /** The account an agent page is for, and the address of its overview. */
@@ -124,7 +127,7 @@ export function viewHref(value: OverviewValue, view: string, property?: string):
     (view === 'posts' || view === 'reviews' || view === 'collections')
   )
     return `${value.agentBase}/${view}`;
-  return value.subject
+  const href = value.subject
     ? subjectViewHref(
         { id: value.subject, label: value.subjectLabel || value.unlabelled },
         value.locale,
@@ -132,6 +135,8 @@ export function viewHref(value: OverviewValue, view: string, property?: string):
         property === undefined ? '' : `?property=${encodeURIComponent(property)}`,
       )
     : null;
+  if (!href || value.context?.population.kind !== 'realm') return href;
+  return `${href}${href.includes('?') ? '&' : '?'}realm=${encodeURIComponent(value.context.population.id)}`;
 }
 
 /** A date in the kernel's partial ISO form, shown at its own precision; any other form is left out. */
@@ -302,7 +307,42 @@ function statementItems(
   property: unknown,
   limit: number,
   value: OverviewValue,
-): { items: Item[]; count: Count; more?: boolean } | undefined {
+): { items: Item[]; count: Count | undefined; more?: boolean } | undefined {
+  if (section?.ok && section.read.kind === 'relations' && Array.isArray(section.body.relations)) {
+    const items = section.body.relations
+      .filter(isRecord)
+      .slice(0, limit)
+      .flatMap((row): Item[] => {
+        if (typeof row.target !== 'string' || !isRecord(row.statement)) return [];
+        const statement = row.statement;
+        const qualifiers = Array.isArray(statement.qualifiers) ? statement.qualifiers.filter(isRecord) : [];
+        return [
+          {
+            id: row.target,
+            label: { text: typeof row.label === 'string' ? row.label : '' },
+            ...(typeof row.type === 'string' ? { type: row.type } : {}),
+            notes: qualifiers.flatMap((qualifier) => {
+              if (!isRecord(qualifier.value) || qualifier.value.type !== 'value') return [];
+              const content = qualifier.value.content;
+              return typeof content === 'string'
+                ? [content]
+                : isRecord(content) && typeof content.text === 'string'
+                  ? [content.text]
+                  : [];
+            }),
+            gated: qualifiers.some(
+              (qualifier) =>
+                isRecord(qualifier.property) &&
+                qualifier.property.id === 'rezics:spoilerLevel' &&
+                (!isRecord(qualifier.value) ||
+                  !isRecord(qualifier.value.content) ||
+                  Number(qualifier.value.content.amount) > value.reader.spoilerLevel),
+            ),
+          },
+        ];
+      });
+    return { items, count: undefined, more: typeof section.body.next === 'string' };
+  }
   const read = subjectRead(section);
   if (!read || typeof property !== 'string') return;
   const held = Object.hasOwn(read.subject.statements, property) ? read.subject.statements[property] : undefined;
@@ -782,15 +822,56 @@ export function RatingSummary(props: Record<string, unknown>) {
 }
 
 export function ThreadList(props: Record<string, unknown>) {
-  const locale = (useContext(OverviewContext)?.locale ?? 'en') as never;
+  const state = useOverview(props.id);
+  if (!state) return null;
+  const { value, section } = state;
+  const title = 'Active discussions';
+  if (!section?.ok || section.read.kind !== 'subjectThreads' || !Array.isArray(section.body.threads))
+    return <Failed slot="thread-list" id={String(props.id)} title={title} locale={value.locale} />;
+  const threads = section.body.threads.filter(isRecord);
+  const href = viewHref(value, 'discussion');
   return (
-    <FeatureEmpty
+    <Preview
       slot="thread-list"
-      id={props.id}
-      title={m.subject_discussion({}, { locale })}
-      text={m.subject_threads_empty({}, { locale })}
-      view="discussion"
-    />
+      id={String(props.id)}
+      title={title}
+      more={props.paged !== true && section.body.next !== null}
+      href={href}
+      locale={value.locale}
+    >
+      {threads.length === 0 ? (
+        <p>
+          {typeof section.body.next === 'string'
+            ? 'No visible entries on this page.'
+            : m.subject_threads_empty({}, { locale: value.locale as never })}
+        </p>
+      ) : (
+        <ol className="divide-y">
+          {threads.map((thread) => {
+            if (typeof thread.id !== 'string') return null;
+            const removed = thread.availability !== 'available';
+            const heading = !removed && typeof thread.title === 'string' ? thread.title : 'Removed discussion';
+            const first = isRecord(thread.firstPost) ? thread.firstPost : undefined;
+            const body = first?.availability === 'available' ? readableDocument(first.body) : undefined;
+            return (
+              <li key={thread.id} className="space-y-2 py-3">
+                <a
+                  className={linkClass}
+                  href={threadLocation(value.locale, { id: thread.id, title: removed ? null : heading })}
+                >
+                  {heading}
+                </a>
+                {body && (
+                  <div className="max-h-40 overflow-hidden">
+                    <DocumentValue document={body} lang={undefined} labels={value.labels} />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </Preview>
   );
 }
 

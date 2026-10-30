@@ -185,3 +185,24 @@ and page limits, and each dispatched route's own Cost bound. These are source-de
 
 The profile-route growth check exercises both HTTP routes with Global Context authorization while profile and unrelated
 Context populations grow. It supplies the route-level evidence that the direct profile lookup checks alone did not cover.
+
+## Selected subject pages and continuation
+
+`pages.read` accepts `target.realm` only with a subject target. The native Realm, publication
+and Context readers select one Context for every factual subject/link/relation descriptor.
+A genuine null publication selects independently authorized Global facts and exposes only
+Global population metadata. Unknown, denied or banned Realms never become a Global success.
+After leaves, fresh subject, Context, Realm, publication and protected-ban guards discard
+changed output: concealment is 404, changed selection is retryable `dependency_unavailable`.
+
+`ThreadList` reads the existing `subject_threads.list` operation at limit five, using the Realm
+population ID as place (Global uses the Global Context ID). The unmodified `{threads,next}`
+body retains native board/place disclosure. Scoped producers without a native adapter return
+unavailable rather than Global or empty data.
+
+A subject full view may continue one current `paged:true` node with top-level
+`continuation: {node,cursor}`. Planning substitutes the opaque native cursor before dedup;
+links and forward relations use separate native property streams. Thread cursors retain their
+native 4096-character bound; Semantic routes retain their native cursor admission. All leaves
+share the existing 16-read/128-slot budget and four dispatch workers. Authority controls are
+fixed anchored native reads under the original admission and deadline, with no new retry.

@@ -20,6 +20,7 @@ export function ViewTabs({
   locale,
   base,
   labels,
+  realm,
 }: {
   tabs: readonly ViewTab[];
   active: View;
@@ -27,6 +28,7 @@ export function ViewTabs({
   /** The overview's address; a view lives under it. */
   base: string;
   labels: ViewTabLabels;
+  realm?: string;
 }) {
   const bar = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -46,7 +48,11 @@ export function ViewTabs({
                 className={triggerClass}
                 data-view={view}
                 aria-current={view === active ? 'page' : undefined}
-                render={<a href={view === 'overview' ? base : `${base}/${view}`} />}
+                render={
+                  <a
+                    href={`${view === 'overview' ? base : `${base}/${view}`}${realm ? `?realm=${encodeURIComponent(realm)}` : ''}`}
+                  />
+                }
               >
                 {labels.names[view]}
                 {count && (

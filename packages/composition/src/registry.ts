@@ -16,8 +16,17 @@ import {
   safetyKind,
 } from './strings.ts';
 
+export const PAGE_GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
+export type SelectedContext = {
+  id: string;
+  population: { kind: 'global' } | { kind: 'realm'; id: string; title: string };
+};
+export type PageContinuation = { node: string; cursor: string };
+
 export interface PageContext {
   subject: string | null;
+  context?: SelectedContext;
+  continuation?: PageContinuation;
   /** The account the page is for, resolved before planning. */
   account?: { id: string; handle: string } | null;
 }
@@ -34,8 +43,25 @@ type InferredStatementRead = {
 };
 
 export type PageRead =
-  | { kind: 'subject'; id: string }
-  | { kind: 'links'; id: string; property: string; filter?: string; type?: string; limit: number }
+  | { kind: 'subject'; id: string; context?: string }
+  | {
+      kind: 'links' | 'relations';
+      id: string;
+      context?: string;
+      property: string;
+      filter?: string;
+      type?: string;
+      limit: number;
+      cursor?: string;
+    }
+  | {
+      kind: 'subjectThreads';
+      id: string;
+      place: string;
+      threadKind: 'discussion' | 'review';
+      limit: number;
+      cursor?: string;
+    }
   | { kind: 'collections'; id: string; limit: number }
   | { kind: 'reactions'; id: string }
   | { kind: 'account'; handle: string }
@@ -285,7 +311,9 @@ const appearance = Type.Object(
 );
 
 const readSubject: ComponentRead = (_props, page) =>
-  page.subject === null ? null : { kind: 'subject', id: page.subject };
+  page.subject === null
+    ? null
+    : { kind: 'subject', id: page.subject, ...(page.context ? { context: page.context.id } : {}) };
 
 /**
  * The inverse links of the page subject for one property. Appearances and credits share it with `RelationGroups`; a
@@ -305,6 +333,7 @@ const readLinks: ComponentRead = (props, page) =>
     : {
         kind: 'links',
         id: page.subject,
+        ...(page.context ? { context: page.context.id } : {}),
         property: props.property as string,
         ...(props.filter === undefined ? {} : { filter: props.filter as string }),
         ...(props.type === undefined ? {} : { type: props.type as string }),
@@ -312,7 +341,14 @@ const readLinks: ComponentRead = (props, page) =>
       };
 
 const readDirected: ComponentRead = (props, page) =>
-  props.direction === 'forward' ? readSubject(props, page) : readLinks(props, page);
+  props.direction === 'forward'
+    ? props.paged === true
+      ? (() => {
+          const read = readLinks(props, page);
+          return read?.kind === 'links' ? { ...read, kind: 'relations' } : null;
+        })()
+      : readSubject(props, page)
+    : readLinks(props, page);
 
 export const platformRegistry = defineRegistry({
   root: Type.Object({ appearance: Type.Optional(appearance) }, closed),
@@ -369,7 +405,13 @@ export const platformRegistry = defineRegistry({
       read: (props, page) =>
         page.subject === null
           ? null
-          : { kind: 'links', id: page.subject, property: props.property as string, limit: props.limit as number },
+          : {
+              kind: 'links',
+              id: page.subject,
+              ...(page.context ? { context: page.context.id } : {}),
+              property: props.property as string,
+              limit: props.limit as number,
+            },
     },
     {
       type: 'RelationGroups',
@@ -403,6 +445,16 @@ export const platformRegistry = defineRegistry({
     {
       type: 'ThreadList',
       props: Type.Object({ paged: Type.Optional(Type.Boolean()) }, closed),
+      read: (_props, page) =>
+        page.subject === null
+          ? null
+          : {
+              kind: 'subjectThreads',
+              id: page.subject,
+              place: page.context?.population.kind === 'realm' ? page.context.population.id : PAGE_GLOBAL_CONTEXT,
+              threadKind: 'discussion',
+              limit: 5,
+            },
     },
     {
       type: 'ReviewList',

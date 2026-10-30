@@ -5,6 +5,8 @@ import {
   platformRegistry,
   shownProperties,
   type CompositionDocument,
+  type SelectedContext,
+  type PageContinuation,
 } from '@rezics/composition';
 import { sharedRatio, type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
@@ -627,6 +629,8 @@ export function PageData({
   locale,
   subject = null,
   subjectLabel,
+  context,
+  continuation,
   account,
   operator,
   base,
@@ -644,6 +648,8 @@ export function PageData({
   locale: string;
   subject?: string | null;
   subjectLabel?: string;
+  context?: SelectedContext;
+  continuation?: PageContinuation;
   /** The account of an agent page, and the address of its overview. */
   account?: { id: string; handle: string };
   operator?: { id: string; handle: string | null; displayName: string | null };
@@ -663,7 +669,12 @@ export function PageData({
 }) {
   // Page documents have already passed the composition contract at the kernel boundary.
   const composition = document as CompositionDocument;
-  const plan = planReads(platformRegistry, composition, { subject, account: account ?? null });
+  const plan = planReads(platformRegistry, composition, {
+    subject,
+    account: account ?? null,
+    ...(context ? { context } : {}),
+    ...(continuation ? { continuation } : {}),
+  });
   const shown = new Set(shownProperties(composition));
   const resolved = { ...subjectMessages, ...messages };
   const labels: ValueLabels = {
@@ -767,6 +778,7 @@ export function PageData({
     licence: resolved.licence,
     sources: resolved.sources,
     sections,
+    ...(context ? { context } : {}),
     ...(about ? { about } : {}),
     relations,
     relationNodes: nodesOfType(composition.content, 'RelationGroups'),

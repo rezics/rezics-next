@@ -11,6 +11,7 @@ import type { LoadedSubject } from '../../subject/load-subject';
 import type { typeFrame as TypeFrame } from '../../subject/definitions';
 import { locales } from '../../paraglide/runtime.js';
 import type { PagePaths } from '../../shell/head';
+import { validatePageRealm, validatePageNode, validateViewCursor } from './view-cursor';
 import { loadSubjectPage } from './subject';
 import { readRatings, readOwnRating } from './subject-ratings';
 import { readReactionCounts, readOwnReaction } from './subject-reactions';
@@ -18,7 +19,11 @@ import { readReactionCounts, readOwnReaction } from './subject-reactions';
 const subjectKernelClient = createServerOnlyFn(async (locale: string) => {
   const { kernelClient } = await import('../../kernel/client');
   // Eden's treaty client is thenable; wrap it so this async boundary does not make a request to /v1.
-  return { client: kernelClient(locale) };
+  const { env } = await import('cloudflare:workers');
+  const { prepareSession, viewerCredential } = await import('../../session/request');
+  setResponseHeader('cache-control', 'private, no-store');
+  await prepareSession(getRequest(), env as Partial<SessionEnv>);
+  return { client: kernelClient(locale), authorization: viewerCredential(getRequest()) ?? undefined };
 });
 
 const readSubjectPage = createServerFn({ method: 'GET', strict: false })
@@ -33,10 +38,16 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
       (value.view !== undefined && !isView(value.view))
     )
       throw notFound();
-    return { id: value.id, locale: value.locale, view: value.view as View | undefined };
+    return {
+      id: value.id,
+      locale: value.locale,
+      view: value.view as View | undefined,
+      realm: validatePageRealm(value.realm),
+    };
   })
   .handler(async ({ data }) => {
-    return loadSubjectPage((await subjectKernelClient(data.locale)).client, data.id, data.view, data.locale);
+    const { client, authorization } = await subjectKernelClient(data.locale);
+    return loadSubjectPage(client, data.id, data.view, data.locale, { realm: data.realm, authorization });
   });
 
 const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
@@ -48,7 +59,7 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
       typeof value.locale !== 'string' ||
       value.locale.length > 35 ||
       !isView(value.view) ||
-      (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 2048))
+      (value.cursor !== undefined && typeof value.cursor !== 'string')
     )
       throw notFound();
     return {
@@ -56,12 +67,19 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
       locale: value.locale,
       subjectType: value.subjectType as string | undefined,
       view: value.view,
-      cursor: value.cursor as string | undefined,
+      cursor: validateViewCursor(value.cursor),
+      realm: validatePageRealm(value.realm),
+      node: validatePageNode(value.node),
     };
   })
   .handler(async ({ data }) => {
     const { loadViewPages } = await import('./subject-frame');
-    return loadViewPages((await subjectKernelClient(data.locale)).client, data.id, data.view, data.locale, data.cursor);
+    const { client, authorization } = await subjectKernelClient(data.locale);
+    return loadViewPages(client, data.id, data.view, data.locale, data.cursor, {
+      realm: data.realm,
+      node: data.node,
+      authorization,
+    });
   });
 
 const readSubjectCanonical = createServerFn({ method: 'GET', strict: false })
@@ -311,18 +329,30 @@ export function subjectViewPaths(paths: PagePaths, view: string): PagePaths {
   ) as PagePaths;
 }
 
-export const subjectPageQuery = (id: string, locale: string, view: View | 'overview' = 'overview') =>
+export const subjectPageQuery = (id: string, locale: string, view: View | 'overview' = 'overview', realm?: string) =>
   queryOptions({
     ...publicRead,
-    queryKey: key('subject-page', id, locale, view),
-    queryFn: async () => readSubjectPage({ data: { id, locale, ...(view !== 'overview' ? { view } : {}) } }),
+    staleTime: 0,
+    gcTime: 0,
+    queryKey: [...key('subject-page', id, locale, view), realm ?? null],
+    queryFn: async () => readSubjectPage({ data: { id, locale, realm, ...(view !== 'overview' ? { view } : {}) } }),
   });
 
-export const subjectViewPagesQuery = (id: string, locale: string, view: View, cursor?: string) =>
+export const subjectViewPagesQuery = (
+  id: string,
+  locale: string,
+  view: View,
+  cursor?: string,
+  realm?: string,
+  node?: string,
+) =>
   queryOptions({
     ...publicRead,
-    queryKey: ['subject-view-pages', id, locale, view, cursor ?? null] as const,
-    queryFn: () => readSubjectViewPages({ data: { id, locale, view, ...(cursor !== undefined ? { cursor } : {}) } }),
+    staleTime: 0,
+    gcTime: 0,
+    queryKey: ['subject-view-pages', id, locale, view, cursor ?? null, realm ?? null, node ?? null] as const,
+    queryFn: () =>
+      readSubjectViewPages({ data: { id, locale, view, realm, node, ...(cursor !== undefined ? { cursor } : {}) } }),
   });
 
 export const subjectCanonicalQuery = (id: string, locale: string) =>

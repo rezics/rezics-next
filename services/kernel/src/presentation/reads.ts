@@ -136,14 +136,23 @@ function validateReads(reads: unknown): PreparedRead[] {
 
     let canonicalDescriptor: PageRead | undefined;
     if (descriptor.kind === 'subject') {
-      unknownFields(descriptor, ['kind', 'id'], pointer, errors);
+      unknownFields(descriptor, ['kind', 'id', 'context'], pointer, errors);
       if (typeof descriptor.id !== 'string' || !UUID_PATTERN.test(descriptor.id)) {
         addError(errors, `${pointer}/id`, 'invalid_format');
       } else {
-        canonicalDescriptor = { kind: 'subject', id: descriptor.id };
+        canonicalDescriptor = {
+          kind: 'subject',
+          id: descriptor.id,
+          ...(typeof descriptor.context === 'string' ? { context: descriptor.context } : {}),
+        };
       }
-    } else if (descriptor.kind === 'links') {
-      unknownFields(descriptor, ['kind', 'id', 'property', 'filter', 'type', 'limit'], pointer, errors);
+    } else if (descriptor.kind === 'links' || descriptor.kind === 'relations') {
+      unknownFields(
+        descriptor,
+        ['kind', 'id', 'context', 'property', 'filter', 'type', 'limit', 'cursor'],
+        pointer,
+        errors,
+      );
       const idValid = typeof descriptor.id === 'string' && UUID_PATTERN.test(descriptor.id);
       if (!idValid) addError(errors, `${pointer}/id`, 'invalid_format');
       const propertyValid = typeof descriptor.property === 'string' && CURIE_PATTERN.test(descriptor.property);
@@ -160,7 +169,7 @@ function validateReads(reads: unknown): PreparedRead[] {
       if (!limitValid) addError(errors, `${pointer}/limit`, 'out_of_range');
       if (idValid && propertyValid && filterValid && typeValid && limitValid) {
         canonicalDescriptor = {
-          kind: 'links',
+          kind: descriptor.kind,
           id: descriptor.id as string,
           property: descriptor.property as string,
           ...(descriptor.filter === undefined ? {} : { filter: descriptor.filter as string }),
@@ -191,8 +200,15 @@ function validateReads(reads: unknown): PreparedRead[] {
       } else {
         canonicalDescriptor = { kind: 'account', handle: descriptor.handle };
       }
-    } else if (descriptor.kind === 'accountThreads') {
-      unknownFields(descriptor, ['kind', 'id', 'threadKind', 'limit'], pointer, errors);
+    } else if (descriptor.kind === 'accountThreads' || descriptor.kind === 'subjectThreads') {
+      unknownFields(
+        descriptor,
+        descriptor.kind === 'subjectThreads'
+          ? ['kind', 'id', 'place', 'threadKind', 'limit', 'cursor']
+          : ['kind', 'id', 'threadKind', 'limit'],
+        pointer,
+        errors,
+      );
       const idValid = typeof descriptor.id === 'string' && UUID_PATTERN.test(descriptor.id);
       if (!idValid) addError(errors, `${pointer}/id`, 'invalid_format');
       const kindValid = descriptor.threadKind === 'discussion' || descriptor.threadKind === 'review';
@@ -207,6 +223,11 @@ function validateReads(reads: unknown): PreparedRead[] {
           threadKind: descriptor.threadKind as 'discussion' | 'review',
           limit: descriptor.limit as number,
         };
+        if (descriptor.kind === 'subjectThreads') {
+          if (typeof descriptor.place !== 'string' || !UUID_PATTERN.test(descriptor.place))
+            addError(errors, `${pointer}/place`, 'invalid_format');
+          else canonicalDescriptor = { ...canonicalDescriptor, kind: 'subjectThreads', place: descriptor.place };
+        }
       }
     } else if (descriptor.kind === 'accountPosts' || descriptor.kind === 'accountCollections') {
       unknownFields(descriptor, ['kind', 'id', 'limit'], pointer, errors);
@@ -243,6 +264,32 @@ function validateReads(reads: unknown): PreparedRead[] {
     }
 
     if (canonicalDescriptor === undefined) continue;
+    if (
+      canonicalDescriptor.kind === 'subject' ||
+      canonicalDescriptor.kind === 'links' ||
+      canonicalDescriptor.kind === 'relations'
+    ) {
+      if (descriptor.context !== undefined) {
+        if (typeof descriptor.context !== 'string' || !UUID_PATTERN.test(descriptor.context))
+          addError(errors, `${pointer}/context`, 'invalid_format');
+        else canonicalDescriptor = { ...canonicalDescriptor, context: descriptor.context };
+      }
+    }
+    if (
+      canonicalDescriptor.kind === 'links' ||
+      canonicalDescriptor.kind === 'relations' ||
+      canonicalDescriptor.kind === 'subjectThreads'
+    ) {
+      if (descriptor.cursor !== undefined) {
+        if (
+          typeof descriptor.cursor !== 'string' ||
+          descriptor.cursor.length === 0 ||
+          (canonicalDescriptor.kind === 'subjectThreads' && descriptor.cursor.length > 4096)
+        )
+          addError(errors, `${pointer}/cursor`, 'invalid_format');
+        else canonicalDescriptor = { ...canonicalDescriptor, cursor: descriptor.cursor };
+      }
+    }
     let canonical: string | undefined;
     let normalized: unknown;
     try {
@@ -286,8 +333,8 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
   if (descriptor.kind === 'search') {
     headers.set('content-type', 'application/json');
     init.body = JSON.stringify(descriptor.body);
-  } else if (descriptor.kind === 'links') {
-    url.pathname = `/v1/subjects/${descriptor.id}/links`;
+  } else if (descriptor.kind === 'links' || descriptor.kind === 'relations') {
+    url.pathname = `/v1/subjects/${descriptor.id}/${descriptor.kind}`;
     url.searchParams.set('property', descriptor.property);
     if (descriptor.filter !== undefined) url.searchParams.set('filter', descriptor.filter);
     if (descriptor.type !== undefined) url.searchParams.set('type', descriptor.type);
@@ -300,8 +347,9 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
   } else if (descriptor.kind === 'account') {
     url.pathname = '/v1/accounts';
     url.searchParams.set('handle', descriptor.handle);
-  } else if (descriptor.kind === 'accountThreads') {
-    url.pathname = `/v1/accounts/${descriptor.id}/threads`;
+  } else if (descriptor.kind === 'accountThreads' || descriptor.kind === 'subjectThreads') {
+    url.pathname = `/v1/${descriptor.kind === 'subjectThreads' ? 'subjects' : 'accounts'}/${descriptor.id}/threads`;
+    if (descriptor.kind === 'subjectThreads') url.searchParams.set('place', descriptor.place);
     url.searchParams.set('kind', descriptor.threadKind);
     url.searchParams.set('limit', String(descriptor.limit));
   } else if (descriptor.kind === 'accountPosts') {
@@ -312,6 +360,16 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
     url.searchParams.set('view', 'BASIC');
     url.searchParams.set('limit', String(descriptor.limit));
   }
+  if (
+    (descriptor.kind === 'subject' || descriptor.kind === 'links' || descriptor.kind === 'relations') &&
+    descriptor.context
+  )
+    url.searchParams.set('context', descriptor.context);
+  if (
+    (descriptor.kind === 'links' || descriptor.kind === 'relations' || descriptor.kind === 'subjectThreads') &&
+    descriptor.cursor
+  )
+    url.searchParams.set('cursor', descriptor.cursor);
   return new Request(url, init);
 }
 

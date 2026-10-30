@@ -2,6 +2,11 @@ import { withHeaders } from '@elysia/openapi';
 import canonicalize from 'canonicalize';
 import {
   planReads,
+  readCost,
+  MAX_PAGE_COST,
+  PageContinuationError,
+  type PageContinuation,
+  type SelectedContext,
   platformRegistry,
   PROFILE_ROUTE_MAX_LENGTH,
   PROFILE_ROUTE_PATTERN,
@@ -31,6 +36,7 @@ import { decodeSession, encodeSession, mergeSession, type SessionComponent } fro
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
 import { readPage } from '../reads.ts';
+import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
 
 const resource = { route: 0, id: GLOBAL_CONTEXT };
@@ -44,7 +50,7 @@ const pageRedirect = t.Object({ redirect: t.Object({ from: t.String(), to: t.Str
 
 type ReadResult = { status: number; body: unknown };
 type PageAccount = { id: string; handle: string; automated: boolean; operatorId: string | null };
-type PageTarget = ({ subject: string } | { route: string } | { account: string }) & { view?: View };
+type PageTarget = ({ subject: string; realm?: string } | { route: string } | { account: string }) & { view?: View };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -69,7 +75,8 @@ function targetOf(body: unknown): PageTarget {
   const errors: FieldError[] = [];
   if (!isRecord(body)) reject([{ pointer: '', code: 'invalid_type' }]);
   for (const key of Object.keys(body)) {
-    if (key !== 'target' && key !== 'languages') errors.push({ pointer: `/${segment(key)}`, code: 'unknown_field' });
+    if (key !== 'target' && key !== 'languages' && key !== 'continuation')
+      errors.push({ pointer: `/${segment(key)}`, code: 'unknown_field' });
   }
   if (!Object.hasOwn(body, 'target')) {
     errors.push({ pointer: '/target', code: 'required' });
@@ -81,7 +88,7 @@ function targetOf(body: unknown): PageTarget {
     reject(errors);
   }
   for (const key of Object.keys(target)) {
-    if (key !== 'subject' && key !== 'route' && key !== 'account' && key !== 'view')
+    if (key !== 'subject' && key !== 'route' && key !== 'account' && key !== 'view' && key !== 'realm')
       errors.push({ pointer: `/target/${segment(key)}`, code: 'unknown_field' });
   }
   const named = ['subject', 'route', 'account'].filter((key) => Object.hasOwn(target, key));
@@ -95,6 +102,16 @@ function targetOf(body: unknown): PageTarget {
     else if (named[0] === 'route') errors.push({ pointer: '/target/view', code: 'unknown_field' });
     else view = target.view;
   }
+  let realm: string | undefined;
+  if (Object.hasOwn(target, 'realm')) {
+    if (named[0] !== 'subject') errors.push({ pointer: '/target/realm', code: 'unknown_field' });
+    else if (typeof target.realm !== 'string' || !subjectIdPattern.test(target.realm))
+      errors.push({
+        pointer: '/target/realm',
+        code: typeof target.realm === 'string' ? 'invalid_format' : 'invalid_type',
+      });
+    else realm = target.realm;
+  }
   if (named.length !== 1) {
     errors.push({ pointer: '/target', code: 'invalid_type' });
     reject(errors);
@@ -106,7 +123,7 @@ function targetOf(body: unknown): PageTarget {
         pointer: '/target/subject',
         code: typeof subject === 'string' ? 'invalid_format' : 'invalid_type',
       });
-    else if (errors.length === 0) return { subject, ...(view ? { view } : {}) };
+    else if (errors.length === 0) return { subject, ...(realm ? { realm } : {}), ...(view ? { view } : {}) };
   } else if (named[0] === 'account') {
     const account = target.account;
     if (typeof account !== 'string' || !handlePattern.test(account))
@@ -123,6 +140,25 @@ function targetOf(body: unknown): PageTarget {
     else if (errors.length === 0) return { route };
   }
   reject(errors);
+}
+
+function continuationOf(body: unknown, target: PageTarget): PageContinuation | undefined {
+  if (!isRecord(body) || !Object.hasOwn(body, 'continuation')) return;
+  if (!('subject' in target) || !target.view || target.view === 'overview')
+    reject([{ pointer: '/continuation', code: 'unsupported' }]);
+  const value = body.continuation;
+  if (!isRecord(value)) reject([{ pointer: '/continuation', code: 'invalid_type' }]);
+  const errors: FieldError[] = [];
+  for (const key of Object.keys(value))
+    if (key !== 'node' && key !== 'cursor')
+      errors.push({ pointer: `/continuation/${segment(key)}`, code: 'unknown_field' });
+  if (typeof value.node !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(value.node))
+    errors.push({ pointer: '/continuation/node', code: 'invalid_format' });
+  if (typeof value.cursor !== 'string' || value.cursor.length === 0)
+    errors.push({ pointer: '/continuation/cursor', code: 'invalid_type' });
+  if (errors.length) reject(errors);
+  if (typeof value.node !== 'string' || typeof value.cursor !== 'string') throw new Error('Invalid continuation');
+  return { node: value.node, cursor: value.cursor };
 }
 
 function languagesOf(body: unknown): readonly string[] | undefined {
@@ -191,11 +227,13 @@ export function pageRoutes<App>(
   app: App,
   {
     pool,
+    routeKey,
     access,
     tokens,
     dispatch,
   }: {
     pool: Pool;
+    routeKey: Uint8Array;
     access?: Access | AccessFactory;
     tokens: KeyRing;
     dispatch: (request: Request) => Promise<Response>;
@@ -214,7 +252,7 @@ export function pageRoutes<App>(
         400: problemSchema('invalid_request'),
         401: unauthorized,
         404: problemSchema('not_found'),
-        503: problemSchema('presentation_not_ready', 'overloaded', 'deadline_exceeded'),
+        503: problemSchema('presentation_not_ready', 'dependency_unavailable', 'overloaded', 'deadline_exceeded'),
       },
       detail: {
         operationId: 'pages.read',
@@ -223,7 +261,7 @@ export function pageRoutes<App>(
         security: [{ bearerAuth: [] }, {}],
       },
     },
-    async ({ body, request, authorize, admission, job, actor }) => {
+    async ({ body, request, authorize, admission, job, actor, access: currentAccess, session: requestSession }) => {
       // A 308 preserves the POST body; its Location supplies the replacement page target.
       const encodedTarget = new URL(request.url).searchParams.get('target');
       let redirectedTarget: unknown;
@@ -238,6 +276,7 @@ export function pageRoutes<App>(
         encodedTarget === null ? body : { ...(isRecord(body) ? body : {}), target: redirectedTarget },
       );
       const languages = languagesOf(body);
+      const continuation = continuationOf(body, target);
       const check = await authorize({
         ...resource,
         ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
@@ -261,12 +300,21 @@ export function pageRoutes<App>(
         probes.set(canonicalize(descriptor)!, result);
         return result;
       };
+      let selected: SelectedPage | undefined;
+      const authority = {
+        deps: { pool, access: currentAccess(), routeKey },
+        actor,
+        deadline: job.deadline,
+        run: <T>(work: () => Promise<T>) => admission.run('normal', job, work),
+        record: (component: SessionComponent) => requestSession.record(component),
+      };
       const subjectProbe = async (id: string) => {
-        const result = await probe({ kind: 'subject', id });
+        const context = selected ? { context: selected.context.id } : {};
+        const result = await probe({ kind: 'subject', id, ...context });
         if (result.status !== 200) return { failed: result } as const;
         const found = survivor(result.body);
         // The planned subject read names the survivor of a redirect, so the probe answers that descriptor too.
-        probes.set(canonicalize({ kind: 'subject', id: found.id })!, result);
+        probes.set(canonicalize({ kind: 'subject', id: found.id, ...context })!, result);
         return { subject: found } as const;
       };
       let subject: { id: string; type: string } | null = null;
@@ -281,6 +329,7 @@ export function pageRoutes<App>(
         let automated = false;
         if ('subject' in target) {
           subjectTarget = target.subject;
+          if (target.realm) selected = await selectPage(authority, target.realm, subjectTarget);
         } else {
           const result = await probe({ kind: 'account', handle: target.account });
           if (result.status !== 200) return respond(result.status, result.body, probeSession, false);
@@ -337,6 +386,37 @@ export function pageRoutes<App>(
       }
 
       return pageAnswer({
+        ...(selected
+          ? {
+              context: selected.context,
+              finalGuard: async () => {
+                const current = await readPage({
+                  dispatch,
+                  incoming: request,
+                  reads: { guard: { kind: 'subject', id: subject!.id, context: selected.context.id } },
+                  session,
+                });
+                probeSession = mergedSession(tokens, scope, probeSession, current.session);
+                const result = current.results.guard!;
+                if (result.status !== 200)
+                  throw new ProblemError(result.status === 404 ? 'not_found' : 'dependency_unavailable', {
+                    headers: { 'retry-after': '1' },
+                  });
+                if (
+                  survivor(result.body).id !== subject!.id ||
+                  canonicalize(result.body) !==
+                    canonicalize(
+                      probes.get(canonicalize({ kind: 'subject', id: subject!.id, context: selected.context.id })!)
+                        ?.body,
+                    )
+                )
+                  throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
+                await guardSelectedPage(authority, selected);
+                return current.session;
+              },
+            }
+          : {}),
+        ...(continuation ? { continuation } : {}),
         dispatch,
         request,
         session,
@@ -366,13 +446,37 @@ async function pageAnswer(input: {
   probes: Map<string, ReadResult>;
   probeSession: string | null;
   languages?: readonly string[];
+  context?: SelectedContext;
+  continuation?: PageContinuation;
+  finalGuard?: () => Promise<string | null>;
 }): Promise<Response> {
   // The probes already ran; plan once and run what they did not answer in one call.
-  const plan = planReads(platformRegistry, input.resolved.document, { subject: input.subject, account: input.account });
+  const plan = (() => {
+    try {
+      return planReads(platformRegistry, input.resolved.document, {
+        subject: input.subject,
+        account: input.account,
+        ...(input.context ? { context: input.context } : {}),
+        ...(input.continuation ? { continuation: input.continuation } : {}),
+      });
+    } catch (error) {
+      if (error instanceof PageContinuationError)
+        reject([{ pointer: `/continuation/${error.field}`, code: 'invalid_format' }]);
+      throw error;
+    }
+  })();
+  if (Object.values(plan.reads).reduce((cost, read) => cost + readCost(read), 0) > MAX_PAGE_COST)
+    reject([{ pointer: '/reads', code: 'out_of_range' }]);
   const results = new Map(input.probes);
   const pending: Record<string, PageRead> = {};
   for (const descriptor of Object.values(plan.reads)) {
     const key = canonicalize(descriptor)!;
+    if (
+      input.context?.population.kind === 'realm' &&
+      (descriptor.kind === 'collections' || descriptor.kind === 'reactions' || descriptor.kind === 'search')
+    ) {
+      results.set(key, { status: 503, body: { code: 'dependency_unavailable' } });
+    }
     if (!results.has(key)) pending[`p${Object.keys(pending).length}`] = descriptor;
   }
   let readSession = input.probeSession;
@@ -388,6 +492,8 @@ async function pageAnswer(input: {
     readSession = mergedSession(input.session.ring, input.session.scope, readSession, page.session);
   }
 
+  if (input.finalGuard)
+    readSession = mergedSession(input.session.ring, input.session.scope, readSession, await input.finalGuard());
   const reads: Record<string, ReadResult> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
     const result = results.get(canonicalize(descriptor)!);
@@ -407,6 +513,8 @@ async function pageAnswer(input: {
     {
       ...(input.subject === null ? {} : { subject: input.subject }),
       ...(input.account === null ? {} : { account: input.account.id }),
+      ...(input.context ? { context: input.context } : {}),
+      ...(input.continuation ? { continuation: input.continuation } : {}),
       profile: input.digest,
       template: { scope: input.resolved.scope, key: input.resolved.key },
       document: input.resolved.document,

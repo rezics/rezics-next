@@ -53,7 +53,12 @@ function profileProblem(error: unknown): never {
 
 export function profileRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  { pool, access, tokens }: { pool: Pool; access?: Access | AccessFactory; tokens: KeyRing },
+  {
+    pool,
+    access,
+    tokens,
+    routeKey,
+  }: { pool: Pool; access?: Access | AccessFactory; tokens: KeyRing; routeKey: Uint8Array },
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
@@ -222,6 +227,7 @@ export function profileRoutes(
   // Sub-reads dispatch through the kernel app. Every route is mounted before a request runs.
   return pageRoutes(profiles, {
     pool,
+    routeKey,
     tokens,
     dispatch: (request) => app.handle(request),
     ...(access === undefined ? {} : { access }),

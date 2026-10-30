@@ -90,7 +90,7 @@ export function subjectFrame(overview: SubjectPageData, locale: string): Subject
 export type ViewPagesLoad =
   | { kind: 'missing' }
   | { kind: 'redirect'; id: string; target?: 'account' }
-  | { kind: 'page'; page: SubjectPageData; overview: SubjectPageData; next?: string };
+  | { kind: 'page'; page: SubjectPageData; overview: SubjectPageData; next?: string; node?: string };
 
 /** One `pages.read` of the view and one of the overview, whose previews give the tab bar its counts and the frame its subject. */
 export async function loadViewPages(
@@ -99,47 +99,49 @@ export async function loadViewPages(
   view: View,
   locale = 'en',
   cursor?: string,
+  options: { realm?: string; node?: string; authorization?: string } = {},
 ): Promise<ViewPagesLoad> {
-  const result = await loadSubjectPage(client, id, view, locale);
-  if (result.kind !== 'page') return result;
-  const overview = await loadSubjectPage(client, id, undefined, locale);
+  // Resolve a node from the current template; the continued request independently resolves and guards it again.
+  const first = await loadSubjectPage(client, id, view, locale, {
+    ...options,
+    ...(cursor !== undefined && options.node ? { continuation: { node: options.node, cursor } } : {}),
+  });
+  if (first.kind !== 'page') return first;
+  const plan = planReads(platformRegistry, first.page.document as CompositionDocument, pageContext(first.page));
+  const primary = Object.entries(plan.nodes).find(([node, key]) => {
+    const read = plan.reads[key];
+    return (
+      (!options.node || options.node === node) &&
+      (read?.kind === 'links' || read?.kind === 'relations' || read?.kind === 'subjectThreads')
+    );
+  });
+  let result = first;
+  if (cursor !== undefined && !options.node) {
+    if (!primary) return { kind: 'missing' };
+    const continued = await loadSubjectPage(client, id, view, locale, {
+      ...options,
+      continuation: { node: primary[0], cursor },
+    });
+    if (continued.kind !== 'page') return continued;
+    result = continued;
+  }
+  const overview = await loadSubjectPage(client, id, undefined, locale, options);
   if (overview.kind !== 'page') return overview;
-  let next: string | undefined;
-  const reads = planReads(
+  const currentPlan = planReads(
     platformRegistry,
     result.page.document as CompositionDocument,
     pageContext(result.page),
-  ).reads;
-  const primary = Object.entries(reads).find(
-    (entry): entry is [string, Extract<PageRead, { kind: 'links' | 'collections' }>] =>
-      entry[1].kind === 'links' || entry[1].kind === 'collections',
   );
-  if (primary) {
-    const [key, read] = primary;
-    if (cursor === undefined) {
-      const body = result.page.reads[key]?.body;
-      if (isRecord(body) && typeof body.next === 'string') next = body.next;
-    } else {
-      const response =
-        read.kind === 'links'
-          ? await client.subjects({ id }).links.get({
-              query: {
-                property: read.property,
-                ...(read.filter ? { filter: read.filter } : {}),
-                ...(read.type ? { type: read.type } : {}),
-                limit: read.limit,
-                cursor,
-              },
-            })
-          : await client.subjects({ id }).collections.get({ query: { limit: read.limit, cursor } });
-      if (response.status === 400) return { kind: 'missing' };
-      result.page.reads[key] = { status: response.status, body: response.error ? {} : response.data };
-      if (!response.error && response.data) {
-        if (typeof response.data.next === 'string') next = response.data.next;
-      }
-    }
-  }
-  return { kind: 'page', page: result.page, overview: overview.page, ...(next !== undefined ? { next } : {}) };
+  const key = primary ? currentPlan.nodes[primary[0]] : undefined;
+  const body = key ? result.page.reads[key]?.body : undefined;
+  const next = isRecord(body) && typeof body.next === 'string' ? body.next : undefined;
+  return {
+    kind: 'page',
+    page: result.page,
+    overview: overview.page,
+    ...(next ? { next } : {}),
+    ...(primary ? { node: primary[0] } : {}),
+  };
 }
 
 /** The tabs with the current view among them: the reader is on it, so the bar always offers it, in the documented order. */
@@ -166,6 +168,7 @@ export function SubjectFrame({
   tabLabels,
   view,
   base: tabBase,
+  realm,
 }: {
   frame: SubjectFrameData;
   locale: string;
@@ -180,6 +183,7 @@ export function SubjectFrame({
   view: View;
   /** The page-view address when this subject is embedded in a routed Zone. */
   base?: string;
+  realm?: string;
 }) {
   const title = frame.title.text || unlabelled;
   const base = subjectHref({ id: frame.id, label: title }, locale).href;
@@ -225,6 +229,7 @@ export function SubjectFrame({
         locale={locale}
         base={tabBase ?? base}
         labels={tabLabels}
+        realm={realm}
       />
     </div>
   );
