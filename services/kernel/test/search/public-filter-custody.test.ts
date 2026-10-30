@@ -799,7 +799,7 @@ test('accepted native wide release capture and cold keyed recovery retain full i
     definitionInput.meaning.release.properties[last]!.labels.en = 'mutated';
     const joined = await capture(db, () => custody.read(retained!, context()), { includeBackends: true });
     if (joined.value.status !== 'found') throw new Error(joined.value.reason);
-    const reference = { authority: 'semantic.readRelease', digest: identity.digest };
+    const reference = { authority: 'semantic.readRelease' as const, digest: identity.digest };
     expect(joined.value.definition).toEqual({ ...expected, meaning: { ...expected.meaning, release: reference } });
     expect(joined.value.execution).toEqual(execution);
     expect(joined.value.cost.bytes).toBeLessThanOrEqual(4 * 1024 * 1024);
