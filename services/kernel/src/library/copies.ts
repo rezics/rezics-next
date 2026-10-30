@@ -447,7 +447,9 @@ export function createCopyCommands(config: Dependencies) {
             const kindPin = decodeLibraryProfilePin(row.kind_profile_pin);
             if (kindPin) {
               const release = await readRelease(pool, kindPin.releaseDigest, { composed: false });
-              const profile = release ? resolveLibraryProfilePin({ digest: kindPin.releaseDigest, release }, kindPin) : null;
+              const profile = release
+                ? resolveLibraryProfilePin({ digest: kindPin.releaseDigest, release }, kindPin)
+                : null;
               if (!profile?.copies?.kinds.some((kind) => kind.id === row.kind))
                 throw new Error('Retained copy accepted kind profile is unavailable');
             }

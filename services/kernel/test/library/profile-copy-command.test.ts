@@ -737,21 +737,29 @@ test('metadata preserves both meanings and an explicit newer status survives del
   for (const field of ['library_profile_pin', 'kind_profile_pin', 'status_profile_pin'])
     expect(metadata[field]).toEqual(creation[field]);
   expect((await commands.readPresentedCopy(owner.actor, created.value.id)).presentation).toMatchObject({
-    meaning: 'known', kindLabel: 'installation', statusLabel: 'licensed',
+    meaning: 'known',
+    kindLabel: 'installation',
+    statusLabel: 'licensed',
   });
   await json(
-    await native.send(owner.bearer, 'PATCH', path(created.value.id), { revision: 2, status: 'archived' }), 200,
+    await native.send(owner.bearer, 'PATCH', path(created.value.id), { revision: 2, status: 'archived' }),
+    200,
   );
   const updated = await fact(created.value.id);
   expect(updated.status_profile_pin).toEqual(pin(currentDigest, 'game'));
   expect(updated.kind_profile_pin).toEqual(creation.kind_profile_pin);
   expect(updated.library_profile_pin).toEqual(creation.library_profile_pin);
   const before = await inspect();
-  const presented = (await json(
-    await native.send(owner.bearer, 'GET', `${path(created.value.id)}?presentation=FULL`), 200,
-  )).copy;
+  const presented = (
+    await json(await native.send(owner.bearer, 'GET', `${path(created.value.id)}?presentation=FULL`), 200)
+  ).copy;
   expect(presented).toMatchObject({
-    id: created.value.id, subjectId, revision: 3, kind: 'installation', status: 'archived', location: 'Study',
+    id: created.value.id,
+    subjectId,
+    revision: 3,
+    kind: 'installation',
+    status: 'archived',
+    location: 'Study',
     presentation: { meaning: 'known', kindLabel: 'installation', statusLabel: 'Archived now' },
   });
   expect(await inspect()).toEqual(before);
@@ -762,15 +770,21 @@ test('metadata preserves both meanings and an explicit newer status survives del
     expect(deleted[field]).toEqual(updated[field]);
   // Undo accepts the actual historic status, even when today's profile no longer offers it.
   await native.activate(originalDigest);
-  const restored = await json(await native.send(owner.bearer, 'POST', `${path(created.value.id)}:restore`, {
-    deletionId: deleted.deletion_id, revision: deleted.revision,
-  }), 200);
+  const restored = await json(
+    await native.send(owner.bearer, 'POST', `${path(created.value.id)}:restore`, {
+      deletionId: deleted.deletion_id,
+      revision: deleted.revision,
+    }),
+    200,
+  );
   expect(restored.copy).toMatchObject({ id: created.value.id, revision: 5, status: 'archived', location: 'Study' });
   const final = await fact(created.value.id);
   for (const field of ['library_profile_pin', 'kind_profile_pin', 'status_profile_pin', 'created_at', 'updated_at'])
     expect(final[field]).toEqual(updated[field]);
   expect((await commands.readPresentedCopy(owner.actor, created.value.id)).presentation).toMatchObject({
-    meaning: 'known', kindLabel: 'installation', statusLabel: 'Archived now',
+    meaning: 'known',
+    kindLabel: 'installation',
+    statusLabel: 'Archived now',
     statusEditing: { state: 'supported', statuses: [{ id: 'licensed', label: 'licensed', labelLanguage: 'en' }] },
   });
 }, 120_000);

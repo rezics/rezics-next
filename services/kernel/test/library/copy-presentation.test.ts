@@ -72,7 +72,9 @@ test('exact accepted labels survive a current rename while current native status
   };
   const before = structuredClone(copy);
   expect(
-    presentCopy({ copy, kindPin: pin, statusPin: pin }, snapshot, { ...source, kind: 'supported', profile: current }, ['zh-Hant-TW']),
+    presentCopy({ copy, kindPin: pin, statusPin: pin }, snapshot, { ...source, kind: 'supported', profile: current }, [
+      'zh-Hant-TW',
+    ]),
   ).toEqual({
     meaning: 'known',
     kindLabel: '安裝',
@@ -95,7 +97,9 @@ test('missing exact release is unavailable, readable retirement is unsupported, 
     meaning: 'unavailable',
     statusEditing: { state: 'unavailable' },
   });
-  expect(presentCopy({ copy, kindPin: pin, statusPin: pin }, { ...snapshot, digest: 'different' }, source).meaning).toBe('unavailable');
+  expect(
+    presentCopy({ copy, kindPin: pin, statusPin: pin }, { ...snapshot, digest: 'different' }, source).meaning,
+  ).toBe('unavailable');
   const retired = { ...source, kind: 'unsupported', acceptingType: 'ex:Game' } as const;
   expect(presentCopy({ copy, kindPin: pin, statusPin: pin }, snapshot, retired)).toMatchObject({
     meaning: 'known',
@@ -103,7 +107,11 @@ test('missing exact release is unavailable, readable retirement is unsupported, 
     statusEditing: { state: 'unsupported' },
   });
   expect(
-    presentCopy({ copy, kindPin: pin, statusPin: pin }, snapshot, { ...source, kind: 'supported', profile: { id: 'empty' } }).statusEditing,
+    presentCopy({ copy, kindPin: pin, statusPin: pin }, snapshot, {
+      ...source,
+      kind: 'supported',
+      profile: { id: 'empty' },
+    }).statusEditing,
   ).toEqual({ state: 'unsupported' });
   expect(presentCopy({ copy, kindPin: pin, statusPin: pin }, snapshot, null)).toMatchObject({
     meaning: 'known',
@@ -148,11 +156,13 @@ test('original kind and explicitly accepted newer status resolve separate exact 
   const statusProfile: LibraryProfile = {
     id: profile.id,
     copies: {
-      kinds: [{
-        id: 'installation',
-        labels: { en: 'Renamed kind' },
-        statuses: [{ id: 'archived', labels: { en: 'Archived', fr: 'Archivée' } }],
-      }],
+      kinds: [
+        {
+          id: 'installation',
+          labels: { en: 'Renamed kind' },
+          statuses: [{ id: 'archived', labels: { en: 'Archived', fr: 'Archivée' } }],
+        },
+      ],
     },
   };
   const statusSnapshot = {
@@ -169,16 +179,20 @@ test('original kind and explicitly accepted newer status resolve separate exact 
     statusLabelLanguage: 'fr',
     statusEditing: { state: 'supported', statuses: [{ id: 'archived', label: 'Archivée', labelLanguage: 'fr' }] },
   });
-  expect(presentCopy(fact, snapshot, { ...current, subjectId: 'other-source' }, [], statusSnapshot).statusEditing)
-    .toEqual({ state: 'unavailable' });
+  expect(
+    presentCopy(fact, snapshot, { ...current, subjectId: 'other-source' }, [], statusSnapshot).statusEditing,
+  ).toEqual({ state: 'unavailable' });
   expect(presentCopy(fact, snapshot, current, [], null)).toEqual({
-    meaning: 'unavailable', statusEditing: { state: 'unavailable' },
+    meaning: 'unavailable',
+    statusEditing: { state: 'unavailable' },
   });
   expect(presentCopy(fact, null, current, [], statusSnapshot)).toEqual({
-    meaning: 'unavailable', statusEditing: { state: 'unavailable' },
+    meaning: 'unavailable',
+    statusEditing: { state: 'unavailable' },
   });
   // The old shared mutable pin supplies no creation proof, even when status resolves exactly.
   expect(presentCopy({ ...fact, kindPin: null }, null, current, [], statusSnapshot)).toEqual({
-    meaning: 'unknown', statusEditing: { state: 'unavailable' },
+    meaning: 'unknown',
+    statusEditing: { state: 'unavailable' },
   });
 });
