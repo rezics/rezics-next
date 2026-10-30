@@ -16,4 +16,10 @@ SELECT 'thread'::text AS kind, t.thread_id AS id, t.thread_id AS thread_id,
        NULL::timestamptz AS deleted_at, false AS restorable, NULL::uuid AS decision_id,
        NULL::boolean AS matches
 FROM input i
-JOIN content.thread t ON t.route = i.route AND t.thread_id = i.id;
+CROSS JOIN LATERAL (
+  SELECT t.thread_id, t.board_id, t.author_account_id, t.first_post_id, t.title,
+         t.visibility, t.security_revision, t.availability, t.created_at, t.kind
+  FROM content.thread t
+  WHERE t.route = i.route AND t.thread_id = i.id
+  LIMIT 1
+) t;

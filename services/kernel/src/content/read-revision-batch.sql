@@ -17,5 +17,11 @@ SELECT 'revision'::text AS kind, r.revision_id AS id, r.thread_id AS thread_id,
          ELSE COALESCE(to_tsvector('simple'::regconfig, r.search_text)
            @@ plainto_tsquery('simple'::regconfig, options.query), false) END AS matches
 FROM input i
-JOIN content.revision r ON r.route = i.route AND r.revision_id = i.id
-CROSS JOIN options;
+CROSS JOIN options
+CROSS JOIN LATERAL (
+  SELECT r.revision_id, r.thread_id, r.board_id, r.post_id, r.availability, r.recorded_at,
+         r.licence, r.subject_ids, r.media_ids, r.body, r.body_sha256, r.vote_citation, r.search_text
+  FROM content.revision r
+  WHERE r.route = i.route AND r.revision_id = i.id
+  LIMIT 1
+) r;

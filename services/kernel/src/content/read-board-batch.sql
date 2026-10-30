@@ -15,4 +15,9 @@ SELECT 'board'::text AS kind, b.board_id AS id, NULL::uuid AS thread_id,
        NULL::timestamptz AS deleted_at, false AS restorable, NULL::uuid AS decision_id,
        NULL::boolean AS matches
 FROM input i
-JOIN content.board b ON b.route = i.route AND b.board_id = i.id;
+CROSS JOIN LATERAL (
+  SELECT b.board_id, b.title, b.visibility, b.security_revision, b.created_at, b.purpose, b.realm_id
+  FROM content.board b
+  WHERE b.route = i.route AND b.board_id = i.id
+  LIMIT 1
+) b;
