@@ -74,7 +74,8 @@ Web/Content handoff: actual routes `/creator/offers/new` and `/creator/offers`, 
 and exact 390/1280 stories `pages-commerce-creator-offer-editor--{price-intent,actual-route}-{390,1280}`.
 Price stories supply explicit adopted example rules, not native permission or publication. Actual route stories keep
 unavailable outcomes when their data source is unavailable. Current visual, native combined-journey and promoted-main
-proof remain pending; this retry runs only local Web typing. Earlier buyer fixture proof above predates this adoption:
+proof remain pending. Local `bun run --cwd apps/web typecheck` passes with no errors in 1,037 files; no other
+checks ran in this retry. Earlier buyer fixture proof above predates this adoption:
 the existing mapped-entitlement fixture still expects `$12.99` without unit metadata, while the adopted policy requires
 unknown. That fixture is preserved for its owner's reconciliation; no historical unit is invented to satisfy it.
 
