@@ -3,18 +3,21 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from './profile-data';
 import {
   changePreferences,
   changeCollectionVisibility,
+  changeNotifications,
   readOwnedCollections,
   reloadOwnedCollection,
   type OwnedCollection,
   type OwnedCollectionsPage,
   type CollectionVisibilityWrite,
   loadSettingsPage,
+  parseNotificationChange,
   parsePreferenceChange,
+  type NotificationWriteResult,
   type PreferenceWriteResult,
   type SettingsPage,
 } from './preferences';
@@ -68,7 +71,9 @@ export const readOwnedCollection = createServerFn({ method: 'GET' })
 
 export const readSettingsPage = createServerFn({ method: 'GET' }).handler(async (): Promise<SettingsPage> => {
   setResponseHeader('cache-control', 'private, no-store');
-  return loadSettingsPage(kernelClient(), getRequest(), env as Partial<SessionEnv>);
+  const request = getRequest();
+  const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
+  return page.signedIn ? { ...page, csrfToken: requestCsrfToken(request) } : page;
 });
 
 export const savePreferences = createServerFn({ method: 'POST' })
@@ -112,4 +117,15 @@ export const saveProfile = createServerFn({ method: 'POST' })
     if (data.before.accountId !== accountId || data.after.accountId !== accountId)
       return { ok: false as const, status: 403, message: 'You can only change your own profile.' };
     return saveProfileRecord(kernelClient(), authorization, accountId, data.before, data.after, data.idempotencyKey);
+  });
+
+export const saveNotifications = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    const change = parseNotificationChange(input);
+    if (!change) throw new Error('Invalid notification preferences change');
+    return change;
+  })
+  .handler(async ({ data }): Promise<NotificationWriteResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return changeNotifications(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });

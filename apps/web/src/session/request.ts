@@ -12,6 +12,7 @@ import {
 
 const credentials = new WeakMap<Request, string>();
 const subjects = new WeakMap<Request, string>();
+const csrfTokens = new WeakMap<Request, string>();
 
 // Credential-using routes resolve before their first kernel call, outside any error
 // concealment. Page requests need no lookup. The boolean clears stale cookies.
@@ -52,6 +53,7 @@ export async function prepareSession(request: Request, env: Partial<SessionEnv>)
   if (result.status === 'absent') return true;
   credentials.set(request, `Bearer ${result.accessToken}`);
   subjects.set(request, result.subject);
+  csrfTokens.set(request, result.csrfToken);
   return false;
 }
 
@@ -63,4 +65,8 @@ export function sessionSubject(request: Request): string | undefined {
 export function viewerCredential(request: Request): string | null {
   assertPublicCacheReadAllowed(request, 'session credential');
   return request.headers.get('authorization') ?? credentials.get(request) ?? null;
+}
+
+export function requestCsrfToken(request: Request): string | null {
+  return csrfTokens.get(request) ?? null;
 }

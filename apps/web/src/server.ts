@@ -31,6 +31,7 @@ import { suggestSubjects } from './search/suggestions.ts';
 import { limitRead, readLimitKey, type ReadRateLimitEnv } from './rate-limit/read.ts';
 import { orderStatusResponse } from './checkout/order.server.ts';
 import { startCheckout } from './checkout/start.ts';
+import { submitNotificationForm } from './settings/actions.server.ts';
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
 import { isPublicCacheRequest } from './router.tsx';
@@ -270,6 +271,13 @@ async function fetchRequest(request: Request): Promise<Response> {
       return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: 'POST' });
     try {
       return await startCheckout(request, sessionEnv);
+    } catch (error) {
+      return problemResponse(error);
+    }
+  }
+  if (request.method === 'POST' && locales.some((locale) => url.pathname === `/${locale}/settings`)) {
+    try {
+      return await submitNotificationForm(request);
     } catch (error) {
       return problemResponse(error);
     }

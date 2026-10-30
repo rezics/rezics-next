@@ -750,6 +750,12 @@ language through the client's `accept-language`.
 - **Growth check:** `tests/settings-privacy.test.ts`: `first-page cost stays fixed for 5 and 50 Collections, then grows
   by one read per requested page`; the paging test also checks one additional read for Load more.
 
+### Settings notifications
+
+- **Touches:** The preferences read the page already makes; one PATCH per change.
+- **Bound:** The map holds a few kinds; rendering is linear in it.
+- **Growth check:** The acceptance test counts kernel requests for one settings render: equal to base.
+
 ### Personal library
 
 - **Touches:** One session read and `GET /v1/libraryEntries?view=FULL` for one page of at most 100 entries. A state

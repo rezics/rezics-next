@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import settingsPreferencesRecording from '../kernel/recorded/settings-preferences.json';
 import { m } from '../paraglide/messages.js';
+import { PageHeading } from '../shell/page-heading';
+import { SignInPrompt } from '../threads/composer';
 import { PageStory, pageReady } from './page';
 
 const meta = {
@@ -21,6 +23,34 @@ type Story = StoryObj<typeof meta>;
 
 const levelTitles = [m.settings_spoiler_0_title, m.settings_spoiler_1_title, m.settings_spoiler_2_title] as const;
 
+function SignedOutSettingsPreview() {
+  return (
+    <main id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
+      <div className="mx-auto w-full max-w-5xl">
+        <article className="max-w-2xl space-y-8 text-foreground">
+          <header>
+            <PageHeading>{m.settings_heading()}</PageHeading>
+          </header>
+          <div className="space-y-3">
+            <p className="text-muted-foreground">{m.settings_signed_out()}</p>
+            <SignInPrompt returnTo="/settings" />
+          </div>
+        </article>
+      </div>
+    </main>
+  );
+}
+
+function notificationName(kind: string): string {
+  if (kind === 'reply') return m.settings_notification_reply();
+  if (kind === 'mention') return m.settings_notification_mention();
+  return kind
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((word) => word[0]!.toLocaleUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 /** The page shows the recorded level as chosen and the other controls ready to change. */
 async function settingsReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
@@ -32,6 +62,17 @@ async function settingsReady(context: { canvasElement: HTMLElement }) {
     'aria-checked',
     settingsPreferencesRecording.suitability === 'show' ? 'true' : 'false',
   );
+  const notificationGroup = await view.findByRole('group', { name: m.settings_notifications_heading() });
+  const notificationView = within(notificationGroup);
+  const notificationSwitches = await notificationView.findAllByRole('switch');
+  const notifications = Object.entries(settingsPreferencesRecording.notifications);
+  await expect(notificationSwitches).toHaveLength(notifications.length);
+  for (const [index, [kind, checked]] of notifications.entries()) {
+    const control = await notificationView.findByRole('switch', { name: notificationName(kind) });
+    await expect((control as HTMLInputElement).checked).toBe(checked);
+    await expect(notificationSwitches[index]).toHaveAccessibleName(notificationName(kind));
+  }
+  await notificationView.findByText(m.settings_notifications_mandatory());
   await view.findByRole('button', { name: m.account_sign_out() });
   await view.findByRole('heading', { level: 2, name: m.settings_privacy_heading() });
   await view.findByRole('link', { name: 'Books to revisit' });
@@ -135,10 +176,11 @@ export const SignedOut: Story = {
   play: async (context) => {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
+    await view.findByRole('heading', { level: 1, name: m.settings_heading() });
     await view.findByRole('link', { name: m.account_sign_in() });
     await expect(view.queryByRole('radio')).toBeNull();
   },
-  render: () => <PageStory visitor="Signed Out" path="/settings" />,
+  render: () => <SignedOutSettingsPreview />,
 };
 
 export const PersonProfileWithAvatarAndFiveLinks: Story = {

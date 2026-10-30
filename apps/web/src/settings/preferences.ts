@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { readLibraryResult, type CollectionVisibility } from '../library/reads';
 import type { SessionEnv } from '../session/client';
@@ -7,10 +8,18 @@ import { prepareSession, sessionSubject, viewerCredential } from '../session/req
 export type SpoilerLevel = 0 | 1 | 2;
 export type Suitability = 'blur' | 'show';
 export type ReadingPreferences = { spoilerLevel: SpoilerLevel; suitability: Suitability; version: number };
+export type NotificationPreferences = Record<string, boolean>;
+export type NotificationPatch = Record<string, boolean | null> | null;
 
 export type SettingsPage =
   | { signedIn: false }
-  | { signedIn: true; preferences: ReadingPreferences; securityHref: string | null };
+  | {
+      signedIn: true;
+      preferences: ReadingPreferences;
+      notifications?: NotificationPreferences;
+      csrfToken?: string | null;
+      securityHref: string | null;
+    };
 
 export type PreferenceChange = {
   expectedVersion: number;
@@ -99,6 +108,16 @@ export async function reloadOwnedCollection(
   return ownedCollection(readLibraryResult(result).collection);
 }
 
+export type NotificationChange = {
+  expectedVersion: number;
+  notifications: NotificationPatch;
+  idempotencyKey: string;
+};
+
+export type NotificationWriteResult =
+  | { ok: true; notifications: NotificationPreferences; version: number }
+  | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -119,6 +138,28 @@ export function parsePreferenceChange(input: unknown): PreferenceChange | undefi
     idempotencyKey,
     ...(spoilerLevel !== undefined ? { spoilerLevel } : {}),
     ...(suitability !== undefined ? { suitability } : {}),
+  };
+}
+
+/** A notification merge patch, or `undefined` if it has no valid optional change. */
+export function parseNotificationChange(input: unknown): NotificationChange | undefined {
+  if (!isRecord(input)) return undefined;
+  const { expectedVersion, notifications, idempotencyKey } = input;
+  if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) return undefined;
+  if (typeof idempotencyKey !== 'string' || !uuid.test(idempotencyKey)) return undefined;
+  if (notifications !== null) {
+    if (!isRecord(notifications) || Object.keys(notifications).length === 0) return undefined;
+    if (
+      Object.entries(notifications).some(
+        ([kind, value]) => !/^[a-z][a-z0-9_]*$/.test(kind) || (typeof value !== 'boolean' && value !== null),
+      )
+    )
+      return undefined;
+  }
+  return {
+    expectedVersion: expectedVersion as number,
+    notifications: notifications === null ? null : (notifications as Record<string, boolean | null>),
+    idempotencyKey,
   };
 }
 
@@ -151,9 +192,11 @@ export async function loadSettingsPage(
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false };
   const result = await client.accounts({ accountId }).preferences.get({ headers: { authorization } });
+  const data = readLibraryResult(result);
   return {
     signedIn: true,
-    preferences: present(readLibraryResult(result)),
+    preferences: present(data),
+    ...(isRecord(data.notifications) ? { notifications: data.notifications as NotificationPreferences } : {}),
     securityHref: securityHref(sessionEnv),
   };
 }
@@ -185,6 +228,45 @@ export async function changePreferences(
     if (status === 401 || status === 403) return { ok: false, reason: 'forbidden' };
     return { ok: false, reason: 'unavailable' };
   } catch (error) {
+    if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/** One session read and one JSON Merge Patch for a notification change. */
+export async function changeNotifications(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  change: NotificationChange,
+): Promise<NotificationWriteResult> {
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId) return { ok: false, reason: 'forbidden' };
+    const { idempotencyKey, ...body } = change;
+    const preferences = client.accounts({ accountId }).preferences;
+    const result = await preferences.patch(body as Parameters<typeof preferences.patch>[0], {
+      headers: {
+        authorization,
+        'idempotency-key': idempotencyKey,
+        'content-type': 'application/merge-patch+json',
+      } as { 'idempotency-key': string; 'content-type': string },
+    });
+    if (!result.error && result.data)
+      return {
+        ok: true,
+        notifications: { ...result.data.notifications } as NotificationPreferences,
+        version: result.data.version,
+      };
+    const status = result.status;
+    if (status === 409 && problemCode(result.error) === 'conflict') return { ok: false, reason: 'conflict' };
+    if (status === 400 || status === 422) return { ok: false, reason: 'invalid' };
+    if (status === 401 || status === 403) return { ok: false, reason: 'forbidden' };
+    return { ok: false, reason: 'unavailable' };
+  } catch (error) {
+    if (error instanceof MediaProblem && error.problem.code === 'forbidden') return { ok: false, reason: 'forbidden' };
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
     return { ok: false, reason: 'unavailable' };
   }
