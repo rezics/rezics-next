@@ -481,7 +481,9 @@ async function startReactionWorker(databaseUrl: string, routeKey: Uint8Array, re
       await readOutput;
       const status = await child.exited;
       if (status !== 0 || !output.includes(`reaction-relay:${id}:ok`))
-        throw new Error(`Reaction work worker did not stop cleanly (${status})\nstdout:\n${output}\nstderr:\n${await readErrors}`);
+        throw new Error(
+          `Reaction work worker did not stop cleanly (${status})\nstdout:\n${output}\nstderr:\n${await readErrors}`,
+        );
     },
   };
 }
