@@ -104,6 +104,37 @@ renewal when needed. The native `execution` record binds the actual immutable ob
 supported filter/order inputs and actual returned original/terminal own-row set. Nothing caller-created replaces
 that set, even when it is empty. `preparing` yields no public membership/absence/order evidence.
 
+## Retained consumed windows
+
+`PublicFilterConsumerCaptureInput.pageSize?: number` records public `s` in 1..100 separately
+from native batch size. Useful-page callers always set it; legacy captures default to their
+existing legal size. `query(queried, context, refill?)` preserves two-argument calls. The exact
+optional refill type is `Readonly<{execution: string; consumed: number; size: number}>`.
+A queried response requires `window: Readonly<{positions: readonly number[]; examined: number;
+exhausted: boolean}>`.
+
+Positions align one-to-one with result hits and are strictly increasing zero-based raw ordinals
+in THIS execution, each less than examined. Examined includes canonical duplicates, rejects and
+lookahead, even when no public hit survives. Exhausted requires complete-shard, non-timeout,
+non-terminated native end evidence after examined. An extra bounded seek is charged to the same
+original allowance. No length, total, repair result or elapsed time establishes exhaustion.
+
+Refill validates the named execution's exact root AST/text/sort/meaning/principal, physical
+incarnation and Source registration. It consumes an integer prefix in 0..examined and derives
+its native frontier from retained raw keys. Unconsumed suffix/lookahead cannot be skipped.
+Derived size/frontier never mutate the root capture or create a new observation. Persist actual
+execution/start/own rows and lineage for every batch. Reused and currently revalidated rows cost
+normally. Reject foreign/stale executions and invalid prefixes. Size is positive, at most the
+existing per-query ceiling and remaining root allowance; refill never reserves a fresh budget.
+The root's three rounds and `min(600, 6s+3)` combined raw allowance and all lower native/SQL/point/
+byte ceilings remain literal. Ready-result reads retain their tighter two-read/`2s+2` ceilings.
+
+Useful pages consume through the last used raw ordinal plus one when filled, otherwise through
+examined after processing all hits. EOF requires both consumed==examined and exhausted. All other
+continuations retain the execution/consumed locator confidentially. Sparse work-bound exhaustion
+transitions to actual finite native preparation, never an advancing empty success or a locally
+fabricated job. Exact-execution final `readStatus` remains mandatory after response work.
+
 ## Start, final observation and narrowed Source joining
 
 Start occurs before native engine execution; final revalidation is `readStatus({queried, execution}, context)`

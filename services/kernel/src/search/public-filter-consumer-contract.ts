@@ -31,6 +31,8 @@ export type PublicFilterConsumerCaptureInput = Readonly<
   SearchPlan & {
     filterDocument: FilterDocument | undefined;
     text: TextNode | undefined;
+    /** Requested public slots, independent of derived native batch size. Legacy callers default to size. */
+    pageSize?: number;
   }
 >;
 
@@ -50,7 +52,7 @@ export type PublicCanonicalCaptureInput =
   | (PublicSuggestionCaptureInput & Readonly<{ after?: never }>);
 
 export type PublicSuggestionQuery =
-  | (Omit<Extract<PublicFilterConsumerQuery, { status: 'queried' }>, 'result'> &
+  | (Omit<Extract<PublicFilterConsumerQuery, { status: 'queried' }>, 'result' | 'window'> &
       Readonly<{ result: readonly SubjectHit[] }>)
   | Exclude<PublicFilterConsumerQuery, { status: 'queried' }>;
 
@@ -83,6 +85,16 @@ export type PublicFilterConsumerCapture =
     }>
   | PublicFilterConsumerUnavailable;
 
+/** Consume a raw prefix of a retained execution; only the producer resolves native keys. */
+export type PublicFilterConsumerRefill = Readonly<{ execution: string; consumed: number; size: number }>;
+
+/** Ordinals in THIS execution, including rejected/duplicate/lookahead raw candidates. */
+export type PublicFilterConsumerWindow = Readonly<{
+  positions: readonly number[];
+  examined: number;
+  exhausted: boolean;
+}>;
+
 export type PublicFilterConsumerQuery =
   | Readonly<{
       status: 'queried';
@@ -92,6 +104,7 @@ export type PublicFilterConsumerQuery =
       execution: string;
       start: PrivacyReductionStart;
       result: SearchResult;
+      window: PublicFilterConsumerWindow;
       cost: PublicFilterCost;
     }>
   | Readonly<{ status: 'preparing'; queried: PublicFilterQueriedObservation; cost: PublicFilterCost }>
@@ -132,6 +145,7 @@ export interface PublicFilterConsumerOperations {
   query(
     queried: PublicFilterQueriedObservation,
     context: PublicFilterConsumerContext,
+    refill?: PublicFilterConsumerRefill,
   ): Promise<PublicFilterConsumerQuery>;
   repairStep(job: PublicFilterConsumerJob, context: PublicFilterConsumerContext): Promise<PublicFilterConsumerRepair>;
   readStatus(

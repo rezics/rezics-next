@@ -14,7 +14,7 @@ import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { compileKinds, kindDigest, type KindSnapshot } from './query.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding } from './cursor.ts';
+import { decodeSearchCursor, encodeSearchCursor, encodeRetainedSearchCursor, retainedSearchContinuation, type SearchCursorBinding } from './cursor.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
 import {
@@ -29,17 +29,21 @@ import {
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
 import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, type SearchHit } from './hits.ts';
-import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations } from './indices.ts';
+import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
-import { publicHitFigures, type PublicSearchHit } from './public-figures.ts';
-import type { DefaultPublicFilterRuntime, BoundPublicRequest } from './public-runtime.ts';
-import type { PublicFilterConsumerJob, PublicFilterConsumerQuery } from './public-filter-consumer-contract.ts';
+import { publicHitFigures } from './public-figures.ts';
 import { countFacets, installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
 import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
+import { collectUsefulPage } from './useful-page.ts';
+import { readPublicSearchPage, type DefaultPublicFilterRuntime } from './public-runtime.ts';
+import type { PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicFilterConsumerCapture } from './public-filter-consumer-contract.ts';
+import type { SearchHit as NativeSearchHit } from './query.ts';
+import type { PublicSearchHit } from './public-figures.ts';
+import type { KindValue } from './query.ts';
 
 export type SearchRequest = {
   text?: string;
@@ -55,14 +59,15 @@ export type SearchRequest = {
 
 export type PublicSearchPage = {
   subjects: PublicSearchHit[];
+  kinds?: { values: KindValue[]; next: string | null };
   next: string | null;
   as_of: string;
-  kinds?: { values: import('./query.ts').KindValue[]; next: string | null };
 };
-export type PublicSearchReadContext = {
+
+export type PublicSearchReadContext = Readonly<{
   deadline: number;
-  complete(page: PublicSearchPage): Promise<void>;
-};
+  complete: (page: PublicSearchPage) => Promise<void>;
+}>;
 
 type Result = { id: string; type: string; labels: Record<string, string> };
 
@@ -197,10 +202,10 @@ export function createSearchService({
   cursors,
   clock = systemClock,
   facetSample = 10_000,
-  // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
-  release: releaseOverride,
   publicFilters,
   preparePublic,
+  // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
+  release: releaseOverride,
 }: {
   pool: Pool;
   client: OpenSearch;
@@ -211,7 +216,7 @@ export function createSearchService({
   clock?: KernelClock;
   release?: () => Promise<FilterRelease | null>;
   facetSample?: number;
-  /** Installed only by trusted default host composition. */
+  /** Trusted native provider; omitted only by historical isolated service fixtures. */
   publicFilters?: () => DefaultPublicFilterRuntime;
   preparePublic?: (job: PublicFilterConsumerJob) => Promise<void>;
 }) {
@@ -362,12 +367,7 @@ export function createSearchService({
         throw error;
       }
     }
-    if (
-      !publicFilters &&
-      (text || admitted) &&
-      !(text && positiveText(text)) &&
-      !(admitted && positiveFilter(admitted))
-    )
+    if (!publicFilters && (text || admitted) && !(text && positiveText(text)) && !(admitted && positiveFilter(admitted)))
       unsupported(text ? '/text' : '/filter');
     return admitted;
   }
@@ -378,12 +378,13 @@ export function createSearchService({
       request: SearchRequest,
       now = clock().getTime(),
       active?: { digest: string; release: FilterRelease } | null,
-      read?: PublicSearchReadContext,
+      readContext?: PublicSearchReadContext,
     ) {
       const { text, filter, sort, limit, hitOptions, bindingRequest } = validate(request);
       // One lookup serves filter admission and the requested properties.
       const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
       const current = native?.release ?? (releaseOverride ? await release() : undefined);
+      if (publicFilters && !native) throw indexNotReady();
       const kinds: KindSnapshot | undefined = current
         ? compileKinds(current, native?.digest ?? kindDigest(current))
         : undefined;
@@ -409,11 +410,19 @@ export function createSearchService({
         invalid('/cursor', 'invalid_format');
       }
 
+      const retained = cursor?.ok ? retainedSearchContinuation(cursor.after) : null;
+      if (publicFilters && cursor && !retained) throw new ProblemError('search_restart_required');
+      if (!publicFilters && retained) throw new ProblemError('search_restart_required');
       // Authenticate the original operation/request/viewer before reading dynamic rating metadata.
       const rating = sort === 'rating' ? await ratingEpoch() : undefined;
+      if (retained && (
+        rating ? !retained.rating || retained.rating.questionId !== rating.questionId ||
+          retained.rating.populationId !== rating.populationId || retained.rating.priorEpoch !== rating.priorEpoch
+          : retained.rating !== undefined
+      )) throw new ProblemError('search_restart_required');
       let ratingPhase: RatingPhase | undefined;
       if (rating) {
-        if (request.cursor !== undefined) {
+        if (request.cursor !== undefined && !retained) {
           const decoded = await decodeRatingCursor(
             cursors,
             inexact ? lowerBoundBinding : binding,
@@ -434,6 +443,9 @@ export function createSearchService({
       // refill targets that physical index even if the alias switches during validation.
       const generation = await indexRequest(aliasGeneration);
       if (cursor && cursor.generation !== generation) throw new ProblemError('search_restart_required');
+      if (retained && (retained.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
+        retained.queried.consumer.meaningDigest !== native?.digest))
+        throw new ProblemError('search_restart_required');
       const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
       if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
 
@@ -466,12 +478,7 @@ export function createSearchService({
             : (() => {
                 throw new ProblemError('search_restart_required');
               })();
-      let after = cursor?.after;
       let overflow = false;
-      let exhausted = false;
-      const results: SearchHit[] = [];
-      const shown: IndexedSubject[] = [];
-      const emitted = new Set<string>();
       const witnesses = new Map<string, number>();
       let witnessCount = 0;
       // Observe every checked snapshot, including rejected candidates: current overflow can
@@ -497,98 +504,94 @@ export function createSearchService({
               ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
             }
           : source;
-      let bound: BoundPublicRequest | undefined;
-      let executed: Extract<PublicFilterConsumerQuery, { status: 'queried' }> | undefined;
-      const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
-      const capturePlan = {
-        ...plan,
-        filterDocument: admitted,
-        text,
-        generation,
-        size: Math.min(200, 2 * limit + 1),
-        ...(after === undefined ? {} : { after }),
-        ...(rating ? { rating, ...(ratingPhase ? { ratingPhase } : {}) } : {}),
-      };
-      const preparing = async (): Promise<never> => {
-        if (bound && (bound.capture.status === 'captured' || bound.capture.status === 'preparing'))
-          await preparePublic?.(bound.capture.repair);
-        throw indexNotReady();
-      };
-      try {
-        if (publicFilters) {
-          bound = await indexRequest(() =>
-            publicFilters().bindRequest({ plan: capturePlan, snapshot: 'pit' }, context),
-          );
-          if (bound.capture.status !== 'captured') return await preparing();
-          if (bound.capture.queried.consumer.meaningDigest !== native?.digest)
-            throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-          const query = await bound.operations.query(bound.capture.queried, context);
-          if (query.status !== 'queried') return await preparing();
-          executed = query;
-        }
-        for (let round = 0; round < (publicFilters ? 1 : 3); round++) {
-          const size = Math.min(200, 2 * (limit - results.length) + 1);
-          const page =
-            executed?.result ??
-            (await indexRequest(() =>
-              searchSubjectHits(client, prefix, {
-                ...plan,
-                generation,
-                size,
-                ...(after === undefined ? {} : { after }),
-                ...(rating ? { rating, ...(ratingPhase ? { ratingPhase } : {}) } : {}),
-              }),
-            ));
-          overflow ||= page.overflow === true;
+      const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
           sourcePositions.clear();
           const { passed, relationRejected } = await sourceRequest(() =>
             checkHits(
               disclosureSource,
-              page.hits,
+              hits,
               clauses,
               admitted ? { filter: admitted, relationProperties } : undefined,
             ),
           );
           inexact ||= relationRejected === true;
-          const ratingAccepted = rating ? await ratingCandidates(page.hits, rating, sourcePositions) : undefined;
-          const subjects = new Map(
-            passed
-              .filter(({ hit }) => !ratingAccepted || ratingAccepted.has(hit))
-              .map(({ hit, subject }) => [hit, subject]),
-          );
-          let consumed = 0;
-          for (const hit of page.hits) {
-            const subject = emitted.has(hit.id) ? undefined : subjects.get(hit);
-            // Consume rejected lookahead too, stopping before the next undisclosed hit.
-            if (results.length === limit && subject) break;
-            after = hit.sort;
-            if (rating) {
-              if (hit.ratingPhase !== 'scored' && hit.ratingPhase !== 'unscored') throw indexNotReady();
-              ratingPhase = hit.ratingPhase;
-            }
-            consumed++;
-            if (subject) {
-              emitted.add(hit.id);
-              if (request.cursor === undefined && request.kindCursor === undefined && witnessCount < 2) {
-                witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
-                witnessCount++;
-              }
-              results.push(projectHit(subject, hitOptions));
-              shown.push(subject);
-            }
+          const ratingAccepted = rating ? await ratingCandidates([...hits], rating, sourcePositions) : undefined;
+          const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
+          const checked = new Map<(typeof hits)[number], IndexedSubject>();
+          for (const hit of hits) {
+            if (rating && hit.ratingPhase !== 'scored' && hit.ratingPhase !== 'unscored') throw indexNotReady();
+            const subject = subjects.get(hit);
+            if (subject && (!ratingAccepted || ratingAccepted.has(hit))) checked.set(hit, subject);
           }
-          exhausted = page.hits.length < size && consumed === page.hits.length;
-          if (exhausted || results.length === limit) break;
+          return checked;
+      };
+      const runtime = publicFilters?.();
+      if (runtime && !readContext) throw indexNotReady();
+      const context = { deadline: readContext?.deadline ?? Date.now() + 10_000 };
+      const capturePlan = {
+          ...plan, generation, filterDocument: admitted, text,
+          pageSize: limit, size: Math.min(200, 2 * limit + 1),
+          ...(retained?.frontier.after ? { after: retained.frontier.after } : {}),
+          ...(rating ? { rating, ...(retained?.frontier.ratingPhase ? { ratingPhase: retained.frontier.ratingPhase } : {}) } : {}),
+      };
+      let operations: PublicFilterConsumerOperations | undefined;
+      let capture: PublicFilterConsumerCapture | undefined;
+      try {
+        if (runtime) {
+          if (retained) {
+            operations = await indexRequest(() => runtime.resumeRequest(retained.queried, context));
+          } else {
+            const bound = await indexRequest(() => runtime.bindRequest({ plan: capturePlan, snapshot: 'pit' }, context));
+            operations = bound.operations;
+            capture = bound.capture;
+          }
         }
-        if (publicFilters && !exhausted && results.length < limit) {
-          // Never expose an advancing sparse/empty page. The native consumer owns retained preparation and quota.
-          if (bound?.capture.status === 'captured') {
-            await bound.operations.closeObservation(bound.capture.queried, context);
-            await bound.operations.close();
-            bound = undefined;
+        const retainedRead = operations ? await indexRequest(() => readPublicSearchPage({
+          operations, context, plan: capturePlan, capture,
+          prepare: preparePublic,
+          ...(retained ? { continuation: retained } : {}),
+          check: checkCandidates,
+          canonicalId: (subject) => subject.id,
+        })) : undefined;
+        if (retainedRead && (
+          retainedRead.continuation.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
+          retainedRead.continuation.queried.consumer.meaningDigest !== native?.digest
+        )) throw request.cursor ? new ProblemError('search_restart_required') : indexNotReady();
+        const useful = retainedRead?.page ?? await collectUsefulPage({
+          limit,
+          frontier: {
+            ...(cursor?.after === undefined ? {} : { after: cursor.after }),
+            ...(ratingPhase === undefined ? {} : { ratingPhase }),
+          },
+          read: async ({ after, ratingPhase: phase, size }) => {
+            const page = await indexRequest(() =>
+              searchSubjectHits(client, prefix, {
+                ...plan,
+                generation,
+                size,
+                ...(after === undefined ? {} : { after }),
+                ...(rating ? { rating, ...(phase ? { ratingPhase: phase } : {}) } : {}),
+              }),
+            );
+            overflow ||= page.overflow === true;
+            return page;
+          },
+          check: checkCandidates,
+          canonicalId: (subject) => subject.id,
+        });
+        // Never publish a partial page or a raw-candidate continuation on work-bound exhaustion.
+        // Native preparation must own the retained input; a request cannot fabricate a job.
+        if (useful.status === 'preparing') throw indexNotReady();
+        const exhausted = useful.status === 'exhausted';
+        const after = useful.frontier.after;
+        ratingPhase = useful.frontier.ratingPhase;
+        const shown = [...useful.values];
+        const results: SearchHit[] = shown.map((subject) => projectHit(subject, hitOptions));
+        for (const subject of shown) {
+          if (request.cursor === undefined && request.kindCursor === undefined && witnessCount < 2) {
+            witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
+            witnessCount++;
           }
-          bound = await publicFilters().bindRequest({ plan: capturePlan, snapshot: 'prepared' }, context);
-          return await preparing();
         }
         if (hitOptions.properties) {
           const facts = await sourceRequest(() =>
@@ -609,8 +612,8 @@ export function createSearchService({
             throw new ProblemError('search_restart_required');
         }
         const cursorBinding = overflow || inexact ? lowerBoundBinding : binding;
-        const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], publicFilters ? undefined : witnesses);
-        const response = {
+        const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], retainedRead ? new Map() : witnesses);
+        const response: PublicSearchPage = {
           subjects: publicResults,
           ...(metadata
             ? {
@@ -625,7 +628,9 @@ export function createSearchService({
             : {}),
           next: exhausted
             ? null
-            : rating
+            : retainedRead
+              ? await encodeRetainedSearchCursor(cursors, cursorBinding, generation!, retainedRead.continuation, now)
+              : rating
               ? await encodeRatingCursor(
                   cursors,
                   cursorBinding,
@@ -638,26 +643,17 @@ export function createSearchService({
         };
         // This operation's final observation must follow all query and source work;
         // another request's in-flight alias read cannot bracket this response.
-        await read?.complete(response);
-        if ((await indexRequest(freshAliasGeneration)) !== generation)
-          throw new ProblemError('search_restart_required');
-        if (bound && executed) {
-          const status = await bound.operations.readStatus(
-            { queried: executed.queried, execution: executed.execution },
-            context,
-          );
-          if (status.status !== 'observed' || status.blocking.length) return await preparing();
+        await readContext?.complete(response);
+        if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
+        if (retainedRead) {
+          await indexRequest(retainedRead.finalize);
+          await indexRequest(retainedRead.release);
         }
         return response;
       } finally {
-        if (bound) {
-          try {
-            if (bound.capture.status === 'captured')
-              await bound.operations.closeObservation(bound.capture.queried, context);
-          } finally {
-            await bound.operations.close();
-          }
-        }
+        // Closing the request factory drains resources; only an exhausted page closes
+        // its retained observation. A later request reopens that producer state.
+        await operations?.close();
       }
     },
 
@@ -666,6 +662,7 @@ export function createSearchService({
       request: FacetRequest & { languages?: string[] },
       now = clock().getTime(),
     ) {
+      // The hit consumer supplies no native aggregate proof for this separate surface.
       if (publicFilters) throw indexNotReady();
       const { languages: languageChain, ...facetRequest } = request;
       const { languages } = validateHitOptions({ languages: languageChain });

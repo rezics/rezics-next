@@ -1,4 +1,7 @@
 import type { KeyRing } from '../tokens/seal.ts';
+import type { PublicFilterConsumerJob, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
+import type { SearchConsumedWindow, SearchFrontier, SearchWindowWork } from './useful-page.ts';
+import type { RatingCursorContext } from './rating-cursor.ts';
 export type SearchCursorBinding = {
     operation: string;
     request: unknown;
@@ -18,3 +21,14 @@ export declare function encodeSearchCursor(ring: KeyRing, binding: SearchCursorB
     after: readonly SearchSortValue[];
 }, now?: number): Promise<string>;
 export declare function decodeSearchCursor(ring: KeyRing, binding: SearchCursorBinding, token: string, now?: number): Promise<SearchCursorResult>;
+/** Confidential locator only. The producer revalidates it against its native retained state. */
+export type RetainedSearchContinuation = Readonly<{
+    queried: PublicFilterQueriedObservation;
+    repair: PublicFilterConsumerJob;
+    window: SearchConsumedWindow;
+    work: SearchWindowWork;
+    frontier: SearchFrontier;
+    rating?: RatingCursorContext;
+}>;
+export declare function encodeRetainedSearchCursor(ring: KeyRing, binding: SearchCursorBinding, generation: number, continuation: RetainedSearchContinuation, now?: number): Promise<string>;
+export declare function retainedSearchContinuation(after: readonly SearchSortValue[]): RetainedSearchContinuation | null;

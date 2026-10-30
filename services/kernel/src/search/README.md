@@ -1028,6 +1028,52 @@ Search hits, item facts, facet values and suggestions use the same label choice.
 - Bound: no read, statement or engine request added; per returned subject, work linear in R ranges (at most 8) times its labels and descriptions.
 - Growth check: none; no read changes. `test/search/facet-counts.test.ts`: "facet value labels follow the reader's language chain" and `test/search/service.test.ts`: "typeahead labels follow the reader's language chain" prove the choice.
 
+## Useful-page iteration and native recovery handoff
+
+`collectRetainedUsefulPage` consumes the native consumer's required retained raw window. Its
+`positions` align with filtered hits; `examined` charges every raw duplicate, reject and unused
+lookahead. A filled page consumes through the last used position plus one. An unfilled page
+consumes all examined positions. Only `consumed === examined && exhausted` proves native EOF;
+returned length, totals and repair settlement cannot establish it. An empty filtered window can
+still retain raw progress. Refill sends only `{execution, consumed, size}` to the native producer,
+which derives keys from retained execution state and preserves unconsumed suffixes.
+
+Direct reads share three rounds and `min(600, 6s+3)` raw work. Prepared reads share two rounds and
+`2s+2` raw work. These are combined allowances across ordinary/rating phases and all rejects;
+the native producer additionally owns the lower operation, SQL, point and byte ceilings and
+retains root accounting across requests. Every useful capture sets `pageSize` to public `s`,
+separately from its derived batch size (at most 200). Legacy two-argument queries remain valid.
+
+`public-runtime.ts` orchestrates actual capture/query/repair/status methods. Default composition
+binds an admitted direct PIT capture through the native factory; the standalone orchestration
+defaults to prepared capture. Admission and finite preparation belong to the actual producer.
+A preparing capture delivers its actual repair locator through the host's existing durable
+preparation store, or advances one bounded native step when used without that delivery port.
+Sparse allowance exhaustion requests actual prepared capture and delivers its native job, discarding partial
+page values. Neither settlement nor the existence of that job produces ready output. Only a
+subsequent captured observation and successful query can do so. Native retention owns quota,
+24-hour idle expiry, replay and progress; there is no service-local result/job store.
+
+The service seals actual observation, execution/consumed locator, native repair locator and
+last public tuple inside the existing confidential request/principal/language-bound cursor.
+Rating continuation also retains and compares its Global question/population/prior context.
+The public envelope remains count-free. Expired tokens, changed generations and lost retained
+observations require restart; temporary dependency loss preserves the token for retry.
+
+Summary completion runs inside `search` before exact-execution `readStatus` calls. Every batch,
+including zero-hit executions, must pass final native status after all response source work.
+Native end evidence never authorizes disclosure. Exhausted observations close only after final
+status; filled observations remain with the native owner for continuation and expiry.
+
+Default server construction uses the existing registered runtime composition. Retained
+continuations reopen a request factory without recapturing the observation or resetting its
+allowance. Closing that factory drains request resources; filled observations remain with the
+producer. The current producer module is explicitly provisional and returns unavailable until
+native mechanics land. Historical isolated services omitting the runtime retain their existing
+query fixtures and collector. Those fixtures and the pure orchestration cases supply no
+native/default-worker preparation or privacy evidence. No Source mirror, matcher or storage
+writer is introduced by this orchestration.
+
 ## Producer integrity and remaining native delivery
 
 [Identity writer custody](identity-epoch-participant.md) documents the native ordinary-writer enrollment installed
@@ -1119,9 +1165,11 @@ only on explicit conflict reload, never upload anonymous history, omit persisted
 has produced its actual native Access. The worker obtains that same binding through a headless Kernel composition,
 with the installed domain clock, canonical route key and existing WorkClient. The default service sends admitted,
 expanded filter/text/order/keyset inputs to the consumer factory, completes generic facts, figures and HTTP summaries
-before the execution-joined final observation, and closes the exact transient observation in `finally`. Sparse
+before the execution-joined final observation, and drains its request factory in `finally`. Exhausted
+observations close after final status; filled observations retain their execution/consumed locator. Sparse
 unexhausted pages yield readiness and the producer's retained prepared job rather than an advancing empty response.
-Confidential continuations continue to contain only the existing generation/comparator/keyset guards. Public kind
+Confidential continuations retain actual observation, execution/consumed and root-work locators within the
+existing principal/query/language and generation/comparator guards. Public kind
 metadata carries no inferred counts. Aggregate facets retain readiness until their native aggregate proof exists.
 
 `PublicSuggestionCaptureInput` adds the canonical `{purpose:'suggest', prefix, size, generation?,
