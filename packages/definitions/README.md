@@ -850,7 +850,7 @@ The compiler implements the [agreed library profile format](src/library-profile-
 `Release.libraryProfiles?: Record<string, LibraryProfile>` is the canonical registry;
 `TypeDefinition.library?: { profileId: string }` is its closed, same-release reference.
 The package exports `LibraryProfile`, `LibraryProfileReference`, `LibraryLabels`,
-`LibraryProgressMode`, `LibraryProgressUnit`, `LibraryProfileSource` and the
+`LibraryProgressMode`, `LibraryProgressUnit`, `LibraryCountForms`, `LibraryUnitCountForms`, `LibraryProfileSource` and the
 `LibraryProfilePin` provenance union. Pins describe consumer data; this package
 does not infer accepting types, authorize writes or execute migrations.
 
@@ -870,6 +870,17 @@ Labels belong to `presentation/<declaring-schema-group>/<locale>` under
 `copyStatuses[kindId][statusId]`. Every leaf needs English; the eight supported
 locales and 1–80 Unicode code point bound apply recursively. Source labels,
 foreign homes, duplicate contributions and unknown members reject.
+
+Unit leaves also accept the closed object `{ label, countForms }`. `label` retains the
+singular label; `countForms` requires `other` and optionally supplies `zero`, `one`,
+`two`, `few` and `many`, each using the same 1–80 code point bound. The binder emits
+`LibraryProgressUnit.countForms?: Partial<Record<keyof LibraryLabels, LibraryCountForms>>`.
+Locales are independent: no English requirement or cross-locale fallback applies to
+forms. Old string leaves and releases without forms remain valid. Both labels and
+count forms are excluded recursively from source declarations. Consumers select
+forms only beside the selected label language, using that language's plural rules
+and localized numeric wrapper; absent locale/category metadata falls back to the
+singular label. Percent rendering and all numeric/identity descriptors are unchanged.
 
 The three modes are `scalar_amount`, `cursor_position` and `completed_units`.
 Units are bounded data IDs with per-pair decimal string bounds, optional precision

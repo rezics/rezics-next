@@ -25,7 +25,12 @@ libraryProfiles:
       dropped: 'Abandonné'
     units:
       scalar_amount:
-        page: 'page'
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+            many: 'pages'
     copyKinds:
       physical: 'Physique'
       digital: 'Numérique'
@@ -44,7 +49,12 @@ libraryProfiles:
       dropped: 'Abandonné'
     units:
       scalar_amount:
-        page: 'page'
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+            many: 'pages'
     copyKinds:
       physical: 'Physique'
       digital: 'Numérique'
@@ -63,25 +73,100 @@ libraryProfiles:
       dropped: 'Abandonné'
     units:
       scalar_amount:
-        page: 'page'
-        chapter: 'chapitre'
-        episode: 'épisode'
-        minute: 'minute'
-        volume: 'volume'
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+            many: 'pages'
+        chapter:
+          label: 'chapitre'
+          countForms:
+            one: 'chapitre'
+            other: 'chapitres'
+            many: 'chapitres'
+        episode:
+          label: 'épisode'
+          countForms:
+            one: 'épisode'
+            other: 'épisodes'
+            many: 'épisodes'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
+        volume:
+          label: 'volume'
+          countForms:
+            one: 'volume'
+            other: 'volumes'
+            many: 'volumes'
         percent: 'pourcentage'
       cursor_position:
-        page: 'page'
-        chapter: 'chapitre'
-        episode: 'épisode'
-        minute: 'minute'
-        volume: 'volume'
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+            many: 'pages'
+        chapter:
+          label: 'chapitre'
+          countForms:
+            one: 'chapitre'
+            other: 'chapitres'
+            many: 'chapitres'
+        episode:
+          label: 'épisode'
+          countForms:
+            one: 'épisode'
+            other: 'épisodes'
+            many: 'épisodes'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
+        volume:
+          label: 'volume'
+          countForms:
+            one: 'volume'
+            other: 'volumes'
+            many: 'volumes'
         percent: 'pourcentage'
       completed_units:
-        page: 'page'
-        chapter: 'chapitre'
-        episode: 'épisode'
-        minute: 'minute'
-        volume: 'volume'
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+            many: 'pages'
+        chapter:
+          label: 'chapitre'
+          countForms:
+            one: 'chapitre'
+            other: 'chapitres'
+            many: 'chapitres'
+        episode:
+          label: 'épisode'
+          countForms:
+            one: 'épisode'
+            other: 'épisodes'
+            many: 'épisodes'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
+        volume:
+          label: 'volume'
+          countForms:
+            one: 'volume'
+            other: 'volumes'
+            many: 'volumes'
         percent: 'pourcentage'
     copyKinds:
       legacy-unspecified: 'Non précisé'

@@ -1,6 +1,7 @@
 import { verticalManifests, verticalProfile } from '../../../../services/kernel/test/support/manifests.ts';
 import { bundledSources } from '../../src/bundled.ts';
 import type { Release } from '../../src/index.ts';
+import countForms from '../fixtures/library-count-forms.json';
 
 export const LIBRARY_LOCALES = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const;
 export type ProfileData = Record<string, any>;
@@ -102,7 +103,13 @@ export function libraryLabels(profile: ProfileData, locale: (typeof LIBRARY_LOCA
           units: Object.fromEntries(
             profile.progress.allowed.map((m: ProfileData) => [
               m.mode,
-              Object.fromEntries(m.units.map((u: ProfileData) => [u.id, unitWords[u.id]?.[n] ?? u.id])),
+              Object.fromEntries(
+                m.units.map((u: ProfileData) => {
+                  const label = unitWords[u.id]?.[n] ?? u.id;
+                  const forms = (countForms[locale] as Record<string, unknown>)[u.id];
+                  return [u.id, forms ? { label, countForms: forms } : label];
+                }),
+              ),
             ]),
           ),
         }
@@ -128,7 +135,19 @@ export function compiledProfile(profile: ProfileData): ProfileData {
     Object.fromEntries(LIBRARY_LOCALES.map((l) => [l, select(libraryLabels(profile, l))]));
   for (const s of result.entryStateSet?.states ?? []) s.labels = labels((p) => p.states[s.id]);
   for (const m of result.progress?.allowed ?? [])
-    for (const u of m.units) u.labels = labels((p) => p.units[m.mode][u.id]);
+    for (const u of m.units) {
+      u.labels = labels((p) => {
+        const leaf = p.units[m.mode][u.id];
+        return typeof leaf === 'string' ? leaf : leaf.label;
+      });
+      const forms = Object.fromEntries(
+        LIBRARY_LOCALES.flatMap((locale) => {
+          const leaf = libraryLabels(profile, locale).units[m.mode][u.id];
+          return typeof leaf === 'string' ? [] : [[locale, structuredClone(leaf.countForms)]];
+        }),
+      );
+      if (Object.keys(forms).length) u.countForms = forms;
+    }
   for (const k of result.copies?.kinds ?? []) {
     k.labels = labels((p) => p.copyKinds[k.id]);
     for (const s of k.statuses) s.labels = labels((p) => p.copyStatuses[k.id][s.id]);

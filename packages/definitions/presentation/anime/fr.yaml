@@ -34,7 +34,12 @@ libraryProfiles:
       dropped: 'Abandonné'
     units:
       scalar_amount:
-        episode: 'épisode'
+        episode:
+          label: 'épisode'
+          countForms:
+            one: 'épisode'
+            other: 'épisodes'
+            many: 'épisodes'
     copyKinds:
       physical: 'Physique'
       digital: 'Numérique'
@@ -53,7 +58,12 @@ libraryProfiles:
       dropped: 'Abandonné'
     units:
       scalar_amount:
-        episode: 'épisode'
+        episode:
+          label: 'épisode'
+          countForms:
+            one: 'épisode'
+            other: 'épisodes'
+            many: 'épisodes'
     copyKinds:
       physical: 'Physique'
       digital: 'Numérique'
@@ -72,7 +82,12 @@ libraryProfiles:
       dropped: 'Abandonné'
     units:
       scalar_amount:
-        minute: 'minute'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
     copyKinds:
       physical: 'Physique'
       digital: 'Numérique'
@@ -91,7 +106,12 @@ libraryProfiles:
       dropped: 'Abandonné'
     units:
       scalar_amount:
-        minute: 'minute'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
     copyKinds:
       physical: 'Physique'
       digital: 'Numérique'

@@ -18,7 +18,11 @@ libraryProfiles:
       dropped: 'Abgebrochen'
     units:
       scalar_amount:
-        minute: 'Minute'
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
     copyKinds:
       physical: 'Physisch'
       digital: 'Digital'

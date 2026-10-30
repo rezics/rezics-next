@@ -31,7 +31,7 @@ this entry. A release without this declaration need not synthesize it; the futur
 ## Exact closed output
 
 All object members in this shape are exhaustive. Source uses the same nested shapes except that every `labels`
-member is absent. Numeric strings must remain strings while parsing YAML/JSON; numeric bounds must reject without
+and `countForms` member is absent. Numeric strings must remain strings while parsing YAML/JSON; numeric bounds must reject without
 coercion. JSON Schema, source validation and release semantic validation must agree, including recursive closure.
 
 ```ts
@@ -50,6 +50,12 @@ type LibraryProfile = {
       units: {
         id: Id;
         labels: Labels;
+        countForms?: Partial<
+          Record<
+            keyof Labels,
+            { other: string; zero?: string; one?: string; two?: string; few?: string; many?: string }
+          >
+        >;
         dimension?: Id;
         minimum?: string;
         maximum?: string;
@@ -128,6 +134,16 @@ libraryProfiles:
     copyStatuses:
       physical: { owned: owned }
 ```
+
+Only unit leaves additionally accept a closed `{ label: string, countForms }` object;
+all other leaves remain strings. Each count-form object requires `other` and permits
+`zero`, `one`, `two`, `few` and `many`, all 1–80 code points. It binds only to that
+unit's locale in the optional released `countForms` map. Missing maps remain valid;
+no locale's forms fall back to another locale. These are presentation metadata only,
+excluded recursively from source declarations, with no effect on percent rendering,
+numeric semantics, references or provenance. Launch data supplies forms for page,
+chapter, episode, minute and volume; cooking currently declares minutes, and there
+is no declared cooking/session count unit to invent.
 
 `states[stateId]` labels the declared state's `labels[locale]`; `units[mode][unitId]` labels exactly that pair;
 `copyKinds[kindId]` labels the kind; `copyStatuses[kindId][statusId]` labels that status in that kind. These four

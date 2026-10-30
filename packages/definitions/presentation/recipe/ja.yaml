@@ -18,7 +18,10 @@ libraryProfiles:
       dropped: '断念'
     units:
       scalar_amount:
-        minute: '分'
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
     copyKinds:
       physical: '物理'
       digital: 'デジタル'

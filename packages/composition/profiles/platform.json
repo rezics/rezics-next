@@ -2920,22 +2920,6 @@
             }
           },
           {
-            "type": "SearchBox",
-            "props": {
-              "id": "search",
-              "placeholder": {
-                "en": "Search books, anime, visual novels and recipes",
-                "zh-Hant": "搜尋書籍、動畫、視覺小說和食譜",
-                "zh-Hans": "搜索图书、动画、视觉小说和食谱",
-                "ja": "書籍、アニメ、ビジュアルノベル、レシピを検索",
-                "ko": "도서, 애니메이션, 비주얼 노벨, 레시피 검색",
-                "de": "Nach Büchern, Anime, Visual Novels und Rezepten suchen",
-                "fr": "Rechercher des livres, des anime, des visual novels et des recettes",
-                "es": "Buscar libros, anime, novelas visuales y recetas"
-              }
-            }
-          },
-          {
             "type": "Slot",
             "props": {
               "id": "personal",

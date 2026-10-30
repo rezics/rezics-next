@@ -2,10 +2,12 @@ import { createHash } from 'node:crypto';
 import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bundledRelease } from '../../src/bundled.ts';
+import historicalBundle from '../fixtures/bundled-historical-construction.json';
+// The compatibility corpus predates optional presentation extensions. Keep its exact released input.
+const bundledRelease = historicalBundle as Release;
 import { RELEASE_LIMITS, validateRelease, valueSchema, type Release } from '../../src/index.ts';
 import { analyzePattern } from '../../src/pattern-safety.ts';
-import { historicalConstructionSources } from './historical-construction.ts';
+import { materializeHistoricalConstruction } from './historical-construction.ts';
 import { admitFilter, parseFilter, validateFilter, type FilterDocument } from '../../../filter/src/filter.ts';
 
 export const scales = [64, 512, 4096] as const;
@@ -212,22 +214,9 @@ async function probe(): Promise<Evidence> {
     unique = replaceOnce(unique, 'return [...result, index];', `return [...publicationSpread(result), index];`);
     unique += `\nfunction* publicationSpread(result) {\n  ${counter}.duplicateAppends++;\n  for (const item of result) { ${counter}.duplicateCopies++; yield item; }\n}\n`;
     copy('typebox-uniqueItems', uniquePath, unique, join(directory, 'typebox/build/schema/engine/uniqueItems.mjs'));
-    const originals = historicalConstructionSources();
-    const originalSource = (path: string) => {
-      const source = originals.get(resolve(root, path));
-      if (source === undefined) throw new Error(`Missing pinned construction source: ${path}`);
-      return source;
-    };
-    const originalFilterPath = join(directory, 'original-filter.ts');
-    writeFileSync(originalFilterPath, imports(originalSource('packages/filter/src/filter.ts'), dirname(filterPath)));
-    const originalDefinitionsPath = join(directory, 'original-definitions.ts');
-    writeFileSync(
-      originalDefinitionsPath,
-      imports(originalSource('packages/definitions/src/index.ts'), dirname(definitionsPath)).replace(
-        Bun.resolveSync('@rezics/filter', dirname(definitionsPath)),
-        originalFilterPath,
-      ),
-    );
+    const originalGraph = materializeHistoricalConstruction(directory);
+    const originalDefinitionsPath = originalGraph.get(definitionsPath)!;
+    const originalFilterPath = originalGraph.get(filterPath)!;
     const originalDefinitions = (await import(originalDefinitionsPath)) as typeof import('../../src/index.ts');
     const originalFilter = (await import(originalFilterPath)) as typeof import('../../../filter/src/filter.ts');
     let filter = imports(read(filterPath), dirname(filterPath));

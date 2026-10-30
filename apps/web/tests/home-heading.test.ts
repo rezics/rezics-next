@@ -90,17 +90,9 @@ test('the platform home opens with its heading and keeps a personal slot for sig
   expect(SLOT_NAMES).toContain('personal');
   expect(validateProfile(platformRegistry, platform)).toEqual([]);
   const content = home().document.content as Node[];
-  expect(content.map(({ type }) => type)).toEqual([
-    'Heading',
-    'SearchBox',
-    'Slot',
-    'TypeList',
-    'TypeList',
-    'TypeList',
-    'TypeList',
-  ]);
+  expect(content.map(({ type }) => type)).toEqual(['Heading', 'Slot', 'TypeList', 'TypeList', 'TypeList', 'TypeList']);
   expect(content[0]).toEqual({ type: 'Heading', props: { id: 'heading', level: 1, text: homeHeadings } });
-  expect(content[2]).toEqual({ type: 'Slot', props: { id: 'personal', name: 'personal', children: [] } });
+  expect(content[1]).toEqual({ type: 'Slot', props: { id: 'personal', name: 'personal', children: [] } });
   const subjectPages = [platform.generic, ...platform.bases, ...platform.types].flatMap((entry) =>
     Object.values(templateViews(entry)),
   );
@@ -125,8 +117,8 @@ test('the route page shows the template heading as its only h1 and lets the host
   expect(html).toMatch(new RegExp(`<h1[^>]*lang="ja"[^>]*>${homeHeadings.ja}</h1>`));
   expect(html).not.toContain('Fallback heading');
   expect(html).toMatch(/<section[^>]*data-slot="personal"[^>]*><p>続きを読む<\/p><\/section>/);
-  expect(html.indexOf('<h1')).toBeLessThan(html.indexOf('<form'));
-  expect(html.indexOf('<form')).toBeLessThan(html.indexOf('data-slot="personal"'));
+  expect(html).not.toContain('<form');
+  expect(html.indexOf('<h1')).toBeLessThan(html.indexOf('data-slot="personal"'));
 
   const signedOut = renderToString(
     createElement(RoutePage, {

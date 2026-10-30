@@ -34,7 +34,11 @@ libraryProfiles:
       dropped: 'Dropped'
     units:
       scalar_amount:
-        episode: 'episode'
+        episode:
+          label: 'episode'
+          countForms:
+            one: 'episode'
+            other: 'episodes'
     copyKinds:
       physical: 'Physical'
       digital: 'Digital'
@@ -53,7 +57,11 @@ libraryProfiles:
       dropped: 'Dropped'
     units:
       scalar_amount:
-        episode: 'episode'
+        episode:
+          label: 'episode'
+          countForms:
+            one: 'episode'
+            other: 'episodes'
     copyKinds:
       physical: 'Physical'
       digital: 'Digital'
@@ -72,7 +80,11 @@ libraryProfiles:
       dropped: 'Dropped'
     units:
       scalar_amount:
-        minute: 'minute'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
     copyKinds:
       physical: 'Physical'
       digital: 'Digital'
@@ -91,7 +103,11 @@ libraryProfiles:
       dropped: 'Dropped'
     units:
       scalar_amount:
-        minute: 'minute'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
     copyKinds:
       physical: 'Physical'
       digital: 'Digital'

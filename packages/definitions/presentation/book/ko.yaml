@@ -24,7 +24,10 @@ libraryProfiles:
       dropped: '중단'
     units:
       scalar_amount:
-        page: '쪽'
+        page:
+          label: '쪽'
+          countForms:
+            other: '쪽'
     copyKinds:
       physical: '실물'
       digital: '디지털'
@@ -43,7 +46,10 @@ libraryProfiles:
       dropped: '중단'
     units:
       scalar_amount:
-        page: '쪽'
+        page:
+          label: '쪽'
+          countForms:
+            other: '쪽'
     copyKinds:
       physical: '실물'
       digital: '디지털'
@@ -62,25 +68,70 @@ libraryProfiles:
       dropped: '중단'
     units:
       scalar_amount:
-        page: '쪽'
-        chapter: '장'
-        episode: '에피소드'
-        minute: '분'
-        volume: '권'
+        page:
+          label: '쪽'
+          countForms:
+            other: '쪽'
+        chapter:
+          label: '장'
+          countForms:
+            other: '장'
+        episode:
+          label: '에피소드'
+          countForms:
+            other: '에피소드'
+        minute:
+          label: '분'
+          countForms:
+            other: '분'
+        volume:
+          label: '권'
+          countForms:
+            other: '권'
         percent: '퍼센트'
       cursor_position:
-        page: '쪽'
-        chapter: '장'
-        episode: '에피소드'
-        minute: '분'
-        volume: '권'
+        page:
+          label: '쪽'
+          countForms:
+            other: '쪽'
+        chapter:
+          label: '장'
+          countForms:
+            other: '장'
+        episode:
+          label: '에피소드'
+          countForms:
+            other: '에피소드'
+        minute:
+          label: '분'
+          countForms:
+            other: '분'
+        volume:
+          label: '권'
+          countForms:
+            other: '권'
         percent: '퍼센트'
       completed_units:
-        page: '쪽'
-        chapter: '장'
-        episode: '에피소드'
-        minute: '분'
-        volume: '권'
+        page:
+          label: '쪽'
+          countForms:
+            other: '쪽'
+        chapter:
+          label: '장'
+          countForms:
+            other: '장'
+        episode:
+          label: '에피소드'
+          countForms:
+            other: '에피소드'
+        minute:
+          label: '분'
+          countForms:
+            other: '분'
+        volume:
+          label: '권'
+          countForms:
+            other: '권'
         percent: '퍼센트'
     copyKinds:
       legacy-unspecified: '미지정'

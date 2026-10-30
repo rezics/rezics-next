@@ -1,0 +1,168 @@
+{
+  "en": {
+    "page": {
+      "one": "page",
+      "other": "pages"
+    },
+    "chapter": {
+      "one": "chapter",
+      "other": "chapters"
+    },
+    "episode": {
+      "one": "episode",
+      "other": "episodes"
+    },
+    "minute": {
+      "one": "minute",
+      "other": "minutes"
+    },
+    "volume": {
+      "one": "volume",
+      "other": "volumes"
+    }
+  },
+  "de": {
+    "page": {
+      "one": "Seite",
+      "other": "Seiten"
+    },
+    "chapter": {
+      "one": "Kapitel",
+      "other": "Kapitel"
+    },
+    "episode": {
+      "one": "Folge",
+      "other": "Folgen"
+    },
+    "minute": {
+      "one": "Minute",
+      "other": "Minuten"
+    },
+    "volume": {
+      "one": "Band",
+      "other": "Bände"
+    }
+  },
+  "es": {
+    "page": {
+      "one": "página",
+      "other": "páginas",
+      "many": "páginas"
+    },
+    "chapter": {
+      "one": "capítulo",
+      "other": "capítulos",
+      "many": "capítulos"
+    },
+    "episode": {
+      "one": "episodio",
+      "other": "episodios",
+      "many": "episodios"
+    },
+    "minute": {
+      "one": "minuto",
+      "other": "minutos",
+      "many": "minutos"
+    },
+    "volume": {
+      "one": "tomo",
+      "other": "tomos",
+      "many": "tomos"
+    }
+  },
+  "fr": {
+    "page": {
+      "one": "page",
+      "other": "pages",
+      "many": "pages"
+    },
+    "chapter": {
+      "one": "chapitre",
+      "other": "chapitres",
+      "many": "chapitres"
+    },
+    "episode": {
+      "one": "épisode",
+      "other": "épisodes",
+      "many": "épisodes"
+    },
+    "minute": {
+      "one": "minute",
+      "other": "minutes",
+      "many": "minutes"
+    },
+    "volume": {
+      "one": "volume",
+      "other": "volumes",
+      "many": "volumes"
+    }
+  },
+  "ja": {
+    "page": {
+      "other": "ページ"
+    },
+    "chapter": {
+      "other": "章"
+    },
+    "episode": {
+      "other": "エピソード"
+    },
+    "minute": {
+      "other": "分"
+    },
+    "volume": {
+      "other": "巻"
+    }
+  },
+  "ko": {
+    "page": {
+      "other": "쪽"
+    },
+    "chapter": {
+      "other": "장"
+    },
+    "episode": {
+      "other": "에피소드"
+    },
+    "minute": {
+      "other": "분"
+    },
+    "volume": {
+      "other": "권"
+    }
+  },
+  "zh-Hans": {
+    "page": {
+      "other": "页"
+    },
+    "chapter": {
+      "other": "章"
+    },
+    "episode": {
+      "other": "集"
+    },
+    "minute": {
+      "other": "分钟"
+    },
+    "volume": {
+      "other": "卷"
+    }
+  },
+  "zh-Hant": {
+    "page": {
+      "other": "頁"
+    },
+    "chapter": {
+      "other": "章"
+    },
+    "episode": {
+      "other": "集"
+    },
+    "minute": {
+      "other": "分鐘"
+    },
+    "volume": {
+      "other": "卷"
+    }
+  }
+}

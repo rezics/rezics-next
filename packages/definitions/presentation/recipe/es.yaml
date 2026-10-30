@@ -18,7 +18,12 @@ libraryProfiles:
       dropped: 'Abandonado'
     units:
       scalar_amount:
-        minute: 'minuto'
+        minute:
+          label: 'minuto'
+          countForms:
+            one: 'minuto'
+            other: 'minutos'
+            many: 'minutos'
     copyKinds:
       physical: 'Físico'
       digital: 'Digital'

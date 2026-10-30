@@ -4,6 +4,8 @@ import {
   libraryAt as at,
   validateLibraryProfileSource,
   type LibraryLabels,
+  type LibraryProgressUnit,
+  type LibraryCountForms,
   type LibraryProfile,
   type LibraryProfileReference,
   type LibraryProfileSource,
@@ -13,7 +15,7 @@ import type { CatalogueViolation } from './compile.ts';
 type Node = Record<string, unknown>;
 type Location = { file: string; pointer: string };
 type Report = (location: Location, code: CatalogueViolation['code'], message: string) => void;
-type Home = { children: Map<string, Home> } | { labels: LibraryLabels; seen: Set<string> };
+type Home = { children: Map<string, Home> } | { labels: LibraryLabels; seen: Set<string>; unit?: LibraryProgressUnit };
 type Declaration = { profile: LibraryProfile; home: Home; location: Location; source: string };
 const record = (v: unknown): v is Node => v !== null && typeof v === 'object' && !Array.isArray(v);
 const branch = (): Home & { children: Map<string, Home> } => ({ children: new Map() });
@@ -59,7 +61,15 @@ export function compileLibraryProfiles(schemas: Record<string, Node>, report: Re
         allowed: source.progress.allowed.map((mode) => {
           const pairs = branch();
           units.children.set(mode.mode, pairs);
-          return { ...mode, units: mode.units.map((unit) => ({ ...unit, labels: leaf(pairs, unit.id) })) };
+          return {
+            ...mode,
+            units: mode.units.map((unit) => {
+              const released = { ...unit, labels: leaf(pairs, unit.id) };
+              const home = pairs.children.get(unit.id)!;
+              if ('labels' in home) home.unit = released;
+              return released;
+            }),
+          };
         }),
       };
     }
@@ -163,12 +173,51 @@ export function compileLibraryProfiles(schemas: Record<string, Node>, report: Re
           if (!target) report({ file, pointer: at(pointer, key) }, 'invalid', 'Unknown presentation home');
           else visit(target, child, at(pointer, key));
         }
-      } else if (!locales.has(locale) || typeof value !== 'string' || [...value].length < 1 || [...value].length > 80)
-        report({ file, pointer }, 'invalid', 'Library labels require a launch locale and 1–80 code points');
-      else if (home.seen.has(locale)) report({ file, pointer }, 'duplicate', 'Duplicate library label');
-      else {
-        home.seen.add(locale);
-        Object.assign(home.labels, { [locale]: value });
+      } else {
+        const text = (value: unknown, pointer: string): value is string => {
+          if (typeof value === 'string' && [...value].length >= 1 && [...value].length <= 80) return true;
+          report({ file, pointer }, 'invalid', 'Library labels require a launch locale and 1–80 code points');
+          return false;
+        };
+        let label = value;
+        let forms: LibraryCountForms | undefined;
+        if (home.unit && record(value)) {
+          let valid = true;
+          for (const key of Object.keys(value))
+            if (key !== 'label' && key !== 'countForms') {
+              report({ file, pointer: at(pointer, key) }, 'invalid', 'Unknown unit presentation member');
+              valid = false;
+            }
+          label = value.label;
+          if (!text(label, at(pointer, 'label'))) valid = false;
+          const formPointer = at(pointer, 'countForms');
+          if (!record(value.countForms)) {
+            report({ file, pointer: formPointer }, 'invalid', 'Expected count forms');
+            valid = false;
+          } else {
+            if (!Object.hasOwn(value.countForms, 'other')) {
+              report({ file, pointer: at(formPointer, 'other') }, 'invalid', 'Other count form is required');
+              valid = false;
+            }
+            for (const [category, form] of Object.entries(value.countForms)) {
+              if (!['other', 'zero', 'one', 'two', 'few', 'many'].includes(category)) {
+                report({ file, pointer: at(formPointer, category) }, 'invalid', 'Unknown count category');
+                valid = false;
+              } else if (!text(form, at(formPointer, category))) valid = false;
+            }
+            if (valid) forms = { ...value.countForms } as LibraryCountForms;
+          }
+          if (!valid) return;
+        } else if (!text(label, pointer)) return;
+        if (home.seen.has(locale)) report({ file, pointer }, 'duplicate', 'Duplicate library label');
+        else {
+          home.seen.add(locale);
+          Object.assign(home.labels, { [locale]: label });
+          if (forms && home.unit) {
+            home.unit.countForms ??= {};
+            Object.assign(home.unit.countForms, { [locale]: forms });
+          }
+        }
       }
     };
     for (const [id, body] of Object.entries(value)) {

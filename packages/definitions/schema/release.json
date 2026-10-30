@@ -212,6 +212,36 @@
             }
           },
           "required": ["kind"]
+        },
+        "countForms": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "en": {
+              "$ref": "#/$defs/libraryCountForms"
+            },
+            "de": {
+              "$ref": "#/$defs/libraryCountForms"
+            },
+            "es": {
+              "$ref": "#/$defs/libraryCountForms"
+            },
+            "fr": {
+              "$ref": "#/$defs/libraryCountForms"
+            },
+            "ja": {
+              "$ref": "#/$defs/libraryCountForms"
+            },
+            "ko": {
+              "$ref": "#/$defs/libraryCountForms"
+            },
+            "zh-Hans": {
+              "$ref": "#/$defs/libraryCountForms"
+            },
+            "zh-Hant": {
+              "$ref": "#/$defs/libraryCountForms"
+            }
+          }
         }
       },
       "required": ["id", "labels", "identity", "structure"]
@@ -567,7 +597,14 @@
           ]
         },
         "inverse": {
-          "anyOf": [{ "const": "none" }, { "$ref": "#/$defs/curie" }]
+          "anyOf": [
+            {
+              "const": "none"
+            },
+            {
+              "$ref": "#/$defs/curie"
+            }
+          ]
         },
         "inverseLabels": {
           "$ref": "#/$defs/labels"
@@ -586,13 +623,17 @@
         },
         "filter": {
           "anyOf": [
-            { "$ref": "#/$defs/curie" },
+            {
+              "$ref": "#/$defs/curie"
+            },
             {
               "type": "array",
               "minItems": 1,
               "maxItems": 2,
               "uniqueItems": true,
-              "items": { "$ref": "#/$defs/curie" }
+              "items": {
+                "$ref": "#/$defs/curie"
+              }
             }
           ]
         }
@@ -737,6 +778,43 @@
           "maxLength": 1500
         }
       }
+    },
+    "libraryCountForms": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "other": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "zero": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "one": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "two": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "few": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "many": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      },
+      "required": ["other"]
     }
   }
 }

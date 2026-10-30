@@ -4,10 +4,13 @@ import schema from '../schema/release.json';
 export type LibraryLabels = { en: string } & Partial<
   Record<'de' | 'es' | 'fr' | 'ja' | 'ko' | 'zh-Hans' | 'zh-Hant', string>
 >;
+export type LibraryCountForms = { other: string } & Partial<Record<'zero' | 'one' | 'two' | 'few' | 'many', string>>;
+export type LibraryUnitCountForms = Partial<Record<keyof LibraryLabels, LibraryCountForms>>;
 export type LibraryProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
 export type LibraryProgressUnit = {
   id: string;
   labels: LibraryLabels;
+  countForms?: LibraryUnitCountForms;
   dimension?: string;
   minimum?: string;
   maximum?: string;
@@ -43,14 +46,14 @@ export type LibraryProfilePin =
 type WithoutLabels<T> = T extends (infer U)[]
   ? WithoutLabels<U>[]
   : T extends object
-    ? { [K in keyof T as K extends 'labels' ? never : K]: WithoutLabels<T[K]> }
+    ? { [K in keyof T as K extends 'labels' | 'countForms' ? never : K]: WithoutLabels<T[K]> }
     : T;
 export type LibraryProfileSource = WithoutLabels<LibraryProfile>;
 
 export const libraryAt = (pointer: string, key: string | number) =>
   `${pointer}/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`;
 
-// Source and release share the exact structural schema. Only presentation owns labels.
+// Source and release share structural descriptors. Presentation owns labels and count forms.
 const sourceDefinitions = structuredClone(schema.$defs);
 for (const leaf of [
   sourceDefinitions.libraryState,
@@ -61,6 +64,7 @@ for (const leaf of [
   Reflect.deleteProperty(leaf.properties, 'labels');
   leaf.required = leaf.required.filter((key) => key !== 'labels');
 }
+Reflect.deleteProperty(sourceDefinitions.libraryUnit.properties, 'countForms');
 const sourceValidator = Compile({ $ref: '#/$defs/libraryProfile', $defs: sourceDefinitions });
 
 /** Validate before constructing typed source data; reports precise closed-object pointers. */

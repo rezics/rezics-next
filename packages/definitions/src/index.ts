@@ -14,6 +14,8 @@ import {
 } from './library-profile.ts';
 export type {
   LibraryLabels,
+  LibraryCountForms,
+  LibraryUnitCountForms,
   LibraryProgressMode,
   LibraryProgressUnit,
   LibraryProfile,

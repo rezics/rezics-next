@@ -22,7 +22,10 @@ libraryProfiles:
       dropped: '断念'
     units:
       scalar_amount:
-        page: 'ページ'
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
     copyKinds:
       physical: '物理'
       digital: 'デジタル'
@@ -41,7 +44,10 @@ libraryProfiles:
       dropped: '断念'
     units:
       scalar_amount:
-        page: 'ページ'
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
     copyKinds:
       physical: '物理'
       digital: 'デジタル'
@@ -60,25 +66,70 @@ libraryProfiles:
       dropped: '断念'
     units:
       scalar_amount:
-        page: 'ページ'
-        chapter: '章'
-        episode: 'エピソード'
-        minute: '分'
-        volume: '巻'
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: 'エピソード'
+          countForms:
+            other: 'エピソード'
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+        volume:
+          label: '巻'
+          countForms:
+            other: '巻'
         percent: 'パーセント'
       cursor_position:
-        page: 'ページ'
-        chapter: '章'
-        episode: 'エピソード'
-        minute: '分'
-        volume: '巻'
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: 'エピソード'
+          countForms:
+            other: 'エピソード'
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+        volume:
+          label: '巻'
+          countForms:
+            other: '巻'
         percent: 'パーセント'
       completed_units:
-        page: 'ページ'
-        chapter: '章'
-        episode: 'エピソード'
-        minute: '分'
-        volume: '巻'
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: 'エピソード'
+          countForms:
+            other: 'エピソード'
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+        volume:
+          label: '巻'
+          countForms:
+            other: '巻'
         percent: 'パーセント'
     copyKinds:
       legacy-unspecified: '未指定'

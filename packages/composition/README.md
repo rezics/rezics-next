@@ -534,12 +534,11 @@ account's own presentation in place of the subject's header), and their overview
 public activity after the relations: `AccountPosts` (limit 4), `AccountThreads` of reviews (limit 4) and
 `AccountCollections` (limit 4). The Person overview plans 15 reads of cost 128, the most the budget allows. Both
 define the `posts`, `reviews` and `collections` views with the same components, `paged` and at their largest limit
-(20, 20 and 24). Route `/` is the site home template: a `SearchBox` whose
-placeholder invites searching books, anime, visual novels and recipes, then the `personal`
+(20, 20 and 24). Route `/` is the site home template: its `Heading`, then the `personal`
 slot, then one `TypeList` per vertical: Books (`schema:Book`), Anime (`schema:TVSeries` and
 `schema:Movie`), Visual novels (`wd:Q689445`) and Recipes (`schema:Recipe`), sorted by
 `collections` with limit 12 and titled with the vertical's name. The home has no `LinkGrid`: a
-grid of category links would repeat the `TypeList` headings below it. The website renders each
+grid of category links would repeat the `TypeList` headings below it. The centered site header supplies the sole Home search entry. The website renders each
 `TypeList` as a row of covers with the read's total count and a See all link to
 `/search?type=` plus the list's first type CURIE, percent-encoded. Every text is written in the
 eight UI locales. Resolution is route,

@@ -25,7 +25,11 @@ libraryProfiles:
       dropped: 'Abgebrochen'
     units:
       scalar_amount:
-        page: 'Seite'
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
     copyKinds:
       physical: 'Physisch'
       digital: 'Digital'
@@ -44,7 +48,11 @@ libraryProfiles:
       dropped: 'Abgebrochen'
     units:
       scalar_amount:
-        page: 'Seite'
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
     copyKinds:
       physical: 'Physisch'
       digital: 'Digital'
@@ -63,25 +71,85 @@ libraryProfiles:
       dropped: 'Abgebrochen'
     units:
       scalar_amount:
-        page: 'Seite'
-        chapter: 'Kapitel'
-        episode: 'Folge'
-        minute: 'Minute'
-        volume: 'Band'
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
+        chapter:
+          label: 'Kapitel'
+          countForms:
+            one: 'Kapitel'
+            other: 'Kapitel'
+        episode:
+          label: 'Folge'
+          countForms:
+            one: 'Folge'
+            other: 'Folgen'
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+        volume:
+          label: 'Band'
+          countForms:
+            one: 'Band'
+            other: 'Bände'
         percent: 'Prozent'
       cursor_position:
-        page: 'Seite'
-        chapter: 'Kapitel'
-        episode: 'Folge'
-        minute: 'Minute'
-        volume: 'Band'
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
+        chapter:
+          label: 'Kapitel'
+          countForms:
+            one: 'Kapitel'
+            other: 'Kapitel'
+        episode:
+          label: 'Folge'
+          countForms:
+            one: 'Folge'
+            other: 'Folgen'
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+        volume:
+          label: 'Band'
+          countForms:
+            one: 'Band'
+            other: 'Bände'
         percent: 'Prozent'
       completed_units:
-        page: 'Seite'
-        chapter: 'Kapitel'
-        episode: 'Folge'
-        minute: 'Minute'
-        volume: 'Band'
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
+        chapter:
+          label: 'Kapitel'
+          countForms:
+            one: 'Kapitel'
+            other: 'Kapitel'
+        episode:
+          label: 'Folge'
+          countForms:
+            one: 'Folge'
+            other: 'Folgen'
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+        volume:
+          label: 'Band'
+          countForms:
+            one: 'Band'
+            other: 'Bände'
         percent: 'Prozent'
     copyKinds:
       legacy-unspecified: 'Nicht näher bestimmt'

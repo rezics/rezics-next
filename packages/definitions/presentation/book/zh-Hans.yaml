@@ -25,7 +25,10 @@ libraryProfiles:
       dropped: '放弃'
     units:
       scalar_amount:
-        page: '页'
+        page:
+          label: '页'
+          countForms:
+            other: '页'
     copyKinds:
       physical: '实体'
       digital: '数字'
@@ -44,7 +47,10 @@ libraryProfiles:
       dropped: '放弃'
     units:
       scalar_amount:
-        page: '页'
+        page:
+          label: '页'
+          countForms:
+            other: '页'
     copyKinds:
       physical: '实体'
       digital: '数字'
@@ -63,25 +69,70 @@ libraryProfiles:
       dropped: '放弃'
     units:
       scalar_amount:
-        page: '页'
-        chapter: '章'
-        episode: '集'
-        minute: '分钟'
-        volume: '卷'
+        page:
+          label: '页'
+          countForms:
+            other: '页'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: '集'
+          countForms:
+            other: '集'
+        minute:
+          label: '分钟'
+          countForms:
+            other: '分钟'
+        volume:
+          label: '卷'
+          countForms:
+            other: '卷'
         percent: '百分比'
       cursor_position:
-        page: '页'
-        chapter: '章'
-        episode: '集'
-        minute: '分钟'
-        volume: '卷'
+        page:
+          label: '页'
+          countForms:
+            other: '页'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: '集'
+          countForms:
+            other: '集'
+        minute:
+          label: '分钟'
+          countForms:
+            other: '分钟'
+        volume:
+          label: '卷'
+          countForms:
+            other: '卷'
         percent: '百分比'
       completed_units:
-        page: '页'
-        chapter: '章'
-        episode: '集'
-        minute: '分钟'
-        volume: '卷'
+        page:
+          label: '页'
+          countForms:
+            other: '页'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: '集'
+          countForms:
+            other: '集'
+        minute:
+          label: '分钟'
+          countForms:
+            other: '分钟'
+        volume:
+          label: '卷'
+          countForms:
+            other: '卷'
         percent: '百分比'
     copyKinds:
       legacy-unspecified: '未指定'

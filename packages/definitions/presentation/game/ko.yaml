@@ -33,7 +33,10 @@ libraryProfiles:
       dropped: '중단'
     units:
       scalar_amount:
-        minute: '분'
+        minute:
+          label: '분'
+          countForms:
+            other: '분'
     copyKinds:
       physical: '실물'
       digital: '디지털'
@@ -52,7 +55,10 @@ libraryProfiles:
       dropped: '중단'
     units:
       scalar_amount:
-        minute: '분'
+        minute:
+          label: '분'
+          countForms:
+            other: '분'
     copyKinds:
       physical: '실물'
       digital: '디지털'
@@ -71,7 +77,10 @@ libraryProfiles:
       dropped: '중단'
     units:
       scalar_amount:
-        minute: '분'
+        minute:
+          label: '분'
+          countForms:
+            other: '분'
     copyKinds:
       physical: '실물'
       digital: '디지털'

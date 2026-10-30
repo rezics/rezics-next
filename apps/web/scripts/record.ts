@@ -821,6 +821,22 @@ function stableRecording(value: unknown, previous: unknown): unknown {
   ]);
 }
 
+const homeRecordingNames = new Set([
+  'home-page',
+  ...['de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'].map((locale) => `home-page-${locale}`),
+]);
+
+/** A Home request refreshes the complete locale family; other names remain exact selections. */
+export function selectsRecording(name: string, names: readonly string[]): boolean {
+  return names.length === 0 || names.includes(name) || (names.includes('home-page') && homeRecordingNames.has(name));
+}
+
+/** Generated definitions and Home templates must reflect the current producer shape. */
+export function recordingSnapshot(name: string, value: unknown, previous: unknown): unknown {
+  const generated = name === 'definitions-active' || name === 'definitions-release' || homeRecordingNames.has(name);
+  return stableRecording(value, generated ? undefined : previous);
+}
+
 /** Recorded story rows use the shared identity, labels and cover, projected to the story locale. */
 function applyStorySubjects(value: unknown, locale: string, name: string): unknown {
   if (Array.isArray(value)) return value.map((item) => applyStorySubjects(item, locale, name));
@@ -1725,7 +1741,7 @@ async function main(): Promise<void> {
     throw new Error(`Empty search returned hits: ${JSON.stringify(unmatched)}`);
 
   // The home lists are searches, so the home is read through the kernel that mounts search over the index above.
-  for (const locale of ['en', 'zh-Hans']) {
+  for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
     const homeResponse = await retryOverloaded(async () =>
       appHandle.handle(
         new Request('http://kernel.test/v1/pages:read', {
@@ -1807,15 +1823,21 @@ async function main(): Promise<void> {
     throw new Error(`Unknown recordings: ${unknown.join(', ')}. Recorded: ${[...recorded.keys()].join(', ')}`);
   const written: string[] = [];
   for (const [name, body] of recorded) {
-    if (only.length && !only.includes(name)) continue;
+    if (!selectsRecording(name, only)) continue;
     const file = join(output, `${name}.json`);
     written.push(file);
-    // Definitions are generated snapshots; retaining old strings would preserve stale digests and ratios.
-    const generated = name === 'definitions-active' || name === 'definitions-release';
-    const previous = !generated && (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
-    const locale = name.endsWith('-zh-Hans') ? 'zh-Hans' : 'en';
+    const previous = (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
+    const locale =
+      homeRecordingNames.has(name) && name !== 'home-page'
+        ? name.slice('home-page-'.length)
+        : name.endsWith('-zh-Hans')
+          ? 'zh-Hans'
+          : 'en';
     const canonical = applyStorySubjects(body, locale, name);
-    await writeFile(file, JSON.stringify(applyStorySubjects(stableRecording(canonical, previous), locale, name)));
+    await writeFile(
+      file,
+      JSON.stringify(applyStorySubjects(recordingSnapshot(name, canonical, previous), locale, name)),
+    );
   }
   // The repository formatter owns the committed shape. A raw stringify fails apps/web's format test.
   if (written.length) {

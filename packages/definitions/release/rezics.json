@@ -5827,6 +5827,38 @@
                   "ko": "에피소드",
                   "zh-Hans": "集",
                   "zh-Hant": "集"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Folge",
+                    "other": "Folgen"
+                  },
+                  "en": {
+                    "one": "episode",
+                    "other": "episodes"
+                  },
+                  "es": {
+                    "one": "episodio",
+                    "other": "episodios",
+                    "many": "episodios"
+                  },
+                  "fr": {
+                    "one": "épisode",
+                    "other": "épisodes",
+                    "many": "épisodes"
+                  },
+                  "ja": {
+                    "other": "エピソード"
+                  },
+                  "ko": {
+                    "other": "에피소드"
+                  },
+                  "zh-Hans": {
+                    "other": "集"
+                  },
+                  "zh-Hant": {
+                    "other": "集"
+                  }
                 }
               }
             ]
@@ -6009,6 +6041,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               }
             ]
@@ -6191,6 +6255,38 @@
                   "ko": "에피소드",
                   "zh-Hans": "集",
                   "zh-Hant": "集"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Folge",
+                    "other": "Folgen"
+                  },
+                  "en": {
+                    "one": "episode",
+                    "other": "episodes"
+                  },
+                  "es": {
+                    "one": "episodio",
+                    "other": "episodios",
+                    "many": "episodios"
+                  },
+                  "fr": {
+                    "one": "épisode",
+                    "other": "épisodes",
+                    "many": "épisodes"
+                  },
+                  "ja": {
+                    "other": "エピソード"
+                  },
+                  "ko": {
+                    "other": "에피소드"
+                  },
+                  "zh-Hans": {
+                    "other": "集"
+                  },
+                  "zh-Hant": {
+                    "other": "集"
+                  }
                 }
               }
             ]
@@ -6373,6 +6469,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               }
             ]
@@ -6555,6 +6683,38 @@
                   "ko": "쪽",
                   "zh-Hans": "页",
                   "zh-Hant": "頁"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Seite",
+                    "other": "Seiten"
+                  },
+                  "en": {
+                    "one": "page",
+                    "other": "pages"
+                  },
+                  "es": {
+                    "one": "página",
+                    "other": "páginas",
+                    "many": "páginas"
+                  },
+                  "fr": {
+                    "one": "page",
+                    "other": "pages",
+                    "many": "pages"
+                  },
+                  "ja": {
+                    "other": "ページ"
+                  },
+                  "ko": {
+                    "other": "쪽"
+                  },
+                  "zh-Hans": {
+                    "other": "页"
+                  },
+                  "zh-Hant": {
+                    "other": "頁"
+                  }
                 }
               }
             ]
@@ -6737,6 +6897,38 @@
                   "ko": "쪽",
                   "zh-Hans": "页",
                   "zh-Hant": "頁"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Seite",
+                    "other": "Seiten"
+                  },
+                  "en": {
+                    "one": "page",
+                    "other": "pages"
+                  },
+                  "es": {
+                    "one": "página",
+                    "other": "páginas",
+                    "many": "páginas"
+                  },
+                  "fr": {
+                    "one": "page",
+                    "other": "pages",
+                    "many": "pages"
+                  },
+                  "ja": {
+                    "other": "ページ"
+                  },
+                  "ko": {
+                    "other": "쪽"
+                  },
+                  "zh-Hans": {
+                    "other": "页"
+                  },
+                  "zh-Hant": {
+                    "other": "頁"
+                  }
                 }
               }
             ]
@@ -6919,6 +7111,38 @@
                   "ko": "쪽",
                   "zh-Hans": "页",
                   "zh-Hant": "頁"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Seite",
+                    "other": "Seiten"
+                  },
+                  "en": {
+                    "one": "page",
+                    "other": "pages"
+                  },
+                  "es": {
+                    "one": "página",
+                    "other": "páginas",
+                    "many": "páginas"
+                  },
+                  "fr": {
+                    "one": "page",
+                    "other": "pages",
+                    "many": "pages"
+                  },
+                  "ja": {
+                    "other": "ページ"
+                  },
+                  "ko": {
+                    "other": "쪽"
+                  },
+                  "zh-Hans": {
+                    "other": "页"
+                  },
+                  "zh-Hant": {
+                    "other": "頁"
+                  }
                 }
               },
               {
@@ -6940,6 +7164,38 @@
                   "ko": "장",
                   "zh-Hans": "章",
                   "zh-Hant": "章"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Kapitel",
+                    "other": "Kapitel"
+                  },
+                  "en": {
+                    "one": "chapter",
+                    "other": "chapters"
+                  },
+                  "es": {
+                    "one": "capítulo",
+                    "other": "capítulos",
+                    "many": "capítulos"
+                  },
+                  "fr": {
+                    "one": "chapitre",
+                    "other": "chapitres",
+                    "many": "chapitres"
+                  },
+                  "ja": {
+                    "other": "章"
+                  },
+                  "ko": {
+                    "other": "장"
+                  },
+                  "zh-Hans": {
+                    "other": "章"
+                  },
+                  "zh-Hant": {
+                    "other": "章"
+                  }
                 }
               },
               {
@@ -6961,6 +7217,38 @@
                   "ko": "에피소드",
                   "zh-Hans": "集",
                   "zh-Hant": "集"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Folge",
+                    "other": "Folgen"
+                  },
+                  "en": {
+                    "one": "episode",
+                    "other": "episodes"
+                  },
+                  "es": {
+                    "one": "episodio",
+                    "other": "episodios",
+                    "many": "episodios"
+                  },
+                  "fr": {
+                    "one": "épisode",
+                    "other": "épisodes",
+                    "many": "épisodes"
+                  },
+                  "ja": {
+                    "other": "エピソード"
+                  },
+                  "ko": {
+                    "other": "에피소드"
+                  },
+                  "zh-Hans": {
+                    "other": "集"
+                  },
+                  "zh-Hant": {
+                    "other": "集"
+                  }
                 }
               },
               {
@@ -6982,6 +7270,38 @@
                   "ko": "권",
                   "zh-Hans": "卷",
                   "zh-Hant": "卷"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Band",
+                    "other": "Bände"
+                  },
+                  "en": {
+                    "one": "volume",
+                    "other": "volumes"
+                  },
+                  "es": {
+                    "one": "tomo",
+                    "other": "tomos",
+                    "many": "tomos"
+                  },
+                  "fr": {
+                    "one": "volume",
+                    "other": "volumes",
+                    "many": "volumes"
+                  },
+                  "ja": {
+                    "other": "巻"
+                  },
+                  "ko": {
+                    "other": "권"
+                  },
+                  "zh-Hans": {
+                    "other": "卷"
+                  },
+                  "zh-Hant": {
+                    "other": "卷"
+                  }
                 }
               },
               {
@@ -7003,6 +7323,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               },
               {
@@ -7052,6 +7404,38 @@
                   "ko": "쪽",
                   "zh-Hans": "页",
                   "zh-Hant": "頁"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Seite",
+                    "other": "Seiten"
+                  },
+                  "en": {
+                    "one": "page",
+                    "other": "pages"
+                  },
+                  "es": {
+                    "one": "página",
+                    "other": "páginas",
+                    "many": "páginas"
+                  },
+                  "fr": {
+                    "one": "page",
+                    "other": "pages",
+                    "many": "pages"
+                  },
+                  "ja": {
+                    "other": "ページ"
+                  },
+                  "ko": {
+                    "other": "쪽"
+                  },
+                  "zh-Hans": {
+                    "other": "页"
+                  },
+                  "zh-Hant": {
+                    "other": "頁"
+                  }
                 }
               },
               {
@@ -7073,6 +7457,38 @@
                   "ko": "장",
                   "zh-Hans": "章",
                   "zh-Hant": "章"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Kapitel",
+                    "other": "Kapitel"
+                  },
+                  "en": {
+                    "one": "chapter",
+                    "other": "chapters"
+                  },
+                  "es": {
+                    "one": "capítulo",
+                    "other": "capítulos",
+                    "many": "capítulos"
+                  },
+                  "fr": {
+                    "one": "chapitre",
+                    "other": "chapitres",
+                    "many": "chapitres"
+                  },
+                  "ja": {
+                    "other": "章"
+                  },
+                  "ko": {
+                    "other": "장"
+                  },
+                  "zh-Hans": {
+                    "other": "章"
+                  },
+                  "zh-Hant": {
+                    "other": "章"
+                  }
                 }
               },
               {
@@ -7094,6 +7510,38 @@
                   "ko": "에피소드",
                   "zh-Hans": "集",
                   "zh-Hant": "集"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Folge",
+                    "other": "Folgen"
+                  },
+                  "en": {
+                    "one": "episode",
+                    "other": "episodes"
+                  },
+                  "es": {
+                    "one": "episodio",
+                    "other": "episodios",
+                    "many": "episodios"
+                  },
+                  "fr": {
+                    "one": "épisode",
+                    "other": "épisodes",
+                    "many": "épisodes"
+                  },
+                  "ja": {
+                    "other": "エピソード"
+                  },
+                  "ko": {
+                    "other": "에피소드"
+                  },
+                  "zh-Hans": {
+                    "other": "集"
+                  },
+                  "zh-Hant": {
+                    "other": "集"
+                  }
                 }
               },
               {
@@ -7115,6 +7563,38 @@
                   "ko": "권",
                   "zh-Hans": "卷",
                   "zh-Hant": "卷"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Band",
+                    "other": "Bände"
+                  },
+                  "en": {
+                    "one": "volume",
+                    "other": "volumes"
+                  },
+                  "es": {
+                    "one": "tomo",
+                    "other": "tomos",
+                    "many": "tomos"
+                  },
+                  "fr": {
+                    "one": "volume",
+                    "other": "volumes",
+                    "many": "volumes"
+                  },
+                  "ja": {
+                    "other": "巻"
+                  },
+                  "ko": {
+                    "other": "권"
+                  },
+                  "zh-Hans": {
+                    "other": "卷"
+                  },
+                  "zh-Hant": {
+                    "other": "卷"
+                  }
                 }
               },
               {
@@ -7136,6 +7616,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               },
               {
@@ -7184,6 +7696,38 @@
                   "ko": "쪽",
                   "zh-Hans": "页",
                   "zh-Hant": "頁"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Seite",
+                    "other": "Seiten"
+                  },
+                  "en": {
+                    "one": "page",
+                    "other": "pages"
+                  },
+                  "es": {
+                    "one": "página",
+                    "other": "páginas",
+                    "many": "páginas"
+                  },
+                  "fr": {
+                    "one": "page",
+                    "other": "pages",
+                    "many": "pages"
+                  },
+                  "ja": {
+                    "other": "ページ"
+                  },
+                  "ko": {
+                    "other": "쪽"
+                  },
+                  "zh-Hans": {
+                    "other": "页"
+                  },
+                  "zh-Hant": {
+                    "other": "頁"
+                  }
                 }
               },
               {
@@ -7205,6 +7749,38 @@
                   "ko": "장",
                   "zh-Hans": "章",
                   "zh-Hant": "章"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Kapitel",
+                    "other": "Kapitel"
+                  },
+                  "en": {
+                    "one": "chapter",
+                    "other": "chapters"
+                  },
+                  "es": {
+                    "one": "capítulo",
+                    "other": "capítulos",
+                    "many": "capítulos"
+                  },
+                  "fr": {
+                    "one": "chapitre",
+                    "other": "chapitres",
+                    "many": "chapitres"
+                  },
+                  "ja": {
+                    "other": "章"
+                  },
+                  "ko": {
+                    "other": "장"
+                  },
+                  "zh-Hans": {
+                    "other": "章"
+                  },
+                  "zh-Hant": {
+                    "other": "章"
+                  }
                 }
               },
               {
@@ -7226,6 +7802,38 @@
                   "ko": "에피소드",
                   "zh-Hans": "集",
                   "zh-Hant": "集"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Folge",
+                    "other": "Folgen"
+                  },
+                  "en": {
+                    "one": "episode",
+                    "other": "episodes"
+                  },
+                  "es": {
+                    "one": "episodio",
+                    "other": "episodios",
+                    "many": "episodios"
+                  },
+                  "fr": {
+                    "one": "épisode",
+                    "other": "épisodes",
+                    "many": "épisodes"
+                  },
+                  "ja": {
+                    "other": "エピソード"
+                  },
+                  "ko": {
+                    "other": "에피소드"
+                  },
+                  "zh-Hans": {
+                    "other": "集"
+                  },
+                  "zh-Hant": {
+                    "other": "集"
+                  }
                 }
               },
               {
@@ -7247,6 +7855,38 @@
                   "ko": "권",
                   "zh-Hans": "卷",
                   "zh-Hant": "卷"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Band",
+                    "other": "Bände"
+                  },
+                  "en": {
+                    "one": "volume",
+                    "other": "volumes"
+                  },
+                  "es": {
+                    "one": "tomo",
+                    "other": "tomos",
+                    "many": "tomos"
+                  },
+                  "fr": {
+                    "one": "volume",
+                    "other": "volumes",
+                    "many": "volumes"
+                  },
+                  "ja": {
+                    "other": "巻"
+                  },
+                  "ko": {
+                    "other": "권"
+                  },
+                  "zh-Hans": {
+                    "other": "卷"
+                  },
+                  "zh-Hant": {
+                    "other": "卷"
+                  }
                 }
               },
               {
@@ -7268,6 +7908,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               },
               {
@@ -7470,6 +8142,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               }
             ]
@@ -7652,6 +8356,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               }
             ]
@@ -7834,6 +8570,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               }
             ]
@@ -8016,6 +8784,38 @@
                   "ko": "분",
                   "zh-Hans": "分钟",
                   "zh-Hant": "分鐘"
+                },
+                "countForms": {
+                  "de": {
+                    "one": "Minute",
+                    "other": "Minuten"
+                  },
+                  "en": {
+                    "one": "minute",
+                    "other": "minutes"
+                  },
+                  "es": {
+                    "one": "minuto",
+                    "other": "minutos",
+                    "many": "minutos"
+                  },
+                  "fr": {
+                    "one": "minute",
+                    "other": "minutes",
+                    "many": "minutes"
+                  },
+                  "ja": {
+                    "other": "分"
+                  },
+                  "ko": {
+                    "other": "분"
+                  },
+                  "zh-Hans": {
+                    "other": "分钟"
+                  },
+                  "zh-Hant": {
+                    "other": "分鐘"
+                  }
                 }
               }
             ]

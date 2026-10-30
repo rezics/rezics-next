@@ -36,39 +36,48 @@ export function historicalConstructionSources(publication = false) {
   return result;
 }
 
-/** Materialize only the two changed modules to keep the oracle isolated from
- * already imported delivered modules. Only import locations change; the exact
- * original pattern, profile and schema files retain their own module locations.
+/** Reuse the same verified old dependency graph for pure and instrumented comparisons. */
+export function materializeHistoricalConstruction(directory: string) {
+  const pinned = historicalConstructionSources();
+  const targets = new Map(
+    [...pinned.keys()].map((origin, index) => [
+      origin,
+      join(directory, `module-${index}${origin.endsWith('.json') ? '.json' : '.ts'}`),
+    ]),
+  );
+  for (const [origin, source] of pinned) {
+    const target = targets.get(origin)!;
+    writeFileSync(
+      target,
+      origin.endsWith('.json')
+        ? source
+        : source.replace(/from (['"])([^'"]+)\1/g, (match, quote: string, specifier: string) => {
+            if (specifier.startsWith('node:')) return match;
+            const dependency =
+              specifier === '@rezics/filter'
+                ? resolve(root, filterPath)
+                : specifier.startsWith('.')
+                  ? resolve(dirname(origin), specifier)
+                  : Bun.resolveSync(specifier, dirname(origin));
+            return `from ${quote}${targets.get(dependency) ?? dependency}${quote}`;
+          }),
+    );
+  }
+  return targets;
+}
+
+/** Materialize changed modules and their pinned dependencies in an isolated old
+ * graph. Import rewrites point at exact verified snapshots, never current schema.
  */
 export async function originalValidator() {
-  const pinned = historicalConstructionSources();
   const temporary = resolve(root, '.temp/publication-construction');
   mkdirSync(temporary, { recursive: true });
   const directory = mkdtempSync(join(temporary, 'oracle-'));
   try {
-    const filter = join(directory, 'filter.ts');
-    const definitions = join(directory, 'definitions.ts');
-    for (const [path, target] of [
-      [filterPath, filter],
-      [definitionsPath, definitions],
-    ]) {
-      const origin = resolve(root, path!);
-      const source = pinned.get(origin)!;
-      writeFileSync(
-        target!,
-        source.replace(/from (['"])([^'"]+)\1/g, (match, quote: string, specifier: string) => {
-          if (specifier.startsWith('node:')) return match;
-          const dependency =
-            specifier === '@rezics/filter'
-              ? filter
-              : specifier.startsWith('.')
-                ? resolve(dirname(origin), specifier)
-                : Bun.resolveSync(specifier, dirname(origin));
-          return `from ${quote}${dependency}${quote}`;
-        }),
-      );
-    }
-    const original = (await import(definitions)) as { validateRelease: typeof validateRelease };
+    const targets = materializeHistoricalConstruction(directory);
+    const original = (await import(targets.get(resolve(root, definitionsPath))!)) as {
+      validateRelease: typeof validateRelease;
+    };
     return { validate: original.validateRelease, close: () => rmSync(directory, { recursive: true, force: true }) };
   } catch (error) {
     rmSync(directory, { recursive: true, force: true });
@@ -86,6 +95,14 @@ export function mountHistoricalConstruction() {
   Bun.plugin({
     name: 'pinned-historical-construction',
     setup(build) {
+      build.onLoad(
+        { filter: /\/packages\/definitions\/(?:src\/library-profile\.ts|schema\/release\.json)$/ },
+        ({ path }) => {
+          const contents = pinned.get(path);
+          if (contents === undefined) throw new Error(`Unexpected historical dependency: ${path}`);
+          return { contents, loader: path.endsWith('.json') ? 'json' : 'ts' };
+        },
+      );
       build.onLoad(
         {
           filter:

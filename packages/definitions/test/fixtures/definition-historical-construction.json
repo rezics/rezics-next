@@ -27,12 +27,14 @@
     {
       "path": "packages/definitions/src/library-profile.ts",
       "gitBlob": "ed06fac88c79fbb6c082ef156a57d2afa7a29f8d",
-      "sha256": "09ceb8f8d7edd792ebfd9b8899361a57b916208f6aaa552a4fe1cfa522e1e0b6"
+      "sha256": "09ceb8f8d7edd792ebfd9b8899361a57b916208f6aaa552a4fe1cfa522e1e0b6",
+      "snapshot": "packages/definitions/test/fixtures/library-profile-historical-construction.source"
     },
     {
       "path": "packages/definitions/schema/release.json",
       "gitBlob": "104d7b136e779b6c2004cfe7557bd43c0cb0a52d",
-      "sha256": "890c2f1e9a400380947efe843f58943517cc3b706eacd9954a56d0882e3233bd"
+      "sha256": "890c2f1e9a400380947efe843f58943517cc3b706eacd9954a56d0882e3233bd",
+      "snapshot": "packages/definitions/test/fixtures/release-historical-construction.json"
     },
     {
       "path": "packages/definitions/src/extension.ts",
@@ -68,6 +70,12 @@
       "path": "services/kernel/src/semantic/definitions-read.sql",
       "gitBlob": "7acfc26fe1cfe7ce4d7d3c5ea44766facc0fcab8",
       "sha256": "2855372ac650bf7556192d6fc180376d1a7d8b68f766cfea5db78e9529ede1a8"
+    },
+    {
+      "path": "packages/definitions/release/rezics.json",
+      "gitBlob": "1fd8c93aee1c0ee338c9a444dfc2415b64629ba5",
+      "sha256": "87e1eb6fdec7eb1e9945342525ab08cb5c0298dbfcd2f719df4074c68baaba22",
+      "snapshot": "packages/definitions/test/fixtures/bundled-historical-construction.json"
     }
   ],
   "dependencies": {

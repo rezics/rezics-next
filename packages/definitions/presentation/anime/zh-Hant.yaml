@@ -35,7 +35,10 @@ libraryProfiles:
       dropped: '放棄'
     units:
       scalar_amount:
-        episode: '集'
+        episode:
+          label: '集'
+          countForms:
+            other: '集'
     copyKinds:
       physical: '實體'
       digital: '數位'
@@ -54,7 +57,10 @@ libraryProfiles:
       dropped: '放棄'
     units:
       scalar_amount:
-        episode: '集'
+        episode:
+          label: '集'
+          countForms:
+            other: '集'
     copyKinds:
       physical: '實體'
       digital: '數位'
@@ -73,7 +79,10 @@ libraryProfiles:
       dropped: '放棄'
     units:
       scalar_amount:
-        minute: '分鐘'
+        minute:
+          label: '分鐘'
+          countForms:
+            other: '分鐘'
     copyKinds:
       physical: '實體'
       digital: '數位'
@@ -92,7 +101,10 @@ libraryProfiles:
       dropped: '放棄'
     units:
       scalar_amount:
-        minute: '分鐘'
+        minute:
+          label: '分鐘'
+          countForms:
+            other: '分鐘'
     copyKinds:
       physical: '實體'
       digital: '數位'
