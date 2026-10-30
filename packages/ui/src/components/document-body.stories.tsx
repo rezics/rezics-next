@@ -327,12 +327,18 @@ export const MediaImages: Story = {
   args: {
     document: snapshot('blocks', [
       { type: 'image', attrs: { src: 'asset-7', variant: 'medium', alt: 'Mountain at dawn', width: 640, height: 400 } },
+      { type: 'image', attrs: { src: 'asset-8', alt: '' } },
+      { type: 'media', attrs: { src: 'recording-1', kind: 'audio', caption: 'Recorded at dawn' } },
     ]),
   },
   play: async ({ canvasElement }) => {
-    const image = within(canvasElement).getByRole('img', { name: 'Mountain at dawn' });
-    await expect(image).toHaveAttribute('src', '/media/asset-7/medium');
-    await expect(image).toHaveAttribute('loading', 'lazy');
-    await expect(image).toHaveAttribute('width', '640');
+    const canvas = within(canvasElement);
+    const image = canvas.getByRole('img', { name: 'Mountain at dawn' });
+    await expect(image).toBeVisible();
+    await expect(image).toHaveTextContent('Image unavailable — Mountain at dawn');
+    await expect(canvas.getByRole('img', { name: 'Image unavailable' })).toBeVisible();
+    await expect(canvas.getByText('Recorded at dawn', { selector: 'figcaption' })).toBeVisible();
+    expect(canvasElement.querySelector('img, source, [src], [srcset]')).toBeNull();
+    expect(canvasElement.innerHTML).not.toContain('/media/');
   },
 };
