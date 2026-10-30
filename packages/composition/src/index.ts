@@ -31,6 +31,7 @@ export {
   MAX_PAGE_COST,
   MAX_PAGE_READS,
   PageContinuationError,
+  PageReadLimitError,
   planReads,
   readCost,
   shownProperties,
