@@ -361,6 +361,22 @@ test('resumed stale versions need explicit current review; a published reload ne
   await reloaded.create();
   await reloaded.publish();
   expect(native.calls.filter((call) => call.path.endsWith(':publish'))).toHaveLength(commands);
+
+  const retryNative = resumeBoundary();
+  const retrying = new EditionPublicationController(retryNative.api);
+  await retrying.resume(editionId);
+  retryNative.setCommandStatus(503);
+  await retrying.publish();
+  const uncertain = retrying.snapshot().intent;
+  expect(retrying.snapshot().uncertain).toBe(true);
+  retryNative.setCommandStatus(412);
+  await retrying.retry();
+  expect(retrying.snapshot().failure?.kind).toBe('conflict');
+  expect(retrying.snapshot().intent).toBe(uncertain);
+  await retrying.refresh();
+  retrying.acceptReview();
+  expect(retrying.snapshot().intent).toBeNull();
+  expect(retrying.snapshot().edition?.editionRevision).toBe('7');
 });
 
 /** Exact closed native metadata responses; no document source, post/head lookup or local authority. */

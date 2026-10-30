@@ -209,13 +209,13 @@ export function createNativeEditionCreateApi(
           const result = await currentSource({ ...intent, source: intent.source });
           if ('kind' in result) return result;
           selected = result;
-        } else {
+        } else if (intent.kind === 'publish') {
           const current = await metadata(intent.editionId);
           if ('kind' in current) return current;
           if (current.creatorAccountId !== viewerId || current.targetSubjectId !== intent.targetSubjectId)
             return { kind: 'refused', status: 403 };
           selected = current;
-        }
+        } else return { kind: 'unavailable', status: 502, reason: 'binding' };
         if (intent.kind === 'publish') {
           const denied = await publishAdmission(intent.editionId);
           if (denied) return denied;

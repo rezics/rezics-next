@@ -279,7 +279,9 @@ export class EditionPublicationController {
     } else
       this.set({
         failure: result,
-        uncertain: this.state.uncertain || result.kind === 'uncertain',
+        uncertain:
+          result.kind === 'uncertain' ||
+          (this.state.uncertain && !(intent.kind === 'publish' && result.kind === 'conflict')),
         busy: false,
         ...(result.editionId ? { knownEditionId: result.editionId } : {}),
         ...(result.kind === 'refused' ||

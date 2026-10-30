@@ -56,6 +56,8 @@ export function EditionPublicationPanel({
     () => suppliedController ?? new EditionPublicationController(api),
     [api, suppliedController, session.subject],
   );
+  // Loader metadata belongs to the initial session; a replacement session must read it again.
+  const initialController = useRef(controller);
   if (!override && session.state !== 'signed-in')
     return (
       <article className="mx-auto w-full max-w-3xl space-y-4">
@@ -76,7 +78,7 @@ export function EditionPublicationPanel({
       controller={controller}
       initialSource={initialSource}
       initialEditionId={initialEditionId}
-      initialResume={initialResume}
+      initialResume={controller === initialController.current ? initialResume : undefined}
     />
   );
 }
