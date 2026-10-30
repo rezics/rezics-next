@@ -35,7 +35,6 @@ import {
   type ZoneHead,
 } from './resource-store.ts';
 
-const WINDOW_MS = 30 * 86_400_000;
 export function zoneIfMatch(value: string | undefined): string {
   if (
     !value ||
@@ -299,8 +298,12 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
           const at = authoritativeTimeValue(command.time);
           const next: ZoneHead = { ...row };
           if (operation === 'restore') {
-            if (row.state !== 'deleted' || !row.restoreUntil || Date.parse(at) >= Date.parse(row.restoreUntil))
-              throw new ProblemError('conflict');
+            if (row.state !== 'deleted' || !row.restoreUntil) throw new ProblemError('conflict');
+            const eligibility = await tx.query<{ restorable: boolean }>(
+              'SELECT $1::timestamptz < $2::timestamptz AS restorable',
+              [at, row.restoreUntil],
+            );
+            if (!eligibility.rows[0]?.restorable) throw new ProblemError('conflict');
             next.state = 'active';
             next.deletedAt = null;
             next.restoreUntil = null;
@@ -308,8 +311,12 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
             if (row.state !== 'active') throw new ProblemError('not_found');
             if (operation === 'delete') {
               next.state = 'deleted';
-              next.deletedAt = new Date(at).toISOString();
-              next.restoreUntil = new Date(Date.parse(at) + WINDOW_MS).toISOString();
+              next.deletedAt = at;
+              const deadline = await tx.query<{ purge_after: string }>(
+                "SELECT ($1::timestamptz + interval '720 hours')::text AS purge_after",
+                [at],
+              );
+              next.restoreUntil = deadline.rows[0]!.purge_after;
             } else if (operation === 'publish') next.visibility = (input as ZonePublishInput).visibility;
             else {
               next.configuration = (input as ZoneConfigureInput).configuration;

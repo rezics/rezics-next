@@ -297,8 +297,18 @@ export async function lockRecordPurgeReceivingHold(
     }>(
       `SELECT source,receiver_epoch,accepted_transaction_id,completion_transaction_id
      FROM semantic.record_purge_receiving WHERE partition_no=$1 AND receiving_id=$2 AND source_key=$3
-     AND deletion_generation=$4 AND hold_id=$5 FOR UPDATE`,
-      [target.partition, target.receivingId, locator.key, ref.deletionGeneration, locator.holdId],
+     AND deletion_generation=$4 AND hold_id=$5
+     AND (source->>'purgeAfter')::timestamptz <= $6::timestamptz
+     AND (source->>'purgeAfter')::timestamptz = (source->>'deletionCommittedAt')::timestamptz + interval '720 hours'
+     FOR UPDATE`,
+      [
+        target.partition,
+        target.receivingId,
+        locator.key,
+        ref.deletionGeneration,
+        locator.holdId,
+        authoritativeTimeValue(command.time),
+      ],
     )
   ).rows[0];
   if (!row) return null;
@@ -309,8 +319,7 @@ export async function lockRecordPurgeReceivingHold(
   if (
     row.source.disposition !== 'ordinary-deletion' ||
     identity(row.source.reference).key !== locator.key ||
-    row.source.reference.deletionGeneration !== ref.deletionGeneration ||
-    Date.parse(row.source.purgeAfter) > Date.parse(authoritativeTimeValue(command.time))
+    row.source.reference.deletionGeneration !== ref.deletionGeneration
   )
     return null;
   const set = locked.get(tx) ?? new Set<RecordPurgeReceivingHold>();
