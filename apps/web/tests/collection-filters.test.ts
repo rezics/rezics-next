@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { admitFilter } from '@rezics/filter';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createKernelClient } from '@rezics/client';
+import type { KernelClient } from '@rezics/client';
 import {
   readCollectionFilterParams,
   collectionFilterQuery,
@@ -12,7 +12,6 @@ import { createRecordedKernelFetch } from '../src/kernel/fake';
 import { CollectionFilterFeedback } from '../src/library/collection-filters';
 import { m } from '../src/paraglide/messages.js';
 import { loadEditableCollectionPage } from '../src/library/collection-load';
-import { withPlatformClosedRecognition } from '../src/kernel/platform-closed';
 
 const harem = '00000000-0000-4000-8000-000000000123';
 const release = {
@@ -222,43 +221,46 @@ test('one members request per filter change and page at 0, 20 and 100 members wi
         { statement: { property: 'schema:wordCount', range: { gte: 1_000_001, unit: '1' } } },
       ],
     ]) {
-      const requests: URL[] = [];
+      const requests: Record<string, unknown>[] = [];
       const id = `filter-growth-${size}-${documents.length}`;
-      const client = withPlatformClosedRecognition(
-        createKernelClient('https://kernel.test', {
-          fetch: (async (input, init) => {
-            const request = new Request(input, init);
-            const url = new URL(request.url);
-            requests.push(url);
-            if (url.pathname === `/v1/collections/${id}`)
-              return Response.json({
-                collection: {
-                  id,
-                  curatorAccountId: 'owner',
-                  title: 'Collection',
-                  description: null,
-                  visibility: 'private',
-                  revision: 1,
-                  memberCount: size,
-                  createdAt: '2026-10-29T00:00:00Z',
-                  updatedAt: '2026-10-29T00:00:00Z',
-                  membershipKind: 'curated',
+      const client = {
+        collections: ({ collectionId }: { collectionId: string }) => ({
+          get: async () => ({
+            status: 200,
+            data: {
+              collection: {
+                id: collectionId,
+                curatorAccountId: 'owner',
+                title: 'Collection',
+                description: null,
+                visibility: 'private',
+                revision: 1,
+                memberCount: size,
+                createdAt: '2026-10-29T00:00:00Z',
+                updatedAt: '2026-10-29T00:00:00Z',
+                membershipKind: 'curated',
+              },
+            },
+          }),
+          members: {
+            get: async ({ query }: { query: Record<string, unknown> }) => {
+              requests.push(query);
+              return {
+                status: 200,
+                data: {
+                  members: Array.from({ length: size }, (_, index) => ({
+                    id: `m-${index}`,
+                    note: null,
+                    addedAt: '2026-10-29T00:00:00Z',
+                    subject: { id: `s-${index}`, type: 'schema:Book', label: `Book ${index}` },
+                  })),
+                  next: null,
                 },
-              });
-            if (url.pathname.endsWith('/members'))
-              return Response.json({
-                members: Array.from({ length: size }, (_, index) => ({
-                  id: `m-${index}`,
-                  note: null,
-                  addedAt: '2026-10-29T00:00:00Z',
-                  subject: { id: `s-${index}`, type: 'schema:Book', label: `Book ${index}` },
-                })),
-                next: null,
-              });
-            throw new Error(`unexpected ${url.pathname}`);
-          }) as typeof fetch,
+              };
+            },
+          },
         }),
-      );
+      } as unknown as KernelClient;
       const filter = documents.length === 0 ? undefined : documents.length === 1 ? documents[0] : { and: documents };
       const page = await loadEditableCollectionPage(
         client,
@@ -268,9 +270,12 @@ test('one members request per filter change and page at 0, 20 and 100 members wi
         'anonymous',
       );
       expect(page.members).toHaveLength(size);
-      const memberRequests = requests.filter((url) => url.pathname.endsWith('/members'));
-      expect(memberRequests).toHaveLength(1);
-      expect(memberRequests[0]!.searchParams.get('filter')).toBe(filter ? JSON.stringify(filter) : null);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toEqual({
+        view: 'FULL',
+        limit: 100,
+        ...(filter ? { filter: JSON.stringify(filter) } : {}),
+      });
     }
   }
 });
