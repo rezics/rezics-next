@@ -526,7 +526,9 @@ test(
         expect(await form.locator('input[name="expectedVersion"]').inputValue()).toBe('3');
         expect(await form.locator('input[name="notificationKind"]').inputValue()).toBe('reply');
         expect(await form.locator('input[name="action"]').inputValue()).toBe('save');
-        expect(await form.evaluate((node) => new FormData(node as HTMLFormElement).getAll('enabled'))).toEqual(['true']);
+        expect(await form.evaluate((node) => new FormData(node as HTMLFormElement).getAll('enabled'))).toEqual([
+          'true',
+        ]);
 
         if (javascriptEnabled) {
           await replies.focus();
