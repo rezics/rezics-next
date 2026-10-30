@@ -4365,6 +4365,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             code: never;
                         }[];
                     };
+                    409: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
                     422: Response | {
                         type: unknown;
                         title: unknown;
@@ -4892,6 +4906,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 code: never;
                             }[];
                         };
+                        409: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
                         412: {
                             type: unknown;
                             title: unknown;
@@ -5002,6 +5030,10 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             visibility: 'public' | 'protected';
                             contextId: string;
                             boardSchemeId: string | null;
+                            ownershipState: "orphaned" | "owned";
+                            orphanedAt: string | null;
+                            claimEligibleAt: string | null;
+                            governanceReadOnly: boolean;
                             headRevisionId: string;
                             createdAt: string;
                             creator: string;
@@ -5021,6 +5053,10 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             visibility: "protected" | "public";
                             contextId: string;
                             boardSchemeId: string | null;
+                            ownershipState: "orphaned" | "owned";
+                            orphanedAt: string | null;
+                            claimEligibleAt: string | null;
+                            governanceReadOnly: boolean;
                             headRevisionId: string;
                             createdAt: string;
                             creator: string;
@@ -5083,6 +5119,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         }[];
                     };
                     404: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    409: {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -5177,6 +5227,10 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 visibility: "protected" | "public";
                                 contextId: string;
                                 boardSchemeId: string | null;
+                                ownershipState: "orphaned" | "owned";
+                                orphanedAt: string | null;
+                                claimEligibleAt: string | null;
+                                governanceReadOnly: boolean;
                                 headRevisionId: string;
                                 createdAt: string;
                                 creator: string;
@@ -5428,6 +5482,10 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 visibility: "protected" | "public";
                                 contextId: string;
                                 boardSchemeId: string | null;
+                                ownershipState: "orphaned" | "owned";
+                                orphanedAt: string | null;
+                                claimEligibleAt: string | null;
+                                governanceReadOnly: boolean;
                                 headRevisionId: string;
                                 createdAt: string;
                                 creator: string;
@@ -5490,6 +5548,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                             }[];
                         };
                         404: {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail?: string;
+                            errors?: {
+                                pointer: string;
+                                code: never;
+                            }[];
+                        };
+                        409: {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -5605,6 +5677,10 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     visibility: "protected" | "public";
                                     contextId: string;
                                     boardSchemeId: string | null;
+                                    ownershipState: "orphaned" | "owned";
+                                    orphanedAt: string | null;
+                                    claimEligibleAt: string | null;
+                                    governanceReadOnly: boolean;
                                     headRevisionId: string;
                                     createdAt: string;
                                     creator: string;
@@ -5667,6 +5743,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 }[];
                             };
                             404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6260,6 +6350,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                             code: never;
                                         }[];
                                     };
+                                    409: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
                                     412: {
                                         type: unknown;
                                         title: unknown;
@@ -6425,6 +6529,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                             code: never;
                                         }[];
                                     };
+                                    409: {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail?: string;
+                                        errors?: {
+                                            pointer: string;
+                                            code: never;
+                                        }[];
+                                    };
                                     412: {
                                         type: unknown;
                                         title: unknown;
@@ -6581,6 +6699,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     code: never;
                                 }[];
                             };
+                            409: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
                             422: Response | {
                                 type: unknown;
                                 title: unknown;
@@ -6706,6 +6838,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 }[];
                             };
                             404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -6848,6 +6994,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                 }[];
                             };
                             404: {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail?: string;
+                                errors?: {
+                                    pointer: string;
+                                    code: never;
+                                }[];
+                            };
+                            409: {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -7258,6 +7418,20 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                     }[];
                                 };
                                 404: {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail?: string;
+                                    errors?: {
+                                        pointer: string;
+                                        code: never;
+                                    }[];
+                                };
+                                409: {
                                     type: unknown;
                                     title: unknown;
                                     status: number;

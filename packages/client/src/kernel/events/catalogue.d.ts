@@ -846,6 +846,14 @@ declare const productEventTypes: {
         spaceId: Type.TString;
         address: Type.TString;
     }>;
+    readonly 'com.rezics.community.realm.claim-requested.v1': Type.TObject<{
+        realmId: Type.TString;
+        requestId: Type.TString;
+        state: Type.TLiteral<"pending">;
+        orphanedAt: Type.TString;
+        claimEligibleAt: Type.TString;
+        requestedAt: Type.TString;
+    }>;
     readonly 'com.rezics.community.realm.created.v1': Type.TObject<{
         realmId: Type.TString;
         revisionId: Type.TString;
