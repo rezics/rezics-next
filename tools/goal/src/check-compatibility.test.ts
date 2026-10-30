@@ -91,7 +91,9 @@ test('main consumer exercises actual dev worker-check forms, validates records a
       'remoteCheck.options.--memory-gib',
       'remoteCheck.options.--returns',
     ]) {
-      expect(reportCheck(report, field).some((check) => check.status === 'compatible')).toBe(true);
+      const checks = reportCheck(report, field);
+      if (!checks.some((check) => check.status === 'compatible'))
+        throw new Error(`Expected ${field} to be compatible; received ${JSON.stringify(checks)}.`);
     }
 
     const recordChecks = reportCheck(report, 'workerCheck.record.finished');
@@ -149,8 +151,12 @@ test('incompatible worker result fields and missing remote options identify the 
 
     const report = checkScriptCompatibility(root);
     expect(report.contractVersion).toBe(CHECK_COMPATIBILITY_CONTRACT.version);
-    expect(reportCheck(report, 'workerCheck.record.runnerHost').some((check) => check.status === 'incompatible')).toBe(true);
-    expect(reportCheck(report, 'remoteCheck.options.--returns').some((check) => check.status === 'incompatible')).toBe(true);
+    const runnerHost = reportCheck(report, 'workerCheck.record.runnerHost');
+    if (!runnerHost.some((check) => check.status === 'incompatible'))
+      throw new Error(`Expected workerCheck.record.runnerHost to be incompatible; received ${JSON.stringify(report.checks)}.`);
+    const missingReturns = reportCheck(report, 'remoteCheck.options.--returns');
+    if (!missingReturns.some((check) => check.status === 'incompatible'))
+      throw new Error(`Expected remoteCheck.options.--returns to be incompatible; received ${JSON.stringify(missingReturns)}.`);
     expect(reportCheck(report, 'remoteCheck.options.--memory-gib').some((check) => check.status === 'compatible')).toBe(true);
     expect(report.incompatibilities.every((issue) => issue.field.length > 0 && issue.command.length > 0)).toBe(true);
   } finally {
