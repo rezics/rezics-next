@@ -49,8 +49,9 @@ new IDs `pages-commerce-offer--mapped-fixed-edition`, `pages-commerce-order--map
 `pages-commerce-entitlements--revoked` and `pages-commerce-entitlements--legacy-unknown-mapping` states as well,
 at 390/1280 and in all eight locales. These are explicitly constructed wire-shaped presentation fixtures, not new
 native recordings or delivery evidence. The new interface acceptance source follows the exact mapped edition into
-the existing reader adapter, preserves refusal/unavailability and covers unknown/revoked navigation. The local `bun run --cwd apps/web typecheck` passes after a minimal
-curated-members adapter guard for the existing native preparation union. The new
+the existing reader adapter, preserves refusal/unavailability and covers unknown/revoked navigation. The local
+`bun run --cwd apps/web typecheck` passes on the integrated source (1,025 files). Integration preserves the existing
+curated-members preparation guard and the creator-publication translations alongside these benefit translations. The new
 `bun test apps/web/tests/mapped-entitlement.test.ts` passes three tests with 198 assertions. Browser, Storybook,
 native, remote and integration proof/publication remain pending. No protected-use, privacy, runtime or main approval is claimed.
 
@@ -115,8 +116,8 @@ Access; do not introduce a second permission engine or label research sketches a
 journeys continue under their existing sole behavior authorities and the separate owner brief. These ownership
 changes preserve the commerce manager scope and every original native/interface/main obligation.
 
-**Limits and custody.** Read owner deliveries and route/UI seams only; no independent native/code audit, tests, typecheck,
-generator, runtime or promotion check. Named owners and existing Web producers are handoff responsibilities, not claims of live task registration or delivery proof.
+**Limits and custody.** Read owner deliveries and route/UI seams; the local interface checks above are the only new
+verification. No independent native/code audit, runtime or promotion check. Named owners and existing Web producers are handoff responsibilities, not claims of live task registration or delivery proof.
 The delivered reports and existing owner sources supply the design evidence; no new audit is introduced.
 The linked Stripe fulfillment variant could not be fetched; no fulfillment-detail claim relies on it. REZICS eligibility is unknown.
 Read-only references: main `.reference/INDEX.md`; `shelves/bookwyrm/bookwyrm/models/shelf.py`, `LICENSE.md` (Anti-Capitalist Software License 1.4);
