@@ -212,11 +212,17 @@ export function createMembershipInverseCommands(config: {
         let transition: MembershipReservation['transition'];
         if (input.principal.kind === 'realm' && !sourceTransactionId) {
           const generationId = derivedId(NAMESPACE, `${transactionId}:transition`, route(input.accountId));
-          const acquired = first(await transitionAcquire.run(tx, {
-            route: route(input.accountId), account_id: input.accountId, realm_id: input.principal.id,
-            reservation_id: rows[0].reservationId, generation_id: generationId,
-            operation_id: input.key, transaction_id: transactionId,
-          }));
+          const acquired = first(
+            await transitionAcquire.run(tx, {
+              route: route(input.accountId),
+              account_id: input.accountId,
+              realm_id: input.principal.id,
+              reservation_id: rows[0].reservationId,
+              generation_id: generationId,
+              operation_id: input.key,
+              transaction_id: transactionId,
+            }),
+          );
           requireAllowed(acquired);
           transition = { generationId, operationId: input.key };
         }

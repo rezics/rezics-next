@@ -76,8 +76,7 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
       input.kind === 'organization' ? { kind: 'organization' as const, id: input.organizationId } : input.principal;
     if (input.kind === 'membership' && input.role === null && !input.reservationId)
       throw new Error('Missing reservation');
-    if (input.kind === 'membership' && input.reservationId &&
-        (input.role === null || input.principal.kind !== 'realm'))
+    if (input.kind === 'membership' && input.reservationId && (input.role === null || input.principal.kind !== 'realm'))
       return { accountId, principal, reservationId: input.reservationId };
     try {
       return (await ports.reserve({ accountId, principal, key: key('reserve') })).value;
@@ -117,14 +116,19 @@ export function registerMembershipWorkflows<Context>(ports: MembershipWorkflowPo
     async (input: MembershipWorkInput): Promise<MembershipWorkResult> => {
       const reservation = await reserve(input);
       if ('status' in reservation) return reservation;
-      const positiveRealm = reservation.principal.kind === 'realm' && input.kind === 'membership' && input.role !== null;
+      const positiveRealm =
+        reservation.principal.kind === 'realm' && input.kind === 'membership' && input.role !== null;
       await coordinateMembership({
         leaving: input.kind === 'membership' && input.role === null,
         reserve: async () => reservation,
         publish: (held) => publish(input, held),
         release,
         compensate: async (held) => {
-          if (positiveRealm) { await cancel(held); await finalize(held); return; }
+          if (positiveRealm) {
+            await cancel(held);
+            await finalize(held);
+            return;
+          }
           await terminalize(held);
           await release(held);
         },

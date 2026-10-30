@@ -556,7 +556,9 @@ export type MembershipWorkInput =
     }
   | { kind: 'organization'; organizationId: string; authorization: string };
 export type MembershipWorkReservation = {
-  accountId: string; principal: MembershipPrincipal; reservationId: string;
+  accountId: string;
+  principal: MembershipPrincipal;
+  reservationId: string;
   transition?: { generationId: string; operationId: string };
 };
 export type MembershipWorkResult =
