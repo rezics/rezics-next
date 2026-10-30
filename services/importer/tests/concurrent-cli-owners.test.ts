@@ -12,15 +12,34 @@ test('ordinary CLI holds acquisition ownership until cancellation and rejects on
   const state = join(directory, 'state.sqlite');
   const key = join(directory, 'account.jwk');
   const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  await writeFile(key, JSON.stringify({ ...pair.privateKey.export({ format: 'jwk' }), kid: randomUUID(), alg: 'ES256' }), { mode: 0o600 });
+  await writeFile(
+    key,
+    JSON.stringify({ ...pair.privateKey.export({ format: 'jwk' }), kid: randomUUID(), alg: 'ES256' }),
+    { mode: 0o600 },
+  );
   await writeFile(state, '', { mode: 0o600 });
   const requests: string[] = [];
   const controllers: AbortController[] = [];
   const pending: Promise<Awaited<ReturnType<typeof runImportCli>>>[] = [];
   const args = (alias: string) => [
-    '--source', 'openlibrary', '--source-alias', alias, '--dump', '-', '--state', state,
-    '--api', 'https://kernel.import.test', '--auth', 'https://auth.import.test', '--account-key', key,
-    '--account', '00000000-0000-4000-8000-000000000001', '--client', 'ordinary-importer',
+    '--source',
+    'openlibrary',
+    '--source-alias',
+    alias,
+    '--dump',
+    '-',
+    '--state',
+    state,
+    '--api',
+    'https://kernel.import.test',
+    '--auth',
+    'https://auth.import.test',
+    '--account-key',
+    key,
+    '--account',
+    '00000000-0000-4000-8000-000000000001',
+    '--client',
+    'ordinary-importer',
   ];
   const fetchBoundary = (async (url: Request | string | URL) => {
     requests.push(url instanceof Request ? url.url : String(url));
@@ -35,13 +54,19 @@ test('ordinary CLI holds acquisition ownership until cancellation and rejects on
     let sent = false;
     let returns = 0;
     const stdin: AsyncIterableIterator<Uint8Array> = {
-      [Symbol.asyncIterator]() { return this; },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
       async next() {
         if (!sent) {
           sent = true;
-          return { done: false, value: new TextEncoder().encode(
-            [work.type.key, work.key, work.revision, work.last_modified.value, JSON.stringify(work)].join('\t') + '\n',
-          ) };
+          return {
+            done: false,
+            value: new TextEncoder().encode(
+              [work.type.key, work.key, work.revision, work.last_modified.value, JSON.stringify(work)].join('\t') +
+                '\n',
+            ),
+          };
         }
         ready();
         return new Promise<IteratorResult<Uint8Array>>((resolve) => (finish = resolve));
@@ -56,15 +81,26 @@ test('ordinary CLI holds acquisition ownership until cancellation and rejects on
     const done = runImportCli(args(alias), { stdin, signal: controller.signal, fetch: fetchBoundary });
     pending.push(done);
     return {
-      done, controller,
-      waiting: Promise.race([waiting, done.then((r) => { throw new Error(`Unexpected early exit ${JSON.stringify(r)}`); })]),
-      get returns() { return returns; },
+      done,
+      controller,
+      waiting: Promise.race([
+        waiting,
+        done.then((r) => {
+          throw new Error(`Unexpected early exit ${JSON.stringify(r)}`);
+        }),
+      ]),
+      get returns() {
+        return returns;
+      },
     };
   }
   const owners = (alias: string) => {
     const db = new Database(state, { readonly: true });
-    try { return db.query('SELECT source,pid,birth,capability FROM import_owners WHERE source=?').get(alias); }
-    finally { db.close(); }
+    try {
+      return db.query('SELECT source,pid,birth,capability FROM import_owners WHERE source=?').get(alias);
+    } finally {
+      db.close();
+    }
   };
   try {
     const a = hold('books-a');
@@ -72,7 +108,11 @@ test('ordinary CLI holds acquisition ownership until cancellation and rejects on
     const before = owners('books-a');
     expect(before).toMatchObject({ source: 'books-a', pid: process.pid });
     const competitor = await runImportCli(args('books-a'), {
-      stdin: { async *[Symbol.asyncIterator]() { throw new Error('Busy CLI must not consume input'); } },
+      stdin: {
+        async *[Symbol.asyncIterator]() {
+          throw new Error('Busy CLI must not consume input');
+        },
+      },
       fetch: fetchBoundary,
     });
     expect(competitor.code).toBe(5);
