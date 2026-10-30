@@ -184,7 +184,8 @@ else
   exec ${JSON.stringify(process.execPath)} "$@"
 fi
 `,
-      );
+      ),
+    );
       chmodSync(join(bin, 'bun'), 0o755);
       restorePath = prependPath(bin);
       if (surface === 'retry') {
@@ -257,6 +258,7 @@ if [ "$1" = install ]; then
 fi
 exec ${JSON.stringify(process.execPath)} "$@"
 `,
+      ),
     );
     chmodSync(join(bin, 'bun'), 0o755);
     // The replacement worker exits without editing the conflicts it was handed.
