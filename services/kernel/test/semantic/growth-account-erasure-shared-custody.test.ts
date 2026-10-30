@@ -226,7 +226,7 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
     // allowed to perform unmetered work during the shared harness's measured operations.
     await worker.stop();
     worker = undefined;
-    const native = await inventories(f, owner.accountId);
+    let native = await inventories(f, owner.accountId);
     for (const key of before.sourceKeys) expect(native.sourceKeys.has(key), `Lost historical native Source role ${key}`).toBe(true);
     for (const key of native.sourceKeys) expect(Buffer.byteLength(key)).toBeLessThanOrEqual(1024);
     expect([...native.sourceKeys].some((key) => key.includes(':context:') && key.includes(':owner:'))).toBe(true);
@@ -313,6 +313,17 @@ test('Original Semantic and Zone shared-erasure custody growth artifact counts r
     }
     await worker.stop();
     worker = undefined;
+    const closed = await inventories(f, owner.accountId);
+    expect(closed.sourceKeys).toEqual(native.sourceKeys);
+    const closedCopies = new Set(closed.artifacts.map((a) =>
+      `${a.partition}:${Buffer.from(encodeLocator(a.locator)).toString('hex')}`,
+    ));
+    for (const original of native.artifacts) expect(closedCopies.has(
+      `${original.partition}:${Buffer.from(encodeLocator(original.locator)).toString('hex')}`,
+    ), 'An original copied-history locator must survive receiving minimization').toBe(true);
+    // Include copies produced while the native minimizers drained, rather than counting only
+    // the earlier producer snapshot or treating a worker's completion as physical absence.
+    native = closed;
     const artifact = native.artifacts[0]!;
     const populations = [...native.homes].map((home) => {
       const base = unrelatedSemanticPopulation(`shared-erasure-${home}`, home).population;
