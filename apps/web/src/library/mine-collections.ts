@@ -153,7 +153,8 @@ export async function loadMineCollectionsPage(
       page = await readPage(client, accountId, authorization, undefined, input.layout === 'previews');
       navigationPage = page;
     }
-    if (!input.cursor) navigationPage = page;
+    // Preview navigation shares the returned page's budget, including on later cursor pages.
+    if (!input.cursor || input.layout === 'previews') navigationPage = page;
     if (!navigationPage) navigationPage = await readPage(client, accountId, authorization);
     return {
       signedIn: true,
