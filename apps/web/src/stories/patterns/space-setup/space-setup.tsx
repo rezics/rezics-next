@@ -600,10 +600,13 @@ export function SpaceSetupForm({
                   </>
                 )}
               </fieldset>
-              {!canEdit && loaded ? (
-                <p role="status" className="rounded-xl bg-muted p-4 text-sm">
-                  {m.space_setup_denied()}
-                </p>
+              {!canEdit && loaded && !problem ? (
+                <div className="space-y-3 rounded-xl bg-muted p-4 text-sm">
+                  <p role="status">{m.space_setup_denied()}</p>
+                  <Button type="button" variant="outline" disabled={busy} onClick={() => void refresh()}>
+                    {m.space_setup_refresh()}
+                  </Button>
+                </div>
               ) : null}
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
                 <div className="flex items-center gap-2">
