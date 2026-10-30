@@ -1,6 +1,6 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { cn } from '@rezics/ui/utils';
 import { Link, useLocation, type ErrorComponentProps } from '@tanstack/react-router';
-import { cn } from 'cn';
 import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
 
