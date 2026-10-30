@@ -128,9 +128,10 @@ export function readFlowTasks(db: Database): FlowTask[] {
   const exists = db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='worker_tasks'").get();
   if (!exists) return [];
   return (
-    db
-      .query("SELECT id, json_extract(body, '$.brief.goal') AS goal FROM worker_tasks ORDER BY sequence")
-      .all() as { id: string; goal: string | null }[]
+    db.query("SELECT id, json_extract(body, '$.brief.goal') AS goal FROM worker_tasks ORDER BY sequence").all() as {
+      id: string;
+      goal: string | null;
+    }[]
   )
     .filter((row): row is { id: string; goal: string } => typeof row.goal === 'string')
     .map((row) => ({ id: row.id, brief: { goal: row.goal } }));

@@ -123,7 +123,7 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   insertLandingRequest(db, 'queued', 1, 0);
   insertLandingRequest(db, 'delivered', 1, 1);
   insertLandingRequest(db, 'old-request', 1);
-  db.query("INSERT INTO worker_promotions(id, body) VALUES (1, ?)").run(
+  db.query('INSERT INTO worker_promotions(id, body) VALUES (1, ?)').run(
     JSON.stringify({ id: 'prom-1', phase: 'gate-head' }),
   );
 
@@ -200,55 +200,27 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
       released_at TEXT
     );
   `);
-  db.query('INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)').run(
-    'attempt',
-    'wait',
-    1,
-    'waiting',
-    at(-30 * 60_000),
-  );
-  db.query('INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)').run(
-    'promotion',
-    'prom-1',
-    0,
-    'gate-head',
-    at(-90 * 60_000),
-  );
-  db.query('INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)').run(
-    'promotion',
-    'prom-1',
-    0,
-    'classify-main',
-    at(-40 * 60_000),
-  );
-  db.query('INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)').run(
-    'promotion',
-    'prom-1',
-    0,
-    'gate-head',
-    at(-15 * 60_000),
-  );
-  db.query('INSERT INTO lifecycle_quarantines(task_id, attempt, cause, quarantined_at, released_at) VALUES (?, ?, ?, ?, ?)').run(
-    'old-quarantine',
-    1,
-    'old-cause',
-    at(-2 * 60 * 60_000),
-    at(-90 * 60_000),
-  );
-  db.query('INSERT INTO lifecycle_quarantines(task_id, attempt, cause, quarantined_at, released_at) VALUES (?, ?, ?, ?, ?)').run(
-    'current-quarantine',
-    2,
-    'invariant-a',
-    at(-20 * 60_000),
-    null,
-  );
-  db.query('INSERT INTO lifecycle_quarantines(task_id, attempt, cause, quarantined_at, released_at) VALUES (?, ?, ?, ?, ?)').run(
-    'recent-released',
-    1,
-    'recovered',
-    at(-10 * 60_000),
-    at(-5 * 60_000),
-  );
+  db.query(
+    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('attempt', 'wait', 1, 'waiting', at(-30 * 60_000));
+  db.query(
+    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('promotion', 'prom-1', 0, 'gate-head', at(-90 * 60_000));
+  db.query(
+    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('promotion', 'prom-1', 0, 'classify-main', at(-40 * 60_000));
+  db.query(
+    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('promotion', 'prom-1', 0, 'gate-head', at(-15 * 60_000));
+  db.query(
+    'INSERT INTO lifecycle_quarantines(task_id, attempt, cause, quarantined_at, released_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('old-quarantine', 1, 'old-cause', at(-2 * 60 * 60_000), at(-90 * 60_000));
+  db.query(
+    'INSERT INTO lifecycle_quarantines(task_id, attempt, cause, quarantined_at, released_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('current-quarantine', 2, 'invariant-a', at(-20 * 60_000), null);
+  db.query(
+    'INSERT INTO lifecycle_quarantines(task_id, attempt, cause, quarantined_at, released_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('recent-released', 1, 'recovered', at(-10 * 60_000), at(-5 * 60_000));
 
   const metrics = lifecycleMetrics(db, now);
   expect(metrics.waiting.entries.find((entry) => entry.taskId === 'wait')).toMatchObject({
@@ -345,9 +317,9 @@ test('Live-sized settled history does not require decoding all task/attempt JSON
   expect(store.decodedBytes()).toEqual({ tasks: 0, attempts: 0 });
   expect(metrics.attemptsPerTaskPerTrailingHour.total).toBe(0);
   expect(emitHourlyLifecycleMetrics(db, metrics, now)).toBe(true);
-  expect(emitHourlyLifecycleMetrics(db, { ...metrics, asOf: 'different snapshot' }, new Date('2026-10-30T12:59:00.000Z'))).toBe(
-    false,
-  );
+  expect(
+    emitHourlyLifecycleMetrics(db, { ...metrics, asOf: 'different snapshot' }, new Date('2026-10-30T12:59:00.000Z')),
+  ).toBe(false);
 
   db.close();
   databases.splice(databases.indexOf(db), 1);

@@ -219,8 +219,7 @@ export function formatLifecycleMetrics(metrics: LifecycleMetrics): string[] {
   return [
     `Launches in trailing hour: ${attempts.total}; tasks with launches: ${attempts.taskCount}; mean per task: ${attempts.meanPerTask?.toFixed(2) ?? 'unknown'}.`,
     ...attempts.perTask.map(
-      (task) =>
-        `  ${task.taskId}: ${task.launches} launches (${task.sameAttemptResumes} same-attempt resumes).`,
+      (task) => `  ${task.taskId}: ${task.launches} launches (${task.sameAttemptResumes} same-attempt resumes).`,
     ),
     `Current waits: ${waiting.count}; oldest age ${age(waiting.oldestAgeMs)}; unknown ages ${waiting.unknownAgeCount}.`,
     `Orphaned landings: ${orphaned.available ? orphaned.count : 'unknown'}${orphaned.taskIds.length ? ` (${orphaned.taskIds.join(', ')})` : ''}.`,

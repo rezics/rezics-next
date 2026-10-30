@@ -307,7 +307,9 @@ function orphanedLandings(db: Database): LifecycleMetrics['orphanedLandings'] {
 function promotionPhase(db: Database, nowMs: number, hasTransitions: boolean): LifecycleMetrics['promotion'] {
   if (!hasTable(db, 'worker_promotions')) return { available: false, phase: null, phaseAgeMs: null };
   const row = db
-    .query("SELECT json_extract(body, '$.id') AS promotion_id, json_extract(body, '$.phase') AS phase FROM worker_promotions WHERE id=1")
+    .query(
+      "SELECT json_extract(body, '$.id') AS promotion_id, json_extract(body, '$.phase') AS phase FROM worker_promotions WHERE id=1",
+    )
     .get() as { promotion_id: string | null; phase: string | null } | null;
   if (!row) return { available: true, phase: null, phaseAgeMs: null };
   if (!row.phase || !row.promotion_id || !hasTransitions)
@@ -318,8 +320,7 @@ function promotionPhase(db: Database, nowMs: number, hasTransitions: boolean): L
       WHERE entity='promotion' AND entity_id=? AND attempt=0 ORDER BY sequence DESC LIMIT 1
     `)
     .get(row.promotion_id) as { phase: string; entered_at: string | null } | null;
-  if (!transition || transition.phase !== row.phase)
-    return { available: true, phase: row.phase, phaseAgeMs: null };
+  if (!transition || transition.phase !== row.phase) return { available: true, phase: row.phase, phaseAgeMs: null };
   return { available: true, phase: row.phase, phaseAgeMs: age(transition.entered_at, nowMs) };
 }
 
@@ -330,9 +331,7 @@ function byCause(rows: { cause: string }[]): Record<string, number> {
 }
 
 function quarantines(db: Database, now: Date, start: Date): LifecycleMetrics['quarantines'] {
-  if (
-    !hasColumns(db, 'lifecycle_quarantines', LIFECYCLE_RECORD_READER_CONTRACT.quarantines.columns)
-  )
+  if (!hasColumns(db, 'lifecycle_quarantines', LIFECYCLE_RECORD_READER_CONTRACT.quarantines.columns))
     return {
       available: false,
       currentCount: null,
@@ -415,7 +414,11 @@ function hourBucket(at: Date): string {
 }
 
 /** Persist one complete metric snapshot per UTC hour. This is an audit row, not a manager wake alert. */
-export function emitHourlyLifecycleMetrics(db: Database, metrics: LifecycleMetrics, at: Date | number = new Date()): boolean {
+export function emitHourlyLifecycleMetrics(
+  db: Database,
+  metrics: LifecycleMetrics,
+  at: Date | number = new Date(),
+): boolean {
   const now = dateValue(at);
   migrate(db, lifecycleMetricMigrations);
   const result = db
