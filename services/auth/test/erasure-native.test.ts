@@ -345,6 +345,44 @@ test('existing deletion caller drains real Auth stores before user deletion; def
   }
 }, 540_000);
 
+test('actual automated registration attributes its immutable native provisioning witness to the approved creator and operator', async () => {
+  const f = await nativeFixture();
+  try {
+    const owner = await f.person('registration-operator');
+    const key = 'native-provisioning-roles';
+    const operation = {
+      kind: 'automated' as const,
+      registrationId: '',
+      operatorAccountId: owner.accountId,
+      handle: 'native_provisioning_roles',
+      operationKey: key,
+      authorization: 'approval-request',
+    };
+    const approval = await f.approvals.approve(owner.bearer, { operationKey: key, operation }, f.context());
+    const result = await f.host.workflows.createAutomated({
+      key,
+      handle: operation.handle,
+      operatorAccountId: owner.accountId,
+      authorization: approval.reference,
+      credential: { email: 'native-provisioning-roles@native-erasure.test', password },
+    });
+    const row = (
+      await f.pool.query(
+        `SELECT r.erasure_creator_id,r.erasure_operator_id,r.erasure_stage_id,s.registration_id,s.completed_at
+         FROM auth_provisioning_receipt r JOIN auth_registration_stage s ON s.account_id=r.account_id
+         WHERE r.account_id=$1`,
+        [result.accountId],
+      )
+    ).rows[0]!;
+    expect(row.erasure_creator_id).toBe(owner.accountId);
+    expect(row.erasure_operator_id).toBe(owner.accountId);
+    expect(row.erasure_stage_id).toBe(row.registration_id);
+    expect(row.completed_at).toBeInstanceOf(Date);
+  } finally {
+    await f.close();
+  }
+}, 120_000);
+
 test('an absent native user with operating evidence retains original applicability across a rolled-back page and a new native connection pool', async () => {
   const fixture = testDatabase();
   let pool = new Pool({ connectionString: fixture.url });

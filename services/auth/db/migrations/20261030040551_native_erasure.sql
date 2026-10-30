@@ -93,6 +93,9 @@ ALTER TABLE "auth_effect_receipt" ADD COLUMN erasure_operator_id text;
 ALTER TABLE auth_registration_stage ADD COLUMN erasure_release_at timestamptz;
 ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_creator_id text;
 ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_operator_id text;
+ALTER TABLE auth_provisioning_receipt ADD COLUMN erasure_creator_id text;
+ALTER TABLE auth_provisioning_receipt ADD COLUMN erasure_operator_id text;
+ALTER TABLE auth_provisioning_receipt ADD COLUMN erasure_stage_id text;
 CREATE INDEX erasure_auth_client_0 ON "auth_client" ("userId","client_id");
 CREATE INDEX erasure_account_0 ON "account" ("userId","id");
 CREATE INDEX erasure_session_0 ON "session" ("userId","id");
@@ -141,6 +144,8 @@ CREATE INDEX erasure_auth_barrier_proof_4 ON "auth_barrier_proof" ("erasure_oper
 CREATE INDEX erasure_auth_provisioning_receipt_0 ON "auth_provisioning_receipt" ("account_id","idempotency_key");
 CREATE INDEX erasure_auth_provisioning_receipt_1 ON "auth_provisioning_receipt" ("owner_id","idempotency_key");
 CREATE INDEX erasure_auth_provisioning_receipt_2 ON "auth_provisioning_receipt" ("credential_id","idempotency_key");
+CREATE INDEX erasure_provisioning_creator ON auth_provisioning_receipt (erasure_creator_id,idempotency_key);
+CREATE INDEX erasure_provisioning_operator ON auth_provisioning_receipt (erasure_operator_id,idempotency_key);
 CREATE INDEX erasure_auth_recovery_0 ON "auth_recovery" ("account_id","proof_hash");
 CREATE INDEX erasure_auth_effect_receipt_0 ON "auth_effect_receipt" ("account_id","receipt_id");
 CREATE INDEX erasure_auth_effect_receipt_1 ON "auth_effect_receipt" ("acting_human_id","receipt_id");
@@ -464,10 +469,21 @@ END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_effect_receipt" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_auth_effect_receipt();
 CREATE FUNCTION auth_erasure_guard_auth_provisioning_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  IF TG_OP='INSERT' THEN
+    -- The stage's unique native account binding establishes these roles in the
+    -- credential/receipt transaction. No encrypted payload or request JSON walk.
+    SELECT registration_id,erasure_creator_id,erasure_operator_id
+    INTO NEW.erasure_stage_id,NEW.erasure_creator_id,NEW.erasure_operator_id
+    FROM auth_registration_stage WHERE account_id=NEW.account_id;
+  END IF;
   IF TG_OP='UPDATE' THEN
   PERFORM auth_erasure_admit(OLD."account_id");
+  PERFORM auth_erasure_admit(OLD.erasure_creator_id);
+  PERFORM auth_erasure_admit(OLD.erasure_operator_id);
   END IF;
   PERFORM auth_erasure_admit(NEW."account_id");
+  PERFORM auth_erasure_admit(NEW.erasure_creator_id);
+  PERFORM auth_erasure_admit(NEW.erasure_operator_id);
   RETURN NEW;
 END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_provisioning_receipt" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_auth_provisioning_receipt();

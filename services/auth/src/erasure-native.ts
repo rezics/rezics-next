@@ -87,7 +87,11 @@ export const nativeErasureStores: readonly Store[] = [
     client: 'erasure_client_id',
     children: ['SELECT 1 FROM auth_recovery_establishment WHERE reference=$1 LIMIT 1'],
   },
-  { table: 'auth_provisioning_receipt', key: 'idempotency_key', roles: ['account_id'] },
+  {
+    table: 'auth_provisioning_receipt',
+    key: 'idempotency_key',
+    roles: ['account_id', 'erasure_creator_id', 'erasure_operator_id'],
+  },
   {
     table: 'account',
     key: 'id',
@@ -236,6 +240,18 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
         `SELECT 1 FROM auth_effect_receipt r WHERE receipt_id=$1
          AND (stage_version IS NOT NULL OR committed_at IS NOT NULL)
          AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)`,
+        [key],
+      );
+      if (held.rowCount) return { after, keys, blocked: 'native-release' };
+    }
+    if (store.table === 'auth_provisioning_receipt') {
+      // A surviving subject's activation/release can still consume the immutable
+      // provisioning witness. Its exact native stage supplies the terminal proof.
+      const held = await connection.query(
+        `SELECT 1 FROM auth_provisioning_receipt r WHERE idempotency_key=$1
+         AND NOT EXISTS (SELECT 1 FROM auth_erasure e WHERE e.account_id=r.account_id)
+         AND NOT EXISTS (SELECT 1 FROM auth_registration_stage s WHERE s.registration_id=r.erasure_stage_id
+           AND (s.completed_at IS NOT NULL OR s.expired_at IS NOT NULL OR s.erasure_release_at IS NOT NULL))`,
         [key],
       );
       if (held.rowCount) return { after, keys, blocked: 'native-release' };
