@@ -350,6 +350,8 @@ export async function runCliNativeBackpressureJourney() {
 
     const recovered = await invoke('recovered', rows);
     expect(recovered.code, recovered.stderr).toBe(0);
+    expect(exchanges.some((e) => e.leg === 'recovered' && e.caller === 'cli' && e.status === 429)).toBe(true);
+    expect(actualScheduledWaits.some((wait) => wait.leg === 'recovered' && wait.durationMs > 0)).toBe(true);
     const completedBaselineBefore = baseline();
     expect(completedBaselineBefore.source.count).toBe(rows.length);
     const originalBindings = bindings();
