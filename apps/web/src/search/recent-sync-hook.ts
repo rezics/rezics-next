@@ -19,11 +19,13 @@ export function useRecentSearchSyncAdapter(
     const old = previous.current;
     previous.current = expected;
     if (old?.startsWith('account:') && old !== expected) storage?.setItem(recentHistoryKey(old), '[]');
-    if (session.state === 'signed-out') {
-      // Logout may start a fresh document: remove only account data in the sole history namespace.
+    if (session.state === 'signed-out' || session.state === 'signed-in') {
+      // Retire the removed native store without migrating it. Logout also clears account history across documents.
       try {
         const prefix = recentHistoryKey('account:');
-        for (const key of Object.keys(localStorage)) if (key.startsWith(prefix)) localStorage.removeItem(key);
+        for (const key of Object.keys(localStorage))
+          if ((session.state === 'signed-out' && key.startsWith(prefix)) || key.startsWith('rezics:recent:v1:'))
+            localStorage.removeItem(key);
       } catch {
         /* Memory-only history has no durable native cache. */
       }

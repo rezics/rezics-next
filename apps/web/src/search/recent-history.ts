@@ -20,6 +20,14 @@ export function recentBucket(state: string, subject?: string | null): string | n
 }
 export const recentHistoryKey = (bucket: string) => `rezics.search-history.v1:${encodeURIComponent(bucket)}`;
 const kinds = new Set(['Library', 'Collection', 'Realm', 'Zone', 'Agent']);
+export function nativeHistoryScope(scope: SearchScope): boolean {
+  return (
+    scope.kind === 'Library' ||
+    ((scope.kind === 'Realm' || scope.kind === 'Collection') &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scope.id))
+  );
+}
+
 function cleanScope(raw: unknown): SearchScope | undefined {
   if (!raw || typeof raw !== 'object') return;
   const value = raw as Record<string, unknown>;
@@ -51,7 +59,9 @@ export function readRecentHistory(storage: RecentStorage, bucket: string): Recen
         !Number.isFinite(item.visitedAt)
       )
         return [];
-      const scope = cleanScope(item.scope);
+      let scope = cleanScope(item.scope);
+      if (scope && bucket.startsWith('account:') && nativeHistoryScope(scope))
+        scope = { kind: scope.kind, id: scope.id, name: '' };
       // Corrupt scoped history must never silently become global history.
       if (item.scope && !scope) return [];
       const query = item.query.slice(0, 256);
@@ -117,7 +127,7 @@ export function readRecentDocument(storage: RecentStorage, bucket: string): Rece
 export function writeRecentDocument(storage: RecentStorage, bucket: string, document: RecentDocument): void {
   const entries = document.entries.slice(0, RECENT_HISTORY_LIMIT).map((entry) => {
     // Account scope labels/actions must be hydrated again; browser history is never their authority.
-    if (bucket.startsWith('account:') && entry.scope)
+    if (bucket.startsWith('account:') && entry.scope && nativeHistoryScope(entry.scope))
       return { ...entry, scope: { kind: entry.scope.kind, id: entry.scope.id, name: '' } };
     return entry;
   });

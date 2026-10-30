@@ -45,7 +45,7 @@ type Queued = Pending & { localId?: string; visitedAt?: number; expectedRevision
 type Journal = {
   revision: number | null;
   observed: Record<string, number>;
-  rows: Record<string, { id: string; visitedAt: number }>;
+  rows: Record<string, { id: string; visitedAt: number; entry?: NativeEntry }>;
   pending: Queued[];
   conflict?: boolean;
 };
@@ -142,6 +142,10 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       throw new DOMException('Recent account changed', 'AbortError');
   };
   const load = () => readRecentDocument(storage, bucket);
+  const nativeKey = (entry: NativeEntry | undefined) =>
+    entry
+      ? JSON.stringify([entry.kind, entry.kind === 'query' ? entry.text.trim() : '', entry.scope ?? null])
+      : undefined;
   const save = (document: RecentDocument, journal: Journal) =>
     writeRecentDocument(storage, bucket, { ...document, native: journal });
   function reconcile(): { document: RecentDocument; journal: Journal } {
@@ -171,7 +175,10 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     document.entries = document.entries.filter((e) => e.visitedAt > Date.now() - lifetime);
     for (const entry of document.entries) {
       if (journal.observed[entry.id] === entry.visitedAt) continue;
-      const native = nativeRecentEntry(entry);
+      let native = nativeRecentEntry(entry);
+      const previous = journal.rows[entry.id]?.entry;
+      if (native?.kind === 'query' && previous?.kind === 'query' && previous.languages)
+        native = { ...native, languages: previous.languages };
       if (native) {
         // A visit not yet attempted can be coalesced; attempted receipt bodies are immutable.
         journal.pending = journal.pending.filter(
@@ -205,13 +212,20 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     const { document, journal } = reconcile();
     if (journal.pending.length) return false;
     const locals = document.entries;
-    const remote = rows.map((item) => {
+    const seen = new Set<string>();
+    const remote = rows.flatMap((item) => {
       const converted = localRecentEntry(item);
       // Keep a locally supplied scope identity, but only the current owner's display.
-      const local = locals.find((e) => JSON.stringify(nativeRecentEntry(e)) === JSON.stringify(item.entry));
-      if (local) converted.id = local.id;
-      journal.rows[converted.id] = { id: item.id, visitedAt: converted.visitedAt };
-      return converted;
+      const local = locals.find((e) => nativeKey(nativeRecentEntry(e)) === nativeKey(item.entry));
+      if (local) {
+        converted.query = local.query;
+        if (converted.scope && local.scope) converted.scope.id = local.scope.id;
+        converted.id = recentId(converted.query, converted.scope);
+      }
+      if (seen.has(converted.id)) return [];
+      seen.add(converted.id);
+      journal.rows[converted.id] = { id: item.id, visitedAt: converted.visitedAt, entry: item.entry };
+      return [converted];
     });
     const entries = [...locals.filter((e) => !nativeRecentEntry(e)), ...remote]
       .sort((a, b) => b.visitedAt - a.visitedAt)
@@ -230,7 +244,14 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     return serial(bucket, async () => {
       live(signal);
       // The caller's entries may already be stale. Always use the sole persisted local document.
-      void input;
+      const retained = load();
+      if (
+        retained.entries.length === input.length &&
+        retained.entries.every(
+          (entry, index) => entry.id === input[index]?.id && entry.visitedAt === input[index]?.visitedAt,
+        )
+      )
+        writeRecentDocument(storage, bucket, { ...retained, entries: [...input] });
       let { document, journal } = reconcile();
       if (journal.conflict) {
         if (!retry) throw new RecentSyncError('conflict');
@@ -280,7 +301,11 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
                 : p,
             );
           if (pending.localId && receipt.id)
-            journal.rows[pending.localId] = { id: receipt.id, visitedAt: pending.visitedAt! };
+            journal.rows[pending.localId] = {
+              id: receipt.id,
+              visitedAt: pending.visitedAt!,
+              ...(pending.change.kind === 'use' ? { entry: pending.change.entry } : {}),
+            };
           if (pending.change.kind === 'remove' && pending.localId) delete journal.rows[pending.localId];
           if (pending.change.kind === 'clear') journal.rows = {};
           save(document, journal);

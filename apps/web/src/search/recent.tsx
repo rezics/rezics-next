@@ -2,7 +2,7 @@ import { Cover } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ChevronRight, Search, X } from 'lucide-react';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, locales } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
 import { useSession } from '../session/query';
 import { recentBucket, type RecentEntry as HistoryEntry, type RecentHistory } from './recent-history';
@@ -207,7 +207,7 @@ function historyItem(entry: HistoryEntry): RecentItem {
   const action = ref?.searchAction;
   const href = ref
     ? action?.startsWith('/') && !action.startsWith('//') && !/[\\\r\n]/.test(action)
-      ? `${action.replace(/^\/(en|zh-Hant|zh-Hans)(?=\/)/, '')}${entry.query ? `?q=${encodeURIComponent(entry.query)}` : ''}`
+      ? `${action.replace(new RegExp(`^/(${locales.join('|')})(?=/)`), '')}${entry.query ? `?q=${encodeURIComponent(entry.query)}` : ''}`
       : undefined
     : `/search?q=${encodeURIComponent(entry.query)}`;
   return {
