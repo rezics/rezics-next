@@ -509,7 +509,7 @@ export async function erasePostLogicalPageAsInitiator(
   };
   const opening = await discoveryOpening.run(deps.pool, { route, thread_id: input.threadId });
   const discovery =
-    opening && postIds.includes(opening.first_post_id)
+    opening?.first_post_id && postIds.includes(opening.first_post_id)
       ? await prepareDiscoveryMutation(deps, {
           identity,
           authorization,

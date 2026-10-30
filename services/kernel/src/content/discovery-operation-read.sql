@@ -5,4 +5,4 @@ SELECT route, intent, generation::text, target_kind, effect, target_id, native_v
 FROM content.realm_discovery_operation CROSS JOIN input
 WHERE route = :route::integer AND intent = :intent::text
   AND (input.expected_generation = 0 OR generation = input.expected_generation)
-ORDER BY generation DESC LIMIT 1 FOR UPDATE;
+ORDER BY content.realm_discovery_operation.generation DESC LIMIT 1 FOR UPDATE;

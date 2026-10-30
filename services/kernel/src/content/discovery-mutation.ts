@@ -227,6 +227,12 @@ export async function lockDiscoveryMutation(tx: CommandTransaction, ref: Discove
   const source = await native(tx, { kind: row.target_kind as Target['kind'], id: row.target_id });
   if (!source || source.native_version !== row.native_version || source.source_version !== row.source_version)
     throw new GrantDeniedError();
+  // A board can contain starts from a newly public epoch. Its local Realm epoch
+  // must still be the one fenced before this source mutation.
+  if (row.target_kind === 'board') {
+    const binding = await readRealmDiscoveryEpoch(tx, row.realm_id);
+    if (!binding || binding.realm_epoch !== row.realm_epoch) throw new GrantDeniedError();
+  }
   held.set(tx, row);
 }
 

@@ -121,16 +121,18 @@ export async function commitDiscoveryFence(pool: Pool, ref: DiscoveryOperationRe
     pool,
     { partition: partitionOf(route), deadline: Date.now() + 30_000 },
     async (tx) => {
-      const installed = await fence.run(tx, {
-        route,
-        realm_id: source.realm_id,
-        realm_epoch: source.realm_epoch,
-        source_route: ref.route,
-        intent: ref.intent,
-        generation: ref.generation,
-        outcome: null,
-        transaction_id: null,
-      });
+      const installed = (
+        await fence.run(tx, {
+          route,
+          realm_id: source.realm_id,
+          realm_epoch: source.realm_epoch,
+          source_route: ref.route,
+          intent: ref.intent,
+          generation: ref.generation,
+          outcome: null,
+          transaction_id: null,
+        })
+      )[0];
       if (!installed) throw new Error('Discovery Realm fence unavailable');
       await advance.run(tx, { route, realm_id: source.realm_id, generation: installed.fence_generation });
       return { value: installed.fence_generation, events: [sourceEvent(source.realm_id, source.realm_epoch)] };
@@ -171,16 +173,18 @@ export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperatio
         });
       else throw new Error('Discovery contribution unavailable');
     }
-    const resolved = await fence.run(tx, {
-      route,
-      realm_id: source.realm_id,
-      realm_epoch: source.realm_epoch,
-      source_route: ref.route,
-      intent: ref.intent,
-      generation: ref.generation,
-      outcome: source.phase,
-      transaction_id: source.outcome_transaction_id,
-    });
+    const resolved = (
+      await fence.run(tx, {
+        route,
+        realm_id: source.realm_id,
+        realm_epoch: source.realm_epoch,
+        source_route: ref.route,
+        intent: ref.intent,
+        generation: ref.generation,
+        outcome: source.phase,
+        transaction_id: source.outcome_transaction_id,
+      })
+    )[0];
     if (
       !resolved ||
       resolved.outcome !== source.phase ||
