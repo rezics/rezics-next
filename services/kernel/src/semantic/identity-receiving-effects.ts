@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import {
+  CommandUnavailableError,
   currentCommand,
   currentCommandResources,
   noEffect,
@@ -637,6 +638,7 @@ export async function readIdentityReceivingSelection(
     return result.value;
   } catch (error) {
     if (error instanceof IdentityEpochStoreError && error.code === 'identity_effect_stale') return null;
+    if (error instanceof CommandUnavailableError) throw unavailable('Native receiving home unavailable');
     throw error;
   }
 }
