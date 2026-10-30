@@ -42,7 +42,7 @@ bun services/importer/src/cli.ts \
 
 Wikidata input accepts the decompressed native mixed Item/Property JSON dump directly, with one entity per
 line inside its JSON array; existing item-only JSONL input also works. No item extraction or caller-side filter
-is needed. The [official JSON dump guidance](https://www.wikidata.org/w/index.php?title=Wikidata:Database_download&oldid=2479770906#JSON_dumps_(recommended))
+is needed. The [official JSON dump guidance](<https://www.wikidata.org/w/index.php?title=Wikidata:Database_download&oldid=2479770906#JSON_dumps_(recommended)>)
 documents this mixed format (verified 2026-10-30).
 
 The reader admits `type: 'item'` with canonical `Q[1-9][0-9]*` identity and recognizes `type: 'property'` only
