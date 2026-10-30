@@ -11,16 +11,11 @@ import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
-import { readSettingsPage, saveNotifications, savePreferences } from './actions';
+import { readSettingsPage, savePreferences } from './actions';
 import { ProfileSection } from './profile';
+import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
-import type {
-  NativePreferenceFailure,
-  NotificationPreferences,
-  ReadingPreferences,
-  SettingsPage,
-  SpoilerLevel,
-} from './preferences';
+import type { NativePreferenceFailure, ReadingPreferences, SettingsPage, SpoilerLevel } from './preferences';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { useOperation } from '../kernel/exposure';
@@ -273,216 +268,6 @@ function ReadingCard({
   );
 }
 
-function humanizeNotificationKind(kind: string): string {
-  return kind
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((word) => word[0]!.toLocaleUpperCase() + word.slice(1))
-    .join(' ');
-}
-
-function notificationName(kind: string): string {
-  if (kind === 'reply') return m.settings_notification_reply();
-  if (kind === 'mention') return m.settings_notification_mention();
-  return humanizeNotificationKind(kind);
-}
-
-function NotificationsCard({
-  initial,
-  version,
-  csrfToken,
-  action,
-  initialFailed,
-  onVersionChange,
-}: {
-  initial: NotificationPreferences;
-  version: number;
-  csrfToken: string | null;
-  action: string;
-  initialFailed: boolean;
-  onVersionChange: (version: number) => void;
-}) {
-  const ids = useId();
-  const [hydrated, setHydrated] = useState(false);
-  const [choice, setChoice] = useState(initial);
-  const [signal, setSignal] = useState<Signal>(initialFailed ? 'failed' : 'idle');
-  const [responseFailure, setResponseFailure] = useState<NativePreferenceFailure | null>(null);
-  useLayoutEffect(() => setHydrated(true), []);
-  const busy = signal === 'saving' || signal === 'reloading';
-
-  async function change(notifications: NotificationPreferences | null) {
-    if (!hydrated || busy) return;
-    setSignal('saving');
-    try {
-      const result = await saveNotifications({
-        data: { expectedVersion: version, idempotencyKey: crypto.randomUUID(), notifications },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) {
-        setChoice(result.notifications);
-        onVersionChange(result.version);
-        setSignal('saved');
-        setResponseFailure(null);
-      } else {
-        setResponseFailure(result.failure ?? null);
-        setSignal(result.reason === 'conflict' ? 'conflict' : failureSignal(result.reason));
-      }
-    } catch {
-      setResponseFailure(null);
-      setSignal('failed');
-    }
-  }
-
-  async function reload() {
-    if (busy) return;
-    setSignal('reloading');
-    try {
-      const page = await readSettingsPage();
-      if (!page.signedIn) throw new Error('signed out');
-      if (!('preferences' in page)) {
-        setResponseFailure(page.failure);
-        setSignal(page.state);
-        return;
-      }
-      if (!page.notifications) {
-        setResponseFailure(null);
-        setSignal('unavailable');
-        return;
-      }
-      setChoice(page.notifications);
-      onVersionChange(page.preferences.version);
-      setResponseFailure(null);
-      setSignal('idle');
-    } catch {
-      setResponseFailure(null);
-      setSignal('failed');
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_notifications_text()}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div role="group" aria-label={m.settings_notifications_heading()} className="space-y-3">
-          <FieldGroup>
-            <div className="flex flex-col gap-3">
-              {Object.entries(choice).map(([kind, checked]) => {
-                const id = `${ids}-${encodeURIComponent(kind)}`;
-                const name = notificationName(kind);
-                return (
-                  <form key={kind} method="post" action={action} className="m-0">
-                    <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-                    <input type="hidden" name="expectedVersion" value={version} />
-                    <input type="hidden" name="notificationKind" value={kind} />
-                    <FieldLabel htmlFor={id}>
-                      <Field orientation="horizontal">
-                        <FieldContent>
-                          <FieldTitle>{name}</FieldTitle>
-                        </FieldContent>
-                        <span className="relative h-5 w-8 shrink-0">
-                          <input
-                            id={id}
-                            type="checkbox"
-                            role="switch"
-                            name="enabled"
-                            value="true"
-                            checked={checked}
-                            disabled={busy}
-                            onChange={(event) => void change({ [kind]: event.currentTarget.checked })}
-                            aria-label={name}
-                            className="peer absolute inset-0 h-5 w-8 cursor-pointer appearance-none rounded-2xl border-2 border-transparent bg-input/90 transition-colors checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
-                          />
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute left-0.5 top-0.5 size-4 rounded-full bg-background shadow-sm transition-transform peer-checked:translate-x-3 dark:peer-checked:bg-primary-foreground"
-                          />
-                        </span>
-                      </Field>
-                    </FieldLabel>
-                    <Button type="submit" size="sm" variant="outline" hidden={hydrated}>
-                      {m.settings_notification_save()}
-                    </Button>
-                    <input type="hidden" name="action" value="save" />
-                  </form>
-                );
-              })}
-              <form
-                method="post"
-                action={action}
-                className="m-0"
-                onSubmit={(event) => {
-                  if (!hydrated) return;
-                  event.preventDefault();
-                  void change(null);
-                }}
-              >
-                <input type="hidden" name="csrf_token" value={csrfToken ?? ''} />
-                <input type="hidden" name="expectedVersion" value={version} />
-                <input type="hidden" name="action" value="restore" />
-                <Button type="submit" variant="outline" disabled={busy}>
-                  {m.settings_notifications_restore()}
-                </Button>
-              </form>
-            </div>
-          </FieldGroup>
-          <div aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
-            {signal === 'saving' ? m.settings_saving() : null}
-            {signal === 'saved' ? m.settings_saved() : null}
-          </div>
-          {signal === 'conflict' || signal === 'reloading' ? (
-            <Alert>
-              <AlertTitle>{m.settings_conflict_title()}</AlertTitle>
-              <AlertDescription>
-                <p>{m.settings_conflict_text()}</p>
-                <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void reload()}>
-                  {m.settings_reload()}
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {signal === 'failed' || signal === 'closed' || signal === 'preparing' || signal === 'unavailable' ? (
-            <Alert
-              variant="destructive"
-              data-response-status={responseFailure?.status ?? ''}
-              data-response-code={responseFailure?.code ?? ''}
-            >
-              <AlertTitle>
-                {signal === 'closed'
-                  ? m.settings_closed_title()
-                  : signal === 'preparing'
-                    ? m.settings_preparing_title()
-                    : signal === 'unavailable'
-                      ? m.settings_unavailable_title()
-                      : m.settings_failed_title()}
-              </AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p>
-                  {signal === 'closed'
-                    ? m.settings_closed_text()
-                    : signal === 'preparing'
-                      ? m.settings_preparing_text()
-                      : signal === 'unavailable'
-                        ? m.settings_unavailable_text()
-                        : m.settings_failed_text()}
-                </p>
-                <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void reload()}>
-                  {m.settings_reload()}
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <p className="text-sm text-muted-foreground">{m.settings_notifications_mandatory()}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function AccountCard({ securityHref, csrfToken }: { securityHref: string | null; csrfToken: string | null }) {
   return (
     <Card>
@@ -586,7 +371,6 @@ export function SettingsPageView({
             <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
               {page.notifications ? (
                 <NotificationsCard
-                  key={`${page.preferences.version}-notifications`}
                   initial={page.notifications}
                   version={version}
                   csrfToken={formCsrfToken}

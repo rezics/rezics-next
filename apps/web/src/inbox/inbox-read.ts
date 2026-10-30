@@ -172,7 +172,15 @@ async function readNoticePage(client: InboxKernelClient, accountId: string, auth
     headers: authHeaders(authorization),
   });
   if (result.error || !result.data) throw new InboxReadError(nativeFailure(result.error, result.status));
-  return result.data as NoticePage;
+  const page = result.data as NoticePage;
+  if (
+    !Array.isArray(page.items) ||
+    page.items.length > INBOX_PAGE_SIZE ||
+    (page.next !== null && (typeof page.next !== 'string' || page.next.length > 4096)) ||
+    page.items.some((item) => !item || typeof item.unread !== 'boolean')
+  )
+    throw new InboxReadError({ status: result.status ?? null });
+  return page;
 }
 
 async function currentInboxReads(client: InboxKernelClient, authorization: string): Promise<InboxReads> {
@@ -257,7 +265,11 @@ export const setInboxResponsePolicy = createServerFn({ method: 'GET' }).handler(
 export const readInboxPage = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     const value = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-    if ('cursor' in value && value.cursor !== undefined && typeof value.cursor !== 'string')
+    if (
+      'cursor' in value &&
+      value.cursor !== undefined &&
+      (typeof value.cursor !== 'string' || value.cursor.length > 4096)
+    )
       throw new Error('Invalid inbox cursor');
     return typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {};
   })
@@ -287,22 +299,48 @@ export const readInboxPage = createServerFn({ method: 'GET' })
     }
   });
 
-export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async () => {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
+export type UnreadCount =
+  | { signedIn: false }
+  | { signedIn: true; state: 'ready'; count: number; capped: boolean }
+  | { signedIn: true; state: 'unavailable'; failure: NativeInboxFailure };
+
+/** The badge has one private count read. A dependency failure never becomes a zero count. */
+export async function loadUnreadCount(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+): Promise<UnreadCount> {
   try {
-    await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
-  } catch {
-    return { signedIn: false, count: 0, capped: false };
+    await prepareSession(request, sessionEnv, { refresh: false });
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId) return { signedIn: false };
+    const result = await client
+      .accounts({ accountId })
+      .notifications.count.get({ headers: authHeaders(authorization) });
+    if (result.error || !result.data) throw new InboxReadError(nativeFailure(result.error, result.status));
+    const count = result.data;
+    if (
+      !Number.isInteger(count.count) ||
+      count.count < 0 ||
+      count.count > 100 ||
+      typeof count.capped !== 'boolean' ||
+      (count.capped && count.count !== 100)
+    )
+      throw new InboxReadError({ status: result.status });
+    return { signedIn: true, state: 'ready', count: count.count, capped: count.capped };
+  } catch (error) {
+    return {
+      signedIn: true,
+      state: 'unavailable',
+      failure: error instanceof InboxReadError ? error.failure : nativeFailure(error),
+    };
   }
-  const authorization = viewerCredential(request);
-  const accountId = sessionSubject(request);
-  if (!authorization || !accountId) return { signedIn: false, count: 0, capped: false };
-  const client = kernelClient() as unknown as InboxKernelClient;
-  const result = await client.accounts({ accountId }).notifications.count.get({ headers: authHeaders(authorization) });
-  const count = result.data as { count: number; capped: boolean } | undefined;
-  if (result.error || !count) return { signedIn: true, count: 0, capped: false };
-  return { signedIn: true, ...count };
+}
+
+export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async (): Promise<UnreadCount> => {
+  setResponseHeader('cache-control', 'private, no-store');
+  return loadUnreadCount(kernelClient(), getRequest(), env as Partial<SessionEnv>);
 });
 
 export const markInboxSeen = createServerFn({ method: 'POST' })
@@ -318,11 +356,12 @@ export const markInboxSeen = createServerFn({ method: 'POST' })
     const authorization = viewerCredential(request);
     const accountId = sessionSubject(request);
     if (!authorization || !accountId) return { signedIn: false };
-    const client = kernelClient() as unknown as InboxKernelClient;
-    const result = await client.accounts({ accountId }).notifications.$markSeen.post({
-      body: { through: data.through },
-      headers: { ...authHeaders(authorization), 'idempotency-key': crypto.randomUUID() },
-    });
+    const result = await kernelClient()
+      .accounts({ accountId })
+      .notifications.$markSeen.post(
+        { through: data.through },
+        { headers: { ...authHeaders(authorization), 'idempotency-key': crypto.randomUUID() } },
+      );
     if (result.error) throw new Error('Kernel notification mark seen failed');
     return { signedIn: true };
   });

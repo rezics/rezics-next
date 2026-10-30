@@ -866,7 +866,12 @@ Space response at 390 and 1280 pixels.
 
 ### Settings notifications
 
-- **Touches:** The preferences read the page already makes; one PATCH per change.
+- **Touches:** The preferences read the page already makes; one PATCH per change. An uncertain save retains its
+  original input, expected version and idempotency key. Each explicit retry replays that PATCH and, after success,
+  makes one fresh private preferences GET. A historical receipt never replaces newer native values. Draft edits
+  remain separate until the original outcome is known; conflict reload and newer readback require review before
+  deliberate resubmission. Preferences affect future optional sends, never notices already in the Inbox.
+  Moderation decisions, report outcomes and appeal outcomes remain mandatory.
 - **Bound:** The map holds a few kinds; rendering is linear in it. Missing or malformed notification preferences show an unavailable state; the client never supplies enabled values for absent native fields.
 - **Growth check:** The acceptance test counts kernel requests for one settings render: equal to base.
 
@@ -963,7 +968,7 @@ Space response at 390 and 1280 pixels.
 ### Notifications inbox (`/inbox`)
 
 - **Touches:** One private notification page read, one optional batched public identity read for its distinct actors, then at most one existing post, decision or report read per distinct target; the navigation badge reads the capped count after hydration.
-- **Bound:** A page contains at most 20 notices; at most `2 + D` page kernel reads for `D` distinct targets, plus one count read per navigation inside its 60-second stale time. Opening marks the newest notice once.
+- **Bound:** A page contains at most 20 notices; at most `2 + D` page kernel reads for `D` distinct targets, plus one count read per navigation inside its 60-second stale time. Opening marks the newest notice once; a failed mark offers explicit retry. The badge shares one browser-only private count query. Dependency or malformed count/list unread data stays unavailable and never becomes zero, read, or a successful empty Inbox.
 - **Growth check:** `tests/notifications-inbox.test.ts` checks pages of 5 and 20 notices naming three repeated posts and limits reads to the list, distinct targets and count. The native notification acceptance measures the served inbox at 1, 8 and 64 unrelated boards with its selected page fixed.
 - **Visual check:** Inbox stories cover empty, mixed, hidden targets, preparing, closed, unavailable and more-than-99 unread states. Review the reference state in all eight launch locales at 390 and 1280 in light theme and in English and Japanese at both widths in dark theme; review each other state in English and Simplified Chinese at both widths and themes.
 

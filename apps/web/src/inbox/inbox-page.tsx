@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
 import { personalRead, readQueryKey } from '../kernel/query';
 import { useSession } from '../session/query';
+import { csrfHeaders } from '../threads/composer';
+import { unreadCountQuery } from './inbox-query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
@@ -103,11 +105,13 @@ export function InboxRows({
 }
 
 export function InboxPageView() {
-  const { state } = useSession();
+  const { state, csrfToken } = useSession();
   const queryClient = useQueryClient();
   const [cursor, setCursor] = useState<string | undefined>();
   const [older, setOlder] = useState<ResolvedInboxPage | null>(null);
   const marked = useRef<string | null>(null);
+  const [seenFailed, setSeenFailed] = useState(false);
+  const [seenRetry, setSeenRetry] = useState(0);
   const accumulatedCursor = useRef<string | undefined>(undefined);
   const pageQuery = useQuery({
     queryKey: [...queryKey, cursor ?? null],
@@ -128,12 +132,16 @@ export function InboxPageView() {
   useEffect(() => {
     if (cursor !== undefined) return;
     const newest = page?.items[0];
-    if (!newest || marked.current === newest.id) return;
+    if (!newest || !csrfToken || marked.current === newest.id) return;
     marked.current = newest.id;
-    void markInboxSeen({ data: { through: newest.id } }).then(() =>
-      queryClient.invalidateQueries({ queryKey: readQueryKey(['notifications', 'count'], 'session') }),
-    );
-  }, [cursor, page?.items, queryClient]);
+    setSeenFailed(false);
+    void markInboxSeen({ data: { through: newest.id }, headers: csrfHeaders() })
+      .then((result) => {
+        if (!result.signedIn) throw new Error('Signed out');
+        return queryClient.invalidateQueries({ queryKey: unreadCountQuery.queryKey });
+      })
+      .catch(() => setSeenFailed(true));
+  }, [cursor, page?.items, queryClient, csrfToken, seenRetry]);
 
   const loadMore = () => {
     if (!page?.next) return;
@@ -146,6 +154,20 @@ export function InboxPageView() {
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
+      {seenFailed ? (
+        <section role="status" className="mt-4 space-y-2">
+          <p>{m.inbox_seen_unavailable()}</p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              marked.current = null;
+              setSeenRetry((value) => value + 1);
+            }}
+          >
+            {m.inbox_retry()}
+          </Button>
+        </section>
+      ) : null}
       {state !== 'signed-in' || pageSignedOut ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_sign_in()}</p>
       ) : pageQuery.isPending ? (
