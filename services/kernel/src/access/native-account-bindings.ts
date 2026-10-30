@@ -249,7 +249,9 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
   const trustedAccess: TrustedAccessPorts & ManagementMembershipAccess = {
     ...createManagementMembershipAccess({
-      pool, access, clock: accessClock(access),
+      pool,
+      access,
+      clock: accessClock(access),
       accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
     }),
     ...createAuthBindings({

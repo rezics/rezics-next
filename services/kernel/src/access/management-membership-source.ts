@@ -45,28 +45,45 @@ export async function readOrganizationMembershipCommandState(
     requireAccessDeadline(context.deadline);
     const time = await withConnection(pool, (client) => mintReadTime(client, deps.clock ?? accessClock(access)));
     try {
-      const check = await accessCheck(access, actor, 'organization:membership', { route: route!, id: organizationId }, {
-        pool, deadline: context.deadline, time,
-      });
+      const check = await accessCheck(
+        access,
+        actor,
+        'organization:membership',
+        { route: route!, id: organizationId },
+        {
+          pool,
+          deadline: context.deadline,
+          time,
+        },
+      );
       // Member-anchor evidence is read independently, before organization checkout.
       const member = await accountSource.run(pool, {
-        route: memberRoute!, member_id: memberAccountId, organization_id: organizationId,
+        route: memberRoute!,
+        member_id: memberAccountId,
+        organization_id: organizationId,
       });
       return await withConnection(pool, async (client) => {
         if (!(await check(client, time))) throw new AuthBindingDeniedError();
         const rows = await organizationSource.run(client, {
-          route: route!, organization_id: organizationId, member_id: memberAccountId,
-          at: authoritativeTimeValue(time), reservation_id: member?.reservationId ?? null,
+          route: route!,
+          organization_id: organizationId,
+          member_id: memberAccountId,
+          at: authoritativeTimeValue(time),
+          reservation_id: member?.reservationId ?? null,
         });
         const org = rows[0];
         if (!org || org.kind !== 'organization' || org.state !== 'active' || org.fenced)
           throw new AuthBindingDeniedError();
         if (!member || !member.complete || member.state !== 'active' || member.fenced || rows.length !== 1)
           throw new AccessUnavailableError('overloaded');
-        if (org.role !== null && (
-          (org.role !== 'owner' && org.role !== 'member') || !org.reservationId ||
-          org.reservationId !== member.reservationId || !member.reservationTransactionId
-        )) throw new AccessUnavailableError('overloaded');
+        if (
+          org.role !== null &&
+          ((org.role !== 'owner' && org.role !== 'member') ||
+            !org.reservationId ||
+            org.reservationId !== member.reservationId ||
+            !member.reservationTransactionId)
+        )
+          throw new AccessUnavailableError('overloaded');
         if (!(await check(client, time))) throw new AuthBindingDeniedError();
         requireAccessDeadline(context.deadline);
         return { org, member };
@@ -80,9 +97,13 @@ export async function readOrganizationMembershipCommandState(
   if (JSON.stringify(before) !== JSON.stringify(final)) throw new AccessUnavailableError('contention');
   return {
     ...selected,
-    membership: final.org.role === null ? null : {
-      role: final.org.role as 'owner' | 'member', reservationId: final.org.reservationId!,
-    },
+    membership:
+      final.org.role === null
+        ? null
+        : {
+            role: final.org.role as 'owner' | 'member',
+            reservationId: final.org.reservationId!,
+          },
   };
 }
 
@@ -90,17 +111,27 @@ export async function readOrganizationMembershipCommandState(
  * A profile/ID comparison never grants membership or substitutes for the formula.
  */
 export function createManagementMembershipAccess(deps: {
-  pool: Pool; access: Access; clock?: () => Date;
+  pool: Pool;
+  access: Access;
+  clock?: () => Date;
   accessTokenForProof: AuthSessionPort['internal']['accessTokenForProof'];
 }): ManagementMembershipAccess {
   return {
     async readOrganizationMembershipCommandState({ human, deadline, ...selection }) {
-      const actor = await deps.access.authenticate(await deps.accessTokenForProof(human), { pool: deps.pool, deadline });
-      if (human.client_id !== AUTH_MANAGEMENT_CLIENT_ID ||
+      const actor = await deps.access.authenticate(await deps.accessTokenForProof(human), {
+        pool: deps.pool,
+        deadline,
+      });
+      if (
+        human.client_id !== AUTH_MANAGEMENT_CLIENT_ID ||
         JSON.stringify(human.scope) !== JSON.stringify(AUTH_MANAGEMENT_SCOPES.membership) ||
-        actor.accountId !== human.account_id || actor.clientId !== human.client_id ||
-        actor.authnEpoch !== human.authn_epoch || actor.requestedBy !== null ||
-        JSON.stringify(actor.scopes) !== JSON.stringify(human.scope)) throw new AuthBindingDeniedError();
+        actor.accountId !== human.account_id ||
+        actor.clientId !== human.client_id ||
+        actor.authnEpoch !== human.authn_epoch ||
+        actor.requestedBy !== null ||
+        JSON.stringify(actor.scopes) !== JSON.stringify(human.scope)
+      )
+        throw new AuthBindingDeniedError();
       return readOrganizationMembershipCommandState(deps, actor, selection, { deadline });
     },
   };

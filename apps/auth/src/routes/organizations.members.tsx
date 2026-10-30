@@ -140,20 +140,34 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
   }
   async function select(memberAccountId: string, desired: 'owner' | 'member' | null) {
     if (lock.current || command || !membershipId(memberAccountId) || !accountId) return;
-    if (needsProfile) { setReauth(true); setNotice('step-up'); return; }
+    if (needsProfile) {
+      setReauth(true);
+      setNotice('step-up');
+      return;
+    }
     lock.current = true;
     setBusy(true);
     try {
       const current = await loadSelectedMembership(organizationId, memberAccountId);
-      if (current.kind !== 'ready') { setNotice(current.kind); return; }
+      if (current.kind !== 'ready') {
+        setNotice(current.kind);
+        return;
+      }
       if (current.membership?.role === desired || (desired === null && current.membership === null)) {
-        setNotice('conflict'); return;
+        setNotice('conflict');
+        return;
       }
       const next = newMembershipCommand(accountId, {
-        kind: 'membership', organizationId, memberAccountId, role: desired,
+        kind: 'membership',
+        organizationId,
+        memberAccountId,
+        role: desired,
         ...(current.membership ? { reservationId: current.membership.reservationId } : {}),
       });
-      if (!saveMembershipCommand(next)) { setNotice('unavailable'); return; }
+      if (!saveMembershipCommand(next)) {
+        setNotice('unavailable');
+        return;
+      }
       setCommand(next);
       setConfirmed(false);
       setNotice('');
@@ -198,8 +212,11 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
     lock.current = true;
     setBusy(true);
     try {
-      if (!(await (command ? reauthenticateMembership(command, email, password) :
-        reauthenticateMembershipSession(accountId, email, password)))) {
+      if (
+        !(await (command
+          ? reauthenticateMembership(command, email, password)
+          : reauthenticateMembershipSession(accountId, email, password)))
+      ) {
         setPage({ kind: 'unavailable' });
         setNotice('unavailable');
         return;
@@ -267,9 +284,7 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                       type="button"
                       variant="outline"
                       disabled={busy || !!command}
-                      onClick={() =>
-                        void select(holder.accountId, holder.role === 'owner' ? 'member' : 'owner')
-                      }
+                      onClick={() => void select(holder.accountId, holder.role === 'owner' ? 'member' : 'owner')}
                     >
                       {m.auth_members_change_role()}
                     </Button>
@@ -298,81 +313,90 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
             </nav>
           </>
         )}
-            {accountId && !command ? (
-              <form
-                className="space-y-4"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void select(member, role);
-                }}
+        {accountId && !command ? (
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void select(member, role);
+            }}
+          >
+            <Field>
+              <FieldLabel htmlFor="membership-account">{m.auth_members_target()}</FieldLabel>
+              <Input
+                id="membership-account"
+                required
+                value={member}
+                disabled={busy}
+                onChange={(event) => setMember(event.target.value)}
+                pattern="[0-9a-fA-F-]{36}"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="membership-role">{m.auth_members_role()}</FieldLabel>
+              <select
+                id="membership-role"
+                value={role}
+                disabled={busy}
+                onChange={(event) => setRole(event.target.value as 'owner' | 'member')}
+                className="min-h-11 rounded-md border bg-background px-3"
               >
-                <Field>
-                  <FieldLabel htmlFor="membership-account">{m.auth_members_target()}</FieldLabel>
-                  <Input
-                    id="membership-account"
-                    required
-                    value={member}
-                    disabled={busy}
-                    onChange={(event) => setMember(event.target.value)}
-                    pattern="[0-9a-fA-F-]{36}"
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="membership-role">{m.auth_members_role()}</FieldLabel>
-                  <select
-                    id="membership-role"
-                    value={role}
-                    disabled={busy}
-                    onChange={(event) => setRole(event.target.value as 'owner' | 'member')}
-                    className="min-h-11 rounded-md border bg-background px-3"
-                  >
-                    <option value="member">{m.auth_members_member()}</option>
-                    <option value="owner">{m.auth_members_owner()}</option>
-                  </select>
-                </Field>
-                <Button
-                  type="submit"
-                  disabled={busy || !membershipId(member)}
-                >
-                  {m.auth_members_review_add()}
-                </Button>
-                <Button type="button" variant="outline" disabled={busy || !membershipId(member)}
-                  onClick={() => void select(member, role)}>{m.auth_members_change_role()}</Button>
-                <Button type="button" variant="outline" disabled={busy || !membershipId(member)}
-                  onClick={() => void select(member, null)}>{m.auth_members_remove()}</Button>
-              </form>
-            ) : null}
+                <option value="member">{m.auth_members_member()}</option>
+                <option value="owner">{m.auth_members_owner()}</option>
+              </select>
+            </Field>
+            <Button type="submit" disabled={busy || !membershipId(member)}>
+              {m.auth_members_review_add()}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !membershipId(member)}
+              onClick={() => void select(member, role)}
+            >
+              {m.auth_members_change_role()}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !membershipId(member)}
+              onClick={() => void select(member, null)}
+            >
+              {m.auth_members_remove()}
+            </Button>
+          </form>
+        ) : null}
 
-            {reauth ? (
-              <form onSubmit={(event) => void authenticate(event)} className="space-y-4">
-                <Field>
-                  <FieldLabel htmlFor="membership-email">{m.auth_login_email()}</FieldLabel>
-                  <Input
-                    id="membership-email"
-                    type="email"
-                    autoComplete="username"
-                    required
-                    value={email}
-                    disabled={busy}
-                    onChange={(event) => setEmail(event.target.value)}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="membership-password">{m.auth_login_password()}</FieldLabel>
-                  <PasswordInput
-                    id="membership-password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    disabled={busy}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
-                </Field>
-                <Button type="submit" disabled={busy} aria-busy={busy}>
-                  {m.auth_members_reauthenticate()}
-                </Button>
-              </form>
-            ) : null}
+        {reauth ? (
+          <form onSubmit={(event) => void authenticate(event)} className="space-y-4">
+            <Field>
+              <FieldLabel htmlFor="membership-email">{m.auth_login_email()}</FieldLabel>
+              <Input
+                id="membership-email"
+                type="email"
+                autoComplete="username"
+                required
+                value={email}
+                disabled={busy}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="membership-password">{m.auth_login_password()}</FieldLabel>
+              <PasswordInput
+                id="membership-password"
+                autoComplete="current-password"
+                required
+                value={password}
+                disabled={busy}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </Field>
+            <Button type="submit" disabled={busy} aria-busy={busy}>
+              {m.auth_members_reauthenticate()}
+            </Button>
+          </form>
+        ) : null}
         {command ? (
           <section className="space-y-4" aria-labelledby="membership-confirmation">
             <h2 id="membership-confirmation" ref={confirmation} tabIndex={-1}>
@@ -403,11 +427,7 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                   />
                   {m.auth_members_confirm_check()}
                 </label>
-                <Button
-                  type="submit"
-                  aria-busy={busy}
-                  disabled={busy || !confirmed || observed}
-                >
+                <Button type="submit" aria-busy={busy} disabled={busy || !confirmed || observed}>
                   {command.unresolved ? m.auth_members_retry_exact() : m.auth_members_submit()}
                 </Button>
               </form>

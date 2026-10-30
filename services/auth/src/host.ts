@@ -1,4 +1,7 @@
-import { accountManagementMembershipTransport, type ManagementMembershipAccess } from './account-management-membership-transport.ts';
+import {
+  accountManagementMembershipTransport,
+  type ManagementMembershipAccess,
+} from './account-management-membership-transport.ts';
 import { randomUUID } from 'node:crypto';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { authManagementClient } from './auth-management-client.ts';
@@ -164,7 +167,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
         credentialEffectTransport(service, workflows.handler, options),
         (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
           .readOrganizationMembershipCommandState
-          ? options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess
+          ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
           : undefined,
       ),
       options.accountOperations,

@@ -253,31 +253,62 @@ export async function loadMembershipPage(
 }
 
 export type SelectedMembership =
-  | { kind: 'ready'; organizationId: string; memberAccountId: string;
-      membership: null | { role: 'owner' | 'member'; reservationId: string } }
+  | {
+      kind: 'ready';
+      organizationId: string;
+      memberAccountId: string;
+      membership: null | { role: 'owner' | 'member'; reservationId: string };
+    }
   | Exclude<MembershipPage, { kind: 'ready' }>;
-export function parseSelectedMembership(body: unknown, organizationId: string, memberAccountId: string): SelectedMembership {
-  if (!record(body) || !closed(body, ['organizationId', 'memberAccountId', 'membership']) ||
-    body.organizationId !== organizationId || body.memberAccountId !== memberAccountId)
+export function parseSelectedMembership(
+  body: unknown,
+  organizationId: string,
+  memberAccountId: string,
+): SelectedMembership {
+  if (
+    !record(body) ||
+    !closed(body, ['organizationId', 'memberAccountId', 'membership']) ||
+    body.organizationId !== organizationId ||
+    body.memberAccountId !== memberAccountId
+  )
     return { kind: 'unavailable' };
   if (body.membership === null) return { kind: 'ready', organizationId, memberAccountId, membership: null };
   const current = body.membership;
-  if (!record(current) || !closed(current, ['role', 'reservationId']) ||
-    !role(current.role) || !membershipId(current.reservationId)) return { kind: 'unavailable' };
-  return { kind: 'ready', organizationId, memberAccountId,
-    membership: { role: current.role, reservationId: current.reservationId } };
+  if (
+    !record(current) ||
+    !closed(current, ['role', 'reservationId']) ||
+    !role(current.role) ||
+    !membershipId(current.reservationId)
+  )
+    return { kind: 'unavailable' };
+  return {
+    kind: 'ready',
+    organizationId,
+    memberAccountId,
+    membership: { role: current.role, reservationId: current.reservationId },
+  };
 }
-export async function loadSelectedMembership(organizationId: string, memberAccountId: string): Promise<SelectedMembership> {
+export async function loadSelectedMembership(
+  organizationId: string,
+  memberAccountId: string,
+): Promise<SelectedMembership> {
   if (!membershipId(organizationId) || !membershipId(memberAccountId)) return { kind: 'unavailable' };
   const response = await authPost('/account-management/organizations/member', { organizationId, memberAccountId });
-  return response.ok ? parseSelectedMembership(response.body, organizationId, memberAccountId) : readFailure(response.status);
+  return response.ok
+    ? parseSelectedMembership(response.body, organizationId, memberAccountId)
+    : readFailure(response.status);
 }
 export function membershipReadback(command: MembershipCommand, current: SelectedMembership): boolean {
-  return current.kind === 'ready' && current.organizationId === command.operation.organizationId &&
+  return (
+    current.kind === 'ready' &&
+    current.organizationId === command.operation.organizationId &&
     current.memberAccountId === command.operation.memberAccountId &&
-    (command.operation.role === null ? current.membership === null :
-      current.membership?.role === command.operation.role &&
-      (command.operation.reservationId === undefined || current.membership.reservationId === command.operation.reservationId));
+    (command.operation.role === null
+      ? current.membership === null
+      : current.membership?.role === command.operation.role &&
+        (command.operation.reservationId === undefined ||
+          current.membership.reservationId === command.operation.reservationId))
+  );
 }
 
 function validCommand(value: unknown): value is MembershipCommand {
@@ -391,7 +422,11 @@ export async function reauthenticateMembership(
   if (!saved || saved === 'invalid' || JSON.stringify(saved) !== JSON.stringify(command)) return false;
   return reauthenticateMembershipSession(command.accountId, email, password);
 }
-export async function reauthenticateMembershipSession(accountId: string, email: string, password: string): Promise<boolean> {
+export async function reauthenticateMembershipSession(
+  accountId: string,
+  email: string,
+  password: string,
+): Promise<boolean> {
   const profile = membershipProfile();
   if (!profile) return false;
   const response = await authPost('/signin', { email, password, ...profile });
