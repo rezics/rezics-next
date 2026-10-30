@@ -5,8 +5,19 @@ import { RecentHistoryView } from '../search/recent';
 import { RecentPanel } from '../search/recent-panel';
 import { rememberRecent, type RecentHistory } from '../search/recent-history';
 import { m } from '../paraglide/messages.js';
+import { PatternStory } from './page';
 
-const meta = { title: 'Patterns/Search/Recent', parameters: { layout: 'padded' } } satisfies Meta;
+const meta = {
+  title: 'Patterns/Search/Recent',
+  parameters: { layout: 'padded' },
+  decorators: [
+    (Story) => (
+      <PatternStory path="/search">
+        <Story />
+      </PatternStory>
+    ),
+  ],
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 function Example({
@@ -55,6 +66,14 @@ export const History: Story = {
     await expect(canvas.getByText(m.search_history_empty())).toBeVisible();
   },
 };
-export const Offline: Story = { render: () => <Example failure="unavailable" /> };
+export const Offline: Story = {
+  render: () => <Example failure="unavailable" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(m.search_history_offline())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.search_history_reload() })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: m.header_search_trending_searches() })).toBeVisible();
+  },
+};
 export const Conflict: Story = { render: () => <Example history failure="conflict" /> };
 export const UnavailableScope: Story = { render: () => <Example history unavailable /> };
