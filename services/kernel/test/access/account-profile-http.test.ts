@@ -150,13 +150,16 @@ beforeAll(async () => {
   owner = await person('profile-http-owner');
   other = await person('profile-http-other');
   await bootstrapGovernance(db.pool, owner.accountId);
-  // Seed upload permission as in the media HTTP fixture; Access still checks every upload.
+  // Activation supplies the native self grant; Access still checks every upload.
   for (const person of [owner, other]) {
-    await db.admin.query(
-      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-       VALUES ($1,$2,$2,'media:create','(,)',$2)`,
+    const grant = await db.admin.query(
+      `SELECT count(*)::int AS count FROM access.resource_grant
+       WHERE route=$1 AND resource_id=$2 AND subject_kind='identity'
+         AND subject_id=$2 AND subject_role='' AND action='media:create'
+         AND valid='(,)'::tstzrange AND valid @> clock_timestamp()`,
       [routeOf(person.accountId), person.accountId],
     );
+    expect(grant.rows).toEqual([{ count: 1 }]);
   }
 }, 120000);
 
