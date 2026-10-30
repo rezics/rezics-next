@@ -112,7 +112,9 @@ export interface NativeLibrarySourceCustody {
         frontier: NativeSourceFrontier;
     }): Promise<Unavailable | {
         status: 'complete';
-        capture: NativeSourceCapture;
+        capture: NativeSourceCapture & Readonly<{
+            identity: AccountSourceIdentity;
+        }>;
         work: WorkReceipt;
     }>;
     /** Same live native command or admitted operational client and T; never a foreign checkout/callback. */

@@ -586,7 +586,11 @@ export async function readIdentityReceivingSelection(
     const identity = hint.identity;
     // Only the actual Library factory's current account-backed Source forms are supported.
     // A public output or terminal account cannot borrow a collection ID as account authority.
-    if (!identity || !['curated', 'private_builtin'].includes(identity.scope) || routeOf(identity.accountId) === null)
+    if (
+      !identity ||
+      (identity.scope !== 'curated' && identity.scope !== 'private_builtin') ||
+      routeOf(identity.accountId) === null
+    )
       throw unavailable('Unsupported native receiving Source form');
     if (
       routeOf(identity.collectionId) !== identity.route ||

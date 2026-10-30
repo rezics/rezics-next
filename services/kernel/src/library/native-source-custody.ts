@@ -130,7 +130,14 @@ export interface NativeLibrarySourceCustody {
       identity: NativeSourceIdentity;
       frontier: NativeSourceFrontier;
     },
-  ): Promise<Unavailable | { status: 'complete'; capture: NativeSourceCapture; work: WorkReceipt }>;
+  ): Promise<
+    | Unavailable
+    | {
+        status: 'complete';
+        capture: NativeSourceCapture & Readonly<{ identity: AccountSourceIdentity }>;
+        work: WorkReceipt;
+      }
+  >;
   /** Same live native command or admitted operational client and T; never a foreign checkout/callback. */
   readAndHold(
     input: NativeSourceCaptureWork & {
@@ -783,6 +790,7 @@ export function createNativeLibrarySourceCustody({
                 3,
               );
           if (!receipt) throw new Refused('binding');
+          validate(input.identity);
           return {
             status: 'complete' as const,
             capture: Object.freeze({
