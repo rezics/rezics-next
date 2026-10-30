@@ -388,6 +388,23 @@ maintenance RPC. [host.ts][auth-host-source] and [maintenance.ts][auth-maintenan
 the separate [website-maintenance.ts][website-maintenance] adapter still targets kernel worker composition for
 protocol expiry and has not converged on that ownership rule.
 
+### Native Auth metadata privacy
+
+[Auth's native metadata contract](../services/auth/src/metadata-privacy-contract.md) owns client contacts,
+client/resource free fields and private creation-record custody. A client owner is one party, never evidence
+that no other person occurs. Personal writes require the actual source-approved subject and current native
+actor, acting human, operator, delegated principal and issuer-client context before any copy is created;
+JSON, email, handle and ciphertext inspection cannot establish those roles. These attribution fields grant
+no permission, scope or credential authority.
+
+Auth adopts whole-field purge of unclassifiable historical free metadata, after any actual consumer retires.
+Unknown creation/release witnesses remain safely pending; encryption and expired credentials do not prove
+consumer retirement. Native discovery uses role-first indexes and existing Auth erasure progress. Shared
+copy handoff and the original delayed-consent lifecycle remain required. The contract labels its concrete
+schema/caller proposal and missing owning interfaces explicitly; it adds no runtime personal metadata API,
+retention exception or completion flag. Existing client registration and the dedicated two-scope Auth page
+operation client retain their exact party/scope-set contract.
+
 ## 7. Controllers and catalogue identity
 
 A controller is the private real person or legal entity behind an account. A person's default identity is one

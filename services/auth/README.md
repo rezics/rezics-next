@@ -1474,6 +1474,17 @@ command prefix. The permanent native approval-binding receipt refuses changed
 business input or principal assignment. DBOS history retention therefore does
 not discard the effect authority or allow a second effect for that logical key.
 
+## Native metadata privacy contract
+
+[Native metadata privacy and creation custody](src/metadata-privacy-contract.md) owns the adopted field
+classification, whole-field legacy disposition, exact proposed personal-party columns, producer/consumer
+retirement, indexed native bounds and source-interface handoff for client contacts, client/resource metadata
+and private creation records. It is a specification with native boundary evidence, not a delivered personal
+metadata API. Generic registration and website registration remain mechanical trusted configuration writers.
+New personal metadata stays closed until its source-approved subject/context and shared-copy custody are adopted.
+A recorded owner never proves absence of other people; JSON, address, handle and ciphertext searches cannot
+supply attribution. Unknown creation/release witnesses remain pending until their actual source consumers retire.
+
 ## Native erasure and custody
 
 The existing deletion operation accepts a durable `auth_erasure` obligation after
@@ -1588,10 +1599,13 @@ remains pending, including after native work and the original consent cutoff:
 - Historical opaque protocol rows and historical role fields lack a deployment
   coverage proof. Null attribution remains unknown; it cannot establish genuine
   all-role emptiness. The ordinal v2 proof covers cursors, not this missing proof.
-- Client contacts, arbitrary resource/client metadata and legacy request or
-  encrypted creation bindings do not have complete typed person attribution.
-  Ownership is never inferred by searching JSON, handles, email or network address.
-  Trusted delegated-principal attribution still needs an explicit native producer port.
+- Client contacts, arbitrary resource/client metadata and legacy request or encrypted creation bindings still
+  lack runtime complete person attribution. The [metadata privacy contract](src/metadata-privacy-contract.md)
+  adopts their exact field disposition and minimal native proposal: bounded typed contacts, source-projected
+  actor/human/operator/principal/client roles, whole-field legacy scrub and real consumer retirement. Source
+  context projection, contact-subject approval and shared-copy recorder interfaces are explicitly missing;
+  no shared type/export or personal writer is claimed delivered. Ownership is never inferred from JSON,
+  addresses, handles or ciphertext.
 - Unknown historical registration bindings, lost operator-reservation identities,
   unresolved delivered reduction owners and unknown native requests remain pending.
   Their surviving release witnesses are not discarded or called complete.
