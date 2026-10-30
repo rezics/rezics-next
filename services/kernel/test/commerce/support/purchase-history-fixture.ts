@@ -48,33 +48,49 @@ export async function purchaseHistoryFixture() {
       work: createCommerceWork(workClient),
     },
   });
-  const people = await createPersonas(app, { version: 1, pool: db.pool, auth });
+  const personas = await createPersonas(app, { version: 1, pool: db.pool, auth });
+  const scopes = ['order:create', 'order:read', 'entitlement:read', 'entitlement:list', 'account:delete'];
   await registerTestClient(service, {
     clientId: 'history',
     firstParty: true,
-    scopes: ['order:create', 'order:read', 'entitlement:read', 'entitlement:list', 'account:delete'],
+    scopes,
   });
-  // Choose a registration key before registration; placement still comes from the native lifecycle.
-  let peerKey = '';
-  for (let n = 0; n < 2_000_000; n++) {
-    const candidate = `history_peer_${people.alice.accountId.replaceAll('-', '')}_${n}`;
-    if (routeOf(auth.COMMANDS.internalLifecycle.registrationTarget(candidate)) === routeOf(people.alice.accountId)) {
-      peerKey = candidate;
-      break;
-    }
+  async function signIn(accountId: string, consentedScopes = scopes): Promise<Persona> {
+    const signedIn = await auth.request('/signin', {
+      account_id: accountId,
+      password,
+      client_id: 'history',
+      scope: consentedScopes,
+    });
+    expect(signedIn.status).toBe(200);
+    const issued = await auth.request('/token', {}, cookies(signedIn));
+    expect(issued.status).toBe(200);
+    return { accountId, bearer: (await issued.json()).access_token as string };
   }
-  if (!peerKey) throw new Error('No same-route registration key found');
-  const registered = await auth.person(peerKey);
-  const signedIn = await auth.request('/signin', {
-    account_id: registered.accountId,
-    password,
-    client_id: 'history',
-    scope: ['order:create', 'order:read', 'entitlement:read', 'entitlement:list', 'account:delete'],
-  });
-  expect(signedIn.status).toBe(200);
-  const issued = await auth.request('/token', {}, cookies(signedIn));
-  expect(issued.status).toBe(200);
-  const peer = { accountId: registered.accountId, bearer: (await issued.json()).access_token as string };
+  const people = {
+    ...personas,
+    // Owner-self reads need no resource grant. Omit consent on the actual buyer instead
+    // of granting a fictitious order permission on the shared persona's account resource.
+    async unscoped(action: string) {
+      if (!scopes.includes(action)) throw new Error(`Unmounted history action: ${action}`);
+      return signIn(
+        personas.alice.accountId,
+        scopes.filter((scope) => scope !== action),
+      );
+    },
+  };
+  // Choose a registration key before registration; placement still comes from the native lifecycle.
+  async function sameRoutePerson(label: string) {
+    for (let n = 0; n < 2_000_000; n++) {
+      const candidate = `history_${label}_${people.alice.accountId.replaceAll('-', '')}_${n}`;
+      if (routeOf(auth.COMMANDS.internalLifecycle.registrationTarget(candidate)) === routeOf(people.alice.accountId)) {
+        const registered = await auth.person(candidate);
+        return signIn(registered.accountId);
+      }
+    }
+    throw new Error('No same-route registration key found');
+  }
+  const peer = await sameRoutePerson('peer');
   expect(routeOf(peer.accountId)).toBe(routeOf(people.alice.accountId));
   async function request(
     path: string,
@@ -122,6 +138,11 @@ export async function purchaseHistoryFixture() {
       Bun.randomUUIDv7(),
     )
   ).value;
+  // Include an older, unrelated native history in this route before measuring growing
+  // buyer histories. A nearly empty partition otherwise makes a sequential scan cheaper
+  // than any B-tree seek, and cannot exercise the production buyer-leading access path.
+  const otherBuyer = await actor(await sameRoutePerson('background'));
+  for (let i = 0; i < 4096; i++) await commands.createOrder(otherBuyer, offer.id, Bun.randomUUIDv7());
   const worker = Bun.spawn([process.execPath, `${import.meta.dir}/purchase-history-runtime.ts`], {
     env: { ...process.env, ...workerTestEnv({ DATABASE_URL: db.url, WORK_STRIPE_PORT: String(fake.port) }) },
     stdout: 'pipe',
