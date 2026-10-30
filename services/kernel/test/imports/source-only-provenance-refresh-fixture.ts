@@ -212,8 +212,10 @@ export async function runJourney() {
     const initial = await invoke('2000-01-01');
     const before = inspect();
     expect(before.source.count).toBe(1);
+    expect(before.bootstrap).not.toBeNull();
     const subjectBefore = await nativeClaim();
     expect(before.claim).toEqual({ state: 'bound', subject: subjectBefore });
+    expect((await subject(subjectBefore)).type).toBe('schema:Book');
     const original = (await Promise.all(properties.map((property) => candidates(subjectBefore, property)))).flat();
     expect(original).toHaveLength(2);
     const originalKeys = [...commands.keys()];
@@ -274,6 +276,11 @@ export async function runJourney() {
     const allFacts = (await Promise.all(properties.map((property) => candidates(subjectAfter, property)))).flat();
     const oldOwnedFacts = allFacts.filter((candidate) => original.some((old) => old.id === candidate.id));
     expect(oldOwnedFacts).toHaveLength(2);
+    for (const old of oldOwnedFacts) {
+      const originalCandidate = original.find((candidate) => candidate.id === old.id)!;
+      expect(old.statement).toEqual(originalCandidate.statement);
+      expect(old.source).toEqual(originalCandidate.source);
+    }
     const freshFacts = allFacts
       .filter((candidate) => candidate.source !== null && !original.some((old) => old.id === candidate.id))
       .map((candidate) => ({ ...candidate, digest: candidate.source!.digest }));

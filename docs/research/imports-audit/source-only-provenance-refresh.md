@@ -30,7 +30,7 @@ all grants, adoption and fences use existing native support or public commands. 
 tmpfs; no raw private/user-post source input is imported.
 
 The separate local recovery case uses real SQLite/Importer/registration with only typed external transport.
-It first acknowledges fresh proposals while an old retraction fails, closes/reopens, loses the remaining
+It first acknowledges fresh proposals while an old retraction fails, closes/reopens, loses the replay
 response before acknowledgement, then reopens and replays the immutable envelope. It checks that fresh
 acknowledged candidates survive, prior receipts/bytes remain immutable and unchanged input creates no writes.
 This is bounded coordination proof, not native authorization evidence.
@@ -65,5 +65,31 @@ promotion or whole Imports completion is claimed. The controller owns regression
 
 ## Verification
 
-Preflight and the single managed native submission are pending. Results and exact diagnostics will be appended
-after their actual executions; the source-derived failing sketch is not an execution receipt.
+At `3570d096a3`, edited-file `oxfmt --check` passed for all six changed files, including both large documents
+without table reformatting. The following local command passed eight tests with zero failures and 135 assertions:
+
+```sh
+bun test services/importer/tests/source-only-provenance-refresh.test.ts services/importer/tests/source-provenance-recovery.test.ts services/importer/tests/source-statistics.test.ts
+```
+
+This includes the unchanged frozen local caller and all six existing statistic cases. The first new recovery
+preflight expected a reduced envelope; actual RunStore replay preserves the full immutable envelope, including
+already acknowledged commands under their same keys. The new test was corrected to assert exact full-envelope
+replay. No production fix or existing acceptance edit was needed for that observation correction.
+
+The scoped compiler command was `node_modules/.bin/tsc --noEmit -p services/importer/tsconfig.json`.
+It exited 2 with only these three unchanged safety-test diagnostics from the supplied base, and no diagnostics
+in this implementation or new local caller. Their files remain unmodified; their assigned corrective work stays
+separate. This is not a compiler pass:
+
+```text
+services/importer/tests/cli-auth-cancellation.test.ts(98,14): error TS2352: Conversion of type '() => Promise<Response>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Property 'preconnect' is missing in type '() => Promise<Response>' but required in type 'typeof fetch'.
+services/importer/tests/cli-special-files.test.ts(57,57): error TS2345: Argument of type 'number | ReadableStream<Uint8Array<ArrayBuffer>> | undefined' is not assignable to parameter of type 'BodyInit | null | undefined'.
+  Type 'number' is not assignable to type 'BodyInit | null | undefined'.
+services/importer/tests/source-statistic-fence.test.ts(66,86): error TS2339: Property 'subject' does not exist on type 'Claim'.
+  Property 'subject' does not exist on type '{ state: "pending"; }'.
+```
+
+The single managed native submission is pending. Its exact result will be recorded after execution; the
+source-derived failing sketch is not an execution receipt.
