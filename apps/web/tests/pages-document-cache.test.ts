@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { cachePublicPage, recordPageReadCacheControl } from '../src/security/page-cache.ts';
+import { cachePublicPage, publicPageCacheControl, recordPageReadCacheControl } from '../src/security/page-cache.ts';
 
 test('a private native document aggregate cannot enter the shared HTML cache or become a conditional success', async () => {
   const request = new Request('https://rezics.test/en/subjects/rice', { headers: { 'if-none-match': '*' } });
@@ -30,7 +30,7 @@ test('a private native document aggregate cannot enter the shared HTML cache or 
 
 test('restrictive read policies belong to the exact request and survive a later public read', async () => {
   const request = new Request('https://rezics.test/en/subjects/rice');
-  const another = new Request(request);
+  const another = new Request(request, { headers: { 'if-none-match': '*' } });
   recordPageReadCacheControl(request, 'private');
   recordPageReadCacheControl(request, 'public, max-age=60');
   let rendered = 0;
@@ -50,8 +50,9 @@ test('restrictive read policies belong to the exact request and survive a later 
     buildId: 'documents',
     dehydratedData: () => null,
     async render() {
-      return new Response('Independent', { headers: { 'cache-control': 'no-cache' } });
+      return new Response('Independent', { headers: { 'content-type': 'text/html' } });
     },
   });
-  expect(independent.headers.get('cache-control')).toBe('no-cache');
+  expect(independent.status).toBe(304);
+  expect(independent.headers.get('cache-control')).toBe(publicPageCacheControl);
 });

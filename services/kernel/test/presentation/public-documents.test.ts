@@ -71,6 +71,34 @@ async function created(
   expect(result.response.status).toBe(201);
   return result.body.subject;
 }
+async function acceptAndAdopt(subject: string, candidate: string, rank: 'preferred' | 'normal') {
+  expect(
+    (
+      await call(
+        'POST',
+        `/v1/subjects/${subject}/candidates/${candidate}:accept`,
+        { context: GLOBAL_CONTEXT, expected_head: null },
+        true,
+      )
+    ).response.status,
+  ).toBe(200);
+  expect(
+    (
+      await call(
+        'POST',
+        `/v1/subjects/${subject}:adopt`,
+        {
+          context: GLOBAL_CONTEXT,
+          property,
+          mode: 'replace',
+          expected_head: null,
+          selection: [{ candidate, rank }],
+        },
+        true,
+      )
+    ).response.status,
+  ).toBe(200);
+}
 async function aggregate(id: string, language = 'en', author = false, session?: string) {
   return call('POST', '/v1/pages:read', { target: { subject: id }, languages: [language] }, author, session);
 }
@@ -144,32 +172,7 @@ test('rank and selected language come from the disclosed observation, including 
   );
   expect(proposed.response.status).toBe(201);
   const candidate = proposed.body.candidate;
-  expect(
-    (
-      await call(
-        'POST',
-        `/v1/subjects/${subject.id}/candidates/${candidate}:accept`,
-        { context: GLOBAL_CONTEXT, expected_head: null },
-        true,
-      )
-    ).response.status,
-  ).toBe(200);
-  expect(
-    (
-      await call(
-        'POST',
-        `/v1/subjects/${subject.id}:adopt`,
-        {
-          context: GLOBAL_CONTEXT,
-          property,
-          mode: 'replace',
-          expected_head: null,
-          selection: [{ candidate, rank: 'preferred' }],
-        },
-        true,
-      )
-    ).response.status,
-  ).toBe(200);
+  await acceptAndAdopt(subject.id, candidate, 'preferred');
   const page = await aggregate(subject.id, 'ja');
   expect(page.response.status).toBe(200);
   const filled = subjectRead(page.body, subject.id);
@@ -272,32 +275,7 @@ test('a native source retraction removes its adopted document from the configure
   expect(proposed.response.status).toBe(200);
   expect(proposed.body.results[0].status).toBe(201);
   const candidate = proposed.body.results[0].value.candidate;
-  expect(
-    (
-      await call(
-        'POST',
-        `/v1/subjects/${subject.id}/candidates/${candidate}:accept`,
-        { context: GLOBAL_CONTEXT, expected_head: null },
-        true,
-      )
-    ).response.status,
-  ).toBe(200);
-  expect(
-    (
-      await call(
-        'POST',
-        `/v1/subjects/${subject.id}:adopt`,
-        {
-          context: GLOBAL_CONTEXT,
-          property,
-          mode: 'replace',
-          selection: [{ candidate, rank: 'normal' }],
-          expected_head: null,
-        },
-        true,
-      )
-    ).response.status,
-  ).toBe(200);
+  await acceptAndAdopt(subject.id, candidate, 'normal');
   const before = await aggregate(subject.id);
   expect(before.response.status).toBe(200);
   const document = subjectRead(before.body, subject.id).documents[candidate];
