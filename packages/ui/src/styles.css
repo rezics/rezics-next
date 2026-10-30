@@ -332,10 +332,10 @@
   --rating: #bf7a0e; /* stars and rating bars */
   --vote-down: #6a5bb5; /* active downvote, kept apart from blue actions */
 
-  /* shadcn colors text, borders and tints with --destructive, so it is the text-safe tone; a filled
-     destructive control with white text uses --destructive-solid. */
-  --destructive: #b0233a;
-  --destructive-foreground: #b0233a;
+  /* Rhea uses --destructive for error and action text: match the text-safe accent ink.
+     Keep red in --destructive-solid for non-text danger affordances below. */
+  --destructive: #1f4a85;
+  --destructive-foreground: #1f4a85;
   --destructive-solid: #c42840;
   --info: #65bae1;
   --info-foreground: #1f6f93;
@@ -409,8 +409,8 @@
     --rating: #e9a93a;
     --vote-down: #a99cf0;
 
-    --destructive: #f0617a;
-    --destructive-foreground: #f0617a;
+    --destructive: #c9dbf5;
+    --destructive-foreground: #c9dbf5;
     --destructive-solid: #d63a50;
     --info: #3bacda;
     --info-foreground: #8fd0ee;
@@ -439,6 +439,31 @@
     --chart-4: #f0524c;
     --chart-5: #a99cf0;
   }
+}
+
+/* Adapt generated Rhea states without changing their text, focus rings or control behavior. */
+[data-slot='button'].text-destructive,
+:is([data-slot='dropdown-menu-item'], [data-slot='context-menu-item'], [data-slot='menubar-item'])[data-variant='destructive']:is(:focus, [data-highlighted]) {
+  background-color: color-mix(in srgb, var(--destructive-solid) 10%, transparent);
+  @variant dark {
+    background-color: color-mix(in srgb, var(--destructive-solid) 20%, transparent);
+  }
+}
+
+[data-slot='button'].text-destructive:hover {
+  background-color: color-mix(in srgb, var(--destructive-solid) 20%, transparent);
+  @variant dark {
+    background-color: color-mix(in srgb, var(--destructive-solid) 30%, transparent);
+  }
+}
+
+:is([data-slot='button'], [data-slot='alert']).text-destructive > svg,
+:is([data-slot='dropdown-menu-item'], [data-slot='context-menu-item'], [data-slot='menubar-item'])[data-variant='destructive'] > svg {
+  stroke: var(--destructive-solid);
+}
+
+[data-slot][aria-invalid='true'] {
+  border-color: var(--destructive-solid);
 }
 
 /* Simplified Chinese interface: Latin keeps Manrope and Source Serif; Han falls

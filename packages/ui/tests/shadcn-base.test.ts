@@ -296,6 +296,24 @@ test('the shadcn color variables resolve to the Aura tokens with AA text contras
   expect(css).not.toMatch(/@custom-variant dark\s*\(&:is\(\.dark \*\)\)/);
 });
 
+test('destructive ink meets AA over Rhea action states and in error descriptions', async () => {
+  for (const [name, tokens] of Object.entries(await themes())) {
+    for (const surface of ['background', 'card', 'popover']) {
+      // Generated buttons use 10%/20% fills in light and 20%/30% in dark; menus use the first tint on focus.
+      for (const share of name === 'light' ? [0.1, 0.2] : [0.2, 0.3])
+        expect(
+          contrast(tokens.destructive!, mix(tokens['destructive-solid']!, tokens[surface]!, share)),
+          `${name} destructive ink on ${share * 100}% danger tint over ${surface}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      // Rhea's destructive alert description draws the same ink at 90% opacity.
+      expect(
+        contrast(mix(tokens.destructive!, tokens[surface]!, 0.9), tokens[surface]!),
+        `${name} error description over ${surface}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
 test('interface text is set in Manrope and only Work titles in the serif face, both self-hosted', async () => {
   const css = text(join(root, 'src', 'styles.css'));
   expect(css).toMatch(/--font-interface:\s*'Manrope Variable'/);

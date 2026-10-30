@@ -105,6 +105,17 @@ test('text tokens meet WCAG AA in both themes and the logo red stays a visible m
   }
 });
 
+test('destructive action and error text use the existing text-safe ink in both themes', async () => {
+  for (const [name, tokens] of Object.entries(await themes())) {
+    for (const token of ['destructive', 'destructive-foreground'])
+      expect(tokens[token], `${name} --${token}`).toBe(tokens['accent-foreground']);
+    expect(tokens.brand, `${name} logo red`).toBe(name === 'light' ? '#df3d35' : '#f0524c');
+    expect(tokens['destructive-solid'], `${name} non-text danger red`).toBe(
+      name === 'light' ? '#c42840' : '#d63a50',
+    );
+  }
+});
+
 test('the logo red never colors text', async () => {
   const offending = [
     /(?<![\w-])text-brand\b/,
