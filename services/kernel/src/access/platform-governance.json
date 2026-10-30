@@ -36,8 +36,18 @@
     "offer:create",
     "payout_statement:mark_paid",
     "space:create",
+    "space:restore",
     "realm:create",
+    "realm:restore",
     "zone:create"
   ],
-  "globalReach": ["moderation:takedown", "moderation:read_reports", "post:erase", "media:erase", "access:grant"]
+  "globalReach": [
+    "moderation:takedown",
+    "moderation:read_reports",
+    "post:erase",
+    "media:erase",
+    "access:grant",
+    "space:restore",
+    "realm:restore"
+  ]
 }

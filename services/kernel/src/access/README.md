@@ -55,7 +55,7 @@ A grantor needs `access:grant` and never grants an action they do not hold. Gran
 
 ### Platform governance reach
 
-For `moderation:takedown`, `moderation:read_reports`, `post:erase`, `media:erase` and `access:grant`, Access first evaluates the ordinary formula on the requested resource. If it denies, Access checks that exact action on the Global Context with the same actor, client scopes, principal and authoritative time. The Global check uses the normal account and assignment floors and current suspension/fence checks; denials on the requested resource do not affect it. A Global action never covers another action. The actions in `globalReach` must also be held by the built-in `platform.governance` role. Grant commands still require the grantor to hold each listed action on the Global Context when granting it there.
+For `moderation:takedown`, `moderation:read_reports`, `post:erase`, `media:erase`, `access:grant`, `space:restore` and `realm:restore`, Access first evaluates the ordinary formula on the requested resource. If it denies, Access checks that exact action on the Global Context with the same actor, client scopes, principal and authoritative time. The Global check uses the normal account and assignment floors and current suspension/fence checks; denials on the requested resource do not affect it. A Global action never covers another action. The actions in `globalReach` must also be held by the built-in `platform.governance` role. Grant commands still require the grantor to hold each listed action on the Global Context when granting it there.
 
 A command authorized by this Global check writes one row to `access.governance_reach` in the same transaction. The row records the command transaction id, action, requested resource and actor account. Permission proved on a separately released authority connection carries that reach use into the command transaction; authorization denies if the transaction cannot register it. Repeated authorization for the same action, resource and actor in one command registers one write. Replays, denials, rolled-back commands and checks outside a command write nothing.
 
@@ -121,6 +121,18 @@ formula; the fact is not a substitute for them.
 opaque bindings, independent operands, released read-time ownership and the public
 factory wiring. Its trusted issuer fixture does not claim Commerce's current-reader
 or Content's full delivery/sale proof; those remain producer acceptance obligations.
+`community.space.owner` holds `space:restore`; `community.realm.owner` and `community.realm.moderator` hold
+`realm:restore`. These are additive grants on the existing installed roles. Standing and Realm membership grant
+neither restore action. No Space moderator, administrator, management reach or generic restore authority is added.
+One restore action cannot authorize restoration of the other resource type.
+
+Content owns mounting the restore action metadata and protected native operations. Its local restore decision
+requires the current role/action and the exact native removal record: the original remover must still be authorized,
+or the caller must currently hold a higher installed role. Realm ordering is owner > moderator > member/standing;
+Space ordering is owner > standing. Equal rank is not higher. An exact Global restore grant permits platform
+restoration while retaining current native eligibility, the original 30-day deadline, actual own-self-delete rules,
+lifecycle, hold and removal evidence, versions, generations, receipts and replay checks. These grants create no
+claim approval, owner transfer or automatic acquisition after 30 days; owner initialization is not a transfer path.
 
 ## Resource evidence failures
 

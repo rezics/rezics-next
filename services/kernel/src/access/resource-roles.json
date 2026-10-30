@@ -4,6 +4,7 @@
     "community.realm.owner": [
       "realm:read",
       "realm:manage",
+      "realm:restore",
       "realm:ban",
       "realm:publish",
       "board:create",
@@ -11,8 +12,15 @@
       "moderation:takedown"
     ],
     "community.realm.member": ["realm:read", "realm:participate"],
-    "community.realm.moderator": ["realm:read", "realm:ban", "realm:publish", "board:create", "moderation:takedown"],
-    "community.space.owner": ["space:read", "space:manage"],
+    "community.realm.moderator": [
+      "realm:read",
+      "realm:ban",
+      "realm:publish",
+      "realm:restore",
+      "board:create",
+      "moderation:takedown"
+    ],
+    "community.space.owner": ["space:read", "space:manage", "space:restore"],
     "community.space.standing": ["space:read"],
     "content.board.owner": ["board:read", "thread:create"],
     "content.board.standing": ["thread:create", "report:create"],
