@@ -17,7 +17,7 @@ test('copy clear carries its CAS guard and exact receipt into the typed Undo req
     disposedOn: null,
     note: 'private edition',
   };
-  const fetcher: typeof fetch = async (input, init) => {
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     sent.push(new Request(input, init));
     return sent.length === 1
       ? new Response(null, {
@@ -25,10 +25,13 @@ test('copy clear carries its CAS guard and exact receipt into the typed Undo req
           headers: { 'Library-Copy-Deletion-Id': deletionId, 'Library-Copy-Deletion-Revision': '8' },
         })
       : Response.json({ copy });
-  };
+  }) as typeof fetch;
   const client = createKernelClient('https://kernel.test', { fetch: fetcher, session: 'viewer' });
   const holding = client.copies({ copyId });
-  const cleared = await holding.delete({ query: { revision: 7 }, headers: { 'idempotency-key': 'clear-copy' } });
+  const cleared = await holding.delete(undefined, {
+    query: { revision: 7 },
+    headers: { 'idempotency-key': 'clear-copy' },
+  });
   expect(cleared.status).toBe(204);
   expect(cleared.response.headers.get('Library-Copy-Deletion-Id')).toBe(deletionId);
   const body = {
