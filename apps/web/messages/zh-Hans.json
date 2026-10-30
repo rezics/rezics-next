@@ -2740,5 +2740,16 @@
   "work_parts_draft": "打开关系草稿",
   "work_parts_holder": "陈述所属主题",
   "work_parts_candidate": "已提议的候选：{candidate}",
-  "work_parts_not_admitted": "所属主题的当前类型不允许此关系。草稿已保留。"
+  "work_parts_not_admitted": "所属主题的当前类型不允许此关系。草稿已保留。",
+  "managed_actions_title": "管理此账户",
+  "managed_actions_selection": "打开页面只会选中此账户。页面会重新检查你当前的权限，任何更改都需要另行确认。",
+  "managed_actions_profile": "编辑个人资料",
+  "managed_actions_rename": "重命名账户",
+  "managed_actions_members": "管理组织成员",
+  "managed_actions_transfer": "转移操作者责任",
+  "managed_actions_delete": "删除组织",
+  "managed_actions_loading": "正在检查当前管理权限…",
+  "managed_actions_denied": "你当前的权限无法执行此操作。",
+  "managed_actions_unavailable": "此管理操作当前不可用。",
+  "managed_actions_available": "可用"
 }

@@ -2739,5 +2739,16 @@
   "work_parts_draft": "Abrir un borrador de relación",
   "work_parts_holder": "Sujeto de la afirmación",
   "work_parts_candidate": "Candidato propuesto: {candidate}",
-  "work_parts_not_admitted": "El tipo actual del sujeto no admite esta relación. Se conserva el borrador."
+  "work_parts_not_admitted": "El tipo actual del sujeto no admite esta relación. Se conserva el borrador.",
+  "managed_actions_title": "Gestionar esta cuenta",
+  "managed_actions_selection": "Abrir una página solo selecciona esta cuenta. La página vuelve a comprobar tus permisos actuales. Los cambios requieren una confirmación aparte.",
+  "managed_actions_profile": "Editar perfil",
+  "managed_actions_rename": "Cambiar el nombre de la cuenta",
+  "managed_actions_members": "Gestionar miembros de la organización",
+  "managed_actions_transfer": "Transferir la responsabilidad del operador",
+  "managed_actions_delete": "Eliminar organización",
+  "managed_actions_loading": "Comprobando los permisos de gestión actuales…",
+  "managed_actions_denied": "Tus permisos actuales no permiten esta acción.",
+  "managed_actions_unavailable": "Esta acción de gestión no está disponible actualmente.",
+  "managed_actions_available": "Disponible"
 }

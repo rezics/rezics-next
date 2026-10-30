@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezi
 import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import { usePreferenceRetry } from './preference-failure-retry';
+import { ManagedAccountActions } from './managed-account-actions';
 import {
   ManagedAccountReader,
   readManagedAccountDetail,
@@ -242,9 +243,12 @@ export function ManagedAccountDetailCard({
               ) : null}
               <p className="text-sm text-muted-foreground">{m.settings_managed_observation()}</p>
             </section>
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.settings_managed_navigation_unavailable()}
-            </p>
+            <ManagedAccountActions
+              accountId={detail.account.id}
+              nativeAccountKind={detail.account.kind}
+              operated={detail.relation !== null}
+              self={detail.self}
+            />
             <Button type="button" variant="outline" disabled={busy} onClick={() => void reader.load()}>
               {m.managed_refresh()}
             </Button>

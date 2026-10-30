@@ -2739,5 +2739,16 @@
   "work_parts_draft": "関係の下書きを開く",
   "work_parts_holder": "主張を保持する主題",
   "work_parts_candidate": "提案した候補：{candidate}",
-  "work_parts_not_admitted": "現在の主題の型ではこの関係を使用できません。下書きは保持されます。"
+  "work_parts_not_admitted": "現在の主題の型ではこの関係を使用できません。下書きは保持されます。",
+  "managed_actions_title": "このアカウントの管理",
+  "managed_actions_selection": "ページを開くと、このアカウントが選択されます。移動先で現在の権限が再確認され、変更には別途確認が必要です。",
+  "managed_actions_profile": "プロフィールを編集",
+  "managed_actions_rename": "アカウント名を変更",
+  "managed_actions_members": "組織のメンバーを管理",
+  "managed_actions_transfer": "運用者の責任を移管",
+  "managed_actions_delete": "組織を削除",
+  "managed_actions_loading": "現在の管理権限を確認しています…",
+  "managed_actions_denied": "現在の権限ではこの操作を実行できません。",
+  "managed_actions_unavailable": "この管理操作は現在利用できません。",
+  "managed_actions_available": "利用可能"
 }

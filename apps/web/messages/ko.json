@@ -2739,5 +2739,16 @@
   "work_parts_draft": "관계 초안 열기",
   "work_parts_holder": "주장을 보유한 주제",
   "work_parts_candidate": "제안된 후보: {candidate}",
-  "work_parts_not_admitted": "현재 보유 주제의 유형은 이 관계를 허용하지 않습니다. 초안은 유지됩니다."
+  "work_parts_not_admitted": "현재 보유 주제의 유형은 이 관계를 허용하지 않습니다. 초안은 유지됩니다.",
+  "managed_actions_title": "이 계정 관리",
+  "managed_actions_selection": "페이지를 열면 이 계정만 선택됩니다. 이동한 페이지에서 현재 권한을 다시 확인하며, 변경하려면 별도로 확인해야 합니다.",
+  "managed_actions_profile": "프로필 편집",
+  "managed_actions_rename": "계정 이름 변경",
+  "managed_actions_members": "조직 구성원 관리",
+  "managed_actions_transfer": "운영자 책임 이전",
+  "managed_actions_delete": "조직 삭제",
+  "managed_actions_loading": "현재 관리 권한 확인 중…",
+  "managed_actions_denied": "현재 권한으로는 이 작업을 수행할 수 없습니다.",
+  "managed_actions_unavailable": "이 관리 작업은 현재 사용할 수 없습니다.",
+  "managed_actions_available": "사용 가능"
 }

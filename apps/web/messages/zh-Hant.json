@@ -2739,5 +2739,16 @@
   "work_parts_draft": "開啟關係草稿",
   "work_parts_holder": "陳述所屬主題",
   "work_parts_candidate": "已提議的候選：{candidate}",
-  "work_parts_not_admitted": "所屬主題的目前類型不允許此關係。草稿已保留。"
+  "work_parts_not_admitted": "所屬主題的目前類型不允許此關係。草稿已保留。",
+  "managed_actions_title": "管理此帳戶",
+  "managed_actions_selection": "開啟頁面只會選取此帳戶。頁面會重新檢查你目前的權限，任何變更都需要另行確認。",
+  "managed_actions_profile": "編輯個人檔案",
+  "managed_actions_rename": "重新命名帳戶",
+  "managed_actions_members": "管理組織成員",
+  "managed_actions_transfer": "移轉操作者責任",
+  "managed_actions_delete": "刪除組織",
+  "managed_actions_loading": "正在檢查目前的管理權限…",
+  "managed_actions_denied": "你目前的權限無法執行此操作。",
+  "managed_actions_unavailable": "此管理操作目前無法使用。",
+  "managed_actions_available": "可使用"
 }

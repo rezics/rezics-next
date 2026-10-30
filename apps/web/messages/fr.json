@@ -2739,5 +2739,16 @@
   "work_parts_draft": "Ouvrir un brouillon de relation",
   "work_parts_holder": "Sujet portant l’affirmation",
   "work_parts_candidate": "Candidat proposé : {candidate}",
-  "work_parts_not_admitted": "Le type actuel du sujet n’admet pas cette relation. Le brouillon est conservé."
+  "work_parts_not_admitted": "Le type actuel du sujet n’admet pas cette relation. Le brouillon est conservé.",
+  "managed_actions_title": "Gérer ce compte",
+  "managed_actions_selection": "Ouvrir une page sélectionne uniquement ce compte. La page vérifie à nouveau vos droits actuels. Toute modification nécessite une confirmation distincte.",
+  "managed_actions_profile": "Modifier le profil",
+  "managed_actions_rename": "Renommer le compte",
+  "managed_actions_members": "Gérer les membres de l’organisation",
+  "managed_actions_transfer": "Transférer la responsabilité de l’opérateur",
+  "managed_actions_delete": "Supprimer l’organisation",
+  "managed_actions_loading": "Vérification des droits de gestion actuels…",
+  "managed_actions_denied": "Vos droits actuels ne permettent pas cette action.",
+  "managed_actions_unavailable": "Cette action de gestion est actuellement indisponible.",
+  "managed_actions_available": "Disponible"
 }

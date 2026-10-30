@@ -3042,5 +3042,16 @@
   "work_parts_draft": "Open a relation draft",
   "work_parts_holder": "Statement holder",
   "work_parts_candidate": "Proposed candidate: {candidate}",
-  "work_parts_not_admitted": "The current holder Type does not admit this relation. The draft is retained."
+  "work_parts_not_admitted": "The current holder Type does not admit this relation. The draft is retained.",
+  "managed_actions_title": "Manage this account",
+  "managed_actions_selection": "Opening a page only selects this account. The page checks your current access again. Changes require a separate confirmation.",
+  "managed_actions_profile": "Edit profile",
+  "managed_actions_rename": "Rename account",
+  "managed_actions_members": "Manage organization members",
+  "managed_actions_transfer": "Transfer operator responsibility",
+  "managed_actions_delete": "Delete organization",
+  "managed_actions_loading": "Checking current management access…",
+  "managed_actions_denied": "Your current access does not allow this action.",
+  "managed_actions_unavailable": "This management action is currently unavailable.",
+  "managed_actions_available": "Available"
 }

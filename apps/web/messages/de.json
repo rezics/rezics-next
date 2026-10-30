@@ -2739,5 +2739,16 @@
   "work_parts_draft": "Beziehungsentwurf öffnen",
   "work_parts_holder": "Träger der Aussage",
   "work_parts_candidate": "Vorgeschlagener Kandidat: {candidate}",
-  "work_parts_not_admitted": "Der aktuelle Typ des Trägers erlaubt diese Beziehung nicht. Der Entwurf bleibt erhalten."
+  "work_parts_not_admitted": "Der aktuelle Typ des Trägers erlaubt diese Beziehung nicht. Der Entwurf bleibt erhalten.",
+  "managed_actions_title": "Dieses Konto verwalten",
+  "managed_actions_selection": "Beim Öffnen der Seite wird nur dieses Konto ausgewählt. Die Seite prüft deine aktuellen Rechte erneut. Änderungen erfordern eine gesonderte Bestätigung.",
+  "managed_actions_profile": "Profil bearbeiten",
+  "managed_actions_rename": "Konto umbenennen",
+  "managed_actions_members": "Organisationsmitglieder verwalten",
+  "managed_actions_transfer": "Betreiberverantwortung übertragen",
+  "managed_actions_delete": "Organisation löschen",
+  "managed_actions_loading": "Aktuelle Verwaltungsrechte werden geprüft…",
+  "managed_actions_denied": "Deine aktuellen Rechte erlauben diese Aktion nicht.",
+  "managed_actions_unavailable": "Diese Verwaltungsaktion ist derzeit nicht verfügbar.",
+  "managed_actions_available": "Verfügbar"
 }
