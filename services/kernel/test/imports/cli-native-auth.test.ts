@@ -119,7 +119,11 @@ test('the real CLI account-key and public-write journey is frozen against native
           }
           expect(url.origin).toBe(api);
           expect(request.headers.has('cookie')).toBe(false);
-          expect(url.pathname === '/v1/subjects:batchWrite' || url.pathname === '/v1/sourceFences:check').toBe(true);
+          expect(
+            url.pathname === '/v1/subjects:batchWrite' ||
+              url.pathname === '/v1/sourceFences:check' ||
+              url.pathname === '/v1/source-records:setMetadata',
+          ).toBe(true);
           const bearer = request.headers.get('authorization')!;
           expect(bearer.startsWith('Bearer ')).toBe(true);
           const claims = decodeJwt(bearer.slice(7));
