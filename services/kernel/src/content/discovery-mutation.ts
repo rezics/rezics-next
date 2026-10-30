@@ -332,12 +332,16 @@ export async function projectDiscoveryMutation(pool: Pool, ref: DiscoveryOperati
   });
 }
 
-/** Fixed fifty terminal keys per route; invoked by the existing collection step.
- * Unknown/prepared/ready rows stay fenced until their native caller resolves them.
+/** Fixed fifty terminal keys per recovery step, across the partition's sixteen
+ * exact route ranges. Unknown/live rows are never timeout-aborted.
  */
-export async function recoverDiscoveryMutations(pool: Pool, route: number) {
-  const rows = await due.run(pool, { route });
-  for (const row of rows) await projectDiscoveryMutation(pool, row);
+export async function recoverDiscoveryMutations(pool: Pool, partition: number) {
+  let remaining = 50;
+  for (let offset = 0; offset < 16 && remaining > 0; offset++) {
+    const rows = await due.run(pool, { route: partition * 16 + offset, limit: remaining });
+    for (const row of rows) await projectDiscoveryMutation(pool, row);
+    remaining -= rows.length;
+  }
 }
 
 export function createDiscoveryMutationEffect(pool: Pool): Effect {

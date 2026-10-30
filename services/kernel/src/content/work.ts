@@ -252,8 +252,7 @@ async function registerWork(
 
   const collect = DBOS.registerStep(
     async (partition: number) => {
-      for (let offset = 0; offset < 16; offset++)
-        await recoverDiscoveryMutations(context.pool, partition * 16 + offset);
+      await recoverDiscoveryMutations(context.pool, partition);
       const outcome = await createCollectionJob(context.pool, storage, { clock: context.clock }).collectPartition(
         partition,
         BATCH_SIZE,

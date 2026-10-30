@@ -970,7 +970,7 @@ The registered native effect verifies the real outbox envelope and reads the com
 then assigns absolute versioned state in Realm home and resolves only that exact fence. Terminal fence tombstones
 prevent delayed preparation from reopening it. A failed source executor is resolved by a locked ABORTED CAS before
 its fence can clear; an APPLIED winner projects its actual outcome. The same source lock prohibits any late effect
-once abortion wins. The existing collection step recovers at most 50 terminal unprojected keys per route; it never
+once abortion wins. The existing collection step recovers at most 50 terminal unprojected keys per partition step; it never
 infers abortion from time, missing process, unavailable evidence or an exception alone. A crash leaving an unknown
 live generation stays pending until a native attempt resolves it. A new authorized retry uses a new generation after
 ABORTED; old cleanup cannot erase its fence. No new workflow API, scheduler, queue or erasure coordinator is added.
@@ -985,5 +985,5 @@ A source change adds one source preparation, one exact Realm fence, one source a
 effect and terminal projection/acknowledgement, each a separate bounded native command. Source/receipt/fence reads
 are exact indexed keys. A board change touches one board fact; the later bucket consumer must use at most 31 day
 keys per board, durable bounded pages for multiple boards, and O(changes log R) rank updates. Erasure pages retain
-100 posts and one opening contribution; recovery reads at most 50 terminal keys per route. There is no thread,
+100 posts and one opening contribution; recovery reads at most 50 terminal keys per partition step. There is no thread,
 membership, revision-history or descendant scan, cross-home SQL join or held cross-home transaction.

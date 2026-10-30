@@ -413,7 +413,7 @@ from removed resources. A restored container starts a new epoch; old contributio
 Preparation, fences and outcome acknowledgements each release their connection before the next home. Source
 application and ABORTED recovery compete on the same source operation row, so an aborted generation cannot later
 apply and an applied winner cannot clear as abort. Terminal fence tombstones survive delayed installation. Only
-terminal unprojected source operations are recovered, 50 indexed due keys per route in the existing native collection
+terminal unprojected source operations are recovered, 50 indexed due keys per partition step in the existing native collection
 step. Unknown/live source outcomes remain pending; there is no timeout-based fence clearance or new scheduler.
 
 Source qualification, epoch changes and source invalidation touch exact routed keys with constant rows/statements
