@@ -1598,6 +1598,15 @@ freeze assignments or public identity state.
 
 ### Public Account canonical targets
 
+The [Account discovery contract](account-discovery-contract.md) owns native discovery production and
+`account-discovery-reduction.ts:readAccountDiscoveryReductionBinding`. Its immutable sorted heads observe
+Account and exact-claim counters plus current ownership epochs for every requested native home, including
+empty and excluded populations, in one released native snapshot. The shared registered Source must enumerate
+the complete configured Account **and** hashed claim domain in bounded pages and retain these heads in its
+original immutable capture. Current writer witnesses and later repair ACKs cannot revalidate an old capture
+after a changed head. Root/order/read definition, whole owner-domain closure and actual physical incarnation
+remain the Source owner's independent obligations; kernel ownership epoch is not restore activation.
+
 `account-canonical-targets.ts` exports `PublicAccountCanonicalTarget` with only
 `{accountId, accountKind: 'actor' | 'organization', handle: string | null, canonicalPath: string | null}` and
 `readPublicAccountCanonicalTargets(deps: SummaryReaderDependencies, subjectIds)` returning a map with explicit

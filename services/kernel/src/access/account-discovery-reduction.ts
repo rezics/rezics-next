@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { readPartitions } from '../partition/partition.ts';
-import { withRequestDeadline } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 
@@ -24,15 +25,17 @@ export async function readAccountDiscoveryReductionBinding(
   context: Readonly<{ deadline: number }>,
 ): Promise<AccountDiscoveryReductionBinding> {
   const requested = [...new Set(partitions)].sort((a, b) => a - b);
-  if (requested.length > 100) throw new RangeError('Account discovery reductions accept at most 100 partitions');
+  if (requested.length === 0 || requested.length > 100)
+    throw new RangeError('Account discovery reductions require 1 to 100 distinct partitions');
   for (const partition of requested) {
     if (!Number.isInteger(partition) || partition < 0 || partition > 4095)
       throw new RangeError('Account discovery partition must be an integer from 0 to 4095');
   }
   if (!Number.isFinite(context.deadline)) throw new TypeError('Account discovery requires a finite deadline');
-  requireAccessDeadline(context.deadline);
+  const deadline = Math.min(context.deadline, deadlineFor(DEFAULT_REQUEST_DEADLINE_MS));
+  requireAccessDeadline(deadline);
   try {
-    return await withRequestDeadline(context.deadline, () =>
+    return await withRequestDeadline(deadline, () =>
       withReadTransaction(pool, async (client) => {
         const homes = new Map((await readPartitions(client, requested)).map((home) => [home.partitionNo, home]));
         const counters = await client.query<{ partition: number; revision: string; claimRevision: string }>(
@@ -56,13 +59,16 @@ export async function readAccountDiscoveryReductionBinding(
             claimRevision: BigInt(counter.claimRevision),
           });
         });
-        requireAccessDeadline(context.deadline);
+        requireAccessDeadline(deadline);
         return Object.freeze({ owner: 'accounts', heads: Object.freeze(heads) });
       }),
     );
   } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    if (code === '42P01' || code === '42703')
+      throw new CommandUnavailableError('contention', requested[0]!);
     // Preserve moved/fenced routing information, and classify bounded read failures.
-    throwAccessUnavailable(error, context.deadline);
+    throwAccessUnavailable(error, deadline);
     throw error;
   }
 }

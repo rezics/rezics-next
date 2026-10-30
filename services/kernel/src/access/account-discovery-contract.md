@@ -17,11 +17,35 @@ Search policy. Native Account production does not grant query admission or certi
   unavailability of an optional owner omits that owner's avatar/verification fields. Unexpected errors and
   the overall request deadline still fail the read, and native Account revalidation must succeed.
 - `readAccountDiscoveryWitness(pool, partitions)` returns native `{revision, claimRevision}` heads for up to
-  100 partitions, including empty/excluded populations. Observe all participating Account AND claim partitions
-  before query execution and compare after counts and hydration. Never use only returned IDs as the guard.
+  100 partitions, including empty/excluded populations. This remains a current writer witness; it does not bind
+  a registered immutable whole-query capture. Its nonempty reads use the native reduction reader below.
 - `readAccountDiscoveryBindings(pool, partition, ids)` returns native Account revision, the exact live claim's
   route/revision and consumed claim revision. A writer must match its snapshot's Account revision and consume
   at least that claim revision, otherwise redrive then resnapshot. These bindings are internal, not public wire.
+
+`account-discovery-reduction.ts` exports `AccountDiscoveryReductionHead`,
+`AccountDiscoveryReductionBinding` and
+`readAccountDiscoveryReductionBinding(pool, partitions, {deadline})`. The immutable copied binding is
+`{owner:'accounts', heads:[{partition, epoch, revision, claimRevision}]}` sorted by partition. Each call requires
+1–100 deduplicated integer partitions in 0–4095 and uses one bounded native REPEATABLE READ snapshot: one
+`readPartitions` full-key batch and one population full-key batch, with no Account/claim row join. Each requested
+home must have current active ownership and installed positive Account and claim heads. Missing, partial,
+uninstalled, fenced, moved and expired observations throw existing typed unavailability. There is no omitted
+home, successful empty proof, truncation at 100, per-row expansion or foreign checkout inside the snapshot.
+
+The shared registered Source enumerates its fixed configured **whole Account and claim domain** in bounded
+caller pages, including empty/excluded, zero-hit, NOT, order and count populations. Selected Account partitions
+cannot establish hashed foreign claim coverage. A native binding says nothing about whether a caller supplied
+the complete domain. It is useful only when the actual shared Source retains it inside its registered immutable
+capture and compares every head and exact home coverage against that **original** binding at start and final
+observations. A current start/final match or later repair ACK cannot replace the original binding. Changed native
+heads invalidate the old capture even when current hits/counts look equal again; a fresh capture after actual
+repair can succeed. No structural binding supplied by a caller grants query authority.
+
+Exact registered root AST, order/read definition, whole owner-domain closure and actual Source/Search physical
+incarnation remain independently mandatory. `epoch` is the current kernel ownership epoch, not a physical
+backup/engine incarnation. Unknown/restored Source incarnation stays unavailable at its owner until real
+activation. This observation creates no readiness/ACK, permission mirror or retained Accounts query store.
 
 `account-discovery-work.ts` exports `consumeAccountDiscoveryClaim({pool, clock?}, intent)`,
 `redriveAccountDiscovery({pool, clock?}, partition, limit?)` and `registerAccountDiscoveryWork(context)`.
@@ -40,15 +64,29 @@ anchor's intent/head; the Account command permanently records consumed claim-par
 contain keys/revisions only and are registered with the existing Access erasure discovery owner. Source intent
 rows coalesce and are drained into the existing event log. Census rows contain no Account identity.
 
-The shared Search type home `services/kernel/src/search/discovery.ts` is absent in this checkout. Accounts
-therefore exports the concrete inferred structural shapes, with no duplicate shared type home. Search must
-supply its single `AccountDiscoverySource` and `AccountDiscoverySummary` exports before Accounts can import them.
-Search must connect this source, bindings, event and both native heads to its actual mixed producer, projection,
-whole-query reduction admission, generation and physical-incarnation restore handling. No such Account reduction
-admission primitive or mixed native assembler is currently exported by Search here. Accounts supplies no fake
-adapter/ACK and changes no SubjectSource or Search runtime. A restored database must receive Search's new physical
+Accounts uses the delivered `AccountDiscoverySource` and `AccountDiscoverySummary` types from
+`services/kernel/src/search/discovery.ts`. The actual mixed producer in `search/account-discovery.ts` uses the
+native source, exact bindings and claim redrive. The additive reduction binding above is the Accounts-owned
+seam for Semantic/Search to retain in that same shared registered immutable Source; its consumer comparison
+and physical-incarnation activation belong to those owners. Accounts supplies no substitute adapter/ACK and
+changes no SubjectSource or Search runtime. A restored database must receive Search's new physical
 incarnation and external revision high water before activation; restoring sequence state from an old backup alone
 is insufficient. These are real remaining foreign-code seams, not another Accounts research prerequisite.
+
+The native writer audit reuses the existing installation and counters: Account INSERT/UPDATE/DELETE hooks
+cover state, fences, operator, handle, display name and all other Account fields, even on excluded rows;
+preferences dirty the Account revision; claim INSERT/UPDATE/DELETE hooks cover pending/active/former-reserved,
+release and rename phases on their actual hashed homes. Administrative Account/claim TRUNCATE advances heads.
+Allocation serializes on the existing partition population row and uses the noncycling native sequence. Native
+mutation, counters and durable intents commit or roll back together; async redrive cannot substitute for the
+immediate claim head. No new counter or baseline installation is needed. Repair must preserve these heads and
+sequence high water, never reset them or infer them from consumed cursors or `core.partition.position`.
+Missing baseline/history remains unavailable until actual native installation and bounded default catch-up;
+metadata cannot fabricate restored physical readiness.
+
+`test/access/account-discovery-reduction.test.ts` exercises native empty/excluded and name-order populations,
+rollback, foreign claim transitions before consumption, restoration and real redrive, and unavailable/partial
+homes. It proves the owner heads; the shared immutable query/physical engine assertions remain consumer-owned.
 
 Existing attribution (`readPublicIdentities`), former-handle lookup (`readPublicAccountByHandle`), active deployment
 paging (`pageActiveAccounts`) and sitemap (`readAgentPages`) keep their distinct contracts and are not discovery.

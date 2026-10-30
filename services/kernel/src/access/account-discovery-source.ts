@@ -6,11 +6,12 @@ import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
 import { readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { readAccountDiscoveryReductionBinding } from './account-discovery-reduction.ts';
+import type { AccountDiscoverySource, AccountDiscoverySummary } from '../search/discovery.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from '../semantic/summaries.ts';
 
-// Search's adopted discovery.ts type home is not delivered in this checkout.
-// Keep the public return shapes inferred from the actual producer until that
-// owner supplies AccountDiscoverySource and AccountDiscoverySummary there.
 type AccountRow = {
   route: number;
   id: string;
@@ -110,7 +111,7 @@ function indexed(row: AccountRow, found: Awaited<ReturnType<typeof claims>>) {
 }
 
 /** Native source only; neither routing text keys nor caller policy belong in this factory. */
-export function accountDiscoverySource(pool: Pool) {
+export function accountDiscoverySource(pool: Pool): AccountDiscoverySource {
   return {
     async read(partition: number, ids: readonly string[]) {
       partitionKey(partition);
@@ -181,31 +182,18 @@ export function accountDiscoverySource(pool: Pool) {
   };
 }
 
-/** A bounded native observation includes excluded/empty populations. Observe BOTH
- * Account and claim partitions before execution and compare after all hydration.
- * Search owns its physical incarnation and whole-query admission/repair protocol.
+/** Current writer witness only. Immutable query admission must retain the complete
+ * native reduction binding in its registered Source, including ownership epochs.
  */
 export async function readAccountDiscoveryWitness(pool: Pool, partitions: readonly number[]) {
-  const requested = [...new Set(partitions)];
-  if (requested.length > 100) throw new RangeError('Account discovery witnesses accept at most 100 partitions');
-  requested.forEach(partitionKey);
-  return withReadTransaction(pool, async (client) => {
-    const result = await client.query<{ partition: number; revision: string; claimRevision: string }>(
-      `SELECT partition_no AS partition, revision::text, claim_revision::text AS "claimRevision"
-       FROM access.account_discovery_population WHERE partition_no = ANY($1::integer[])`,
-      [requested],
-    );
-    if (result.rows.length !== requested.length) throw new Error('Account discovery census is not installed');
-    return new Map(
-      result.rows.map((row) => [
-        row.partition,
-        {
-          revision: BigInt(row.revision),
-          claimRevision: BigInt(row.claimRevision),
-        },
-      ]),
-    );
+  // Preserve the existing writer API's empty batch; it is not query evidence.
+  if (partitions.length === 0) return new Map<number, { revision: bigint; claimRevision: bigint }>();
+  const binding = await readAccountDiscoveryReductionBinding(pool, partitions, {
+    deadline: deadlineFor(DEFAULT_REQUEST_DEADLINE_MS),
   });
+  return new Map(
+    binding.heads.map(({ partition, revision, claimRevision }) => [partition, { revision, claimRevision }]),
+  );
 }
 
 /** Source bindings for the index writer. An unconsumed exact claim is never
@@ -263,7 +251,7 @@ function summary(
   handle: string | null,
   avatar: AvatarSummary | null,
   verifiedAgent: { id: string; label: string; type: string } | null,
-) {
+): AccountDiscoverySummary {
   return {
     id: row.id,
     accountKind: row.accountKind,
