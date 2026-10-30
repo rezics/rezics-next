@@ -1,10 +1,17 @@
 import { useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { Withheld } from '@rezics/ui/withheld';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { csrfHeaders } from '../threads/composer';
 import { appealDecision } from './appeal';
-import { canAppealDecision, type DecisionPage, type ModerationDecision } from './decision-read';
+import {
+  canAppealDecision,
+  canAttemptAppealWithoutTarget,
+  type DecisionPage,
+  type ModerationDecision,
+} from './decision-read';
 
 function relativeTime(instant: string, now: number, locale: string) {
   const delta = Date.parse(instant) - now;
@@ -47,7 +54,9 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const locale = getLocale();
-  const allowed = canAppealDecision(decision, page.target.authorId ?? null, page.viewerId, clockNow);
+  const allowed = page.target
+    ? canAppealDecision(decision, page.target.authorId ?? null, page.viewerId, clockNow)
+    : canAttemptAppealWithoutTarget(decision, page.viewerId, clockNow);
   const count = Array.from(text).length;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -56,7 +65,7 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
     setSaving(true);
     setError(null);
     try {
-      const result = await appealDecision({ data: { id: decision.id, statement: text } });
+      const result = await appealDecision({ data: { id: decision.id, statement: text }, headers: csrfHeaders() });
       if (result.state === 'pending' || result.state === 'updated') {
         setDecision(result.decision);
         setClockNow(Date.now());
@@ -88,11 +97,20 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
         <h2 id="decision-applies" className="text-lg font-semibold">
           {m.decision_applies_heading()}
         </h2>
-        <p className="mt-3 leading-7">
-          <a href={page.target.href} className="underline underline-offset-4">
-            {page.target.text || m.decision_target_fallback({ kind: decision.targetKind })}
-          </a>
-        </p>
+        {page.target ? (
+          <p className="mt-3 leading-7">
+            <a href={page.target.href} className="underline underline-offset-4">
+              {page.target.text || m.decision_target_fallback({ kind: decision.targetKind })}
+            </a>
+          </p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            <Withheld shape="passage" labels={{ withheld: m.moderation_target_withheld() }} />
+            <code className="text-sm text-muted-foreground">
+              {decision.targetKind} {decision.targetId}
+            </code>
+          </div>
+        )}
       </section>
       <section className="mt-8 border-t border-border pt-6" aria-labelledby="decision-appeal">
         <h2 id="decision-appeal" className="text-lg font-semibold">

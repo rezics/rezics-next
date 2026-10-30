@@ -12,7 +12,19 @@ import {
   type NativeTestLifecycle,
 } from './lifecycle.ts';
 
-export type AuthPersona = 'alice' | 'bob' | 'governor' | 'suspended' | 'newcomer' | 'anonymous' | 'wrong-rp';
+export type AuthPersona =
+  | 'alice'
+  | 'bob'
+  | 'governor'
+  | 'suspended'
+  | 'newcomer'
+  | 'anonymous'
+  | 'wrong-rp'
+  | 'moderation-alice'
+  | 'moderation-author'
+  | 'moderator'
+  | 'appeal-moderator'
+  | 'outsider';
 export type AuthJourney = {
   url: string;
   context: BrowserContext;

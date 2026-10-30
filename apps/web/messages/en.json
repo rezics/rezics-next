@@ -255,7 +255,6 @@
   "library_nav_collections": "Collections",
   "library_nav_labels": "Labels",
   "library_nav_following": "Following",
-  "library_nav_labels": "Labels",
   "library_nav_library": "Library",
   "library_nav_all_collections": "All Collections",
   "library_nav_selector": "Choose a library destination",
@@ -889,5 +888,9 @@
   "library_filter_empty_description": "Clear the state filter to see all tracked entries.",
   "library_collections": "Collections",
   "library_all_collections": "All Collections",
-  "library_next_page": "Next page"
+  "library_next_page": "Next page",
+  "thread_post_erased": "Removed by its author",
+  "moderation_evidence_label": "Report details",
+  "moderation_appeal_target_label": "Affected content",
+  "moderation_appeal_conflict": "This appeal was already resolved. Refresh the queue before continuing."
 }

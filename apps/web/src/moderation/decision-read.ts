@@ -30,7 +30,7 @@ export type DecisionTarget = {
   text: string;
   href: string;
 };
-export type DecisionPage = { decision: ModerationDecision; target: DecisionTarget; viewerId: string | null };
+export type DecisionPage = { decision: ModerationDecision; target: DecisionTarget | null; viewerId: string | null };
 
 type ReadResult = { data?: unknown; error?: unknown; status?: number };
 type DecisionReads = {
@@ -54,13 +54,13 @@ function postText(value: unknown): string {
   return parts.join('');
 }
 
-/** Resolves the private decision and exactly one existing target read. */
+/** Resolves the private decision and exactly one existing target read when the native visibility permits it. */
 export async function loadDecisionPage(id: string, reads: DecisionReads): Promise<DecisionPage | null> {
   const decision = await reads.decision(id);
   if (!decision) return null;
   const target =
     decision.targetKind === 'post' ? await reads.post(decision.targetId) : await reads.thread(decision.targetId);
-  return target ? { decision, target, viewerId: null } : null;
+  return { decision, target, viewerId: null };
 }
 
 export function canAppealDecision(
@@ -78,6 +78,15 @@ export function canAppealDecision(
   );
 }
 
+/** The native appeal write remains authoritative when moderation hides the target read. */
+export function canAttemptAppealWithoutTarget(
+  decision: ModerationDecision,
+  viewerId: string | null,
+  now: number,
+): boolean {
+  return Boolean(viewerId && !decision.appeal && now <= Date.parse(decision.appealDeadline));
+}
+
 type DecisionKernel = {
   'moderation-decisions': (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
   posts: (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
@@ -85,6 +94,12 @@ type DecisionKernel = {
 };
 function headers(authorization: string) {
   return { authorization };
+}
+
+function readStatus(result: ReadResult): number | undefined {
+  if (typeof result.status === 'number') return result.status;
+  if (result.error && typeof result.error === 'object' && 'status' in result.error) return Number(result.error.status);
+  return undefined;
 }
 
 function targetHref(kind: 'post' | 'thread', id: string, threadId?: string) {
@@ -123,30 +138,36 @@ export function decisionReadAdapters(client: DecisionKernel, authorization: stri
     },
     post: async (id) => {
       const result = await client.posts({ id }).get({ headers: headers(authorization) });
+      if (result.error) {
+        if (readStatus(result) === 404) return null;
+        throw notFound();
+      }
       const record = (result.data as { post?: Record<string, unknown> } | undefined)?.post;
-      return result.error || !record
-        ? null
-        : {
-            id,
-            ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
-            ...(typeof record.threadId === 'string' ? { threadId: record.threadId } : {}),
-            ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
-            text: postText(record),
-            href: targetHref('post', id, String(record.threadId ?? id)),
-          };
+      if (!record) throw notFound();
+      return {
+        id,
+        ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
+        ...(typeof record.threadId === 'string' ? { threadId: record.threadId } : {}),
+        ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
+        text: postText(record),
+        href: targetHref('post', id, String(record.threadId ?? id)),
+      };
     },
     thread: async (id) => {
       const result = await client.threads({ id }).get({ headers: headers(authorization) });
+      if (result.error) {
+        if (readStatus(result) === 404) return null;
+        throw notFound();
+      }
       const record = (result.data as { thread?: Record<string, unknown> } | undefined)?.thread;
-      return result.error || !record
-        ? null
-        : {
-            id,
-            ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
-            ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
-            text: String(record.title ?? ''),
-            href: targetHref('thread', id),
-          };
+      if (!record) throw notFound();
+      return {
+        id,
+        ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
+        ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
+        text: String(record.title ?? ''),
+        href: targetHref('thread', id),
+      };
     },
   };
 }

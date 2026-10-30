@@ -252,9 +252,8 @@
   "library_menu_status": "Status ändern",
   "library_more": "Mehr",
   "library_nav_collections": "Sammlungen",
-  "library_nav_labels": "Schlagwörter",
-  "library_nav_following": "Folge ich",
   "library_nav_labels": "Etiketten",
+  "library_nav_following": "Folge ich",
   "library_nav_library": "Bibliothek",
   "library_nav_all_collections": "Alle Sammlungen",
   "library_nav_selector": "Bibliotheksziel auswählen",
@@ -888,5 +887,9 @@
   "library_filter_empty_description": "Entfernen Sie den Statusfilter, um alle erfassten Einträge zu sehen.",
   "library_collections": "Sammlungen",
   "library_all_collections": "Alle Sammlungen",
-  "library_next_page": "Nächste Seite"
+  "library_next_page": "Nächste Seite",
+  "thread_post_erased": "Dieser Beitrag wurde von seinem Autor entfernt.",
+  "moderation_evidence_label": "Meldungsdetails",
+  "moderation_appeal_target_label": "Betroffener Inhalt",
+  "moderation_appeal_conflict": "Diese Beschwerde wurde bereits bearbeitet. Aktualisiere die Liste, bevor du fortfährst."
 }

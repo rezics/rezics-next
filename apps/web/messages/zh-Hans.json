@@ -255,7 +255,6 @@
   "library_nav_collections": "收藏集",
   "library_nav_labels": "标签",
   "library_nav_following": "关注",
-  "library_nav_labels": "标签",
   "library_nav_library": "书架",
   "library_nav_all_collections": "所有收藏集",
   "library_nav_selector": "选择库中的目的地",
@@ -889,5 +888,9 @@
   "library_filter_empty_description": "清除状态筛选即可查看所有已追踪条目。",
   "library_collections": "收藏集",
   "library_all_collections": "所有收藏集",
-  "library_next_page": "下一页"
+  "library_next_page": "下一页",
+  "thread_post_erased": "此帖已由作者删除。",
+  "moderation_evidence_label": "举报详情",
+  "moderation_appeal_target_label": "相关内容",
+  "moderation_appeal_conflict": "此申诉已处理。请刷新列表后再继续。"
 }

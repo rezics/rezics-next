@@ -254,7 +254,6 @@
   "library_nav_collections": "コレクション",
   "library_nav_labels": "ラベル",
   "library_nav_following": "フォロー中",
-  "library_nav_labels": "ラベル",
   "library_nav_library": "ライブラリ",
   "library_nav_all_collections": "すべてのコレクション",
   "library_nav_selector": "ライブラリの移動先を選択",
@@ -888,5 +887,9 @@
   "library_filter_empty_description": "状態の絞り込みを解除すると、記録したすべての項目が表示されます。",
   "library_collections": "コレクション",
   "library_all_collections": "すべてのコレクション",
-  "library_next_page": "次のページ"
+  "library_next_page": "次のページ",
+  "thread_post_erased": "投稿者によって削除されました。",
+  "moderation_evidence_label": "報告の詳細",
+  "moderation_appeal_target_label": "対象のコンテンツ",
+  "moderation_appeal_conflict": "この異議申し立てはすでに処理されています。続行する前に一覧を更新してください。"
 }

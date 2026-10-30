@@ -942,10 +942,10 @@ Space response at 390 and 1280 pixels.
 
 ### Board moderation reports (`/boards/{id}/moderation`)
 
-- **Touches:** One page of at most 20 reports, then one existing target read per distinct post, thread or board on that page.
-- **Bound:** At most `1 + D` kernel reads for `D` distinct report targets; each moderator action issues one write.
-- **Growth check:** `tests/moderation-reports.test.ts` pages repeated targets and confirms one target read per distinct identity, preserves the cursor and excludes reporter identity.
-- **Visual check:** Moderation report stories cover open and resolved reports in English and Simplified Chinese; use light and dark themes at 390 and 1280 pixels.
+- **Touches:** One page of at most 20 reports for the selected board, thread or known post, then one existing target read for each distinct target on that page. A post-specific report page uses `?post=<id>`; report APIs are target-scoped, so the page does not discover child reports by walking the board.
+- **Bound:** Reports use at most `1 + D` kernel reads for `D` distinct targets on the selected page. The appeals tab uses one page of at most 20 native appeals with the decision statement and target included in each row, then one existing target read per distinct post or thread; it makes no per-appeal decision reads. Each submitted moderator action issues one write.
+- **Growth check:** `tests/moderation-reports.test.ts` pages repeated targets and confirms one target read per distinct identity and preserves the cursor. `tests/native/native-moderation.host.test.ts` fixes the appeal page and target while adding 1, 8 and 64 unrelated posts; the page still makes one appeal request, one target read and no decision reads.
+- **Visual check:** Report stories cover open and resolved reports in English and Simplified Chinese. Appeal stories cover a pending native appeal in all launch locales and the empty queue in English and Simplified Chinese; use light and dark themes at 390 and 1280 pixels.
 
 ### Post edit
 

@@ -92,6 +92,14 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 | apps/web/src/routes/boards/$id.tsx | error                   | member    | missing                                          | missing |
 | apps/web/src/routes/boards/$id.tsx | error                   | suspended | missing                                          | missing |
 
+## apps/web/src/routes/boards/$id_.moderation.tsx
+
+| Route                                          | State              | Viewer    | Desktop                                                                        | Phone                                                                        |
+| ---------------------------------------------- | ------------------ | --------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| apps/web/src/routes/boards/$id_.moderation.tsx | open reports       | moderator | apps/web/src/stories/moderation-reports.stories.tsx#OpenEnglishLightDesktop    | apps/web/src/stories/moderation-reports.stories.tsx#OpenEnglishLightPhone    |
+| apps/web/src/routes/boards/$id_.moderation.tsx | pending appeal     | moderator | apps/web/src/stories/moderation-appeals.stories.tsx#PendingEnglishLightDesktop | apps/web/src/stories/moderation-appeals.stories.tsx#PendingEnglishLightPhone |
+| apps/web/src/routes/boards/$id_.moderation.tsx | empty appeal queue | moderator | apps/web/src/stories/moderation-appeals.stories.tsx#EmptyEnglishLightDesktop   | apps/web/src/stories/moderation-appeals.stories.tsx#EmptyEnglishLightPhone   |
+
 ## apps/web/src/routes/boards/$id_.new.tsx
 
 | Route                                   | State                   | Viewer    | Desktop                                             | Phone   |

@@ -254,7 +254,6 @@
   "library_nav_collections": "컬렉션",
   "library_nav_labels": "라벨",
   "library_nav_following": "팔로잉",
-  "library_nav_labels": "라벨",
   "library_nav_library": "라이브러리",
   "library_nav_all_collections": "모든 컬렉션",
   "library_nav_selector": "라이브러리 목적지 선택",
@@ -888,5 +887,9 @@
   "library_filter_empty_description": "상태 필터를 지우면 기록한 모든 항목을 볼 수 있습니다.",
   "library_collections": "컬렉션",
   "library_all_collections": "모든 컬렉션",
-  "library_next_page": "다음 페이지"
+  "library_next_page": "다음 페이지",
+  "thread_post_erased": "작성자가 삭제한 게시물입니다.",
+  "moderation_evidence_label": "신고 세부 정보",
+  "moderation_appeal_target_label": "대상 콘텐츠",
+  "moderation_appeal_conflict": "이미 처리된 이의 제기입니다. 계속하기 전에 목록을 새로고침하세요."
 }

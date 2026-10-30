@@ -34,7 +34,9 @@ export async function submitDecisionAppeal(id: string, text: string, reads: Appe
 
 type DecisionKernel = {
   'moderation-decisions': (params: { id: string }) => {
-    $appeal: { post: (options: unknown) => Promise<{ data?: unknown; error?: unknown; status?: number }> };
+    $appeal: {
+      post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown; status?: number }>;
+    };
     get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }>;
   };
 };
@@ -63,10 +65,12 @@ export const appealDecision = createServerFn({ method: 'POST' })
     const resource = client['moderation-decisions']({ id: data.id });
     return submitDecisionAppeal(data.id, data.statement, {
       appeal: async (id, statement) => {
-        const response = await client['moderation-decisions']({ id }).$appeal.post({
-          body: { statement },
-          headers: { authorization, 'idempotency-key': crypto.randomUUID() },
-        });
+        const response = await client['moderation-decisions']({ id }).$appeal.post(
+          {
+            statement,
+          },
+          { headers: { authorization, 'idempotency-key': JSON.stringify(crypto.randomUUID()) } },
+        );
         const errorStatus =
           response.error && typeof response.error === 'object' && 'status' in response.error
             ? Number(response.error.status)

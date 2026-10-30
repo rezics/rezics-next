@@ -21,6 +21,7 @@ export type ReportPage = { reports: Report[]; next: string | null };
 export type ReportReadSource = {
   boardReports: (id: string, cursor?: string) => Promise<ReportPage>;
   threadReports: (id: string, cursor?: string) => Promise<ReportPage>;
+  postReports: (id: string, cursor?: string) => Promise<ReportPage>;
 };
 export type ReportTargetReads = {
   post: (id: string) => Promise<ReportTargetValue | null>;
@@ -39,11 +40,13 @@ export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']
 /** Keeps report records private and resolves repeated target identities with one existing read each. */
 export async function readModerationReports(
   source: ReportReadSource,
-  input: { boardId: string; threadId?: string; cursor?: string },
+  input: { boardId: string; threadId?: string; postId?: string; cursor?: string },
 ): Promise<ReportPage> {
-  const page = input.threadId
-    ? await source.threadReports(input.threadId, input.cursor)
-    : await source.boardReports(input.boardId, input.cursor);
+  const page = input.postId
+    ? await source.postReports(input.postId, input.cursor)
+    : input.threadId
+      ? await source.threadReports(input.threadId, input.cursor)
+      : await source.boardReports(input.boardId, input.cursor);
   return {
     next: page.next,
     reports: page.reports.map(({ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }) => ({
@@ -83,7 +86,10 @@ type Client = {
     reports: { get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
     get: (options?: unknown) => Promise<{ data?: unknown; error?: unknown }>;
   };
-  posts: (params: { id: string }) => { get: (options?: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+  posts: (params: { id: string }) => {
+    reports: { get: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+    get: (options?: unknown) => Promise<{ data?: unknown; error?: unknown }>;
+  };
 };
 const auth = (authorization: string) => ({ headers: { authorization } });
 
@@ -94,11 +100,13 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
     if (typeof value.boardId !== 'string' || value.boardId.length > 128) throw notFound();
     if (value.threadId !== undefined && (typeof value.threadId !== 'string' || value.threadId.length > 128))
       throw notFound();
+    if (value.postId !== undefined && (typeof value.postId !== 'string' || value.postId.length > 128)) throw notFound();
     if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 4096))
       throw notFound();
     return {
       boardId: value.boardId,
       ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
+      ...(typeof value.postId === 'string' ? { postId: value.postId } : {}),
       ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
     };
   })
@@ -122,6 +130,13 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
         threadReports: async (id, cursor) => {
           const result = await client
             .threads({ id })
+            .reports.get({ ...headers, query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) } });
+          if (result.error || !result.data) throw notFound();
+          return result.data as ReportPage;
+        },
+        postReports: async (id, cursor) => {
+          const result = await client
+            .posts({ id })
             .reports.get({ ...headers, query: { limit: MODERATION_REPORTS_PAGE_SIZE, ...(cursor ? { cursor } : {}) } });
           if (result.error || !result.data) throw notFound();
           return result.data as ReportPage;

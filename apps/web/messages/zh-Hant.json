@@ -254,7 +254,6 @@
   "library_nav_collections": "收藏集",
   "library_nav_labels": "標籤",
   "library_nav_following": "關注",
-  "library_nav_labels": "標籤",
   "library_nav_library": "書架",
   "library_nav_all_collections": "所有收藏集",
   "library_nav_selector": "選擇庫中的目的地",
@@ -888,5 +887,9 @@
   "library_filter_empty_description": "清除狀態篩選即可查看所有已追蹤項目。",
   "library_collections": "收藏集",
   "library_all_collections": "所有收藏集",
-  "library_next_page": "下一頁"
+  "library_next_page": "下一頁",
+  "thread_post_erased": "此篇文章已由作者刪除。",
+  "moderation_evidence_label": "檢舉詳細資訊",
+  "moderation_appeal_target_label": "相關內容",
+  "moderation_appeal_conflict": "此申訴已處理。請重新整理列表後再繼續。"
 }

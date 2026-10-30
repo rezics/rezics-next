@@ -254,7 +254,6 @@
   "library_nav_collections": "Colecciones",
   "library_nav_labels": "Etiquetas",
   "library_nav_following": "Siguiendo",
-  "library_nav_labels": "Etiquetas",
   "library_nav_library": "Biblioteca",
   "library_nav_all_collections": "Todas las colecciones",
   "library_nav_selector": "Elegir destino de la biblioteca",
@@ -888,5 +887,9 @@
   "library_filter_empty_description": "Quita el filtro de estado para ver todas las entradas registradas.",
   "library_collections": "Colecciones",
   "library_all_collections": "Todas las colecciones",
-  "library_next_page": "Página siguiente"
+  "library_next_page": "Página siguiente",
+  "thread_post_erased": "El autor eliminó esta publicación.",
+  "moderation_evidence_label": "Detalles del informe",
+  "moderation_appeal_target_label": "Contenido afectado",
+  "moderation_appeal_conflict": "Esta apelación ya se resolvió. Actualiza la lista antes de continuar."
 }

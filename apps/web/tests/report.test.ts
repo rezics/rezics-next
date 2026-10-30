@@ -293,7 +293,7 @@ const fake = Bun.serve({
       method: request.method,
       path: url.pathname,
       body,
-      key: request.headers.get('idempotency-key'),
+      key: JSON.parse(request.headers.get('idempotency-key') ?? 'null'),
       authorization: request.headers.get('authorization'),
     });
     if (request.method === 'GET') {

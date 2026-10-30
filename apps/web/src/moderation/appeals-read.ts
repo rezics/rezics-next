@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { notFound } from '@tanstack/react-router';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
@@ -19,7 +19,7 @@ export type Appeal = {
     target?: { kind: 'post' | 'thread'; id: string };
     targetKind?: 'post' | 'thread';
     targetId?: string;
-    /** Present in UI fixtures; the API deliberately exposes only canResolve. */
+    /** Retained for existing component fixtures; native lists expose only canResolve. */
     deciderId?: string;
     appeal?: { outcome: 'reversed' | 'upheld'; statement: string; resolvedAt: string } | null;
   };
@@ -35,26 +35,60 @@ export type AppealTargetReads = {
   thread: (id: string) => Promise<ModerationTarget['value']>;
 };
 
-/** Reads one page and resolves each target identity through its ordinary read at most once. */
+function parseAppealPage(value: unknown): AppealPage {
+  if (!value || typeof value !== 'object') throw notFound();
+  const page = value as Record<string, unknown>;
+  if (!Array.isArray(page.appeals) || (page.next !== null && typeof page.next !== 'string')) throw notFound();
+  const appeals = page.appeals.map((item): Appeal => {
+    if (!item || typeof item !== 'object') throw notFound();
+    const appeal = item as Record<string, unknown>;
+    const decision =
+      appeal.decision && typeof appeal.decision === 'object' ? (appeal.decision as Record<string, unknown>) : null;
+    if (
+      typeof appeal.id !== 'string' ||
+      typeof appeal.decisionId !== 'string' ||
+      typeof appeal.appellantId !== 'string' ||
+      typeof appeal.statement !== 'string' ||
+      typeof appeal.createdAt !== 'string' ||
+      typeof appeal.canResolve !== 'boolean' ||
+      !decision ||
+      typeof decision.statement !== 'string' ||
+      !decision.target ||
+      typeof decision.target !== 'object'
+    )
+      throw notFound();
+    const target = decision.target as Record<string, unknown>;
+    if ((target.kind !== 'post' && target.kind !== 'thread') || typeof target.id !== 'string') throw notFound();
+    return {
+      id: appeal.id,
+      decisionId: appeal.decisionId,
+      appellantId: appeal.appellantId,
+      statement: appeal.statement,
+      createdAt: appeal.createdAt,
+      decision: {
+        statement: decision.statement,
+        target: { kind: target.kind, id: target.id },
+      },
+      canResolve: appeal.canResolve,
+    };
+  });
+  return { appeals, next: page.next as string | null };
+}
+
+/** Reads one native page, then resolves each distinct target with at most one ordinary read. */
 export async function readModerationAppeals(
   source: AppealReadSource,
   input: { boardId: string; threadId?: string; cursor?: string },
 ): Promise<AppealPage> {
-  const page = input.threadId
-    ? await source.threadAppeals(input.threadId, input.cursor)
-    : await source.boardAppeals(input.boardId, input.cursor);
-  return { next: page.next, appeals: page.appeals };
+  return input.threadId
+    ? source.threadAppeals(input.threadId, input.cursor)
+    : source.boardAppeals(input.boardId, input.cursor);
 }
 
 export async function resolveAppealTargets(appeals: Appeal[], reads: AppealTargetReads): Promise<ModerationTarget[]> {
-  type Target = NonNullable<Appeal['decision']['target']>;
-  const unique = new Map<string, Target>();
+  const unique = new Map<string, NonNullable<Appeal['decision']['target']>>();
   for (const appeal of appeals) {
-    const target: Target | undefined =
-      appeal.decision.target ??
-      (appeal.decision.targetKind && appeal.decision.targetId
-        ? { kind: appeal.decision.targetKind, id: appeal.decision.targetId }
-        : undefined);
+    const target = appealTarget(appeal);
     if (target) unique.set(`${target.kind}:${target.id}`, target);
   }
   return Promise.all(
@@ -66,11 +100,20 @@ export async function resolveAppealTargets(appeals: Appeal[], reads: AppealTarge
   );
 }
 
+export function appealTarget(appeal: Appeal): Appeal['decision']['target'] {
+  return (
+    appeal.decision.target ??
+    (appeal.decision.targetKind && appeal.decision.targetId
+      ? { kind: appeal.decision.targetKind, id: appeal.decision.targetId }
+      : undefined)
+  );
+}
+
 type ReadResult = { data?: unknown; error?: unknown };
 type Client = {
   boards: (params: { id: string }) => {
     appeals: { get: (options: unknown) => Promise<ReadResult> };
-  } & { get: (options?: unknown) => Promise<ReadResult> };
+  };
   threads: (params: { id: string }) => {
     appeals: { get: (options: unknown) => Promise<ReadResult> };
     get: (options?: unknown) => Promise<ReadResult>;
@@ -110,7 +153,7 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
             query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
           });
           if (result.error || !result.data) throw notFound();
-          return result.data as AppealPage;
+          return parseAppealPage(result.data);
         },
         threadAppeals: async (id, cursor) => {
           const result = await client.threads({ id }).appeals.get({
@@ -118,7 +161,7 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
             query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
           });
           if (result.error || !result.data) throw notFound();
-          return result.data as AppealPage;
+          return parseAppealPage(result.data);
         },
       },
       data,

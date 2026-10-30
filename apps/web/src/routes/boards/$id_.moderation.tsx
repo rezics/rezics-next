@@ -13,6 +13,7 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
   validateSearch: (search: Record<string, unknown>) => ({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
     ...(typeof search.thread === 'string' && search.thread.length <= 128 ? { thread: search.thread } : {}),
+    ...(typeof search.post === 'string' && search.post.length <= 128 ? { post: search.post } : {}),
     ...(search.tab === 'appeals' ? { tab: 'appeals' as const } : {}),
   }),
   loaderDeps: ({ search }) => search,
@@ -22,7 +23,9 @@ export const Route = createFileRoute('/boards/$id_/moderation')({
       ...(deps.cursor ? { cursor: deps.cursor } : {}),
       ...(deps.thread ? { threadId: deps.thread } : {}),
     };
-    return deps.tab === 'appeals' ? loadModerationAppeals({ data: input }) : loadModerationReports({ data: input });
+    return deps.tab === 'appeals'
+      ? loadModerationAppeals({ data: input })
+      : loadModerationReports({ data: { ...input, ...(deps.post ? { postId: deps.post } : {}) } });
   },
   head: ({ match }) =>
     pageHead(
@@ -39,14 +42,14 @@ function ModerationReportsRoute() {
   const navigate = useNavigate();
   const page = Route.useLoaderData();
   const { id } = Route.useParams();
-  const { thread, cursor, tab } = Route.useSearch();
+  const { thread, post, cursor, tab } = Route.useSearch();
   const appealPage = page as Awaited<ReturnType<typeof loadModerationAppeals>>;
   const reportPage = page as Awaited<ReturnType<typeof loadModerationReports>>;
   const onNext = (nextCursor: string) =>
     void navigate({
       to: '/boards/$id/moderation',
       params: { id },
-      search: { ...(thread ? { thread } : {}), ...(tab ? { tab } : {}), cursor: nextCursor },
+      search: { ...(thread ? { thread } : {}), ...(post ? { post } : {}), ...(tab ? { tab } : {}), cursor: nextCursor },
     });
   return tab === 'appeals' ? (
     <ModerationAppealsView
@@ -54,6 +57,7 @@ function ModerationReportsRoute() {
       targets={appealPage.targets}
       next={appealPage.next}
       {...(thread ? { threadId: thread } : {})}
+      {...(post ? { postId: post } : {})}
       onNext={onNext}
     />
   ) : (
@@ -63,6 +67,7 @@ function ModerationReportsRoute() {
       next={reportPage.next}
       tab="reports"
       {...(thread ? { threadId: thread } : {})}
+      {...(post ? { postId: post } : {})}
       onNext={onNext}
     />
   );

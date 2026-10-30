@@ -42,6 +42,7 @@ test('board report pages retain their cursor, omit reporter identity, and resolv
         return { reports, next: 'next+page==' };
       },
       threadReports: async () => ({ reports: [], next: null }),
+      postReports: async () => ({ reports: [], next: null }),
     },
     { boardId: id(1), cursor: 'current/page==' },
   );
@@ -80,6 +81,7 @@ test('thread scope reads reports from the thread endpoint and the read owns outc
         calls.push(`thread:${threadId}:${cursor ?? ''}`);
         return { reports: [report(1, { kind: 'thread', id: threadId }, 'dismissed')], next: null };
       },
+      postReports: async () => ({ reports: [], next: null }),
     },
     { boardId: id(1), threadId: id(2), cursor: 'thread-cursor' },
   );
@@ -95,6 +97,7 @@ test('pages of five and twenty reports read each repeated target once', async ()
       {
         boardReports: async () => ({ reports: repeated, next: null }),
         threadReports: async () => ({ reports: [], next: null }),
+        postReports: async () => ({ reports: [], next: null }),
       },
       { boardId: id(1) },
     );
@@ -116,6 +119,30 @@ test('pages of five and twenty reports read each repeated target once', async ()
     expect(targets).toHaveLength(1);
     expect(targetReads).toBe(1);
   }
+});
+
+test('post scope reads reports for one known post and carries its cursor', async () => {
+  const calls: string[] = [];
+  const postId = id(88);
+  const page = await readModerationReports(
+    {
+      boardReports: async () => {
+        calls.push('board');
+        return { reports: [], next: null };
+      },
+      threadReports: async () => {
+        calls.push('thread');
+        return { reports: [], next: null };
+      },
+      postReports: async (targetId, cursor) => {
+        calls.push(`post:${targetId}:${cursor ?? ''}`);
+        return { reports: [report(1, { kind: 'post', id: targetId })], next: null };
+      },
+    },
+    { boardId: id(1), postId, cursor: 'post-cursor' },
+  );
+  expect(calls).toEqual([`post:${postId}:post-cursor`]);
+  expect(page.reports[0]?.target).toEqual({ kind: 'post', id: postId });
 });
 
 test('take down and dismiss send their established commands and return to read outcomes', async () => {

@@ -4,6 +4,7 @@ import { Tombstone } from '@rezics/ui/tombstone';
 import { Withheld } from '@rezics/ui/withheld';
 import { useState, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
+import { csrfHeaders } from '../threads/composer';
 import { actionOnReport } from './actions';
 import type { Report, ResolvedReportTarget } from './reports-read';
 import { PageHeading } from '../shell/page-heading';
@@ -47,6 +48,7 @@ export function ModerationReportsView({
   next,
   tab = 'reports',
   threadId,
+  postId,
   onNext,
 }: {
   reports: Report[];
@@ -54,8 +56,17 @@ export function ModerationReportsView({
   next: string | null;
   tab?: 'reports' | 'appeals';
   threadId?: string;
+  postId?: string;
   onNext?: (cursor: string) => void;
 }) {
+  const filters = [
+    threadId ? `thread=${encodeURIComponent(threadId)}` : '',
+    postId ? `post=${encodeURIComponent(postId)}` : '',
+  ]
+    .filter(Boolean)
+    .join('&');
+  const reportsHref = filters ? `?${filters}` : '?';
+  const appealsHref = `?tab=appeals${filters ? `&${filters}` : ''}`;
   return (
     <article className="max-w-4xl space-y-8 text-foreground">
       <header className="space-y-3">
@@ -68,16 +79,14 @@ export function ModerationReportsView({
             {m.moderation_reports_tab()}
           </span>
         ) : (
-          <a href={threadId ? `?thread=${encodeURIComponent(threadId)}` : '?'}>{m.moderation_reports_tab()}</a>
+          <a href={reportsHref}>{m.moderation_reports_tab()}</a>
         )}
         {tab === 'appeals' ? (
           <span aria-current="page" className="font-semibold">
             {m.moderation_appeals_tab()}
           </span>
         ) : (
-          <a href={`?tab=appeals${threadId ? `&thread=${encodeURIComponent(threadId)}` : ''}`}>
-            {m.moderation_appeals_tab()}
-          </a>
+          <a href={appealsHref}>{m.moderation_appeals_tab()}</a>
         )}
       </nav>
       {threadId ? <p className="text-sm text-muted-foreground">{m.moderation_thread_filter()}</p> : null}
@@ -94,6 +103,11 @@ export function ModerationReportsView({
                 <p>
                   <span className="font-medium">{m.moderation_reason_label()}:</span> {report.reason}
                 </p>
+                {report.evidence ? (
+                  <p className="whitespace-pre-wrap">
+                    <span className="font-medium">{m.moderation_evidence_label()}:</span> {report.evidence}
+                  </p>
+                ) : null}
                 <time className="block text-sm text-muted-foreground" dateTime={report.createdAt}>
                   {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
                     new Date(report.createdAt),
@@ -130,7 +144,7 @@ function ReportActions({ reportId, target }: { reportId: string; target: Report[
   async function dismiss() {
     setPending(true);
     try {
-      await actionOnReport({ data: { action: 'dismiss', reportId } });
+      await actionOnReport({ data: { action: 'dismiss', reportId }, headers: csrfHeaders() });
       location.reload();
     } catch {
       setMessage(m.moderation_action_failed());
@@ -152,6 +166,7 @@ function ReportActions({ reportId, target }: { reportId: string; target: Report[
           reason: String(data.get('reason') ?? ''),
           statement: String(data.get('statement') ?? ''),
         },
+        headers: csrfHeaders(),
       });
       location.reload();
     } catch {

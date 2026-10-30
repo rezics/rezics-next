@@ -17,7 +17,8 @@ type DismissInput = { reportId: string };
 type ResolveAppealInput = { id: string; outcome: 'uphold' | 'reverse'; statement: string };
 export type AppealResolutionResult =
   | { state: 'resolved'; outcome: 'uphold' | 'reverse'; statement: string }
-  | { state: 'forbidden' };
+  | { state: 'forbidden' }
+  | { state: 'conflict' };
 
 function decisionReason(reason: string, statement: string): string {
   const cleanReason = reason.trim();
@@ -46,7 +47,7 @@ export async function resolveModerationAppeal(
   return { outcome: input.outcome, statement: input.statement.trim() };
 }
 
-/** Carry a refusal as serializable data: server-function errors discard custom properties. */
+/** Keeps native authorization and conflict results serializable across the server-function boundary. */
 export async function submitModerationAppealResolution(
   command: ModerationCommand,
   input: ResolveAppealInput,
@@ -54,8 +55,11 @@ export async function submitModerationAppealResolution(
   try {
     return { state: 'resolved', ...(await resolveModerationAppeal(command, input)) };
   } catch (error) {
-    if (error && typeof error === 'object' && 'status' in error && Number(error.status) === 403)
-      return { state: 'forbidden' };
+    if (error && typeof error === 'object' && 'status' in error) {
+      const status = Number(error.status);
+      if (status === 403) return { state: 'forbidden' };
+      if (status === 409) return { state: 'conflict' };
+    }
     throw error;
   }
 }
@@ -94,30 +98,30 @@ export const actionOnReport = createServerFn({ method: 'POST' })
     if (!authorization) throw new Error('Sign in required');
     const client = kernelClient() as unknown as {
       boards: (params: { id: string }) => {
-        $takeDown: { post: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+        $takeDown: { post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
       };
       threads: (params: { id: string }) => {
-        $takeDown: { post: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+        $takeDown: { post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
       };
       posts: (params: { id: string }) => {
-        $takeDown: { post: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+        $takeDown: { post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
       };
       reports: (params: { id: string }) => {
-        $dismiss: { post: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+        $dismiss: { post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
       };
     };
-    const headers = { authorization, 'idempotency-key': crypto.randomUUID() };
+    const headers = { authorization, 'idempotency-key': JSON.stringify(crypto.randomUUID()) };
     if (data.action === 'dismiss') {
-      const result = await client.reports({ id: data.reportId }).$dismiss.post({ body: {}, headers });
+      const result = await client.reports({ id: data.reportId }).$dismiss.post({}, { headers });
       if (result.error) throw new Error('Report dismissal failed');
       return { ok: true };
     }
     const command =
       data.targetKind === 'board' ? client.boards : data.targetKind === 'thread' ? client.threads : client.posts;
-    const result = await command({ id: data.targetId! }).$takeDown.post({
-      body: { reason: decisionReason(data.reason ?? '', data.statement ?? '') },
-      headers,
-    });
+    const result = await command({ id: data.targetId! }).$takeDown.post(
+      { reason: decisionReason(data.reason ?? '', data.statement ?? '') },
+      { headers },
+    );
     if (result.error) throw new Error('Board takedown failed');
     return { ok: true };
   });
@@ -145,19 +149,21 @@ export const actionOnAppeal = createServerFn({ method: 'POST' })
     if (!authorization) throw new Error('Sign in required');
     const client = kernelClient() as unknown as {
       'moderation-appeals': (params: { id: string }) => {
-        $resolve: { post: (options: unknown) => Promise<{ data?: unknown; error?: unknown }> };
+        $resolve: {
+          post: (body: unknown, options: unknown) => Promise<{ data?: unknown; error?: unknown; status?: number }>;
+        };
       };
     };
     return submitModerationAppealResolution(async (_path, body) => {
-      const result = await client['moderation-appeals']({ id: data.id }).$resolve.post({
-        body,
-        headers: { authorization, 'idempotency-key': crypto.randomUUID() },
-      });
+      const result = await client['moderation-appeals']({ id: data.id }).$resolve.post(
+        body as { outcome: 'uphold' | 'reverse'; statement: string },
+        { headers: { authorization, 'idempotency-key': JSON.stringify(crypto.randomUUID()) } },
+      );
       if (result.error) {
         const status =
           typeof result.error === 'object' && result.error !== null && 'status' in result.error
             ? Number(result.error.status)
-            : undefined;
+            : result.status;
         throw Object.assign(new Error('Appeal resolution failed'), { status });
       }
       return result.data;

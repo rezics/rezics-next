@@ -59,7 +59,7 @@ export async function submitReport(
     // The kernel's report targets name the subject kind only once its report contract admits it. Until then it
     // refuses the report and the dialog says so.
     const result = await client.reports.post(body as KernelReport, {
-      headers: { 'idempotency-key': idempotencyKey, ...(authorization ? { authorization } : {}) },
+      headers: { 'idempotency-key': JSON.stringify(idempotencyKey), ...(authorization ? { authorization } : {}) },
     });
     if (!result.error) return { ok: true, reportId: result.data.reportId };
     if (isPlatformClosedProblem(result.status, result.error.value)) return { ok: false, reason: 'closed' };
