@@ -99,6 +99,15 @@ export async function enrollRecordHistorySourceSets(
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
       [key, generation, ...storageKey, set.locator.transactionId, set.members, set.locator.revision, set.digest],
     );
+    const enrolled = await tx.query(
+      `SELECT original_transaction,member_count,native_revision,snapshot_digest FROM core.record_history_purge_set
+       WHERE source_key=$1 AND deletion_generation=$2 AND source_partition=$3 AND set_locator=$4 AND set_revision=$5 FOR SHARE`,
+      [key, generation, ...storageKey],
+    );
+    const retained = enrolled.rows[0];
+    if (!retained || retained.original_transaction !== set.locator.transactionId || retained.member_count !== set.members ||
+        retained.native_revision !== set.locator.revision || retained.snapshot_digest !== set.digest)
+      throw new TypeError('Conflicting immutable native source set enrollment');
     // Exact native verification is the only path from unresolved metadata to snapshot.
     await tx.query(
       `UPDATE core.record_history_source_set SET metadata_state='native-snapshot',snapshot_digest=$4,member_count=$5
@@ -106,6 +115,15 @@ export async function enrollRecordHistorySourceSets(
        AND native_revision=$6 AND original_transaction=$7`,
       [...storageKey, set.digest, set.members, set.locator.revision, set.locator.transactionId],
     );
+    const original = await tx.query(
+      `SELECT original_transaction,native_revision,snapshot_digest,member_count,metadata_state
+       FROM core.record_history_source_set WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3 FOR SHARE`,
+      storageKey,
+    );
+    const row = original.rows[0];
+    if (row && (row.original_transaction !== set.locator.transactionId || row.native_revision !== set.locator.revision ||
+        row.snapshot_digest !== set.digest || row.member_count !== set.members || row.metadata_state !== 'native-snapshot'))
+      throw new TypeError('Conflicting immutable native source set association');
   }
   await tx.query(
     `UPDATE core.record_history_purge SET native_set_frontier=$3,native_set_index_complete=$4

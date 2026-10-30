@@ -4,7 +4,6 @@ import {
   prepareRecordPurgeAuthority,
   type RecordPurgeAuthority,
   type NativeRecordPurgeReference,
-  type ResourceRecordPurgeReference,
 } from '../semantic/record-purge-authority.ts';
 import { recordHistorySourceKey, type RecordHistorySourceReference } from './record-source.ts';
 

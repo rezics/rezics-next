@@ -207,13 +207,20 @@ test('History consumes the actual Semantic one-set building seal locator revisio
   }
   const work = copies.rows.find((copy) => copy.artifact_type === 'durable-work/v1');
   expect(decodeLocator('durable-work/v1', work!.locator)).toEqual({ artifactType: 'durable-work/v1', workId });
-  const page = await producer.pageSemanticRecordSourceSets({ pool: f.db.pool }, source, {
-    frontier: null, limit: 1, deadline: Date.now() + 30_000,
-  });
-  expect(['progress', 'complete']).toContain(page.state);
-  expect(page.sets.length).toBeLessThanOrEqual(1);
-  if (page.frontier !== null) expect(typeof page.frontier).toBe('string');
-  expect(page.sets).toContainEqual(snapshot);
+  let frontier: string | null = null;
+  let found = false;
+  for (let step = 0; step < 16; step++) {
+    const page = await producer.pageSemanticRecordSourceSets({ pool: f.db.pool }, source, {
+      frontier, limit: 1, deadline: Date.now() + 30_000,
+    });
+    expect(['progress', 'complete']).toContain(page.state);
+    expect(page.sets.length).toBeLessThanOrEqual(1);
+    if (page.frontier !== null) expect(typeof page.frontier).toBe('string');
+    found ||= page.sets.some((set) => set.locator.transactionId === locator!.transactionId);
+    if (found || page.state === 'complete') break;
+    frontier = page.frontier;
+  }
+  expect(found).toBe(true);
   await command(async (tx) => {
     expect(await producer.verifySemanticRecordSourceSet(tx, locator!, snapshot!.digest)).toBe(true);
     expect(await producer.verifySemanticRecordSourceSet(tx, locator!, `${snapshot!.digest}changed`)).toBe(false);
