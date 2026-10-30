@@ -21,7 +21,9 @@ function Identity({ account, accountId }: { account: ManagementIdentity | null; 
       {account?.displayName && account.handle ? (
         <p className="text-sm text-muted-foreground">@{account.handle}</p>
       ) : null}
-      {!account ? <p className="text-sm text-muted-foreground">{m.settings_managed_detail_identity_unavailable()}</p> : null}
+      {!account ? (
+        <p className="text-sm text-muted-foreground">{m.settings_managed_detail_identity_unavailable()}</p>
+      ) : null}
     </div>
   );
 }
