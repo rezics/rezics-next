@@ -122,11 +122,19 @@ export function AuthStory({
     }
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(input instanceof Request ? input.url : String(input), window.location.href).pathname;
+      if (path === '/consent/third-party')
+        return Response.json({
+          client_id: 'third-party',
+          display_name: 'Reading companion',
+          scopes: ['openid', 'offline_access', 'subject:read'],
+          granted: ['openid', 'offline_access', 'subject:read'],
+        });
       if (
         !['/account-operations/approve', '/account-operations/execute', '/consent', '/passkeys/remove'].includes(path)
       )
         return originalFetch(input, init);
-      if (mode === 'unknown' && path === '/account-operations/execute') throw new TypeError('Story: lost response');
+      if (mode === 'unknown' && ['/account-operations/execute', '/consent'].includes(path))
+        throw new TypeError('Story: lost response');
       const failure =
         mode === 'unavailable'
           ? 503
@@ -145,7 +153,7 @@ export function AuthStory({
           reference: 'story-native-approval',
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
         });
-      if (path === '/consent') return Response.json({ client_id: 'third-party', scope: [] });
+      if (path === '/consent') return Response.json(JSON.parse(String(init?.body)));
       if (path === '/passkeys/remove') return Response.json({});
       const body = JSON.parse(String(init?.body)) as { operation: { kind: string; accountId?: string } };
       return Response.json({ accountId: body.operation.accountId ?? 'story-organization' });

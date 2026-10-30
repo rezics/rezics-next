@@ -48,11 +48,11 @@ export function parseInventoryPage<V extends InventoryView>(view: V, body: unkno
     seen.add(entry.client_id);
     const label = { client_id: entry.client_id, display_name: entry.display_name };
     if (view === 'clients') {
-      if (typeof entry.disabled !== 'boolean' || !strings(entry.scopes)) return { kind: 'unavailable' };
+      if (typeof entry.disabled !== 'boolean' || !scopeSet(entry.scopes)) return { kind: 'unavailable' };
       rows.push({ ...label, disabled: entry.disabled, scopes: entry.scopes });
     } else {
       if (
-        !strings(entry.granted) ||
+        !scopeSet(entry.granted) ||
         !['current', 'inactive', 'unavailable'].includes(String(entry.status)) ||
         typeof entry.reducible !== 'boolean' ||
         typeof entry.pending_reduction !== 'boolean' ||
@@ -204,28 +204,42 @@ export function createConsentReduction(consent: GrantedConsent, retained: readon
   });
 }
 
-/** One native current read followed by the existing exact consent replacement.
+/** Existing exact consent replacement, with a native current read for retained scopes.
  * No tokens, receipts or returned scopes become a local grant or replay queue.
  */
-export async function reduceConsent(consent: GrantedConsent, retained: readonly string[]): Promise<ConsentReductionResult> {
+export async function reduceConsent(
+  consent: GrantedConsent,
+  retained: readonly string[],
+): Promise<ConsentReductionResult> {
   // Snapshot before the first await: caller edits cannot retarget an in-flight write.
   const target = createConsentReduction(consent, retained);
   if (!target) return { kind: 'denied' };
-  const current = await readConsent(target.clientId);
-  if (!current.ok) {
-    return {
-      kind: current.status === 401 ? 'signed-out' : current.status === 403 || current.status === 404 ? 'denied' : 'unavailable',
-    };
+  // Empty replacement cannot add authority. Preserve the original remove-all
+  // transport; SecurityInventory refreshes its current native DTO for either path.
+  // A nonempty replacement also checks the exact native granted set so it cannot
+  // restore a permission removed since the selection was made.
+  if (target.retained.length > 0) {
+    const current = await readConsent(target.clientId);
+    if (!current.ok) {
+      return {
+        kind:
+          current.status === 401
+            ? 'signed-out'
+            : current.status === 403 || current.status === 404
+              ? 'denied'
+              : 'unavailable',
+      };
+    }
+    // This exact native read also refuses first-party, disabled/unready clients.
+    // Do not turn a stale reduction into a consent expansion or unchanged write.
+    if (
+      !scopeSet(current.body.granted) ||
+      !scopeSet(current.body.scopes) ||
+      !sameScopes(current.body.granted, target.current) ||
+      target.retained.some((scope) => !current.body.scopes.includes(scope))
+    )
+      return { kind: 'denied' };
   }
-  // This exact native read also refuses first-party, disabled/unready clients.
-  // Do not turn a stale reduction into a consent expansion or unchanged write.
-  if (
-    !scopeSet(current.body.granted) ||
-    !scopeSet(current.body.scopes) ||
-    !sameScopes(current.body.granted, target.current) ||
-    target.retained.some((scope) => !current.body.scopes.includes(scope))
-  )
-    return { kind: 'denied' };
   const response = await authPost<unknown>('/consent', {
     client_id: target.clientId,
     scope: target.retained,

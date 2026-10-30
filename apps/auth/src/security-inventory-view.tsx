@@ -7,7 +7,8 @@ import { ErrorAlert } from './alert';
 import { m } from './paraglide/messages.js';
 import {
   loadInventory,
-  removeConsent,
+  reduceConsent,
+  createConsentReduction,
   type GrantedConsent,
   type InventoryPage,
   type InventoryView,
@@ -15,6 +16,23 @@ import {
 } from './security-inventory';
 
 export type InventorySource = typeof loadInventory;
+type Selection = { consent: GrantedConsent; retained: string[]; confirming: boolean };
+
+function Permission({ scope }: { scope: string }) {
+  const label =
+    scope === 'openid'
+      ? m.auth_consent_scope_openid()
+      : scope === 'offline_access'
+        ? m.auth_consent_scope_offline_access()
+        : null;
+  return (
+    <span className="wrap-anywhere">
+      {label ? <>{label} — </> : null}
+      <code>{scope}</code>
+    </span>
+  );
+}
+
 function inventoryMessage(kind: Exclude<InventoryPage<InventoryView>['kind'], 'ready'>): string {
   if (kind === 'signed-out') return m.auth_account_operation_sign_in_required();
   if (kind === 'denied') return m.auth_inventory_denied();
@@ -39,20 +57,25 @@ function InventoryList<V extends InventoryView>({
   const [pending, setPending] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [selection, setSelection] = useState<GrantedConsent | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
   const [reducing, setReducing] = useState(false);
   const generation = useRef(0);
+  const submitting = useRef(false);
   const heading = view === 'clients' ? m.auth_inventory_clients_heading() : m.auth_inventory_consents_heading();
   const headingId = `inventory-${view}-heading`;
 
   useEffect(() => {
     const current = ++generation.current;
     setPending(true);
-    void source(view).then((result) => {
-      if (generation.current !== current) return;
-      setPage(result);
-      setPending(false);
-    });
+    setPage(null);
+    setSelection(null);
+    void source(view)
+      .catch(() => ({ kind: 'unavailable' as const }))
+      .then((result) => {
+        if (generation.current !== current) return;
+        setPage(result);
+        setPending(false);
+      });
     return () => {
       generation.current++;
     };
@@ -64,7 +87,7 @@ function InventoryList<V extends InventoryView>({
     setPending(true);
     setError('');
     setSelection(null);
-    const result = await source(view, target);
+    const result = await source(view, target).catch(() => ({ kind: 'unavailable' as const }));
     if (generation.current !== current) return;
     setPending(false);
     if (result.kind !== 'ready') {
@@ -79,16 +102,63 @@ function InventoryList<V extends InventoryView>({
     setCursor(target);
   }
 
+  function select(consent: GrantedConsent, removeAll: boolean) {
+    // Keep only public inventory fields; drafts never leave this mounted row.
+    const snapshot: GrantedConsent = {
+      client_id: consent.client_id,
+      display_name: consent.display_name,
+      granted: [...consent.granted],
+      status: consent.status,
+      reducible: consent.reducible,
+      pending_reduction: consent.pending_reduction,
+    };
+    setSelection({ consent: snapshot, retained: removeAll ? [] : [...snapshot.granted], confirming: removeAll });
+    setError('');
+  }
+
   async function reduce() {
-    if (!selection || pending || reducing) return;
+    if (!selection?.confirming || preflight || pending || submitting.current) return;
+    const { consent, retained } = selection;
+    const target = createConsentReduction(consent, retained);
+    if (!target) return;
+    submitting.current = true;
     setReducing(true);
     setError('');
-    const result = await removeConsent(selection);
+    const current = generation.current;
+    // Refresh the same bounded native inventory page, including current pending,
+    // first-party/reducible and availability rules, before the exact native read.
+    const fresh = await source(view, cursor).catch(() => ({ kind: 'unavailable' as const }));
+    if (generation.current !== current) {
+      submitting.current = false;
+      setReducing(false);
+      return;
+    }
+    const row = fresh.kind === 'ready' ? fresh.rows.find((entry) => entry.client_id === target.clientId) : null;
+    const matches =
+      row &&
+      'granted' in row &&
+      row.granted.length === target.current.length &&
+      row.granted.every((scope) => target.current.includes(scope)) &&
+      createConsentReduction(row, target.retained);
+    const result =
+      fresh.kind !== 'ready'
+        ? {
+            kind:
+              fresh.kind === 'signed-out'
+                ? ('signed-out' as const)
+                : fresh.kind === 'unavailable'
+                  ? ('unavailable' as const)
+                  : ('denied' as const),
+          }
+        : matches
+          ? await reduceConsent(consent, target.retained)
+          : { kind: 'denied' as const };
+    submitting.current = false;
+    if (generation.current !== current) return;
     setReducing(false);
     setSelection(null);
     if (result.kind === 'accepted') {
-      // Consent reduction fences authentication. A historical receipt is not
-      // a current inventory snapshot and cannot be patched into the old list.
+      // A historical acknowledgement cannot be patched into the old inventory.
       setNotice(m.auth_inventory_reduced());
       setPage({ kind: 'signed-out' });
       onSessionEnded?.(true);
@@ -103,10 +173,88 @@ function InventoryList<V extends InventoryView>({
               : m.auth_inventory_unavailable(),
       );
       setPage({
-        kind: result.kind === 'signed-out' ? 'signed-out' : result.kind === 'denied' ? 'denied' : 'unavailable',
+        kind:
+          result.kind === 'signed-out' || result.kind === 'unknown'
+            ? 'signed-out'
+            : result.kind === 'denied'
+              ? 'denied'
+              : 'unavailable',
       });
       if (result.kind === 'signed-out') onSessionEnded?.(false);
     }
+  }
+
+  function review(row: GrantedConsent) {
+    if (!selection || selection.consent.client_id !== row.client_id || preflight) return null;
+    const removed = selection.consent.granted.filter((scope) => !selection.retained.includes(scope));
+    return (
+      <fieldset disabled={reducing || pending} className="flex min-w-0 flex-col gap-3" aria-busy={reducing}>
+        <legend className="font-semibold">
+          {m.auth_inventory_review_named({ name: row.display_name?.trim() || m.auth_inventory_unnamed() })}
+        </legend>
+        {selection.confirming ? (
+          <p>
+            {selection.retained.length === 0
+              ? m.auth_inventory_remove_confirm({ name: row.display_name?.trim() || m.auth_inventory_unnamed() })
+              : m.auth_inventory_reduce_confirm({ name: row.display_name?.trim() || m.auth_inventory_unnamed() })}
+          </p>
+        ) : (
+          <>
+            <p>{m.auth_inventory_choose_removals()}</p>
+            <ul className="flex flex-col gap-3" aria-label={m.auth_inventory_retained()}>
+              {selection.retained.map((scope) => (
+                <li key={scope} className="flex flex-wrap items-center gap-3">
+                  <Permission scope={scope} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      setSelection((draft) =>
+                        draft && !draft.confirming
+                          ? { ...draft, retained: draft.retained.filter((entry) => entry !== scope) }
+                          : draft,
+                      )
+                    }
+                  >
+                    {m.auth_inventory_remove_permission({ scope })}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {removed.length > 0 ? (
+          <div role="status">
+            <p>{m.auth_inventory_removed()}</p>
+            <ul>
+              {removed.map((scope) => (
+                <li key={scope}>
+                  <Permission scope={scope} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-3">
+          {selection.confirming ? (
+            <Button type="button" disabled={reducing || pending} aria-busy={reducing} onClick={() => void reduce()}>
+              {selection.retained.length === 0 ? m.auth_inventory_remove() : m.auth_inventory_reduce()}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled={!removed.length || reducing || pending}
+              onClick={() => setSelection((draft) => (draft ? { ...draft, confirming: true } : null))}
+            >
+              {m.auth_inventory_review_removal()}
+            </Button>
+          )}
+          <Button type="button" variant="outline" disabled={reducing || pending} onClick={() => setSelection(null)}>
+            {m.auth_inventory_cancel()}
+          </Button>
+        </div>
+      </fieldset>
+    );
   }
 
   return (
@@ -163,7 +311,16 @@ function InventoryList<V extends InventoryView>({
                               : m.auth_inventory_consent_current()}
                     </ItemDescription>
                     {'granted' in row && row.granted.length > 0 ? (
-                      <Badge variant="secondary">{m.auth_inventory_permissions({ count: row.granted.length })}</Badge>
+                      <>
+                        <Badge variant="secondary">{m.auth_inventory_permissions({ count: row.granted.length })}</Badge>
+                        <ul aria-label={m.auth_inventory_permissions({ count: row.granted.length })}>
+                          {row.granted.map((scope) => (
+                            <li key={scope}>
+                              <Permission scope={scope} />
+                            </li>
+                          ))}
+                        </ul>
+                      </>
                     ) : null}
                     {'granted' in row &&
                     row.reducible &&
@@ -171,44 +328,35 @@ function InventoryList<V extends InventoryView>({
                     !row.pending_reduction &&
                     row.granted.length > 0 &&
                     !preflight ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={pending || reducing}
-                        onClick={() => {
-                          setSelection(row);
-                          setError('');
-                        }}
-                      >
-                        {m.auth_inventory_remove_named({
-                          name: row.display_name?.trim() || m.auth_inventory_unnamed(),
-                        })}
-                      </Button>
+                      <div className="flex flex-wrap gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={pending || reducing || !!selection}
+                          onClick={() => select(row, false)}
+                        >
+                          {m.auth_inventory_review_named({
+                            name: row.display_name?.trim() || m.auth_inventory_unnamed(),
+                          })}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={pending || reducing || !!selection}
+                          onClick={() => select(row, true)}
+                        >
+                          {m.auth_inventory_remove_named({
+                            name: row.display_name?.trim() || m.auth_inventory_unnamed(),
+                          })}
+                        </Button>
+                      </div>
                     ) : null}
+                    {'granted' in row ? review(row) : null}
                   </ItemContent>
                 </Item>
               ))}
             </ItemGroup>
           )}
-          {selection ? (
-            <Alert>
-              <AlertDescription className="flex flex-col gap-3">
-                <p>
-                  {m.auth_inventory_remove_confirm({
-                    name: selection.display_name?.trim() || m.auth_inventory_unnamed(),
-                  })}
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <Button type="button" disabled={reducing} aria-busy={reducing} onClick={() => void reduce()}>
-                    {m.auth_inventory_remove()}
-                  </Button>
-                  <Button type="button" variant="outline" disabled={reducing} onClick={() => setSelection(null)}>
-                    {m.auth_inventory_cancel()}
-                  </Button>
-                </div>
-              </AlertDescription>
-            </Alert>
-          ) : null}
           <nav aria-label={heading} className="flex flex-wrap gap-3">
             {history.length > 0 ? (
               <Button
