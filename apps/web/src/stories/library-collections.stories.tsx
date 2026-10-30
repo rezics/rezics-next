@@ -82,7 +82,7 @@ export const ManyCollections: Story = {
 const longTitles = [
   'Books to read through the long winter evenings and return to with friends',
   'Places, films and stories to explore together on our next journey',
-];
+] as const;
 
 export const LongCollectionTitles: Story = {
   render: () =>
