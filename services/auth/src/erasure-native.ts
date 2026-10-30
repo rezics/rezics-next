@@ -239,7 +239,7 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
       if (!row.client_id) {
         const client = (
           await connection.query<{ client_id: string | null }>(
-            'SELECT CASE WHEN octet_length(client_id)<=1024 THEN client_id END AS client_id FROM auth_client WHERE "userId"=$1 ORDER BY client_id LIMIT 1',
+            'SELECT CASE WHEN octet_length(client_id)<=1024 THEN client_id END AS client_id FROM auth_client WHERE "userId"=$1 ORDER BY auth_client.client_id LIMIT 1',
             [row.account_id],
           )
         ).rows[0];
@@ -374,7 +374,7 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
       const requests = (
         await connection.query<{ workflow_id: string | null; terminal_at: Date | null }>(
           `SELECT CASE WHEN octet_length(workflow_id)<=1024 THEN workflow_id END AS workflow_id,terminal_at FROM auth_workflow_request WHERE ${quote(requestRole)}=$1
-         ORDER BY workflow_id LIMIT $2 FOR UPDATE`,
+         ORDER BY auth_workflow_request.workflow_id LIMIT $2 FOR UPDATE`,
           [row.account_id, ERASURE_PAGE_SIZE],
         )
       ).rows;

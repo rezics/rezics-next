@@ -47,7 +47,7 @@ export async function eraseConsentPage(database: Pool): Promise<string | null> {
     const client = (
       await connection.query<{ client_id: string | null }>(
         `SELECT CASE WHEN octet_length(client_id)<=1024 THEN client_id END AS client_id FROM auth_consent WHERE account_id=$1 AND client_id>$2
-       ORDER BY client_id LIMIT 1`,
+       ORDER BY auth_consent.client_id LIMIT 1`,
         [accountId, due.after_client],
       )
     ).rows[0];
