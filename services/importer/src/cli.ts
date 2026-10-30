@@ -552,6 +552,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   }
 
   const signal = options.signal ?? new AbortController().signal;
+  const credentialLifetime = new AbortController();
   const handles = { value: 0 };
   let dumpHandle: FileHandle | undefined;
   let importer: Importer | undefined;
@@ -575,6 +576,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       authOrigin: config.auth,
       scopes: config.source === 'vndb' ? VNDB_IMPORTER_SCOPES : IMPORTER_SCOPES,
       fetch: guardedFetch,
+      signal: AbortSignal.any([signal, credentialLifetime.signal]),
       now: () => clock.now(),
       observer: {
         onAccountKey(path, observation) {
@@ -584,6 +586,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       },
     });
   } catch (error) {
+    credentialLifetime.abort();
     if (dumpHandle) {
       try {
         await dumpHandle.close();
@@ -833,6 +836,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       openHandles: 0,
     };
   } finally {
+    credentialLifetime.abort();
     await settleInFlight();
     if (importer) {
       try {
