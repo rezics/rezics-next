@@ -231,7 +231,7 @@ test('other registered sources never derive a clear from source rating fields', 
     const result = source.convert(
       {
         external_id: id,
-        record_revision: '7',
+        record_revision: String(payload.lastrevid ?? payload.revision ?? 7),
         record: {
           ...payload,
           c_votecount: 0,

@@ -190,6 +190,7 @@ export async function runJourney() {
     const commands = new Map<string, BatchCommand>();
     const exchanges: Exchange[] = [];
     const authExchanges: { path: string; status: number }[] = [];
+    const clearExchanges: { path: string; bytes: string; key: string; status: number; receipt: unknown }[] = [];
 
     async function invoke(source: SourceId, version: number, absent = false) {
       const start = exchanges.length;
@@ -252,6 +253,28 @@ export async function runJourney() {
                 (request.method === 'POST' &&
                   /^\/v1\/subjects\/[^/]+\/source-statistics\/vndb:clear$/.test(url.pathname)),
             ).toBe(true);
+            if (url.pathname.endsWith('/source-statistics/vndb:clear')) {
+              expect(source).toBe('vndb');
+              const bytes = await request.clone().text();
+              const key = JSON.parse(request.headers.get('idempotency-key')!) as string;
+              const response = await runtime.replay(request);
+              expect(response.status, await response.clone().text()).toBe(204);
+              const id = url.pathname.split('/')[3]!;
+              const receipt = await runtime.database.admin.query(
+                `SELECT * FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+                 AND command_kind='rating.source_statistic.clear' AND idempotency_key=$3`,
+                [partitionOf(routeOf(id)!), runtime.identity.bulk.accountId, key],
+              );
+              expect(receipt.rows).toHaveLength(1);
+              clearExchanges.push({
+                path: url.pathname,
+                bytes,
+                key,
+                status: response.status,
+                receipt: receipt.rows[0],
+              });
+              return response;
+            }
             if (url.pathname !== '/v1/subjects:batchWrite') return runtime.replay(request);
             expect(acquired).toBe(true);
             const saved = request.clone(),
@@ -595,6 +618,7 @@ export async function runJourney() {
           subject: originalSubjectId,
           bootstrap: target.bootstrap,
           originalReceipts: originalReceiptsAfter,
+          clearExchanges,
           removalReceipts,
           returnedCandidates: newNativeProposals.map((c) => ({ id: c.id, source: c.source })),
           fence,
