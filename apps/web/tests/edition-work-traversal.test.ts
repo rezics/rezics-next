@@ -426,3 +426,78 @@ test('the remaining edition story transports retain ready, hidden-target and gen
     }
   }
 });
+
+test('all seven current edition stories retain their own canonical subject and requested view before page loading', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { loadSubject } = await import('../src/subject/load-subject');
+  const { canonicalRedirect, subjectUrlForView } = await import('../src/subject/subject-href');
+  const client = createKernelClient('http://kernel.local', { fetch: createStoryRecordedKernelFetch() });
+  for (const [scenario, slug, view] of [
+    ['edition', 'the-harbour-first-edition', undefined],
+    ['work', 'the-harbour', undefined],
+    ['work', 'the-harbour', 'editions'],
+    ['creator', 'ada-harbour', 'works'],
+    ['hidden', 'an-edition-with-an-unresolved-work', undefined],
+    ['unavailable', 'an-edition-awaiting-its-source', undefined],
+    ['conflict', 'ada-harbour', 'works'],
+  ] as const) {
+    const subject = traversalSubjects[scenario];
+    const canonical = await loadSubject(client, subject.id, 'en');
+    if (canonical.kind !== 'subject') throw new Error('Expected the current story subject');
+    const base = `/en/subjects/${subject.id}/${slug}`;
+    expect(canonical.value.id).toBe(subject.id);
+    expect(canonical.value.href).toBe(base);
+    expect(canonical.value.paths.en).toBe(base.slice(3));
+    expect(canonicalRedirect(subjectUrlForView(canonical.value, view), `?realm=${traversalRealm}`).href).toBe(
+      `${base}${view ? `/${view}` : ''}?realm=${traversalRealm}`,
+    );
+  }
+});
+
+test('only the declared traversal subjects have an empty verified-account story lookup', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { routes } = await import('../src/kernel/fake/accounts');
+  const client = createKernelClient('http://kernel.local', { fetch: createStoryRecordedKernelFetch() });
+  for (const { id } of Object.values(traversalSubjects)) {
+    const response = await client.accounts.get({ query: { agent: id } });
+    expect(response.status).toBe(200);
+    expect(response.data).toEqual({ accounts: [], next: null });
+  }
+  // Other selectors and identities still reach their existing account/alias fixtures and guards.
+  for (const query of ['agent=another-subject', 'handle=mira', `ids=${traversalSubjects.creator.id}`, '']) {
+    expect(
+      await routes[0]!.story!({
+        request: new Request(`http://kernel.local/v1/accounts?${query}`),
+        recordings: {},
+        match: null,
+      }),
+    ).toBeUndefined();
+  }
+});
+
+test('the actual Work overview transport supplies its ready frame and twelve-edition preview in both responsive layouts', async () => {
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { loadSubjectPage } = await import('../src/features/pages/subject');
+  const { subjectFrame } = await import('../src/features/pages/subject-frame');
+  const client = createKernelClient('http://kernel.local', { fetch: createStoryRecordedKernelFetch() });
+  const loaded = await loadSubjectPage(client, traversalSubjects.work.id, undefined, 'en', { realm: traversalRealm });
+  if (loaded.kind !== 'page') throw new Error('Expected the actual Work overview');
+  expect(subjectFrame(loaded.page, 'en')).toMatchObject({
+    id: traversalSubjects.work.id,
+    title: { text: traversalSubjects.work.label },
+    context: '0192f3a0-6c1e-7b2a-9d4e-000000000921',
+  });
+  expect(loaded.page.context?.population).toEqual({ kind: 'realm', id: traversalRealm, title: 'Harbour readers' });
+  expect(group(loaded.page, 'editions').result.body).toMatchObject({
+    links: expect.arrayContaining([expect.objectContaining({ label: 'Edition 12' })]),
+    count: { value: 15, exact: true },
+    next: 'fixture-editions-next',
+  });
+  expect((group(loaded.page, 'editions').result.body as { links: unknown[] }).links).toHaveLength(12);
+  const html = render(loaded.page, 'work');
+  expect(html).toContain('data-layout="cover-row"');
+  expect(html).toContain('data-layout="cover-grid"');
+  expect(html).toContain('Edition 12');
+  expect(html).not.toContain('Edition 13');
+  expect(html).toContain(`/subjects/${traversalSubjects.work.id}/the-harbour/editions?realm=${traversalRealm}`);
+});
