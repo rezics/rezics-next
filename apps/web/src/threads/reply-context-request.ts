@@ -10,6 +10,7 @@ export async function replyToThreadRequest(
   authorization: string,
   refusal: (status: number, headers: HeadersInit | undefined, body?: unknown) => WriteFailure,
 ): Promise<{ ok: true; post: CreatedPost } | WriteFailure> {
+  const headers = { authorization, 'idempotency-key': JSON.stringify(data.idempotencyKey) };
   try {
     const result = await client.threads({ id: data.threadId }).posts.post(
       {
@@ -18,7 +19,7 @@ export async function replyToThreadRequest(
         ...(data.parentId === undefined ? {} : { parentId: data.parentId }),
         ...(data.mediaIds?.length ? { mediaIds: data.mediaIds } : {}),
       },
-      { headers: { authorization, 'idempotency-key': JSON.stringify(data.idempotencyKey) } },
+      { headers },
     );
     if (result.error) {
       const failure = refusal(result.status, result.headers, result.error.value);
