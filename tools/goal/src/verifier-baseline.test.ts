@@ -351,7 +351,7 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
   const missingCalls: string[] = [];
   const missingRunner = runner(async (command) => {
     missingCalls.push(command.join(' '));
-    return command.includes('new.test.ts')
+    return command.some((argument) => argument.includes('new.test.ts'))
       ? { passed: false, output: 'AssertionError: new acceptance failed\n', timedOut: false }
       : { passed: true, output: '', timedOut: false };
   });
@@ -495,11 +495,9 @@ test('a new assertion without a task in the verified range remains unowned and u
     await verifyDev({ ...ctx, runGate });
     expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
     expect(ctx.events).toHaveLength(0);
-    expect(ctx.store.devVerifierFindings()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ status: 'new', headCommit: head, taskId: undefined }),
-      ]),
-    );
+    const finding = ctx.store.devVerifierFindings().find((item) => item.headCommit === head);
+    expect(finding).toMatchObject({ status: 'new', headCommit: head });
+    expect(finding).not.toHaveProperty('taskId');
   } finally {
     ctx.close();
   }
