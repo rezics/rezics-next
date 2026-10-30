@@ -7,6 +7,7 @@ const pageRoutes = [
   '/step-up',
   '/account/delete',
   '/organizations/new',
+  '/organizations/delete',
 ];
 
 export default {

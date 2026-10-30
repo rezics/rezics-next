@@ -1,9 +1,15 @@
 import { failureMessage } from './api';
+import { selectOrganizationDeleteStepUp, organizationDeleteSessionMatches } from './organization-delete-step-up';
 import { loadAccountSession } from './account-operations';
 import { accountOperationSessionMatches, selectAccountOperationStepUp } from './account-operation-step-up';
 import { passkeySignInFailure, signInWithPasskey } from './passkeys';
 import { signIn, signInForAccountOperation, signInTarget, type SignInResult } from './sign-in';
 import { m } from './paraglide/messages.js';
+
+function selectStepUp(query: string) {
+  const organization = selectOrganizationDeleteStepUp(query);
+  return organization.kind === 'ordinary' ? selectAccountOperationStepUp(query) : organization;
+}
 
 // A null message is a dismissed passkey prompt, which stays silent.
 export type StepUpOutcome = { ok: true; target: string } | { ok: false; message: string | null };
@@ -21,16 +27,25 @@ export async function confirmStepUp(
   query: string,
   origin: string,
 ): Promise<StepUpOutcome> {
-  const selection = selectAccountOperationStepUp(query);
+  const selection = selectStepUp(query);
   if (selection.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
   const result =
-    selection.kind === 'operation'
-      ? await signInForAccountOperation(email, password, selection.pending.kind)
+    selection.kind === 'operation' || selection.kind === 'organization-delete'
+      ? await signInForAccountOperation(
+          email,
+          password,
+          selection.kind === 'organization-delete' ? 'delete' : selection.pending.kind,
+        )
       : await signIn(email, password);
   if (!result.ok) return { ok: false, message: stepUpFailure(result) };
-  if (selection.kind === 'operation') {
+  if (selection.kind === 'operation' || selection.kind === 'organization-delete') {
     const session = await loadAccountSession();
-    if (session.kind !== 'ready' || !accountOperationSessionMatches(session, selection.pending))
+    if (
+      session.kind !== 'ready' ||
+      !(selection.kind === 'organization-delete'
+        ? organizationDeleteSessionMatches(session, selection.pending)
+        : accountOperationSessionMatches(session, selection.pending))
+    )
       return { ok: false, message: m.auth_account_operation_failure() };
     return { ok: true, target: new URL(selection.pending.returnTo, origin).href };
   }
@@ -38,15 +53,24 @@ export async function confirmStepUp(
 }
 
 export async function confirmStepUpWithPasskey(query: string, origin: string): Promise<StepUpOutcome> {
-  const selection = selectAccountOperationStepUp(query);
+  const selection = selectStepUp(query);
   if (selection.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
   const result = await signInWithPasskey(
-    selection.kind === 'operation' ? { operation: selection.pending.kind } : undefined,
+    selection.kind === 'organization-delete'
+      ? { operation: 'delete' }
+      : selection.kind === 'operation'
+        ? { operation: selection.pending.kind }
+        : undefined,
   );
   if (result.ok) {
-    if (selection.kind === 'operation') {
+    if (selection.kind === 'operation' || selection.kind === 'organization-delete') {
       const session = await loadAccountSession();
-      if (session.kind !== 'ready' || !accountOperationSessionMatches(session, selection.pending))
+      if (
+        session.kind !== 'ready' ||
+        !(selection.kind === 'organization-delete'
+          ? organizationDeleteSessionMatches(session, selection.pending)
+          : accountOperationSessionMatches(session, selection.pending))
+      )
         return { ok: false, message: m.auth_account_operation_failure() };
       return { ok: true, target: new URL(selection.pending.returnTo, origin).href };
     }
