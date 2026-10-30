@@ -69,6 +69,7 @@ async function post(path: string, body: unknown) {
 beforeAll(async () => {
   await bootstrapRelease(pool, bundledRelease);
   for (const action of actions) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:subject_identity');
   // Kernel composition registers this very Access instance and its command/write-rate bridge.
   await kernel.handle(new Request(`http://kernel.test/v1/definitions/releases/${bundledDigest}`));
   for (const [i, id] of ids.entries()) {
