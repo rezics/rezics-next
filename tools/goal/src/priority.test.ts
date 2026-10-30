@@ -6,7 +6,7 @@ import { runWorkerCommand } from './worker-commands.ts';
 import { harness, markdown } from './test-support.ts';
 
 function runtimeFor(h: ReturnType<typeof harness>) {
-  return { settings: h.settings, db: h.store.db, store: h.store, tasks: h.tasks } as never;
+  return { settings: h.settings, db: h.store.db, store: h.store, tasks: h.tasks, drain: async () => {} } as never;
 }
 
 function addManager(db: ReturnType<typeof harness>['store']['db'], id: string, sessionId: string, supermanager: string) {
