@@ -95,7 +95,7 @@ test('oversized account-key Auth body is cancelled and never supplies a token', 
       account: f.account,
       client: 'rezics-importer',
       authOrigin: f.authOrigin,
-      fetch: (async () => {
+      fetch: (async (_input: RequestInfo | URL) => {
         requests++;
         return new Response(body, { status: 200, headers: { 'set-cookie': 'fixture=session; Secure; HttpOnly' } });
       }) as typeof fetch,

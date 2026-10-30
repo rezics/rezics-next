@@ -63,7 +63,10 @@ test('bound VNDB refresh suppresses source-statistic publication behind the exac
   try {
     expect((await run(7)).status).toBe('committed');
     expect(statistics).toBe(1);
-    expect(importer.session.bindings.claim({ source: 'vndb', external_id: 'v123' })?.subject).toBe(subject);
+    const claim = importer.session.bindings.claim({ source: 'vndb', external_id: 'v123' });
+    expect(claim?.state).toBe('bound');
+    if (claim?.state !== 'bound') throw new Error('Expected bound VNDB claim');
+    expect(claim.subject).toBe(subject);
     fenced = true;
     const before = fences.length;
     expect((await run(8)).status).toBe('committed');

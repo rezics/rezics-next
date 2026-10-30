@@ -54,7 +54,9 @@ for (const special of ['dump', 'key'] as const) {
       }
       expect(completed).toBe(true);
       expect(child.exitCode).toBe(0);
-      const observation = JSON.parse(await new Response(child.stdout).text());
+      const stdout = child.stdout;
+      if (!(stdout instanceof ReadableStream)) throw new Error('Expected piped CLI stdout');
+      const observation = JSON.parse(await new Response(stdout).text());
       expect(observation.result.code).toBe(2);
       expect(observation.result.openHandles).toBe(0);
       expect(observation.requests).toBe(0);
