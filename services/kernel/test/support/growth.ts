@@ -756,7 +756,8 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
           }
         }
         for (const [target, relations] of pendingWrites) {
-          if (relations.size > 0) settleMs += await recordedSettle(target, { relations: [...relations], operationBackends: pendingBackends });
+          if (relations.size > 0)
+            settleMs += await recordedSettle(target, { relations: [...relations], operationBackends: pendingBackends });
         }
         (seeding as { settleMs: number }).settleMs = settleMs;
         if (check.prepare) await check.prepare(db, scale, repetition);
