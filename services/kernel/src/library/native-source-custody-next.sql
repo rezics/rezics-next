@@ -6,6 +6,7 @@ WITH input AS NOT MATERIALIZED (
 SELECT c.route,c.capture_id::text AS "captureId",c.collection_id::text AS "collectionId",c.account_id::text AS "accountId",
  c.incarnation,c.generation::text AS generation,c.scope,c.owner_epoch AS "ownerEpoch",
  c.receiving_epoch::text AS "receivingEpoch",c.effect_key AS "effectKey",
+ c.output_generation::text AS "outputGeneration",c.publication_transaction_id::text AS "publicationTransactionId",c.publication_position::text AS "publicationPosition",
  s.source_generation::text AS "sourceGeneration"
 FROM input JOIN library.native_source_capture c ON c.route=input.route AND c.collection_id=input.collection_id
 LEFT JOIN library.collection s ON s.route=c.route AND s.collection_id=c.collection_id

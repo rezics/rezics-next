@@ -14,4 +14,5 @@ WHERE victim.route = input.route AND victim.collection_id = input.collection_id
   AND NOT EXISTS (SELECT 1 FROM library.builtin_collection_reference WHERE route = input.route AND collection_id = input.collection_id)
   AND NOT EXISTS (SELECT 1 FROM library.collection_listing_history WHERE route = input.route AND collection_id = input.collection_id)
   AND NOT EXISTS (SELECT 1 FROM library.native_source_capture WHERE route = input.route AND collection_id = input.collection_id)
+  AND NOT EXISTS (SELECT 1 FROM library.collection_source_output WHERE route=input.route AND collection_id=input.collection_id)
 RETURNING true AS removed;

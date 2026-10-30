@@ -18,19 +18,31 @@ import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
 export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
 
 /** Lookup hints only. Native records, not possession of this value, establish custody. */
-export type NativeSourceIdentity = Readonly<{
-  route: number;
-  collectionId: string;
-  accountId: string;
-  incarnation: string;
-  generation: string;
-  ownerEpoch: number;
-  receivingEpoch: string;
-  effectKey: string;
-} & (
-  | { scope: 'curated' | 'private_builtin'; outputGeneration?: never; publicationTransactionId?: never; publicationPosition?: never }
-  | { scope: 'active_explicit_output'; outputGeneration: string; publicationTransactionId: string; publicationPosition: string }
-)>;
+export type NativeSourceIdentity = Readonly<
+  {
+    route: number;
+    collectionId: string;
+    accountId: string;
+    incarnation: string;
+    generation: string;
+    ownerEpoch: number;
+    receivingEpoch: string;
+    effectKey: string;
+  } & (
+    | {
+        scope: 'curated' | 'private_builtin';
+        outputGeneration?: never;
+        publicationTransactionId?: never;
+        publicationPosition?: never;
+      }
+    | {
+        scope: 'active_explicit_output';
+        outputGeneration: string;
+        publicationTransactionId: string;
+        publicationPosition: string;
+      }
+  )
+>;
 export type NativeSourceDriver =
   | 'member'
   | 'entry'
@@ -173,6 +185,8 @@ import rawUnit from './native-source-custody-raw-unit.sql';
 import rawChange from './native-source-custody-raw-change.sql';
 import rawCopy from './native-source-custody-raw-copy.sql';
 import rawOutput from './native-source-custody-raw-output.sql';
+import rawExplicitOutput from './native-source-custody-raw-explicit-output.sql';
+import outputQuery from './native-source-custody-output.sql';
 
 const rawQueries = {
   member: rawMember,
@@ -208,10 +222,13 @@ const identityKeys = [
   'ownerEpoch',
   'receivingEpoch',
   'effectKey',
+  'outputGeneration',
+  'publicationTransactionId',
+  'publicationPosition',
 ] as const;
 const frontierKeys = ['captureId', 'driver', 'after', 'tie', 'sessionId', 'scanned', 'version'] as const;
 function sameIdentity(state: NativeSourceIdentity, identity: NativeSourceIdentity): boolean {
-  return identityKeys.every((key) => state[key] === identity[key]);
+  return identityKeys.every((key) => (state[key] ?? undefined) === (identity[key] ?? undefined));
 }
 function sameFrontier(state: NativeSourceFrontier, frontier: NativeSourceFrontier): boolean {
   return frontierKeys.every((key) => state[key] === frontier[key]);
@@ -235,9 +252,24 @@ function validate(identity: NativeSourceIdentity): void {
     Buffer.byteLength(identity.incarnation) > 128 ||
     !identity.effectKey ||
     Buffer.byteLength(identity.effectKey) > 256 ||
-    !['curated', 'private_builtin'].includes(identity.scope)
+    !['curated', 'private_builtin', 'active_explicit_output'].includes(identity.scope)
   )
     throw new Refused('binding');
+  if (identity.scope === 'active_explicit_output') {
+    if (
+      !uuid.test(identity.outputGeneration) ||
+      !uuid.test(identity.publicationTransactionId) ||
+      !/^[1-9][0-9]{0,18}$/.test(identity.publicationPosition) ||
+      BigInt(identity.publicationPosition) > 9223372036854775807n
+    )
+      throw new Refused('binding');
+  } else if (
+    identity.outputGeneration != null ||
+    identity.publicationTransactionId != null ||
+    identity.publicationPosition != null
+  ) {
+    throw new Refused('binding');
+  }
 }
 function parameters(identity: NativeSourceIdentity): Parameters {
   return {
@@ -252,6 +284,9 @@ function parameters(identity: NativeSourceIdentity): Parameters {
     owner_epoch: identity.ownerEpoch,
     receiving_epoch: identity.receivingEpoch,
     effect_key: identity.effectKey,
+    output_generation: identity.outputGeneration ?? null,
+    publication_transaction_id: identity.publicationTransactionId ?? null,
+    publication_position: identity.publicationPosition ?? null,
   };
 }
 /** Fixed projections and primary-key/route-leading range plans only; no observed row-count cost classifier. */
@@ -312,7 +347,7 @@ async function bindOwner(
   identity: NativeSourceIdentity,
   ensure: boolean,
   retained = false,
-): Promise<{ collectionFence: string; accountFence: string }> {
+): Promise<{ collectionFence: string; accountFence: string; outputMembers?: string }> {
   validate(identity);
   const values = parameters(identity);
   const [partition] = await run<{ epoch: number; writeState: string; movedTo: string | null }>(partitionQuery, values);
@@ -345,8 +380,18 @@ async function bindOwner(
     (source.state !== 'active' && !(retained && source.state === 'deleted'))
   )
     throw new Refused('binding');
-  if (source.kind === 'dynamic' && (source.visibility !== 'private' || source.builtin === null))
+  let outputMembers: string | undefined;
+  if (identity.scope === 'active_explicit_output') {
+    if (source.kind !== 'dynamic' || source.builtin !== null) throw new Refused('output_authority');
+    if (!retained) {
+      if (source.visibility === 'private') throw new Refused('output_authority');
+      const [output] = await run<{ members: string }>(outputQuery, values, 48, 5);
+      if (!output) throw new Refused('output_authority');
+      outputMembers = output.members;
+    }
+  } else if (source.kind === 'dynamic' && (source.visibility !== 'private' || source.builtin === null)) {
     throw new Refused('output_authority');
+  }
   if (
     (identity.scope === 'curated' && source.kind !== 'curated') ||
     (identity.scope === 'private_builtin' && source.kind !== 'dynamic')
@@ -357,7 +402,7 @@ async function bindOwner(
   const collectionFence = heads.find((row) => row.kind === 'collection')?.generation;
   const accountFence = heads.find((row) => row.kind === 'account')?.generation;
   if (collectionFence === undefined || accountFence === undefined) throw new Refused('binding');
-  return { collectionFence, accountFence };
+  return { collectionFence, accountFence, outputMembers };
 }
 function compareFences(state: State, fences: { collectionFence: string; accountFence: string }): void {
   if (state.collectionFence !== fences.collectionFence || state.accountFence !== fences.accountFence)
@@ -371,6 +416,9 @@ async function readState(run: Execute, identity: NativeSourceIdentity, captureId
   const [state] = await run<State>(readQuery, { ...parameters(identity), capture_id: captureId });
   if (!state || !sameIdentity(state, identity)) throw new Refused('binding');
   return state;
+}
+function compareOutputCount(state: State, fences: { outputMembers?: string }): void {
+  if (fences.outputMembers !== undefined && state.scanned !== fences.outputMembers) throw new Refused('writer');
 }
 
 /** Existing-owner raw dependency capture. No identity, canonical Source, permission or destination authority. */
@@ -556,10 +604,12 @@ export function createNativeLibrarySourceCustody({
           source.generation !== input.sourceGeneration ||
           (input.identity.scope === 'curated'
             ? source.kind !== 'curated'
-            : source.kind !== 'dynamic' || source.builtin === null || source.visibility !== 'private')
+            : input.identity.scope === 'private_builtin'
+              ? source.kind !== 'dynamic' || source.builtin === null || source.visibility !== 'private'
+              : source.kind !== 'dynamic' || source.builtin !== null)
         )
           return blocked('source');
-        if (source.publicCustody) return blocked('public_custody');
+        if (source.publicCustody || input.identity.scope === 'active_explicit_output') return blocked('public_custody');
         if (
           episode.kind === 'deleted' &&
           (source.state !== 'deleted' ||
@@ -618,6 +668,7 @@ export function createNativeLibrarySourceCustody({
                 capture_id: captureId,
                 collection_fence: fences.collectionFence,
                 account_fence: fences.accountFence,
+                driver: input.identity.scope === 'active_explicit_output' ? 'output' : 'member',
               },
               32,
             );
@@ -625,7 +676,7 @@ export function createNativeLibrarySourceCustody({
               ...input.identity,
               ...fences,
               captureId,
-              driver: 'member',
+              driver: input.identity.scope === 'active_explicit_output' ? 'output' : 'member',
               after: '',
               tie: '',
               sessionId: null,
@@ -646,10 +697,10 @@ export function createNativeLibrarySourceCustody({
             const after =
               state.after || (driver === 'member' || driver === 'unit' ? '' : driver === 'change' ? '0' : null);
             const raw = await run<Omit<NativeSourceDependency, 'driver'>>(
-              rawQueries[driver],
+              input.identity.scope === 'active_explicit_output' ? rawExplicitOutput : rawQueries[driver],
               {
                 ...parameters(input.identity),
-                after,
+                after: input.identity.scope === 'active_explicit_output' ? state.after || zeroId : after,
                 tie: state.tie || zeroId,
                 session_id: state.sessionId,
                 limit,
@@ -686,6 +737,7 @@ export function createNativeLibrarySourceCustody({
                 sessionId: driver === 'unit' ? state.sessionId : null,
               };
             }
+            if (state.driver === 'done') compareOutputCount(state, fences);
             await run(
               advanceQuery,
               {
@@ -713,6 +765,7 @@ export function createNativeLibrarySourceCustody({
           const state = await readState(run, input.identity, input.frontier.captureId);
           if (!sameFrontier(state, input.frontier) || state.driver !== 'done') throw new Refused('binding');
           compareFences(state, fences);
+          compareOutputCount(state, fences);
           const values = { ...parameters(input.identity), capture_id: state.captureId };
           const [receipt] = state.complete
             ? await run<{ transactionId: string; position: string }>(proofQuery, values, 64, 3)
@@ -746,6 +799,7 @@ export function createNativeLibrarySourceCustody({
         const fences = await bindOwner(run, input.identity, false);
         const state = await readState(run, input.identity, input.captureId);
         compareFences(state, fences);
+        compareOutputCount(state, fences);
         const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
         const [receipt] = await run<{ transactionId: string }>(proofQuery, values, 64, 3);
         if (!receipt) throw new Refused('binding');

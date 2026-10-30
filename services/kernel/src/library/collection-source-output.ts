@@ -1,17 +1,28 @@
 /** Explicit membership Publication storage. It never evaluates personal predicates or grants read authority. */
 import type { PoolClient } from 'pg';
 import { shareAccount } from '../access/account-share.ts';
-import { currentCommand, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import lock from './collection-source-output-lock.sql';
 
+/** Native receipt locator/provenance only. It carries no viewer or subject permission. */
+export type CollectionOutputPublication = Readonly<{
+  generation: string;
+  transactionId: string;
+  position: string;
+  nativeXid: string;
+  sourceGeneration: string;
+  memberFence: string;
+  members: string;
+}>;
 export type CollectionOutputRef = Readonly<{ route: number; collectionId: string; generation: string }>;
 type Client = Pick<PoolClient, 'query'>;
 type Build = {
   source_generation: string;
   expected_members: string;
   written_members: string;
+  member_count: string;
   after_subject_id: string | null;
   state: 'building' | 'complete' | 'cancelled';
 };
@@ -32,6 +43,7 @@ async function writer(tx: CommandTransaction, input: CollectionOutputRef) {
   const command = currentCommand(tx);
   if (
     command.partition !== partitionOf(input.route) ||
+    command.basis === null ||
     command.authorization?.mode !== 'execute' ||
     command.authorization.action !== 'collection:update' ||
     command.authorization.resource.route !== input.route ||
@@ -56,7 +68,7 @@ async function writer(tx: CommandTransaction, input: CollectionOutputRef) {
 async function build(tx: Client, input: CollectionOutputRef): Promise<Build> {
   const row = (
     await tx.query<Build>(
-      `SELECT source_generation::text,expected_members::text,written_members::text,after_subject_id::text,state
+      `SELECT source_generation::text,expected_members::text,written_members::text,member_count::text,after_subject_id::text,state
      FROM library.collection_source_output
      WHERE route=$1 AND collection_id=$2 AND generation=$3 FOR UPDATE`,
       [input.route, input.collectionId, input.generation],
@@ -84,9 +96,16 @@ export async function beginCollectionSourceOutput(
     throw new ProblemError('dependency_unavailable');
   await tx.query(
     `INSERT INTO library.collection_source_output
-     (route,collection_id,generation,source_generation,expected_members)
-     VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-    [input.route, input.collectionId, input.generation, source.sourceGeneration, input.expectedMembers],
+     (route,collection_id,generation,source_generation,expected_members,account_id)
+     VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+    [
+      input.route,
+      input.collectionId,
+      input.generation,
+      source.sourceGeneration,
+      input.expectedMembers,
+      source.accountId,
+    ],
   );
   const current = await build(tx, input);
   if (
@@ -148,7 +167,8 @@ export async function completeCollectionSourceOutput(
   if (
     current.state !== 'building' ||
     current.source_generation !== source.sourceGeneration ||
-    current.written_members !== current.expected_members
+    current.written_members !== current.expected_members ||
+    current.member_count !== current.expected_members
   )
     throw conflict();
   await tx.query(
@@ -165,6 +185,29 @@ export async function completeCollectionSourceOutput(
     `UPDATE library.collection SET source_generation=source_generation+1 WHERE route=$1 AND collection_id=$2`,
     [input.route, input.collectionId],
   );
+  const sourceGeneration = (BigInt(source.sourceGeneration) + 1n).toString();
+  // After the authorized body's finalizer, before Core's actual fence/basis and COMMIT. The deferred native
+  // constraint requires that exact Core transaction and xid; a random UUID or process capability cannot seal it.
+  registerCommandCallback(tx, async (transactionId) => {
+    const publication = await tx.query(
+      `INSERT INTO library.collection_source_output_publication
+       (route,collection_id,generation,account_id,incarnation,source_generation,expected_members,member_fence,collection_fence,transaction_id)
+       SELECT g.route,g.collection_id,g.generation,s.curator_account_id,
+              s.collection_id::text || ':' || extract(epoch FROM s.created_at)::text,h.source_generation,
+              g.expected_members,g.member_fence,f.generation,$5
+       FROM library.collection_source_output g
+       JOIN library.collection_source_output_head h USING(route,collection_id,generation)
+       JOIN library.collection s ON s.route=g.route AND s.collection_id=g.collection_id
+       JOIN library.native_source_fence f ON f.route=g.route AND f.kind='collection' AND f.owner_id=g.collection_id
+       WHERE g.route=$1 AND g.collection_id=$2 AND g.generation=$3 AND h.source_generation=$4
+         AND s.source_generation=$4 AND s.curator_account_id=$6 AND s.state='active' AND s.visibility<>'private'
+         AND g.source_generation+1=$4 AND g.state='complete'
+         AND g.expected_members=g.written_members AND g.member_count=g.expected_members
+       RETURNING transaction_id`,
+      [input.route, input.collectionId, input.generation, sourceGeneration, transactionId, source.accountId],
+    );
+    if (publication.rows.length !== 1) throw conflict();
+  });
 }
 
 export async function cancelCollectionSourceOutput(tx: CommandTransaction, input: CollectionOutputRef): Promise<void> {
@@ -188,9 +231,14 @@ export async function readCollectionSourceOutputInventory(
       generation: string;
       state: 'building' | 'complete' | 'cancelled';
       members: string;
+      publicationTransactionId: string | null;
+      nativeXid: string | null;
     }>(
-      `SELECT generation::text,state,written_members::text AS members FROM library.collection_source_output
-     WHERE route=$1 AND collection_id=$2 ORDER BY generation LIMIT 2`,
+      `SELECT g.generation::text,g.state,g.written_members::text AS members,
+             r.transaction_id::text AS "publicationTransactionId",r.native_xid::text AS "nativeXid"
+      FROM library.collection_source_output g
+      LEFT JOIN library.collection_source_output_publication r USING(route,collection_id,generation)
+      WHERE g.route=$1 AND g.collection_id=$2 ORDER BY g.generation LIMIT 2`,
       [input.route, input.collectionId],
     )
   ).rows;

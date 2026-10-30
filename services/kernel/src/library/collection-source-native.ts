@@ -53,6 +53,7 @@ export type NativeCollectionMetadata = Readonly<
     authority: 'curated' | 'private_builtin' | 'activated_output' | 'unavailable_output';
     /** Selected explicit COMPLETE membership only; never a private working generation. */
     outputGeneration: string | null;
+    outputPublication: CollectionOutputPublication | null;
   }
 >;
 export type NativeCollectionWitness = Readonly<{
@@ -80,6 +81,7 @@ const headerSQL = headerQuery.sql;
 import membersQuery from './collection-source-native-members.sql';
 import factsQuery from './collection-source-native-facts.sql';
 import probeQuery from './collection-source-native-probe.sql';
+import type { CollectionOutputPublication } from './collection-source-output.ts';
 import outputHead from './collection-source-output-head.sql';
 import outputPage from './collection-source-output-page.sql';
 import outputProbe from './collection-source-output-probe.sql';
@@ -125,7 +127,7 @@ for (const sql of [headerSQL, fenceSQL, referenceSQL, accountSQL]) register(sql,
 // The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
 register(scopeIdentitySQL, fixed(4, 1, 4608));
 register(partitionSizeSQL, fixed(4, 1, 128));
-register(outputHead.sql, fixed(8, 2, 256));
+register(outputHead.sql, fixed(40, 6, 1024));
 register(outputProbe.sql, () => ({
   nativeRows: 4,
   nativePoints: 1,
@@ -305,16 +307,17 @@ async function observe(
   work.admitResultBytes('partition:' + home, 6 * Number(size.bytes) + 256);
   const partition = await readPartition(client, home);
   if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
-  const outputGeneration =
+  const outputPublication =
     row.membershipKind === 'dynamic' && row.visibility !== 'private' && row.state === 'active'
       ? ((
-          await client.query<{ generation: string }>(outputHead.sql, [
+          await client.query<CollectionOutputPublication>(outputHead.sql, [
             ref.route,
             ref.collectionId,
             row.sourceGeneration,
           ])
-        ).rows[0]?.generation ?? null)
+        ).rows[0] ?? null)
       : null;
+  const outputGeneration = outputPublication?.generation ?? null;
   const authority =
     row.membershipKind === 'curated'
       ? 'curated'
@@ -333,6 +336,7 @@ async function observe(
     incarnation: `${row.collectionId}:${row.createdAt}`,
     authority,
     outputGeneration,
+    outputPublication,
     factFence,
     stamp: {
       partition: partition.partitionNo,

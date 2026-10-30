@@ -137,3 +137,85 @@ test('output helpers require the actual native transaction and bounded sorted ch
     }),
   ).rejects.toMatchObject({ code: 'dependency_unavailable' });
 });
+
+test('COMPLETE output has immutable same-command publication provenance and pending B cannot replace that receipt', async () => {
+  const source = await f.collection(),
+    a = { ...source, generation: randomUUID() },
+    b = { ...source, generation: randomUUID() };
+  const id = await f.createSubject('game');
+  await f.command(source.collectionId, { begin: a }, (tx) => begin(tx, { ...a, expectedMembers: 1 }));
+  await f.command(source.collectionId, { append: a }, (tx) => append(tx, { ...a, after: null, subjectIds: [id] }));
+  const committed = await f.command(source.collectionId, { complete: a }, (tx) => complete(tx, a));
+  const proof = async () =>
+    (
+      await f.pool.query(
+        `SELECT r.transaction_id::text,b.position::text,r.native_xid::text,
+      r.xmin=b.xmin AND r.xmin=g.xmin AND r.xmin=h.xmin AS same_transaction,
+      r.source_generation=s.source_generation AND r.source_generation=h.source_generation AS same_source,
+      g.member_count::text,g.member_fence=r.member_fence AS same_members
+     FROM library.collection_source_output_publication r
+     JOIN editorial.write_basis b ON b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id
+     JOIN library.collection_source_output g USING(route,collection_id,generation)
+     JOIN library.collection_source_output_head h USING(route,collection_id,generation)
+     JOIN library.collection s ON s.route=r.route AND s.collection_id=r.collection_id
+     WHERE r.route=$1 AND r.collection_id=$2 AND r.generation=$3`,
+        [source.route, source.collectionId, a.generation],
+      )
+    ).rows;
+  const before = await proof();
+  expect(before).toEqual([
+    expect.objectContaining({
+      transaction_id: committed.transactionId,
+      position: committed.position.toString(),
+      same_transaction: true,
+      same_source: true,
+      member_count: '1',
+      same_members: true,
+    }),
+  ]);
+  await f.command(source.collectionId, { begin: b }, (tx) => begin(tx, { ...b, expectedMembers: 0 }));
+  expect(await proof()).toEqual(before);
+  await expect(
+    f.pool.query(
+      'UPDATE library.collection_source_output_publication SET transaction_id=$4 WHERE route=$1 AND collection_id=$2 AND generation=$3',
+      [source.route, source.collectionId, a.generation, randomUUID()],
+    ),
+  ).rejects.toThrow('native_source_receipt_immutable');
+});
+
+test('native member inventory prevents forged ready-empty and a missing Core commit cannot seal publication', async () => {
+  const source = await f.collection(),
+    a = { ...source, generation: randomUUID() };
+  const id = await f.createSubject('game');
+  await f.command(source.collectionId, { begin: a }, (tx) => begin(tx, { ...a, expectedMembers: 1 }));
+  await f.command(source.collectionId, { append: a }, (tx) => append(tx, { ...a, after: null, subjectIds: [id] }));
+  // Corrupt only the caller-maintained checkpoint. Actual native member bookkeeping remains independent.
+  await f.pool.query(
+    'UPDATE library.collection_source_output SET expected_members=0,written_members=0,after_subject_id=NULL WHERE route=$1 AND collection_id=$2 AND generation=$3',
+    [source.route, source.collectionId, a.generation],
+  );
+  await expect(f.command(source.collectionId, { complete: a }, (tx) => complete(tx, a))).rejects.toMatchObject({
+    code: 'conflict',
+  });
+  expect((await f.inspect(source.collectionId)).selected).toBeNull();
+  // A fabricated receipt cannot use a real but unrelated old Core command or an invented transaction UUID.
+  await expect(
+    f.pool.query(
+      `INSERT INTO library.collection_source_output_publication
+      (route,collection_id,generation,account_id,incarnation,source_generation,expected_members,member_fence,collection_fence,transaction_id)
+     SELECT g.route,g.collection_id,g.generation,g.account_id,
+       s.collection_id::text || ':' || extract(epoch FROM s.created_at)::text,s.source_generation+1,0,g.member_fence,0,$4
+     FROM library.collection_source_output g JOIN library.collection s USING(route,collection_id)
+     WHERE g.route=$1 AND g.collection_id=$2 AND g.generation=$3`,
+      [source.route, source.collectionId, a.generation, randomUUID()],
+    ),
+  ).rejects.toThrow();
+  expect(
+    (
+      await f.pool.query(
+        'SELECT 1 FROM library.collection_source_output_publication WHERE route=$1 AND collection_id=$2',
+        [source.route, source.collectionId],
+      )
+    ).rows,
+  ).toEqual([]);
+});

@@ -1,3 +1,11 @@
+import { createHash } from 'node:crypto';
+import { principalCommandIdentity } from '../../src/command/command.ts';
+import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
+import {
+  beginCollectionSourceOutput,
+  appendCollectionSourceOutput,
+  completeCollectionSourceOutput,
+} from '../../src/library/collection-source-output.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { runCommand, noEffect, type CommandTransaction, type AuthoritativeTime } from '../../src/command/command.ts';
 import {
@@ -471,4 +479,219 @@ test('retirement requires a matching live command T and actual deleted/due or te
       ])
     ).rows,
   ).toHaveLength(1);
+});
+
+// Uses the existing native fixture and actual saved-Collection API, never a ready-output fixture or a second
+// custody harness. An unavailable upstream saved-source producer remains an upstream acceptance prerequisite.
+async function explicitSource() {
+  const owner = await native.identity([
+    'subject:read',
+    'collection:create',
+    'collection:read',
+    'collection:update',
+    'library_entry:read',
+  ]);
+  expect((await native.send('steward', 'POST', '/v1/platform/exposure/personal_library:open')).status).toBe(200);
+  const response = await native.send(owner.bearer, 'POST', '/v1/collections', {
+    membershipKind: 'dynamic',
+    title: 'Native explicit output',
+    visibility: 'public',
+    rule: { filter: { owner: { presence: true } } },
+  });
+  expect(response.status).toBe(201);
+  const collectionId = (await response.json()).collection.id as string;
+  const ref = { route: routeOf(collectionId)!, collectionId };
+  const output = async <T>(input: unknown, body: (tx: CommandTransaction) => Promise<T>) => {
+    const deadline = Date.now() + 30000;
+    return runCommand(
+      native.pool,
+      {
+        ...principalCommandIdentity(owner.actor),
+        partition: partitionOf(ref.route),
+        deadline,
+        authorization: resourceAuthorization({
+          access: native.access,
+          actor: owner.actor,
+          action: 'collection:update',
+          anchor: {
+            resource: { route: ref.route, id: collectionId },
+            async validate(tx) {
+              return (
+                (
+                  await tx.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2', [
+                    ref.route,
+                    collectionId,
+                  ])
+                ).rows.length === 1
+              );
+            },
+          },
+          context: { pool: native.pool, partition: partitionOf(ref.route), deadline },
+        }),
+        receipt: {
+          kind: 'library.collection.explicit-output',
+          key: entryKey(),
+          digest: createHash('sha256').update(JSON.stringify(input)).digest(),
+        },
+      },
+      async (tx) => ({
+        value: (await body(tx)) ?? null,
+        events: [{ type: 'com.rezics.library.collection.updated.v1', subject: collectionId, data: { collectionId } }],
+      }),
+    );
+  };
+  const observe = async () => {
+    const { metadata } = await readNativeCollectionMetadata(native.pool, ref, work());
+    if (!metadata) throw new Error('Missing native explicit-output source');
+    return metadata;
+  };
+  const identity = async (): Promise<Extract<NativeSourceIdentity, { scope: 'active_explicit_output' }>> => {
+    const metadata = await observe(),
+      proof = metadata.outputPublication;
+    if (!proof) throw new Error('Missing committed native output publication');
+    return {
+      ...ref,
+      accountId: owner.actor.accountId,
+      incarnation: metadata.incarnation,
+      generation: metadata.sourceGeneration,
+      scope: 'active_explicit_output',
+      ownerEpoch: metadata.stamp.epoch,
+      receivingEpoch: '1',
+      effectKey: entryKey(),
+      outputGeneration: proof.generation,
+      publicationTransactionId: proof.transactionId,
+      publicationPosition: proof.position,
+    };
+  };
+  return { owner, ref, output, observe, identity };
+}
+
+test('Native Source capture can bind an actual active explicit COMPLETE Collection output generation and committed publication provenance without borrowing public catalogue capture or accepting pending output', async () => {
+  const source = await explicitSource(),
+    a = { ...source.ref, generation: entryKey() },
+    b = { ...source.ref, generation: entryKey() };
+  const ids = [await native.createSubject('game'), await native.createSubject('recipe')].sort();
+  await source.output({ begin: a }, (tx) => beginCollectionSourceOutput(tx, { ...a, expectedMembers: ids.length }));
+  expect((await source.observe()).authority).toBe('unavailable_output');
+  await source.output({ append: a }, (tx) => appendCollectionSourceOutput(tx, { ...a, after: null, subjectIds: ids }));
+  const publication = await source.output({ complete: a }, (tx) => completeCollectionSourceOutput(tx, a));
+  const identity = await source.identity();
+  expect(identity.publicationTransactionId).toBe(publication.transactionId);
+  expect(identity.publicationPosition).toBe(publication.position.toString());
+  expect((await source.observe()).authority).toBe('activated_output');
+  await source.output({ begin: b }, (tx) => beginCollectionSourceOutput(tx, { ...b, expectedMembers: 1 }));
+  await source.output({ append: b }, (tx) =>
+    appendCollectionSourceOutput(tx, { ...b, after: null, subjectIds: [ids[0]!] }),
+  );
+  const captured = await scan(identity);
+  expect(captured.rows.map((row) => [row.driver, row.key, row.tie, row.subjectId, row.transactionId])).toEqual(
+    ids.map((id) => ['output', id, '', id, publication.transactionId]),
+  );
+  const complete = await custody.finishCapture({ ...work(), identity, frontier: captured.frontier });
+  expect(complete.status).toBe('complete');
+  if (complete.status !== 'complete') throw new Error('Missing native output capture');
+  expect(complete.capture.scanned).toBe(String(ids.length));
+  const binding = { identity, captureId: complete.capture.captureId, holdId: entryKey() };
+  expect(
+    (await command(identity, (client, at) => custody.readAndHold({ ...work(), ...binding, client, at }))).value.status,
+  ).toBe('held');
+  // Reopening the native owner and serializing locators cannot manufacture or lose committed provenance.
+  custody = createNativeLibrarySourceCustody({ pool: native.pool });
+  expect(
+    (
+      await command(identity, (client, at) =>
+        custody.revalidateHold({ ...work(), ...JSON.parse(JSON.stringify(binding)), client, at }),
+      )
+    ).value.status,
+  ).toBe('held');
+  for (const changed of [
+    { ...identity, outputGeneration: b.generation },
+    { ...identity, outputGeneration: entryKey() },
+    { ...identity, publicationTransactionId: entryKey() },
+    { ...identity, publicationPosition: String(BigInt(identity.publicationPosition) + 1n) },
+    { ...identity, generation: String(BigInt(identity.generation) + 1n) },
+    { ...identity, receivingEpoch: '2' },
+    { ...identity, effectKey: entryKey() },
+  ]) {
+    expect(
+      (
+        await command(identity, (client, at) =>
+          custody.readAndHold({ ...work(), ...binding, identity: changed, client, at }),
+        )
+      ).value.status,
+    ).toBe('unavailable');
+  }
+  // Selecting real B invalidates every fresh use of A, while exact already held A retains its obligation.
+  await source.output({ complete: b }, (tx) => completeCollectionSourceOutput(tx, b));
+  expect((await custody.finishCapture({ ...work(), identity, frontier: captured.frontier })).status).toBe(
+    'unavailable',
+  );
+  expect(
+    (
+      await command(identity, (client, at) =>
+        custody.readAndHold({ ...work(), ...binding, client, at, holdId: entryKey() }),
+      )
+    ).value.status,
+  ).toBe('unavailable');
+  expect(
+    (await command(identity, (client, at) => custody.revalidateHold({ ...work(), ...binding, client, at }))).value
+      .status,
+  ).toBe('held');
+  expect(
+    (await command(identity, (client, at) => custody.releaseHold({ ...work(), ...binding, client, at }))).value.status,
+  ).toBe('released');
+});
+
+test('actual output final fences reject raw rekey, unpublish, owner T and frozen authority while preserving ordinary capture', async () => {
+  const source = await explicitSource(),
+    a = { ...source.ref, generation: entryKey() };
+  const id = await native.createSubject('game'),
+    rekey = await native.createSubject('recipe');
+  await source.output({ begin: a }, (tx) => beginCollectionSourceOutput(tx, { ...a, expectedMembers: 1 }));
+  await source.output({ append: a }, (tx) => appendCollectionSourceOutput(tx, { ...a, after: null, subjectIds: [id] }));
+  await source.output({ complete: a }, (tx) => completeCollectionSourceOutput(tx, a));
+  const identity = await source.identity(),
+    captured = await scan(identity);
+  await native.pool.query(
+    'UPDATE library.collection_source_output_member SET subject_id=$4 WHERE route=$1 AND collection_id=$2 AND generation=$3',
+    [identity.route, identity.collectionId, a.generation, rekey],
+  );
+  expect((await custody.finishCapture({ ...work(), identity, frontier: captured.frontier })).status).toBe(
+    'unavailable',
+  );
+  expect((await source.observe()).authority).toBe('unavailable_output');
+  await native.pool.query(
+    "UPDATE library.collection SET visibility='private',source_generation=source_generation+1 WHERE route=$1 AND collection_id=$2",
+    [identity.route, identity.collectionId],
+  );
+  expect((await custody.capturePage({ ...work(), identity, frontier: null, limit: 1 })).status).toBe('unavailable');
+  await native.pool.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
+    routeOf(identity.accountId),
+    identity.accountId,
+  ]);
+  expect((await custody.capturePage({ ...work(), identity, frontier: null, limit: 1 })).status).toBe('unavailable');
+  await expect(
+    source.output({ late: true }, (tx) =>
+      beginCollectionSourceOutput(tx, { ...a, generation: entryKey(), expectedMembers: 0 }),
+    ),
+  ).rejects.toThrow();
+  await native.pool.query(
+    "UPDATE library.collection SET visibility='public',curator_account_id=NULL WHERE route=$1 AND collection_id=$2",
+    [identity.route, identity.collectionId],
+  );
+  expect((await custody.capturePage({ ...work(), identity, frontier: null, limit: 1 })).status).toBe('unavailable');
+  expect(
+    (
+      await native.pool.query(
+        'SELECT 1 FROM library.collection_source_output_publication WHERE route=$1 AND collection_id=$2 AND generation=$3',
+        [identity.route, identity.collectionId, a.generation],
+      )
+    ).rows,
+  ).toHaveLength(1);
+  const ordinary = await make(),
+    ordinaryCapture = await scan(ordinary.identity);
+  expect(
+    (await custody.finishCapture({ ...work(), identity: ordinary.identity, frontier: ordinaryCapture.frontier }))
+      .status,
+  ).toBe('complete');
 });

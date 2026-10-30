@@ -101,7 +101,11 @@ actual driver, native `after` and stable `tie`, current session parent where nee
 `version`. The owner verifies every frontier field before advancing it. Curated occurrence order uses native
 ordinal plus member ID, including retained occurrences. Other ranges cover live and retained entries, personal
 labels, every assignment (including excluded/unreserved assignments), sessions and their unit/change children,
-copies including retained copies, and account-owned published logs. Child pages stay anchored to one already
+copies including retained copies, and account-owned published logs. Active explicit-output capture instead starts
+at the output driver and scans only `(route,collection_id,output_generation,subject_id)` in native UUID order.
+It visits every selected original, including originals a consumer later excludes, without scanning private inputs.
+The persisted scanned total must equal the receipt's exact expected native member count before finalization or a
+fresh hold; native tuple exhaustion alone or caller counts cannot establish a complete empty capture. Child pages stay anchored to one already
 scanned native session; they never search other owners to discover dependencies. Publication tombstones without
 an account or subject carry no dependency. No subject normalization or eligibility classifier runs here.
 
@@ -135,9 +139,27 @@ binding: it grants no fresh Source read, complete/current observation, publicati
 admission or ordinary purge authority. Each lookup uses bounded indexed native points and the original work
 allowance and deadline. There is no cross-partition transfer or destination acknowledgement authority here.
 
-Public/unlisted dynamic and frozen output remain `unavailable` with `output_authority`: there is no committed native
-published Collection output generation/receipt authority to capture. The published-log dependency range is not
-that authority. Cross-partition owner holds also remain unavailable. This seam imports no identity receiving,
+Active curator-owned public/unlisted saved-dynamic output uses `active_explicit_output`. Native metadata exposes
+`outputPublication: CollectionOutputPublication | null` with `generation`, `transactionId`, `position`, `nativeXid`,
+`sourceGeneration`, `memberFence` and `members` (all strings). The selected COMPLETE head, its source generation,
+immutable publication receipt and actual same-transaction Core `editorial.write_basis` must agree on reread.
+The publication hook uses Core's live command callback and executor transaction ID; a deferred native constraint
+requires the actual Core fence/basis at commit, including same native xid provenance. It copies no request body,
+private criteria, pins or author-approval JSON. Its source incarnation and actual curator are retained explicitly.
+
+Native membership triggers maintain a separate exact row count and member fence; COMPLETE compares these with
+its bounded append checkpoint and declared expected count. Changes to selected rows, keys or the head invalidate
+the publication proof and advance native Collection controls. Pending B does not replace or fence unchanged A.
+Every capture page and its committed final fence rereads current publication proof. Releasing/revalidating an
+already held capture still uses the original retained receipt, allowing later selection/visibility changes without
+new reading authority. Ordinary curated/private-built-in source paths retain their existing drivers.
+
+Missing, pending, cancelled, stale or forged output remains unavailable. Historical output without this real
+publication receipt is preserved without invented provenance. Frozen output after account T/curator minimization
+still has no selected exact native ownership binding: capture remains unavailable and original output/header/
+publication custody is retained pending Semantic/Commerce ownership and destination disposition. The published-log
+range and Semantic public catalogue capture are never borrowed as output authority. Cross-partition owner holds
+also remain unavailable. This seam imports no identity receiving,
 scoped observation, coordinator, canonical Source store or Library participant. Scoped protocols and canonical
 Source remain separate authorities. Export presence and local compilation do not establish native physical-plan,
 full-row payload, acceptance, integration or main readiness; those proofs are deferred to controller checks.
@@ -157,7 +179,11 @@ means readable, permitted, ready or erased at a destination. Unreleased holds su
 native releases committed before this command can be removed. Retirement deletes bounded released holds, then
 the receipt and capture, under current partition/account/Collection/control locks. Never-public private/unlisted
 due cleanup and the existing terminal owned-graph runner consume this operation before deleting local children.
-Ever-public history and public output remain retained pending actual Source and ordinary destination disposition.
+Every retained explicit-output generation (including building, cancelled and superseded copies), its publication
+receipt and public history remain retained pending actual Source and ordinary destination disposition. Existing
+account probes enumerate output and publication owner indexes even after curator minimization; child-family
+entries describe FK obligations, not independently observed rows or global no-data. Native source/control release
+guards and ordinary/terminal Collection cleanup preserve these roots.
 There is no new public endpoint, scheduler, shared custody wakeup or participant acknowledgement.
 
 ## Authority and source selection
