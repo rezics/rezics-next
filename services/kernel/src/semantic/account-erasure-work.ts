@@ -3,6 +3,7 @@ import { noEffect, runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { readSemanticErasure, stepSemanticErasure, SEMANTIC_ERASURE_PROGRESS } from './account-erasure.ts';
+import { readSemanticErasureCustody } from './account-erasure-custody.ts';
 
 const workflowName = 'semantic.erasure.local';
 
@@ -15,11 +16,21 @@ export function registerSemanticErasureWork({ pool, client }: WorkContext) {
     backoffRate: 2,
     maxAttempts: 10,
   });
+  const custody = DBOS.registerStep(async (accountId: string) => readSemanticErasureCustody(pool, accountId), {
+    name: 'semantic.erasure.custody.step',
+    retriesAllowed: true,
+    intervalSeconds: 1,
+    backoffRate: 2,
+    maxAttempts: 10,
+  });
   DBOS.registerWorkflow(
     async ({ accountId }: { accountId: string }) => {
       while (!(await step(accountId)).localComplete) {
         // Each await is a separate persisted DBOS step, not a nested native page or held connection.
       }
+      // Local page exhaustion is not participant completion. Keep the same workflow alive while real
+      // receiving proof is unavailable; each observation releases its connection before durable sleep.
+      while ((await custody(accountId)).state === 'pending') await DBOS.sleep(60_000);
     },
     { name: workflowName },
   );
@@ -27,7 +38,6 @@ export function registerSemanticErasureWork({ pool, client }: WorkContext) {
   return async (accountId: string) => {
     const progress = await readSemanticErasure(pool, accountId);
     if (!progress) throw new TypeError('Semantic erasure has not begun');
-    if (progress.state === 'pending-shared-custody') return;
     const route = routeOf(accountId)!;
     const partition = partitionOf(route);
     const workflowId = `semantic:erasure:${accountId}:${progress.at}`;

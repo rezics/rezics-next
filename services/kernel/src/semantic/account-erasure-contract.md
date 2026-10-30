@@ -270,6 +270,36 @@ verification receipt text. An erased receipt is an observation, never an admissi
 ### Pending custody and launch coverage
 
 After all local homes complete, progress is durable `pending-shared-custody` and further local steps are idle.
+The same registered `semantic.erasure.local` workflow then observes its native account-home fence/progress and
+unsettled late inbox through `account-erasure-custody.ts`'s `readSemanticErasureCustody`. Its closed
+`SemanticErasureCustody` result contains only `state: 'pending'` and a reason; it is not a terminal certificate or
+receiving receipt. Custody also checks the actual terminal-home `erasure_home` row at partition 4095 against the
+original native T. A missing, reopened or differently bound terminal home remains `local-cleanup`, even if the
+account checkpoint has reached 4096. This point read does not certify historical role coverage. The separate
+persisted custody step releases its connection before a sixty-second durable
+sleep. The queue, partition key and account-and-T workflow ID remain unchanged. Scheduling an already locally
+complete account no longer skips the enqueue. A previously completed DBOS workflow still follows the existing
+`return-existing` policy; enqueueing does not claim that such a workflow has resumed or obtained custody.
+
+The available local exports remain `readSemanticErasure` and `stepSemanticErasure`; neither certifies historical
+role coverage or receiving minimization. The adopted Accounts receiving boundary is
+`history/receiving.ts`: `HistoryReceivingDependencies`, `HistoryReceivingContext`, opaque `HistoryOwnerCoverage`
+and `HistoryReceivingReceipt`, `HistoryOwnerCoverageResult`, `readHistoryOwnerCoverage`,
+`verifyHistoryOwnerCoverage`, `readHistoryReceivingReceipt` and `verifyHistoryReceivingReceipt`. Reads use
+`(dependencies, barrier, family | artifact, {deadline})`; native verification uses
+`(transaction, barrier, family | artifact, coverage | receipt)` on the same final account-home ACK transaction.
+Semantic requires both `semantic` and `zones` producer coverage and receiving receipts for exact original copied
+artifacts, including editorial receiving copies. Coverage and receipts never replace local payload minimization.
+
+This checkout lacks both `history/receiving.ts` and its required `history/registry.ts` exports `HistoryBarrier`,
+`HistoryArtifact` and `HistoryProducerFamily`. The supplied receiving declaration imports these three types but
+does not define their shapes. Existing `history/contracts.ts` and `history/locator.ts` are codecs, not substitutes
+for them; the preference-only minimizer in `history/receipt.ts` is not whole-family coverage. An exact provisional
+receiving adapter therefore cannot yet be copied without inventing those undeclared types. Custody remains
+`producer-contract-unavailable`, including after empty local probes. No fabricated receipt, successful adapter,
+final ACK or `none` follows from these missing declarations. Binding the real exports and local historical-role
+terminal proof remains part of this slice.
+
 `erasure_shared_custody` retains exact source partition/transaction/outbox position and account roles. Accounts
 owns command receipts, outbox and durable-work payloads. The delivered history artifact/role encoders do not
 supply an actual receiving minimizer/commit receipt; current native receipt keys also differ from the future
@@ -325,6 +355,11 @@ fictional driver signatures or a helper that calls ACK on the worker's behalf:
 | Private/deleted/archived export/count surfaces at T and public retained skeleton free of every private historical byte                                             | Actual owner enumeration and export/count producers where absent, plus final minimization driver and exact copy keys. Existing T/public cases freeze available native surfaces, not a new export API or a certification of final storage absence.                                                                                       |
 | Genuine no-applicable-data account                                                                                                                                 | Indexed absence proof across ALL roles/stores and real registration/agent disposition. Unknown stores or missing cleanup may never return `none`.                                                                                                                                                                                       |
 
-The sole local participant producer is registered by default. The manager binds the final separate account-home
-ACK only after actual Accounts shared-history producer exports and commit receipts exist. Existing lifecycle,
+The positive native `account-erasure-shared-custody.test.ts` schedule requires the default worker to reach one
+Semantic ACK after private candidate, source outbox, private/archived Zone and attribution minimization, retaining
+an eligible accepted/adopted public contribution. It uses the supplied native fixture and worker; it never writes
+ACKs, progress or proof rows. It is retained for execution after integration, alongside the existing frozen suites.
+
+The sole local participant producer is registered by default. The final separate account-home
+ACK requires actual Accounts shared-history producer exports and commit receipts. Existing lifecycle,
 retention and privacy tests retain their authority; no new public deletion, export, hold or restore API is added.
