@@ -271,12 +271,20 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
   }
   expect((await registry.read({ queried: winner.queried }, context())).status).toBe('found');
   await registry.closeObservation(winner.queried, search, context());
-  await pool.query(`ALTER TABLE search.public_filter_observation ADD CONSTRAINT custody_test_rollback CHECK (registration <> '${renew.registration.id}') NOT VALID`);
+  await pool.query(
+    `ALTER TABLE search.public_filter_observation ADD CONSTRAINT custody_test_rollback CHECK (registration <> '${renew.registration.id}') NOT VALID`,
+  );
   try {
-    const failed = await registry.openPit({registration:renew.registration,covered:cut(),keepAliveMs:60000},concurrentSearch,context());
+    const failed = await registry.openPit(
+      { registration: renew.registration, covered: cut(), keepAliveMs: 60000 },
+      concurrentSearch,
+      context(),
+    );
     expect(failed.status).toBe('unavailable');
-    expect(cleanup).toMatchObject([{pits:[{successful:true}]}]);
-  } finally { await pool.query('ALTER TABLE search.public_filter_observation DROP CONSTRAINT custody_test_rollback'); }
+    expect(cleanup).toMatchObject([{ pits: [{ successful: true }] }]);
+  } finally {
+    await pool.query('ALTER TABLE search.public_filter_observation DROP CONSTRAINT custody_test_rollback');
+  }
   const prepared = await registry.retainPrepared(
     {
       registration: renew.registration,
