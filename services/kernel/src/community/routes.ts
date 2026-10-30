@@ -45,7 +45,6 @@ import {
   type RealmDependencies,
   type RealmView,
 } from './realm.ts';
-import { requestRealmClaim } from './realm-continuity.ts';
 import { setBoardScheme } from './board-scheme.ts';
 import { createRealmParticipationCheck } from './participation.ts';
 import {
@@ -947,49 +946,6 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
             return { realm: representation };
-          });
-        } catch (error) {
-          communityProblem(error);
-        }
-      },
-    )
-    .post(
-      '/v1/realms/:realmId/claimRequests',
-      {
-        params: realmParams,
-        headers: writeHeaders,
-        response: {
-          202: withHeaders(strict(t.Object({
-            realmId: id, requestId: id, state: t.Literal('pending'),
-            orphanedAt: instant, claimEligibleAt: instant, requestedAt: instant,
-          }, closed)), sessionHeader),
-          ...writeFailures,
-        },
-        detail: {
-          operationId: 'realm.claim.request',
-          'x-exposure': 'public',
-          'x-action': 'realm:participate',
-          'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
-          security: writeSecurity,
-        },
-      },
-      async ({ params: { realmId }, headers, actor, admission, job, session, set }) => {
-        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        try {
-          return await admission.run('normal', job, async () => {
-            const result = await requestRealmClaim(realmDependencies(), actor, realmId, {
-              idempotencyKey: key, deadline: job.deadline,
-            });
-            session.record(result);
-            set.status = 202;
-            return {
-              ...result.value,
-              orphanedAt: new Date(result.value.orphanedAt).toISOString(),
-              claimEligibleAt: new Date(result.value.claimEligibleAt).toISOString(),
-              requestedAt: new Date(result.value.requestedAt).toISOString(),
-            };
           });
         } catch (error) {
           communityProblem(error);

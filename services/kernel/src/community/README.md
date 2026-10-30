@@ -154,12 +154,12 @@ are read-only even for an independently granted or Global actor. It never grants
 The locked identity serializes governance against the actual succession transaction and preserves removal's
 separate lifecycle check.
 
-`requestRealmClaim` / `POST /v1/realms/{realmId}/claimRequests` uses ordinary `realm:participate` admission and an
+`requestRealmClaim(deps, actor, realmId, { idempotencyKey, deadline })` uses ordinary `realm:participate` admission and an
 independent current `realm:read` check. It accepts only an orphan whose original `orphaned_at + 720 hours` has
 elapsed at authoritative command time. The database preserves that deadline during orphan retries. A native
 pending request is unique per Realm, original orphan instant and requester; a fresh idempotency key returns the
 same pending request without another event. The result is always `pending`; neither expiry nor requesting grants
-ownership. Approval requires a genuine platform decision establishing a native Access owner. The API exposes no
+ownership. Approval requires a genuine platform decision establishing a native Access owner. The native command exposes no
 approval operation without that authority.
 
 Claim requests are held in the Realm home. A request point touches one native identity/head, one full requester

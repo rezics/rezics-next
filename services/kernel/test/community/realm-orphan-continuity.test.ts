@@ -3,7 +3,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { resourceAuthorization } from '../../src/access/index.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { noEffect, principalCommandIdentity, runCommand } from '../../src/command/command.ts';
-import { realmGovernanceAuthorization, RealmReadOnlyError } from '../../src/community/realm-continuity.ts';
+import { realmGovernanceAuthorization, RealmReadOnlyError, requestRealmClaim } from '../../src/community/realm-continuity.ts';
 import { readRealm, updateRealm } from '../../src/community/realm.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -73,11 +73,10 @@ test('stored orphan decision preserves public read and discussion admission whil
   expect(current?.headRevisionId).toBe(realm.headRevisionId);
 });
 
-test('one microsecond before the original claim deadline is refused without a request or receipt', async () => {
+test('one microsecond before the original claim deadline is refused without a pending request', async () => {
   const realm = await createRealm();
   await orphan(realm.realmId, true);
-  const response = await request('POST', `/v1/realms/${realm.realmId}/claimRequests`);
-  expect(response.status).toBe(409);
+  await expect(requestRealmClaim(deps(), owner().actor, realm.realmId, context())).rejects.toMatchObject({ code: 'conflict' });
   const pending = await system.database.pool.query('SELECT request_id FROM community.realm_claim_request WHERE route=$1 AND realm_id=$2',
     [routeOf(realm.realmId), realm.realmId]);
   expect(pending.rows).toHaveLength(0);
@@ -90,17 +89,18 @@ test('exact deadline accepts only pending review and retries preserve the deadli
     'SELECT subject_id,role,valid::text FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2 ORDER BY subject_id,role,valid',
     [routeOf(realm.realmId), realm.realmId])).rows;
   const before = await grants();
-  const path = `/v1/realms/${realm.realmId}/claimRequests`;
   const key = crypto.randomUUID();
-  const response = await request('POST', path, undefined, key);
-  expect(response.status).toBe(202);
-  const pending: unknown = await response.json();
-  expect(pending).toMatchObject({ state: 'pending', claimEligibleAt: at });
+  const first = await requestRealmClaim(deps(), owner().actor, realm.realmId, context(key));
+  expect(first.value.state).toBe('pending');
+  expect(Date.parse(first.value.claimEligibleAt)).toBe(Date.parse(at));
   for (const retryKey of [key, crypto.randomUUID()]) {
-    const retry = await request('POST', path, undefined, retryKey);
-    expect(retry.status).toBe(202);
-    expect(await retry.json()).toEqual(pending);
+    const retry = await requestRealmClaim(deps(), owner().actor, realm.realmId, context(retryKey));
+    expect(retry.value).toEqual(first.value);
   }
+  const restricted = await system.auth.issue({ accountId: owner().actor.accountId,
+    clientId: system.auth.ordinaryClient.id, scopes: ['realm:read'] });
+  await expect(requestRealmClaim(deps(), restricted.actor, realm.realmId, context(key)))
+    .rejects.toMatchObject({ name: 'GrantDeniedError' });
   expect(await grants()).toEqual(before);
   const requests = await system.database.pool.query('SELECT state FROM community.realm_claim_request WHERE route=$1 AND realm_id=$2',
     [routeOf(realm.realmId), realm.realmId]);
