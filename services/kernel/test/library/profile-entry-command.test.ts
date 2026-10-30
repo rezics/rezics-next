@@ -150,14 +150,22 @@ test('game recipe and record states use one HTTP entry slot and descriptive acti
     await problem(await native.send('owner', 'PUT', path(subjectId), { state: 'planned' }), 409, 'conflict');
     expect(await native.inspect()).toEqual(fresh);
     const changed = await json(
-      await native.send('owner', 'PUT', path(subjectId), { state: 'completed', revision: 1 }),
+      await native.send('owner', 'PUT', path(subjectId), {
+        state: 'completed',
+        revision: 1,
+        incarnationId: first.libraryEntry.incarnationId,
+      }),
       200,
     );
     expect(changed.libraryEntry.revision).toBe(2);
     expect(changed.libraryEntry.createdAt).toBe(first.libraryEntry.createdAt);
     const cas = await native.inspect();
     await problem(
-      await native.send('owner', 'PUT', path(subjectId), { state: entryStates[vertical], revision: 1 }),
+      await native.send('owner', 'PUT', path(subjectId), {
+        state: entryStates[vertical],
+        revision: 1,
+        incarnationId: first.libraryEntry.incarnationId,
+      }),
       409,
       'conflict',
     );
@@ -214,7 +222,11 @@ test('release replacement and rollback preserve raw facts until a genuine fresh 
   privateFree(oldRead);
   const noWrite = await native.inspect();
   await problem(
-    await native.send('owner', 'PUT', path(subjectId), { state: 'cooking', revision: 1 }),
+    await native.send('owner', 'PUT', path(subjectId), {
+      state: 'cooking',
+      revision: 1,
+      incarnationId: original.incarnation_id,
+    }),
     422,
     'unsupported_library_profile',
   );
@@ -222,7 +234,14 @@ test('release replacement and rollback preserve raw facts until a genuine fresh 
   await native.activate(native.originalDigest);
   expect(await fact(subjectId)).toEqual(original);
   await native.activate(native.replacementDigest);
-  await json(await native.send('owner', 'PUT', path(subjectId), { state: 'cooking_again', revision: 1 }), 200);
+  await json(
+    await native.send('owner', 'PUT', path(subjectId), {
+      state: 'cooking_again',
+      revision: 1,
+      incarnationId: original.incarnation_id,
+    }),
+    200,
+  );
   const updated = await fact(subjectId);
   expect(updated.library_profile_pin).toEqual(pin(native.replacementDigest, 'recipe'));
   expect(updated.revision).toBe(2);
@@ -243,14 +262,21 @@ test('profile retirement rejects new state values but permits own read and clear
   expect(native.replacement.libraryProfiles!['legacy-fixed-v1']).toBeDefined();
   const before = await native.inspect();
   await problem(
-    await native.send('owner', 'PUT', path(subjectId), { state: 'completed', revision: 1 }),
+    await native.send('owner', 'PUT', path(subjectId), {
+      state: 'completed',
+      revision: 1,
+      incarnationId: stored.incarnation_id,
+    }),
     422,
     'unsupported_library_profile',
   );
   expect(await native.inspect()).toEqual(before);
   expect((await json(await native.send('owner', 'GET', path(subjectId)), 200)).libraryEntry.state).toBe('planned');
   expect(await fact(subjectId)).toEqual(stored);
-  expect((await native.send('owner', 'DELETE', `${path(subjectId)}?revision=1`)).status).toBe(204);
+  expect(
+    (await native.send('owner', 'DELETE', `${path(subjectId)}?revision=1&incarnationId=${stored.incarnation_id}`))
+      .status,
+  ).toBe(204);
   await problem(await native.send('owner', 'GET', path(subjectId)), 404, 'not_found', 'not_applicable');
   const cleared = await native.inspect();
   await problem(

@@ -9,7 +9,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await f?.close();
 });
-test('entry incarnation phase one exposes actual identity accepts optional guards and rejects a stale guarded mutation after refill', async () => {
+test('entry incarnation exposes actual identity and rejects missing or stale guards after refill', async () => {
   const subject = await f.createSubject('game'),
     path = '/v1/libraryEntries/' + subject;
   const created = await f.send('owner', 'PUT', path, { state: 'playing' });
@@ -64,11 +64,13 @@ test('entry incarnation phase one exposes actual identity accepts optional guard
   );
   expect(replay.status).toBe(200);
   expect((await replay.json()).libraryEntry).toEqual(current.libraryEntry);
+  const beforeMissing = await f.inspect();
   const oldClient = await f.send('owner', 'PUT', path, { state: 'playing', revision: current.libraryEntry.revision });
-  expect(oldClient.status).toBe(200);
+  expect(oldClient.status).toBe(409);
+  expect(await f.inspect()).toEqual(beforeMissing);
 }, 120000);
 
-test('optional entry incarnation binds guarded writers and receipts across real clear and refill', async () => {
+test('entry incarnation binds guarded writers and receipts across real clear and refill', async () => {
   const subject = await f.createSubject('record');
   const first = await f.commands.putEntry(f.owner.actor, subject, { state: 'listening' }, entryKey());
   const original = first.value.entry;
@@ -100,11 +102,25 @@ test('optional entry incarnation binds guarded writers and receipts across real 
     f.commands.deleteEntry(f.owner.actor, subject, original.revision, key, next.value.entry.incarnationId!),
   ).rejects.toBeInstanceOf(IdempotencyConflictError);
   expect(await f.inspect()).toEqual(before);
-  // Phase one still accepts the real omitted-guard producer and its original digest shape.
   const unguardedKey = entryKey();
-  const unguarded = await f.commands.deleteEntry(f.owner.actor, subject, next.value.entry.revision, unguardedKey);
-  expect(await f.commands.deleteEntry(f.owner.actor, subject, next.value.entry.revision, unguardedKey)).toEqual({
-    ...unguarded,
-    replayed: true,
-  });
+  await expect(
+    f.commands.deleteEntry(f.owner.actor, subject, next.value.entry.revision, unguardedKey),
+  ).rejects.toBeInstanceOf(LibraryConflictError);
+  expect(await f.inspect()).toEqual(before);
+  const guarded = await f.commands.deleteEntry(
+    f.owner.actor,
+    subject,
+    next.value.entry.revision,
+    unguardedKey,
+    next.value.entry.incarnationId!,
+  );
+  expect(
+    await f.commands.deleteEntry(
+      f.owner.actor,
+      subject,
+      next.value.entry.revision,
+      unguardedKey,
+      next.value.entry.incarnationId!,
+    ),
+  ).toEqual({ ...guarded, replayed: true });
 });

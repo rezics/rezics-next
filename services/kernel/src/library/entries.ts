@@ -32,6 +32,7 @@ import { prepareEntryRestoration } from './entry-restore-preparation.ts';
 import { retainEntryDeletion, restoreRetainedEntryDeletion } from './entry-retention-store.ts';
 import stampLegacyIncarnation from './entry-legacy-incarnation-stamp.sql';
 import restoreState from './entry-restore-state.sql';
+import mutationState from './entry-mutation-state.sql';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
@@ -254,13 +255,29 @@ export function createEntryCommands(config: Dependencies) {
           },
         },
         async (tx, command, prepared) => {
+          const route = requireRoute(owner.accountId);
+          if (expectedRevision !== undefined) {
+            // This exact locked row is the cutover evidence. Receipt replay has
+            // already returned, and a concurrent stamp/replacement cannot race admission.
+            const current = await mutationState.run(tx, {
+              route,
+              account_id: owner.accountId,
+              subject_id: resolved.subjectId,
+            });
+            if (
+              !current ||
+              current.revision !== expectedRevision ||
+              (current.incarnationId != null && parsed.incarnationId === undefined) ||
+              (parsed.incarnationId !== undefined && current.incarnationId !== parsed.incarnationId)
+            )
+              throw new LibraryConflictError();
+          }
           if ('error' in prepared) throw prepared.error;
           const source = prepared.source;
           if (!source || (!existing && source.subjectId !== resolved.subjectId)) throw new LibraryNotFoundError();
           if (source.kind !== 'supported' || !hasEntryState(source.profile, parsed.state))
             throw new ProblemError('unsupported_library_profile');
           const seq = await allocateOwnerWriteSeq(tx, owner.accountId);
-          const route = requireRoute(owner.accountId);
           const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
           let entry: Entry;
           if (expectedRevision === undefined) {
@@ -344,11 +361,16 @@ export function createEntryCommands(config: Dependencies) {
       },
       async (tx, command) => {
         const route = requireRoute(owner.accountId);
-        const current = await store.readEntry(tx, route, owner.accountId, subjectId);
+        const current = await mutationState.run(tx, {
+          route,
+          account_id: owner.accountId,
+          subject_id: subjectId,
+        });
         if (!current) throw new LibraryNotFoundError();
         if (
           current.revision !== expected ||
           expected > 2_147_483_644 ||
+          (current.incarnationId != null && guard === undefined) ||
           (guard !== undefined && current.incarnationId !== guard)
         )
           throw new LibraryEntryLifecycleConflictError('stale');

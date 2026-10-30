@@ -292,6 +292,15 @@ export async function createProfileEntryFixture(
           entries: await rows(
             'SELECT to_jsonb(f) AS row FROM library.entry f WHERE route=$1 AND account_id=$2 ORDER BY subject_id',
           ),
+          deletedEntries: await rows(
+            'SELECT to_jsonb(f) AS row FROM library.entry_deleted f WHERE route=$1 AND account_id=$2 ORDER BY deletion_id',
+          ),
+          ownerCounter: await rows(
+            'SELECT to_jsonb(f) AS row FROM library.owner_write_counter f WHERE route=$1 AND account_id=$2',
+          ),
+          factSourceHead: await rows(
+            'SELECT to_jsonb(f) AS row FROM library.fact_source_head f WHERE route=$1 AND account_id=$2',
+          ),
           sessions: await rows(
             'SELECT to_jsonb(f) AS row FROM library.progress_session f WHERE route=$1 AND account_id=$2 ORDER BY session_id',
           ),

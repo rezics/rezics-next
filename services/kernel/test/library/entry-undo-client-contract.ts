@@ -16,6 +16,7 @@ export async function entryUndoClientContract(
     // @ts-expect-error private storage provenance is absent from public entries
     result.data.libraryEntry.libraryProfilePin;
   }
+  await entry.put({ state: 'planned', revision: 1, incarnationId }, { headers: { 'idempotency-key': '"update"' } });
   await entry.delete(undefined, { query: { revision: 1, incarnationId }, headers: { 'idempotency-key': '"clear"' } });
   const options = { headers: { 'idempotency-key': '"undo"' } };
   // @ts-expect-error restore revisions are numbers

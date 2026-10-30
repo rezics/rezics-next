@@ -49,6 +49,8 @@ type Dependencies = {
 const closed = { additionalProperties: false } as const;
 const id = t.String();
 const nullable = t.Union([id, t.Null()]);
+// Request fields remain optional for exact historical receipts; fresh non-null
+// incarnations enforce the guard inside the authorized command after receipt lookup.
 const incarnationId = t.String({ format: 'uuid' });
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 const stateInput = libraryVocabularyIdSchema;

@@ -258,7 +258,12 @@ test('an account keeps one library entry per readable subject whose state change
   });
 
   tick();
-  const progressed = await commands.putEntry(owner, subjectId, { state: 'in_progress', revision: 1 }, key());
+  const progressed = await commands.putEntry(
+    owner,
+    subjectId,
+    { state: 'in_progress', revision: 1, incarnationId: created.value.entry.incarnationId },
+    key(),
+  );
   expect(progressed.value).toMatchObject({
     created: false,
     entry: { state: 'in_progress', revision: 2, updatedAt: clock().toISOString() },
@@ -269,13 +274,25 @@ test('an account keeps one library entry per readable subject whose state change
     accountId: owner.accountId,
   });
   const beforeStale = await snapshot();
-  await expect(commands.putEntry(owner, subjectId, { state: 'paused', revision: 1 }, key())).rejects.toMatchObject({
+  await expect(
+    commands.putEntry(
+      owner,
+      subjectId,
+      { state: 'paused', revision: 1, incarnationId: created.value.entry.incarnationId },
+      key(),
+    ),
+  ).rejects.toMatchObject({
     name: 'LibraryConflictError',
   });
   expect(await snapshot()).toEqual(beforeStale);
 
   tick();
-  const completed = await commands.putEntry(owner, subjectId, { state: 'completed', revision: 2 }, key());
+  const completed = await commands.putEntry(
+    owner,
+    subjectId,
+    { state: 'completed', revision: 2, incarnationId: progressed.value.entry.incarnationId },
+    key(),
+  );
   expect(completed.value.entry).toMatchObject({ state: 'completed', revision: 3 });
   expect(await followCommands.readFollow(owner, subjectId)).toMatchObject({ state: 'following', reason: 'library' });
   expect(await commands.readEntry(owner, subjectId)).toEqual(completed.value.entry);
@@ -293,7 +310,7 @@ test('an account keeps one library entry per readable subject whose state change
     'SELECT count(*)::int AS n FROM library.copy WHERE account_id = $1',
     [owner.accountId],
   );
-  const removed = await commands.deleteEntry(owner, subjectId, 3, key());
+  const removed = await commands.deleteEntry(owner, subjectId, 3, key(), completed.value.entry.incarnationId!);
   expect(removed.value).toEqual({ deletionId: removed.transactionId, revision: 4 });
   expect(removed.value).not.toHaveProperty('state');
   expect(await commands.readEntry(owner, subjectId).catch((error) => error)).toBeInstanceOf(LibraryNotFoundError);
@@ -303,7 +320,9 @@ test('an account keeps one library entry per readable subject whose state change
     [owner.accountId],
   );
   expect(copiesAfterDelete.rows[0].n).toBe(copiesBeforeDelete.rows[0].n);
-  await expect(commands.deleteEntry(owner, subjectId, 3, key())).rejects.toBeInstanceOf(LibraryNotFoundError);
+  await expect(
+    commands.deleteEntry(owner, subjectId, 3, key(), completed.value.entry.incarnationId!),
+  ).rejects.toBeInstanceOf(LibraryNotFoundError);
 
   expect(await eventRows(subjectId)).toEqual([
     { partition_no: partitionOf(route), type: updatedEvent, subject: owner.accountId, data: { subjectId } },
@@ -341,7 +360,10 @@ test('setting in progress follows the subject in the same command unless it was 
   );
 
   const result = await commands.putEntry(owner, subjectId, { state: 'in_progress' }, key());
-  expect(result.value).toMatchObject({ created: true, entry: { state: 'in_progress', revision: 1 } });
+  expect(result.value).toMatchObject({
+    created: true,
+    entry: { state: 'in_progress', revision: 1 },
+  });
   expect(await followCommands.readFollow(owner, subjectId)).toMatchObject({
     state: 'unfollowed',
     reason: 'explicit',
@@ -453,7 +475,9 @@ test('put, delete and list statement counts stay equal at three scales of unrela
   };
   const putSubjects = await Promise.all([0, 1, 2].map(() => createReadableSubject(owner)));
   const deleteSubjects = await Promise.all([0, 1, 2].map(() => createReadableSubject(owner)));
-  for (const subjectId of deleteSubjects) await commands.putEntry(owner, subjectId, { state: 'planned' }, key());
+  const deleteEntries = [];
+  for (const subjectId of deleteSubjects)
+    deleteEntries.push((await commands.putEntry(owner, subjectId, { state: 'planned' }, key())).value.entry);
   const sample = async (population: Population, operation: (repetition: number) => Promise<unknown>) => {
     const samples: GrowthSample[] = [];
     let previous = 0;
@@ -469,7 +493,7 @@ test('put, delete and list statement counts stay equal at three scales of unrela
     commands.putEntry(owner, putSubjects[repetition]!, { state: 'planned' }, key()),
   );
   const remove = await sample(populations.delete, (repetition) =>
-    commands.deleteEntry(owner, deleteSubjects[repetition]!, 1, key()),
+    commands.deleteEntry(owner, deleteSubjects[repetition]!, 1, key(), deleteEntries[repetition]!.incarnationId!),
   );
   const page = await sample(populations.page, () => commands.listEntries(owner, { limit: 20 }));
   for (const samples of [put, remove, page]) {

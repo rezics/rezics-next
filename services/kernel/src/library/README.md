@@ -347,23 +347,28 @@ physical-erasure claim follows from empty Library tables.
 
 For replacement-safe fresh writes, expose opaque `incarnationId` in entry reads and write results. A revisioned PUT
 body and DELETE query carry `incarnationId` alongside `revision`; the spelling is consistent across both requests.
-After the writer/backfill cutover, a fresh revisioned request missing this precondition conflicts with no effects.
-A create without `revision` remains valid and allocates a real non-null incarnation through the existing `newId`
-allocator; updates preserve their incarnation. Parsers may admit an omitted `incarnationId` only far enough to
-authorize and find an old exact receipt. Preserve that receipt's old canonical digest/input branch; do not reject
-it in the schema or run current profile/input validation before the receipt. Fresh commands enforce the strong
-precondition after a receipt miss. Backfill at most 100 raw live primary keys per page before null/pending filters,
-using CAS on the observed revision, transaction identity and `incarnation_id IS NULL`; preserve values, revision,
-pins and timestamps. Do not stamp on GET. Enable the new ABI/writer only after new fills are non-null, bounded
-backfill is exhausted, and the profile owner has completed the required retained-row readiness gate.
+A fresh revisioned mutation on a current non-null incarnation requires its exact guard, immediately for both
+new fills and actually stamped rows. A missing or mismatched guard returns 409 without effects even when a
+replacement has the same numeric revision. A create without `revision` remains valid and allocates a real non-null
+incarnation through the existing `newId` allocator; updates preserve their incarnation. Parsers keep the field
+optional solely to authorize and find an exact historical receipt. Omitting the field retains the original
+canonical request-input digest. Current native authority and owner fencing precede receipt replay; a receipt miss
+then locks the exact live primary key and checks revision and incarnation before any business write.
 
-**Current implementation gaps.** The existing `Entry` model and response omit `incarnation_id`; insert SQL does not
-allocate it; update/delete compare only the slot and revision; delete physically removes a limited projection that
-omits the shelf, pin and incarnation columns. Both `entries.ts` preparation and `personal-routes.ts` currently
-pre-read before receipt lookup. The retained-entry table/due DAO is not integrated into an ordinary delete writer or
-restore route/command. No automatic due worker, terminal account full-graph consumer, public contribution provider
-or complete exact-locator cleanup of shared receipt/outbox/workflow payloads is implemented. First-public Library
-legal-hold support is deferred. A retained-row DAO alone does not supply the ordinary lifecycle guarantees.
+A current legacy NULL row remains pre-cutover and keeps its existing omitted-guard compatibility; a supplied
+mismatch never bypasses it. A real row lock serializes fresh commands with stamping, updates and replacement.
+No owner/global readiness marker, feature flag, receipt rewrite or historical-input exemption supplies cutover
+evidence. Bounded default backfill remains separately required: at most 100 raw live primary keys per page before
+null/pending filters, with CAS on observed revision, transaction identity and `incarnation_id IS NULL`, preserving
+values, revision, pins and timestamps. GET never stamps. This API slice does not certify all historical NULL rows
+or retained-profile readiness as migrated.
+
+**Current implementation.** Native fills expose and persist incarnation identity. Revisioned PUT and retained
+DELETE enforce the locked current-row guard after authorized receipt lookup. DELETE atomically retains the complete
+row with its original sequence and returns exact receipt metadata; Undo restores its identity and values with a new
+owner sequence. Pre-retention physical-delete receipts still return empty 204 without invented headers. Automatic
+purge, terminal account full-graph cleanup and shared evidence minimization remain separate lifecycle work; this
+fresh-write guard slice makes no completion claim for them. First-public Library legal holds remain deferred.
 Existing first-scope concealment, Everything support from other live facts, the 18 legacy outcome pairs, and
 public/private policy stay unchanged.
 
@@ -907,8 +912,12 @@ Where a named test does not call the operation, or does not grow the rows that o
 ### Entry put
 
 - Touches: One subject resolve, then own-account `library_entry:update`. A missing revision inserts one `entry` primary key. A supplied revision compare-and-swaps that primary key. State `in_progress` also runs one follow upsert in the same command and may emit a second event. The event subject is the account id.
-- Bound: Planned insert or update: library body `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the resolve, authorization and the envelope. In progress adds one follow upsert, so the body is `S` 2, and `k` is 2 when the follow changes.
-- Growth check: `test/library/entries.test.ts`: `put, delete and list statement counts stay equal at three scales of unrelated account entries` keeps `planned` put statements equal at 1, 8 and 64. It does not measure blocks and does not follow. `test/library/entry-store.test.ts`: `entry write, entry page and copy page touch the same rows and statements at three scales` updates one entry at scales 1, 4 and 16 with 500 x scale seeded rows per relation (500, 2,000 and 8,000), with no planner setting: one statement, constant rows, logarithmic blocks and no sequential scan.
+- Bound: Constant exact-key rows and statements, logarithmic index blocks, including the native profile,
+  owner sequence, fact hooks and command envelope. Revisioned writes add one locked current entry point before
+  their existing state CAS. In-progress writes retain their existing follow upsert/event envelope.
+- Growth check: `test/library/entry-incarnation-precondition-growth.test.ts` measures complete success, missing/wrong
+  guard rejection, replacement ABA and exact historical replay at 64/512/4096 unrelated live/retained/receipt histories,
+  including native physical/control work. `entries.test.ts` keeps the existing statement-count regression.
 
 ### Retained entry clear
 
