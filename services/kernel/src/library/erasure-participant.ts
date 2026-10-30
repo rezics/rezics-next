@@ -162,7 +162,7 @@ export function registerLibraryErasure(
           ...(cursor.graph.blockedCollection === null
             ? []
             : [
-                `collection:${cursor.graph.blockedCollection}: public-history destination withdrawal/fence not committed; source retained`,
+                `collection:${cursor.graph.blockedCollection}: native Source custody or public-history destination disposition unresolved; source retained`,
               ]),
         ],
       };

@@ -131,9 +131,7 @@ scoped observation, coordinator, canonical Source store or Library participant. 
 Source remain separate authorities. Export presence and local compilation do not establish native physical-plan,
 full-row payload, acceptance, integration or main readiness; those proofs are deferred to controller checks.
 
-## Authority and source selection
-
-### Native capture retirement
+## Native capture retirement
 
 `createNativeLibrarySourceCustody().retireCapture` takes the existing `allowance` and absolute `deadline`, a live
 Core `CommandTransaction` as `client` and its matching `AuthoritativeTime` as `at`, exact `identity` and `captureId`,
@@ -150,6 +148,8 @@ the receipt and capture, under current partition/account/Collection/control lock
 due cleanup and the existing terminal owned-graph runner consume this operation before deleting local children.
 Ever-public history and public output remain retained pending actual Source and ordinary destination disposition.
 There is no new public endpoint, scheduler, shared custody wakeup or participant acknowledgement.
+
+## Authority and source selection
 
 One Library owner selects the same native truth:
 
