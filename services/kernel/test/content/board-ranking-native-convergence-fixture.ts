@@ -94,6 +94,7 @@ export class RankingWorld {
   private now = this.start;
   private realmId: string | undefined;
   private readonly administrators = new Set<string>();
+  private readonly reactionSlots = new Map<string, 'upvote' | 'downvote' | 'love'>();
   private readonly kernel: ReturnType<typeof createKernel>;
   constructor(
     readonly base: ReactionRelayBase,
@@ -313,8 +314,20 @@ export class RankingWorld {
     const committed = await this.capture(partitionOf(routeOf(person.accountId)!), () =>
       this.command('PUT', `/v1/threads/${thread.id}/reaction`, { kind }, person, 200, key),
     );
-    thread.reactions[kind] = (thread.reactions[kind] ?? 0) + 1;
-    thread.score += kind === 'upvote' ? 1 : kind === 'downvote' ? -1 : 0;
+    if (committed.value.kind !== kind) throw new Error('Native reaction did not return the commanded slot kind');
+    const slot = `${thread.id}:${person.accountId}`;
+    const previous = this.reactionSlots.get(slot);
+    if (previous !== kind) {
+      const weight = (value: typeof previous) => (value === 'upvote' ? 1 : value === 'downvote' ? -1 : 0);
+      if (previous !== undefined) {
+        const count = thread.reactions[previous]! - 1;
+        if (count === 0) delete thread.reactions[previous];
+        else thread.reactions[previous] = count;
+      }
+      thread.reactions[kind] = (thread.reactions[kind] ?? 0) + 1;
+      thread.score += weight(kind) - weight(previous);
+      this.reactionSlots.set(slot, kind);
+    }
     return { ...committed, key };
   }
   async page(boardId: string, sort: Sort, bearer?: string, cursor?: string, limit = 3): Promise<BoardPage> {

@@ -270,6 +270,13 @@ test.serial(
         // Give the concealed target a real nonzero aggregate. Love has the documented zero vote weight here.
         const privateVote = await world.react(revokedThread, world.base.other, 'love');
         await runtime.consume(privateVote.envelopes);
+        const privateRead = await world.call('GET', `/v1/threads/${revokedThread.id}`, {
+          bearer: world.base.other.bearer,
+        });
+        requireStatus(privateRead, 200);
+        expect(privateRead.value!.thread.reactions).toEqual(revokedThread.reactions);
+        expect(privateRead.value!.thread.viewerReaction).toBe('love');
+        expect(privateRead.value!.reactionsAsOf).not.toBeNull();
         const privateBefore = await snapshotReactionOperation(
           world.pool,
           world.base.other.accountId,
