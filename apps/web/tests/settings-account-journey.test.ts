@@ -7,6 +7,9 @@ import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountSafetyLinks, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { SectionsNavigation, settingsSections } from '../src/settings/sections-navigation';
 import { csrfTokenFromRequest, csrfTokenMatches, isAllowedSiteOrigin, newCsrfToken } from '../src/session/csrf';
+import { createKernelClient } from '@rezics/client';
+import type { SessionEnv } from '../src/session/client';
+import { loadSettingsPage } from '../src/settings/preferences';
 
 const hrefs = (html: string) => [...html.matchAll(/<a\b[^>]*href="([^"]*)"/g)].map((match) => match[1]!);
 const account = (securityHref: string | null, csrfToken: string | null = newCsrfToken()) =>
@@ -181,4 +184,222 @@ test('the signed-out Settings account journey renders its real main content and 
   } finally {
     queryClient.clear();
   }
+});
+
+test('an unknown hydration session cannot mount a prepared account preference form, even with a seeded session cache', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const [{ SettingsPageView }, { sessionQuery }, { m }] = await Promise.all([
+    import('../src/settings/settings-page'),
+    import('../src/session/query'),
+    import('../src/paraglide/messages.js'),
+  ]);
+  const queryClient = new QueryClient();
+  queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'current-alice' });
+  const root = createRootRoute({
+    component: () =>
+      createElement(SettingsPageView, {
+        page: {
+          signedIn: true,
+          accountId: 'alice',
+          preferences: { spoilerLevel: 2, suitability: 'show', version: 77 },
+          notifications: { reply: false, mention: true },
+          csrfToken: 'loader-alice',
+          securityHref: 'https://accounts.example.test/security',
+        },
+        csrfToken: 'current-alice',
+      }),
+  });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/en/settings'] }) });
+  try {
+    await router.load();
+    const html = renderToStaticMarkup(
+      createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+    );
+    expect(html).toContain(m.settings_heading());
+    expect(html).toContain(m.settings_sections_loading());
+    expect(html).toContain(m.settings_display_heading());
+    expect(html).not.toContain(m.settings_account_sign_in_text());
+    expect(html).not.toMatch(/id="(?:reading|notifications|account)"|name="(?:expectedVersion|csrf_token)"/);
+    expect(html).not.toContain('loader-alice');
+    expect(html).not.toContain('current-alice');
+    expect(queryClient.isFetching()).toBe(0);
+  } finally {
+    queryClient.clear();
+  }
+});
+
+test('the prepared preference loader carries only an established native account identity, including failures', async () => {
+  let sessionUnavailable = false;
+  let preferencesUnavailable = false;
+  const paths: string[] = [];
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      paths.push(new URL(request.url).pathname);
+      expect(request.headers.get('authorization')).toBe('Bearer current-viewer');
+      if (preferencesUnavailable) throw new Error('Preferences unavailable');
+      return Response.json({ spoilerLevel: 1, suitability: 'blur', version: 7 });
+    }) as typeof fetch,
+  });
+  const env = {
+    AUTH_ISSUER: 'https://auth.example.test',
+    API_RESOURCE: 'https://api.rezics.test',
+    WEBSITE_SCOPES: 'openid account:read',
+    WEBSITE_CLIENT_ID: 'settings-viewer',
+    WEBSITE_CLIENT_KEY: 'unused-by-this-read',
+    SESSIONS: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        async credential() {
+          if (sessionUnavailable) throw new Error('Session unavailable');
+          return {
+            status: 'active',
+            subject: 'immutable-account',
+            accessToken: 'current-viewer',
+            csrfToken: 'current',
+          };
+        },
+      }),
+    },
+  } as unknown as Partial<SessionEnv>;
+  const request = () =>
+    new Request('https://site.example.test/en/settings', {
+      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+    });
+  expect(await loadSettingsPage(client, request(), env)).toMatchObject({
+    signedIn: true,
+    accountId: 'immutable-account',
+    preferences: { version: 7 },
+  });
+  preferencesUnavailable = true;
+  expect(await loadSettingsPage(client, request(), env)).toMatchObject({
+    signedIn: true,
+    accountId: 'immutable-account',
+    state: 'unavailable',
+  });
+  sessionUnavailable = true;
+  expect(await loadSettingsPage(client, request(), env)).toMatchObject({ accountId: null, state: 'unavailable' });
+  expect(paths).toEqual(['/v1/accounts/immutable-account/preferences', '/v1/accounts/immutable-account/preferences']);
+});
+
+test('account transitions fence late preference receipts, recovery reads and saves from retired sections', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const [{ accountPreferenceIO }, { NotificationEditor }, { readReading }, { sessionQuery }] = await Promise.all([
+    import('../src/settings/settings-page'),
+    import('../src/settings/notification-recovery'),
+    import('../src/settings/reading-preferences'),
+    import('../src/session/query'),
+  ]);
+  const client = new QueryClient();
+  const confirmed: number[] = [];
+  const writes: string[] = [];
+  let mounted = true;
+  const credential = () => {
+    const session = client.getQueryData(sessionQuery.queryKey);
+    return mounted && session?.state === 'signed-in' && session.subject === 'alice' ? session.csrfToken : null;
+  };
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'alice-current' });
+  const receipt = Promise.withResolvers<{
+    ok: true;
+    notifications: { reply: boolean; mention: boolean };
+    version: number;
+  }>();
+  const readback = Promise.withResolvers<import('../src/settings/preferences').SettingsPage>();
+  const io = accountPreferenceIO('alice', credential, (version) => confirmed.push(version), {
+    read: () => readback.promise,
+    saveReading: async (_input, token) => {
+      writes.push(token);
+      return { ok: true, preferences: { spoilerLevel: 2, suitability: 'show', version: 78 } };
+    },
+    saveNotifications: async (_input, token) => {
+      writes.push(token);
+      return receipt.promise;
+    },
+  });
+  try {
+    const old = new NotificationEditor(
+      { notifications: { reply: true, mention: true }, version: 77 },
+      io.notifications,
+    );
+    const saving = old.edit('reply', false, 77);
+    const reloading = readReading(io.reading, 77);
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'bob-current' });
+    mounted = false;
+    receipt.resolve({ ok: true, notifications: { reply: false, mention: true }, version: 78 });
+    // A read that finishes with another account's data cannot become Alice's recovery baseline.
+    readback.resolve({
+      signedIn: true,
+      accountId: 'bob',
+      preferences: { spoilerLevel: 0, suitability: 'blur', version: 100 },
+      securityHref: null,
+    });
+    await saving;
+    expect(await reloading).toEqual({ ok: false, reason: 'unavailable' });
+    io.notifications.confirmed(999);
+    expect(confirmed).toEqual([]);
+    await old.restore(77);
+    expect(
+      await io.reading.save({ expectedVersion: 77, spoilerLevel: 2, idempotencyKey: crypto.randomUUID() }),
+    ).toEqual({
+      ok: false,
+      reason: 'forbidden',
+    });
+    expect(writes).toEqual(['alice-current']);
+    // Returning to the original subject does not revive an unmounted section's callbacks.
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'alice-new' });
+    io.notifications.confirmed(1_000);
+    expect(confirmed).toEqual([]);
+  } finally {
+    client.clear();
+  }
+});
+
+test('same-account recovery uses the current token and rejects unowned prepared readbacks without resetting the draft', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const [{ accountPreferenceIO }, { NotificationEditor }] = await Promise.all([
+    import('../src/settings/settings-page'),
+    import('../src/settings/notification-recovery'),
+  ]);
+  let token: string | null = 'current-token';
+  let owner: string | null = 'alice';
+  const tokens: string[] = [];
+  const versions: number[] = [];
+  const io = accountPreferenceIO(
+    'alice',
+    () => token,
+    (version) => versions.push(version),
+    {
+      read: async () => ({
+        signedIn: true,
+        accountId: owner,
+        preferences: { spoilerLevel: 1, suitability: 'blur', version: 8 },
+        notifications: { reply: true, mention: true },
+        securityHref: null,
+      }),
+      saveReading: async () => ({ ok: false, reason: 'conflict' }),
+      saveNotifications: async (_input, csrfToken) => {
+        tokens.push(csrfToken);
+        return { ok: false, reason: 'conflict' };
+      },
+    },
+  );
+  const editor = new NotificationEditor(
+    { notifications: { reply: true, mention: true }, version: 7 },
+    io.notifications,
+  );
+  await editor.edit('reply', false, 7);
+  token = 'rotated-current-token';
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ phase: 'review', draft: { reply: false }, known: { version: 8 } });
+  editor.useCurrent();
+  expect(editor.snapshot()).toMatchObject({ phase: 'idle', draft: { reply: true } });
+  await editor.edit('reply', false, 8);
+  expect(tokens).toEqual(['current-token', 'rotated-current-token']);
+  owner = null;
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ phase: 'failed', draft: { reply: false }, known: { version: 8 } });
+  expect(versions).toEqual([8]);
+  token = null;
+  await editor.restore(8);
+  expect(tokens).toHaveLength(2);
 });

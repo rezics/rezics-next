@@ -65,6 +65,7 @@ test('the settings page stays within its bound as the stored version grows', asy
     const page = await loadSettingsPage(client, request, env);
     expect(page).toEqual({
       signedIn: true,
+      accountId: 'alice',
       preferences: { spoilerLevel: 1, suitability: 'show', version },
       securityHref: 'https://auth.example.test/security',
     });

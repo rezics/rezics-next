@@ -56,6 +56,7 @@ test('Settings keeps the native per-kind values and writes only the submitted me
   const read = harness(() => Response.json({ ...reading, notifications }));
   expect(await loadSettingsPage(read.client, read.request, read.env)).toEqual({
     signedIn: true,
+    accountId: 'alice',
     preferences: reading,
     notifications,
     securityHref: 'https://auth.example.test/security',
@@ -84,6 +85,7 @@ test('missing and malformed preference maps never become enabled controls or a c
     const read = harness(() => Response.json({ ...reading, notifications }));
     expect(await loadSettingsPage(read.client, read.request, read.env)).toEqual({
       signedIn: true,
+      accountId: 'alice',
       preferences: reading,
       securityHref: 'https://auth.example.test/security',
     });

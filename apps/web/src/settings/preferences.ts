@@ -27,6 +27,8 @@ export type SettingsPage =
   | { signedIn: false }
   | {
       signedIn: true;
+      /** The subject resolved by the prepared page request; absent identity is never writable. */
+      readonly accountId?: string | null;
       preferences: ReadingPreferences;
       notifications?: NotificationPreferences;
       csrfToken?: string | null;
@@ -35,6 +37,7 @@ export type SettingsPage =
     }
   | {
       signedIn: true;
+      readonly accountId?: string | null;
       state: 'closed' | 'preparing' | 'unavailable';
       failure: NativePreferenceFailure;
       csrfToken?: string | null;
@@ -281,17 +284,20 @@ export async function loadSettingsPage(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
 ): Promise<SettingsPage> {
+  let accountId: string | null = null;
   try {
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
-    const accountId = sessionSubject(request);
-    if (!authorization || !accountId) return { signedIn: false };
+    const preparedAccountId = sessionSubject(request);
+    if (!authorization || !preparedAccountId) return { signedIn: false };
+    accountId = preparedAccountId;
     const result = await client.accounts({ accountId }).preferences.get({ headers: { authorization } });
     const preferences = !result.error ? present(result.data) : undefined;
     if (!preferences) {
       const failure = failureDetails(result.error ?? result.data, statusOf(result), result.headers);
       return {
         signedIn: true,
+        accountId,
         state: failureState(failure),
         failure,
         securityHref: securityHref(sessionEnv),
@@ -301,6 +307,7 @@ export async function loadSettingsPage(
     const notifications = presentNotifications(data.notifications);
     return {
       signedIn: true,
+      accountId,
       preferences,
       ...(notifications ? { notifications } : {}),
       securityHref: securityHref(sessionEnv),
@@ -309,6 +316,7 @@ export async function loadSettingsPage(
     const failure = failureDetails(error);
     return {
       signedIn: true,
+      accountId,
       state: isPlatformClosedError(error) || failure.code === 'platform_closed' ? 'closed' : failureState(failure),
       failure,
       securityHref: securityHref(sessionEnv),
