@@ -185,7 +185,7 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
   let keys = 0;
   if (rows.length)
     await connection.query(
-      "UPDATE auth_erasure SET applicable=true WHERE id::text=current_setting('auth.erasure_obligation',true)",
+      "UPDATE auth_erasure SET applicable=true WHERE id=current_setting('auth.erasure_obligation',true)::bigint",
     );
   for (const { key } of rows) {
     if (key === null || Buffer.byteLength(key) > 1024) return { after, keys, blocked: 'locator-size' };
