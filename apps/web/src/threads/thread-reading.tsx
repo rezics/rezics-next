@@ -1,6 +1,6 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { reactionKinds } from '@rezics/ui/reactions';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import type { ThreadReadingPost } from '../routes/threads/$id_.$slug';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -13,6 +13,7 @@ import type { readThreadPersonal } from './reads';
 import { replyToThread } from './actions';
 import { csrfHeaders, draftFetch } from './composer';
 import { ThreadReplyComposer } from './reply-context-composer';
+import { AuthorErasureEntry } from './author-erasure-entry';
 
 export type ThreadReadingPage = LoadedThreadPage & {
   authors: PageAuthors;
@@ -34,6 +35,7 @@ export function ThreadReading({
   onPostIdsChange,
   Post,
   signedOut,
+  authorErasure,
 }: {
   page: ThreadReadingPage;
   Post: typeof ThreadReadingPost;
@@ -45,6 +47,7 @@ export function ThreadReading({
   onMutation: () => Promise<void>;
   onPageRefresh: () => Promise<ThreadReadingPage | undefined>;
   onPostIdsChange?: (ids: string[]) => void;
+  authorErasure?: Omit<ComponentProps<typeof AuthorErasureEntry>, 'threadId'>;
 }) {
   const { thread, realm, posts: loadedPosts, authors, provenanceSubjects, verification, mentions, now } = page;
   const [posts, setPosts] = useState(loadedPosts);
@@ -88,6 +91,15 @@ export function ThreadReading({
   return (
     <article data-slot="thread-reading" className="mx-auto w-full min-w-0 space-y-5 text-foreground">
       {renderHeader(displayTitle)}
+      {composer.current?.viewerId ? (
+        <div hidden={!currentPersonal?.viewerId} inert={!currentPersonal?.viewerId}>
+          <AuthorErasureEntry
+            key={`${thread.id}:${composer.current.viewerId}`}
+            threadId={thread.id}
+            {...authorErasure}
+          />
+        </div>
+      ) : null}
       <div
         className={
           summary ? 'grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_15rem]' : 'mx-auto w-full max-w-3xl'

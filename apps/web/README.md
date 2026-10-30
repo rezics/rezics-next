@@ -2182,6 +2182,60 @@ parent selection/cancellation, deleted and withheld posts, a deleted organizatio
 both recorded history versions, reporting, loading, unavailable and current denial states. These are review inputs;
 typing alone establishes no native or visual pass.
 
+### Author erasure in a thread
+
+`threads/author-erasure-entry.tsx` is the narrow author action region mounted by `ThreadReading`. Opening its
+explanation and closing it leave the existing composer, reply target and draft mounted. Confirmation explains that
+only the acting account's posts and revisions in this thread are selected, physical cleanup is asynchronous and
+irreversible, and neither other authors' posts nor the account are deleted. Single-post deletion and restoration
+keep their existing native paths.
+
+Like the composer, an in-flight erasure intent stays mounted but hidden/inert during a transient personal-query gap;
+reloading personal permissions cannot discard an uncertain request's key. Operation hydration retains its refresh budget.
+
+The current thread/post DTOs have no native `mayErase` admission. The isolated consumer-local
+`author-erasure-admission.ts` therefore returns unavailable, and product confirmation remains disabled. When that
+producer is delivered, replace this adapter with its current read; author identity, edit/delete flags and story
+fixtures cannot supply command authority. The mounted native command still checks current `post:erase` itself.
+
+The binding consumes the generated `threads({id}).$erase.post({authorId}, options)` and
+`operations({id}).get(options)` methods, after inspection of Content's `operations.ts`, `operation-contract.ts` and
+mounted `moderation-routes.ts`. The POST server function uses the ordinary server session and CSRF preparation,
+derives the author exclusively from that session's subject and passes its credential to native Content. One explicit
+intent retains its key after an uncertain enqueue response. Only a valid 202 with the matching native selection and
+an actual operation name can open `/operations/{id}`. A successful enqueue is not completed cleanup. A lost or
+malformed response keeps the original request available for explicit retry.
+
+The authenticated operation route uses a private, no-store native GET. Rendering allowlists native AIP-151 metadata
+`processedPosts`, `erasedRevisions` and `steps`, and the terminal response or RPC error code. It never renders native
+error text/details, authored bodies or workflow logs. Zero reported progress is labelled queued/waiting for progress;
+positive native counters indicate running. These labels describe the DTO's reported progress, without claiming an
+unexposed workflow scheduler state. Only native `done` plus its successful response establishes completion. Terminal
+permission denial, source changes and dependency failures have fixed, useful copy. An inaccessible or unavailable
+current read removes previous progress rather than implying success or displaying stale counts.
+
+Opening the route costs one authenticated operation point read. It performs at most four further point reads, two
+seconds apart while visible, stopping on terminal state or read failure, then exposes **Check again**. Hidden time
+does not spend the refresh budget. Each manual check reads the same ID once; no thread/post enumeration, upfront
+total, percentage, automatic enqueue retry or client workflow restoration is involved. Native Content alone restores
+the initiating account and checks each cleanup step. Rendering is constant in the three supplied counters.
+
+Review the integrated source through these story pairs, using the ordinary `phone390`/`desktop1280` viewport and
+light/dark globals. Pages wrap the same delivered regions in `AppShell`, which supplies the sole page main:
+
+- `pages-community-author-erasure--current-admission-unavailable` / `patterns-community-author-erasure--current-admission-unavailable`
+- `pages-community-author-erasure--enqueue-lost-response` / `patterns-community-author-erasure--enqueue-lost-response`
+- `pages-community-author-erasure--running-counters` / `patterns-community-author-erasure--running-counters`
+- `pages-community-author-erasure--terminal-permission-denial` / `patterns-community-author-erasure--terminal-permission-denial`
+- `pages-community-author-erasure--completed` / `patterns-community-author-erasure--completed`
+
+The stories use isolated wire illustrations for admission, lost response, counters and terminal outcomes; they do not
+establish native authority or physical cleanup. The lost-response play retains the actual thread composer, retries
+the same intent and opens the queued operation. The running play reaches the bounded manual check without a total.
+`tests/author-erasure.test.ts` adds focused generated-client, session/CSRF, denial, current-source, counter validation,
+refresh-bound and presentation cases. Native, acceptance, browser and visual proof remain deferred under the current
+minimal verification contract. No screenshots are produced by this slice.
+
 ### Realm appearance and rules
 
 `community/realm-presentation-settings.tsx` owns the reusable `RealmAppearanceSettings` Pattern, inserted into
