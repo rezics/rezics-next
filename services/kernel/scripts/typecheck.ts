@@ -17,13 +17,13 @@ async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> 
   return await child.exited;
 }
 
-async function typecheck(env: NodeJS.ProcessEnv): Promise<number> {
+async function typecheck(env: NodeJS.ProcessEnv, emitClient: boolean): Promise<number> {
   const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
   if (tsc !== 0) return tsc;
   const constructed = await command(['bun', 'run', 'construct'], env);
   if (constructed !== 0) return constructed;
   // Declaration emission shares this compiler database; it never starts a native check.
-  return process.argv.includes('--emit-client') ? command(['bun', 'scripts/client.ts'], env) : 0;
+  return emitClient ? command(['bun', 'scripts/client.ts'], env) : 0;
 }
 
 export async function runKernelTypecheck(
@@ -33,29 +33,30 @@ export async function runKernelTypecheck(
     typecheck?: typeof typecheck;
     withThrowawayDatabase?: typeof withThrowawayDatabase;
   } = {},
+  args: readonly string[] = process.argv.slice(2),
 ): Promise<number> {
+  const emitClient = args.includes('--emit-client');
   const runPlaced = dependencies.place ?? runOnCheckHost;
   const runCommands = dependencies.typecheck ?? typecheck;
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
-  if (env.DATABASE_URL) return runCommands(env);
+  if (env.DATABASE_URL) return runCommands(env, emitClient);
 
-  // An unset check-host setting selects the local compiler database;
-  // the shared explicit placement opt-out also remains authoritative here.
+  // Preserve default host discovery unless the caller explicitly opts out.
   const placed =
-    env.REZICS_STACK_REMOTE === 'off' || !env.KERNEL_CHECK_REMOTE
+    env.REZICS_STACK_REMOTE === 'off'
       ? null
       : await runPlaced(
           {
             label: 'kernel typecheck',
             root: repository,
             cwd: directory,
-            command: ['bun', 'scripts/typecheck.ts'],
+            command: ['bun', 'scripts/typecheck.ts', ...(emitClient ? ['--emit-client'] : [])],
           },
           env,
         );
   if (placed !== null) return placed;
 
-  return withDatabase((databaseEnv) => runCommands(databaseEnv));
+  return withDatabase((databaseEnv) => runCommands(databaseEnv, emitClient));
 }
 
 if (import.meta.main) {

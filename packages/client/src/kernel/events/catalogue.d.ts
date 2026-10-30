@@ -765,6 +765,10 @@ declare const productEventTypes: {
         entitlementId: Type.TString;
         orderId: Type.TString;
     }>;
+    readonly 'com.rezics.community.realm-discovery.changed.v1': Type.TObject<{
+        realmId: Type.TString;
+        realmEpoch: Type.TString;
+    }>;
     readonly 'com.rezics.community.realm.membership.cancelled.v1': Type.TObject<{
         realmId: Type.TString;
         accountId: Type.TString;
@@ -930,6 +934,28 @@ declare const productEventTypes: {
         predecessor: Type.TUnion<[Type.TString, Type.TNull]>;
         subjectRevisionId: Type.TNull;
         publishedAt: Type.TString;
+    }>;
+    readonly "com.rezics.content.realm-discovery.changed.v1": Type.TObject<{
+        realmId: Type.TString;
+        realmEpoch: Type.TString;
+        spaceId: Type.TString;
+        boardId: Type.TString;
+        threadId: Type.TString;
+        sourceRoute: Type.TInteger;
+        creationDay: Type.TString;
+        sourceVersion: Type.TString;
+        contributing: Type.TBoolean;
+        change: Type.TUnion<[Type.TLiteral<1>, Type.TLiteral<-1>]>;
+    }>;
+    readonly "com.rezics.content.realm-discovery.prepared.v1": Type.TObject<{
+        route: Type.TInteger;
+        intent: Type.TString;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.content.realm-discovery.outcome.v1": Type.TObject<{
+        route: Type.TInteger;
+        intent: Type.TString;
+        generation: Type.TString;
     }>;
     readonly 'com.rezics.content.board-thread.projected.v1': Type.TObject<{
         boardId: Type.TString;

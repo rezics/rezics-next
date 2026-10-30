@@ -41,6 +41,48 @@ test('without DATABASE_URL, a reachable check host receives the typecheck and re
   expect(localDatabaseStarted).toBe(false);
 });
 
+test.each([
+  [['--emit-client'], ['bun', 'scripts/typecheck.ts', '--emit-client']],
+  [['--emit-client=false'], ['bun', 'scripts/typecheck.ts']],
+])('Kernel placement forwards only the exact supported emission mode: %j', async (args, command) => {
+  const status = await runKernelTypecheck(
+    { PATH: process.env.PATH },
+    {
+      place: async (run) => {
+        expect(run.command).toEqual(command);
+        return 23;
+      },
+      withThrowawayDatabase: async () => {
+        throw new Error('should not start locally');
+      },
+    },
+    args,
+  );
+
+  expect(status).toBe(23);
+});
+
+test.each([false, true])('explicit local opt-out preserves the compiler emission mode: %j', async (emitClient) => {
+  const databaseEnv = { DATABASE_URL: 'postgres://throwaway.test/db' };
+  const status = await runKernelTypecheck(
+    { REZICS_STACK_REMOTE: 'off', KERNEL_CHECK_REMOTE: 'configured-hosts.json' },
+    {
+      place: async () => {
+        throw new Error('explicit local opt-out should not place');
+      },
+      withThrowawayDatabase: async (work) => work(databaseEnv),
+      typecheck: async (env, receivedEmitClient) => {
+        expect(env).toBe(databaseEnv);
+        expect(receivedEmitClient).toBe(emitClient);
+        return 19;
+      },
+    },
+    emitClient ? ['--emit-client'] : [],
+  );
+
+  expect(status).toBe(19);
+});
+
 test('without DATABASE_URL and no answering host, typecheck and construct share the local throwaway database', async () => {
   let receivedUrl: string | undefined;
   const status = await runKernelTypecheck(
