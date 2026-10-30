@@ -125,8 +125,8 @@ interchangeable. Preserve the chosen subject ID when moving from reading into co
 | Actual Web URLs | `/subjects/$id` canonicalizes to `/subjects/$id/$slug`; the `$view` route renders the selected view. `features/pages/subject.tsx`, `views.ts` and `data.tsx` present the returned reads. | Web: `routes/subjects/$id.tsx`, `$id_.$slug.tsx`, `$id_.$slug_.$view.tsx`. A Details view is not a delivered editorial workspace. |
 | Traversal | Existing links/relations/counts/graph APIs provide bounded previews and continuation; templates select Editions, Contents, Characters, Credits and other applicable sections. | Semantic `links.ts`, `counts.ts`, `graph.ts`; subject-page contract forbids a fixed first slice masquerading as a complete list. |
 
-Paths in this table are relative to `services/kernel/src/` unless prefixed by `apps/web/src/` or described as Web
-paths. The actual route and DTO evidence is in
+Kernel paths with a module prefix are relative to `services/kernel/src/`; unprefixed names are within the named
+owning module. Web paths are relative to `apps/web/src/`. The actual route and DTO evidence is in
 [subject HTTP](../../services/kernel/src/semantic/http/subjects.ts),
 [Search HTTP](../../services/kernel/src/search/http/routes.ts),
 [page HTTP](../../services/kernel/src/presentation/http/pages.ts) and
@@ -441,7 +441,7 @@ No code or long source passages are proposed for copying.
 
 | Retained repository/path | Revision and licence | Material inspected |
 | --- | --- | --- |
-| `catalogue-editorial-journey/wikibase` — [official repository](https://github.com/wikimedia/mediawiki-extensions-Wikibase) | `f04124242a234a3c37f96d4be3b6ace69aebde17`; inspected PHP is GPL-2.0-or-later; root `COPYING` supplies GPLv2 with nested exceptions. | `repo/rest-api/README.md`, `src/openapi.json`, `src/Middleware/RequestPreconditionCheck.php`; `repo/domains/crud/src/Application/UseCases/PatchStatement/PatchStatement.php`; statements `Application/Serialization/StatementSerializer.php` (read through Git without executing it). |
+| `catalogue-editorial-journey/wikibase` — [official repository](https://github.com/wikimedia/mediawiki-extensions-Wikibase) | `f04124242a234a3c37f96d4be3b6ace69aebde17`; inspected PHP is GPL-2.0-or-later; root `COPYING` supplies GPLv2 with nested exceptions. | `repo/rest-api/README.md`, `repo/rest-api/src/openapi.json`, `repo/rest-api/src/Middleware/RequestPreconditionCheck.php`; `repo/domains/crud/src/Application/UseCases/PatchStatement/PatchStatement.php`; `repo/domains/statements/src/Application/Serialization/StatementSerializer.php` (read through Git without executing it). |
 | `catalogue-editorial-journey/linkml` — [official repository](https://github.com/linkml/linkml) | `ae3df7a455031d49f62b802d484a6c9e73f57b4c`; Apache-2.0, `LICENSE`. | `docs/schemas/annotations.md`, `inheritance.md`; official schema documentation. |
 | `partitioned-sitemap-feeds/openlibrary` — [official repository](https://github.com/internetarchive/openlibrary) | `37e446827465be2febad416de1bc18753b66997d`; AGPL-3.0, `LICENSE`. | `openlibrary/templates/books/edit.html`, `books/edit/edition.html`, `history.html`; work/edition schema and edition-list source locations. |
 | `anime-release-profile-grain/schemaorg` — [official repository](https://github.com/schemaorg/schemaorg) | `b0b19f7fab48caa1f2cbee1f1149e2aee8dec896`, vocabulary 30.1; vocabulary CC BY-SA 3.0 (`docs/terms.html`); supporting software Apache-2.0 (`LICENSE`). | Retained vocabulary provenance reused with existing mapping research; official Recipe/term documentation supplies the comparison, without redefining native schema. |
