@@ -4062,6 +4062,9 @@ INSERT INTO auth_native_role_deployment(singleton,version) VALUES(true,1);
 UPDATE auth_copy_coverage SET native_covered=false WHERE singleton;
 -- Permanent, nonpersonal reasons per source store. Expiry, a missing source
 -- or deletion of a historical row never turns unresolved custody into absence.
+ALTER TABLE auth_erasure ADD COLUMN native_role_version smallint NOT NULL DEFAULT 0 CHECK(native_role_version IN (0,1));
+DROP INDEX auth_erasure_pending;
+CREATE INDEX auth_erasure_pending ON auth_erasure(revision,id) WHERE native_completed_at IS NULL OR native_role_version=0;
 CREATE TABLE auth_native_role_unknown (
   store text NOT NULL,
   reason text NOT NULL CHECK(reason IN ('historical-role-custody','unsupported-producer-format','source-unavailable')),

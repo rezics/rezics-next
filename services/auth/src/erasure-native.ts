@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { AuthErasureBarrier, AuthErasureSource } from '@rezics/auth-contract';
 import { requireErasureCursorVersion } from './erasure-cursor-cutover.ts';
-import { nativeAdditionalRoles, nativeRoleCoverageComplete, reconcileNativeRoleCoveragePage } from './erasure-coverage.ts';
+import { nativeAdditionalRoles, nativeRoleStores, nativeRoleCoverageComplete, reconcileNativeRoleCoveragePage } from './erasure-coverage.ts';
 import {
   closeCredentialConsumer,
   registrationTerminal,
@@ -30,6 +30,7 @@ type Obligation = {
   client_phase: number;
   user_deleted_at: Date | null;
   consent_completed_at: Date | null;
+  native_role_version: number;
 };
 type Store = { table: string; key: string; roles: string[]; client?: string; children?: string[] };
 // Order is the native foreign-key/consumer order. No payload is selected by this manifest.
@@ -263,7 +264,8 @@ export async function startNativeErasure(
     await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-erasure:${accountId}`]);
     const row = (
       await connection.query<{ id: string }>(
-        `INSERT INTO auth_erasure (account_id,barrier,version,applicable,kernel_version,kernel_at) VALUES ($1,$2,$3,${initialApplicability},$4,$5)
+        `INSERT INTO auth_erasure (account_id,barrier,version,applicable,kernel_version,kernel_at,native_role_version) VALUES ($1,$2,$3,${initialApplicability},$4,$5,
+          CASE WHEN EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND armed AND store_index=${nativeRoleStores.length}) THEN 1 ELSE 0 END)
        ON CONFLICT (account_id) DO UPDATE SET account_id=EXCLUDED.account_id RETURNING id`,
         [accountId, barrier, ERASURE_VERSION, identity?.version ?? null, identity?.at ?? null],
       )
@@ -409,6 +411,24 @@ export async function nativeErasurePage(pool: Pool, id: string, runtime?: Native
     });
     if (row.kernel_at && !row.source_discharged_at) return answer('pending', 'native-source');
     await connection.query("SELECT set_config('auth.erasure_obligation',$1,true)", [id]);
+    const deployment = (await connection.query<{ armed: boolean; store_index: number }>(
+      'SELECT armed,store_index FROM auth_native_role_deployment WHERE singleton AND version=1',
+    )).rows[0];
+    if (deployment?.armed && deployment.store_index < nativeRoleStores.length) {
+      await checkpoint(connection, row, { code: 'native-role-deployment' });
+      return answer('pending', 'native-role-deployment');
+    }
+    if (row.native_role_version === 0 && deployment?.armed) {
+      // Discovery may have added a role behind an older phase cursor. Revisit
+      // the existing engine once, preserving T, applicability, source handoff,
+      // user deletion and the original consent cutoff. No second erasure root.
+      await connection.query(`UPDATE auth_erasure SET native_role_version=1,
+        phase=0,after_key='',client_id=NULL,client_phase=0,native_completed_at=NULL WHERE id=$1`, [id]);
+      row.native_role_version = 1;
+      row.phase = row.client_phase = 0;
+      row.after_key = '';
+      row.client_id = null;
+    }
     if (row.phase === 0) {
       // Discover one owned client, retaining neither an owner list nor a connection
       // across client boundaries. Its existing lock excludes in-flight issuance.
@@ -611,7 +631,7 @@ export async function redriveNativeErasure(pool: Pool, runtime?: NativeConsumerR
   if (coverage) return coverage;
   const next = (
     await pool.query<{ id: string }>(
-      `SELECT id FROM auth_erasure WHERE native_completed_at IS NULL
+      `SELECT id FROM auth_erasure WHERE native_completed_at IS NULL OR native_role_version=0
      ORDER BY revision,id LIMIT 1`,
     )
   ).rows[0];
