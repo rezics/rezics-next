@@ -415,6 +415,7 @@ try { count = Number(readFileSync('.temp/worker-attempt-count', 'utf8')); } catc
 writeFileSync('.temp/worker-attempt-count', String(count + 1));
 const run = (args) => spawnSync('git', args, { encoding: 'utf8' });
 if (count === 0) {
+  mkdirSync(dirname(plan.fileA), { recursive: true });
   writeFileSync(plan.fileA, plan.contentA);
   run(['add', '--', plan.fileA]);
   run(['commit', '-qm', 'Complete fixture']);
