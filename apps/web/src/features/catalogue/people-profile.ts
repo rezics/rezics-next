@@ -20,14 +20,16 @@ export type PeopleProfile = {
   relations: string[];
   unsupported: string[];
 };
-export type PeopleRead = CandidateFailure | {
-  ok: true;
-  release: Release;
-  public: SubjectRead | null;
-  work: SubjectRead | null;
-  profiles: PeopleProfile[];
-  credits: string[];
-};
+export type PeopleRead =
+  | CandidateFailure
+  | {
+      ok: true;
+      release: Release;
+      public: SubjectRead | null;
+      work: SubjectRead | null;
+      profiles: PeopleProfile[];
+      credits: string[];
+    };
 export type PeopleItem = InitialSubject & { statements?: Record<string, StatementInput[]> };
 export type PeopleCommand = { key: string; item: PeopleItem };
 export type PeopleTransport = {
@@ -51,26 +53,43 @@ export function peopleProfiles(release: Release, locale: string): PeopleProfile[
     const description = definitionText(type.descriptions, locale);
     const fields = type.properties.filter((property) => correctionProperty(release, id, property));
     const relations = type.properties.filter((property) => !!release.properties[property]?.relation);
-    return [{
-      id, label: label.text, lang: label.lang, description: description.text,
-      descriptionLang: description.lang, fields, relations,
-      unsupported: type.properties.filter((property) =>
-        property !== 'schema:name' && !fields.includes(property) && !relations.includes(property)),
-    }];
+    return [
+      {
+        id,
+        label: label.text,
+        lang: label.lang,
+        description: description.text,
+        descriptionLang: description.lang,
+        fields,
+        relations,
+        unsupported: type.properties.filter(
+          (property) => property !== 'schema:name' && !fields.includes(property) && !relations.includes(property),
+        ),
+      },
+    ];
   });
 }
 
 export function peopleCreditProperties(release: Release, type: string): string[] {
   return (release.types[type]?.properties ?? []).filter((id) => {
     const property = release.properties[id];
-    return property?.relation?.group === 'credit' && property.targets?.some((target) =>
-      ['schema:Person', 'schema:Organization'].some((agent) =>
-        agent === target || release.types[agent]?.bases.includes(target)));
+    return (
+      property?.relation?.group === 'credit' &&
+      property.targets?.some((target) =>
+        ['schema:Person', 'schema:Organization'].some(
+          (agent) => agent === target || release.types[agent]?.bases.includes(target),
+        ),
+      )
+    );
   });
 }
 
 /** One current subject read and one shared release read, in parallel. Related summaries need no row hydration. */
-export async function readPeopleProfile(client: KernelClient, locale: string, address: PeopleAddress = {}): Promise<PeopleRead> {
+export async function readPeopleProfile(
+  client: KernelClient,
+  locale: string,
+  address: PeopleAddress = {},
+): Promise<PeopleRead> {
   const id = address.id ?? address.work;
   if ((id !== undefined && !peopleUuid.test(id)) || (address.id && address.work))
     return { ok: false, reason: 'invalid' };
@@ -86,14 +105,23 @@ export async function readPeopleProfile(client: KernelClient, locale: string, ad
     if (address.id && !profiles.some((profile) => profile.id === current?.subject.type))
       return { ok: false, reason: 'invalid' };
     return {
-      ok: true, release, profiles,
+      ok: true,
+      release,
+      profiles,
       public: address.id ? current : null,
       work: address.work ? current : null,
       credits: address.work && current ? peopleCreditProperties(release, current.subject.type) : [],
     };
   } catch (error) {
-    return { ok: false, reason: error instanceof DefinitionReadError && error.reason === 'invalid' ? 'stale'
-      : error instanceof DefinitionReadError && error.reason === 'denied' ? 'denied' : 'unavailable' };
+    return {
+      ok: false,
+      reason:
+        error instanceof DefinitionReadError && error.reason === 'invalid'
+          ? 'stale'
+          : error instanceof DefinitionReadError && error.reason === 'denied'
+            ? 'denied'
+            : 'unavailable',
+    };
   }
 }
 
@@ -102,7 +130,9 @@ export function peopleInitialItem(initial: InitialSubject, facts: Record<string,
   const entries = Object.entries(facts);
   return {
     ...initial,
-    ...(entries.length ? { statements: Object.fromEntries(entries.map(([id, fact]) => [id, [structuredClone(fact)]])) } : {}),
+    ...(entries.length
+      ? { statements: Object.fromEntries(entries.map(([id, fact]) => [id, [structuredClone(fact)]])) }
+      : {}),
   };
 }
 
@@ -112,14 +142,21 @@ export function validatePeopleItem(item: PeopleItem, release: Release): Violatio
   if (!profile) errors.push({ pointer: '/type', code: 'unsupported' });
   for (const property of Object.keys(item.statements ?? {})) {
     if (!profile?.fields.includes(property))
-      errors.push({ pointer: `/statements/${property.replaceAll('~', '~0').replaceAll('/', '~1')}`, code: 'unsupported' });
+      errors.push({
+        pointer: `/statements/${property.replaceAll('~', '~0').replaceAll('/', '~1')}`,
+        code: 'unsupported',
+      });
   }
   return errors;
 }
 
 /** Current native personal/disclosure/target eligibility is rechecked by the ordinary writer. */
 export async function createPeopleProfile(
-  client: KernelClient, request: Request, sessionEnv: Partial<SessionEnv>, command: PeopleCommand, locale: string,
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  command: PeopleCommand,
+  locale: string,
 ): Promise<CreateResult> {
   try {
     const release = await profileRelease(client);

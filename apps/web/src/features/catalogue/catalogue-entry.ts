@@ -106,7 +106,8 @@ export const catalogueEntries = {
   people: ({ id, label, work, locale }: Locale & { id?: string; label?: string; work?: string }): CatalogueEntry => ({
     group: id ? 'edit' : 'create',
     label: m.people_profile_title({}, options(locale)),
-    href: id ? `${subject({ id, label: label ?? '', locale })}/people`
+    href: id
+      ? `${subject({ id, label: label ?? '', locale })}/people`
       : `/${locale}/catalogue/people${work ? `?work=${encodeURIComponent(work)}` : ''}`,
   }),
 };

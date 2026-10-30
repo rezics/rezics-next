@@ -6,7 +6,12 @@ import { m } from '../../paraglide/messages.js';
 export const Route = createFileRoute('/catalogue/people')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => ({
-    work: input.work === undefined ? undefined : typeof input.work === 'string' && input.work.length <= 128 ? input.work : '',
+    work:
+      input.work === undefined
+        ? undefined
+        : typeof input.work === 'string' && input.work.length <= 128
+          ? input.work
+          : '',
   }),
   head: () => ({ meta: [{ title: m.people_profile_title() }, { name: 'robots', content: 'noindex, nofollow' }] }),
   component: () => {
