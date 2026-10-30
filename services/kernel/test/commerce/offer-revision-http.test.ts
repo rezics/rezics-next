@@ -277,10 +277,11 @@ test('seller price revision through HTTP binds target intent preserves captured 
   const publicRead = await get(a.value.id);
   expect(publicRead.status).toBe(200);
   const publicOffer = (await publicRead.json()).offer;
-  expect(publicOffer).toMatchObject({ id: a.value.id, unitAmountMinor: 2400 });
+  expect(publicOffer).toMatchObject({ id: a.value.id, revision: a.value.revision + 1, unitAmountMinor: 2400 });
   expect(Object.keys(publicOffer).sort()).toEqual([
     'currency',
     'id',
+    'revision',
     'state',
     'subject',
     'targetSubjectId',
