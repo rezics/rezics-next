@@ -1,3 +1,4 @@
+import { bindRealmDiscoveryCommand } from './discovery-source.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -191,6 +192,7 @@ export async function createSpace(deps: SpaceDependencies, actor: Actor, input: 
     deps.pool,
     { ...options(deps, actor, route, kind, body, context), authorization },
     async (tx, command) => {
+      bindRealmDiscoveryCommand(tx);
       metadata(body.title, body.summary);
       const at = authoritativeTimeValue(command.time);
       await insert.run(tx, { route, id: resource.id, revision, at, creator });
@@ -245,6 +247,7 @@ export async function updateSpace(deps: SpaceDependencies, actor: Actor, input: 
     deps.pool,
     { ...options(deps, actor, route, 'community.space.update', body, context), authorization },
     async (tx, command) => {
+      bindRealmDiscoveryCommand(tx);
       const previous = current.get(command.time)!;
       if (routeOf(body.expectedHead) !== route) throw new SpaceInputError();
       if (previous.headRevisionId !== body.expectedHead) throw new SpaceConflictError();

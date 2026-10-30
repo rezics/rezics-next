@@ -1,3 +1,4 @@
+import { bindRealmDiscoveryCommand } from './discovery-source.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import {
@@ -362,6 +363,7 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
       authorization: combined.bound(authorization),
     },
     async (tx, command) => {
+      bindRealmDiscoveryCommand(tx);
       // An authorized receipt replay returns before this slot gate. New attempts
       // must have observed a free slot at T; the unique key arbitrates contenders.
       if (!available.get(command.time)) throw new GrantDeniedError();
@@ -446,6 +448,7 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
       authorization: realmGovernanceAuthorization(combined.bound(authorization), { route, id: body.realmId }),
     },
     async (tx, command) => {
+      bindRealmDiscoveryCommand(tx);
       const previous = current.get(command.time)!;
       if (routeOf(body.expectedHead) !== route) throw new RealmInputError();
       if (previous.headRevisionId !== body.expectedHead) throw new RealmConflictError();

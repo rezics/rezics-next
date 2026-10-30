@@ -393,18 +393,55 @@ reads actual terminal source evidence, assigns absolute versioned contribution o
 exact fence. It accepts no success assertion. Outbox envelopes are verified by the registered Content effect.
 
 `readRealmDiscoveryGate(client, realmId)` supplies `{realm_epoch, generation, settled}` for one exact routed key.
-Pending or mismatched generations are unavailable. The later aggregate consumer must apply the native facts to its
-bounded day buckets before advancing its aggregate generation, and check that generation plus current Realm/Space
-binding, board publication and lifecycle before and at final disclosure. `realm_discovery_source` is keyed by
-Realm/epoch/source route/thread, and `realm_discovery_board` by Realm/epoch/board; both guard monotonically increasing
-native versions. They contain no person identity, bodies or public count. The native Community changed event names
-an exact Realm/epoch for that later consumer. Initial/delayed deltas project absolute current source state and never
-clear an operation fence. Projected generations do not authorize disclosure by themselves.
+`readRealmDiscoveryChanges(pool, {realmId, afterGeneration, limit, deadline})` is the additive internal consumer
+interface. Its exported `RealmDiscoveryChangeValue` is the closed union of thread absolute `DiscoverySourceFact`,
+board `{boardId, sourceVersion, published}`, epoch, and gate `{settled}` records. Each
+`RealmDiscoveryCommittedChange` contains `realmId`, `realmEpoch`, decimal `generation` and `previousGeneration`,
+the actual native executor `transactionId`, and `value`. `RealmDiscoveryChangePage` contains `changes`, the consistent
+native `head` gate (or null for an absent Realm), and `next`. Generation frontiers are internal decimal strings,
+never public cursors. Limits are integers 1–50. Invalid input throws. The reader checks native partition ownership
+and deadline, then reads at most that many committed records in ascending generation and the head in one released
+repeatable-read home snapshot. `next` is the last returned generation only while more committed work exists;
+otherwise null. Missing log work below the head is unavailable, never invented empty success. Partition moves,
+fencing, transport failures and deadlines remain native errors. This mechanical read supplies no person permission.
+
+The append-only `realm_discovery_change` log is keyed `(route, realm_id, generation)` and has no expiry or pruning.
+New Realm generations start at zero. Every actual mirrored thread/board change, exact fence install/resolution and
+epoch transition appends a record in its original Realm command and advances the Realm generation by exactly one,
+with the preceding committed generation recorded explicitly. Multiple records in a command have consecutive
+predecessors and the same executor transaction id. Epoch transitions never reset this frontier. Repeated versions,
+authorized replay and repeated fence operations append nothing. All producer commands lock the native Realm row
+before mirror/fence writes. Deferred native SQL triggers append after the executor callback supplies its actual
+transaction id; failure rolls back the original mutation too. A fact plus exact gate resolution commits atomically.
+The native changed event is only a Realm/epoch wake hint. Committed log reads are the evidence.
+
+The forward migration neither scans old threads nor invents historical log records or predecessors. A pre-log
+Realm whose generation already advanced without retained log evidence stays unavailable on that missing range;
+consumers must never guess a baseline from its mirrored rows. New deployment activity uses the zero-based log.
+
+The consumer must read this genuine log through its real pool, require its local `appliedGeneration` to equal each
+record's `previousGeneration`, enforce original/current epoch rules and native source-version deduplication, and
+assign absolute states. Repeated old records are no-effect; gaps or conflicting predecessors remain unavailable
+and retry the native read. It preserves its exact checked input across that released read and its own home write.
+A step consumes at most 50 records. Epoch events reset eligibility without scanning sources. A board changes only
+its eligibility and at most 31 buckets; thread caches retain original identity/day/absolute contribution even while
+board eligibility is false. Old-epoch cleanup and expiry are independently bounded; neither log records nor timers
+confer permission. No sourceVersion is a generation, and no raw delta change is a count to sum.
+
+Pending or mismatched generations are unavailable. The later consumer must apply native facts to its bounded
+buckets before advancing its generation; disclosure requires equality with the current settled native gate,
+matching epoch, current rollover and independent current anonymous Realm/Space/lifecycle/publication checks before
+and at final disclosure. Mirrored thread/board facts contain no person identity, bodies or public count. The
+aggregate never calls source abort, changes source phases or resolves fences. Aggregate and public API ownership
+remain separate from this producer.
 
 Same-home container lifecycle writers are covered by database guards in the forward discovery migration:
 Realm visibility/state/host changes advance its epoch and discovery generation atomically; Space state changes
 advance the epoch/generation of its one exact native Realm slot through `(route, space_id)`. Metadata edits retain
-them. `readRealmDiscoveryEpoch(tx, realmId)` is the exported same-home binding read and rejects another partition.
+them. Every same-home lifecycle command must call the delivered `bindRealmDiscoveryCommand(tx)` in its native
+command body, before commit, so the deferred epoch log uses that executor's transaction id. Existing Realm/Space
+commands do this; lifecycle writers delivered separately must consume this hook. An unbound epoch writer fails
+closed and cannot commit an unlogged state change. `readRealmDiscoveryEpoch(tx, realmId)` is the exported same-home binding read and rejects another partition.
 The container lifecycle owner must retain the Context pointer and original Space binding, use these ordinary native
 state writers, and check lifecycle/publication before and at final disclosure. No new container-lifecycle files are
 changed here, and no removed-container Global fallback is introduced. Readable orphan resources remain distinct

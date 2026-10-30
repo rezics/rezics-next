@@ -7,7 +7,7 @@ import { principalCommandIdentity, runCommand } from '../../src/command/command.
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { softDeletePost } from '../../src/content/erase-post.ts';
 import { resolveAppeal } from '../../src/content/appeals.ts';
-import { projectDiscoveryStart, readRealmDiscoveryGate } from '../../src/community/discovery-source.ts';
+import { projectDiscoveryStart, readRealmDiscoveryGate, readRealmDiscoveryChanges } from '../../src/community/discovery-source.ts';
 import {
   prepareDiscoveryMutation,
   abortDiscoveryMutation,
@@ -284,3 +284,94 @@ test('appeal reversal prepares its Realm fence outside the target transaction an
     await single.end();
   }
 }, 120_000);
+
+
+test('committed discovery changes retain native predecessors, fact and gate atomicity, and bounded released pagination across epochs', async () => {
+  const target = await f.createRealmTarget('Committed discovery log', 'public');
+  const pool = f.system.database.pool;
+  const original = (await source(target.threadId))!;
+  await projectDiscoveryStart(pool, { ...original, change: 1 });
+  const range = (afterGeneration = '0', limit = 50) => readRealmDiscoveryChanges(pool, {
+    realmId: target.realmId, afterGeneration, limit, deadline: Date.now() + 30_000,
+  });
+  const initial = await range();
+  expect(initial.changes).toHaveLength(1);
+  expect(initial.changes[0]).toMatchObject({
+    realmId: target.realmId, realmEpoch: original.realmEpoch,
+    generation: '1', previousGeneration: '0', value: { kind: 'thread', source: original },
+  });
+  expect(initial.head).toEqual({ realm_epoch: original.realmEpoch, generation: '1', settled: true });
+  expect(initial.next).toBeNull();
+  await projectDiscoveryStart(pool, { ...original, change: 1 });
+  expect(await range()).toEqual(initial);
+
+  const key = randomUUID();
+  await softDeletePost(
+    { pool, access: f.system.access, routeKey: f.system.routeKey },
+    f.system.actors.author.actor,
+    { postId: target.postId, reason: 'Deleted by author' },
+    { idempotencyKey: key, deadline: Date.now() + 30_000, requestId: randomUUID() },
+  );
+  const pending = await range('1', 1);
+  expect(pending.changes.map((change) => change.value)).toEqual([{ kind: 'gate', settled: false }]);
+  expect(pending.head?.settled).toBe(false);
+  const operation = (await pool.query<{ route: number; intent: string; generation: string }>(
+    'SELECT route,intent,generation::text FROM content.realm_discovery_operation WHERE route=$1 AND target_id=$2',
+    [original.sourceRoute, target.postId],
+  )).rows[0]!;
+  await projectDiscoveryMutation(pool, operation);
+  const resolved = await range('2');
+  const retracted = (await source(target.threadId))!;
+  expect(resolved.changes.map((change) => change.value)).toEqual([
+    { kind: 'thread', source: retracted }, { kind: 'gate', settled: true },
+  ]);
+  expect(retracted.contributing).toBe(false);
+  expect(resolved.changes[0]!.transactionId).toBe(resolved.changes[1]!.transactionId);
+  const complete = await range();
+  expect(complete.changes.map((change) => [change.previousGeneration, change.generation])).toEqual([
+    ['0', '1'], ['1', '2'], ['2', '3'], ['3', '4'],
+  ]);
+  const first = await range('0', 2);
+  expect(first.changes).toEqual(complete.changes.slice(0, 2));
+  expect(first.next).toBe('2');
+  expect(first.head).toEqual(complete.head);
+  expect((await range(first.next!, 2)).next).toBeNull();
+  await projectDiscoveryMutation(pool, operation);
+  expect(await range()).toEqual(complete);
+
+  await visibility(target.realmId, 'protected');
+  const epoch = await range('4');
+  expect(epoch.changes).toHaveLength(1);
+  expect(epoch.changes[0]).toMatchObject({ previousGeneration: '4', generation: '5', value: { kind: 'epoch' } });
+  expect(BigInt(epoch.changes[0]!.realmEpoch)).toBeGreaterThan(BigInt(original.realmEpoch));
+  expect(epoch.head?.realm_epoch).toBe(epoch.changes[0]!.realmEpoch);
+  const native = await pool.query<{ transaction_id: string }>(
+    'SELECT transaction_id FROM core.receipt WHERE partition_no=$1 AND transaction_id=$2',
+    [partitionOf(routeOf(target.realmId)!), epoch.changes[0]!.transactionId],
+  );
+  expect(native.rows.length).toBeGreaterThan(0);
+  // A one-connection pool proves the snapshot is released before the next home read.
+  const single = new Pool({ ...pool.options, max: 1 });
+  try {
+    const input = { realmId: target.realmId, afterGeneration: '0', limit: 1, deadline: Date.now() + 30_000 };
+    expect((await readRealmDiscoveryChanges(single, input)).next).toBe('1');
+    expect((await readRealmDiscoveryChanges(single, input)).changes).toEqual(initial.changes);
+  } finally {
+    await single.end();
+  }
+}, 120_000);
+
+test('discovery log rejects invalid internal frontiers and bounds before checking out a home', async () => {
+  const realmId = (await f.createRealmTarget('Invalid discovery range', 'public')).realmId;
+  const pool = f.system.database.pool;
+  for (const afterGeneration of ['-1', '01', '1.5', '', '9223372036854775808']) {
+    await expect(readRealmDiscoveryChanges(pool, {
+      realmId, afterGeneration, limit: 1, deadline: Date.now() + 30_000,
+    })).rejects.toBeInstanceOf(RangeError);
+  }
+  for (const limit of [0, 51, 1.5, NaN]) {
+    await expect(readRealmDiscoveryChanges(pool, {
+      realmId, afterGeneration: '0', limit, deadline: Date.now() + 30_000,
+    })).rejects.toBeInstanceOf(RangeError);
+  }
+});

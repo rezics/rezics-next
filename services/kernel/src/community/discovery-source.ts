@@ -1,9 +1,10 @@
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
+import { CommandUnavailableError } from '../access/unavailable.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access } from '../request/access.ts';
+import { accessCheck, type Access, type AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { realmReadEligibility } from './realm.ts';
 import { spaceReadEligibility } from './space.ts';
@@ -69,18 +70,19 @@ export async function prepareRealmDiscoverySource(
 
 // These operations consume committed Content evidence. They never authorize a
 // content mutation and never hold a source connection while entering Realm home.
-import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
 import {
   readDiscoveryOperation,
   readDiscoveryOutcome,
   type DiscoveryOperationReference,
 } from '../content/discovery-mutation.ts';
-import { readDiscoverySource, prepareDiscoverySourceApply } from '../content/discovery.ts';
+import { readDiscoverySource, prepareDiscoverySourceApply, type DiscoverySourceFact } from '../content/discovery.ts';
 import type { DiscoveryDelta } from '../content/discovery-events.ts';
 import epoch from './discovery-source-epoch.sql';
 import gate from './discovery-source-gate.sql';
 import fence from './discovery-source-fence.sql';
-import advance from './discovery-source-generation.sql';
+import changes from './discovery-source-changes.sql';
+import bindTransaction from './discovery-source-transaction.sql';
 import project from './discovery-source-project.sql';
 import projectBoard from './discovery-source-board.sql';
 
@@ -100,12 +102,90 @@ export type RealmDiscoveryGate = Readonly<{ realm_epoch: string; generation: str
  * active explicit-public Realm and independent anonymous-readable active Space.
  */
 export async function readRealmDiscoveryGate(
-  client: import('../request/access.ts').AccessClient,
+  client: AccessClient,
   realmId: string,
 ): Promise<RealmDiscoveryGate | null> {
   const route = routeOf(realmId);
   return route === null ? null : gate.run(client, { route, realm_id: realmId });
 }
+export type RealmDiscoveryChangeValue =
+  | Readonly<{ kind: 'thread'; source: DiscoverySourceFact }>
+  | Readonly<{ kind: 'board'; boardId: string; sourceVersion: string; published: boolean }>
+  | Readonly<{ kind: 'epoch' }>
+  | Readonly<{ kind: 'gate'; settled: boolean }>;
+export type RealmDiscoveryCommittedChange = Readonly<{
+  realmId: string;
+  realmEpoch: string;
+  generation: string;
+  previousGeneration: string;
+  transactionId: string;
+  value: RealmDiscoveryChangeValue;
+}>;
+export type RealmDiscoveryChangePage = Readonly<{
+  changes: readonly RealmDiscoveryCommittedChange[];
+  head: RealmDiscoveryGate | null;
+  next: string | null;
+}>;
+
+/** Deferred native SQL triggers obtain only the executor's actual transaction id.
+ * Container lifecycle writers must call this in their ordinary command body.
+ * No caller data, receipt, source version or event becomes a log transaction id.
+ */
+export function bindRealmDiscoveryCommand(tx: CommandTransaction): void {
+  currentCommand(tx);
+  registerCommandCallback(tx, async (transactionId) => {
+    await bindTransaction.run(tx, { transaction_id: transactionId });
+  });
+}
+
+/** One released, consistent native home snapshot. A missing log predecessor is
+ * deliberately not repaired here: the consumer must remain unavailable on gaps.
+ */
+export async function readRealmDiscoveryChanges(
+  pool: Pool,
+  input: Readonly<{ realmId: string; afterGeneration: string; limit: number; deadline: number }>,
+): Promise<RealmDiscoveryChangePage> {
+  const { realmId, afterGeneration, limit, deadline } = input;
+  const route = routeOf(realmId);
+  if (
+    route === null ||
+    typeof afterGeneration !== 'string' || afterGeneration.length > 19 ||
+    !/^(0|[1-9][0-9]*)$/.test(afterGeneration) ||
+    BigInt(afterGeneration) > 9223372036854775807n ||
+    !Number.isInteger(limit) || limit < 1 || limit > 50 || !Number.isFinite(deadline)
+  ) throw new RangeError('Invalid Realm discovery change range');
+  const partitionNo = partitionOf(route);
+  return within(deadline, () => withConnection(pool, async (connection) => {
+    const client = deadlineClient(connection, deadline);
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      const partition = await readPartition(client, partitionNo);
+      if (!partition) throw new CommandUnavailableError('contention', partitionNo);
+      if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+      if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
+      const head = await readRealmDiscoveryGate(client, realmId);
+      const rows = head ? await changes.run(client, {
+        route, realm_id: realmId, after_generation: afterGeneration, limit,
+      }) : [];
+      const records = rows.map((row): RealmDiscoveryCommittedChange => Object.freeze({
+        realmId, realmEpoch: row.realm_epoch, generation: row.generation,
+        previousGeneration: row.previous_generation, transactionId: row.transaction_id,
+        value: row.value as RealmDiscoveryChangeValue,
+      }));
+      const last = records.at(-1)?.generation ?? afterGeneration;
+      if (head && BigInt(last) < BigInt(head.generation) && records.length === 0)
+        throw new Error('Realm discovery committed change range unavailable');
+      await client.query('COMMIT');
+      return Object.freeze({ changes: Object.freeze(records), head,
+        next: head && BigInt(last) < BigInt(head.generation) ? last : null });
+    } catch (error) {
+      try { await connection.query('ROLLBACK'); }
+      catch (rollbackError) { discardConnection(connection, rollbackError as Error); }
+      throw error;
+    }
+  }));
+}
+
 function sourceEvent(realmId: string, realmEpoch: string) {
   return { type: 'com.rezics.community.realm-discovery.changed.v1', subject: realmId, data: { realmId, realmEpoch } };
 }
@@ -121,6 +201,7 @@ export async function commitDiscoveryFence(pool: Pool, ref: DiscoveryOperationRe
     pool,
     { partition: partitionOf(route), deadline: Date.now() + 30_000 },
     async (tx) => {
+      if (!await epoch.run(tx, { route, realm_id: source.realm_id })) throw new Error('Discovery Realm unavailable');
       const installed = (
         await fence.run(tx, {
           route,
@@ -134,7 +215,8 @@ export async function commitDiscoveryFence(pool: Pool, ref: DiscoveryOperationRe
         })
       )[0];
       if (!installed) throw new Error('Discovery Realm fence unavailable');
-      await advance.run(tx, { route, realm_id: source.realm_id, generation: installed.fence_generation });
+      if (!installed.changed) return noEffect(installed.fence_generation);
+      bindRealmDiscoveryCommand(tx);
       return { value: installed.fence_generation, events: [sourceEvent(source.realm_id, source.realm_epoch)] };
     },
   );
@@ -149,9 +231,11 @@ export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperatio
   const { operation: source, current, source: contribution } = await readDiscoveryOutcome(pool, ref);
   const route = routeOf(source.realm_id)!;
   await runCommand(pool, { partition: partitionOf(route), deadline: Date.now() + 30_000 }, async (tx) => {
+    if (!await epoch.run(tx, { route, realm_id: source.realm_id })) throw new Error('Discovery Realm unavailable');
+    let changed = false;
     if (source.phase === 'applied') {
       if (contribution)
-        await project.run(tx, {
+        changed = !!await project.run(tx, {
           route,
           realm_id: contribution.realmId,
           realm_epoch: contribution.realmEpoch,
@@ -159,18 +243,19 @@ export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperatio
           thread_id: contribution.threadId,
           board_id: contribution.boardId,
           creation_day: contribution.creationDay,
+          space_id: contribution.spaceId,
           source_version: contribution.sourceVersion,
           contributing: contribution.contributing,
         });
       else if (source.target_kind === 'board')
-        await projectBoard.run(tx, {
+        changed = (await projectBoard.run(tx, {
           route,
           realm_id: source.realm_id,
           realm_epoch: source.realm_epoch,
           board_id: source.board_id,
           source_version: current.native_version,
           published: current.visibility === 'published',
-        });
+        })).length > 0;
       else throw new Error('Discovery contribution unavailable');
     }
     const resolved = (
@@ -191,7 +276,8 @@ export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperatio
       resolved.outcome_transaction_id !== source.outcome_transaction_id
     )
       throw new Error('Discovery fence outcome conflict');
-    await advance.run(tx, { route, realm_id: source.realm_id, generation: resolved.fence_generation });
+    if (!changed && !resolved.changed) return noEffect(null);
+    bindRealmDiscoveryCommand(tx);
     return { value: null, events: [sourceEvent(source.realm_id, source.realm_epoch)] };
   });
 }
@@ -206,6 +292,7 @@ export async function projectDiscoveryStart(pool: Pool, delta: DiscoveryDelta): 
   const source = prepared.source;
   const route = routeOf(source.realmId)!;
   await runCommand(pool, { partition: partitionOf(route), deadline: Date.now() + 30_000 }, async (tx) => {
+    if (!await epoch.run(tx, { route, realm_id: source.realmId })) throw new Error('Discovery Realm unavailable');
     const changed = await project.run(tx, {
       route,
       realm_id: source.realmId,
@@ -214,13 +301,12 @@ export async function projectDiscoveryStart(pool: Pool, delta: DiscoveryDelta): 
       thread_id: source.threadId,
       board_id: source.boardId,
       creation_day: source.creationDay,
+      space_id: source.spaceId,
       source_version: source.sourceVersion,
       contributing: source.contributing,
     });
     if (!changed) return noEffect(null);
-    const current = await epoch.run(tx, { route, realm_id: source.realmId });
-    if (!current) throw new Error('Discovery Realm unavailable');
-    await advance.run(tx, { route, realm_id: source.realmId, generation: String(BigInt(current.generation) + 1n) });
+    bindRealmDiscoveryCommand(tx);
     return { value: null, events: [sourceEvent(source.realmId, source.realmEpoch)] };
   });
 }

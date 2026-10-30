@@ -987,3 +987,14 @@ are exact indexed keys. A board change touches one board fact; the later bucket 
 keys per board, durable bounded pages for multiple boards, and O(changes log R) rank updates. Erasure pages retain
 100 posts and one opening contribution; recovery reads at most 50 terminal keys per partition step. There is no thread,
 membership, revision-history or descendant scan, cross-home SQL join or held cross-home transaction.
+
+
+The Community producer also exports `RealmDiscoveryChangeValue`, `RealmDiscoveryCommittedChange`,
+`RealmDiscoveryChangePage` and `readRealmDiscoveryChanges` from `community/discovery-source.ts`. This is a bounded
+committed Realm-home log, not a callback for consumer-supplied records. Every changed mirror fact and exact gate
+resolution commits with consecutive Realm generations and the actual executor transaction id. Native source
+versions remain separate from these generations. `projectDiscoveryMutation` and `recoverDiscoveryMutations`
+retain their original source-owned outcome/recovery contract; aggregate callers never acknowledge or abort them.
+See the [Community owner contract](../community/README.md#public-realm-discussion-discovery) for the exact reader,
+predecessor, lifecycle binding and consumer obligations. Source qualification and synchronous mutation responses
+are unchanged.
