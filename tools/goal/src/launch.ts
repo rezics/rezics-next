@@ -268,6 +268,7 @@ export async function awaitHostCapacity(
   first = false,
   taskId?: string,
   targetAttempt?: number,
+  options: { pollIntervalMs?: number; now?: () => number } = {},
 ): Promise<CapacityRelease> {
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
   const file = join(stateDirectory, 'capacity.json');
@@ -278,7 +279,7 @@ export async function awaitHostCapacity(
   // the cap and the queue; with most backend tasks critical path the running count stayed above the cap and ordinary
   // starts (most web tasks) waited for days (2026-10-29). Every start now respects the cap; critical path only dates
   // its ticket half an hour earlier, so it goes ahead of recent waiters without starving older ones.
-  const ticket = `${String(Date.now() - (first ? CRITICAL_HEAD_START_MS : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
+  const ticket = `${String((options.now?.() ?? Date.now()) - (first ? CRITICAL_HEAD_START_MS : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
   mkdirSync(queue, { recursive: true });
   const owner = processIdentity();
   if (!owner) throw new Error('Cannot identify capacity ticket owner');
@@ -318,7 +319,7 @@ export async function awaitHostCapacity(
       } finally {
         admissionLease.release();
       }
-      await new Promise((resolve) => setTimeout(resolve, 15_000));
+      await new Promise((resolve) => setTimeout(resolve, Math.max(1, options.pollIntervalMs ?? 15_000)));
     }
   } finally {
     rmSync(join(queue, ticket), { force: true });

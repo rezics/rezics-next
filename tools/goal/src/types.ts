@@ -144,12 +144,39 @@ export type Task = {
   taskClass: TaskClass;
   currentAttempt: number;
   createdAt: string;
+  /** Priority mutations are appended here; absent history on older tasks is unknown legacy provenance. */
+  priorityHistory?: PriorityHistoryEntry[];
+  /** Task-bound grants authorizing one manager to raise this task to critical priority. */
+  priorityGrants?: PriorityGrant[];
   /** A held contract change is recorded on the next attempt once its dependencies are met. */
   pendingBriefChange?: { previousBriefHash: string; newBriefHash: string };
   integratedBase?: string;
   integratedCommits?: string[];
   integratedCommit?: string;
   mergedCommit?: string;
+};
+export type PriorityHistoryEntry = {
+  value: 'critical' | 'normal';
+  setter: string | null;
+  grantor: string | null;
+  at: string;
+  grantId?: string;
+  provenance:
+    | { kind: 'manager-session'; sessionId: string }
+    | { kind: 'programmatic' };
+};
+export type PriorityGrant = {
+  id: string;
+  taskId: string;
+  grantor: string;
+  grantee: string;
+  scope: 'critical-path';
+  grantedAt: string;
+  provenance: { kind: 'manager-session'; sessionId: string };
+  consumedAt?: string;
+  consumedBy?: string;
+  revokedAt?: string;
+  revokedBy?: string;
 };
 export type IntegrationPlan = { taskId: string; attempt: number; base: string; commit: string; commits: string[] };
 export type RetryIntent = AttemptRef & {

@@ -23,6 +23,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerServices, type ManagerSpec } from './managers.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
+import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
@@ -706,4 +707,12 @@ function callingManager(runtime: IntegrationRuntime): string | undefined {
     return undefined;
   const rows = runtime.db.query('SELECT state FROM manager_sessions').all() as { state: string }[];
   return rows.map((row) => JSON.parse(row.state)).find((state) => state.threadId === process.env.CODEX_THREAD_ID)?.id;
+}
+
+/** Priority authorization uses the same persisted manager-session identity, never GOAL_MANAGER by itself. */
+export function authenticatedCallingManager(
+  runtime: IntegrationRuntime,
+  env: NodeJS.ProcessEnv = process.env,
+): AuthenticatedManager | undefined {
+  return authenticatedManager(runtime.db, env);
 }
