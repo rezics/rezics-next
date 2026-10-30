@@ -7,6 +7,7 @@ import {
   type CreatorStatementStory,
 } from '../kernel/fake/creator-statements';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pageReady } from './page';
 
 const meta = {
@@ -27,6 +28,9 @@ export const Creator: Story = {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
     await expect(await view.findByText('txn_creatorCharge')).toBeVisible();
+    await expect(
+      view.getByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(-3.15)),
+    ).toBeVisible();
     const disclosure = view.getByText(m.statements_provenance(), { exact: true });
     disclosure.focus();
     await userEvent.keyboard('{Enter}');
@@ -41,6 +45,9 @@ export const NegativeAdjustment: Story = {
     await userEvent.click(await view.findByRole('link', { name: m.statements_next_lines() }));
     await expect(await view.findByText('txn_creatorRefund')).toBeVisible();
     await expect(view.getByRole('heading', { name: m.statements_refund() })).toBeVisible();
+    await expect(
+      view.getAllByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(-11))[0],
+    ).toBeVisible();
     await userEvent.click(view.getByRole('link', { name: m.statements_restart_lines() }));
     await expect(await view.findByText('txn_creatorCharge')).toBeVisible();
   },

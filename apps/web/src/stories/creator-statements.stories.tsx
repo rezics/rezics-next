@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { selectCreatorStatementStory, type CreatorStatementStory } from '../kernel/fake/creator-statements';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageStory, pageReady } from './page';
 
 const meta = {
@@ -22,8 +23,12 @@ export const Creator: Story = {
     await pageReady(context);
     const view = within(within(context.canvasElement).getByRole('main'));
     await expect(await view.findByRole('heading', { name: m.statements_heading() })).toBeVisible();
-    await expect(await view.findByText(/USD.*315/)).toBeVisible();
-    await expect(view.getByText(/EUR.*675/)).toBeVisible();
+    await expect(
+      await view.findByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(-3.15)),
+    ).toBeVisible();
+    await expect(
+      view.getByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'EUR' }).format(6.75)),
+    ).toBeVisible();
     await userEvent.click(view.getByRole('link', { name: m.statements_next() }));
     await expect(await view.findByText(m.statements_paid())).toBeVisible();
   },

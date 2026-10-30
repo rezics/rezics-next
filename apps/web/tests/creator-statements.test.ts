@@ -4,6 +4,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { createElement, type ReactElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
+import { formatMinorAmount } from '../src/checkout/money';
 import {
   creatorLineFixture,
   creatorStatementFixture,
@@ -18,7 +19,8 @@ mock.module('@tanstack/react-start/server', () => ({
 const { loadCreatorStatement, loadCreatorStatements, statementSearch, statementDetailSearch } =
   await import('../src/checkout/creator-statements');
 const { CreatorStatementPage } = await import('../src/checkout/creator-statement-page');
-const { CreatorStatementsPage, StatementPayment } = await import('../src/checkout/creator-statements-page');
+const { CreatorStatementsPage, StatementAmount, StatementPayment } =
+  await import('../src/checkout/creator-statements-page');
 const { isSignedInPath } = await import('../src/session/guard');
 const { isPublicCacheRoute } = await import('../src/security/page-cache');
 
@@ -46,6 +48,50 @@ async function render(page: ReactElement): Promise<string> {
 }
 
 describe('Creators can inspect private royalty statements, source lines and external-payment meaning', () => {
+  test('Creator statements display exact signed native minor-unit amounts as localized currency with correct currency exponent and distinguish royalties from external paid statements', () => {
+    for (const locale of ['en', 'de', 'ar-EG']) {
+      for (const [currency, minor, major] of [
+        ['usd', -315, -3.15],
+        ['eur', 675, 6.75],
+        ['jpy', 675, 675],
+        ['kwd', 675, 0.675],
+        ['kwd', -1, -0.001],
+        ['usd', -1, -0.01],
+        ['usd', 0, 0],
+      ] as const) {
+        expect(formatMinorAmount(locale, currency, minor)).toBe(
+          new Intl.NumberFormat(locale, { style: 'currency', currency }).format(major),
+        );
+      }
+    }
+    expect(formatMinorAmount('en', 'usd', Number.MAX_SAFE_INTEGER)).toBe('$90,071,992,547,409.91');
+    expect(formatMinorAmount('en', 'usd', -Number.MAX_SAFE_INTEGER)).toBe('-$90,071,992,547,409.91');
+    const open = renderToString(createElement(StatementPayment, { statement, locale: 'en' }));
+    expect(open).toContain('No external payment recorded');
+    expect(open).not.toContain('External payment recorded');
+    expect(open).toContain('Whether royalties are payable or funds are available is unknown');
+    const paid = renderToString(
+      createElement(StatementPayment, { statement: paidCreatorStatementFixture, locale: 'en' }),
+    );
+    expect(paid).toContain('External payment recorded');
+    expect(paid).toContain('does not confirm that you received the payment');
+  });
+
+  test('unsafe or unknown money shows unavailable rather than a guessed amount', () => {
+    for (const [currency, value] of [
+      ['zzz', 675],
+      ['us', 675],
+      ['usd', Number.MAX_SAFE_INTEGER + 1],
+      ['usd', 1.5],
+      ['usd', NaN],
+    ] as const) {
+      expect(formatMinorAmount('en', currency, value)).toBeNull();
+      expect(renderToString(createElement(StatementAmount, { currency, value, locale: 'en' }))).toContain(
+        'Amount unavailable',
+      );
+    }
+  });
+
   test('owner-self list and selected detail use exact typed routes, current credentials and bounded signed pages', async () => {
     const api = fixture((call) => {
       const url = new URL(call.url);
@@ -200,8 +246,10 @@ describe('Creators can inspect private royalty statements, source lines and exte
         },
       }),
     );
-    expect(html).toContain('USD -315 minor units');
-    expect(html).toContain('USD -1,100 minor units');
+    expect(html).toContain('-$3.15');
+    expect(html).toContain('-$11.00');
+    expect(html).toContain('No external payment recorded');
+    expect(html).not.toContain('minor units</span>');
     expect(html).toContain(statement.weightedNetMinor);
     expect(html).toContain(line.balanceTransactionId);
     expect(html).toContain(line.created);
@@ -213,8 +261,10 @@ describe('Creators can inspect private royalty statements, source lines and exte
       createElement(StatementPayment, { statement: paidCreatorStatementFixture, locale: 'en' }),
     );
     expect(paid).toContain(paidCreatorStatementFixture.paidReference!);
-    expect(paid).toContain('does not establish a Stripe transfer');
-    expect(paid).toContain('Available funds and payable amount: unknown');
+    expect(paid).toContain('External payment recorded');
+    expect(paid).toContain('does not confirm that you received the payment');
+    expect(paid).toContain('Whether royalties are payable or funds are available is unknown');
+    expect(paid).not.toContain('Stripe');
     const missing = renderToString(
       createElement(StatementPayment, {
         statement: { ...paidCreatorStatementFixture, paidReference: null, paidAt: null },
@@ -227,14 +277,27 @@ describe('Creators can inspect private royalty statements, source lines and exte
         locale: 'en',
         page: {
           kind: 'ready',
-          payoutStatements: [statement, { ...paidCreatorStatementFixture, currency: 'jpy' }],
+          payoutStatements: [statement, { ...paidCreatorStatementFixture, currency: 'eur' }],
           next: null,
         },
       }),
     );
-    expect(list).toContain('USD -315 minor units');
-    expect(list).toContain('JPY 675 minor units');
-    expect(list).not.toContain('6.75');
+    expect(list).toContain('-$3.15');
+    expect(list).toContain('€6.75');
+    expect(list).toContain('External payment recorded');
+    expect(list).not.toContain('Stripe');
+    const euroDetail = await render(
+      createElement(CreatorStatementPage, {
+        id: paidCreatorStatementFixture.id,
+        locale: 'en',
+        page: {
+          kind: 'ready',
+          statement: { ...paidCreatorStatementFixture, currency: 'eur' },
+          lines: { kind: 'ready', lines: [], next: null },
+        },
+      }),
+    );
+    expect(euroDetail).toContain('€6.75');
   });
 
   test('private routes require sign-in, never opt into public cache and carry noindex/no-store on BFF reads', async () => {

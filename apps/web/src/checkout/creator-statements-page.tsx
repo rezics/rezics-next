@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorStatement, CreatorStatementsData, StatementFailure } from './creator-statements';
+import { formatMinorAmount } from './money';
 
 export function statementsHref(locale: string, cursor?: string): string {
   return `/${locale}/creator/statements${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
@@ -13,14 +14,10 @@ export function statementHref(locale: string, id: string, cursor?: string, from?
   return `/${locale}/creator/statements/${id}${query.size ? `?${query}` : ''}`;
 }
 
-/** The native DTO has no currency exponent. Preserve the represented integer without guessing a scale. */
 export function StatementAmount({ value, currency, locale }: { value: number; currency: string; locale: string }) {
   return (
     <span className="tabular-nums">
-      {m.statements_amount({
-        currency: currency.toUpperCase(),
-        amount: new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value),
-      })}
+      {formatMinorAmount(locale, currency, value) ?? m.statements_amount_unavailable()}
     </span>
   );
 }
