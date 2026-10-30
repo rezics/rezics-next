@@ -1,4 +1,7 @@
-import type { WorkModule } from '../work/registry.ts';
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import type { WorkContext, WorkModule } from '../work/registry.ts';
+import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import { purgeLabelRetentionPage } from './label-retention.ts';
 
 export const libraryWorkModule: WorkModule = {
   name: 'library',
@@ -11,10 +14,6 @@ export const libraryWorkModule: WorkModule = {
   },
 };
 
-import { DBOS } from '@dbos-inc/dbos-sdk';
-import type { WorkContext } from '../work/registry.ts';
-import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { purgeLabelRetentionPage } from './label-retention.ts';
 
 export const LABEL_RETENTION_SWEEP_WORKFLOW = 'library.labelRetentionSweep';
 export const LABEL_RETENTION_SCHEDULE = 'library.labelRetention.every-10-minutes';
@@ -35,6 +34,7 @@ async function registerLabelRetention({ pool, client, clock }: WorkContext) {
       if (after === null) partition++;
     }
     if (partition < 4096) await continuation({ ...input, sequence: input.sequence + 1, partition, after });
+    return { partition, after };
   };
   DBOS.registerWorkflow(segment, { name: 'library.labelRetentionSegment' });
   DBOS.registerWorkflow(async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }),

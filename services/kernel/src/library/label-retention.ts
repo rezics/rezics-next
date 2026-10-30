@@ -4,7 +4,7 @@ import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { PARTITIONS } from '../route/route.ts';
+import { PARTITIONS, routeOf } from '../route/route.ts';
 import { workStepDeadline } from './command-support.ts';
 import { lockLabelAssignmentSubject } from './label-assignment-store.ts';
 
@@ -42,10 +42,22 @@ function decode(after: string, partition: number): Cursor {
   if (typeof after !== 'string' || Buffer.byteLength(after) > 2048 || !/^[A-Za-z0-9_-]+$/.test(after))
     throw new TypeError('Invalid private retention cursor');
   const cursor = JSON.parse(Buffer.from(after, 'base64url').toString()) as Cursor;
+  if (!cursor || typeof cursor !== 'object') throw new TypeError('Invalid private retention cursor');
   if (cursor.version !== 1 || cursor.partition !== partition ||
       !Number.isInteger(cursor.route) || cursor.route < partition * 16 || cursor.route >= (partition + 1) * 16 ||
       !['label', 'assignment'].includes(cursor.kind) || !Number.isFinite(Date.parse(cursor.cutoff)))
     throw new TypeError('Invalid private retention cursor');
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  for (const key of [cursor.last, cursor.parent]) {
+    if (key !== null && (!key || routeOf(key.accountId) !== cursor.route || !uuid.test(key.labelId) ||
+      !Number.isInteger(key.revision) || key.revision < 1 || key.revision > 2147483647 ||
+      !Number.isFinite(Date.parse(key.deletedAt)) || !Number.isFinite(Date.parse(key.purgeAfter)) ||
+      (key.subjectId !== '' && !uuid.test(key.subjectId)) ||
+      (key.assignmentId !== null && !uuid.test(key.assignmentId))))
+      throw new TypeError('Invalid private retention key');
+  }
+  if ((cursor.parent !== null && cursor.kind !== 'label') ||
+      (cursor.childAfter !== null && !uuid.test(cursor.childAfter))) throw new TypeError('Invalid private parent cursor');
   return cursor;
 }
 
