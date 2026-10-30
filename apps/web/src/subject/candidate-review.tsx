@@ -313,7 +313,7 @@ export function CandidateReview({
                       <Button
                         variant="outline"
                         className="min-h-11"
-                  disabled={locked || requiresReload}
+                        disabled={locked || requiresReload}
                         onClick={() => void load(property, current.page!.next!)}
                       >
                         {m.candidate_more({}, options)}
