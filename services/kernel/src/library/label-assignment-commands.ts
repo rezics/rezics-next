@@ -47,6 +47,12 @@ function id(value: unknown): string {
   if (typeof value !== 'string' || routeOf(value) === null) throw invalid();
   return value;
 }
+function assignmentId(value: unknown): string {
+  // Assignment identities are native random UUIDs, not routed resource identities.
+  if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value))
+    throw invalid();
+  return value;
+}
 function owner(actor: Actor, action: string): AccountActor {
   if (actor.kind !== 'account' || routeOf(actor.accountId) === null || !actor.scopes.includes(action))
     throw new GrantDeniedError();
@@ -63,7 +69,7 @@ function input(value: unknown, expected: boolean) {
     parsed.revision > 2147483646
   )
     throw invalid();
-  return { subjectId, assignmentId: id(parsed.assignmentId), revision: parsed.revision };
+  return { subjectId, assignmentId: assignmentId(parsed.assignmentId), revision: parsed.revision };
 }
 const minimal = (a: { id: string; revision: number }) => ({ assignment: { id: a.id, revision: a.revision } });
 const events = (actor: AccountActor, labelId: string) => [
@@ -143,29 +149,49 @@ export function createLabelAssignmentCommands(deps: {
       const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
       if (operation === 'assign') {
         const result = await setLabelAssignment(tx, tuple, context);
-        if (result.kind === 'not_found') throw new LibraryNotFoundError();
-        if (result.kind === 'capacity') throw new ProblemError('library_label_capacity');
-        if (result.kind === 'migration_required') throw new ProblemError('index_not_ready');
-        if (result.kind === 'existing') return noEffect(minimal(result.assignment));
-        return { value: minimal(result.assignment), events: events(account, labelId) };
+        switch (result.kind) {
+          case 'not_found':
+            throw new LibraryNotFoundError();
+          case 'capacity':
+            throw new ProblemError('library_label_capacity');
+          case 'migration_required':
+            throw new ProblemError('index_not_ready');
+          case 'existing':
+            return noEffect(minimal(result.assignment));
+          case 'applied':
+            return { value: minimal(result.assignment), events: events(account, labelId) };
+        }
       }
       const expected = { ...tuple, ...(parsed as Expected) };
       if (operation === 'unassign') {
         const result = await unassignStoredLabelAssignment(tx, expected, context);
-        if (result.kind === 'not_found') throw new LibraryNotFoundError();
-        if (result.kind === 'stale') throw new LibraryConflictError();
-        if (result.kind === 'migration_required') throw new ProblemError('index_not_ready');
-        return {
-          value: { deleted: true as const, revision: result.assignment.revision },
-          events: events(account, labelId),
-        };
+        switch (result.kind) {
+          case 'not_found':
+            throw new LibraryNotFoundError();
+          case 'stale':
+            throw new LibraryConflictError();
+          case 'migration_required':
+            throw new ProblemError('index_not_ready');
+          case 'applied':
+            return {
+              value: { deleted: true as const, revision: result.assignment.revision },
+              events: events(account, labelId),
+            };
+        }
       }
       const result = await restoreStoredLabelAssignment(tx, expected, context);
-      if (result.kind === 'not_found') throw new LibraryNotFoundError();
-      if (result.kind === 'migration_required') throw new ProblemError('index_not_ready');
-      if (result.kind === 'stale' || result.kind === 'expired' || result.kind === 'capacity')
-        throw new ProblemError(`library_label_restore_${result.kind}`);
-      return { value: minimal(result.assignment), events: events(account, labelId) };
+      switch (result.kind) {
+        case 'not_found':
+          throw new LibraryNotFoundError();
+        case 'migration_required':
+          throw new ProblemError('index_not_ready');
+        case 'stale':
+        case 'expired':
+        case 'capacity':
+          throw new ProblemError(`library_label_restore_${result.kind}`);
+        case 'applied':
+          return { value: minimal(result.assignment), events: events(account, labelId) };
+      }
     };
     if (operation === 'unassign') return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
     return runner.ownAccountPrepared(

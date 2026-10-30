@@ -65,7 +65,10 @@ function detail(operation: string, action = 'library_entry:update', write = true
 }
 function undoHeader(name: string) {
   return {
-    200: { description: 'Deleted', headers: { [name]: { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } } } },
+    200: {
+      description: 'Deleted',
+      headers: { [name]: { schema: { type: 'string' as const, pattern: '^[1-9][0-9]*$' } } },
+    },
   };
 }
 function queryFields(request: Request, allowed: string[]) {
