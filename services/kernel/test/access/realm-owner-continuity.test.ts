@@ -11,7 +11,7 @@ import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { authoritativeTimeValue, currentCommand, mintReadTime } from '../../src/command/command.ts';
-import { grantCommand } from '../../src/access/grant-command.ts';
+import { grantCommand, type GrantCommandContext } from '../../src/access/grant-command.ts';
 import { newId } from '../../src/route/route.ts';
 import { grantFixture } from './grant-fixture.ts';
 
@@ -314,9 +314,28 @@ test('native last-owner enforcement uses command T for an interval that is not c
   expect(remaining.rowCount).toBe(1);
 });
 
+function attemptLeaveGuard(context: GrantCommandContext) {
+  return grantCommand(
+    { pool: context.pool, access: f.access },
+    context,
+    {
+      resource: f.resource,
+      actions: ['access:grant', 'realm:manage'],
+      kind: 'access.role-grant.revoke',
+      key: Bun.randomUUIDv7(),
+      input: { leave: f.actor },
+      denied: () => new GrantDeniedError(),
+    },
+    async (tx) => {
+      await assertRealmOwnerMayLeave(tx, { resource: f.resource, accountId: f.actor, at: currentCommand(tx).time });
+      return null;
+    },
+  );
+}
+
 test('only the authorized locked native sole-owner refusal exposes realm_last_owner without effects', async () => {
   const before = await f.snapshot();
-  const error = await commands.revokeRole(await f.context(), input()).then(
+  const error = await attemptLeaveGuard(await f.context()).then(
     () => {
       throw new Error('Expected sole-owner refusal');
     },
@@ -400,11 +419,7 @@ for (const refusal of ['authority', 'inactive', 'unavailable'] as const) {
     pool.connect = (async () => {
       throw unavailable;
     }) as typeof pool.connect;
-    const writer =
-      refusal === 'unavailable'
-        ? createGrantCommands({ pool, access: f.access, managementAction: 'access:grant' })
-        : commands;
-    const error = await writer.revokeRole(context, input()).then(
+    const error = await attemptLeaveGuard(refusal === 'unavailable' ? { ...context, pool } : context).then(
       () => {
         throw new Error('Expected generic refusal or unavailability');
       },
