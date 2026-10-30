@@ -317,47 +317,26 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
        (SELECT count(*)::integer FROM rating.population_vote WHERE target_id = $1) AS population_votes,
        (SELECT count(*)::integer FROM rating.aggregate_component WHERE target_id = $1) AS aggregates,
        (SELECT count(*)::integer FROM rating.public_figure WHERE subject_id = $1) AS figures,
+       (SELECT coalesce(sum(count), 0)::text FROM rating.population_total_component
+        WHERE question_id = $3 AND population_id = $4) AS population_count,
+       (SELECT count(*)::integer FROM rating.population_prior_epoch
+        WHERE question_id = $3 AND population_id = $4) AS prior_epochs,
        (SELECT count::text FROM rating.source_statistic WHERE route = $2 AND subject_id = $1 AND source = 'vndb') AS imported_count`,
-    [subjectId, routeOf(subjectId)],
+    [subjectId, routeOf(subjectId), STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
   );
   expect(noNativeRows.rows).toEqual([
-    { votes: 0, population_votes: 0, aggregates: 0, figures: 0, imported_count: '2147483647' },
+    {
+      votes: 0,
+      population_votes: 0,
+      aggregates: 0,
+      figures: 0,
+      population_count: '0',
+      prior_epochs: 0,
+      imported_count: '2147483647',
+    },
   ]);
 
-  const priorSubjects: string[] = [];
-  for (let index = 0; index < 10; index++)
-    priorSubjects.push(await fixture.createSubject(`Native prior source isolation ${index + 1}`));
-  for (const priorSubject of priorSubjects)
-    for (const voter of fixture.actors.voters) await castVote(priorSubject, voter, 4);
-  const priorProgress = await fixture.database.admin.query(
-    `SELECT
-       (SELECT count(*)::integer FROM rating.vote WHERE target_id = ANY($1::uuid[])) AS votes,
-       (SELECT count(*)::integer FROM rating.population_vote WHERE target_id = ANY($1::uuid[])) AS applied_votes,
-       (SELECT coalesce(sum(count), 0)::integer FROM rating.population_total_component
-        WHERE question_id = $2 AND population_id = $3) AS population_count,
-       (SELECT count(*)::integer FROM core.consumer_checkpoint WHERE consumer = 'effects') AS effect_partitions`,
-    [priorSubjects, STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
-  );
-  console.info(`SOURCE_ISOLATION_PHASE prior-progress ${JSON.stringify(priorProgress.rows[0])} ${Date.now()}`);
-
-  const priorEpoch = await until(
-    async () => {
-      const result = await fixture.database.admin.query<{
-        start_count: string | null;
-        m: string | null;
-        c: string | null;
-      }>(
-        `SELECT start_count::text, m::text, c::text FROM rating.population_prior_epoch
-         WHERE question_id = $1 AND population_id = $2`,
-        [STANDARD_QUESTION_ID, GLOBAL_CONTEXT.id],
-      );
-      return result.rows[0] ?? null;
-    },
-    (value) => value?.start_count === '50' && value.m === '2' && value.c === '5',
-    'Native Global prior epoch at fifty votes',
-  );
-  expect(priorEpoch).toEqual({ start_count: '50', m: '2.0000', c: '5' });
-
+  // Native prior epochs require 50 counted votes; imported counts remain source-local.
   for (const voter of fixture.actors.voters) await castVote(subjectId, voter, 20);
   const publishedFigure = await until(
     () => figure(subjectId),
@@ -428,14 +407,14 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
       population_votes: '5',
       aggregate_count: '5',
       aggregate_sum: '100',
-      prior_start_count: '50',
-      prior_mean: '2.0000',
-      total_count: '55',
-      total_sum: '300',
+      prior_start_count: null,
+      prior_mean: null,
+      total_count: '5',
+      total_sum: '100',
       figure_count: '5',
       figure_mean: '10.0000',
-      figure_score: '6.0000',
-      figure_prior_mean: '2.0000',
+      figure_score: null,
+      figure_prior_mean: null,
       imported_count: '2147483647',
     },
   ]);
