@@ -4,6 +4,22 @@ import { env } from 'cloudflare:workers';
 import { locales } from '../paraglide/runtime.js';
 import { requestLanguages } from './languages.ts';
 import { withPlatformClosedRecognition } from './platform-closed.ts';
+import { recordPageReadCacheControl } from '../security/page-cache.ts';
+
+/** Carry the owner's restrictive cache policy through SSR, including nested server functions. */
+function pageFetch(fetcher: typeof fetch): typeof fetch {
+  return (async (input, init) => {
+    const response = await fetcher(input, init);
+    let request: Request | undefined;
+    try {
+      request = getRequest();
+    } catch {
+      /* A standalone caller has no SSR response. */
+    }
+    if (request) recordPageReadCacheControl(request, response.headers.get('cache-control'));
+    return response;
+  }) as typeof fetch;
+}
 
 /** The reader's request languages, with descending q-values for sibling scripts. */
 export function acceptLanguage(locale: string): string {
@@ -44,18 +60,21 @@ export function kernelClient(locale?: string) {
   const language = uiLocale(locale) ?? requestLocale();
   const headers = language === undefined ? undefined : { 'accept-language': acceptLanguage(language) };
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-  if (origin) return withPlatformClosedRecognition(createKernelClient(origin, { ...(headers ? { headers } : {}) }));
+  if (origin)
+    return withPlatformClosedRecognition(
+      createKernelClient(origin, { ...(headers ? { headers } : {}), fetch: pageFetch(globalThis.fetch) }),
+    );
   if (import.meta.env.DEV) {
     return withPlatformClosedRecognition(
       createKernelClient('http://kernel.local', {
         ...(headers ? { headers } : {}),
-        fetch: (async (input, init) => {
+        fetch: pageFetch((async (input, init) => {
           const [{ createFakeKernelFetch }, { default: fixtures }] = await Promise.all([
             import('./fake.ts'),
             import('./fixtures.json'),
           ]);
           return createFakeKernelFetch(fixtures as unknown as Parameters<typeof createFakeKernelFetch>[0])(input, init);
-        }) as typeof fetch,
+        }) as typeof fetch),
       }),
     );
   }

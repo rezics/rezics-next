@@ -384,7 +384,7 @@ export function createApp({
     );
     return (request) => {
       return withCommandTiming(() =>
-        withRequestDeadline(Date.now() + requestDeadlineMs, () => {
+        withRequestDeadline(deadlineFor(requestDeadlineMs), () => {
           const url = new URL(request.url);
           const path = url.pathname;
           // Also refuse encoded dollar signs so router aliases cannot expose internal routes.

@@ -45,6 +45,7 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm);
     const loaded = await loadSubjectPage(client, data.id, data.view, data.locale, { realm: data.realm, authorization });
     return withSubjectCommunity(client, loaded, data.view);

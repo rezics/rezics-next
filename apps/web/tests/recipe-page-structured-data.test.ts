@@ -387,3 +387,69 @@ test('explicit block language survives and concealed page instructions stay out 
   expect(html).toContain('aria-expanded="false"');
   expect(html).toContain('lang="ja"');
 });
+
+test('filled standalone documents feed configured visible steps and JSON-LD while unplaced bodies stay private', async () => {
+  const { subjectPageJsonLd } = await import('../src/features/pages/subject.tsx');
+  const candidate = '019a0000-0000-8000-8000-000000000003';
+  const digest = 'a'.repeat(64);
+  const reference = { language: 'en', document: id, digest };
+  const document = {
+    id,
+    candidateId: candidate,
+    subjectId: id,
+    language: 'en',
+    digest,
+    availability: 'available',
+    origin: 'account',
+    author: diet,
+    licence: 'CC-BY-4.0',
+    revision: 1,
+    body: instructions,
+  };
+  const publicBody = {
+    ...body,
+    subject: {
+      ...body.subject,
+      statements: {
+        ...body.subject.statements,
+        'schema:recipeInstructions': [{ ...instruction('en', id), id: candidate, value: value(reference) }],
+      },
+    },
+    documents: { [candidate]: document },
+  };
+  const plan = planReads(platformRegistry, composition, { subject: id });
+  const page: SubjectPageData = {
+    subject: id,
+    profile: 'sha256:0',
+    template: { scope: 'generic', key: null },
+    document: composition as never,
+    reads: Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: publicBody }])),
+  };
+  const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
+  const serialized = subjectPageJsonLd(page, 'en')!;
+  expect(JSON.parse(serialized).recipeInstructions).toEqual(expected);
+  for (const text of ['Rinse the rice.', 'Add water.', 'Simmer for 25 minutes.']) expect(html).toContain(text);
+  const headerOnly = {
+    ...page,
+    document: { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'header' } }] },
+  };
+  const headerPlan = planReads(platformRegistry, headerOnly.document, { subject: id });
+  headerOnly.reads = Object.fromEntries(
+    Object.keys(headerPlan.reads).map((key) => [key, { status: 200, body: publicBody }]),
+  );
+  expect(JSON.parse(subjectPageJsonLd(headerOnly, 'en')!)).not.toHaveProperty('recipeInstructions');
+  expect(renderToString(createElement(SubjectPage, { page: headerOnly, locale: 'en', messages }))).not.toContain(
+    'Rinse the rice.',
+  );
+  for (const mismatch of ['subjectId', 'candidateId', 'digest', 'language'] as const) {
+    const altered = { ...publicBody, documents: { [candidate]: { ...document, [mismatch]: 'wrong' } } };
+    const rejected = {
+      ...page,
+      reads: Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: altered }])),
+    };
+    expect(JSON.parse(subjectPageJsonLd(rejected, 'en')!)).not.toHaveProperty('recipeInstructions');
+    expect(renderToString(createElement(SubjectPage, { page: rejected, locale: 'en', messages }))).not.toContain(
+      'Rinse the rice.',
+    );
+  }
+});

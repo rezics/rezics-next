@@ -20,6 +20,14 @@ export class PublicCacheReadError extends Error {
 
 const activePublicRenders = new WeakMap<Request, number>();
 const dehydratedPageData = new WeakMap<Request, unknown>();
+const privatePageReads = new WeakSet<Request>();
+
+/** Preserve restrictive native read caching through SSR. */
+export function recordPageReadCacheControl(request: Request, cacheControl: string | null): void {
+  if (cacheControl?.split(',').some((directive) => /^(?:private|no-store)(?:=|$)/i.test(directive.trim())))
+    privatePageReads.add(request);
+}
+
 const publicPageFailures = new WeakMap<Request, number>();
 const publicPagePolicies = new WeakMap<Request, 'public' | 'private'>();
 
@@ -153,7 +161,7 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
       const failureStatus = publicPageFailures.get(request);
       if (failureStatus !== undefined)
         return privateNoStore(response, failureStatus === 403 || response.status === 200 ? failureStatus : undefined);
-      if (!eligible) return privateNoStore(response);
+      if (privatePageReads.has(request) || !eligible) return privateNoStore(response);
       if (isSubjectFailure(request, response)) return privateNoStore(response);
       if (isCollectionPage(request) && (response.status !== 200 || publicPagePolicies.get(request) !== 'public'))
         return privateNoStore(response);
@@ -177,6 +185,7 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
       const nonce = (options.freshNonce ?? (() => requestNonce(request) ?? createNonce(request)))();
       return rewriteNonce(headed, nonce);
     } finally {
+      privatePageReads.delete(request);
       publicPageFailures.delete(request);
       dehydratedPageData.delete(request);
     }

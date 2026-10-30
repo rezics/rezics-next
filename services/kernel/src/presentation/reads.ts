@@ -1,5 +1,15 @@
 import canonicalize from 'canonicalize';
-import { MAX_PAGE_READS, MAX_PAGE_COST, readCost } from '@rezics/composition';
+import {
+  MAX_PAGE_READS,
+  MAX_PAGE_COST,
+  MAX_PAGE_DOCUMENTS,
+  pageDocumentReferences,
+  readCost,
+  type PageDocumentRead,
+} from '@rezics/composition';
+import { checkDocument, serializeDocument } from '@rezics/document';
+import { createHash } from 'node:crypto';
+import { MAX_DOCUMENT_BYTES } from '../content/document.ts';
 import { SESSION_HEADER } from '../http/request.ts';
 import type { FieldError } from '../http/problem.ts';
 import { validateSearchLimit } from '../search/service.ts';
@@ -22,6 +32,21 @@ export class PageReadError extends Error {
     this.errors = [...errors].sort((left, right) =>
       left.pointer < right.pointer ? -1 : left.pointer > right.pointer ? 1 : 0,
     );
+  }
+}
+
+/** Request-local accounting includes probes, redirect hops and every native document operation. */
+export class PageReadBudget {
+  reads = 0;
+  cost = 0;
+  admit(reads: number, cost: number): void {
+    if (this.reads + reads > MAX_PAGE_READS || this.cost + cost > MAX_PAGE_COST)
+      throw new PageReadError([{ pointer: '/reads', code: 'out_of_range' }]);
+  }
+  charge(cost: number): void {
+    this.admit(1, cost);
+    this.reads++;
+    this.cost += cost;
   }
 }
 
@@ -432,7 +457,10 @@ export async function readPage(options: {
   reads: Record<string, PageRead>;
   session: SessionKeys;
   languages?: readonly string[];
-}): Promise<{ results: Record<string, PageResult>; session: string | null }> {
+  documents?: PageDocumentRead;
+  observed?: ReadonlyMap<string, PageResult>;
+  budget?: PageReadBudget;
+}): Promise<{ results: Record<string, PageResult>; session: string | null; documents: Record<string, unknown> }> {
   const reads = validateReads(options.reads).map((read) => {
     if (read.descriptor.kind !== 'search') return read;
     const descriptor: PageRead = {
@@ -448,22 +476,68 @@ export async function readPage(options: {
   const unique = new Map<string, PreparedRead>();
   for (const read of reads) if (!unique.has(read.canonical)) unique.set(read.canonical, read);
 
-  const distinctReads = [...unique.values()];
-  const cost = distinctReads.reduce(
-    (sum, { descriptor }) =>
-      sum +
-      (descriptor.kind === 'search'
-        ? validateSearchLimit((descriptor.body as Record<string, unknown>).limit)
-        : readCost(descriptor)),
-    0,
-  );
-  if (cost > MAX_PAGE_COST) throw new PageReadError([{ pointer: '/reads', code: 'out_of_range' }]);
+  const budget = options.budget ?? new PageReadBudget();
+  const observed = new Map(options.observed);
+  let descriptor: PageDocumentRead | undefined;
+  if (options.documents) {
+    const snapshot = copyJSON(options.documents, '/documents');
+    if (
+      !isObject(snapshot) ||
+      Object.keys(snapshot).some((key) => !['kind', 'id', 'context', 'properties'].includes(key)) ||
+      snapshot.kind !== 'documents' ||
+      typeof snapshot.id !== 'string' ||
+      !UUID_PATTERN.test(snapshot.id) ||
+      (snapshot.context !== undefined && (typeof snapshot.context !== 'string' || !UUID_PATTERN.test(snapshot.context))) ||
+      !Array.isArray(snapshot.properties) ||
+      snapshot.properties.length > 64 ||
+      !snapshot.properties.every((property) => typeof property === 'string' && CURIE_PATTERN.test(property))
+    )
+      throw new PageReadError([{ pointer: '/documents', code: 'invalid_format' }]);
+    descriptor = { kind: 'documents', id: snapshot.id, ...(typeof snapshot.context === 'string' ? { context: snapshot.context } : {}), properties: snapshot.properties };
+  }
+  const nativeCost = (read: PreparedRead) =>
+    read.descriptor.kind === 'search'
+      ? validateSearchLimit((read.descriptor.body as Record<string, unknown>).limit)
+      : readCost(read.descriptor);
   const origin = new URL(options.incoming.url).origin;
   const credentials = {
     authorization: options.incoming.headers.get('authorization'),
     session: options.incoming.headers.get(SESSION_HEADER),
     language: options.languages?.join(',') ?? options.incoming.headers.get('accept-language'),
   };
+  const tokens: string[] = [];
+  const execute = async (read: PreparedRead): Promise<DispatchResult> => {
+    const result = await executeRead(read, origin, credentials, async (request) => {
+      budget.charge(nativeCost(read));
+      return options.dispatch(new Request(request, { signal: options.incoming.signal }));
+    });
+    tokens.push(...result.tokens);
+    return result;
+  };
+  // Resolve the dependency first and release its owner connection before document.get.
+  if (descriptor) {
+    const subject: PageRead = { kind: 'subject', id: descriptor.id, ...(descriptor.context ? { context: descriptor.context } : {}) };
+    const canonical = canonicalize(subject)!;
+    if (!observed.has(canonical)) {
+      const result = await withPublicStatementReader(() => execute({ key: 'subject', descriptor: subject, canonical }));
+      observed.set(canonical, result.result);
+    }
+  }
+  const subjectResult = descriptor ? observed.get(canonicalize({ kind: 'subject', id: descriptor.id, ...(descriptor.context ? { context: descriptor.context } : {}) })!) : undefined;
+  const subject =
+    subjectResult?.status === 200 && isObject(subjectResult.body) ? subjectResult.body.subject : undefined;
+  const references =
+    descriptor && isObject(subject) && subject.id === descriptor.id
+      ? pageDocumentReferences(subject, descriptor.properties, options.languages?.[0] ?? 'en')
+      : [];
+  const documentIds = [...new Set(references.map((reference) => reference.document))];
+  const distinctReads = [...unique.values()].filter((read) => !observed.has(read.canonical));
+  // This is the effective dependent plan. Reject it as a whole before any body/list execution; never truncate values.
+  if (documentIds.length > MAX_PAGE_DOCUMENTS) throw new PageReadError([{ pointer: '/reads', code: 'out_of_range' }]);
+  budget.admit(
+    distinctReads.length + documentIds.length,
+    distinctReads.reduce((sum, read) => sum + nativeCost(read), 0) + documentIds.length,
+  );
   const completed = new Array<DispatchResult | undefined>(distinctReads.length);
   const failures = new Array<{ error: unknown } | undefined>(distinctReads.length);
   let next = 0;
@@ -472,7 +546,7 @@ export async function readPage(options: {
       const index = next++;
       if (index >= distinctReads.length) return;
       try {
-        completed[index] = await executeRead(distinctReads[index]!, origin, credentials, options.dispatch);
+        completed[index] = await execute(distinctReads[index]!);
       } catch (error) {
         failures[index] = { error };
       }
@@ -485,9 +559,72 @@ export async function readPage(options: {
   const failedAt = failures.findIndex((failure) => failure !== undefined);
   if (failedAt !== -1) throw failures[failedAt]!.error;
 
-  const byCanonical = new Map<string, PageResult>();
+  const byCanonical = new Map(observed);
   for (let index = 0; index < distinctReads.length; index++) {
     byCanonical.set(distinctReads[index]!.canonical, completed[index]!.result);
+  }
+
+  let forwarded =
+    credentials.session === null
+      ? []
+      : (decodeSession(options.session.ring, options.session.scope, credentials.session) ?? []);
+  for (const token of tokens) {
+    for (const component of decodeSession(options.session.ring, options.session.scope, token) ?? [])
+      forwarded = mergeSession(forwarded, component);
+  }
+  if (tokens.length) credentials.session = encodeSession(options.session.ring, options.session.scope, forwarded);
+  const documents: Record<string, unknown> = {};
+  // Requests are deduplicated by effective native key, then admitted separately against every exact binding.
+  for (const id of documentIds) {
+    budget.charge(1);
+    const headers = new Headers();
+    if (credentials.authorization !== null) headers.set('authorization', credentials.authorization);
+    if (credentials.session !== null) headers.set(SESSION_HEADER, credentials.session);
+    const response = await options.dispatch(
+      new Request(new URL(`/v1/documents/${id}`, origin), {
+        headers,
+        signal: options.incoming.signal,
+        redirect: 'manual',
+      }),
+    );
+    const token = response.headers.get(SESSION_HEADER);
+    if (token !== null) {
+      tokens.push(token);
+      for (const component of decodeSession(options.session.ring, options.session.scope, token) ?? [])
+        forwarded = mergeSession(forwarded, component);
+      credentials.session = encodeSession(options.session.ring, options.session.scope, forwarded);
+    }
+    if (response.status === 404) {
+      await response.body?.cancel();
+      continue;
+    }
+    const result = await responseResult(response);
+    if (result.status !== 200) {
+      // Preserve standalone failures rather than turn 301/503 into a successful empty body.
+      for (const read of reads) {
+        if (read.descriptor.kind === 'subject' && read.descriptor.id === descriptor?.id)
+          byCanonical.set(read.canonical, result);
+      }
+      break;
+    }
+    const document = isObject(result.body) ? result.body.document : undefined;
+    if (!isObject(document) || document.availability !== 'available' || !checkDocument(document.body)) continue;
+    const canonical = serializeDocument(document.body);
+    if (
+      Buffer.byteLength(canonical) > MAX_DOCUMENT_BYTES ||
+      createHash('sha256').update(canonical).digest('hex') !== document.digest
+    )
+      continue;
+    for (const reference of references) {
+      if (
+        document.id === reference.document &&
+        document.subjectId === descriptor?.id &&
+        document.candidateId === reference.candidate &&
+        document.language === reference.language &&
+        document.digest === reference.digest
+      )
+        documents[reference.candidate] = document;
+    }
   }
 
   const resultEntries = reads.map(({ key, canonical }) => [key, byCanonical.get(canonical)!] as const);
@@ -498,8 +635,8 @@ export async function readPage(options: {
       ? []
       : (decodeSession(options.session.ring, options.session.scope, credentials.session) ?? []);
   let hasSubResponseToken = false;
-  for (let index = 0; index < distinctReads.length; index++) {
-    for (const token of completed[index]!.tokens) {
+  {
+    for (const token of tokens) {
       hasSubResponseToken = true;
       const writes = decodeSession(options.session.ring, options.session.scope, token);
       if (!writes) continue;
@@ -509,6 +646,7 @@ export async function readPage(options: {
 
   return {
     results,
+    documents,
     session: hasSubResponseToken ? encodeSession(options.session.ring, options.session.scope, components) : null,
   };
 }

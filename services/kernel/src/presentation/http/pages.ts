@@ -2,6 +2,7 @@ import { withHeaders } from '@elysia/openapi';
 import canonicalize from 'canonicalize';
 import {
   planReads,
+  documentRead,
   readCost,
   MAX_PAGE_COST,
   PageContinuationError,
@@ -39,7 +40,7 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { readPage } from '../reads.ts';
+import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
 
@@ -265,7 +266,8 @@ export function pageRoutes<App>(
         security: [{ bearerAuth: [] }, {}],
       },
     },
-    async ({ body, request, authorize, admission, job, actor, session: requestSession }) => {
+    async ({ body, request, authorize, admission, job, actor, session: requestSession, set }) => {
+      set.headers['cache-control'] = 'private, no-store';
       // A 308 preserves the POST body; its Location supplies the replacement page target.
       const encodedTarget = new URL(request.url).searchParams.get('target');
       let redirectedTarget: unknown;
@@ -294,6 +296,7 @@ export function pageRoutes<App>(
 
       const scope = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
       const session = { ring: tokens, scope };
+      const budget = new PageReadBudget();
       const probes = new Map<string, ReadResult>();
       let probeSession: string | null = null;
       // Run one probe read; its non-200 answer is the page's answer.
@@ -303,6 +306,7 @@ export function pageRoutes<App>(
           incoming: request,
           reads: { probe: descriptor },
           session,
+          budget,
           ...(languages ? { languages } : {}),
         });
         probeSession = mergedSession(tokens, scope, probeSession, probed.session);
@@ -433,6 +437,7 @@ export function pageRoutes<App>(
                   incoming: request,
                   reads: { guard: { kind: 'subject', id: subject!.id, context: selected.context.id } },
                   session,
+                  budget,
                   ...(languages ? { languages } : {}),
                 });
                 probeSession = mergedSession(tokens, scope, probeSession, current.session);
@@ -470,6 +475,7 @@ export function pageRoutes<App>(
         subject: subject?.id ?? null,
         account,
         probes,
+        budget,
         probeSession,
         ...(languages === undefined ? {} : { languages }),
       });
@@ -488,6 +494,7 @@ async function pageAnswer(input: {
   subject: string | null;
   account: PageAccount | null;
   probes: Map<string, ReadResult>;
+  budget: PageReadBudget;
   probeSession: string | null;
   languages?: readonly string[];
   context?: SelectedContext;
@@ -511,37 +518,49 @@ async function pageAnswer(input: {
   })();
   if (Object.values(plan.reads).reduce((cost, read) => cost + readCost(read), 0) > MAX_PAGE_COST)
     reject([{ pointer: '/reads', code: 'out_of_range' }]);
-  const results = new Map(input.probes);
-  const pending: Record<string, PageRead> = {};
+  const observed = new Map(input.probes);
   for (const descriptor of Object.values(plan.reads)) {
-    const key = canonicalize(descriptor)!;
     if (
       input.context?.population.kind === 'realm' &&
       (descriptor.kind === 'collections' || descriptor.kind === 'reactions' || descriptor.kind === 'search')
-    ) {
-      results.set(key, { status: 503, body: { code: 'dependency_unavailable' } });
-    }
-    if (!results.has(key)) pending[`p${Object.keys(pending).length}`] = descriptor;
+    ) observed.set(canonicalize(descriptor)!, { status: 503, body: { code: 'dependency_unavailable' } });
   }
-  let readSession = input.probeSession;
-  if (Object.keys(pending).length > 0) {
-    const page = await readPage({
+  const context = input.context ? { context: input.context.id } : {};
+  const observation = observed.get(canonicalize({ kind: 'subject', id: input.subject, ...context })!);
+  const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
+  const properties = isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
+  const documents = documentRead(input.resolved.document, input.subject, properties, input.context?.id);
+  const incoming = new Request(input.request.url, { headers: input.request.headers, signal: input.request.signal });
+  const forwarded = mergedSession(input.session.ring, input.session.scope, incoming.headers.get(SESSION_HEADER), input.probeSession);
+  if (forwarded !== null) incoming.headers.set(SESSION_HEADER, forwarded);
+  let page;
+  try {
+    page = await readPage({
       dispatch: input.dispatch,
-      incoming: input.request,
-      reads: pending,
+      incoming,
+      reads: plan.reads,
       session: input.session,
+      observed,
+      budget: input.budget,
+      ...(documents ? { documents } : {}),
       ...(input.languages === undefined ? {} : { languages: input.languages }),
     });
-    for (const [key, descriptor] of Object.entries(pending)) results.set(canonicalize(descriptor)!, page.results[key]!);
-    readSession = mergedSession(input.session.ring, input.session.scope, readSession, page.session);
+  } catch (error) {
+    if (error instanceof PageReadError) reject(error.errors);
+    throw error;
   }
+  let readSession = mergedSession(input.session.ring, input.session.scope, input.probeSession, page.session);
 
   if (input.finalGuard)
     readSession = mergedSession(input.session.ring, input.session.scope, readSession, await input.finalGuard());
   const reads: Record<string, ReadResult> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
-    const result = results.get(canonicalize(descriptor)!);
+    let result = page.results[key];
+    if (result?.status === 200 && descriptor.kind === 'subject' && descriptor.id === input.subject && isRecord(result.body))
+      result = { ...result, body: { ...result.body, documents: page.documents } };
     if (!result) throw new Error('Page read did not return a result');
+    if (descriptor.kind === 'subject' && descriptor.id === input.subject && result.status !== 200)
+      return respond(result.status, result.body, readSession, true);
     // A subject page without an active verified account must not name an account through its subject read.
     reads[key] =
       input.account === null &&

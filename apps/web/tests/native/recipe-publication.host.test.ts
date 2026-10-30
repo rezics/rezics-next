@@ -150,14 +150,36 @@ test('native page and public read supply the same validated instruction body to 
   expect(planned).toBeDefined();
   const actual = publicRead.subject.statements['schema:recipeInstructions']!;
   expect(planned!.body.subject.statements['schema:recipeInstructions']).toEqual(actual);
-  const englishContent = actual
-    .map(({ value }) => value.content as { language: string; document: unknown })
-    .find(({ language }) => language === 'en')!;
-  // A document ID/digest alone is not the public snapshot the existing renderer needs.
-  expect({ validatedBody: checkDocument(englishContent.document), document: englishContent.document }).toEqual({
-    validatedBody: true,
-    document: documents.en,
+  const englishStatement = actual.find(({ value }) => (value.content as { language: string }).language === 'en')!;
+  const englishContent = englishStatement.value.content as { language: string; document: string; digest: string };
+  const { serializeDocument } = await import('@rezics/document');
+  const digest = [
+    ...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serializeDocument(documents.en)))),
+  ]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  expect(englishContent).toEqual({ language: 'en', document: expect.any(String), digest });
+  const oracle = await stack.kernel(`/v1/documents/${englishContent.document}`);
+  expect(oracle.status).toBe(200);
+  expect(oracle.headers.get('cache-control')).toBe('private, no-store');
+  const { document } = await oracle.json();
+  expect(document).toEqual({
+    id: englishContent.document,
+    subjectId: recipe.id,
+    candidateId: englishStatement.id,
+    revision: 1,
+    origin: 'account',
+    author: expect.any(String),
+    licence: 'CC-BY-4.0',
+    language: 'en',
+    digest,
+    availability: 'available',
+    body: documents.en,
   });
+  expect(checkDocument(document.body)).toBe(true);
+  expect((planned!.body as PublicRead & { documents: Record<string, unknown> }).documents[englishStatement.id]).toEqual(
+    document,
+  );
   expect(result.jsonld.recipeInstructions).toEqual(
     english.map((text) => ({ '@type': 'HowToStep', text, inLanguage: 'en' })),
   );

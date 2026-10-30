@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import canonicalize from 'canonicalize';
+import type { PageDocumentRead } from './documents.ts';
 import {
   type CompositionDocument,
   type CompositionNode,
@@ -101,4 +102,19 @@ export function shownProperties(document: CompositionDocument): string[] {
     }
   }
   return [...properties];
+}
+
+/** Code-owned dependent read for the statement surfaces this configuration actually renders. */
+export function documentRead(
+  document: CompositionDocument,
+  subject: string | null,
+  available: readonly string[],
+  context?: string,
+): PageDocumentRead | null {
+  if (subject === null) return null;
+  const selected = new Set(shownProperties(document));
+  if ([...walkNodes(platformRegistry, document)].some((node) => node.type === 'MoreStatements')) {
+    for (const property of available) selected.add(property);
+  }
+  return selected.size ? { kind: 'documents', id: subject, ...(context ? { context } : {}), properties: [...selected].sort() } : null;
 }

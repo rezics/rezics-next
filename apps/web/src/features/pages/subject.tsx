@@ -3,6 +3,7 @@ import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
 import {
   planReads,
+  documentRead,
   platformRegistry,
   type CompositionDocument,
   type View,
@@ -97,7 +98,7 @@ export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 
 /** The subject read planned for this page, when that read succeeded. */
 export function subjectBody(
   page: SubjectPageData,
-): { subject: Subject; account?: SubjectRead['account']; related: Related; summary?: Summary | null } | undefined {
+): { subject: Subject; account?: SubjectRead['account']; related: Related; documents?: unknown; summary?: Summary | null } | undefined {
   const planned = Object.entries(
     planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads,
   ).find(([, read]) => read.kind === 'subject' && read.id === page.subject);
@@ -112,6 +113,7 @@ export function subjectBody(
   return {
     subject: result.body.subject as Subject,
     related: result.body.related as Related,
+    documents: result.body.documents,
     ...(Object.hasOwn(result.body, 'account') ? { account: result.body.account as SubjectRead['account'] } : {}),
     ...(Object.hasOwn(result.body, 'summary')
       ? { summary: (result.body.summary as Summary | null | undefined) ?? null }
@@ -213,9 +215,20 @@ export function subjectPageJsonLd(
 ): string | undefined {
   const read = subjectBody(page);
   if (!read) return;
+  const documents = documentRead(page.document as CompositionDocument, page.subject, Object.keys(read.subject.statements));
   const origin = (options.origin ?? 'https://rezics.com').replace(/\/+$/, '');
   const json = subjectJsonLd({
-    subject: read.subject,
+    subject: {
+      ...read.subject,
+      statements: Object.fromEntries(
+        Object.entries(read.subject.statements).filter(
+          ([property, statements]) =>
+            !statements.some((statement) => statement.property.data_type === 'document') ||
+            documents?.properties.includes(property),
+        ),
+      ),
+    },
+    documents: read.documents,
     related: read.related,
     ...(read.summary === undefined ? {} : { summary: read.summary }),
     locale,

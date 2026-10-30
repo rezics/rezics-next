@@ -60,3 +60,11 @@ export {
   templateViews,
   validateProfile,
 } from './profile.ts';
+
+export { documentRead } from './reads.ts';
+export {
+  MAX_PAGE_DOCUMENTS,
+  pageDocumentReferences,
+  type PageDocumentRead,
+  type PageDocumentReference,
+} from './documents.ts';

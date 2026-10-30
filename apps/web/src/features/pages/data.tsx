@@ -22,6 +22,7 @@ import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
 import { subjectHref } from '../../subject/subject-href';
 import type { PageDocument } from './render';
+import { statementDocument } from './documents';
 import * as accounts from './account';
 import { accountOf } from './account-read';
 import * as overview from './overview';
@@ -44,15 +45,7 @@ import {
   type Sources,
   type Stmt,
 } from './shared';
-import {
-  DocumentValue,
-  LanguageTag,
-  MediaValue,
-  readableDocument,
-  SPOILER_PROPERTY,
-  SpoilerGate,
-  type ValueLabels,
-} from './values';
+import { DocumentValue, LanguageTag, MediaValue, SPOILER_PROPERTY, SpoilerGate, type ValueLabels } from './values';
 
 type CoreMessages = {
   unknown: string;
@@ -104,6 +97,7 @@ type Options = {
 type SubjectRead = {
   subject: Subject;
   related: Related;
+  documents?: unknown;
   summary?: Summary | null;
 };
 type SearchHit = Pick<Subject, 'id' | 'labels'> & {
@@ -454,7 +448,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
     }
     if (value.type === 'value' && property.data_type === 'document') {
       const content = value.content;
-      const document = isRecord(content) ? readableDocument(content.document) : undefined;
+      const document = statementDocument(read.subject.id, statement, read.documents);
       if (!isRecord(content) || document === undefined || typeof content.language !== 'string') return null;
       const lang = content.language === options.locale ? undefined : content.language;
       return (

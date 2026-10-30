@@ -9,6 +9,7 @@ import {
   type DocumentSnapshot,
 } from '@rezics/document';
 import { spoilerLevel, webUrl, type Stmt } from './shared.tsx';
+import { statementDocument } from './documents.ts';
 import { publicCardImage } from '../../media/public-card';
 import { originalLanguage } from '../../subject/language.ts';
 import { subjectHref } from '../../subject/subject-href';
@@ -18,6 +19,7 @@ type JsonValue = string | number | JsonValue[] | { [key: string]: JsonValue };
 // The kernel client infers statement values as one union. Indexing it is too large for the compiler,
 // and every field below is checked again at run time.
 type Statement = {
+  id?: string;
   rank: string;
   value: { type: string; content?: unknown };
   property: { data_type: string };
@@ -186,13 +188,17 @@ function statementValue(
   statement: Statement,
   references: Map<string, JsonValue>,
   property: string,
+  subject: string,
+  documents: unknown,
 ): JsonValue | undefined {
   if (statement.value.type !== 'value') return;
   const content = statement.value.content;
   if (property === 'schema:cookTime')
     return statement.property.data_type === 'quantity' ? cookTime(content) : undefined;
   if (property === 'schema:recipeInstructions')
-    return statement.property.data_type === 'document' ? instructions(content) : undefined;
+    return statement.property.data_type === 'document' && record(content)
+      ? instructions({ language: content.language, document: statementDocument(subject, statement, documents) })
+      : undefined;
   if (property === 'schema:sameAs')
     return statement.property.data_type === 'url' && typeof content === 'string' && webUrl(content)
       ? content
@@ -234,8 +240,10 @@ export function subjectJsonLd({
   schemaOrgType,
   ratings,
   summary,
+  documents,
 }: {
   subject: Subject;
+  documents?: unknown;
   related: Related;
   locale: string;
   url: string;
@@ -291,7 +299,7 @@ export function subjectJsonLd({
     const externalId = /^wdt:P\d+$/.test(property);
     if ((key === undefined && !externalId) || (key !== undefined && reserved.has(key))) continue;
     const rank = statements.some((statement) => statement.rank === 'preferred') ? 'preferred' : 'normal';
-    const documents = statements.flatMap((statement) => {
+    const documentLanguages = statements.flatMap((statement) => {
       const content = statement.value.type === 'value' ? statement.value.content : undefined;
       return statement.rank === rank &&
         statement.property.data_type === 'document' &&
@@ -300,7 +308,7 @@ export function subjectJsonLd({
         ? [content.language]
         : [];
     });
-    const language = documents.length > 1 ? pickLanguage(documents, locale, original) : undefined;
+    const language = documentLanguages.length > 1 ? pickLanguage(documentLanguages, locale, original) : undefined;
     const publicStatements = statements.filter((statement) => {
       if (statement.rank !== 'normal' && statement.rank !== 'preferred') return false;
       return !spoilerLevel(statement as unknown as Stmt);
@@ -313,7 +321,7 @@ export function subjectJsonLd({
       if (statement.value.type !== 'value') continue;
       const content = statement.value.content;
       if (language !== undefined && record(content) && content.language !== language) continue;
-      const value = statementValue(statement, references, property);
+      const value = statementValue(statement, references, property, subject.id, documents);
       if (value === undefined) continue;
       if (externalId) {
         identifiers.push({

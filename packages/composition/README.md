@@ -553,3 +553,33 @@ then type, then base, then generic, so `/` uses the home template, a person, org
 concept or fictional character uses its type template, a series uses
 `schema:CreativeWorkSeries`, another bundled work uses `schema:CreativeWork`, and every other
 bundled type uses `generic`.
+
+## Dependent document bodies
+
+`documentRead(document, subject, availableProperties)` is the closed internal descriptor
+`{ kind: 'documents', id, properties }`. `Statements` selects its named properties;
+`MoreStatements` adds the other properties in the already disclosed subject observation.
+The descriptor is orchestration, with the ordinary subject read as a shared dependency.
+It is neither another public endpoint nor another document producer.
+
+After that one bounded subject observation, `pageDocumentReferences` selects the same best rank
+and reader/original language as the generic renderer. The executor admits the entire effective
+plan before reading bodies or other planned lists. Its published maximum is fifteen distinct
+bodies (`MAX_PAGE_DOCUMENTS`): one subject operation plus fifteen `document.get` operations exhausts
+sixteen native reads. Account probes, redirect hops and other reads reduce that allowance. Each
+body costs one of the same 128 requested slots; orchestration grants no free native calls.
+A configuration whose currently selected values exceed either remaining allowance is rejected
+with `/reads: out_of_range`; values are never truncated to fit. Selection examines only the
+standalone subject's bounded current representation, never its history or an all-document scan.
+
+The aggregate invokes `GET /v1/documents/{id}` in process and retains its complete existing
+`document` representation in `reads[key].body.documents[candidateId]`, beside the unchanged subject
+references. Admission requires exact id, subject, candidate, language and canonical SHA-256 digest,
+`availability: available`, the owner's 2 MiB canonical byte cap and `@rezics/document` validation.
+That byte cap also bounds the possible JSON node count and depth; the document validator owns
+profile and traversal validity. At most 30 MiB of canonical bodies fit before other page reads
+reduce the allowance. Metadata and the existing subject response add their own bounded bytes.
+Missing, erased or currently undisclosed bodies are absent. Other owner failures retain their
+status. Every request releases its native owner connection and admission slot before a dependent
+read. Actor, request deadline, cancellation and merged session follow the standalone operations.
+Bodies have request-local lifetime; aggregate and SSR responses are `private, no-store`.
