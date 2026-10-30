@@ -1,3 +1,4 @@
+import { accessClock } from '../access/access-clock.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import type { Access } from '../request/access.ts';
@@ -57,6 +58,7 @@ export function createReplyNoticeEffect(pool: Pool, access: Access): Effect {
         },
         readable,
         deadline,
+        accessClock(access),
       );
     },
   };

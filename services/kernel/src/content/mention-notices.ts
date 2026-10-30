@@ -1,3 +1,4 @@
+import { accessClock } from '../access/access-clock.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -183,6 +184,7 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
           },
           readable,
           deadline,
+          accessClock(access),
         );
       }
     },

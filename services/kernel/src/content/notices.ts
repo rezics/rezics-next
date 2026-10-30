@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { systemClock, type KernelClock } from '../clock.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
@@ -141,10 +142,11 @@ export async function finalizeOptionalNotice(
   notice: NoticeInput & { kind: 'reply' | 'mention' },
   readable: boolean,
   deadline: number,
+  clock: KernelClock = systemClock,
 ): Promise<void> {
   const route = validateNotice(notice);
   // A redrive older than the retained decision horizon cannot reopen a send.
-  if (notice.createdAt.getTime() < Date.now() - NOTICE_RETENTION_MS) return;
+  if (notice.createdAt.getTime() < clock().getTime() - NOTICE_RETENTION_MS) return;
   await within(deadline, () =>
     withConnection(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
