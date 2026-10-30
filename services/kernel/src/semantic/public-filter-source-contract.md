@@ -682,3 +682,24 @@ these exact declarations. `SubjectSourceKeyTraversal` preserves the separate exi
 capability on the ordinary subjectSource; the canonical factory port is `SubjectSourceKeyPages.read`.
 Neither provisional adapter invents runtime Source evidence; the actual native Source
 producer remains responsible for implementation, routing, identity availability and current definition semantics.
+
+### Adopted native bootstrap binding
+
+`public-filter-source-binding.ts` declares the existing synchronous
+`createPublicFilterSourceBinding(pool, routeKey, access)` factory and its additive
+`PublicFilterSourceBootstrapBinding` subtype. Constructors validate configuration; native work belongs to async
+methods. The current adapter returns typed `owner_unavailable` until the native producer is integrated.
+It never synthesizes Source configuration, a cut, owner coverage or an engine acknowledgement.
+
+`resolve` retains the canonical Search capture union (legacy, mixed discovery and suggestion prefix), accepted
+meaning, native Source configuration, expanded root/read definition and dependencies. `join` validates the exact
+Search observation and optional derived execution independently of that execution's batch size/keyset.
+
+`begin` owns pre-arm admission and the original consistent native Source cut before Search opens its PIT or
+retains a prepared generation. `adopt` links actual committed Search custody to that same cut. `recover` resolves
+native uncertainty without recapture; `abort` cannot dispose unresolved physical or receiving custody.
+`repairPage` returns bounded current projections and genuine Source-owned-home observations/receipts for local
+and foreign routing, including partial projection frontiers. Only committed own-home advancement determines an
+external replacement version. `settle` validates the original bootstrap, same old cut/execution, Source receipts,
+all configured owner domains and real Search dispatch/visible-winner/retained-copy custody. Neither a generic
+caller receipt nor a successful engine callback certifies completion. Account proof stays with Accounts.

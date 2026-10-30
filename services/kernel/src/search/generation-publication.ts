@@ -26,7 +26,7 @@ import type {
   PublicFilterQueriedObservation,
 } from './public-filter-consumer-contract.ts';
 import type { SearchWriterPublicationFence, SearchWriterPublicationGuard } from './writer-guard.ts';
-import type { DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
+import type { DiscoveryConsumerCaptureInput, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
 import { createDiscoveryProjection, validateAccountPage } from './account-discovery.ts';
 import { parseDiscoveryHitIdentity, discoveryDocumentId, validateDiscoveryDocument } from './discovery-documents.ts';
 import {
@@ -322,13 +322,15 @@ export function createSearchGenerationPublication(
     check(context);
     return { ...target, incarnation };
   }
-  function publicationCapture(capture: PublicCanonicalCaptureInput): PublicFilterConsumerCaptureInput {
+  function publicationCapture(
+    capture: PublicCanonicalCaptureInput,
+  ): PublicFilterConsumerCaptureInput | DiscoveryConsumerCaptureInput {
     // Suggestion custody has its own canonical prefix semantics and cannot certify all-key population.
     if (!('sort' in capture)) throw new Pending('registration_missing');
     return capture;
   }
   function populationDefinition(definition: PublicFilterSourceDefinition) {
-    const capture = definition.capture;
+    const capture = publicationCapture(definition.capture);
     if (
       capture.filterDocument !== undefined ||
       capture.text !== undefined ||

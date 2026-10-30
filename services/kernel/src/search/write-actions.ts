@@ -190,19 +190,25 @@ export async function writeIndexActions<Document extends SearchDocument>(
   search: OpenSearch,
   index: string,
   actions: readonly IndexAction<Document>[],
-  options: { rejectConflicts?: boolean; writeAlias?: string } = {},
+  options: Readonly<{
+    rejectConflicts?: boolean;
+    writeAlias?: string;
+    versionConflict?: 'reject';
+    timeoutMs?: number;
+  }> = {},
 ): Promise<void> {
   const response = await search.bulk<BulkResponse>(bulkLines(options.writeAlias ?? index, actions), {
     query: {
       ...(options.writeAlias ? { require_alias: true, wait_for_active_shards: 'all' } : {}),
       refresh: 'wait_for',
     },
+    ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
   });
   const hasConflict = validateBulkResponse(response, index, actions);
 
   if (hasConflict) {
     // A refresh proves visibility, not which current Source/native writer won.
-    if (options.rejectConflicts) throw new IndexWriteError([response]);
+    if (options.rejectConflicts || options.versionConflict === 'reject') throw new IndexWriteError([response]);
     const refresh = await search.request<RefreshResponse>('POST', `/${index}/_refresh`);
     validateRefreshResponse(refresh.status, refresh.body);
   }

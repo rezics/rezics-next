@@ -186,3 +186,169 @@ export type DiscoveryIndexDefinition = {
     properties: Record<string, Record<string, unknown>>;
   };
 };
+
+/** Canonical mixed root: provisional DiscoveryCondition values are never admitted engine input. */
+import type { FilterDocument } from '@rezics/filter';
+import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerQuery } from './public-filter-consumer-contract.ts';
+type DiscoveryFilterLeaf = Exclude<FilterDocument, { and: unknown } | { or: unknown } | { not: unknown }>;
+export type DiscoveryFilterDocument =
+  | Readonly<{ and: readonly DiscoveryFilterDocument[] }>
+  | Readonly<{ or: readonly DiscoveryFilterDocument[] }>
+  | Readonly<{ not: DiscoveryFilterDocument }>
+  | DiscoveryFilterLeaf
+  | Readonly<{ kind: Readonly<{ in: readonly string[] }> }>;
+export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInput, 'filterDocument'> &
+  Readonly<{
+    representation: 'discovery-v1';
+    filterDocument: DiscoveryFilterDocument | undefined;
+    comparator: 'mixed-public-v1';
+  }>;
+export type DiscoveryEngineHit = Readonly<{
+  key: DiscoveryKey;
+  index: string;
+  sourcePosition: string;
+  revision: string;
+  matched: readonly string[];
+  sort: readonly (string | number | null)[];
+}>;
+export type DiscoveryEngineResult = Readonly<{ generation?: number; hits: readonly DiscoveryEngineHit[] }>;
+export type DiscoveryConsumerQuery =
+  | (Omit<Extract<PublicFilterConsumerQuery, { status: 'queried' }>, 'result'> &
+      Readonly<{ result: DiscoveryEngineResult }>)
+  | Exclude<PublicFilterConsumerQuery, { status: 'queried' }>;
+
+import { FILTER_LIMITS, admitFilter, parseFilter, walkFilter } from '@rezics/filter';
+import { compileFilter } from './filter.ts';
+import { compileText } from './text.ts';
+import type {
+  PublicFilterProjectionMeaning,
+  PublicFilterDependencyKey,
+} from '../semantic/public-filter-source-contract.ts';
+type EngineClause = Record<string, unknown>;
+/** Full mixed grammar admission; compile each configured domain before combining native ranking. */
+export function compileDiscoveryConsumerCapture(
+  input: DiscoveryConsumerCaptureInput,
+  meaning: PublicFilterProjectionMeaning,
+  registry: DiscoveryRegistry | undefined,
+): Readonly<{ query: EngineClause; dependencyKeys: readonly PublicFilterDependencyKey[] }> {
+  if (
+    input.representation !== 'discovery-v1' ||
+    input.comparator !== 'mixed-public-v1' ||
+    !Object.hasOwn(input, 'filterDocument') ||
+    !Object.hasOwn(input, 'text') ||
+    !['id', 'name', 'relevance'].includes(input.sort) ||
+    !Number.isInteger(input.size) ||
+    input.size < 1 ||
+    input.size > 100 ||
+    (input.pageSize !== undefined && (!Number.isInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > 100))
+  )
+    throw new TypeError('Invalid canonical mixed capture');
+  let leaves = 0;
+  const keys: PublicFilterDependencyKey[] = [
+    { kind: 'type' },
+    { kind: 'order', order: input.sort },
+    { kind: 'order', order: 'id' },
+  ];
+  function admit(node: DiscoveryFilterDocument, depth: number): DiscoveryFilterDocument {
+    if (!node || typeof node !== 'object' || Array.isArray(node) || Object.keys(node).length !== 1)
+      throw new TypeError('Invalid mixed filter node');
+    if ('and' in node || 'or' in node) {
+      if (depth >= FILTER_LIMITS.depth) throw new RangeError('Mixed filter depth exceeds limit');
+      const children = 'and' in node ? node.and : node.or;
+      if (
+        !Array.isArray(children) ||
+        children.length === 0 ||
+        children.length > FILTER_LIMITS.leaves ||
+        ('or' in node && children.length > FILTER_LIMITS.or)
+      )
+        throw new RangeError('Mixed Boolean width exceeds limit');
+      return 'and' in node
+        ? { and: children.map((child) => admit(child, depth + 1)) }
+        : { or: children.map((child) => admit(child, depth + 1)) };
+    }
+    if ('not' in node) {
+      if (depth >= FILTER_LIMITS.depth || 'not' in node.not) throw new RangeError('Invalid mixed negation');
+      return { not: admit(node.not, depth + 1) };
+    }
+    if (++leaves > FILTER_LIMITS.leaves) throw new RangeError('Mixed filter leaves exceed limit');
+    if ('kind' in node) {
+      if (
+        !node.kind ||
+        Object.keys(node.kind).length !== 1 ||
+        !Array.isArray(node.kind.in) ||
+        node.kind.in.length < 1 ||
+        node.kind.in.length > FILTER_LIMITS.in ||
+        node.kind.in.some((kind) => typeof kind !== 'string' || !kind)
+      )
+        throw new TypeError('Invalid kind predicate');
+      for (const kind of node.kind.in) registry?.get(kind);
+      return { kind: { in: [...new Set(node.kind.in)] } };
+    }
+    const leaf = parseFilter(node);
+    for (const child of walkFilter(leaf))
+      if ('owner' in child || 'saved' in child)
+        throw new TypeError('Public mixed capture requires expanded non-owner leaves');
+    const accepted = admitFilter(leaf, meaning.release, { saved: false });
+    const compiled = compileFilter(accepted, { prefix: `d${leaves}-`, relationOverflow: true });
+    for (const item of compiled.leaves)
+      if (item.facet === 'statement') {
+        keys.push({ kind: 'property', property: item.property });
+        for (const qualifier of item.qualifiers ?? []) {
+          keys.push({ kind: 'property', property: qualifier.property });
+          if (++leaves > FILTER_LIMITS.leaves) throw new RangeError('Mixed qualifiers exceed limit');
+        }
+      }
+    return accepted;
+  }
+  const root = input.filterDocument === undefined ? undefined : admit(input.filterDocument, 0);
+  const all: EngineClause = { match_all: {} };
+  const none: EngineClause = { match_none: {} };
+  const conjunction = (queries: EngineClause[]): EngineClause => ({ bool: { filter: queries } });
+  const disjunction = (queries: EngineClause[]): EngineClause => ({
+    bool: { should: queries, minimum_should_match: 1 },
+  });
+  function clauses(
+    node: DiscoveryFilterDocument,
+    kind: string,
+    owner: 'semantic' | 'accounts',
+  ): [EngineClause, EngineClause] {
+    if ('not' in node) {
+      const [yes, no] = clauses(node.not, kind, owner);
+      return [no, yes];
+    }
+    if ('and' in node || 'or' in node) {
+      const children = ('and' in node ? node.and : node.or).map((child) => clauses(child, kind, owner));
+      return 'and' in node
+        ? [conjunction(children.map((v) => v[0])), disjunction(children.map((v) => v[1]))]
+        : [disjunction(children.map((v) => v[0])), conjunction(children.map((v) => v[1]))];
+    }
+    if ('kind' in node) return node.kind.in.includes(kind) ? [all, none] : [none, all];
+    // not_applicable remains not_applicable through NOT and mixed Boolean evaluation.
+    if (owner === 'accounts') return [none, none];
+    return [
+      compileFilter(node, { prefix: 'd', relationOverflow: true }).query,
+      compileFilter({ not: node }, { prefix: 'dn', relationOverflow: true }).query,
+    ];
+  }
+  const text = input.text === undefined ? undefined : compileText(input.text, { field: 'search_text', prefix: 't' });
+  if (text)
+    keys.push(
+      { kind: 'field', field: 'labels' },
+      { kind: 'field', field: 'aliases' },
+      { kind: 'field', field: 'descriptions' },
+    );
+  const filter = registry
+    ? disjunction(
+        registry.entries.map((entry) =>
+          conjunction([{ term: { kind: entry.kind } }, root ? clauses(root, entry.kind, entry.owner)[0] : all]),
+        ),
+      )
+    : none;
+  const query = { bool: { must: text?.query ?? all, filter } };
+  // Optional compiled fields are evidence only, never admitted authority.
+  if (input.filter !== undefined && JSON.stringify(input.filter) !== JSON.stringify(filter))
+    throw new TypeError('Mixed filter DSL mismatch');
+  if (input.query !== undefined && JSON.stringify(input.query) !== JSON.stringify(text?.query))
+    throw new TypeError('Mixed text DSL mismatch');
+  return { query, dependencyKeys: keys };
+}

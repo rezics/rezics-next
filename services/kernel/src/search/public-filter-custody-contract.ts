@@ -123,6 +123,11 @@ export interface PublicFilterCustody {
     use: CustodyUse,
     context: PublicFilterConsumerContext,
   ): Promise<Readonly<{ status: 'released'; cost: CustodyCost }> | CustodyFailure>;
+  /** Retain the actual query response locator under the existing active use, including malformed results. */
+  retainPit(
+    request: Readonly<{ use: CustodyUse; queried: PublicFilterQueriedObservation; pit: string }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<CustodyRetained | CustodyFailure>;
   renewPit(
     queried: PublicFilterQueriedObservation,
     keepAliveMs: number,

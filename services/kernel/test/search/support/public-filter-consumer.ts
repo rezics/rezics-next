@@ -1,5 +1,6 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { PublicFilterSourceBinding } from '../../../src/semantic/public-filter-source-binding.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../../../src/clock.ts';
 import { createSubjectIndex, subjectIndexName } from '../../../src/search/indices.ts';
@@ -21,6 +22,7 @@ export async function createPublicFilterConsumerFixture(
   config: Readonly<{
     pool: Pool;
     source: PublicFilterSource;
+    binding: PublicFilterSourceBinding;
     clock: KernelClock;
     context: PublicFilterConsumerContext;
     search: OpenSearch;
@@ -142,6 +144,7 @@ export async function createPublicFilterConsumerFixture(
     operations = await factory({
       pool: config.pool,
       source: config.source,
+      binding: config.binding,
       clock: config.clock,
       search: controlled,
       context: config.context,

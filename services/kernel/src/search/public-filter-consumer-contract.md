@@ -16,21 +16,51 @@ A native protocol pass later will still be distinct from public API/default-work
 ## Exact exports and missing production entry point
 
 The adjacent module exports `PublicFilterQueriedObservation`, `PublicFilterConsumerContext`,
-`PublicFilterConsumerCaptureInput`, `PublicFilterConsumerJob`, `PublicFilterConsumerUnavailable`, `PublicFilterConsumerCapture`,
+`PublicFilterConsumerCaptureInput`, `PublicFilterConsumerRefill`, `PublicFilterConsumerWindow`,
+`PublicFilterConsumerJob`, `PublicFilterConsumerUnavailable`, `PublicFilterConsumerCapture`,
 `PublicFilterConsumerQuery`, `PublicFilterConsumerStatus`, `PublicFilterConsumerRepair`,
 `PublicFilterConsumerOperations` and `PublicFilterConsumerOperationsFactory`.
 
-The selected future production module is `services/kernel/src/search/public-filter-consumer.ts`; the selected
-factory export is `createPublicFilterConsumerOperations: PublicFilterConsumerOperationsFactory`. Both are
-**MISSING**. They are selected names for co-owner review, not current imports or delivered runtime exports.
-No default composition is installed. Source's `semantic/public-filter-source.ts:publicFilterSource` and
-`recordPrivacyReduction` are also missing. The test helper dynamically loads actual producer modules when run;
-missing producers fail explicit assertions. It does not unconditionally throw in place of the integration cases.
+The production module exports `createPublicFilterConsumerOperations: PublicFilterConsumerOperationsFactory`.
+Its canonical configuration requires the injected `source` and `binding: PublicFilterSourceBinding`, and optionally
+accepts a fixed `DiscoveryRegistry`. The [implementation](public-filter-consumer.md) describes native composition.
+This is an injected implementation, not default-provider readiness or native acceptance.
 
-The actual test-only export is
-`services/kernel/test/search/support/public-filter-consumer.ts:createPublicFilterConsumerFixture`, with exported
-return type `PublicFilterConsumerFixture`. `publicFilterConsumerModule` and `publicFilterConsumerFactoryExport`
-identify the exact missing production entry point. Semantic can depend on this helper without importing a test.
+### Source bootstrap and retained native custody
+
+Source's existing binding extends to `PublicFilterSourceBootstrapBinding`: begin before native PIT/prepared
+capture, adopt the committed observation against the exact original cut, recover uncertainty without recapture,
+and abort only after real receiving/physical custody closure. `repairPage` uses the retained bootstrap, queried
+observation, execution and frontier. Native Source receipts and own-home advancement include LOCAL and FOREIGN
+work. `settle` independently validates those owner records and real Search dispatch/visibility/copy custody for
+that same old cut/execution. No caller receipt, callback Boolean, fourth reader or mirror Source is introduced.
+
+The existing Search registration/observation/execution registry owns consumer work, immutable raw windows,
+uncertain native effects and visible-winner records. Source definitions import Search's canonical legacy,
+mixed and suggestion capture union. Derived batch size/frontier belong to executions and cannot change the root.
+Mixed `captureDiscovery`/`queryDiscovery` methods share the same factory, physical custody and required windows;
+Account own-row authority never derives from a Subject projection.
+
+### Retained consumed windows
+
+Capture accepts optional `pageSize` so useful-page callers can set the requested public size `s` and receive the
+literal root allowance `min(600, 6s + 3)` over at most three rounds. Legacy callers without `pageSize` preserve
+their existing legal size. `PublicFilterConsumerRefill` names an existing execution and an integer consumed prefix;
+it never accepts engine keys or changes the retained root plan. Refill size is positive and bounded by the
+remaining root allowance and the existing per-query limit.
+
+Every queried result carries a required closed `PublicFilterConsumerWindow`. Its `positions` align with returned
+hits and are strictly increasing zero-based ordinals less than `examined`. `examined` charges every raw candidate
+for that execution, including canonical duplicates, rejects and any bounded lookahead. `exhausted` is true only
+when a successful complete-shard, non-timeout, non-terminated native response has actual end evidence. A refill
+consumes the first `consumed` raw positions of its named retained execution, derives the next native frontier from
+retained raw keys, preserves unused suffix/lookahead, and persists the actual execution/start/own-row set for each
+batch. Revalidation of reused rows and all reads remain charged. Refill does not reset the root allowance or alter
+the captured AST/text/order/meaning/principal/physical incarnation.
+
+The page layer can certify EOF only at `consumed === examined && window.exhausted`; otherwise the confidential
+continuation retains the actual execution/consumed locator within its existing bound. Native exhaustion does not
+replace final `readStatus` authorization. No raw frontier or new authority is public.
 
 ## Native identity and immutable execution
 

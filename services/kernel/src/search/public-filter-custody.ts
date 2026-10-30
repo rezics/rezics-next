@@ -6,6 +6,7 @@ import { admitFilter, walkFilter } from '@rezics/filter';
 import releaseExists from '../semantic/definitions-exists.sql';
 import compositeReference from '../semantic/composite-read.sql';
 import { withConnection } from '../database/pool.ts';
+import { compileDiscoveryConsumerCapture } from './discovery.ts';
 import { compileFilter } from './filter.ts';
 import { compileText } from './text.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
@@ -290,6 +291,12 @@ function validateDefinition(definition: CustodyDefinition<PublicCanonicalCapture
   if ('purpose' in input) {
     validatePublicSuggestionInput(input);
     // Source resolves complete prefix/order/name dependencies; custody does not invent callback keys.
+    return;
+  }
+  if ('representation' in input) {
+    const compiled = compileDiscoveryConsumerCapture(input, definition.meaning, undefined);
+    for (const key of compiled.dependencyKeys)
+      requireValue(definition.dependencyKeys.some((entry) => encode(entry) === encode(key)));
     return;
   }
   requireValue(Number.isInteger(input.size) && input.size >= 1 && input.size <= 200);
@@ -664,6 +671,43 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
         },
         true,
       );
+    },
+    retainPit(request, context) {
+      const input = decode<typeof request>(encode(request));
+      text(input.pit);
+      queried(input.queried);
+      return run(context, async (meter) => {
+        const q = input.queried;
+        if (q.snapshot.kind !== 'pit' || input.use.observation !== q.snapshot.observation)
+          throw new Failure('binding_mismatch');
+        const successor = { ...q, snapshot: { ...q.snapshot, pit: input.pit } };
+        const result = await sql(
+          pool,
+          meter,
+          `WITH locked AS (
+          SELECT o.partition_no,o.observation FROM search.public_filter_observation o
+          JOIN search.public_filter_reference f USING(partition_no,observation)
+          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state<>'closed'
+          AND f.token=$4 AND f.expires_at>$5 FOR UPDATE OF o
+        ), owned AS (
+          INSERT INTO search.public_filter_pit SELECT partition_no,observation,$6,$7,'owned' FROM locked
+          ON CONFLICT DO NOTHING
+        ) UPDATE search.public_filter_observation o SET queried=$8,revision=revision+1
+          FROM locked l WHERE (o.partition_no,o.observation)=(l.partition_no,l.observation) RETURNING o.observation`,
+          [
+            partition(q.snapshot.observation),
+            q.snapshot.observation,
+            encode(q),
+            input.use.token,
+            Date.now(),
+            digest(input.pit),
+            input.pit,
+            encode(successor),
+          ],
+        );
+        if (!result.rowCount) throw new Failure('observation_lost');
+        return { status: 'retained' as const, queried: successor, cost: meter };
+      });
     },
     renewPit(q, keepAliveMs, search, context) {
       const input = decode<typeof q>(encode(q));

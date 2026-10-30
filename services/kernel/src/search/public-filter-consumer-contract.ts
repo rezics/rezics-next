@@ -1,4 +1,6 @@
 import type { Pool } from 'pg';
+import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryRegistry } from './discovery.ts';
 import type { FilterDocument } from '@rezics/filter';
 import type { TextNode } from './text.ts';
 import type { KernelClock } from '../clock.ts';
@@ -49,6 +51,7 @@ export type PublicSuggestionCaptureInput = Readonly<{
 /** Retained by the same custody registry and resolved by the same native Source definition. */
 export type PublicCanonicalCaptureInput =
   | PublicFilterConsumerCaptureInput
+  | DiscoveryConsumerCaptureInput
   | (PublicSuggestionCaptureInput & Readonly<{ after?: never }>);
 
 export type PublicSuggestionQuery =
@@ -138,6 +141,15 @@ export type PublicFilterConsumerRepair =
 
 /** Closed native boundary; there is no ACK setter, caller repair input or Boolean evaluator. */
 export interface PublicFilterConsumerOperations {
+  captureDiscovery(
+    request: Readonly<{ plan: DiscoveryConsumerCaptureInput; snapshot: 'pit' | 'prepared' }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<PublicFilterConsumerCapture>;
+  queryDiscovery(
+    queried: PublicFilterQueriedObservation,
+    context: PublicFilterConsumerContext,
+    refill?: PublicFilterConsumerRefill,
+  ): Promise<DiscoveryConsumerQuery>;
   capture(
     request: Readonly<{ plan: PublicCanonicalCaptureInput; snapshot: 'pit' | 'prepared' }>,
     context: PublicFilterConsumerContext,
@@ -158,15 +170,13 @@ export interface PublicFilterConsumerOperations {
   close(): Promise<void>;
 }
 
-/** Future search/public-filter-consumer.ts export createPublicFilterConsumerOperations: MISSING.
- * The target is a native physical name to resolve, never an incarnation/ACK supplied as truth.
- * Source must resolve its native registered public-catalogue identity/read definition; the current
- * reader-only Source port is insufficient for runtime (see the adjacent prerequisite).
- */
+/** Injected native consumer. Source and binding remain supplied owner resources. */
 export type PublicFilterConsumerOperationsFactory = (
   config: Readonly<{
     pool: Pool;
     source: PublicFilterSource;
+    binding: PublicFilterSourceBinding;
+    registry?: DiscoveryRegistry;
     search: OpenSearch;
     clock: KernelClock;
     context: PublicFilterConsumerContext;

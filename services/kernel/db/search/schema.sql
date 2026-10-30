@@ -175,7 +175,11 @@ CREATE TABLE search.public_filter_execution (
     observation text NOT NULL COLLATE pg_catalog."C",
     id text NOT NULL COLLATE pg_catalog."C",
     execution text NOT NULL,
-    CONSTRAINT public_filter_execution_execution_check CHECK ((octet_length(execution) <= 1048576))
+    CONSTRAINT public_filter_execution_execution_check CHECK ((octet_length(execution) <= 1048576)),
+    consumer_repair text,
+    CONSTRAINT public_filter_execution_consumer_repair_check CHECK ((octet_length(consumer_repair) <= 1048576)),
+    consumer_window text,
+    CONSTRAINT public_filter_execution_consumer_window_check CHECK ((octet_length(consumer_window) <= 1048576))
 );
 
 
@@ -198,7 +202,10 @@ CREATE TABLE search.public_filter_observation (
     CONSTRAINT public_filter_observation_prepared_rows_check CHECK ((octet_length(prepared_rows) <= 1048576)),
     CONSTRAINT public_filter_observation_queried_check CHECK ((octet_length(queried) <= 65536)),
     CONSTRAINT public_filter_observation_revision_check CHECK ((revision > 0)),
-    CONSTRAINT public_filter_observation_state_check CHECK ((state = ANY (ARRAY['open'::text, 'closing'::text, 'closed'::text])))
+    CONSTRAINT public_filter_observation_state_check CHECK ((state = ANY (ARRAY['open'::text, 'closing'::text, 'closed'::text]))),
+    consumer_work text,
+    consumer_bootstrap text,
+    CONSTRAINT public_filter_observation_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576))
 );
 
 
@@ -258,7 +265,10 @@ CREATE TABLE search.public_filter_registration (
     CONSTRAINT public_filter_registration_consumer_check CHECK ((octet_length(consumer) <= 8192)),
     CONSTRAINT public_filter_registration_definition_check CHECK ((octet_length(definition) <= 1048576)),
     CONSTRAINT public_filter_registration_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
-    CONSTRAINT public_filter_registration_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text])))
+    CONSTRAINT public_filter_registration_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text]))),
+    consumer_work text,
+    consumer_bootstrap text,
+    CONSTRAINT public_filter_registration_consumer_work_check CHECK ((octet_length(consumer_work) <= 1048576))
 );
 
 
@@ -664,3 +674,6 @@ ALTER TABLE search.identity_writer_gate
   ADD COLUMN publication_revision bigint NOT NULL DEFAULT 0 CHECK (publication_revision>=0),
   ADD CHECK (publication_fence IS NULL OR (publication_job IS NOT NULL AND publication_consumer IS NOT NULL)),
   ADD CHECK (partition_no=0 OR publication_job IS NULL);
+
+CREATE UNIQUE INDEX public_filter_observation_bootstrap ON search.public_filter_observation(partition_no,consumer_bootstrap) WHERE consumer_bootstrap IS NOT NULL;
+CREATE UNIQUE INDEX public_filter_registration_bootstrap ON search.public_filter_registration(partition_no,consumer_bootstrap) WHERE consumer_bootstrap IS NOT NULL;

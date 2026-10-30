@@ -1,3 +1,4 @@
+import { createPublicFilterSourceBinding } from '../../../src/semantic/public-filter-source-binding.ts';
 import { expect } from 'bun:test';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -261,6 +262,7 @@ export async function consumerFixture(f: Fixture, source: PublicFilterSource) {
   return createPublicFilterConsumerFixture({
     pool: f.db.pool,
     source,
+    binding: createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access),
     clock: f.config.clock,
     context: readContext(),
     search: createOpenSearch(url),

@@ -176,6 +176,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     const operations = await createPublicFilterConsumerOperations({
       pool: config.pool,
       source,
+      binding,
       search: config.search,
       clock: config.clock,
       context,
@@ -187,6 +188,8 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
     let draining: Promise<void> | undefined;
     return {
       capture: operations.capture.bind(operations),
+      captureDiscovery: operations.captureDiscovery.bind(operations),
+      queryDiscovery: operations.queryDiscovery.bind(operations),
       query: operations.query.bind(operations),
       repairStep: operations.repairStep.bind(operations),
       readStatus: operations.readStatus.bind(operations),
@@ -280,6 +283,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         const native = await createPublicSuggestionOperations({
           pool: config.pool,
           source,
+          binding,
           search: config.search,
           clock: config.clock,
           context,
