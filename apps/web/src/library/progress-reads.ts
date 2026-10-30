@@ -1,4 +1,4 @@
-import type { ProgressChoices, ProgressInputRules } from './progress-profile';
+import type { ProgressChoices, ProgressInputRules as ProfileProgressInputRules } from './progress-profile';
 import type { ProgressLabelInput } from './progress-label';
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
@@ -31,6 +31,9 @@ export type NativeProgressSession = NonNullable<
 type NativeField<T, K extends PropertyKey> = K extends keyof T ? T[K] : never;
 /** No parallel Web wire contract: this is never until the native declaration is delivered. */
 export type NativeProgressPresentation = NonNullable<NativeField<NativeProgressSession, 'presentation'>>;
+type ProgressInputRules =
+  | ProfileProgressInputRules
+  | Extract<NativeProgressPresentation['recording'], { state: 'supported' }>['inputRules'];
 type NativeDetailOptions = NonNullable<Parameters<ReturnType<KernelClient['progressSessions']>['get']>[0]>;
 type NativeDetailQuery = NonNullable<NativeField<NativeDetailOptions, 'query'>>;
 type NativePresentationQuery = Extract<NativeField<NativeDetailQuery, 'presentation'>, 'FULL'>;
