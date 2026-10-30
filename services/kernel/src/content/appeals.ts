@@ -296,6 +296,11 @@ export async function listAppeals(
       appellantId: row.appellant_account_id,
       statement: row.statement,
       createdAt: new Date(row.created_at).toISOString(),
+      decision: {
+        statement: row.decision_statement,
+        target: { kind: row.target_kind as 'post' | 'thread', id: row.target_id },
+      },
+      canResolve: row.decider_account_id !== context.actor.accountId,
     });
   }
   const final = await snapshot(deps.pool, route, context.deadline, (client) => check(client));

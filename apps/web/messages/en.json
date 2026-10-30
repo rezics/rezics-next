@@ -244,6 +244,7 @@
   "library_menu_status": "Change status",
   "library_more": "More",
   "library_nav_collections": "Collections",
+  "library_nav_labels": "Labels",
   "library_nav_following": "Following",
   "library_nav_labels": "Labels",
   "library_nav_library": "Library",
@@ -803,5 +804,15 @@
   "library_restore_occupied": "This work is already in your library. Its current entry is shown.",
   "library_restore_stale": "This removal has changed. The entry was not restored.",
   "library_restore_expired": "This removal can no longer be undone.",
-  "library_nav_labels": "Labels"
+  "moderation_appeals_heading": "Moderation appeals",
+  "moderation_appeals_tab": "Appeals",
+  "moderation_appeals_empty": "There are no appeals on this page.",
+  "moderation_appeal_decision_label": "Original decision",
+  "moderation_appeal_reason_label": "Appeal reason",
+  "moderation_appeal_uphold_action": "Uphold",
+  "moderation_appeal_reverse_action": "Reverse",
+  "moderation_appeal_upheld": "Decision upheld",
+  "moderation_appeal_reversed": "Decision reversed",
+  "moderation_appeal_other_moderator": "Another moderator must resolve this appeal.",
+  "moderation_appeal_action_failed": "This appeal could not be resolved. Try again."
 }

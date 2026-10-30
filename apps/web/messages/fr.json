@@ -243,6 +243,7 @@
   "library_menu_status": "Changer l’état",
   "library_more": "Plus",
   "library_nav_collections": "Collections",
+  "library_nav_labels": "Étiquettes",
   "library_nav_following": "Abonnements",
   "library_nav_labels": "Étiquettes",
   "library_nav_library": "Bibliothèque",
@@ -802,5 +803,15 @@
   "library_restore_occupied": "Cette œuvre figure déjà dans votre bibliothèque. Son entrée actuelle est affichée.",
   "library_restore_stale": "Cette suppression a changé. L’entrée n’a pas été restaurée.",
   "library_restore_expired": "Cette suppression ne peut plus être annulée.",
-  "library_nav_labels": "Étiquettes"
+  "moderation_appeals_heading": "Recours de modération",
+  "moderation_appeals_tab": "Recours",
+  "moderation_appeals_empty": "Aucun recours sur cette page.",
+  "moderation_appeal_decision_label": "Décision initiale",
+  "moderation_appeal_reason_label": "Motif du recours",
+  "moderation_appeal_uphold_action": "Maintenir",
+  "moderation_appeal_reverse_action": "Annuler",
+  "moderation_appeal_upheld": "Décision maintenue",
+  "moderation_appeal_reversed": "Décision annulée",
+  "moderation_appeal_other_moderator": "Une autre personne de la modération doit examiner ce recours.",
+  "moderation_appeal_action_failed": "Impossible de traiter ce recours. Réessayez."
 }

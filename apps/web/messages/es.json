@@ -243,6 +243,7 @@
   "library_menu_status": "Cambiar estado",
   "library_more": "Más",
   "library_nav_collections": "Colecciones",
+  "library_nav_labels": "Etiquetas",
   "library_nav_following": "Siguiendo",
   "library_nav_labels": "Etiquetas",
   "library_nav_library": "Biblioteca",
@@ -802,5 +803,15 @@
   "library_restore_occupied": "Esta obra ya está en tu biblioteca. Se muestra su entrada actual.",
   "library_restore_stale": "El registro de eliminación ha cambiado. No se restauró la entrada.",
   "library_restore_expired": "Esta eliminación ya no se puede deshacer.",
-  "library_nav_labels": "Etiquetas"
+  "moderation_appeals_heading": "Apelaciones de moderación",
+  "moderation_appeals_tab": "Apelaciones",
+  "moderation_appeals_empty": "No hay apelaciones en esta página.",
+  "moderation_appeal_decision_label": "Decisión original",
+  "moderation_appeal_reason_label": "Motivo de la apelación",
+  "moderation_appeal_uphold_action": "Confirmar",
+  "moderation_appeal_reverse_action": "Revocar",
+  "moderation_appeal_upheld": "Decisión confirmada",
+  "moderation_appeal_reversed": "Decisión revocada",
+  "moderation_appeal_other_moderator": "Otra persona moderadora debe resolver esta apelación.",
+  "moderation_appeal_action_failed": "No se pudo resolver la apelación. Inténtalo de nuevo."
 }

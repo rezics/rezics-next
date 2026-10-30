@@ -1,9 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { ModerationAppealsView } from '../moderation/appeals-tab';
 import { ModerationReportsView } from '../moderation/reports-page';
 
 const meta = {
   title: 'Pages/Community/Moderation reports',
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+  },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -113,3 +122,30 @@ export const ResolvedReportsChineseDark: Story = {
   tags: ['!dev'],
   ...makeStory('resolved', 'zh-Hans', 'dark', true),
 };
+
+const appeal = {
+  id: '0192f3a0-6c1e-7b2a-9d4e-000000000101',
+  decisionId: '0192f3a0-6c1e-7b2a-9d4e-000000000201',
+  appellantId: 'private-author',
+  statement: 'The post shares the event details participants need. Please restore it.',
+  createdAt: '2026-10-29T14:20:00.000Z',
+  decision: {
+    statement: 'The post includes a private phone number.',
+    target: { kind: 'post' as const, id: postReport.target.id },
+  },
+  canResolve: true,
+};
+
+function appealStory(locale: 'en' | 'zh-Hans', viewport: 'phone390' | 'desktop1280') {
+  return {
+    name: `appeals · ${locale} · ${viewport}`,
+    globals: { locale, theme: 'light' },
+    parameters: { viewport: { defaultViewport: viewport } },
+    render: () => <ModerationAppealsView appeals={[appeal]} targets={targets} next={null} />,
+  } satisfies Story;
+}
+
+export const AppealsEnglishPhone: Story = appealStory('en', 'phone390');
+export const AppealsEnglishDesktop: Story = appealStory('en', 'desktop1280');
+export const AppealsChinesePhone: Story = appealStory('zh-Hans', 'phone390');
+export const AppealsChineseDesktop: Story = appealStory('zh-Hans', 'desktop1280');

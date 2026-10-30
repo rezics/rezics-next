@@ -7,8 +7,8 @@ import { actionOnReport } from './actions';
 import type { Report, ResolvedReportTarget } from './reports-read';
 import { PageHeading } from '../shell/page-heading';
 
-type Target = ResolvedReportTarget;
-function targetContent(target: Target | undefined): ReactNode {
+export type ModerationTarget = ResolvedReportTarget;
+export function moderationTargetContent(target: ModerationTarget | undefined): ReactNode {
   if (!target?.value || typeof target.value !== 'object') return m.moderation_target_unavailable();
   const data = target.value as Record<string, any>;
   const resource = data.post ?? data.thread ?? data.board ?? data;
@@ -44,12 +44,14 @@ export function ModerationReportsView({
   reports,
   targets,
   next,
+  tab = 'reports',
   threadId,
   onNext,
 }: {
   reports: Report[];
-  targets: Target[];
+  targets: ModerationTarget[];
   next: string | null;
+  tab?: 'reports' | 'appeals';
   threadId?: string;
   onNext?: (cursor: string) => void;
 }) {
@@ -60,9 +62,22 @@ export function ModerationReportsView({
         <PageHeading>{m.moderation_reports_heading()}</PageHeading>
       </header>
       <nav aria-label={m.moderation_tabs_label()} className="flex gap-4 border-b pb-2">
-        <span aria-current="page" className="font-semibold">
-          {m.moderation_reports_tab()}
-        </span>
+        {tab === 'reports' ? (
+          <span aria-current="page" className="font-semibold">
+            {m.moderation_reports_tab()}
+          </span>
+        ) : (
+          <a href={threadId ? `?thread=${encodeURIComponent(threadId)}` : '?'}>{m.moderation_reports_tab()}</a>
+        )}
+        {tab === 'appeals' ? (
+          <span aria-current="page" className="font-semibold">
+            {m.moderation_appeals_tab()}
+          </span>
+        ) : (
+          <a href={`?tab=appeals${threadId ? `&thread=${encodeURIComponent(threadId)}` : ''}`}>
+            {m.moderation_appeals_tab()}
+          </a>
+        )}
       </nav>
       {threadId ? <p className="text-sm text-muted-foreground">{m.moderation_thread_filter()}</p> : null}
       {reports.length ? (
@@ -73,7 +88,7 @@ export function ModerationReportsView({
               <li key={report.id} className="space-y-3 rounded-lg border p-4">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">{report.target.kind}</p>
-                  <blockquote className="border-l-2 pl-3">{targetContent(target)}</blockquote>
+                  <blockquote className="border-l-2 pl-3">{moderationTargetContent(target)}</blockquote>
                 </div>
                 <p>
                   <span className="font-medium">{m.moderation_reason_label()}:</span> {report.reason}

@@ -301,6 +301,14 @@ describe('minimal appeals through HTTP and committed effects', () => {
     const visible = await call('GET', `/v1/threads/${visibleThread}/appeals`, undefined, undefined, fixture.recipient);
     expect(visible.response.status).toBe(200);
     expect(visible.body.appeals.map((a: { id: string }) => a.id)).toEqual([visibleAppeal]);
+    expect(visible.body.appeals[0]).toMatchObject({
+      decision: {
+        statement: 'Policy violation',
+        target: { kind: 'thread', id: visibleThread },
+      },
+      canResolve: true,
+    });
+    expect(JSON.stringify(visible.body.appeals[0])).not.toContain(fixture.principal);
     expect((await resolve(ids[0]!, 'uphold')).response.status).toBe(200);
     await deliver();
     const page = await call('GET', path, undefined, undefined, fixture.recipient);

@@ -243,6 +243,7 @@
   "library_menu_status": "状態を変更",
   "library_more": "もっと見る",
   "library_nav_collections": "コレクション",
+  "library_nav_labels": "ラベル",
   "library_nav_following": "フォロー中",
   "library_nav_labels": "ラベル",
   "library_nav_library": "ライブラリ",
@@ -802,5 +803,15 @@
   "library_restore_occupied": "この作品はすでにライブラリにあります。現在の登録内容を表示しています。",
   "library_restore_stale": "削除記録が変更されたため、復元できませんでした。",
   "library_restore_expired": "この削除記録は期限切れのため、取り消せません。",
-  "library_nav_labels": "ラベル"
+  "moderation_appeals_heading": "モデレーションへの異議申し立て",
+  "moderation_appeals_tab": "異議申し立て",
+  "moderation_appeals_empty": "このページに異議申し立てはありません。",
+  "moderation_appeal_decision_label": "元の決定",
+  "moderation_appeal_reason_label": "異議申し立ての理由",
+  "moderation_appeal_uphold_action": "維持する",
+  "moderation_appeal_reverse_action": "取り消す",
+  "moderation_appeal_upheld": "決定を維持しました",
+  "moderation_appeal_reversed": "決定を取り消しました",
+  "moderation_appeal_other_moderator": "この異議申し立ては別のモデレーターが審査します。",
+  "moderation_appeal_action_failed": "異議申し立てを処理できませんでした。もう一度お試しください。"
 }

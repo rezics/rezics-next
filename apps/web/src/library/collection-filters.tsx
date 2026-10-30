@@ -25,9 +25,9 @@ export function CollectionFilterFeedback({
   ignored?: string[] | undefined;
   status?: 'unsupported' | 'preparing' | 'failed' | undefined;
   empty: boolean;
-  unavailable?: boolean;
+  unavailable?: boolean | undefined;
   emptyLabel: string;
-  buttonClass?: string;
+  buttonClass?: string | undefined;
 }) {
   return (
     <>

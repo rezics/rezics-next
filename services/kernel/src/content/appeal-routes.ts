@@ -132,6 +132,17 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
                   appellantId: t.String(),
                   statement: t.String(),
                   createdAt: t.String({ format: 'date-time' }),
+                  decision: t.Object(
+                    {
+                      statement: t.String(),
+                      target: t.Object(
+                        { kind: t.Union([t.Literal('post'), t.Literal('thread')]), id: t.String() },
+                        { additionalProperties: false },
+                      ),
+                    },
+                    { additionalProperties: false },
+                  ),
+                  canResolve: t.Boolean(),
                 },
                 { additionalProperties: false },
               ),

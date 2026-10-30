@@ -243,6 +243,7 @@
   "library_menu_status": "상태 변경",
   "library_more": "더 보기",
   "library_nav_collections": "컬렉션",
+  "library_nav_labels": "라벨",
   "library_nav_following": "팔로잉",
   "library_nav_labels": "라벨",
   "library_nav_library": "라이브러리",
@@ -802,5 +803,15 @@
   "library_restore_occupied": "이 작품은 이미 서재에 있습니다. 현재 항목을 표시했습니다.",
   "library_restore_stale": "삭제 기록이 변경되어 항목을 복원하지 못했습니다.",
   "library_restore_expired": "삭제 기록이 만료되어 취소할 수 없습니다.",
-  "library_nav_labels": "라벨"
+  "moderation_appeals_heading": "모더레이션 이의 제기",
+  "moderation_appeals_tab": "이의 제기",
+  "moderation_appeals_empty": "이 페이지에 이의 제기가 없습니다.",
+  "moderation_appeal_decision_label": "원래 결정",
+  "moderation_appeal_reason_label": "이의 제기 이유",
+  "moderation_appeal_uphold_action": "유지",
+  "moderation_appeal_reverse_action": "번복",
+  "moderation_appeal_upheld": "결정을 유지했습니다",
+  "moderation_appeal_reversed": "결정을 번복했습니다",
+  "moderation_appeal_other_moderator": "다른 모더레이터가 이의 제기를 처리해야 합니다.",
+  "moderation_appeal_action_failed": "이의 제기를 처리하지 못했습니다. 다시 시도하세요."
 }

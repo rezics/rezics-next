@@ -243,6 +243,7 @@
   "library_menu_status": "Status ändern",
   "library_more": "Mehr",
   "library_nav_collections": "Sammlungen",
+  "library_nav_labels": "Schlagwörter",
   "library_nav_following": "Folge ich",
   "library_nav_labels": "Labels",
   "library_nav_library": "Bibliothek",
@@ -802,5 +803,15 @@
   "library_restore_occupied": "Dieses Werk ist bereits in deiner Bibliothek. Der aktuelle Eintrag wird angezeigt.",
   "library_restore_stale": "Der Löschvorgang hat sich geändert. Der Eintrag wurde nicht wiederhergestellt.",
   "library_restore_expired": "Dieser Löschvorgang kann nicht mehr rückgängig gemacht werden.",
-  "library_nav_labels": "Schlagwörter"
+  "moderation_appeals_heading": "Moderationsbeschwerden",
+  "moderation_appeals_tab": "Beschwerden",
+  "moderation_appeals_empty": "Auf dieser Seite gibt es keine Beschwerden.",
+  "moderation_appeal_decision_label": "Ursprüngliche Entscheidung",
+  "moderation_appeal_reason_label": "Grund der Beschwerde",
+  "moderation_appeal_uphold_action": "Bestätigen",
+  "moderation_appeal_reverse_action": "Aufheben",
+  "moderation_appeal_upheld": "Entscheidung bestätigt",
+  "moderation_appeal_reversed": "Entscheidung aufgehoben",
+  "moderation_appeal_other_moderator": "Eine andere Moderation muss diese Beschwerde bearbeiten.",
+  "moderation_appeal_action_failed": "Die Beschwerde konnte nicht bearbeitet werden. Versuche es erneut."
 }

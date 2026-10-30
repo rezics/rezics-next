@@ -30,7 +30,7 @@ export function RemovedPost({
   itemRef: Ref<HTMLLIElement>;
   menuButton: Ref<HTMLButtonElement>;
   minHeight?: number | undefined;
-  restoreError?: string;
+  restoreError?: string | undefined;
   onCopyLink: () => void | Promise<void>;
   onRestore?: () => void;
 }) {
