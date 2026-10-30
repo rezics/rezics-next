@@ -86,7 +86,7 @@ function post(postId: string, text: string): FixturePost {
 
 const originals = new Map<string, FixturePost>();
 let currentPosts = new Map<string, FixturePost>();
-let currentTitle = 'A close reading';
+let currentTitle: string | null = 'A close reading';
 let restoreConflict = false;
 const writes: { method: string; path: string; key: string | null; authorization: string | null }[] = [];
 const accessSubjects = new Map<string, string>();
@@ -396,7 +396,13 @@ async function signIn(path: string) {
   return { origin, session: session!, access: lastAccessToken };
 }
 
-async function open(path: string, options: { width?: number } = {}) {
+const uiLabels = {
+  en: { moreActions: 'More actions', delete: 'Delete', confirmDelete: 'Delete content', undo: 'Undo' },
+  'zh-Hans': { moreActions: '更多操作', delete: '删除', confirmDelete: '删除帖子', undo: '撤销' },
+} as const;
+
+async function open(path: string, options: { width?: number; locale?: keyof typeof uiLabels } = {}) {
+  const locale = options.locale ?? 'en';
   const auth = await signIn(path);
   browser ??= await chromium.launch();
   const context = await browser.newContext({
@@ -418,7 +424,11 @@ async function open(path: string, options: { width?: number } = {}) {
   const page = await context.newPage();
   await page.goto(`${auth.origin}${path}`, { waitUntil: 'networkidle' });
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-  await page.locator('main').getByRole('button', { name: 'More actions' }).first().waitFor({ state: 'visible' });
+  await page
+    .locator('main')
+    .getByRole('button', { name: uiLabels[locale].moreActions })
+    .first()
+    .waitFor({ state: 'visible' });
   return { page, access: auth.access };
 }
 
@@ -431,11 +441,11 @@ async function eventually(read: () => boolean | Promise<boolean>, label: string)
   expect(await read(), label).toBe(true);
 }
 
-async function deleteFromMenu(page: Page, postId: string) {
+async function deleteFromMenu(page: Page, postId: string, locale: keyof typeof uiLabels = 'en') {
   const slot = page.locator(`#post-${postId}`);
-  await slot.getByRole('button', { name: 'More actions' }).click();
-  await page.getByText('Delete', { exact: true }).click();
-  await page.getByRole('button', { name: 'Delete content', exact: true }).click();
+  await slot.getByRole('button', { name: uiLabels[locale].moreActions }).click();
+  await page.getByText(uiLabels[locale].delete, { exact: true }).click();
+  await page.getByRole('button', { name: uiLabels[locale].confirmDelete, exact: true }).click();
   await slot.locator('[data-slot="tombstone"]').waitFor({ state: 'visible' });
   return slot;
 }
@@ -582,12 +592,12 @@ test(
     for (const locale of ['en', 'zh-Hans'] as const) {
       for (const width of [390, 1280] as const) {
         reset('visual');
-        const { page } = await open(`/${locale}/threads/${threadId}/a-close-reading`, { width });
+        const { page } = await open(`/${locale}/threads/${threadId}/a-close-reading`, { width, locale });
         const slot = page.locator(`#post-${replyId}`);
         try {
           writes.length = 0;
-          await deleteFromMenu(page, replyId);
-          await page.getByRole('button', { name: 'Undo', exact: true }).click();
+          await deleteFromMenu(page, replyId, locale);
+          await page.getByRole('button', { name: uiLabels[locale].undo, exact: true }).click();
           await eventually(async () => (await slot.innerText()).includes('A reply by Mira'), 'restored post');
           expect(await page.locator(`#post-${deletedId} [data-slot="tombstone"]`).count()).toBe(1);
           expect(await page.locator(`#post-${withheldId} [data-slot="withheld"]`).count()).toBe(1);
