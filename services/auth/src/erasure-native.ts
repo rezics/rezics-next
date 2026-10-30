@@ -169,6 +169,14 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
     for (const query of store.children ?? []) {
       if ((await connection.query(query, [key])).rowCount) return { after, keys, blocked: 'native-child' };
     }
+    if (store.table === 'auth_registration_stage') {
+      const held = await connection.query(
+        `SELECT 1 FROM auth_registration_stage WHERE registration_id=$1
+        AND completed_at IS NULL AND expired_at IS NULL AND erasure_release_at IS NULL`,
+        [key],
+      );
+      if (held.rowCount) return { after, keys, blocked: 'native-stage' };
+    }
     // A surviving subject's live recovery release still owns its witness. Expiry
     // makes this native verifier unusable; no shared-history completion is inferred.
     if (store.table === 'auth_recovery_establishment') {
@@ -302,10 +310,10 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
       const page = await drainStore(connection, { table, key, roles: [] }, 'account_id', row.account_id, row.after_key);
       if (page.keys) await connection.query('UPDATE auth_erasure SET applicable=true WHERE id=$1', [id]);
       await checkpoint(connection, row, {
-        phase: row.phase + (page.keys ? 0 : 1),
+        phase: row.phase + (page.keys || page.blocked ? 0 : 1),
         after: page.keys || page.blocked ? page.after : '',
       });
-      return answer('more', 'subject');
+      return answer(page.blocked ? 'pending' : 'more', page.blocked ?? 'subject');
     }
     if (tail === 2) {
       const counters = (

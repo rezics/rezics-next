@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { BetterAuthPlugin } from 'better-auth';
 import type { DBAdapter, DBTransactionAdapter } from 'better-auth/adapters';
 import type { Pool, PoolClient } from 'pg';
-import { nativeVerificationPlugin } from './verification-maintenance.ts';
+import { nativeVerificationTransactionPlugin } from './verification-maintenance.ts';
 
 export const SESSION_CAPACITY = 64;
 export type SessionTrim = { deleted: number; ready: boolean };
@@ -110,7 +110,7 @@ export function nativeSessionLimits(database: Pool): BetterAuthPlugin {
               });
               // Rebuild the installed verification adapter on the same lease so
               // native recovery consumes retain their deterministic indexed seek.
-              const native = await nativeVerificationPlugin.init({
+              const native = await nativeVerificationTransactionPlugin.init({
                 ...ctx,
                 options: { ...ctx.options, database: nativePool },
               });

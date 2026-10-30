@@ -132,9 +132,10 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     // Only native obligations/markers survive; no replacement scheduler is installed.
     const jobs = (
       await f.pool.query(
-        `SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE name='auth.accounts.operation'`,
+        `SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE name='accounts.operation'`,
       )
     ).rows;
+    expect(jobs.length).toBeGreaterThan(0);
     await DBOS.deleteWorkflows(jobs.map((row) => row.workflow_uuid));
     await f.host.workflows.close();
     await f.host.workflows.start();

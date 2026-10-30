@@ -73,6 +73,7 @@ CREATE INDEX erasure_request_human ON auth_workflow_request (erasure_human_id,wo
 CREATE INDEX erasure_request_operator ON auth_workflow_request (erasure_operator_id,workflow_id);
 CREATE INDEX erasure_request_client ON auth_workflow_request (erasure_client_id,workflow_id);
 ALTER TABLE "auth_effect_receipt" ADD COLUMN erasure_operator_id text;
+ALTER TABLE auth_registration_stage ADD COLUMN erasure_release_at timestamptz;
 ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_creator_id text;
 ALTER TABLE "auth_registration_stage" ADD COLUMN erasure_operator_id text;
 CREATE INDEX erasure_auth_client_0 ON "auth_client" ("userId","client_id");
@@ -438,6 +439,8 @@ END $$;
 CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON "auth_provisioning_receipt" FOR EACH ROW EXECUTE FUNCTION auth_erasure_guard_auth_provisioning_receipt();
 CREATE FUNCTION auth_erasure_guard_auth_registration_stage() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  IF TG_OP='UPDATE' AND NEW.erasure_release_at IS NOT NULL
+    AND (to_jsonb(NEW)-'erasure_release_at')=(to_jsonb(OLD)-'erasure_release_at') THEN RETURN NEW; END IF;
   IF TG_OP='UPDATE' THEN
   PERFORM auth_erasure_admit(OLD."account_id");
   PERFORM auth_erasure_admit(OLD."erasure_creator_id");

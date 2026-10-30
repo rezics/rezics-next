@@ -496,6 +496,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     });
     const release = step('release-expired-handle', async (claim: Reservation) => {
       await access.releaseExpiredRegistrationHandle({ ...claim, key: commandKey('release-expired') });
+      await database.query(
+        'UPDATE auth_registration_stage SET erasure_release_at=COALESCE(erasure_release_at,clock_timestamp()) WHERE account_id=$1 AND reservation_id=$2',
+        [claim.accountId, claim.reservationId],
+      );
     });
     const acceptErasure = step(
       'erase-auth-owner',
