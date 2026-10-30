@@ -165,7 +165,9 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
           // Managed Payments handles indirect taxes for approved digital sellers and eligible product tax codes.
           // https://docs.stripe.com/changelog/dahlia/2026-04-22/managed-payments (2026-04-22.dahlia)
           // The installed SDK types include managed_payments; other accounts use the ADR's automatic-tax fallback.
-          ...((request.managedPayments ?? managedPayments) ? { managed_payments: { enabled: true } } : { automatic_tax: { enabled: true } }),
+          ...((request.managedPayments ?? managedPayments)
+            ? { managed_payments: { enabled: true } }
+            : { automatic_tax: { enabled: true } }),
         };
         // https://docs.stripe.com/api/idempotent_requests: Stripe retains the first result for this exact request key.
         const session = await stripe.checkout.sessions.create(params, { idempotencyKey });

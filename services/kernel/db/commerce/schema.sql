@@ -163,12 +163,12 @@ CREATE TABLE commerce.checkout_creation_attempt (
     expires_at bigint NOT NULL,
     managed_payments boolean NOT NULL,
     retried boolean DEFAULT false NOT NULL,
-    CONSTRAINT checkout_creation_attempt_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT checkout_creation_attempt_cancel_check CHECK (((octet_length(cancel_url) >= 1) AND (octet_length(cancel_url) <= 8192))),
+    CONSTRAINT checkout_creation_attempt_expiry_check CHECK ((expires_at > 0)),
     CONSTRAINT checkout_creation_attempt_home_check CHECK ((route = ((get_byte(uuid_send(order_id), 10) * 256) + get_byte(uuid_send(order_id), 11)))),
     CONSTRAINT checkout_creation_attempt_key_check CHECK ((provider_key = ('order:'::text || (order_id)::text))),
-    CONSTRAINT checkout_creation_attempt_success_check CHECK (((octet_length(success_url) >= 1) AND (octet_length(success_url) <= 8192))),
-    CONSTRAINT checkout_creation_attempt_cancel_check CHECK (((octet_length(cancel_url) >= 1) AND (octet_length(cancel_url) <= 8192))),
-    CONSTRAINT checkout_creation_attempt_expiry_check CHECK ((expires_at > 0))
+    CONSTRAINT checkout_creation_attempt_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT checkout_creation_attempt_success_check CHECK (((octet_length(success_url) >= 1) AND (octet_length(success_url) <= 8192)))
 );
 
 

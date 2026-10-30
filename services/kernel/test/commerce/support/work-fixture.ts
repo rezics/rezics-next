@@ -166,7 +166,8 @@ export async function workFixture() {
     } = {}) {
       const buyerActor = await actor(buyer);
       const realNow = Date.now;
-      if (options.clockOffset) Date.now = () => realNow() + options.clockOffset!;
+      const clockOffset = options.clockOffset ?? 0;
+      if (clockOffset) Date.now = () => realNow() + clockOffset;
       try {
         return await httpCheckout({
           pool, commands, stripe: options.stripe ?? providerStripe,

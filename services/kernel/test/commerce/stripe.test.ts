@@ -281,7 +281,9 @@ test('rejected and unknown Stripe outcomes are distinguished without exposing th
       await port.createCheckoutSession(request, type);
       throw new Error('Expected failure');
     } catch (error) {
-      expect(error).toBeInstanceOf(type === 'invalid_request_error' || type === 'card_error' ? StripeRejectedError : StripeUnavailableError);
+      expect(error).toBeInstanceOf(
+        type === 'invalid_request_error' || type === 'card_error' ? StripeRejectedError : StripeUnavailableError,
+      );
       expect(String(error)).not.toContain(config.apiKey);
     }
   }
@@ -333,7 +335,7 @@ test('fake events contain current Stripe objects and exact bytes signed by strip
   expect(JSON.parse(current.bytes).data.object.status).toBe('won');
 });
 
-test('captured provider tax mode survives a factory configuration change', async () => {
+test('captured provider tax mode overrides later factory configuration', async () => {
   const { fake, port } = setup(true);
   const captured = { ...request, managedPayments: false };
   const first = await port.createCheckoutSession(captured, 'captured-mode');

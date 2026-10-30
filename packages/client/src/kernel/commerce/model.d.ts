@@ -127,6 +127,10 @@ export type SettlementState = {
     entitlement: Entitlement | null;
     /** Snapshot balance transaction IDs already recorded for the order. */
     transactionIds: readonly string[];
+    /** Exact named movement evidence on this buyer route, including collisions with another order. */
+    retainedTransactions: readonly (StripeTransaction & {
+        orderId: string;
+    })[];
 };
 export type EntitlementAction = {
     kind: 'none';
@@ -163,6 +167,8 @@ export type CheckoutRequest = {
     taxCode: string;
     successUrl: string;
     cancelUrl: string;
+    /** Captured provider tax mode; omitted only by older injected callers. */
+    managedPayments?: boolean;
     /** Unix seconds; Stripe accepts 30 minutes to 24 hours ahead. */
     expiresAt: number;
 };
@@ -176,13 +182,15 @@ export interface StripeCheckoutLocatorPort {
     readCheckoutLocator(sessionId: string): Promise<CheckoutLocator>;
 }
 export interface StripePort {
-    /** Retrying with the same idempotency key returns the same session for 24 hours. */
+    /** Factory configuration captured into the native creation request before I/O. */
+    readonly managedPayments?: boolean;
+    /** Replay exact parameters only inside the native attempt's conservative safe window. */
     createCheckoutSession(request: CheckoutRequest, idempotencyKey: string): Promise<CheckoutSession>;
     readCheckout(sessionId: string): Promise<CheckoutSnapshot>;
     /** The Checkout Session that created a PaymentIntent, or null when it is not one of ours. */
     findCheckoutSession(paymentIntentId: string): Promise<string | null>;
 }
-/** Stripe refused the request: nothing was created, and retrying the same request cannot succeed. */
+/** This call was rejected before creation. It says nothing about an earlier ambiguous call. */
 export declare class StripeRejectedError extends Error {
     constructor(message: string);
 }

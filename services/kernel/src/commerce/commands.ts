@@ -353,7 +353,9 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           taxCode: current.taxCode,
           successUrl: stored?.successUrl ?? configuration.successUrl,
           cancelUrl: stored?.cancelUrl ?? configuration.cancelUrl,
-          expiresAt: stored ? Number(stored.expiresAt) : Math.floor(Date.parse(current.createdAt) / 1000) + 3600,
+          expiresAt: stored
+            ? Number(stored.expiresAt)
+            : Math.floor(Date.parse(current.createdAt) / 1000) + 3600,
           managedPayments: stored?.managedPayments ?? configuration.managedPayments ?? false,
         };
         const attempt: CheckoutCreationAttempt = {
@@ -367,13 +369,23 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           return done({ kind: stored ? 'unknown' : 'failed' });
         if (!stored) {
           await creationInsert.run(tx, {
-            route: r, id, attempt_id: attemptId, at: observedAt, provider_key: attempt.providerKey,
-            success_url: request.successUrl, cancel_url: request.cancelUrl, expires_at: request.expiresAt,
+            route: r,
+            id,
+            attempt_id: attemptId,
+            at: observedAt,
+            provider_key: attempt.providerKey,
+            success_url: request.successUrl,
+            cancel_url: request.cancelUrl,
+            expires_at: request.expiresAt,
             managed_payments: request.managedPayments ?? false,
           });
         } else if (!stored.retried) await creationRetry.run(tx, { route: r, id });
         const changed = await checkoutCreate.run(tx, {
-          route: r, id, revision: current.revision, at: observedAt, transaction_id: command.transactionId,
+          route: r,
+          id,
+          revision: current.revision,
+          at: observedAt,
+          transaction_id: command.transactionId,
         });
         if (!changed) throw new RangeError('Commerce order revision exhausted');
         return {
@@ -435,8 +447,11 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
             if (!session && settlement === 'failed') {
               const attempt = await creationRead.run(tx, { route: r, id });
               const evidence = 'creationAttemptId' in outcome ? outcome.creationAttemptId : undefined;
-              if (current.settlement === 'unknown' ||
-                  (attempt && (evidence !== attempt.firstAttemptId || attempt.retried))) throw new Unchanged();
+              if (
+                current.settlement === 'unknown' ||
+                (attempt && (evidence !== attempt.firstAttemptId || attempt.retried))
+              )
+                throw new Unchanged();
             }
             if (!session && settlement === current.settlement) throw new Unchanged();
             const rows = await checkoutRecord.run(tx, {
