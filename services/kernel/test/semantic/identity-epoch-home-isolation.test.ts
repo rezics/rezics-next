@@ -25,8 +25,11 @@ beforeAll(async () => {
   // A test-only non-owner role makes PostgreSQL enforce the policy inside nested
   // PL/pgSQL too. Merely tracing SELECT function(...) cannot establish isolation.
   await f.admin.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOBYPASSRLS`);
-  await f.admin.query(`GRANT USAGE ON SCHEMA semantic,core TO ${role}`);
+  await f.admin.query(`GRANT USAGE ON SCHEMA semantic,core,editorial TO ${role}`);
   await f.admin.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA semantic,core TO ${role}`);
+  // The shared native command fence includes the editorial basis INSERT even
+  // for a maintenance command whose basis is null.
+  await f.admin.query(`GRANT SELECT,INSERT ON editorial.write_basis TO ${role}`);
   const tables = (
     await f.admin.query<{ table_name: string; key: string }>(`
       SELECT c.relname table_name,
