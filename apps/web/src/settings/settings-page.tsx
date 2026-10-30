@@ -80,7 +80,7 @@ function SettingsSections({
 }: {
   page: Extract<SettingsPage, { signedIn: true }>;
   csrfToken: string | null;
-  managedAccountsIO?: ManagedAccountsIO;
+  managedAccountsIO?: ManagedAccountsIO | undefined;
 }) {
   const collectionsAdmitted = useOperation('account.collections');
   const verificationAdmitted = useOperation('agent_verification.request');
@@ -197,7 +197,7 @@ export function SettingsPageView({
 }: {
   page: SettingsPage;
   csrfToken: string | null;
-  managedAccountsIO?: ManagedAccountsIO;
+  managedAccountsIO?: ManagedAccountsIO | undefined;
 }) {
   const location = useLocation();
   return (

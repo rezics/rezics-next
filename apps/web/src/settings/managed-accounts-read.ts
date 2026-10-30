@@ -37,13 +37,17 @@ export type ManagedAccountsIO = (cursors: ManagedAccountsCursors) => Promise<Man
 export type ManagedFeed = 'organizations' | 'responsibilities';
 
 export function parseManagedAccountsCursors(value: unknown): ManagedAccountsCursors {
-  return v.parse(
+  const parsed = v.parse(
     v.strictObject({
       organizationsCursor: v.optional(v.pipe(v.string(), v.maxLength(4096))),
       operatorsCursor: v.optional(v.pipe(v.string(), v.maxLength(4096))),
     }),
     value,
   );
+  return {
+    ...(parsed.organizationsCursor === undefined ? {} : { organizationsCursor: parsed.organizationsCursor }),
+    ...(parsed.operatorsCursor === undefined ? {} : { operatorsCursor: parsed.operatorsCursor }),
+  };
 }
 
 export function managedAccountsFailure(status: number | null, body?: unknown): ManagedAccountsFailure {
@@ -184,7 +188,7 @@ export class ManagedAccountsInventory {
     const before = this.value;
     if (!before.account || before.loading || before[feed].busy) return;
     const preparing = feed === 'organizations' && before.organizations.state === 'preparing';
-    const cursor = preparing ? null : before[feed].next;
+    const cursor = before[feed].next;
     if (cursor === null && !preparing) return;
     const epoch = this.epoch;
     this.publish({ ...before, [feed]: { ...before[feed], busy: true, failure: null } });

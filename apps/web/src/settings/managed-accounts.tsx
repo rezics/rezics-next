@@ -70,7 +70,7 @@ function FeedActions({
   preparing = false,
   retry,
 }: {
-  feed: ManagedAccountsSnapshot['responsibilities'];
+  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure'>;
   preparing?: boolean;
   retry: () => void;
 }) {
@@ -198,7 +198,7 @@ function ViewerInventory({
 }: {
   viewerId: string;
   settingsHref: string;
-  io?: ManagedAccountsIO;
+  io?: ManagedAccountsIO | undefined;
 }) {
   const [inventory] = useState(() => new ManagedAccountsInventory(viewerId, io));
   const snapshot = useSyncExternalStore(inventory.subscribe, inventory.snapshot, inventory.snapshot);
@@ -217,12 +217,12 @@ function ViewerInventory({
 }
 
 /** Viewer changes synchronously remove old pages, even before effect cleanup discards their pending reads. */
-export function ManagedAccounts(props: { viewerId: string; settingsHref: string; io?: ManagedAccountsIO }) {
+export function ManagedAccounts(props: { viewerId: string; settingsHref: string; io?: ManagedAccountsIO | undefined }) {
   return <ViewerInventory key={props.viewerId} {...props} />;
 }
 
 /** The public/SSR page never starts a private read. A session transition removes the entire prior inventory. */
-export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO }) {
+export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefined }) {
   const session = useSession();
   const location = useLocation();
   if (session.state !== 'signed-in' || !session.subject) return null;
