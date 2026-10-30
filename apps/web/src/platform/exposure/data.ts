@@ -4,9 +4,26 @@ export const globalContext = Object.freeze({ route: 0, id: '00000000-0000-8000-8
 export type Action = 'open' | 'close';
 export type Intent = Readonly<{ group: string; action: Action; key: string; body: Readonly<Record<string, never>> }>;
 export type Authority = { status: 'available'; offered: Action[] } | { status: 'unavailable' };
+// Delivered management projection owned by the native current-exposure source.
 export type CurrentExposure =
   | { status: 'available'; exposureGroups: { group: string; open: boolean; at: string }[]; next: string | null }
   | { status: 'unavailable'; missing: 'native-current-exposure-management-read' };
+export type ExposureQuery = { cursor?: string; limit?: number };
+export function parseExposureQuery(value: unknown = {}): ExposureQuery {
+  if (
+    !object(value) ||
+    Object.keys(value).some((key) => !['cursor', 'limit'].includes(key)) ||
+    (value.cursor !== undefined &&
+      (typeof value.cursor !== 'string' || /^[A-Za-z0-9_-]{1,4096}$/.exec(value.cursor)?.[0] !== value.cursor)) ||
+    (value.limit !== undefined &&
+      (typeof value.limit !== 'number' || !Number.isInteger(value.limit) || value.limit < 1 || value.limit > 100))
+  )
+    throw new Error('Invalid exposure page selection');
+  return {
+    ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}),
+    ...(typeof value.limit === 'number' ? { limit: value.limit } : {}),
+  };
+}
 export type Page =
   | { status: 'ready'; groups: string[]; inventory: 'visible-only'; current: CurrentExposure; authority: Authority }
   | { status: 'signed-out' | 'denied' | 'unavailable' };
@@ -101,7 +118,7 @@ export async function readCurrentExposure(
   }
 }
 
-type Binding = { action: Action; type: string };
+type Binding = { action: Action; type: string; id: string };
 type Discovery = { groups: string[]; bindings: Binding[]; management: boolean };
 /** Consume only the real viewer-filtered mounted catalogue. Admission is never public opening data. */
 export function parseDiscovery(value: unknown): Discovery | null {
@@ -141,14 +158,25 @@ export function parseDiscovery(value: unknown): Discovery | null {
           continue;
         // Only an actual native resource binding can supply the type. Never guess semantic.context.
         const types = metadata['x-authority-resource-types'] ?? metadata['x-resource-types'];
+        const fixedId = metadata['x-authority-resource-id'];
         if (metadata['x-authority-anchor'] !== undefined && metadata['x-authority-anchor'] !== 'resource') continue;
+        if (metadata['x-account-authority'] !== undefined) continue;
+        if (
+          fixedId !== undefined &&
+          (fixedId !== globalContext.id ||
+            !Array.isArray(metadata['x-authority-resource-types']) ||
+            !Array.isArray(types) ||
+            types.length !== 1 ||
+            types[0] !== 'semantic.context')
+        )
+          continue;
         if (
           Array.isArray(types) &&
           types.length === 1 &&
           typeof types[0] === 'string' &&
           /^[A-Za-z][A-Za-z0-9_.-]*(?::[A-Za-z][A-Za-z0-9_.-]*)?$/.test(types[0])
         )
-          bindings.push({ action, type: types[0] });
+          bindings.push({ action, type: types[0], id: fixedId === undefined ? globalContext.id : fixedId });
       }
     }
   }
@@ -158,19 +186,20 @@ export function parseDiscovery(value: unknown): Discovery | null {
 async function readAuthority(client: KernelClient, authorization: string, bindings: Binding[]): Promise<Authority> {
   if (bindings.length === 0) return { status: 'unavailable' };
   try {
-    const types = [...new Set(bindings.map((binding) => binding.type))];
+    const references = [...new Map(bindings.map(({ type, id }) => [`${type}/${id}`, { type, id }])).values()];
     const result = await client.viewerActions.post(
-      { resources: types.map((type) => ({ type, id: globalContext.id })) },
+      { resources: references },
       { headers: { authorization }, fetch: { cache: 'no-store' } },
     );
-    if (result.error || !result.data || result.data.resources.length !== types.length) return { status: 'unavailable' };
+    if (result.error || !result.data || result.data.resources.length !== references.length)
+      return { status: 'unavailable' };
     const offered: Action[] = [];
-    for (const type of types) {
-      const resources = result.data.resources.filter((item) => item.type === type && item.id === globalContext.id);
+    for (const { type, id } of references) {
+      const resources = result.data.resources.filter((item) => item.type === type && item.id === id);
       if (resources.length !== 1 || !('viewerActions' in resources[0]!)) return { status: 'unavailable' };
       const resource = resources[0]!;
       if (!('viewerActions' in resource)) return { status: 'unavailable' };
-      for (const binding of bindings.filter((binding) => binding.type === type))
+      for (const binding of bindings.filter((binding) => binding.type === type && binding.id === id))
         if (
           resource.viewerActions.some(
             (entry) =>
@@ -185,7 +214,11 @@ async function readAuthority(client: KernelClient, authorization: string, bindin
   }
 }
 
-export async function loadExposure(client: KernelClient, authorization: string): Promise<Page> {
+export async function loadExposure(
+  client: KernelClient,
+  authorization: string,
+  query: ExposureQuery = {},
+): Promise<Page> {
   try {
     const result = await client['openapi.json'].get({ headers: { authorization }, fetch: { cache: 'no-store' } });
     if (result.error || !result.data)
@@ -197,7 +230,7 @@ export async function loadExposure(client: KernelClient, authorization: string):
       groups: catalogue.groups,
       inventory: 'visible-only',
       current: catalogue.management
-        ? await readCurrentExposure(client, authorization)
+        ? await readCurrentExposure(client, authorization, query)
         : { status: 'unavailable', missing: 'native-current-exposure-management-read' },
       authority: await readAuthority(client, authorization, catalogue.bindings),
     };
@@ -206,12 +239,25 @@ export async function loadExposure(client: KernelClient, authorization: string):
   }
 }
 
-export async function commandExposure(client: KernelClient, authorization: string, input: Intent): Promise<Outcome> {
+/** A private native source page can supply selections independently of public discovery. */
+export function hasExposureGroup(page: Extract<Page, { status: 'ready' }>, group: string): boolean {
+  return (
+    page.groups.includes(group) ||
+    (page.current.status === 'available' && page.current.exposureGroups.some((row) => row.group === group))
+  );
+}
+
+export async function commandExposure(
+  client: KernelClient,
+  authorization: string,
+  input: Intent,
+  query: ExposureQuery = {},
+): Promise<Outcome> {
   const operation = parseIntent(input);
-  const current = await loadExposure(client, authorization);
+  const current = await loadExposure(client, authorization, query);
   if (
     current.status !== 'ready' ||
-    !current.groups.includes(operation.group) ||
+    !hasExposureGroup(current, operation.group) ||
     current.authority.status !== 'available' ||
     !current.authority.offered.includes(operation.action)
   )
@@ -227,7 +273,7 @@ export async function commandExposure(client: KernelClient, authorization: strin
       operation.action === 'open'
         ? await target.$open.post(operation.body, options)
         : await target.$close.post(operation.body, options);
-    const readback = await loadExposure(client, authorization);
+    const readback = await loadExposure(client, authorization, query);
     const receipt = result.data?.exposure;
     if (
       result.error ||
@@ -239,6 +285,6 @@ export async function commandExposure(client: KernelClient, authorization: strin
       return { status: 'uncertain', operation, current: readback };
     return { status: 'recorded', operation, receipt, current: readback };
   } catch {
-    return { status: 'uncertain', operation, current: await loadExposure(client, authorization) };
+    return { status: 'uncertain', operation, current: await loadExposure(client, authorization, query) };
   }
 }

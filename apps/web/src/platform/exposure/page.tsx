@@ -3,10 +3,21 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
-import { parseIntent, type Action, type Intent, type Outcome, type Page } from './data';
+import {
+  hasExposureGroup,
+  parseIntent,
+  type ExposureQuery,
+  type Action,
+  type Intent,
+  type Outcome,
+  type Page,
+} from './data';
 import { ExposureOperation } from './operation';
 
-type IO = { read(): Promise<Page>; change(intent: Intent): Promise<Outcome> };
+type IO = {
+  read(query?: ExposureQuery): Promise<Page>;
+  change(intent: Intent, query?: ExposureQuery): Promise<Outcome>;
+};
 const actionLabel = (action: Action) => (action === 'open' ? m.exposure_open() : m.exposure_close());
 
 export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO }) {
@@ -14,21 +25,23 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
   const [operation] = useState(() => new ExposureOperation());
   const [, render] = useState(0);
   const [reading, setReading] = useState(false);
+  const [selection, setSelection] = useState<ExposureQuery>({});
   const inFlight = useRef(false);
   const intent = operation.intent;
   const outcome = operation.outcome;
   const busy = operation.busy || reading;
   const offered = page.status === 'ready' && page.authority.status === 'available' ? page.authority.offered : [];
   const canSend =
-    intent && page.status === 'ready' && page.groups.includes(intent.group) && offered.includes(intent.action);
+    intent && page.status === 'ready' && hasExposureGroup(page, intent.group) && offered.includes(intent.action);
   const update = () => render((value) => value + 1);
 
-  async function read() {
+  async function read(query: ExposureQuery = selection) {
     if (inFlight.current) return;
     inFlight.current = true;
     setReading(true);
     try {
-      setPage(await io.read());
+      setSelection(query);
+      setPage(await io.read(query));
     } catch {
       setPage({ status: 'unavailable' });
     } finally {
@@ -39,7 +52,7 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
   async function send() {
     if (inFlight.current || !canSend) return;
     inFlight.current = true;
-    const pending = operation.send(io.change);
+    const pending = operation.send((intent) => io.change(intent, selection));
     update();
     try {
       const result = await pending;
@@ -56,7 +69,9 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
         <PageHeading>{m.exposure_title()}</PageHeading>
         <p className="text-muted-foreground">{m.exposure_intro()}</p>
       </header>
-      <p role="status">{m.exposure_current_unavailable()}</p>
+      {(page.status !== 'ready' || page.current.status === 'unavailable') && (
+        <p role="status">{m.exposure_current_unavailable()}</p>
+      )}
       <Button variant="outline" disabled={busy} onClick={() => void read()}>
         {m.exposure_reload()}
       </Button>
@@ -73,16 +88,53 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: IO })
           <h2 id="exposure-groups-heading" className="text-xl font-semibold">
             {m.exposure_groups()}
           </h2>
-          <p className="text-muted-foreground">{m.exposure_partial_inventory()}</p>
+          <p className="text-muted-foreground">
+            {page.current.status === 'available' ? m.exposure_current_page() : m.exposure_partial_inventory()}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {selection.cursor && (
+              <Button variant="outline" disabled={busy} onClick={() => void read({ limit: selection.limit ?? 20 })}>
+                {m.exposure_first_page()}
+              </Button>
+            )}
+            {page.current.status === 'available' && page.current.next && (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  if (page.current.status === 'available' && page.current.next)
+                    void read({ cursor: page.current.next, limit: selection.limit ?? 20 });
+                }}
+              >
+                {m.exposure_next_page()}
+              </Button>
+            )}
+          </div>
           {offered.length === 0 && <p>{m.exposure_actions_unavailable()}</p>}
-          {page.groups.length === 0 && <p>{m.exposure_no_visible_groups()}</p>}
-          {page.groups.map((group) => (
+          {(page.current.status === 'available'
+            ? page.current.exposureGroups.length === 0
+            : page.groups.length === 0) && <p>{m.exposure_no_visible_groups()}</p>}
+          {(page.current.status === 'available'
+            ? page.current.exposureGroups
+            : page.groups.slice(0, 20).map((group) => ({ group, open: undefined, at: undefined }))
+          ).map(({ group, open, at }) => (
             <Card key={group}>
               <CardHeader>
                 <CardTitle className="break-all">{group}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p>{m.exposure_unknown()}</p>
+                <p>
+                  {open === undefined
+                    ? m.exposure_unknown()
+                    : open
+                      ? m.exposure_state_open()
+                      : m.exposure_state_closed()}
+                </p>
+                {at && (
+                  <p>
+                    {m.exposure_observed_at()} <time dateTime={at}>{at}</time>
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-3">
                   {offered.map((action) => (
                     <Button

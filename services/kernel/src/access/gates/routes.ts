@@ -56,6 +56,8 @@ const detail = (operation: 'open' | 'close') => ({
   operationId: `exposure.${operation}`,
   'x-exposure': 'public',
   'x-action': `exposure:${operation}`,
+  'x-authority-resource-types': ['semantic.context'],
+  'x-authority-resource-id': PLATFORM_RESOURCE.id,
   'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
   security: [{ bearerAuth: [] }],
 });

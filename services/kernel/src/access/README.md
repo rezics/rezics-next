@@ -1,5 +1,34 @@
 # Access
 
+## Fixed Global viewer-action bindings
+
+Mounted resource-authority metadata may declare `x-authority-resource-id` only as the canonical
+`PLATFORM_RESOURCE.id` (`00000000-0000-8000-8000-000000000000`), with exactly
+`x-authority-resource-types: ['semantic.context']` and no `x-account-authority` override. An omitted
+`x-authority-anchor` retains the existing resource default; `own-account` is incompatible. Other IDs,
+missing authority types and other type combinations fail constructor compilation. This is the actual
+fixed Global Context, not a new resource type or permission floor.
+
+The existing `exposure.open` and `exposure.close` operations publish this declaration. Compilation retains
+it as `ViewerActionBinding.fixedResourceId`. Native viewer actions discard inapplicable bindings before
+preparation and gate/candidate work, and restrict mixed-batch action decisions and operation entries to
+the matching native reference. All existing resource existence/privacy, current T, scopes, principal,
+floor, explicit grants and denials still apply. Command authorization and receipt handling are unchanged.
+
+Consumers obtain both the type and fixed ID from the genuine mounted declaration, then request the existing
+`viewerActions` batch for that exact reference. Only an exact action and operation pair offers the control.
+Neither discovery/admission nor a configuration management read grants mutation authority; viewer actions
+also convey no current exposure state. Actual state must come from the sole native management read.
+
+The default Context viewer reader is deliberately limited to Global. `fixedGlobalViewerResource` accepts
+Semantic's canonical `globalContextAnchor`; on the existing native checkout it validates actual existence
+with the same opaque `AuthoritativeTime` used by the viewer action decisions. The optional fourth `read`
+argument carries that token without changing three-argument owner readers. Missing/expired time fails before
+IO; missing Global and all other Contexts are absent. Native errors retain the existing typed unavailable
+response. The viewer request releases its time only after preparation, owner reads and final authorization
+finish. The default never replaces a trusted supplied full `semantic.context` reader, and other duplicate
+registrations still fail. Existence supplies ordinary Context read eligibility, never mutation authority.
+
 ## Native work admission
 
 `access/work.ts` owns the additive accounting port. It has no dependency on the Source interpreter and no

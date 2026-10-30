@@ -9,7 +9,7 @@ import { pageHeadContext } from '../../shell/head-context';
 
 export const Route = createFileRoute('/platform/exposure')({
   beforeLoad: requireSignedIn,
-  loader: () => readPlatformExposure(),
+  loader: () => readPlatformExposure({ data: {} }),
   head: ({ match }) =>
     pageHead({ title: m.exposure_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ExposureRoute,
@@ -21,8 +21,9 @@ function ExposureRoute() {
     <PlatformExposurePage
       initial={initial}
       io={{
-        read: () => readPlatformExposure(),
-        change: (data) => changePlatformExposure({ data, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+        read: (data = {}) => readPlatformExposure({ data }),
+        change: (operation, query = {}) =>
+          changePlatformExposure({ data: { operation, query }, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
       }}
     />
   );

@@ -5,7 +5,15 @@ import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { recordPageReadCacheControl } from '../../security/page-cache';
-import { commandExposure, loadExposure, parseIntent, type Outcome, type Page } from './data';
+import {
+  commandExposure,
+  loadExposure,
+  parseIntent,
+  parseExposureQuery,
+  object,
+  type Outcome,
+  type Page,
+} from './data';
 
 async function viewer() {
   setResponseHeader('cache-control', 'private, no-store');
@@ -17,17 +25,23 @@ async function viewer() {
 }
 const configured = () => Boolean((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN);
 
-export const readPlatformExposure = createServerFn({ method: 'GET' }).handler(async (): Promise<Page> => {
-  const authorization = await viewer();
-  if (!authorization) return { status: 'signed-out' };
-  if (!configured()) return { status: 'unavailable' };
-  return loadExposure(kernelClient(), authorization);
-});
+export const readPlatformExposure = createServerFn({ method: 'GET' })
+  .validator(parseExposureQuery)
+  .handler(async ({ data }): Promise<Page> => {
+    const authorization = await viewer();
+    if (!authorization) return { status: 'signed-out' };
+    if (!configured()) return { status: 'unavailable' };
+    return loadExposure(kernelClient(), authorization, data);
+  });
 export const changePlatformExposure = createServerFn({ method: 'POST' })
-  .validator(parseIntent)
+  .validator((value: unknown) => {
+    if (!object(value) || Object.keys(value).length !== 2 || !('operation' in value) || !('query' in value))
+      throw new Error('Invalid exposure command selection');
+    return { operation: parseIntent(value.operation), query: parseExposureQuery(value.query) };
+  })
   .handler(async ({ data }): Promise<Outcome> => {
     const authorization = await viewer();
     if (!authorization) return { status: 'not-sent', current: { status: 'signed-out' } };
     if (!configured()) return { status: 'not-sent', current: { status: 'unavailable' } };
-    return commandExposure(kernelClient(), authorization, data);
+    return commandExposure(kernelClient(), authorization, data.operation, data.query);
   });

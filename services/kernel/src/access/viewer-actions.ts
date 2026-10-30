@@ -5,9 +5,10 @@ import type { Static, TSchema } from 'typebox';
 import { deadlineClient } from './authenticate.ts';
 import { authorizePlatformGate, viewerActionReadTime } from './index.ts';
 import { GLOBAL_CONTEXT } from './gates/catalogue.ts';
+import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { parseExposure, type Exposure } from './gates/declaration.ts';
 import openGroups from './gates/open-groups.sql';
-import { authoritativeTimeValue } from '../command/command.ts';
+import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { createApp } from '../http/app.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../http/request.ts';
@@ -25,7 +26,12 @@ import { routeOf } from '../route/route.ts';
  * public floor are separate: a private resource may still have an explicit grant. */
 export type ViewerActionResource = Readonly<{
   readAction: string;
-  read(client: AccessClient, ids: readonly string[], at: string): Promise<Readonly<Record<string, boolean>>>;
+  read(
+    client: AccessClient,
+    ids: readonly string[],
+    at: string,
+    time?: AuthoritativeTime,
+  ): Promise<Readonly<Record<string, boolean>>>;
 }>;
 export type ViewerActionResources = ReadonlyMap<string, ViewerActionResource>;
 export type ViewerActionBinding = Readonly<{
@@ -34,6 +40,7 @@ export type ViewerActionBinding = Readonly<{
   exposure: Exposure;
   authority: 'resource' | 'own-account';
   accountAuthority?: AccountAuthorityKind;
+  fixedResourceId?: string;
 }>;
 export type ViewerActionBindings = ReadonlyMap<string, readonly ViewerActionBinding[]>;
 
@@ -57,6 +64,17 @@ export function compileViewerActionBindings(routes: readonly MountedRoute[]): Vi
       throw new Error(`${route.method} ${route.path}: invalid x-authority-anchor`);
     if (authority === 'own-account' && anchor === undefined)
       throw new Error(`${route.method} ${route.path}: own-account requires x-authority-resource-types`);
+    const fixedResourceId = detail['x-authority-resource-id'];
+    if (
+      fixedResourceId !== undefined &&
+      (fixedResourceId !== PLATFORM_RESOURCE.id ||
+        authority !== 'resource' ||
+        !Array.isArray(anchor) ||
+        anchor.length !== 1 ||
+        anchor[0] !== 'semantic.context' ||
+        detail['x-account-authority'] !== undefined)
+    )
+      throw new Error(`${route.method} ${route.path}: invalid x-authority-resource-id`);
     if (types === undefined) continue;
     if (
       !Array.isArray(types) ||
@@ -86,6 +104,7 @@ export function compileViewerActionBindings(routes: readonly MountedRoute[]): Vi
           operationId: detail.operationId,
           exposure: parseExposure(detail),
           authority,
+          ...(fixedResourceId === undefined ? {} : { fixedResourceId: fixedResourceId as string }),
           ...(accountAuthority === undefined ? {} : { accountAuthority: accountAuthority as AccountAuthorityKind }),
         }),
       );
@@ -155,6 +174,16 @@ export async function readViewerActions(
     throw new ProblemError('invalid_request');
   const selected = new Map<string, string[]>();
   for (const ref of refs) selected.set(ref.type, [...(selected.get(ref.type) ?? []), ref.id]);
+  // Restrict the mounted catalogue before any permission preparation or gate work.
+  // A mixed batch still checks each fixed binding only on its actual native id.
+  const bindings = new Map(
+    [...selected].map(([type, ids]) => [
+      type,
+      (deps.bindings.get(type) ?? []).filter(
+        (binding) => binding.fixedResourceId === undefined || ids.includes(binding.fixedResourceId),
+      ),
+    ]),
+  );
   const typeActions = new Map<string, Set<string>>();
   const admit = (type: string, action: string) => {
     const actions = typeActions.get(type) ?? new Set<string>();
@@ -163,25 +192,27 @@ export async function readViewerActions(
   };
   for (const type of selected.keys()) {
     admit(type, deps.resources.get(type)!.readAction);
-    for (const binding of deps.bindings.get(type) ?? []) {
+    for (const binding of bindings.get(type) ?? []) {
       for (const action of viewerActionBindingActions(binding))
         admit(binding.authority === 'own-account' ? 'access.account' : type, action);
     }
   }
   const actions = new Set([...typeActions.values()].flatMap((values) => [...values]));
+  let readTime: AuthoritativeTime | undefined;
   try {
     const context = { pool: deps.pool, deadline };
     const decisions = await prepareReadDecisions(deps.access, { actor, actions, typeActions, context });
     const time = viewerActionReadTime(deps.access, context);
+    readTime = time;
     const at = authoritativeTimeValue(time);
     const accountIds = selected.get('access.account');
     const needsAccountAuthority =
-      accountIds && (deps.bindings.get('access.account') ?? []).some((binding) => binding.accountAuthority);
+      accountIds && (bindings.get('access.account') ?? []).some((binding) => binding.accountAuthority);
     if (needsAccountAuthority && !decisions.prepareAccountAuthority) throw new ProblemError('dependency_unavailable');
     const accountAuthority = needsAccountAuthority ? await decisions.prepareAccountAuthority!(accountIds) : undefined;
     const groups = new Set<string>();
     for (const type of selected.keys())
-      for (const binding of deps.bindings.get(type) ?? [])
+      for (const binding of bindings.get(type) ?? [])
         if (binding.exposure.kind === 'gate') groups.add(binding.exposure.group);
     const openings = await openGroups.run(deadlineClient(deps.pool, deadline), { groups: [...groups], at });
     const open = new Set(openings.map((row) => row.group));
@@ -191,7 +222,7 @@ export async function readViewerActions(
       try {
         const gates = new Map<string, boolean>();
         for (const type of selected.keys())
-          for (const binding of deps.bindings.get(type) ?? []) {
+          for (const binding of bindings.get(type) ?? []) {
             if (binding.exposure.kind !== 'gate') continue;
             const group = binding.exposure.group;
             for (const action of viewerActionBindingActions(binding)) {
@@ -224,7 +255,7 @@ export async function readViewerActions(
         if (actor.kind === 'account')
           for (const action of new Set(
             [...selected.keys()].flatMap((type) =>
-              (deps.bindings.get(type) ?? [])
+              (bindings.get(type) ?? [])
                 .filter((binding) => binding.authority === 'own-account')
                 .map((binding) => binding.action),
             ),
@@ -242,17 +273,29 @@ export async function readViewerActions(
           }
         for (const [type, ids] of selected) {
           const owner = deps.resources.get(type)!;
-          const eligibility = await owner.read(client, ids, at);
+          const eligibility = await owner.read(client, ids, at, time);
           const candidates = [
             ...new Set([
               owner.readAction,
-              ...(deps.bindings.get(type) ?? [])
+              ...(bindings.get(type) ?? [])
                 .filter(({ authority, accountAuthority }) => authority === 'resource' && !accountAuthority)
                 .map(({ action }) => action),
             ]),
           ].sort();
           const allowed = new Map<string, Readonly<Record<string, { allowed: boolean }>>>();
-          for (const action of candidates)
+          for (const action of candidates) {
+            const actionIds =
+              action === owner.readAction
+                ? ids
+                : ids.filter((id) =>
+                    (bindings.get(type) ?? []).some(
+                      (binding) =>
+                        binding.authority === 'resource' &&
+                        !binding.accountAuthority &&
+                        binding.action === action &&
+                        (binding.fixedResourceId === undefined || binding.fixedResourceId === id),
+                    ),
+                  );
             allowed.set(
               action,
               await decisions.decide(
@@ -260,7 +303,7 @@ export async function readViewerActions(
                 {
                   action,
                   resourceType: type,
-                  ids,
+                  ids: actionIds,
                   ...(action === owner.readAction
                     ? { eligibility: async () => Object.fromEntries(ids.map((id) => [id, eligibility[id] === true])) }
                     : {}),
@@ -268,8 +311,9 @@ export async function readViewerActions(
                 time,
               ),
             );
+          }
           const nativeAccounts = new Map<string, Awaited<ReturnType<NonNullable<typeof accountAuthority>['decide']>>>();
-          for (const binding of deps.bindings.get(type) ?? []) {
+          for (const binding of bindings.get(type) ?? []) {
             if (!binding.accountAuthority || !accountAuthority) continue;
             const key = `${binding.accountAuthority}/${binding.action}`;
             if (!nativeAccounts.has(key))
@@ -292,7 +336,8 @@ export async function readViewerActions(
               continue;
             }
             const entries = new Map<string, Set<string>>();
-            for (const binding of deps.bindings.get(type) ?? []) {
+            for (const binding of bindings.get(type) ?? []) {
+              if (binding.fixedResourceId !== undefined && binding.fixedResourceId !== id) continue;
               const native = binding.accountAuthority
                 ? nativeAccounts.get(`${binding.accountAuthority}/${binding.action}`)?.[id]
                 : undefined;
@@ -331,6 +376,8 @@ export async function readViewerActions(
   } catch (error) {
     if (error instanceof ProblemError) throw error;
     throw new ProblemError('dependency_unavailable');
+  } finally {
+    if (readTime) releaseOperationalTime(readTime);
   }
 }
 
