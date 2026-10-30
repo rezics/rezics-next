@@ -66,6 +66,27 @@ Definite refusal preserves the draft and key until an explicit edit; uncertain d
 for exact retry. A conflict requires explicit review before a new request. Rejected values refresh current definitions
 without discarding the draft. The private editor is noindex and does not infer ownership or media permissions.
 
+## Provider queue decisions
+
+`/{locale}/imports/review` uses the provider queue's current prepared rows. Its selection toolbar acts on at most
+20 explicitly checked visible suggestions, scoped to the current source, Context and review status. Changing that
+scope clears the selection and any unsubmitted confirmation. Other pages, history and provider-wide selection are
+excluded. Queue presence and source provenance never grant decision authority.
+
+Confirmation seals each subject/candidate identity, decision head and independent action key. The session BFF
+forwards the current viewer, CSRF protection and native session tokens to each existing candidate accept/reject
+endpoint. Accepting is separate from adoption and publication; rejecting does not delete a candidate. Bulk adoption
+is unavailable. Every success, stale head, current denial, concealed suggestion, rate limit and unavailable result
+is shown separately. Failed and uncertain attempts retain their exact payload and key; retries skip confirmed
+successes. An uncertain result stays sealed until resolved. A changed scope clears checkboxes while preserving
+the earlier attempt; it must be revisited before retrying under a different visible scope.
+
+After decisions, refresh the actual queue and current subject readings in parallel. Refresh failure retains the
+decision results rather than claiming all rows disappeared. Missing and hidden subjects share a concealed state;
+related values use supplied summaries, with no per-field fetches or private totals. An unserved queue preparation
+port shows unavailable, never a fabricated empty queue or a successful mutation. Definition labels retain their
+locale fallback and remain distinct from a value's data language.
+
 ## Canonical public reading
 
 Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):
