@@ -74,7 +74,14 @@ export async function readOrganizationMembershipCommandState(
         const org = rows[0];
         if (!org || org.kind !== 'organization' || org.state !== 'active' || org.fenced)
           throw new AuthBindingDeniedError();
-        if (!member || !member.complete || member.state !== 'active' || member.fenced || rows.length !== 1)
+        if (
+          !member ||
+          !member.complete ||
+          member.state !== 'active' ||
+          member.fenced ||
+          (member.reservationId !== null && !member.reservationTransactionId) ||
+          rows.length !== 1
+        )
           throw new AccessUnavailableError('overloaded');
         if (
           org.role !== null &&
