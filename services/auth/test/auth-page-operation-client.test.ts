@@ -186,7 +186,7 @@ function observe(pool: Pool, before: (sql: string, values: unknown[]) => void, a
       before(sql, ((typeof input === 'string' ? args[1] : input.values) as unknown[]) ?? []);
       const result = query(...args);
       return after
-        ? result.then(async (value) => {
+        ? Promise.resolve(result).then(async (value) => {
             await after(sql);
             return value;
           })
@@ -264,7 +264,9 @@ test('create-or-match preserves metadata and exact sets, rejects mismatches and 
     });
     const fenced = await registry(f.pool);
     await expect(service.internal.registerClient(operationClient)).rejects.toThrow();
-    await expect(service.internal.registerClient({ ...operationClient, mode: undefined })).rejects.toThrow();
+    await expect(
+      service.internal.registerClient({ clientId, firstParty: true, scopes: operationClient.scopes }),
+    ).rejects.toThrow();
     expect(await registry(f.pool)).toEqual(fenced);
   } finally {
     await f.close();
@@ -495,7 +497,8 @@ test('host startup keeps fixed exact-key registry touches at 1/8/64 unrelated cl
       observe(pool, (sql, values) => {
         if (
           measuring &&
-          (values[0] === operationClient.clientId || values[0] === `auth-client:${operationClient.clientId}`)
+          ((sql.includes('auth_client') && values[0] !== 'login') ||
+            values[0] === `auth-client:${operationClient.clientId}`)
         )
           touches.push(sql);
       });
