@@ -451,20 +451,27 @@ test('A worktree-writing compiler helper container preserves invoking user owner
   mkdirSync(join(repository, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(repository, '.temp/compiler-storage-'));
   temporaryDirectories.push(directory);
+  const log = join(directory, 'docker-commands');
+  const docker = join(directory, 'docker');
+  writeFileSync(
+    docker,
+    `#!${process.execPath}
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
+console.log(args[0] === 'run' ? 'owned-container' : '127.0.0.1:34646');
+`,
+  );
+  chmodSync(docker, 0o755);
   const fixture = join(directory, 'run.ts');
   writeFileSync(
     fixture,
     `
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
-const commands = [];
+import { readFileSync } from 'node:fs';
+const commands = () => readFileSync(${JSON.stringify(log)}, 'utf8').trim().split('\\n').map(line => JSON.parse(line));
 const migrations = [];
-mock.module('node:child_process', () => ({ spawnSync(program, args, options) {
-  assert.equal(program, 'docker');
-  assert.equal(options.timeout, 10_000);
-  commands.push(args);
-  return { status: 0, stdout: args[0] === 'run' ? 'owned-container' : '127.0.0.1:34646', stderr: '' };
-} }));
 mock.module(${JSON.stringify(join(repository, 'services/kernel/scripts/database.ts'))}, () => ({
   POSTGRES_IMAGE: 'postgres:fixture', migrate(url) { migrations.push(['kernel', url]); },
 }));
@@ -473,20 +480,25 @@ mock.module(${JSON.stringify(join(repository, 'services/auth/scripts/database.ts
 }));
 const { prepareCompilerDatabase } = await import(${JSON.stringify(join(repository, 'scripts/compiler-database.ts'))});
 const database = await prepareCompilerDatabase();
-const start = commands[0];
+const start = commands()[0];
 // The server's writes are disposable and never reach a host-mounted checkout.
 assert.equal(start[start.indexOf('--tmpfs') + 1], '/var/lib/postgresql:rw,size=1g');
 for (const flag of ['-v', '--volume', '--mount', '--user']) assert.equal(start.includes(flag), false);
 assert.equal(start.includes('--rm'), true);
 assert.deepEqual(migrations, [['kernel', database.url], ['auth', database.url]]);
 await Promise.resolve();
-assert.equal(commands.length, 2);
+assert.equal(commands().length, 2);
 await database.remove();
 await database.remove();
-assert.deepEqual(commands.slice(2), [['rm', '-f', '-v', 'owned-container']]);
+assert.deepEqual(commands().slice(2), [['rm', '-f', '-v', 'owned-container']]);
 `,
   );
-  const result = spawnSync(process.execPath, [fixture], { cwd: repository, encoding: 'utf8', timeout: 10_000 });
+  const result = spawnSync(process.execPath, [fixture], {
+    cwd: repository,
+    encoding: 'utf8',
+    timeout: 10_000,
+    env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+  });
   expect(result.stderr).toBe('');
   expect(result.status).toBe(0);
 });
