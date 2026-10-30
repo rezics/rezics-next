@@ -364,10 +364,12 @@ export function createNativeLibrarySourceCustody({
           await run({ sql: 'BEGIN', params: [] }, {}, 0, 0);
           begun = true;
           const result = await operation(run);
+          if (Date.now() >= input.deadline) throw new Refused('allowance');
           terminalUsed = true;
           terminal.dispatch();
           try {
-            await client.query('COMMIT');
+            const commit = { text: 'COMMIT', query_timeout: Math.max(1, input.deadline - Date.now()) };
+            await client.query(commit);
             terminal.settle();
             begun = false;
           } catch (error) {

@@ -240,4 +240,12 @@ test('intervening child writer and native ordinal reorder invalidate complete ca
   const child = await custody.finishCapture({ ...work(), identity, frontier: next.frontier });
   expect(child.status).toBe('unavailable');
   if (child.status === 'unavailable') expect(child.reason).toBe('writer');
+  const barrier = await scan(identity);
+  await native.pool.query(
+    'UPDATE library.fact_source_head SET generation=generation+1 WHERE route=$1 AND account_id=$2',
+    [identity.route, identity.accountId],
+  );
+  const finalWriter = await custody.finishCapture({ ...work(), identity, frontier: barrier.frontier });
+  expect(finalWriter.status).toBe('unavailable');
+  if (finalWriter.status === 'unavailable') expect(finalWriter.reason).toBe('writer');
 });

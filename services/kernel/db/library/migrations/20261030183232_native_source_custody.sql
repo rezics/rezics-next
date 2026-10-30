@@ -50,9 +50,7 @@ CREATE TABLE library.native_source_hold (
 );
 -- Raw ranges include retained/excluded rows. Predicates never define scan exhaustion.
 CREATE INDEX native_source_member_raw ON library.collection_member(route,collection_id,ordinal_key,member_id);
-CREATE INDEX native_source_assignment_raw ON library.label_assignment(route,account_id,subject_id,label_id);
 CREATE INDEX native_source_output_raw ON library.published_log(route,account_id,log_id);
-CREATE INDEX native_source_deleted_raw ON library.entry_deleted(route,account_id,deletion_id);
 
 CREATE FUNCTION library.advance_native_source_fence() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE item record; step integer; owner uuid; r integer; k text;
@@ -90,6 +88,8 @@ CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.collection_member
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.fact_source_head
+  FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.entry
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.entry_deleted
@@ -121,6 +121,7 @@ CREATE TRIGGER native_source_receipt_immutable BEFORE UPDATE OR DELETE ON librar
   FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
 
 -- migrate:down
+DROP TRIGGER native_source_writer ON library.fact_source_head;
 DROP TRIGGER native_source_account_writer ON access.account;
 DROP TRIGGER native_source_writer ON library.collection;
 DROP TRIGGER native_source_writer ON library.collection_member;
@@ -140,6 +141,4 @@ DROP TABLE library.native_source_fence;
 DROP FUNCTION library.guard_native_source_receipt();
 DROP FUNCTION library.advance_native_source_fence();
 DROP INDEX library.native_source_member_raw;
-DROP INDEX library.native_source_assignment_raw;
-DROP INDEX library.native_source_deleted_raw;
 DROP INDEX library.native_source_output_raw;
