@@ -37,6 +37,7 @@ export const routes: FakeRoute[] = [
     path: '/v1/accounts',
     story: ({ request }) => {
       const url = new URL(request.url);
+      if (url.searchParams.has('agent')) return;
       const id = url.searchParams.get('ids') ?? 'reader';
       const variant = storyVariant();
       const byHandle = url.searchParams.has('handle');
@@ -46,6 +47,7 @@ export const routes: FakeRoute[] = [
     },
     fixture: ({ request }) => {
       const url = new URL(request.url);
+      if (url.searchParams.has('agent')) return;
       const id = url.searchParams.get('ids') ?? 'reader';
       const variant = storyVariant();
       const byHandle = url.searchParams.has('handle');
