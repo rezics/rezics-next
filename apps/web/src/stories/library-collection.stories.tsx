@@ -102,7 +102,86 @@ export const PublicItemListExport: Story = {
       expect(itemList.itemListElement).toHaveLength(4);
       expect(JSON.stringify(itemList)).not.toMatch(/private|visibility|revision|curatorAccountId/i);
     });
+    const canvas = within(context.canvasElement);
+    const graph = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+      .map(
+        (script) =>
+          JSON.parse(script.textContent ?? 'null') as {
+            '@graph'?: { '@type': string; mainEntity?: Record<string, unknown> }[];
+          },
+      )
+      .flatMap((value) => value?.['@graph'] ?? []);
+    const mainEntity = graph.find((value) => value['@type'] === 'CollectionPage')?.mainEntity;
+    expect(mainEntity).toBeDefined();
+    let downloaded: Promise<unknown> | undefined;
+    const captureDownload = (event: MouseEvent) => {
+      const anchor = event.target;
+      if (!(anchor instanceof HTMLAnchorElement) || !anchor.download.startsWith('collection-')) return;
+      event.preventDefault();
+      expect(anchor.href).toMatch(/^blob:/);
+      expect(anchor.download).toMatch(/^collection-[a-zA-Z0-9_-]{1,80}\.jsonld$/);
+      downloaded = fetch(anchor.href).then(async (response) => {
+        expect(response.headers.get('content-type')).toBe('application/ld+json');
+        return response.json();
+      });
+    };
+    document.addEventListener('click', captureDownload, true);
+    try {
+      await userEvent.click(canvas.getByRole('button', { name: m.library_collection_export_download() }));
+      expect(downloaded).toBeDefined();
+      const exported = await downloaded;
+      expect(exported).toEqual({ '@context': 'https://schema.org', ...mainEntity });
+      expect(JSON.stringify(exported)).not.toMatch(
+        /@graph|curator|revision|note|description|visibility|source|transaction/,
+      );
+      await expect(canvas.getByText(m.library_collection_export_downloaded())).toBeVisible();
+    } finally {
+      document.removeEventListener('click', captureDownload, true);
+    }
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    let copied = '';
+    let denied = true;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          if (denied) throw new Error('Clipboard denied');
+          copied = text;
+        },
+      },
+    });
+    try {
+      await userEvent.click(canvas.getByRole('button', { name: m.library_collection_export_copy() }));
+      await expect(canvas.getByText(m.library_collection_export_failed())).toBeVisible();
+      denied = false;
+      await userEvent.click(canvas.getByRole('button', { name: m.library_collection_export_copy() }));
+      await waitFor(() => expect(JSON.parse(copied)).toEqual({ '@context': 'https://schema.org', ...mainEntity }));
+      await expect(canvas.getByText(m.library_collection_export_copied())).toBeVisible();
+    } finally {
+      if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
   },
+};
+
+async function exportUnavailable(context: { canvasElement: HTMLElement }, title: string) {
+  await variantReady(context, title);
+  const canvas = within(context.canvasElement);
+  await expect(canvas.getByRole('button', { name: m.library_collection_export_download() })).toBeDisabled();
+  await expect(canvas.getByRole('button', { name: m.library_collection_export_copy() })).toBeDisabled();
+  await expect(canvas.getByText(m.library_collection_export_unavailable())).toBeVisible();
+}
+
+export const PublicItemListExportOwnerUnavailable: Story = {
+  name: 'Public ItemList export — owner view unavailable',
+  render: () => <PageStory visitor="Signed In" path={`/collections/${variants.CuratorPrivateEmpty.id}`} />,
+  play: (context) => exportUnavailable(context, variants.CuratorPrivateEmpty.title),
+};
+
+export const PublicItemListExportIncomplete: Story = {
+  name: 'Public ItemList export — incomplete public view',
+  render: () => <PageStory visitor="Signed Out" path={`/collections/${variants.ReaderPublicMany.id}`} />,
+  play: (context) => exportUnavailable(context, variants.ReaderPublicMany.title),
 };
 
 export const CuratorPublicMany: Story = {
@@ -182,6 +261,8 @@ export const MembersPreparing: Story = {
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByText(m.library_dynamic_preparing())).toBeVisible();
     await expect(canvas.queryByText(m.library_collection_empty())).toBeNull();
+    await expect(canvas.getByRole('button', { name: m.library_collection_export_download() })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: m.library_collection_export_copy() })).toBeDisabled();
   },
 };
 

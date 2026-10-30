@@ -68,6 +68,8 @@ import {
   type CollectionListPresentations,
 } from './collection-presentation';
 import { FollowTargetControl } from './follow-target-control';
+import { collectionPublicItemList } from './collection-public-document';
+import { CollectionExport } from './collection-export';
 import {
   CollectionMemberList,
   CollectionPresentationFields,
@@ -116,26 +118,7 @@ export function collectionPageHead(
           alt: imageSubject ? pageText(libraryTitleValue(imageSubject.label), context.locale).text : title,
         }
       : undefined;
-  const items = page.members.flatMap((member, index) =>
-    member.subject
-      ? [
-          {
-            '@type': 'ListItem',
-            position: index + 1,
-            url: new URL(
-              subjectHref(
-                {
-                  id: member.subject.id,
-                  label: pageText(libraryTitleValue(member.subject.label), context.locale).text,
-                },
-                context.locale,
-              ).href,
-              context.origin,
-            ).href,
-          },
-        ]
-      : [],
-  );
+  const itemList = collectionPublicItemList(page, context, laterPage);
   const breadcrumbs = [
     { '@type': 'ListItem', position: 1, name: 'REZICS', item: context.origin },
     ...(page.curator?.handle
@@ -169,16 +152,7 @@ export function collectionPageHead(
             name: title,
             ...(description ? { description } : {}),
             url: `${context.origin}/${context.locale}${path}`,
-            ...(policy.completeItemList
-              ? {
-                  mainEntity: {
-                    '@type': 'ItemList',
-                    numberOfItems: items.length,
-                    itemListOrder: 'https://schema.org/ItemListOrderAscending',
-                    itemListElement: items,
-                  },
-                }
-              : {}),
+            ...(itemList ? { mainEntity: itemList } : {}),
           },
           { '@type': 'BreadcrumbList', itemListElement: breadcrumbs },
         ],
@@ -747,6 +721,13 @@ export function CollectionPage({
               targetId={page.id}
               {...(page.visibility === null ? { following: page.following } : {})}
             />
+            {!editing ? (
+              <CollectionExport
+                page={page}
+                context={{ origin: publicOrigin(), locale: getLocale() }}
+                laterPage={cursor !== undefined}
+              />
+            ) : null}
           </div>
         </header>
         <p className="text-sm text-muted-foreground">{m.library_collection_social_unavailable()}</p>
