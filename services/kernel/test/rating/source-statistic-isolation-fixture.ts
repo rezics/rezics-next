@@ -15,7 +15,7 @@ import { workerTestEnv } from '../support/worker-env.ts';
 
 export const SOURCE_STATISTIC_GROWTH_SCALES = [256, 1024, 4096] as const;
 
-const ordinaryScopes = [
+const operationScopes = [
   'access:grant',
   'definitions:read',
   'exposure:open',
@@ -25,6 +25,8 @@ const ordinaryScopes = [
   'subject:create',
   'subject:read',
 ];
+// Native setup grants these two actions to its personas; exercised actors receive only operationScopes.
+const nativeFixtureScopes = [...operationScopes, 'space:create', 'realm:create'];
 
 export type IsolationActor = ContentCredential;
 export type IsolationRequestOptions = {
@@ -46,13 +48,13 @@ export async function createSourceStatisticIsolationFixture(options: { withRatin
       databaseUrl: templateUrl.href,
       namespace: `rating_source_isolation_${randomUUID().replaceAll('-', '')}`,
     },
-    ordinaryScopes,
+    nativeFixtureScopes,
   );
 
   let database: GrowthDatabase | undefined;
   let worker: WorkerHandle | undefined;
   try {
-    const additionalVoters = await provisionVoters(native, 2);
+    const additionalVoters = await provisionVoters(native, operationScopes, 2);
     database = await openGrowthDatabase(native.database.pool.options.connectionString);
     database.pool.options.max = 1;
     await bootstrapRelease(database.pool, bundledRelease);
@@ -83,15 +85,24 @@ export async function createSourceStatisticIsolationFixture(options: { withRatin
     const governance = await native.auth.issue({
       accountId: governanceId,
       clientId: native.auth.ordinaryClient.id,
-      scopes: native.auth.ordinaryScopes,
+      scopes: operationScopes,
     });
 
+    const narrowCredential = (credential: ContentCredential): Promise<ContentCredential> =>
+      native.auth.issue({
+        accountId: credential.actor.accountId,
+        clientId: native.auth.ordinaryClient.id,
+        scopes: operationScopes,
+      });
+    const author = await narrowCredential(native.actors.author);
+    const importer = await narrowCredential(native.actors.other);
+    const secondImporter = await narrowCredential(native.actors.moderator);
     const actors = {
-      author: native.actors.author,
-      importer: native.actors.other,
-      secondImporter: native.actors.moderator,
+      author,
+      importer,
+      secondImporter,
       governance,
-      voters: [native.actors.author, native.actors.other, native.actors.moderator, ...additionalVoters],
+      voters: [author, importer, secondImporter, ...additionalVoters],
     } as const;
     for (const actor of [actors.author, actors.importer, actors.secondImporter, actors.governance, ...actors.voters]) {
       const authenticated = await access.authenticate(actor.bearer, {
@@ -219,6 +230,7 @@ export async function createSourceStatisticIsolationFixture(options: { withRatin
 
 async function provisionVoters(
   native: Awaited<ReturnType<typeof createNativeContentSystemWithOrdinaryScopes>>,
+  scopes: readonly string[],
   count: number,
 ): Promise<ContentCredential[]> {
   const sourceAccountId = native.actors.author.actor.accountId;
@@ -245,7 +257,7 @@ async function provisionVoters(
       await native.auth.issue({
         accountId,
         clientId: native.auth.ordinaryClient.id,
-        scopes: native.auth.ordinaryScopes,
+        scopes,
       }),
     );
   }
