@@ -1,4 +1,4 @@
-import { parseOwnerTransfer, type OwnerTransfer, type TransferResult } from './owner-transfer.ts';
+import { parseOwnerTransfer, type OwnerTransfer } from './owner-transfer.ts';
 import type { AccessIO, AccessState, Change, WriteResult } from './data';
 
 export type EditorState = {
@@ -59,12 +59,14 @@ export class AccessRecovery {
   }
   private async attempt(pending: Change | OwnerTransfer) {
     this.update({ busy: true });
-    let result: WriteResult | TransferResult;
+    let result: WriteResult;
+    let current: AccessState | undefined;
     try {
-      result =
-        pending.kind === 'realm-owner-transfer'
-          ? await this.io.transfer!(structuredClone(pending))
-          : await this.io.save(structuredClone(pending));
+      if (pending.kind === 'realm-owner-transfer') {
+        const transfer = await this.io.transfer!(structuredClone(pending));
+        result = transfer;
+        current = transfer.current;
+      } else result = await this.io.save(structuredClone(pending));
     } catch {
       result = { status: 'uncertain' };
     }
@@ -74,6 +76,6 @@ export class AccessRecovery {
       phase: result.status,
       pending: result.status === 'uncertain' || result.status === 'preparing' ? pending : null,
     });
-    this.update({ page: 'current' in result ? result.current : await this.current(), busy: false });
+    this.update({ page: current ?? (await this.current()), busy: false });
   }
 }
