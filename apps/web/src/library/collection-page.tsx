@@ -331,7 +331,8 @@ export function CollectionPage({
         setConflict(true);
         return;
       }
-      if ((editable.memberState ?? 'ready') !== 'ready' || editable.filterStatus) throw new Error('Collection members are not ready');
+      if ((editable.memberState ?? 'ready') !== 'ready' || editable.filterStatus)
+        throw new Error('Collection members are not ready');
       writeKeys.current.clear();
       setConflict(false);
       setEditorMembers(editable.members);
