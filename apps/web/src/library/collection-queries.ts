@@ -199,11 +199,7 @@ export function collectionPageQuery(
   });
 }
 
-export function personalCollectionPageQuery(
-  id: string,
-  cursor?: string,
-  search?: Record<string, string | string[]>,
-) {
+export function personalCollectionPageQuery(id: string, cursor?: string, search?: Record<string, string | string[]>) {
   return queryOptions({
     ...personalRead,
     queryKey: readQueryKey(['collection-page', id, cursor ?? null, search ?? null], 'session'),
