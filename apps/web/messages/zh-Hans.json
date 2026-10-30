@@ -1811,5 +1811,15 @@
   "reporter_status_retrying": "正在重试…",
   "reporter_status_pending_explanation": "你的举报已收到，正在等待审核。",
   "reporter_status_actioned_explanation": "你的举报已审核并采取了措施。这是举报的处理结果，之后的申诉不会改变该结果。",
-  "reporter_status_dismissed_explanation": "你的举报已审核并被驳回。"
+  "reporter_status_dismissed_explanation": "你的举报已审核并被驳回。",
+  "exact_revision_heading": "已记录的修订版本",
+  "exact_revision_read_only": "这是此帖已记录的版本。",
+  "exact_revision_post": "帖子",
+  "exact_revision_id": "修订版本",
+  "exact_revision_back": "返回讨论串",
+  "exact_revision_different_head": "当前讨论串中的此帖已有不同的修订版本。",
+  "exact_revision_unavailable": "此修订版本不可用。",
+  "exact_revision_loading": "正在加载修订版本…",
+  "exact_revision_problem": "无法加载此修订版本，请重试。",
+  "exact_revision_retry": "重试"
 }

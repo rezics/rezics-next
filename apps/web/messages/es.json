@@ -1810,5 +1810,15 @@
   "reporter_status_retrying": "Reintentando…",
   "reporter_status_pending_explanation": "Hemos recibido tu denuncia y está pendiente de revisión.",
   "reporter_status_actioned_explanation": "Tu denuncia se revisó y se tomaron medidas. Este es el resultado de la denuncia; una apelación posterior no lo cambia.",
-  "reporter_status_dismissed_explanation": "Tu denuncia se revisó y se desestimó."
+  "reporter_status_dismissed_explanation": "Tu denuncia se revisó y se desestimó.",
+  "exact_revision_heading": "Versión guardada",
+  "exact_revision_read_only": "Esta es una versión guardada de esta publicación.",
+  "exact_revision_post": "Publicación",
+  "exact_revision_id": "Versión",
+  "exact_revision_back": "Volver al hilo",
+  "exact_revision_different_head": "El hilo actual contiene una versión diferente de esta publicación.",
+  "exact_revision_unavailable": "Esta versión no está disponible.",
+  "exact_revision_loading": "Cargando la versión guardada…",
+  "exact_revision_problem": "No se pudo cargar esta versión. Inténtalo de nuevo.",
+  "exact_revision_retry": "Reintentar"
 }

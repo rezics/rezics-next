@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { Byline } from './byline';
+import { exactRevisionHref } from './exact-revision-href';
 import { readPostHistory } from './reads';
 import { RevisionProvenance } from './revision-provenance-view';
 
@@ -99,7 +100,7 @@ export function PostHistory({
             <ol className="space-y-5" aria-label={m.thread_history_heading()}>
               {revisions.map((revision, index) => (
                 <RevisionEntry
-                  key={revision.id}
+                  key={revision.revisionId}
                   revision={revision}
                   number={index + 1}
                   authors={authors}
@@ -149,7 +150,14 @@ function RevisionEntry({
 }) {
   return (
     <li className="space-y-3 border-t border-border/60 pt-4 first:border-0 first:pt-0">
-      <h4 className="font-semibold">{m.thread_history_version({ number: String(number) })}</h4>
+      <h4 className="font-semibold">
+        <a
+          href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, getLocale())}
+          className="inline-flex min-h-11 items-center underline underline-offset-4"
+        >
+          {m.thread_history_version({ number: String(number) })}
+        </a>
+      </h4>
       <Byline author={authors?.[revision.authorId]} createdAt={revision.createdAt} now={now} showAuthor />
       <RevisionProvenance revision={revision} subjects={subjects} currentVote={currentVote ?? null} review={review} />
       {revision.body ? <DocumentBody document={revision.body} mentions={mentions} locale={getLocale()} /> : null}

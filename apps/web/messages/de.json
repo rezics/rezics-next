@@ -1810,5 +1810,15 @@
   "reporter_status_retrying": "Erneuter Versuch…",
   "reporter_status_pending_explanation": "Deine Meldung ist eingegangen und wartet auf Prüfung.",
   "reporter_status_actioned_explanation": "Deine Meldung wurde geprüft und es wurden Maßnahmen ergriffen. Dies ist das Ergebnis der Meldung; ein späterer Einspruch ändert es nicht.",
-  "reporter_status_dismissed_explanation": "Deine Meldung wurde geprüft und abgewiesen."
+  "reporter_status_dismissed_explanation": "Deine Meldung wurde geprüft und abgewiesen.",
+  "exact_revision_heading": "Gespeicherte Version",
+  "exact_revision_read_only": "Dies ist eine gespeicherte Version dieses Beitrags.",
+  "exact_revision_post": "Beitrag",
+  "exact_revision_id": "Version",
+  "exact_revision_back": "Zurück zum Thema",
+  "exact_revision_different_head": "Im aktuellen Thema ist eine andere Version dieses Beitrags vorhanden.",
+  "exact_revision_unavailable": "Diese Version ist nicht verfügbar.",
+  "exact_revision_loading": "Gespeicherte Version wird geladen…",
+  "exact_revision_problem": "Diese Version konnte nicht geladen werden. Bitte erneut versuchen.",
+  "exact_revision_retry": "Erneut versuchen"
 }

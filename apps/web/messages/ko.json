@@ -1810,5 +1810,15 @@
   "reporter_status_retrying": "재시도 중…",
   "reporter_status_pending_explanation": "신고가 접수되어 검토를 기다리고 있습니다.",
   "reporter_status_actioned_explanation": "신고를 검토하고 조치를 취했습니다. 이는 신고 처리 결과이며, 이후 이의 제기로 변경되지 않습니다.",
-  "reporter_status_dismissed_explanation": "신고를 검토한 결과 기각되었습니다."
+  "reporter_status_dismissed_explanation": "신고를 검토한 결과 기각되었습니다.",
+  "exact_revision_heading": "기록된 버전",
+  "exact_revision_read_only": "이 게시물의 기록된 버전입니다.",
+  "exact_revision_post": "게시물",
+  "exact_revision_id": "버전",
+  "exact_revision_back": "스레드로 돌아가기",
+  "exact_revision_different_head": "현재 스레드에는 이 게시물의 다른 버전이 있습니다.",
+  "exact_revision_unavailable": "이 버전을 볼 수 없습니다.",
+  "exact_revision_loading": "기록된 버전을 불러오는 중…",
+  "exact_revision_problem": "이 버전을 불러오지 못했습니다. 다시 시도해 주세요.",
+  "exact_revision_retry": "다시 시도"
 }

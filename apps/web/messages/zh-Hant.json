@@ -1810,5 +1810,15 @@
   "reporter_status_retrying": "正在重試…",
   "reporter_status_pending_explanation": "已收到你的檢舉，正在等待審核。",
   "reporter_status_actioned_explanation": "你的檢舉已審核並採取措施。這是檢舉的處理結果，之後的申訴不會改變此結果。",
-  "reporter_status_dismissed_explanation": "你的檢舉已審核並駁回。"
+  "reporter_status_dismissed_explanation": "你的檢舉已審核並駁回。",
+  "exact_revision_heading": "已記錄的修訂版本",
+  "exact_revision_read_only": "這是此貼文已記錄的版本。",
+  "exact_revision_post": "貼文",
+  "exact_revision_id": "修訂版本",
+  "exact_revision_back": "返回討論串",
+  "exact_revision_different_head": "目前討論串中的此貼文已有不同的修訂版本。",
+  "exact_revision_unavailable": "此修訂版本無法使用。",
+  "exact_revision_loading": "正在載入修訂版本…",
+  "exact_revision_problem": "無法載入此修訂版本，請重試。",
+  "exact_revision_retry": "重試"
 }

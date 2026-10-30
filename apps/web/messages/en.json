@@ -1811,5 +1811,15 @@
   "reporter_status_retrying": "Retrying…",
   "reporter_status_pending_explanation": "Your report was received and is waiting for review.",
   "reporter_status_actioned_explanation": "Your report was reviewed and action was taken. This is the report’s outcome; a later appeal does not change it.",
-  "reporter_status_dismissed_explanation": "Your report was reviewed and dismissed."
+  "reporter_status_dismissed_explanation": "Your report was reviewed and dismissed.",
+  "exact_revision_heading": "Recorded revision",
+  "exact_revision_read_only": "This is a recorded version of this post.",
+  "exact_revision_post": "Post",
+  "exact_revision_id": "Revision",
+  "exact_revision_back": "Back to thread",
+  "exact_revision_different_head": "The current thread has a different revision of this post.",
+  "exact_revision_unavailable": "This revision is unavailable.",
+  "exact_revision_loading": "Loading recorded revision…",
+  "exact_revision_problem": "We could not load this revision. Try again.",
+  "exact_revision_retry": "Try again"
 }

@@ -1810,5 +1810,15 @@
   "reporter_status_retrying": "再試行中…",
   "reporter_status_pending_explanation": "報告を受け付けました。確認をお待ちください。",
   "reporter_status_actioned_explanation": "報告を確認し、措置を講じました。これは報告への対応結果であり、その後の異議申し立てでは変わりません。",
-  "reporter_status_dismissed_explanation": "報告を確認し、却下しました。"
+  "reporter_status_dismissed_explanation": "報告を確認し、却下しました。",
+  "exact_revision_heading": "記録された版",
+  "exact_revision_read_only": "この投稿の記録された版です。",
+  "exact_revision_post": "投稿",
+  "exact_revision_id": "版",
+  "exact_revision_back": "スレッドに戻る",
+  "exact_revision_different_head": "現在のスレッドには、この投稿の別の版があります。",
+  "exact_revision_unavailable": "この版は利用できません。",
+  "exact_revision_loading": "記録された版を読み込み中…",
+  "exact_revision_problem": "この版を読み込めませんでした。もう一度お試しください。",
+  "exact_revision_retry": "再試行"
 }

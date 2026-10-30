@@ -1810,5 +1810,15 @@
   "reporter_status_retrying": "Nouvelle tentative…",
   "reporter_status_pending_explanation": "Votre signalement a été reçu et attend d’être examiné.",
   "reporter_status_actioned_explanation": "Votre signalement a été examiné et des mesures ont été prises. C’est le résultat du signalement ; un recours ultérieur ne le modifie pas.",
-  "reporter_status_dismissed_explanation": "Votre signalement a été examiné et rejeté."
+  "reporter_status_dismissed_explanation": "Votre signalement a été examiné et rejeté.",
+  "exact_revision_heading": "Version enregistrée",
+  "exact_revision_read_only": "Ceci est une version enregistrée de ce message.",
+  "exact_revision_post": "Message",
+  "exact_revision_id": "Version",
+  "exact_revision_back": "Retour à la discussion",
+  "exact_revision_different_head": "La discussion actuelle contient une autre version de ce message.",
+  "exact_revision_unavailable": "Cette version est indisponible.",
+  "exact_revision_loading": "Chargement de la version enregistrée…",
+  "exact_revision_problem": "Impossible de charger cette version. Réessayez.",
+  "exact_revision_retry": "Réessayer"
 }

@@ -1153,6 +1153,22 @@ conflict and read-only states, with shared locale/theme/viewport globals and the
 - **Growth check:** `tests/moderation-reports.test.ts` pages repeated targets and confirms one target read per distinct identity and preserves the cursor. `tests/native/native-moderation.host.test.ts` fixes the appeal page and target while adding 1, 8 and 64 unrelated posts; the page still makes one appeal request, one target read and no decision reads.
 - **Visual check:** Report stories cover open and resolved reports in English and Simplified Chinese. Appeal stories cover a pending native appeal in all launch locales and the empty queue in English and Simplified Chinese; use light and dark themes at 390 and 1280 pixels.
 
+### Exact recorded revision (`/posts/{id}/revisions/{revisionId}`)
+
+History version links address the returned post and revision IDs. The read-only page uses that exact native GET,
+then one current thread GET for its actual back-link identity and, for an opening post, a differing-head notice.
+Neither today's document nor its subject/vote references replace the recorded revision. Current refusal discards
+all previously readable content; missing, removed and withheld responses stay neutral without an inferred reason.
+Dependency problems offer an explicit fresh retry. Route entries and retries bypass cached revision data; responses
+are private/no-store, and the existing shell supplies locale/canonical routing and one header search.
+
+The bound is one exact resource and one thread point read, plus at most two existing public account batches for
+author/mentions. No parent, history, directory or per-reference requests run. Independent subject labels have no
+admitted batch-summary transport here, so provenance retains stable recorded IDs without links. Immutable citations
+need no private vote read. `Patterns/Community/Exact revision` and its Page stories share the product reading region;
+constructed native DTO examples do not establish native acceptance. The two focused outcomes live in
+`tests/exact-revision.test.ts`.
+
 ### Post edit
 
 - **Touches:** One `POST /v1/posts/<id>/revisions`/K after the session read; send the current revision in `If-Match`
