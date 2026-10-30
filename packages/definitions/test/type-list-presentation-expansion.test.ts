@@ -129,6 +129,20 @@ test.each(invalid)('compiler rejects %s at the authored source pointer', async (
   );
 });
 
+test('list hints preserve the existing required English property labels', async () => {
+  const input = inputWith();
+  const presentation = JSON.parse(input.presentation['lists/en']);
+  delete presentation.properties['schema:datePublished'];
+  input.presentation['lists/en'] = JSON.stringify(presentation);
+  expect(await errors(input)).toContainEqual(
+    expect.objectContaining({
+      file: 'presentation/en',
+      pointer: '/properties/schema:datePublished',
+      code: 'missing_label',
+    }),
+  );
+});
+
 test('unused abstract declarations cannot hide invalid property references', async () => {
   const input = inputWith();
   const schema = JSON.parse(input.schemas['lists.yaml']);
