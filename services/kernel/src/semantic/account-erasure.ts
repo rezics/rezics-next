@@ -846,7 +846,7 @@ async function recordLocatorObligation(pool: Pool, partition: number, accountId:
           );
         }
       }
-      return { value: closed, events: event(accountId) };
+      return { value: closed, events: closed && admission.rowCount ? wake(accountId) : event(accountId) };
     })
   ).value;
 }

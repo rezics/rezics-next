@@ -133,7 +133,7 @@ test('late native Context generations reopen local obligations and the existing 
   expect(nativeLate.rows).toHaveLength(1);
   expect(nativeLate.rows[0]!.resolved_at).not.toBeNull();
   const status = await f.status(owner.accountId);
-  expect(status?.participants.semantic.outcome).toBe('pending');
+  expect(status?.participants.semantic?.outcome).toBe('pending');
   expect(status?.completedAt).toBeNull();
   expect((await f.call(creator, 'GET', `/v1/contexts/${resource.id}`)).status).toBe(200);
   const duplicate = await enroll(resource, owner.accountId);
