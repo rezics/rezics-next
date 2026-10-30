@@ -64,7 +64,7 @@ function richRecord() {
     measurement({ P518: [{ snaktype: 'somevalue', property: 'P518', datatype: 'wikibase-item' }] }),
   ];
   record.labels['unknown-language'] = { language: 'unknown-language', value: 'UNKNOWN_LANGUAGE_SENTINEL' };
-  // Unknown-language monolingual author qualifiers must not become English text.
+  // An unmapped monolingual source extension must not become English text.
   record.claims.P50![0]!.qualifiers!.P1932 = [
     {
       snaktype: 'value',
@@ -433,8 +433,14 @@ export async function runWikidataRichCliJourney() {
       receipts: await Promise.all(oldCommands.map(receipt)),
       candidates: await runtime.database.admin
         .query(
-          'SELECT candidate_id,statement,source FROM semantic.candidate WHERE route=$1 AND subject_id=$2 AND candidate_id=ANY($3::uuid[]) ORDER BY candidate_id',
+          'SELECT candidate_id,statement FROM semantic.candidate WHERE route=$1 AND subject_id=$2 AND candidate_id=ANY($3::uuid[]) ORDER BY candidate_id',
           [routeOf(initialSubjectId), initialSubjectId, selected.map((c) => c.id)],
+        )
+        .then((r) => r.rows),
+      sources: await runtime.database.admin
+        .query(
+          'SELECT revision,source FROM semantic.revision WHERE route=$1 AND subject_id=$2 AND revision=ANY($3::integer[]) ORDER BY revision',
+          [routeOf(initialSubjectId), initialSubjectId, selected.map((c) => c.revision)],
         )
         .then((r) => r.rows),
       media: inspect().media,
@@ -455,7 +461,6 @@ export async function runWikidataRichCliJourney() {
     expect(fresh[0]!.source.digest).not.toBe(selected[0]!.source.digest);
     const independentSelectionAfter = (await publicView(initialSubjectId, context)).subject.statements['schema:url'];
     const unchangedReopen = await invoke(changed);
-    const originalBootstrapAfter = await immutable();
 
     // Leave real prepared work outstanding, then add a facts fence before reopening it.
     const fenced = structuredClone(changed);
@@ -473,6 +478,7 @@ export async function runWikidataRichCliJourney() {
     });
     expect(takedown.status, JSON.stringify(takedown.body)).toBe(200);
     const fencedRefresh = await invoke(fenced);
+    const originalBootstrapAfter = await immutable();
     const afterFence = await publicView(initialSubjectId);
     const disclosedFencedFacts = Object.values(afterFence.subject.statements).flat();
     expect((await page(initialSubjectId, 'schema:wordCount')).candidates).toEqual([]);

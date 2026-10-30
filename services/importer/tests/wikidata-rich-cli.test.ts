@@ -128,7 +128,7 @@ test('rich JSONL CLI rejects a malformed tail before Auth or public effects', as
         fetch: (async (request: Request) => {
           requests.push(request.url);
           throw new Error('Unexpected network effect before sealing');
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       },
     );
     expect(revisions).toEqual(['wikidata-4']);
