@@ -129,9 +129,12 @@ type DefaultPublicFilterRuntime = Readonly<{
 ```
 
 `bindRequest` resolves the active physical generation through trusted lifecycle state.
-It resolves accepted immutable release and type from the admitted shared semantic request.
-For an untyped catalogue query, the native Source's configured population meaning supplies type scope;
-do not invent one type from the first hit or expand a type union into independent unchecked reads.
+It reads actual `semantic/definitions.ts:activeRelease(pool)` and retains its digest and full `Release`.
+Select released `schema:Thing` as the default catalogue population root, as declared in
+`packages/definitions/catalogue/core.yaml`; require the native Source registration for that root.
+This is population scope over the release's catalogue types, not an exact engine `type=Thing` filter.
+Keep the request's full type/OR/NOT expression in its AST; a narrower filter does not change population identity.
+Missing root registration or release is readiness, never a guessed first-hit type or unchecked per-type union.
 It checks that lifecycle registration accepts the resolved meaning and physical target.
 It constructs the declared consumer factory with those exact values and calls `capture`.
 `operations` and `capture` belong to that one native binding and deadline.
@@ -304,12 +307,22 @@ Select a service-owned completion callback for the existing route `fill` work, d
 
 ### Request envelope and route closure
 
-`services/kernel/src/server.ts` owns default construction beside current `createSearchService`.
+`services/kernel/src/server.ts:startServer` owns default construction beside current `createSearchService`.
 Pass the actual installed clock as well as pool/client/prefix/routeKey/native Access.
 Do not silently use a separate clock or a test Source in server composition.
 Select an internal `publicFilters` option on `createSearchService`, supplied by the new runtime.
 An injected historical service can preserve its own existing test construction contract;
 it must not be registered as the default public native runtime by a WeakMap side door.
+
+`createKernelRuntimeDefaults().access` is an `AccessFactory`, not the `Access` required by Source.
+Use actual `http/kernel.ts:createKernelAccessResolver` and its complete mounted action catalogue.
+Select proposed trusted `KernelDependencies.onAccessReady(access: Access): void` in `http/kernel.ts`.
+Invoke it after `compositionFinished=true` and existing catalogue/resource-type validation,
+with `resolveAccess({actions: actionCatalogue(zones), realmRoleReader})` from that same composition.
+The server supplies a private callback that constructs the runtime with this exact resolved Access.
+The service's `publicFilters` option is a lazy getter over that installed runtime; early use fails closed.
+`startServer` accepts no request before this synchronous composition and runtime installation completes.
+No new Access rules, narrowed action catalogue or permissive fallback is introduced.
 
 The existing `search` method retains principal/request/domain-time arguments for cursor compatibility.
 Add a trusted internal read context carrying actual `job.deadline` and completion work from the route.
@@ -416,7 +429,7 @@ The artifact-only change here generates no runtime/client/schema files.
 Future acceptance files are `test/search/default-public-filter-runtime.test.ts` and
 `test/search/default-public-filter-routes.test.ts`, under `services/kernel/`.
 Keep existing `test/search/public-filter-consumer.test.ts` and custody cases unchanged.
-Default binding acceptance must enter real `startKernelServer`/kernel routes, not a fixture-only factory.
+Default binding acceptance must enter real `server.ts:startServer`/kernel routes, not a fixture-only factory.
 The fixture may observe original starters and native traffic without replacing producers.
 
 ## Whole implementation slice: background initialization and activation
@@ -442,7 +455,7 @@ interface SubjectSourceKeyPages {
     request: Readonly<{
       partition: number;
       epoch: number;
-      after: string | null;
+      after: Readonly<{ route: number; id: string }> | null;
       through: bigint;
       inputLimit: number;
     }>,
@@ -454,7 +467,8 @@ interface SubjectSourceKeyPages {
         epoch: number;
         through: bigint;
         keys: readonly string[];
-        after: string | null;
+        after: Readonly<{ route: number; id: string }> | null;
+        position: bigint;
         cost: PublicFilterCost;
       }>
     | Readonly<{ status: 'changed' | 'gap'; cost: PublicFilterCost }>
@@ -471,11 +485,16 @@ Do not add a separate public `keySource` factory or caller-selected population.
 The worker receives the owner-adopted intersection `SubjectSource & SubjectSourceKeyPages`.
 The default request runtime receives no key-page capability.
 
-The native key access path is `(partition, subject key)` with a real bounded keyset frontier.
+The native key access path visits the home partition's sixteen routes in order, then native `(route,id)` keys.
+Each SQL page is anchored to one actual route with a bounded `id` keyset and no cross-partition join.
+The `{route,id}` frontier records route exhaustion as well as last examined key; never use UUID order
+as a substitute for route order or discover the next route through a population scan.
 It includes originals that are currently hidden, redirected or otherwise ineligible for public output.
 The ordinary Source decides whether each known key emits a terminal document or requires withdrawal.
 The frontier advances on examined input, including rejects, not only on indexed output.
 Lookahead is charged and is not consumed past an unprocessed key.
+`inputLimit` is 1..1000 and includes raw keys/rejects/lookahead; each page returns its actual observed
+ordinary source `position: bigint`, distinct from `through`.
 `through` is a source-log bridge boundary, not a claim that the entire snapshot was frozen at that position.
 The producer must detect log retention gaps and epoch changes explicitly.
 Unavailable or missing owner cannot be converted into a complete empty page.
@@ -494,6 +513,16 @@ It also retains consumer/projection generation, accepted meaning and current pha
 A work item carries only this locator, never copied facts, caller subject lists or claimed completion.
 The lifecycle resolves its own retained input before every step.
 Wrong incarnation, retired generation or changed accepted meaning rejects that attempt before writes.
+
+Select proposed internal operations `initializePublicSubjectGeneration`, `stepPublicSubjectPopulation`
+and `readPublicSubjectGeneration` in this module; these are new names awaiting lifecycle-owner adoption.
+Initialization takes trusted runtime configuration plus a native requested generation number and context,
+resolves/creates the never-reused physical target and returns its retained generation locator.
+Step takes only that locator/context and returns `{status:'progress'|'complete', cost}` or existing
+typed unavailable/readiness; completion is diagnostic until the lifecycle's own activation join succeeds.
+Read takes the locator/context and returns native phase, revision, actual source-to-searchable frontier
+and cost, or existing typed failure; no caller input can set those output fields.
+All three resolve the physical UUID and persisted input rather than accepting copied evidence.
 
 For each native home, retain the real ownership epoch and capture ordinary event-log start position A.
 Arm replay/retention before the cold key walk so changes during scanning cannot fall into a gap.
@@ -606,15 +635,27 @@ The bridge also gates rebuild publication; first start and rebuild cannot diverg
 `composeWork` invokes each real register once and launches real service starters after DBOS launch.
 The existing `searchWorkModule.register` reads `readSearchConfig(context.env)` and canonical route key.
 It installs the shared Source, public-filter runtime and population/repair service in that original starter.
-Native Access must come from the actual kernel worker Access composition, not `anonymousAccess` as an allow-all.
-Any new trusted `WorkContext` input for that native Access is an owner-adopted composition change.
+Native Access comes from the same completed kernel composition used by the server.
+In `searchWorkModule.register`, use actual `server.ts:createKernelRuntimeDefaults` with `context.env`
+and `context.clock`, then construct `http/kernel.ts:createKernel` headlessly with pool, routeKey,
+those defaults, the supplied `context.client` and the proposed `onAccessReady` hook.
+This mounts the actual action/resource declarations and resolves native Access; it starts no listener,
+worker, SDK, relay or alternate Source. Pass the returned native Access to the shared runtime.
+It must use the complete native Realm role reader/resource catalogue rather than copied action strings.
+The headless composition owns no additional WorkClient because it receives the existing one.
+No new `WorkContext` Access selector or environment-selected Access implementation is needed.
+The CLI uses this same headless composition with its owned enqueue-only WorkClient and closes that client.
 Do not read an Access implementation, actor or domain clock from environment strings.
 
 Use the existing maintenance queue and its concurrency two for background durable continuations.
 The real relay/indexing concurrency stays two as currently configured by `search/work.ts`.
 Do not create a new queue, timer-only work registry or unlimited background pool.
 Durable work carries generation/job locators and resolves native input on each continuation.
-Use deterministic existing work identity/intent delivery so commit-versus-enqueue loss is recoverable.
+Use actual `work/client.ts:enqueueWorkIntent(work, client, intent)` in the frontier owner's transaction
+for operational steps: maintenance queue, retained job workflow name and deterministic workflow ID.
+`WorkIntent.input.accounts` is empty for this public catalogue work; other fields are only retained locators.
+Initial domain-command scheduling uses its existing committed event/effect path, never a fabricated transaction.
+No post-commit enqueue alone closes the commit-versus-enqueue gap.
 A status response or request disappearance is not cancellation of persisted shared population work.
 
 The runner's `refresh()` discovers/advances the shared lifecycle and schedules bounded work.
@@ -703,8 +744,15 @@ No numeric public quota is declared by this proposal; copying the owner allowanc
 Select native definition admission from the existing configured/released read-definition registry.
 Only definitions with a current retention grant may create or keep a shared prepared generation.
 The grant is resolved internally with the actual definition; no request supplies it.
+This native admitted-definition/grant facility is an owner producer requirement, not a callable
+registry proven present on this base; the binding writer retains ownership of its implementation.
 
 The grant must cover anonymous or authenticated principal class, global definition capacity and expiry.
+Select proposed retained grant fields: native slot home/ID, read-definition identity, Source configuration
+revision, principal class, global admission revision and expiresAt, resolved under that owner's indexed control.
+Those fields locate current native allocation, never a portable authorization certificate.
+Reserve before building, CAS the slot with generation publication and release it only after owned cleanup;
+crash recovery resolves that same slot, and an expired/revoked revision cannot publish a replacement.
 The existing registration owner records reservation/use/release in its own custody-backed lifecycle.
 It does not create an independent quota engine or a second result store.
 Concurrent identical requests join the same admitted job and consume no duplicate building slot.
