@@ -5,5 +5,7 @@ export const libraryWorkModule: WorkModule = {
   async register(context) {
     const { registerLibraryWork } = await import('./work.ts');
     registerLibraryWork(context);
+    const { registerLibraryEntryRetentionWork } = await import('./entry-due-work.ts');
+    await registerLibraryEntryRetentionWork(context);
   },
 };
