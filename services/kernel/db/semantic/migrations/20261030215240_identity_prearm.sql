@@ -114,8 +114,8 @@ DECLARE b semantic.identity_epoch_prearm_bridge;
 BEGIN
  SELECT * INTO b FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=OLD.partition_no AND generation=OLD.generation FOR UPDATE;
  IF FOUND AND b.job_id IS NOT NULL AND (TG_OP='DELETE' OR
- (NEW.generation,NEW.version,NEW.owner_epoch,NEW.observed_count) IS DISTINCT FROM
- (OLD.generation,OLD.version,OLD.owner_epoch,OLD.observed_count))
+ (NEW.partition_no,NEW.terminal,NEW.generation,NEW.version,NEW.owner_epoch,NEW.observed_count) IS DISTINCT FROM
+ (OLD.partition_no,OLD.terminal,OLD.generation,OLD.version,OLD.owner_epoch,OLD.observed_count))
  AND NOT EXISTS(SELECT 1 FROM semantic.identity_epoch_admission_attempt a WHERE a.partition_no=OLD.partition_no
  AND a.job_id=b.job_id AND a.job_epoch=b.job_epoch AND a.state='acquired'
  AND current_setting('semantic.identity_prearm_effect_job',true)=b.job_id::text)

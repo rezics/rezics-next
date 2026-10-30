@@ -95,9 +95,15 @@ test('Real pending identity claims commit only after complete native scope pre-a
        AND c.directory_partition=p.partition_no AND c.page_id=p.page_id
       WHERE p.job_id=$2 AND c.page_id IS NULL`, [root,job.jobId]);
     expect(uncopied.rows).toHaveLength(0);
+    const retainedTickets = await f.pool.query(`SELECT p.page_id FROM semantic.identity_epoch_prearm_page p
+      JOIN semantic.identity_epoch_prearm_disposition d ON d.partition_no=p.partition_no AND d.page_id=p.page_id
+       AND d.stage='unsafe' AND d.source_receipt IS NOT NULL
+      WHERE p.job_id=$1 AND p.original IS NOT NULL`, [job.jobId]);
+    expect(retainedTickets.rows.length, 'the real relevant Source must have native pre-arm receiving custody').toBeGreaterThan(0);
     // Ordinary asynchronous arm was never invoked. Both probes use their unchanged native observation.
     const relevantFinal = await probe(relevant), disjointFinal = await probe(disjoint);
     expect(relevantFinal.status).not.toBe('current');
+    if (relevantFinal.status !== 'current') expect(relevantFinal.reason).toBe('pending_claim');
     expect(disjointFinal.status).toBe('current');
     if (disjointFinal.status === 'current') expect(disjointFinal.observation).toEqual(disjoint);
     for (const result of [relevantFinal, disjointFinal]) expect(result.work.statements).toBeLessThanOrEqual(12);

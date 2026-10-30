@@ -300,7 +300,7 @@ export const identityEpochStore: IdentityEpochStore = {
         canonicalize(prior.receipt) !== canonicalize(receiptValue(receipt))
       )
         throw new IdempotencyConflictError(command.partition);
-      if (prior.state === 'preparing' || prior.state === 'cancelling') throw unavailable();
+      if (prior.state !== 'pending' && prior.state !== 'published') throw unavailable();
       return noEffect({ jobId: prior.job_id, epoch: BigInt(prior.epoch) });
     }
     const ids =
