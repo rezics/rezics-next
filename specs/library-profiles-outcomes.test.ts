@@ -638,7 +638,7 @@ test('exclusive state does not create or couple independent labels sessions hold
   expect(before.copies.filter((item) => item.subjectId === subjectId)).toHaveLength(1);
 
   const current = await entryGuard(subjectId);
-  expect(current.revision).toBe(row?.revision);
+  expect(row?.revision).toBe(current.revision);
   expect((await entry(subjectId, 'completed', idempotencyKey(), current)).status).toBe(200);
   const after = await driver.inspect(fixture);
   expect(after.independentLabels).toEqual(before.independentLabels);
