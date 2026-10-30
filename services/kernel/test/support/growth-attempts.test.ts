@@ -101,7 +101,9 @@ function reportSample(
     statementRepetitions: [],
     occurrenceRepetitions: [
       {
-        statements: [{ index: 0, statement: 'SELECT 1', backend: 100, error: null, plans: [], rows, blocks: 1 }],
+        statements: [
+          { index: 0, statement: 'SELECT 1', backend: 100, error: null, plans: [], planDocuments: [], rows, blocks: 1 },
+        ],
         backgroundStatements: [],
       },
     ],

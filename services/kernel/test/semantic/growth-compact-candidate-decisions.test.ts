@@ -185,9 +185,9 @@ for (const property of ['schema:inLanguage', 'schema:author'] as const) {
           );
           if (axis === 'history' && sample.scale === scales.at(-1)) {
             const originNode = planNodes.find((node) => node.Alias === 'revision');
-            expect(['Index Scan', 'Index Only Scan'], `${label}: indexed origin release lookup`).toContain(
-              originNode?.['Node Type'],
-            );
+            expect(originNode, `${label}: indexed origin release lookup`).toMatchObject({
+              'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
+            });
             for (const key of ['recorded_transaction_id', 'route', 'subject_id'])
               expect(originNode?.['Index Cond'], `${label}: origin point condition ${key}`).toContain(key);
           }
