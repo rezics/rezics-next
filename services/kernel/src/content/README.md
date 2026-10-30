@@ -988,7 +988,6 @@ keys per board, durable bounded pages for multiple boards, and O(changes log R) 
 100 posts and one opening contribution; recovery reads at most 50 terminal keys per partition step. There is no thread,
 membership, revision-history or descendant scan, cross-home SQL join or held cross-home transaction.
 
-
 The Community producer also exports `RealmDiscoveryChangeValue`, `RealmDiscoveryCommittedChange`,
 `RealmDiscoveryChangePage` and `readRealmDiscoveryChanges` from `community/discovery-source.ts`. This is a bounded
 committed Realm-home log, not a callback for consumer-supplied records. Every changed mirror fact and exact gate

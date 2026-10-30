@@ -7,7 +7,11 @@ import { principalCommandIdentity, runCommand } from '../../src/command/command.
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { softDeletePost } from '../../src/content/erase-post.ts';
 import { resolveAppeal } from '../../src/content/appeals.ts';
-import { projectDiscoveryStart, readRealmDiscoveryGate, readRealmDiscoveryChanges } from '../../src/community/discovery-source.ts';
+import {
+  projectDiscoveryStart,
+  readRealmDiscoveryGate,
+  readRealmDiscoveryChanges,
+} from '../../src/community/discovery-source.ts';
 import {
   prepareDiscoveryMutation,
   abortDiscoveryMutation,
@@ -285,20 +289,26 @@ test('appeal reversal prepares its Realm fence outside the target transaction an
   }
 }, 120_000);
 
-
 test('committed discovery changes retain native predecessors, fact and gate atomicity, and bounded released pagination across epochs', async () => {
   const target = await f.createRealmTarget('Committed discovery log', 'public');
   const pool = f.system.database.pool;
   const original = (await source(target.threadId))!;
   await projectDiscoveryStart(pool, { ...original, change: 1 });
-  const range = (afterGeneration = '0', limit = 50) => readRealmDiscoveryChanges(pool, {
-    realmId: target.realmId, afterGeneration, limit, deadline: Date.now() + 30_000,
-  });
+  const range = (afterGeneration = '0', limit = 50) =>
+    readRealmDiscoveryChanges(pool, {
+      realmId: target.realmId,
+      afterGeneration,
+      limit,
+      deadline: Date.now() + 30_000,
+    });
   const initial = await range();
   expect(initial.changes).toHaveLength(1);
   expect(initial.changes[0]).toMatchObject({
-    realmId: target.realmId, realmEpoch: original.realmEpoch,
-    generation: '1', previousGeneration: '0', value: { kind: 'thread', source: original },
+    realmId: target.realmId,
+    realmEpoch: original.realmEpoch,
+    generation: '1',
+    previousGeneration: '0',
+    value: { kind: 'thread', source: original },
   });
   expect(initial.head).toEqual({ realm_epoch: original.realmEpoch, generation: '1', settled: true });
   expect(initial.next).toBeNull();
@@ -315,21 +325,27 @@ test('committed discovery changes retain native predecessors, fact and gate atom
   const pending = await range('1', 1);
   expect(pending.changes.map((change) => change.value)).toEqual([{ kind: 'gate', settled: false }]);
   expect(pending.head?.settled).toBe(false);
-  const operation = (await pool.query<{ route: number; intent: string; generation: string }>(
-    'SELECT route,intent,generation::text FROM content.realm_discovery_operation WHERE route=$1 AND target_id=$2',
-    [original.sourceRoute, target.postId],
-  )).rows[0]!;
+  const operation = (
+    await pool.query<{ route: number; intent: string; generation: string }>(
+      'SELECT route,intent,generation::text FROM content.realm_discovery_operation WHERE route=$1 AND target_id=$2',
+      [original.sourceRoute, target.postId],
+    )
+  ).rows[0]!;
   await projectDiscoveryMutation(pool, operation);
   const resolved = await range('2');
   const retracted = (await source(target.threadId))!;
   expect(resolved.changes.map((change) => change.value)).toEqual([
-    { kind: 'thread', source: retracted }, { kind: 'gate', settled: true },
+    { kind: 'thread', source: retracted },
+    { kind: 'gate', settled: true },
   ]);
   expect(retracted.contributing).toBe(false);
   expect(resolved.changes[0]!.transactionId).toBe(resolved.changes[1]!.transactionId);
   const complete = await range();
   expect(complete.changes.map((change) => [change.previousGeneration, change.generation])).toEqual([
-    ['0', '1'], ['1', '2'], ['2', '3'], ['3', '4'],
+    ['0', '1'],
+    ['1', '2'],
+    ['2', '3'],
+    ['3', '4'],
   ]);
   const first = await range('0', 2);
   expect(first.changes).toEqual(complete.changes.slice(0, 2));
@@ -365,13 +381,23 @@ test('discovery log rejects invalid internal frontiers and bounds before checkin
   const realmId = (await f.createRealmTarget('Invalid discovery range', 'public')).realmId;
   const pool = f.system.database.pool;
   for (const afterGeneration of ['-1', '01', '1.5', '', '9223372036854775808']) {
-    await expect(readRealmDiscoveryChanges(pool, {
-      realmId, afterGeneration, limit: 1, deadline: Date.now() + 30_000,
-    })).rejects.toBeInstanceOf(RangeError);
+    await expect(
+      readRealmDiscoveryChanges(pool, {
+        realmId,
+        afterGeneration,
+        limit: 1,
+        deadline: Date.now() + 30_000,
+      }),
+    ).rejects.toBeInstanceOf(RangeError);
   }
   for (const limit of [0, 51, 1.5, NaN]) {
-    await expect(readRealmDiscoveryChanges(pool, {
-      realmId, afterGeneration: '0', limit, deadline: Date.now() + 30_000,
-    })).rejects.toBeInstanceOf(RangeError);
+    await expect(
+      readRealmDiscoveryChanges(pool, {
+        realmId,
+        afterGeneration: '0',
+        limit,
+        deadline: Date.now() + 30_000,
+      }),
+    ).rejects.toBeInstanceOf(RangeError);
   }
 });

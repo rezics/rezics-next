@@ -70,7 +70,13 @@ export async function prepareRealmDiscoverySource(
 
 // These operations consume committed Content evidence. They never authorize a
 // content mutation and never hold a source connection while entering Realm home.
-import { currentCommand, noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  noEffect,
+  registerCommandCallback,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import {
   readDiscoveryOperation,
   readDiscoveryOutcome,
@@ -149,41 +155,65 @@ export async function readRealmDiscoveryChanges(
   const route = routeOf(realmId);
   if (
     route === null ||
-    typeof afterGeneration !== 'string' || afterGeneration.length > 19 ||
+    typeof afterGeneration !== 'string' ||
+    afterGeneration.length > 19 ||
     !/^(0|[1-9][0-9]*)$/.test(afterGeneration) ||
     BigInt(afterGeneration) > 9223372036854775807n ||
-    !Number.isInteger(limit) || limit < 1 || limit > 50 || !Number.isFinite(deadline)
-  ) throw new RangeError('Invalid Realm discovery change range');
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 50 ||
+    !Number.isFinite(deadline)
+  )
+    throw new RangeError('Invalid Realm discovery change range');
   const partitionNo = partitionOf(route);
-  return within(deadline, () => withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      const partition = await readPartition(client, partitionNo);
-      if (!partition) throw new CommandUnavailableError('contention', partitionNo);
-      if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-      if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
-      const head = await readRealmDiscoveryGate(client, realmId);
-      const rows = head ? await changes.run(client, {
-        route, realm_id: realmId, after_generation: afterGeneration, limit,
-      }) : [];
-      const records = rows.map((row): RealmDiscoveryCommittedChange => Object.freeze({
-        realmId, realmEpoch: row.realm_epoch, generation: row.generation,
-        previousGeneration: row.previous_generation, transactionId: row.transaction_id,
-        value: row.value as RealmDiscoveryChangeValue,
-      }));
-      const last = records.at(-1)?.generation ?? afterGeneration;
-      if (head && BigInt(last) < BigInt(head.generation) && records.length === 0)
-        throw new Error('Realm discovery committed change range unavailable');
-      await client.query('COMMIT');
-      return Object.freeze({ changes: Object.freeze(records), head,
-        next: head && BigInt(last) < BigInt(head.generation) ? last : null });
-    } catch (error) {
-      try { await connection.query('ROLLBACK'); }
-      catch (rollbackError) { discardConnection(connection, rollbackError as Error); }
-      throw error;
-    }
-  }));
+  return within(deadline, () =>
+    withConnection(pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      try {
+        const partition = await readPartition(client, partitionNo);
+        if (!partition) throw new CommandUnavailableError('contention', partitionNo);
+        if (partition.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+        if (partition.writeState !== 'active') throw new CommandUnavailableError('fenced', partitionNo);
+        const head = await readRealmDiscoveryGate(client, realmId);
+        const rows = head
+          ? await changes.run(client, {
+              route,
+              realm_id: realmId,
+              after_generation: afterGeneration,
+              limit,
+            })
+          : [];
+        const records = rows.map((row): RealmDiscoveryCommittedChange =>
+          Object.freeze({
+            realmId,
+            realmEpoch: row.realm_epoch,
+            generation: row.generation,
+            previousGeneration: row.previous_generation,
+            transactionId: row.transaction_id,
+            value: row.value as RealmDiscoveryChangeValue,
+          }),
+        );
+        const last = records.at(-1)?.generation ?? afterGeneration;
+        if (head && BigInt(last) < BigInt(head.generation) && records.length === 0)
+          throw new Error('Realm discovery committed change range unavailable');
+        await client.query('COMMIT');
+        return Object.freeze({
+          changes: Object.freeze(records),
+          head,
+          next: head && BigInt(last) < BigInt(head.generation) ? last : null,
+        });
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(connection, rollbackError as Error);
+        }
+        throw error;
+      }
+    }),
+  );
 }
 
 function sourceEvent(realmId: string, realmEpoch: string) {
@@ -201,7 +231,7 @@ export async function commitDiscoveryFence(pool: Pool, ref: DiscoveryOperationRe
     pool,
     { partition: partitionOf(route), deadline: Date.now() + 30_000 },
     async (tx) => {
-      if (!await epoch.run(tx, { route, realm_id: source.realm_id })) throw new Error('Discovery Realm unavailable');
+      if (!(await epoch.run(tx, { route, realm_id: source.realm_id }))) throw new Error('Discovery Realm unavailable');
       const installed = (
         await fence.run(tx, {
           route,
@@ -231,11 +261,11 @@ export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperatio
   const { operation: source, current, source: contribution } = await readDiscoveryOutcome(pool, ref);
   const route = routeOf(source.realm_id)!;
   await runCommand(pool, { partition: partitionOf(route), deadline: Date.now() + 30_000 }, async (tx) => {
-    if (!await epoch.run(tx, { route, realm_id: source.realm_id })) throw new Error('Discovery Realm unavailable');
+    if (!(await epoch.run(tx, { route, realm_id: source.realm_id }))) throw new Error('Discovery Realm unavailable');
     let changed = false;
     if (source.phase === 'applied') {
       if (contribution)
-        changed = !!await project.run(tx, {
+        changed = !!(await project.run(tx, {
           route,
           realm_id: contribution.realmId,
           realm_epoch: contribution.realmEpoch,
@@ -246,7 +276,7 @@ export async function projectDiscoveryOutcome(pool: Pool, ref: DiscoveryOperatio
           space_id: contribution.spaceId,
           source_version: contribution.sourceVersion,
           contributing: contribution.contributing,
-        });
+        }));
       else if (source.target_kind === 'board')
         changed = !!(await projectBoard.run(tx, {
           route,
@@ -292,7 +322,7 @@ export async function projectDiscoveryStart(pool: Pool, delta: DiscoveryDelta): 
   const source = prepared.source;
   const route = routeOf(source.realmId)!;
   await runCommand(pool, { partition: partitionOf(route), deadline: Date.now() + 30_000 }, async (tx) => {
-    if (!await epoch.run(tx, { route, realm_id: source.realmId })) throw new Error('Discovery Realm unavailable');
+    if (!(await epoch.run(tx, { route, realm_id: source.realmId }))) throw new Error('Discovery Realm unavailable');
     const changed = await project.run(tx, {
       route,
       realm_id: source.realmId,
