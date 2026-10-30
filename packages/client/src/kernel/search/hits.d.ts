@@ -40,8 +40,17 @@ export declare function chooseTexts(list: IndexedSubject['labels'], languages: r
     [k: string]: string;
 };
 export declare function projectHit(subject: IndexedSubject, { descriptions, languages }: HitOptions): SearchHit;
+type Pending = Exclude<Fact, {
+    kind: 'item';
+}> | {
+    kind: 'item';
+    id: string;
+};
+/** The first distinct values of each requested property, in statement order. */
+export declare function pendingFacts(subject: Pick<IndexedSubject, 'statements'>, properties: readonly string[]): Map<string, Pending[]>;
 /**
  * Facts of every hit of a page, in the order of `subjects`. The item targets of the whole page are read once through
  * disclosure; a target that is not visible is dropped without taking a later value's place.
  */
 export declare function projectFacts(source: SubjectSource, subjects: readonly IndexedSubject[], properties: readonly string[], languages: readonly string[] | undefined): Promise<Record<string, Fact[]>[]>;
+export {};

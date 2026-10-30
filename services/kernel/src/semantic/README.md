@@ -1108,8 +1108,8 @@ failures until the identity owner's native mapping/publication work completes; n
 successful mapping or participant receipt.
 
 - Touches: at most 100 raw originals, native current identity/control points, original and terminal
-  Access/source headers, active Type metadata, at most four selected slots and three output values
-  per property, exact candidate/revision/author/consent/account/tuple points, bounded related
+  Access/source headers, active Type metadata, at most four configured properties and three output
+  values per property, their bounded selected slots, exact candidate/revision/author/consent/account/tuple points, bounded related
   identity/label fills and the same finite dependencies at final currentness. Compact slot logs and
   expanded selections retain their existing native 33-log/32-selection limits; these reads and any
   withheld or unrepresentable candidates are charged, not free hydration.
