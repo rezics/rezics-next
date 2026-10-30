@@ -2,11 +2,12 @@ import { revisionResource } from '../../src/semantic/authorship.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createDeletionFixture } from './support/deletion-fixture.ts';
 import { accountAgentId, ensureAccountAgent } from '../../src/semantic/index.ts';
 import { newId } from '../../src/route/route.ts';
 import { patchTerms, termRevision } from '../../src/semantic/terms.ts';
+import { readSemanticRecordSourceSet } from '../../src/semantic/record-source-set.ts';
 
 const f = await createDeletionFixture();
 beforeAll(f.setup);
@@ -169,4 +170,144 @@ test('The real terms PATCH command updates multilingual current terms and safe r
   } finally {
     await f.real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'statement:propose');
   }
+});
+
+async function termSourceSets(subject: string) {
+  return (
+    await f.admin.query(
+      `SELECT r.revision AS subject_revision,r.recorded_transaction_id::text,
+        s.partition_no,s.transaction_id::text,s.revision,s.sealed,s.digest,s.members
+       FROM semantic.revision r JOIN semantic.record_source_set s
+         ON s.partition_no=r.route/16 AND s.transaction_id=r.recorded_transaction_id
+       WHERE r.route=$1 AND r.subject_id=$2 ORDER BY r.revision`,
+      [routeOf(subject), subject],
+    )
+  ).rows;
+}
+
+async function termSourceMembers(subject: string, revision: number) {
+  const sets = (await termSourceSets(subject)).filter((row) => row.subject_revision === revision);
+  expect(sets).toHaveLength(1);
+  const set = sets[0]!;
+  expect(set.transaction_id).toBe(set.recorded_transaction_id);
+  expect(set.sealed).toBe(true);
+  const members = (
+    await f.admin.query(
+      `SELECT kind,subject_id::text,candidate_id::text,document_id::text,source_revision,field,language,source_key
+       FROM semantic.record_source_set_member WHERE partition_no=$1 AND transaction_id=$2 ORDER BY source_key`,
+      [set.partition_no, set.transaction_id],
+    )
+  ).rows;
+  expect(set.digest).toBe(createHash('sha256').update(members.map((row) => row.source_key).join('\n')).digest('hex'));
+  for (const row of members) {
+    expect(row).toMatchObject({ kind: 'terms', subject_id: subject, candidate_id: null, document_id: null });
+    expect(row.source_key).toBe(JSON.stringify(['terms', subject, row.source_revision, row.field, row.language]));
+  }
+  const locator = { partition: set.partition_no, transactionId: set.transaction_id, revision: set.revision };
+  expect(await readSemanticRecordSourceSet({ pool: f.pool }, locator, { deadline: Date.now() + 30_000 })).toEqual({
+    locator,
+    digest: set.digest,
+    members: set.members,
+  });
+  return { set, members: members.map(({ source_revision, field, language }) => [source_revision, field, language]) };
+}
+
+test('The mounted native terms write enrolls exact old and current field-language original sources in its one sealed command SourceSet before History serialization without changing CAS replay no-op or publication', async () => {
+  const created = await f.call('POST', '/v1/subjects', 'owner', {
+    type: 'schema:Book',
+    labels: { en: 'Original', ja: '元' },
+    descriptions: { en: 'Unchanged' },
+    aliases: { en: ['First', 'Second'] },
+  });
+  f.status(created, 201);
+  const subject = created.body.subject.id as string;
+  const key = `"${randomUUID()}"`;
+  const body = { labels: { en: 'Corrected', fr: 'Livre', ja: null }, aliases: { en: ['Third', 'Fourth'] } };
+  expect((await patch(subject, 1, body, key)).status).toBe(200);
+  const enrolled = await termSourceMembers(subject, 2);
+  expect(enrolled.set.members).toBe(4);
+  // An alias array is one unit. Deletion keeps only the actual original support.
+  expect(enrolled.members).toEqual([
+    [1, 'aliases', 'en'],
+    [1, 'labels', 'en'],
+    [1, 'labels', 'ja'],
+    [2, 'aliases', 'en'],
+    [2, 'labels', 'en'],
+    [2, 'labels', 'fr'],
+  ]);
+  const before = await termSourceSets(subject);
+  expect((await patch(subject, 1, body, key)).body).toEqual({ subject, revision: 2 });
+  expect((await patch(subject, 2, body)).body).toEqual({ subject, revision: 2 });
+  expect((await patch(subject, 1, { labels: { en: 'Stale' } })).status).toBe(412);
+  expect((await termSourceSets(subject))).toEqual(before);
+  expect(await termSourceMembers(subject, 2)).toEqual(enrolled);
+  await expect(
+    f.admin.query('UPDATE semantic.record_source_set SET digest=$3 WHERE partition_no=$1 AND transaction_id=$2', [
+      enrolled.set.partition_no,
+      enrolled.set.transaction_id,
+      '0'.repeat(64),
+    ]),
+  ).rejects.toThrow('Immutable Semantic record source set');
+  await f.caughtUp(subject);
+  expect(await f.current(subject)).toMatchObject({ revision: 2, labels: { en: 'Corrected', fr: 'Livre' } });
+  const published = await f.admin.query(
+    'SELECT count(*)::int n FROM semantic.subject_page_change WHERE route=$1 AND subject_id=$2 AND change_id=$3',
+    [routeOf(subject), subject, enrolled.set.transaction_id],
+  );
+  expect(published.rows).toEqual([{ n: 3 }]);
+});
+
+test('native terms deletion and restoration retain the real original imported field support without inventing a deleted payload', async () => {
+  await f.real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:batch_write');
+  const source = {
+    source: 'openlibrary', external_id: `OL${randomUUID()}W`, record_revision: '1',
+    digest: 'c'.repeat(64), converter_revision: 'openlibrary@1', field_group: 'facts',
+  };
+  const response = await f.kernel.handle(new Request('http://kernel.test/v1/subjects:batchWrite', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${await f.bearer(f.accounts.owner, [...f.actions, 'subject:batch_write'])}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ commands: [{ op: 'create', key: randomUUID(), source, subject: {
+      type: 'schema:Book', labels: { en: 'Imported' }, aliases: { fr: ['Import alias', 'Other alias'] },
+    } }] }),
+  }));
+  const result = await response.json();
+  expect(response.status, JSON.stringify(result)).toBe(200);
+  expect(result.results[0].status, JSON.stringify(result)).toBe(201);
+  const subject = result.results[0].value.id as string;
+  expect((await patch(subject, 1, { aliases: { fr: ['Correction'] } })).status).toBe(200);
+  expect((await termSourceMembers(subject, 2)).members).toEqual([[1, 'aliases', 'fr'], [2, 'aliases', 'fr']]);
+  expect((await patch(subject, 2, { aliases: { fr: null } })).status).toBe(200);
+  expect((await termSourceMembers(subject, 3)).members).toEqual([[1, 'aliases', 'fr']]);
+  expect((await patch(subject, 3, { aliases: { fr: ['Restored'] } })).status).toBe(200);
+  expect((await termSourceMembers(subject, 4)).members).toEqual([[1, 'aliases', 'fr'], [4, 'aliases', 'fr']]);
+  expect((await f.admin.query(
+    'SELECT term_support FROM semantic.revision WHERE route=$1 AND subject_id=$2 AND revision=4',
+    [routeOf(subject), subject],
+  )).rows).toEqual([{ term_support: [1] }]);
+});
+
+test('a native term fact-bound failure rolls back the command SourceSet allocation with its revision and publication', async () => {
+  const languages = ['en', 'fr', 'de', 'es', 'it', 'ja', 'ko', 'zh', 'pt', 'ru', 'ar', 'nl', 'sv', 'pl', 'fi', 'da'];
+  const aliases = Object.fromEntries(languages.map((language, index) => [
+    language, Array.from({ length: index === 15 ? 30 : 32 }, (_, n) => `Alias ${language} ${n}`),
+  ]));
+  const created = await f.call('POST', '/v1/subjects', 'owner', {
+    type: 'schema:Book', labels: { en: 'Full' }, aliases,
+    statements: { 'schema:url': [f.cited('schema:url', 'https://example.test/full')] },
+  });
+  f.status(created, 201);
+  const subject = created.body.subject.id as string;
+  const before = await termSourceSets(subject);
+  expect((await patch(subject, 1, { descriptions: { en: 'Exceeds the native fact cap' } })).status).toBe(400);
+  expect(await termSourceSets(subject)).toEqual(before);
+  expect(await f.revisions(subject)).toEqual([{ revision: 1, kind: 'create' }]);
+  expect((await f.admin.query(
+    `SELECT count(*)::int n FROM semantic.record_source_set s
+     WHERE s.partition_no=$1 AND NOT EXISTS (
+       SELECT 1 FROM editorial.write_basis b WHERE b.partition_no=s.partition_no AND b.transaction_id=s.transaction_id)`,
+    [Math.floor(routeOf(subject)! / 16)],
+  )).rows).toEqual([{ n: 0 }]);
 });

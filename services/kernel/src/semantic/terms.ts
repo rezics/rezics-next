@@ -10,6 +10,11 @@ import { fencedIds, sourceTuple, fenceKey } from './fences.ts';
 import { SUBJECT_REVISED } from './events.ts';
 import { publicState, recordSubjectPageTransition } from './subject-page-publication-store.ts';
 import { writeFacts, type StoredFact } from './write-facts.ts';
+import {
+  beginSemanticRecordSourceSet,
+  appendSemanticRecordSourceSet,
+  sealSemanticRecordSourceSet,
+} from './record-source-set.ts';
 import readState from './terms-read-state.sql';
 import readSupport from './terms-read-support.sql';
 import readCurrent from './terms-read-current.sql';
@@ -232,6 +237,7 @@ export async function correctTerms(
         }),
       );
       const delta = facts.length - oldRows.length;
+      const sourceSet = await beginSemanticRecordSourceSet(tx);
       if (!(await changeCurrentFacts.run(tx, { ...parameters, delta })))
         throw new SubjectInputError([{ pointer: '', code: 'out_of_range' }]);
       const support = listed(await readSupport.run(tx, { ...parameters, entries: heads }));
@@ -254,6 +260,32 @@ export async function correctTerms(
       // original heads, never lose an imported head's immutable Source support.
       await writeHeads.run(tx, { ...parameters, transaction_id: transactionId, heads });
       await writeFacts(tx, { ...parameters, transaction_id: transactionId, facts });
+      await appendSemanticRecordSourceSet(tx, sourceSet, {
+        sources: [],
+        terms: patched.changes.flatMap((change) =>
+          change.languages.flatMap((language) => {
+            const original = oldRows.find((row) => row.kind === kinds[change.field] && row.language === language);
+            const originalRevision = original?.support_revision ?? null;
+            // Deletion has no new fact. Keep its genuine native support only.
+            const currentRevision = patched.terms[change.field][language] === undefined ? originalRevision : revision;
+            return currentRevision === null
+              ? []
+              : [{ subjectId: input.subject, originalRevision, currentRevision, field: change.field, language }];
+          }),
+        ),
+      });
+      // Inactive imported heads can still supply original provenance on restoration.
+      await appendSemanticRecordSourceSet(tx, sourceSet, {
+        sources: [],
+        terms: support.map((row) => ({
+          subjectId: input.subject,
+          originalRevision: null,
+          currentRevision: row.revision,
+          field: row.kind === 'label' ? 'labels' : row.kind === 'description' ? 'descriptions' : 'aliases',
+          language: row.language,
+        })),
+      });
+      await sealSemanticRecordSourceSet(tx, sourceSet);
       const events: CommandEvent[] = [
         { type: SUBJECT_REVISED, subject: input.subject, data: { id: input.subject, revision, kind: 'terms' } },
       ];
