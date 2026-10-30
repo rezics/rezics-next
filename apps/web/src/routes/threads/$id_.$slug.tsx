@@ -138,6 +138,8 @@ function ThreadPage() {
     const current = () => mounted.current && currentRead.current === read && read.sequence === sequence;
     await queryClient.cancelQueries({ queryKey: ['thread-page', id] });
     if (!current()) throw new Error('Thread reader changed');
+    // Retire pre-command pages as well as in-flight reads, so navigation cannot reuse their old bodies.
+    queryClient.removeQueries({ queryKey: ['thread-page', id] });
     const updated = await queryClient.fetchQuery({
       ...threadPageQuery(id, cursor, session === 'signed-in' ? 'session' : 'anonymous'),
       staleTime: 0,

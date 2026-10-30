@@ -651,7 +651,8 @@ References to deleted, withheld or unavailable records render with `Tombstone`; 
 [the SEO policy](../../docs/seo.md). Sitemaps drop the URL at the next export; they never authorize page disclosure.
 Warm HTML and validators require [current public rendering](../../docs/seo.md#public-html-cache) before reuse; a TTL never authorizes withdrawn content.
 Restore and Undo use the native author's restore route. Its 204 confirms the write, while the existing current
-thread-page read alone supplies body, title, author, media and placement. A failed read after 204 offers a read retry;
+thread-page read alone supplies body, title, author, media and placement. Pre-command page cache entries are retired
+before that read, so navigation cannot reuse their old bodies after a failed refresh. A failed read after 204 offers a read retry;
 it does not repeat the confirmed write or reveal an earlier local body. An uncertain restore retains its original
 key and checks the current native tombstone before a deliberate retry. Session, actor or target changes retire the
 local intent and any pending disclosure. Delete immediately substitutes a byte-free placeholder, then reads the
