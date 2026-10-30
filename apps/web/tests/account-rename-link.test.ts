@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { authManagementPageHref } from '../src/session/auth-page-routes';
+import { accountRenameNavigation } from '../src/settings/account-rename-actions';
 import { readAccountRenameContext } from '../src/settings/account-rename-data';
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountRenameHref, securityHrefFromIssuer } from '../src/settings/account-safety-links';
@@ -9,14 +11,21 @@ import { m } from '../src/paraglide/messages.js';
 
 const accountId = '123e4567-e89b-42d3-a456-426614174000';
 const securityHref = securityHrefFromIssuer('https://auth.example.test');
-const render = (renameAccount: Awaited<ReturnType<typeof readAccountRenameContext>>, issuer = securityHref) =>
+const deployment = {
+  AUTH_ISSUER: 'https://auth.example.test',
+  AUTH_MANAGEMENT_PAGE_ROUTES: JSON.stringify(['/account/rename']),
+};
+const render = (
+  renameAccount: Awaited<ReturnType<typeof readAccountRenameContext>>,
+  env: Parameters<typeof authManagementPageHref>[0] = deployment,
+) =>
   renderToStaticMarkup(
     createElement(AccountSafetyCard, {
       state: 'signed-in',
-      securityHref: issuer,
+      securityHref: securityHrefFromIssuer(env.AUTH_ISSUER),
       csrfToken: null,
       onReload() {},
-      renameAccount,
+      renameAccount: accountRenameNavigation(env, renameAccount),
     }),
   );
 
@@ -77,8 +86,20 @@ test('Expose safe handle rename from the current Accounts settings journey prese
     expect(html).not.toContain('/@');
     expect(html).not.toContain('private-website-token');
     expect(html).not.toContain('account-operations/approve');
-    expect(render(context, null)).not.toContain('/account/rename');
+    expect(render(context, {})).not.toContain('/account/rename');
   }
+});
+
+test('rename stays unavailable without an explicit valid deployment even with current native capability', () => {
+  const context = { accountId, handle: 'alice', available: true };
+  for (const AUTH_MANAGEMENT_PAGE_ROUTES of [undefined, 'not JSON', '["/organizations/members"]']) {
+    const html = render(context, { ...deployment, AUTH_MANAGEMENT_PAGE_ROUTES });
+    expect(html).not.toContain('/account/rename');
+    expect(html).toContain(m.settings_account_rename_unavailable());
+    expect(html).toContain('href="https://auth.example.test/security"');
+    expect(html).toContain('href="https://auth.example.test/account/delete"');
+  }
+  expect(context).toEqual({ accountId, handle: 'alice', available: true });
 });
 
 test('missing, denied, malformed and foreign native capability cannot enable rename', async () => {
