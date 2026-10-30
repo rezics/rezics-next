@@ -29,6 +29,7 @@ import {
   type Population,
   type Row,
 } from '../support/growth.ts';
+import { assertGrowthAccessPaths } from '../support/growth-access-path.ts';
 import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -1316,7 +1317,18 @@ test("source-fence disclosure on a subject view has constant rows and statements
       return answer.body;
     },
   });
-  assertNoSemanticSequentialScans(report);
+  // Validate every observed semantic access path against its real settled footprint.
+  // Tiny-table scans still contribute all their work to the growth bounds above.
+  const observedSemanticRelations = [
+    ...new Set(
+      report.samples.flatMap(({ repetitions }) =>
+        repetitions.flatMap(({ relations }) =>
+          Object.keys(relations).filter((relation) => relation.startsWith('semantic.')),
+        ),
+      ),
+    ),
+  ];
+  assertGrowthAccessPaths(report.name, report.samples, observedSemanticRelations);
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(report.samples.every(({ cost }) => Boolean(cost.relations['content.source_fences']))).toBe(true);
   logSamples(report);
