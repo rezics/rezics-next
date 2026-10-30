@@ -13,6 +13,7 @@ import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Task, Tokens } from './types.ts';
 import { devVerificationState } from './dev-verifier.ts';
+import { authenticatedCallingManager } from './integration-cli.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -46,6 +47,9 @@ export async function runWorkerCommand(
   const job =
     runtime?.job ?? new WorkerJob(tasks, options.landing ?? { enqueue() {} }, options.inbox ?? { deliver() {} });
   const env = options.env ?? process.env;
+  // The real CLI always supplies its shared runtime. Service injection without a runtime is the trusted
+  // programmatic test seam and deliberately does not confer a CLI manager identity.
+  const priorityActor = options.runtime ? (authenticatedCallingManager(options.runtime, env) ?? null) : undefined;
   try {
     // A worker's inherited sequence fences every mutating command before it can dispatch another task or retry itself.
     if (!['status', 'attempts', 'report'].includes(command) && env.GOAL_TASK_ID && env.GOAL_ATTEMPT) {
@@ -146,15 +150,29 @@ export async function runWorkerCommand(
       if (!arg || (argv.length !== 1 && !(argv.length === 3 && argv[1] === '--brief' && argv[2])))
         throw new Error('usage: retry <task> [--brief <file>]');
       try {
-        tasks.queueRetry(arg, argv.length === 3 ? { brief: argv[2]! } : {});
+        tasks.queueRetry(arg, argv.length === 3 ? { brief: argv[2]! } : {}, priorityActor);
       } catch (error) {
         if (!(error instanceof BriefContractUnchangedError)) throw error;
         print(error.message);
       }
     } else if (command === 'priority') {
-      if (!arg || argv.length !== 2 || !['critical', 'normal'].includes(argv[1]!))
-        throw new Error('usage: priority <task> critical|normal');
-      tasks.setPriority(arg, argv[1] as 'critical' | 'normal');
+      if (argv[0] === 'grant') {
+        if (!argv[1] || argv.length !== 2) throw new Error('usage: priority grant <task>');
+        if (!priorityActor) throw new Error('priority grants require an authenticated manager session');
+        print(JSON.stringify(tasks.grantPriority(argv[1], priorityActor)));
+      } else if (argv[0] === 'revoke') {
+        if (!argv[1] || !argv[2] || argv.length !== 3) throw new Error('usage: priority revoke <task> <grant-id>');
+        if (!priorityActor) throw new Error('priority revocation requires an authenticated manager session');
+        print(JSON.stringify(tasks.revokePriority(argv[1], argv[2], priorityActor)));
+      } else {
+        if (!arg || argv.length !== 2 || !['critical', 'normal'].includes(argv[1]!))
+          throw new Error(
+            'usage: priority <task> critical|normal | priority grant <task> | priority revoke <task> <grant-id>',
+          );
+        if (options.runtime && !priorityActor)
+          throw new Error('priority changes require an authenticated manager session');
+        tasks.setPriority(arg, argv[1] as 'critical' | 'normal', priorityActor);
+      }
     } else if (command === 'stop' || command === 'cancel' || command === 'consult') {
       if (!arg || argv.length !== 1) throw new Error(`usage: ${command} <task>`);
       if (command === 'stop') await tasks.stop(arg);

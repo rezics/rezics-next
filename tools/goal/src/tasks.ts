@@ -20,6 +20,15 @@ import type { Attempt, Profile, Settings, Task } from './types.ts';
 import { frozenFile, parseFrozenFiles, type FrozenFile } from './frozen.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
 import { installShared } from './shared-dependencies.ts';
+import {
+  applyPriorityTransition,
+  criticalPriority,
+  grantCriticalPriority,
+  requireNormalDispatch,
+  revokeCriticalPriority,
+  type AuthenticatedManager,
+} from './priority-authority.ts';
+import type { PriorityGrant } from './types.ts';
 
 type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
 function normalizedBriefText(markdown: string): string {
@@ -330,6 +339,7 @@ export class WorkerTasks {
   }
   dispatch(briefFile: string): Task {
     const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile);
+    requireNormalDispatch(submittedBrief, taskClass);
     const id = crypto.randomUUID();
     const branch = `${this.settings.branchPrefix}${id}`;
     const worktree = join(this.settings.worktreeRoot, id);
@@ -407,7 +417,11 @@ export class WorkerTasks {
     return worker;
   }
   /** Persist an explicit retry for the host to start on its next recovery sweep. */
-  queueRetry(taskId: string, options: RetryOptions = {}): void {
+  queueRetry(
+    taskId: string,
+    options: RetryOptions = {},
+    actor: AuthenticatedManager | null | undefined = undefined,
+  ): void {
     const task = this.store.task(taskId);
     if (!task.currentAttempt) throw new Error('cannot queue a retry before the first attempt');
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
@@ -430,20 +444,34 @@ export class WorkerTasks {
       const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`);
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
-      this.store.updateHeldRetryTask(
-        ref,
-        (current) => {
-          current.brief = reshaped.brief;
-          current.briefPath = briefPath;
-          current.taskClass = reshaped.taskClass;
-          current.state = this.dependenciesMet({ brief: current.brief }) ? 'ready' : 'held';
-          current.pendingBriefChange = {
-            previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
-            newBriefHash: briefHash(reshaped.brief.markdown),
-          };
-        },
-        { abandonPending: true },
-      );
+      try {
+        this.store.updateHeldRetryTask(
+          ref,
+          (current) => {
+            const previousCritical = criticalPriority(current.brief, current.taskClass);
+            current.brief = reshaped.brief;
+            current.briefPath = briefPath;
+            current.taskClass = reshaped.taskClass;
+            applyPriorityTransition(
+              this.store.db,
+              current,
+              previousCritical,
+              criticalPriority(current.brief, current.taskClass),
+              actor,
+            );
+            current.state = this.dependenciesMet({ brief: current.brief }) ? 'ready' : 'held';
+            current.pendingBriefChange = {
+              previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+              newBriefHash: briefHash(reshaped.brief.markdown),
+            };
+          },
+          { abandonPending: true },
+        );
+      } catch (error) {
+        rmSync(briefPath, { force: true });
+        throw error;
+      }
+      this.writeTaskPriority(this.store.task(taskId));
       return;
     }
     const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
@@ -460,33 +488,74 @@ export class WorkerTasks {
     }
     const retryOptions = { ...options };
     delete retryOptions.brief;
-    this.store.recordExplicitRetry(
-      ref,
-      (current) => {
-        if (!['ready', 'running', 'landing', 'stopped'].includes(current.state))
-          throw new Error(`cannot retry ${current.state} task`);
-        if (reshaped) {
-          current.brief = reshaped.brief;
-          current.briefPath = briefPath!;
-          current.taskClass = reshaped.taskClass;
-          current.pendingBriefChange = {
-            previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
-            newBriefHash: briefHash(reshaped.brief.markdown),
-          };
-          if (!this.dependenciesMet({ brief: current.brief })) current.state = 'held';
-          else current.state = 'ready';
-        } else if (current.state === 'stopped') current.state = 'ready';
-      },
-      retryOptions,
-    );
+    try {
+      this.store.recordExplicitRetry(
+        ref,
+        (current) => {
+          if (!['ready', 'running', 'landing', 'stopped'].includes(current.state))
+            throw new Error(`cannot retry ${current.state} task`);
+          if (reshaped) {
+            const previousCritical = criticalPriority(current.brief, current.taskClass);
+            current.brief = reshaped.brief;
+            current.briefPath = briefPath!;
+            current.taskClass = reshaped.taskClass;
+            applyPriorityTransition(
+              this.store.db,
+              current,
+              previousCritical,
+              criticalPriority(current.brief, current.taskClass),
+              actor,
+            );
+            current.pendingBriefChange = {
+              previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
+              newBriefHash: briefHash(reshaped.brief.markdown),
+            };
+            if (!this.dependenciesMet({ brief: current.brief })) current.state = 'held';
+            else current.state = 'ready';
+          } else if (current.state === 'stopped') current.state = 'ready';
+        },
+        retryOptions,
+      );
+    } catch (error) {
+      if (briefPath) rmSync(briefPath, { force: true });
+      throw error;
+    }
+    if (reshaped) this.writeTaskPriority(this.store.task(taskId));
   }
-  setPriority(taskId: string, priority: 'critical' | 'normal'): Task {
+  setPriority(
+    taskId: string,
+    priority: 'critical' | 'normal',
+    actor: AuthenticatedManager | null | undefined = undefined,
+  ): Task {
     const task = this.store.task(taskId);
-    const updated = this.store.updateTask({ taskId, attempt: task.currentAttempt }, (current) => {
-      current.brief.criticalPath = priority === 'critical';
+    const nextCritical = priority === 'critical';
+    const updated = this.store.updatePriorityMetadata({ taskId, attempt: task.currentAttempt }, (current) => {
+      applyPriorityTransition(
+        this.store.db,
+        current,
+        criticalPriority(current.brief, current.taskClass),
+        nextCritical,
+        actor,
+      );
     });
     this.writeTaskPriority(updated);
     return updated;
+  }
+  grantPriority(taskId: string, actor: AuthenticatedManager): PriorityGrant {
+    const task = this.store.task(taskId);
+    let grant!: PriorityGrant;
+    this.store.updatePriorityMetadata({ taskId, attempt: task.currentAttempt }, (current) => {
+      grant = grantCriticalPriority(this.store.db, current, actor);
+    });
+    return grant;
+  }
+  revokePriority(taskId: string, grantId: string, actor: AuthenticatedManager): PriorityGrant {
+    const task = this.store.task(taskId);
+    let grant!: PriorityGrant;
+    this.store.updatePriorityMetadata({ taskId, attempt: task.currentAttempt }, (current) => {
+      grant = revokeCriticalPriority(current, grantId, actor);
+    });
+    return grant;
   }
   private writeTaskPriority(task: Task): void {
     const path = join(task.worktree, '.temp', 'goal', 'task-priority');
