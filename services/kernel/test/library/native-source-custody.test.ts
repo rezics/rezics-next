@@ -412,10 +412,10 @@ test('retained revalidation refuses fresh absent foreign and altered native hold
   expect(refusedHold.value.status).toBe('unavailable');
   expect(
     (
-      await native.pool.query('SELECT count(*)::integer AS n FROM library.native_source_hold WHERE route=$1 AND capture_id=$2', [
-        identity.route,
-        captureId,
-      ])
+      await native.pool.query(
+        'SELECT count(*)::integer AS n FROM library.native_source_hold WHERE route=$1 AND capture_id=$2',
+        [identity.route, captureId],
+      )
     ).rows[0].n,
   ).toBe(1);
 });
