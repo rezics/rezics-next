@@ -1045,8 +1045,10 @@ retains root accounting across requests. Every useful capture sets `pageSize` to
 separately from its derived batch size (at most 200). Legacy two-argument queries remain valid.
 
 `public-runtime.ts` orchestrates actual capture/query/repair/status methods. Default composition
-binds an admitted direct PIT capture through the native factory; the standalone orchestration
-defaults to prepared capture. Admission and finite preparation belong to the actual producer.
+binds prepared capture through the native factory, so a sparse page retry observes actual
+preparation rather than reserving another direct allowance. The standalone orchestration also
+defaults to prepared capture; a trusted direct planner can select PIT. Admission and finite
+preparation belong to the actual producer.
 A preparing capture delivers its actual repair locator through the host's existing durable
 preparation store, or advances one bounded native step when used without that delivery port.
 Sparse allowance exhaustion requests actual prepared capture and delivers its native job, discarding partial

@@ -541,13 +541,16 @@ export function createSearchService({
           if (retained) {
             operations = await indexRequest(() => runtime.resumeRequest(retained.queried, context));
           } else {
-            const bound = await indexRequest(() => runtime.bindRequest({ plan: capturePlan, snapshot: 'pit' }, context));
+            // Poll the retained preparation instead of reserving a fresh direct
+            // allowance on every retry of the same sparse page.
+            const bound = await indexRequest(() => runtime.bindRequest({ plan: capturePlan, snapshot: 'prepared' }, context));
             operations = bound.operations;
             capture = bound.capture;
           }
         }
-        const retainedRead = operations ? await indexRequest(() => readPublicSearchPage({
-          operations, context, plan: capturePlan, capture,
+        const installed = operations;
+        const retainedRead = installed ? await indexRequest(() => readPublicSearchPage({
+          operations: installed, context, plan: capturePlan, capture,
           prepare: preparePublic,
           ...(retained ? { continuation: retained } : {}),
           check: checkCandidates,
