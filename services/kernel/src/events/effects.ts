@@ -33,10 +33,7 @@ export function effectWorkflowId(envelope: Envelope, eventSeq: number, name: str
 
 let compatibilityPool: Pool | undefined;
 
-export function registerEffects(
-  effects: Effect[],
-  pool?: Pool,
-): RegisteredEffects {
+export function registerEffects(effects: Effect[], pool?: Pool): RegisteredEffects {
   const names = new Set<string>();
   for (const effect of effects) {
     if (!/^[a-z][a-z0-9_]{0,62}$/.test(effect.name)) throw new RangeError(`Invalid effect name: ${effect.name}`);

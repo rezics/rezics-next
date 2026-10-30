@@ -237,31 +237,34 @@ test.serial('an admission error rolls back all rows and prevents enqueue or chec
   expect(await checkpoint(partition)).toBe('0');
 });
 
-test.serial('matching admissions follow envelope position and event sequence while effects without admit still run', async () => {
-  admissionOrder.length = 0;
-  legacyRuns.length = 0;
-  const partition = freshPartition();
-  const first = await append(partition, [CREATED, CREATED]);
-  const second = await append(partition, [CREATED]);
+test.serial(
+  'matching admissions follow envelope position and event sequence while effects without admit still run',
+  async () => {
+    admissionOrder.length = 0;
+    legacyRuns.length = 0;
+    const partition = freshPartition();
+    const first = await append(partition, [CREATED, CREATED]);
+    const second = await append(partition, [CREATED]);
 
-  expect((await relayEffects(relayPool, effects, partition)).status).toBe('read');
-  expect(admissionOrder).toEqual([...first.eventIds, ...second.eventIds]);
+    expect((await relayEffects(relayPool, effects, partition)).status).toBe('read');
+    expect(admissionOrder).toEqual([...first.eventIds, ...second.eventIds]);
 
-  const work = [...first.eventIds, ...second.eventIds];
-  await Promise.all(
-    work.flatMap((eventId, index) => {
-      const appended = index < first.eventIds.length ? first : second;
-      const eventSeq = index < first.eventIds.length ? index : index - first.eventIds.length;
-      const envelope = envelopeAt(partition, appended.epoch, appended.position);
-      return [
-        waitForWorkflow(effectWorkflowId(envelope, eventSeq, 'admission_owner')),
-        waitForWorkflow(effectWorkflowId(envelope, eventSeq, 'legacy_record')),
-      ];
-    }),
-  );
-  expect(legacyRuns).toHaveLength(work.length);
-  expect(new Set(legacyRuns)).toEqual(new Set(work));
-});
+    const work = [...first.eventIds, ...second.eventIds];
+    await Promise.all(
+      work.flatMap((eventId, index) => {
+        const appended = index < first.eventIds.length ? first : second;
+        const eventSeq = index < first.eventIds.length ? index : index - first.eventIds.length;
+        const envelope = envelopeAt(partition, appended.epoch, appended.position);
+        return [
+          waitForWorkflow(effectWorkflowId(envelope, eventSeq, 'admission_owner')),
+          waitForWorkflow(effectWorkflowId(envelope, eventSeq, 'legacy_record')),
+        ];
+      }),
+    );
+    expect(legacyRuns).toHaveLength(work.length);
+    expect(new Set(legacyRuns)).toEqual(new Set(work));
+  },
+);
 
 test.serial('lost CAS and crash replay keep processed owner items and deterministic workflow identity', async () => {
   const lostCasPartition = freshPartition();
