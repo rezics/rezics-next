@@ -22,6 +22,7 @@ const publicOrigin = createIsomorphicFn()
 // An agent's page is its own address: never inside a Realm or a Zone, whatever venue the agent speaks in.
 // readAgentPage(...) is called by the shared public query factory so SSR and hydration use the same cache entry.
 export const Route = createFileRoute('/@{$handle}')({
+  staticData: { publicCache: true },
   loader: async ({ params, location, context }) => {
     const locale = getLocale();
     const query = agentPageQuery(params.handle, locale, location.searchStr);

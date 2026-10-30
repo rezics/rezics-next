@@ -125,6 +125,7 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
 
     const response = await options.render();
     if (response.headers.has('set-cookie')) return privateNoStore(response);
+    if (isCollectionNotFound(request, response)) return privateNoStore(response);
     if (!isPublicCacheableResponse(response)) return response;
 
     const etag = await createPageEtag(request.url, options.buildId, options.dehydratedData());
@@ -187,6 +188,10 @@ export function privateServerFunctionResponse(response: Response): Response {
 
 function privateNoStore(response: Response): Response {
   return withHeaders(response, (headers) => headers.set('cache-control', 'private, no-store'));
+}
+
+function isCollectionNotFound(request: Request, response: Response): boolean {
+  return response.status === 404 && /(?:^|\/)collections\/[^/]+\/?$/u.test(new URL(request.url).pathname);
 }
 
 function withHeaders(response: Response, update: (headers: Headers) => void): Response {

@@ -47,7 +47,20 @@ class FakeHtmlRewriter {
 const originalHtmlRewriter = globalThis.HTMLRewriter;
 
 test('the generated router marks only the public page routes for shared caching', () => {
-  const expected = ['/', '/search', '/realms/$id', '/spaces/$address', '/boards/$id', '/threads/$id_/$slug'].toSorted();
+  const expected = [
+    '/',
+    '/search',
+    '/realms/$id',
+    '/spaces/$address',
+    '/boards/$id',
+    '/threads/$id_/$slug',
+    '/subjects/$id_/$slug',
+    '/subjects/$id_/$slug_/$view',
+    '/subjects/$id_/$slug_/relations',
+    '/@{$handle}',
+    '/@{$handle}_/$view',
+    '/collections/$id',
+  ].toSorted();
   expect(markedRouteIds(routeTree as unknown as RouteNode).toSorted()).toEqual(expected);
   expect(Object.keys(publicCacheSamples).toSorted()).toEqual(expected);
 
@@ -98,4 +111,31 @@ test('a recorded public thread uses the fake shared cache after its first anonym
     if (originalHtmlRewriter === undefined) delete (globalThis as { HTMLRewriter?: unknown }).HTMLRewriter;
     else globalThis.HTMLRewriter = originalHtmlRewriter;
   }
+});
+
+test('an anonymous private-collection not-found response stays out of the shared cache', async () => {
+  const request = new Request('https://rezics.test/en/collections/private-collection');
+  const cache = new MemoryCache();
+  let renderCalls = 0;
+  const options = {
+    publicRoute: isPublicCacheRequest(request),
+    cache,
+    buildId: 'test-build',
+    dehydratedData: () => ({ page: 'private-collection-not-found' }),
+    render: async () => {
+      renderCalls += 1;
+      return new Response('<html><body>Not found</body></html>', {
+        status: 404,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    },
+  };
+
+  const first = await cachePublicPage(request, options);
+  const second = await cachePublicPage(request, options);
+  expect(first.status).toBe(404);
+  expect(second.status).toBe(404);
+  expect(second.headers.get('cache-control')).toBe('private, no-store');
+  expect(renderCalls).toBe(2);
+  expect(cache.entries.size).toBe(0);
 });

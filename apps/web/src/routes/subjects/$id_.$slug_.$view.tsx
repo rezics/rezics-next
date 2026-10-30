@@ -78,6 +78,7 @@ const readView = createServerFn({ method: 'GET', strict: false })
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
+  staticData: { publicCache: true },
   // Validate the cursor in the loader so invalid input answers the not-found document.
   validateSearch: (search: Record<string, unknown>): { cursor?: unknown } => ({ cursor: search.cursor }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),

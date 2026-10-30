@@ -95,6 +95,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug')({
+  staticData: { publicCache: true },
   server: {
     handlers: {
       POST: async ({ request }) => {

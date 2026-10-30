@@ -38,8 +38,21 @@ async function publicCacheRouteList(): Promise<string[]> {
   return routes.sort();
 }
 
-test('only home, search, Realm, Space, board and thread routes opt into publicCache', async () => {
-  const expected = new Set(['/', '/search', '/realms/$id', '/spaces/$address', '/boards/$id', '/threads/$id_/$slug']);
+test('only public page routes opt into publicCache', async () => {
+  const expected = new Set([
+    '/',
+    '/search',
+    '/realms/$id',
+    '/spaces/$address',
+    '/boards/$id',
+    '/threads/$id_/$slug',
+    '/subjects/$id_/$slug',
+    '/subjects/$id_/$slug_/$view',
+    '/subjects/$id_/$slug_/relations',
+    '/@{$handle}',
+    '/@{$handle}_/$view',
+    '/collections/$id',
+  ]);
   const publicRoutes = new Set(await publicCacheRouteList());
 
   expect(publicRoutes).toEqual(expected);

@@ -8,6 +8,7 @@ import { m } from '../../paraglide/messages.js';
 import * as v from 'valibot';
 
 export const Route = createFileRoute('/collections/$id')({
+  staticData: { publicCache: true },
   validateSearch: (search: Record<string, unknown>) => {
     const { cursor } = v.parse(
       v.object({ cursor: v.fallback(v.optional(v.pipe(v.string(), v.minLength(1))), undefined) }),

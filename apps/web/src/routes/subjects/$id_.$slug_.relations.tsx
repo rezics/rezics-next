@@ -73,6 +73,7 @@ const readRelations = createServerFn({ method: 'GET', strict: false })
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
+  staticData: { publicCache: true },
   // Validate the cursor in the loader so invalid input answers the not-found document.
   validateSearch: (search: Record<string, unknown>): { property?: string; cursor?: unknown } => {
     return {

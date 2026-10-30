@@ -37,6 +37,7 @@ const viewLabel = {
 };
 
 export const Route = createFileRoute('/@{$handle}_/$view')({
+  staticData: { publicCache: true },
   validateSearch: (search: Record<string, unknown>): { cursor?: string } => ({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 2048 ? { cursor: search.cursor } : {}),
   }),
