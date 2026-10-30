@@ -17,13 +17,9 @@ import {
 import realmMutation from './realm-ownership-mutation.sql';
 import realmRecipient from './realm-ownership-recipient.sql';
 import { ResourceAccessWriteDeniedError } from './resource-denials.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
+export { GrantDeniedError } from './resource-access-errors.ts';
 
-export class GrantDeniedError extends Error {
-  constructor() {
-    super('Access grant administration denied');
-    this.name = 'GrantDeniedError';
-  }
-}
 export type GrantRecipient =
   | { subject: PublicGrantSubject; subjectId?: never; subjectRole?: never }
   | { subject?: never; subjectId: string; subjectRole: '' | 'owner' | 'member' };

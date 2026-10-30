@@ -6,8 +6,16 @@ export class ResourceAccessWriteDeniedError extends Error {
   }
 }
 
+export class GrantDeniedError extends ResourceAccessWriteDeniedError {
+  constructor() {
+    super();
+    this.message = 'Access grant administration denied';
+    this.name = 'GrantDeniedError';
+  }
+}
+
 /** Only the authorized, locked native Realm holder predicate may issue this refusal. */
-export class RealmLastOwnerError extends ResourceAccessWriteDeniedError {
+export class RealmLastOwnerError extends GrantDeniedError {
   constructor() {
     super();
     this.name = 'RealmLastOwnerError';

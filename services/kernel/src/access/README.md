@@ -819,7 +819,10 @@ current open-ended direct owner interval. Native role revoke, demotion and inter
 the same SERIALIZABLE command; contention retries must reauthorize and recheck. Ordinary action grant changes
 operate only on `resource_grant`, so they neither remove nor infer an explicit role holder.
 
-`RealmLastOwnerError`, exported from Access, extends `ResourceAccessWriteDeniedError`. Only the same
+The dependency-free `resource-access-errors.ts` owns the canonical error hierarchy:
+`GrantDeniedError extends ResourceAccessWriteDeniedError` and `RealmLastOwnerError extends GrantDeniedError`.
+The original modules re-export those same classes, preserving existing imports and both denial families.
+`RealmLastOwnerError` is also exported from Access. Only the same
 authorized command's locked native predicate with `target && !remaining` throws it. Missing authority,
 creation source or explicit target, wrong transaction/T, formula denial, inactive accounts and unavailable
 dependencies retain their existing refusal. Grant catches preserve this exact error only from that guard.

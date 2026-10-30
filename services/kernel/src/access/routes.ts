@@ -40,6 +40,7 @@ import {
   type PublicAccountProfile,
 } from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
+import { RealmLastOwnerError } from './resource-access-errors.ts';
 import { readResourceGrants, type GrantReadPage } from './grant-read.ts';
 import type { ViewerActionResources } from './viewer-actions.ts';
 import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';
@@ -463,6 +464,7 @@ const detail = (operationId: string) => ({
   security: [{ bearerAuth: [] }],
 });
 function denied(error: unknown): never {
+  if (error instanceof RealmLastOwnerError) throw error;
   // PostgreSQL rejects invalid temporal values/identities and conflicting grants.
   // Neither those failures nor native formula denials disclose stored grant state.
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
