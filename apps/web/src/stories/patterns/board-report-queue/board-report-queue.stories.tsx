@@ -108,7 +108,7 @@ async function refused(canvasElement: HTMLElement) {
 export const StaleConflict: Story = {
   args: {
     onAction: fn(async (_input: ReportActionInput) => {
-      throw Object.assign(new Error('Already resolved'), { status: 409 });
+      throw Object.assign(new globalThis.Error('Already resolved'), { status: 409 });
     }),
   },
   play: async ({ canvasElement }) => refused(canvasElement),
@@ -125,12 +125,12 @@ export const Resolved: Story = {
   },
 };
 
-export const TargetUnavailable: Story = {
+export const TargetUnavailable = {
   args: {
     targets: [{ key: `post:${postReport.target.id}`, kind: 'post', value: null }],
     revisions: [{ reportId: postReport.id, value: null }],
     onAction: fn(async (_input: ReportActionInput) => {
-      throw Object.assign(new Error('Service unavailable'), { status: 503 });
+      throw Object.assign(new globalThis.Error('Service unavailable'), { status: 503 });
     }),
   },
   play: async ({ canvasElement }) => {
@@ -139,16 +139,16 @@ export const TargetUnavailable: Story = {
     await expect(view.queryByText(currentText)).toBeNull();
     await expect(view.queryByText(revisionText)).toBeNull();
   },
-};
+} satisfies Story;
 
-export const NativeDenied: Story = {
+export const NativeDenied = {
   args: {
     onAction: fn(async (_input: ReportActionInput) => {
-      throw Object.assign(new Error('Forbidden'), { status: 403 });
+      throw Object.assign(new globalThis.Error('Forbidden'), { status: 403 });
     }),
   },
   play: async ({ canvasElement }) => refused(canvasElement),
-};
+} satisfies Story;
 
 export const ReasonValidation: Story = {
   play: async ({ canvasElement, args }) => {

@@ -88,8 +88,8 @@ function ModerationReportsPending() {
   return (
     <ModerationReportsView
       boardId={id}
-      threadId={thread}
-      postId={post}
+      {...(thread ? { threadId: thread } : {})}
+      {...(post ? { postId: post } : {})}
       reports={[]}
       targets={[]}
       next={null}
@@ -105,8 +105,8 @@ function ModerationReportsError({ reset, error }: ErrorComponentProps) {
   if (tab === 'appeals' || isPlatformClosedError(error)) return <ClosedErrorPage error={error} />;
   return (
     <ModerationReportsView
-      threadId={thread}
-      postId={post}
+      {...(thread ? { threadId: thread } : {})}
+      {...(post ? { postId: post } : {})}
       boardId={id}
       reports={[]}
       targets={[]}

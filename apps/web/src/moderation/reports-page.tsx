@@ -90,9 +90,9 @@ export function ModerationReportsView({
         revisions={revisions}
         onAction={onAction}
         next={next}
-        onNext={onNext}
+        {...(onNext ? { onNext } : {})}
         state={state}
-        onRetry={onRetry}
+        {...(onRetry ? { onRetry } : {})}
       />
     </article>
   );
