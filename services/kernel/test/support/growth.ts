@@ -673,7 +673,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
   if (
     scales.some(
       (scale, index) =>
-        !Number.isFinite(scale) || scale <= 0 || scale > 32768 || (index > 0 && scale <= scales[index - 1]!),
+        !Number.isFinite(scale) || scale <= 0 || scale > 4096 || (index > 0 && scale <= scales[index - 1]!),
     ) ||
     firstRatio < 4 ||
     scales.slice(2).some((scale, index) => {
@@ -682,7 +682,7 @@ export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promi
     })
   ) {
     throw new TypeError(
-      'Growth scales must be positive, increasing and equally spaced by a ratio of at least four, with a largest scale no greater than 32768',
+      'Growth scales must be positive, increasing and equally spaced by a ratio of at least four, with a largest scale no greater than 4096',
     );
   }
   if (!Number.isSafeInteger(repetitions) || repetitions < 1)

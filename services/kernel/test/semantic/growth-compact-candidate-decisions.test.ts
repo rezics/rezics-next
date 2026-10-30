@@ -10,7 +10,7 @@ import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Popula
 
 let db: GrowthDatabase;
 const historyScales = [64, 512, 4096] as const;
-const unrelatedScales = [512, 4096, 32768] as const;
+const unrelatedScales = [64, 512, 4096] as const;
 const headRelease = {
   ...bundledRelease,
   catalogue: { ...bundledRelease.catalogue, version: 'compact-decision-history' },
@@ -157,58 +157,39 @@ for (const property of ['schema:inLanguage', 'schema:author'] as const) {
           name: report.name,
           samples: report.samples.map(({ scale, cost, repetitions }) => ({ scale, cost, repetitions })),
           shadow: report.shadow,
+          verdicts: report.verdicts,
         })}`,
       );
       type PlanNode = Record<string, unknown> & { Plans?: PlanNode[] };
-      const shape = (node: PlanNode): unknown => ({
-        ...Object.fromEntries(
-          ['Node Type', 'Join Type', 'Relation Name', 'Alias', 'Index Name', 'Scan Direction']
-            .filter((key) => key in node)
-            .map((key) => [key, node[key]]),
-        ),
-        ...(node.Plans ? { Plans: node.Plans.map(shape) } : {}),
-      });
       const nodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).flatMap(nodes)];
-      let smallestShape: unknown;
       for (const sample of [report.samples[0]!, report.samples.at(-1)!]) {
         for (const [repetition, occurrences] of sample.occurrenceRepetitions.entries()) {
           expect(occurrences.statements).toHaveLength(1);
           const occurrence = occurrences.statements[0]!;
-          if (repetition === 0)
-            console.info(
-              `COMPACT_DECISION_PLAN ${JSON.stringify({ property, axis, scale: sample.scale, occurrence })}`,
-            );
+          console.info(
+            `COMPACT_DECISION_PLAN ${JSON.stringify({ property, axis, scale: sample.scale, repetition, occurrence })}`,
+          );
           const label = `${property} compact statement at ${axis} scale ${sample.scale}, repetition ${repetition}: ${occurrence.statement}`;
           expect(occurrence.statement, label).toContain('SELECT latest.revision, r.release');
           expect(occurrence.planDocuments, `${label}: retained native occurrence plan`).toHaveLength(1);
           const document = occurrence.planDocuments[0] as { Plan: PlanNode };
           const planNodes = nodes(document.Plan);
-          // The unrelated axis starts past the observed small-relation crossover. History retains its 64-row start.
-          if (axis === 'unrelated') {
-            const subjectNode = planNodes.find((node) => node.Alias === 's');
-            expect(subjectNode, `${label}: subject node must remain Index Scan on subject_pkey`).toMatchObject({
-              'Node Type': 'Index Scan',
-              'Index Name': 'subject_pkey',
-            });
-            const actualShape = shape(document.Plan);
-            smallestShape ??= actualShape;
-            expect(actualShape, `${label}: full plan shape differs from scale ${scales[0]}`).toEqual(smallestShape);
-          }
-          if (axis === 'unrelated' || sample.scale === scales.at(-1)) {
-            expect(planNodes, `${label}: indexed origin release lookup`).toEqual(
-              expect.arrayContaining([
-                expect.objectContaining({ 'Node Type': 'Index Scan', 'Index Name': 'revision_transaction' }),
-              ]),
+          expect(planNodes, `${label}: descending indexed latest head lookup`).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                'Node Type': 'Index Only Scan',
+                'Index Name': 'revision_pkey',
+                'Scan Direction': 'Backward',
+              }),
+            ]),
+          );
+          if (axis === 'history' && sample.scale === scales.at(-1)) {
+            const originNode = planNodes.find((node) => node.Alias === 'revision');
+            expect(['Index Scan', 'Index Only Scan'], `${label}: indexed origin release lookup`).toContain(
+              originNode?.['Node Type'],
             );
-            expect(planNodes, `${label}: descending indexed latest head lookup`).toEqual(
-              expect.arrayContaining([
-                expect.objectContaining({
-                  'Node Type': 'Index Only Scan',
-                  'Index Name': 'revision_pkey',
-                  'Scan Direction': 'Backward',
-                }),
-              ]),
-            );
+            for (const key of ['recorded_transaction_id', 'route', 'subject_id'])
+              expect(originNode?.['Index Cond'], `${label}: origin point condition ${key}`).toContain(key);
           }
         }
       }

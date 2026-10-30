@@ -754,13 +754,12 @@ point lookup through `revision_transaction`; candidate id, property, slot and re
 asserted fact. The regular decision read retains its latest-revision release. This adds constant examined rows and
 statements, with logarithmic index depth in subject history, within the existing native subject transaction and
 bounded expansion, decision, CAS, receipt and outbox work. No history enumeration or extra connection is needed.
-`test/semantic/growth-compact-candidate-decisions.test.ts` captures the full native compact SQL with revision history
-at 64, 512 and 4096 and unrelated-subject populations at 512, 4096 and 32768 on independent axes. It checks constant
-rows/statements and logarithmic blocks with the shared series rules. Retained measured occurrence plans prove the
-same full statement shape, an indexed subject lookup, and indexed origin/head lookups at both unrelated-axis
-extremes; history retains its small-relation start and proves both revision indexes at the final scale. The frozen
-native compact decision cases separately verify scalar and item-relation decisions, revisions 1/2/3 and unchanged
-authorized receipt replay.
+`test/semantic/growth-compact-candidate-decisions.test.ts` captures the full native compact SQL at 64, 512 and
+4096 on independent revision-history and unrelated-subject axes. The shared established-growth verdict checks
+constant rows/statements and logarithmic blocks; native planner changes and decreasing cost do not require
+identical plans. Retained measured occurrence plans report both extremes and prove the descending head seek and
+indexed origin point at the largest history scale. The frozen native compact decision cases separately verify
+scalar and item-relation decisions, revisions 1/2/3 and unchanged authorized receipt replay.
 
 ### Candidate adoption across manifests
 
