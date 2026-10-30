@@ -88,7 +88,8 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
       session: request.headers.get('rezics-session-token'),
     });
     if (path === '/v1/definitions/active') return json({ digest: definitions.digest, head: 1 });
-    if (path === `/v1/definitions/releases/${definitions.digest}`) return json({ ...definitions, release });
+    if (path === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`)
+      return json({ ...definitions, release });
     if (path.startsWith('/v1/documents/')) {
       if (scenario === 'body-unavailable') return json({ code: 'not_found' }, 404);
       const document = documents.get(path.split('/').at(-1)!);

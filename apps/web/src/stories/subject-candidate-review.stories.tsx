@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { CandidateStory } from './candidate-story';
+import { CandidateStory } from '../subject/candidate-story';
 import { m } from '../paraglide/messages.js';
 import { candidateProperty } from '../kernel/fake/subject-candidates';
 

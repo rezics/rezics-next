@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
-import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
+import { PageHeading } from '../../shell/page-heading';
+import { SubjectFrame } from '../pages/subject-frame';
 import { viewTabLabels } from '../pages/route-support';
 import { languageName } from '../../subject/language';
 import { m } from '../../paraglide/messages.js';
@@ -127,7 +128,9 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
         />
       )}
       <header className="space-y-2">
-        <ViewHeading label={m.changes_title({}, o)} />
+        <PageHeading className="font-sans max-sm:text-3xl">
+          {m.changes_title({}, o)}
+        </PageHeading>
         <p className="max-w-prose text-sm text-muted-foreground">{m.changes_intro({}, o)}</p>
       </header>
       {!page && currentHref && (

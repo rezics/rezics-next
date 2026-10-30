@@ -70,6 +70,8 @@ type Story = StoryObj<typeof meta>;
 
 async function compose(canvasElement: HTMLElement, language = 'en', licence = 'CC-BY-4.0') {
   const canvas = within(canvasElement);
+  const selected = await canvas.findByRole('region', { name: m.authored_selected() });
+  await within(selected).findByText('An aviator meets a young traveller in the desert.');
   const editor = await canvas.findByRole('textbox', { name: m.authored_text() });
   await userEvent.click(editor);
   await userEvent.type(editor, 'A quiet story about friendship.');
@@ -104,6 +106,10 @@ export const Ready: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await compose(canvasElement);
     await expect(canvas.getByRole('textbox', { name: m.authored_language() })).toHaveValue('en');
+    await expect(canvas.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent(
+      'A quiet story about friendship.',
+    );
+    await expect(canvas.getByRole('button', { name: m.correction_submit() })).toBeEnabled();
   },
 };
 export const Loading: Story = { args: { scenario: 'loading' } };
@@ -120,6 +126,10 @@ export const Denied: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.correction_denied());
+    await within(await canvas.findByRole('region', { name: m.authored_selected() })).findByText(
+      'An aviator meets a young traveller in the desert.',
+    );
+    await expect(canvas.queryByRole('textbox', { name: m.authored_text() })).toBeNull();
   },
 };
 export const InvalidLanguage: Story = {
@@ -150,8 +160,20 @@ export const Conflict: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await submit(canvasElement);
     await canvas.findByText(m.correction_stale());
+    await expect(canvas.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent(
+      'A quiet story about friendship.',
+    );
+    await expect(canvas.getByRole('textbox', { name: m.authored_language() })).toBeDisabled();
     await userEvent.click(canvas.getByRole('button', { name: m.authored_review_draft() }));
     await expect(canvas.getByRole('textbox', { name: m.authored_language() })).toHaveValue('en');
+    await expect(canvas.getByRole('textbox', { name: m.authored_licence() })).toHaveValue('CC-BY-4.0');
+    await expect(canvas.getByRole('textbox', { name: m.authored_citation() })).toHaveValue(
+      'https://example.org/original-notes',
+    );
+    await expect(canvas.getByRole('textbox', { name: m.authored_text() })).toHaveTextContent(
+      'A quiet story about friendship.',
+    );
+    await expect(canvas.getByRole('button', { name: m.correction_submit() })).toBeEnabled();
   },
 };
 export const Unavailable: Story = {
@@ -184,5 +206,8 @@ export const Selected: Story = {
     await userEvent.click(adoption.at(-1)!);
     const selected = await canvas.findByRole('region', { name: m.authored_selected() });
     await within(selected).findByText('A quiet story about friendship.');
+    await userEvent.click(within(selected).getByRole('button', { name: m.correction_reload() }));
+    await within(selected).findByText('A quiet story about friendship.');
+    await expect(within(selected).queryByText('An aviator meets a young traveller in the desert.')).toBeNull();
   },
 };

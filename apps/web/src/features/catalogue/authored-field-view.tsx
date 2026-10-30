@@ -89,7 +89,7 @@ export function AuthoredField({
   const requestedProperty = useRef(initial.ok ? initial.property : '');
   const property = current?.property ?? requestedProperty.current;
   const draft = drafts[property];
-  const locked = busy || !!command.current || !!proposed || !current;
+  const locked = busy || !!command.current || !!proposed || !current || failure === 'denied';
   const title = current ? pageText(current.public.subject.labels, locale).text : '';
   const id = current?.public.subject.id;
   const update = (change: Partial<Draft>) => {
@@ -126,6 +126,23 @@ export function AuthoredField({
     }
   }
 
+  async function rereadAfterDenial() {
+    // A write denial clears private comparison data. Only a fresh public read may restore selected text.
+    setCurrent(undefined);
+    setProposalBody(undefined);
+    setProposed(undefined);
+    setReviewing(false);
+    try {
+      const next = await transport.read(property || undefined, session.current);
+      if (next.ok) {
+        session.current = next.session ?? session.current;
+        setCurrent(next);
+      }
+    } catch {
+      // Keep the unavailable read empty; neither the draft nor the previous body is a fallback.
+    }
+  }
+
   async function submit() {
     if (running.current || proposed || !current || !draft || failure === 'stale') return;
     if (!command.current) {
@@ -153,10 +170,7 @@ export function AuthoredField({
       } else {
         setFailure(result.reason);
         if (result.reason !== 'unavailable' && result.reason !== 'stale') command.current = null;
-        if (result.reason === 'denied') {
-          setCurrent(undefined);
-          setProposalBody(undefined);
-        }
+        if (result.reason === 'denied') await rereadAfterDenial();
       }
     } catch {
       setFailure('unavailable');
@@ -201,7 +215,7 @@ export function AuthoredField({
         await refresh();
       } else if (result.reason === 'denied') {
         setFailure('denied');
-        setCurrent(undefined);
+        await rereadAfterDenial();
       }
       return result;
     },
@@ -299,7 +313,7 @@ export function AuthoredField({
               {m.correction_reload({}, o)}
             </Button>
           </section>
-          {draft && (
+          {draft && failure !== 'denied' && (
             <form
               className="space-y-4"
               onSubmit={(event) => {
