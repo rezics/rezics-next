@@ -9,6 +9,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
+import { ReadingNavigation, SettingsNavigationProvider } from './reading-navigation';
 import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
@@ -198,13 +199,15 @@ function SettingsSections({
       <div className="min-w-0 space-y-8">
         <section id="reading" aria-labelledby="settings-reading-heading" className="scroll-mt-6">
           {'preferences' in page ? (
-            <ReadingCard
-              initial={page.preferences}
-              version={version}
-              csrfToken={csrfToken}
-              io={io.reading}
-              onVersionChange={io.notifications.confirmed}
-            />
+            <ReadingNavigation csrfToken={csrfToken}>
+              <ReadingCard
+                initial={page.preferences}
+                version={version}
+                csrfToken={csrfToken}
+                io={io.reading}
+                onVersionChange={io.notifications.confirmed}
+              />
+            </ReadingNavigation>
           ) : (
             <SettingsFailure state={page.state} failure={page.failure} onRetry={() => void router.invalidate()} />
           )}
@@ -308,13 +311,15 @@ export function SettingsPageView({
         <PageHeading>{m.settings_heading()}</PageHeading>
       </header>
       {ready ? (
-        <SettingsSections
-          key={session.subject}
-          page={{ ...page, accountId: page.accountId! }}
-          csrfToken={session.csrfToken}
-          preferenceIO={preferenceIO}
-          managedAccountsIO={managedAccountsIO}
-        />
+        <SettingsNavigationProvider>
+          <SettingsSections
+            key={session.subject}
+            page={{ ...page, accountId: page.accountId! }}
+            csrfToken={session.csrfToken}
+            preferenceIO={preferenceIO}
+            managedAccountsIO={managedAccountsIO}
+          />
+        </SettingsNavigationProvider>
       ) : signedOut ? (
         <AccountSafetyCard state="signed-out" returnTo={location.publicHref} />
       ) : (

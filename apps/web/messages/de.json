@@ -2750,5 +2750,10 @@
   "managed_actions_loading": "Aktuelle Verwaltungsrechte werden geprüft…",
   "managed_actions_denied": "Deine aktuellen Rechte erlauben diese Aktion nicht.",
   "managed_actions_unavailable": "Diese Verwaltungsaktion ist derzeit nicht verfügbar.",
-  "managed_actions_available": "Verfügbar"
+  "managed_actions_available": "Verfügbar",
+  "settings_reading_leave_title": "Leseeinstellungen verlassen?",
+  "settings_reading_leave_description": "Dein lokaler Entwurf der Leseeinstellungen wird verworfen. Ein bereits gesendeter Speichervorgang kann noch abgeschlossen werden.",
+  "settings_drafts_leave_title": "Bearbeitung der Einstellungen verlassen?",
+  "settings_drafts_leave_description": "Deine lokalen Entwürfe für Leseeinstellungen und Profil sowie ausgewählte Bilder werden verworfen. Bereits gesendete Uploads oder Befehle können noch abgeschlossen werden.",
+  "settings_reading_session_changed": "Deine Anmeldung hat sich geändert. Lade diese Seite neu, um deine aktuellen Einstellungen abzurufen."
 }

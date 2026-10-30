@@ -2750,5 +2750,10 @@
   "managed_actions_loading": "現在の管理権限を確認しています…",
   "managed_actions_denied": "現在の権限ではこの操作を実行できません。",
   "managed_actions_unavailable": "この管理操作は現在利用できません。",
-  "managed_actions_available": "利用可能"
+  "managed_actions_available": "利用可能",
+  "settings_reading_leave_title": "閲覧設定の編集を終了しますか？",
+  "settings_reading_leave_description": "この端末の閲覧設定の下書きは破棄されます。送信済みの保存処理は完了する場合があります。",
+  "settings_drafts_leave_title": "設定の編集を終了しますか？",
+  "settings_drafts_leave_description": "この端末の閲覧設定とプロフィールの下書き、および選択した画像は破棄されます。送信済みのアップロードやコマンドは完了する場合があります。",
+  "settings_reading_session_changed": "ログイン状態が変わりました。このページを再読み込みして、現在の設定を取得してください。"
 }

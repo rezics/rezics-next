@@ -3053,5 +3053,10 @@
   "managed_actions_loading": "Checking current management access…",
   "managed_actions_denied": "Your current access does not allow this action.",
   "managed_actions_unavailable": "This management action is currently unavailable.",
-  "managed_actions_available": "Available"
+  "managed_actions_available": "Available",
+  "settings_reading_leave_title": "Leave reading settings?",
+  "settings_reading_leave_description": "Your local reading draft will be discarded. A save already sent may still finish.",
+  "settings_drafts_leave_title": "Leave settings editing?",
+  "settings_drafts_leave_description": "Your local reading and profile drafts and image selections will be discarded. Uploads or commands already sent may still finish.",
+  "settings_reading_session_changed": "Your sign-in changed. Reload this page to read your current settings."
 }

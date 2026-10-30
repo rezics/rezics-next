@@ -2750,5 +2750,10 @@
   "managed_actions_loading": "正在檢查目前的管理權限…",
   "managed_actions_denied": "你目前的權限無法執行此操作。",
   "managed_actions_unavailable": "此管理操作目前無法使用。",
-  "managed_actions_available": "可使用"
+  "managed_actions_available": "可使用",
+  "settings_reading_leave_title": "離開閱讀設定？",
+  "settings_reading_leave_description": "本機的閱讀設定草稿將會捨棄。已送出的儲存請求仍可能完成。",
+  "settings_drafts_leave_title": "離開設定編輯？",
+  "settings_drafts_leave_description": "本機的閱讀設定與個人檔案草稿，以及選取的圖片將會捨棄。已送出的上傳或指令仍可能完成。",
+  "settings_reading_session_changed": "登入狀態已變更。請重新載入此頁以讀取目前的設定。"
 }

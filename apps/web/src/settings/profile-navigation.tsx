@@ -3,23 +3,15 @@ import {
   useCallback,
   useContext,
   useLayoutEffect,
-  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { useBlocker, type ShouldBlockFn } from '@tanstack/react-router';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@rezics/ui/shadcn/alert-dialog';
-import { m } from '../paraglide/messages.js';
+  SettingsNavigationProvider,
+  useSettingsNavigationDraft,
+  useSettingsNavigationOwner,
+} from './reading-navigation';
 import { profileChanges } from './profile-data';
 import type { ProfileAvatarUpload } from './profile-avatar-upload';
 import type { ProfileEditor, ProfileEditorState } from './profile-write';
@@ -59,6 +51,26 @@ export function ProfileNavigation({
   isCurrent?: () => boolean;
   children: ReactNode;
 }) {
+  const owner = useSettingsNavigationOwner();
+  const content = (
+    <ProfileNavigationRegistration editor={editor} writable={writable} isCurrent={isCurrent}>
+      {children}
+    </ProfileNavigationRegistration>
+  );
+  return owner ? content : <SettingsNavigationProvider>{content}</SettingsNavigationProvider>;
+}
+
+function ProfileNavigationRegistration({
+  editor,
+  writable,
+  isCurrent,
+  children,
+}: {
+  editor: ProfileEditor;
+  writable: boolean;
+  isCurrent: () => boolean;
+  children: ReactNode;
+}) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const [upload, setUpload] = useState<ProfileAvatarUpload | null>(null);
   const uploadState = useSyncExternalStore(
@@ -75,61 +87,6 @@ export function ProfileNavigation({
     () => writable && isCurrent() && profileNeedsNavigationDecision(editor.snapshot(), upload?.snapshot()),
     [editor, isCurrent, upload, writable],
   );
-  const returnFocus = useRef<HTMLElement | null>(null);
-  const stay = useRef<HTMLButtonElement | null>(null);
-  const pendingEditor = useRef<ProfileEditor | null>(null);
-  const shouldBlockFn = useCallback<ShouldBlockFn>(
-    ({ current, next }) => {
-      // Hash/section links (and query changes on this page) keep the same editor mounted.
-      if (current.pathname === next.pathname || !shouldWarn()) return false;
-      pendingEditor.current = editor;
-      returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      return true;
-    },
-    [editor, shouldWarn],
-  );
-  const blocker = useBlocker({
-    shouldBlockFn,
-    withResolver: true,
-    disabled: !needsDecision,
-    enableBeforeUnload: shouldWarn,
-  });
-  const pending = useRef<(() => void) | undefined>(undefined);
-  useLayoutEffect(() => {
-    pending.current = blocker.proceed;
-    // A saved profile or session teardown must not leave a navigation waiting on private editor state.
-    if (blocker.status === 'blocked' && (!needsDecision || pendingEditor.current !== editor)) blocker.proceed();
-  }, [blocker, editor, needsDecision]);
-  useLayoutEffect(() => () => pending.current?.(), []);
-
-  return (
-    <UploadContext.Provider value={register}>
-      {children}
-      <AlertDialog
-        open={blocker.status === 'blocked' && pendingEditor.current === editor && needsDecision}
-        onOpenChange={(open) => {
-          if (!open) blocker.reset?.();
-        }}
-      >
-        <AlertDialogContent
-          initialFocus={stay}
-          finalFocus={returnFocus}
-          className="max-h-[calc(100dvh-2rem)] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle>{m.settings_profile_leave_title()}</AlertDialogTitle>
-            <AlertDialogDescription>{m.settings_profile_leave_description()}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel ref={stay} className="min-h-11" onClick={() => blocker.reset?.()}>
-              {m.settings_profile_stay()}
-            </AlertDialogCancel>
-            <AlertDialogAction className="min-h-11" onClick={() => blocker.proceed?.()}>
-              {m.settings_profile_leave()}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </UploadContext.Provider>
-  );
+  useSettingsNavigationDraft('profile', needsDecision, shouldWarn, editor);
+  return <UploadContext.Provider value={register}>{children}</UploadContext.Provider>;
 }

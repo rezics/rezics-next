@@ -2751,5 +2751,10 @@
   "managed_actions_loading": "正在检查当前管理权限…",
   "managed_actions_denied": "你当前的权限无法执行此操作。",
   "managed_actions_unavailable": "此管理操作当前不可用。",
-  "managed_actions_available": "可用"
+  "managed_actions_available": "可用",
+  "settings_reading_leave_title": "离开阅读设置？",
+  "settings_reading_leave_description": "本地的阅读设置草稿将被丢弃。已发送的保存请求仍可能完成。",
+  "settings_drafts_leave_title": "离开设置编辑？",
+  "settings_drafts_leave_description": "本地的阅读设置和个人资料草稿，以及选取的图片将被丢弃。已发送的上传或命令仍可能完成。",
+  "settings_reading_session_changed": "登录状态已更改。请重新加载此页面以读取当前设置。"
 }

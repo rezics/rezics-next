@@ -20,6 +20,11 @@ import { readSettingsPage, savePreferences } from './actions';
 import type { NativePreferenceFailure, PreferenceChange, ReadingPreferences, SpoilerLevel } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
+  readingNeedsNavigationDecision,
+  useReadingNavigationCurrent,
+  useSettingsNavigationDraft,
+} from './reading-navigation';
+import {
   readingMutation,
   readReading,
   sameReading,
@@ -66,6 +71,20 @@ export function ReadingCard({
     phase: 'idle',
   }));
   const current = useRef(state);
+  const isCurrent = useReadingNavigationCurrent();
+  const lifetime = useRef<object | null>(null);
+  useLayoutEffect(() => {
+    const mounted = {};
+    lifetime.current = mounted;
+    return () => {
+      lifetime.current = null;
+    };
+  }, []);
+  useSettingsNavigationDraft(
+    'reading',
+    readingNeedsNavigationDecision(state),
+    () => !!lifetime.current && isCurrent() && readingNeedsNavigationDecision(current.current),
+  );
   const waiting = usePreferenceRetry(state.failure);
   const draftRevision = useRef(0);
   const sharedVersion = useRef(version);
@@ -81,9 +100,11 @@ export function ReadingCard({
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   async function send(recovering: boolean) {
     const input = current.current.pending;
-    if (!input) return;
+    const mounted = lifetime.current;
+    if (!input || !mounted || !isCurrent()) return;
     update({ phase: 'saving', reason: undefined, failure: undefined });
     const result = await sendReading(transport, input, recovering, () => sharedVersion.current);
+    if (lifetime.current !== mounted || !isCurrent()) return;
     if (result.kind !== 'confirmed') {
       update({
         pending: result.kind === 'uncertain' ? input : null,
@@ -100,7 +121,8 @@ export function ReadingCard({
     onVersionChange(Math.max(sharedVersion.current, preferences.version));
   }
   async function submit() {
-    if (!hydrated || !csrfToken || current.current.pending || current.current.phase === 'reloading') return;
+    if (!isCurrent() || !hydrated || !csrfToken || current.current.pending || current.current.phase === 'reloading')
+      return;
     if (sharedVersion.current > current.current.known.version) {
       update({ phase: 'conflict' });
       return;
@@ -114,17 +136,26 @@ export function ReadingCard({
     await send(false);
   }
   async function edit(next: Partial<ReadingValues>) {
-    if (!hydrated || !csrfToken) return;
+    if (!isCurrent() || !hydrated || !csrfToken) return;
     const autosave = current.current.phase === 'idle' || current.current.phase === 'saved';
     draftRevision.current++;
     update({ draft: { ...current.current.draft, ...next } });
     if (autosave && !current.current.pending) await submit();
   }
   async function reload(keepDraft = false) {
-    if (waiting || current.current.phase === 'saving' || current.current.phase === 'reloading') return;
+    const mounted = lifetime.current;
+    if (
+      !mounted ||
+      !isCurrent() ||
+      waiting ||
+      current.current.phase === 'saving' ||
+      current.current.phase === 'reloading'
+    )
+      return;
     const revision = draftRevision.current;
     update({ phase: 'reloading', failure: undefined });
     const result = await readReading(transport, () => Math.max(current.current.known.version, sharedVersion.current));
+    if (lifetime.current !== mounted || !isCurrent()) return;
     if (!result.ok) {
       update({
         phase: current.current.pending ? 'uncertain' : 'failed',
