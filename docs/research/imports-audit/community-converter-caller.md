@@ -130,6 +130,8 @@ community fixture, example or focused tests in the current compiler output.
 Under the brief's base-failure rule, the reproduced SQL-import diagnostic is
 a pre-existing local-compiler limitation, not a blocker for this slice.
 Conversion workspace typing passed again, now checking 62 files.
+The directly rerun focused pure file passed all 15 children and 140 assertions
+with Bun `1.4.3 (c6da4a4d3)`. No native stack was started for this proof.
 
 The controller has reapplied the slice onto newer repository history. The
 example, native fixture and focused pure tests at `5bbc13c192` have identical
