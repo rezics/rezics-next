@@ -8,14 +8,7 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     admitted: ['collection.create', 'collection_rule.get', 'collection_rule.update'],
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-      },
-    },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -34,17 +27,10 @@ function UnavailableDraft() {
     />
   );
 }
-export const Draft390: Story = {
+export const Draft: Story = {
   render: () => <UnavailableDraft />,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
 };
-export const Draft1280: Story = { render: () => <UnavailableDraft /> };
-export const ActualCreate390: Story = {
-  render: () => <PageStory visitor="Signed In" path="/library/rules/new" />,
-  play: pageReady,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
-};
-export const ActualCreate1280: Story = {
+export const ActualCreate: Story = {
   render: () => <PageStory visitor="Signed In" path="/library/rules/new" />,
   play: pageReady,
 };

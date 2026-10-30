@@ -52,6 +52,49 @@ function transport(reply: (url: URL, call: number) => Response) {
   return { client, calls };
 }
 
+test('canonical log and progress stories retain real owner plays and historic guards without width variants', () => {
+  const logs = readFileSync(new URL('../src/stories/library-my-logs.stories.tsx', import.meta.url), 'utf8');
+  expect([...logs.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
+    'Owner',
+    'Empty',
+    'Long',
+    'UnknownSubject',
+    'Denied',
+    'Unavailable',
+    'Preparing',
+    'NewestPage',
+    'Restarted',
+    'SignedOut',
+  ]);
+  expect(logs).toContain('export const Owner: Story = { render, play: ready }');
+  expect(logs).toContain('return () => setMyLogsStory()');
+  expect(logs).toContain('await ready(context)');
+  expect(logs).not.toMatch(/viewport|maxWidth/);
+  const progress = readFileSync(
+    new URL('../src/stories/library-progress-session.stories.tsx', import.meta.url),
+    'utf8',
+  );
+  expect([...progress.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
+    'SignedIn',
+    'ProfileUnits',
+    'RetiredPair',
+    'EmptyChanges',
+    'LongContent',
+    'Unavailable',
+    'Error',
+    'HistoricScalar',
+    'SparseHistory',
+    'OpaqueCursor',
+    'UnresolvedUnit',
+    'WithheldSummaries',
+  ]);
+  expect(progress).toContain('render: () => manualStory(manualScalarId)');
+  expect(progress).toContain(
+    "expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument()",
+  );
+  expect(progress).not.toMatch(/viewport|maxWidth/);
+});
+
 test('own explicit snapshots use current owner/FULL/opaque paging and preserve native null subjects without private progress fields', async () => {
   const original = recording.publishedLogs[0]!;
   const hidden = { ...original, id: 'hidden-log', subjectId: 'withheld-original-id', subject: null };

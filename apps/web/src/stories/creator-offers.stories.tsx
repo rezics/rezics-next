@@ -16,9 +16,9 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-function render(state: CreatorOffersStory, width?: number) {
+function render(state: CreatorOffersStory) {
   return (
-    <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8" style={width ? { maxWidth: width } : undefined}>
+    <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8">
       <CreatorOffersPage
         page={creatorOffersStoryPage(state)}
         locale={getLocale()}
@@ -52,11 +52,3 @@ export const Error: Story = { render: () => render('error') };
 export const Stale: Story = { render: () => render('stale') };
 export const Preparing: Story = { render: () => render('preparing') };
 export const LongTitle: Story = { render: () => render('long-title') };
-export const Mobile390: Story = {
-  render: () => render('long-title', 390),
-  globals: { viewport: { value: 'phone390' } },
-};
-export const Desktop1280: Story = {
-  render: () => render('history', 1280),
-  globals: { viewport: { value: 'desktop1280' } },
-};

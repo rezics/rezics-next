@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
 import { parseCreatorPrice } from '../src/checkout/creator-price';
 import { formatMinorAmount } from '../src/checkout/money';
 import { parseMoneySchema, recordedMoneyUnit } from '../src/checkout/money-schema';
@@ -6,6 +7,22 @@ import { configuredPriceExample, configuredUsdRule, recordedStripeUnit } from '.
 
 const locales = ['en', 'de', 'fr', 'es', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
 describe('Actual creator offer editor plus exact recorded money display', () => {
+  test('price intent and actual routes keep separate canonical stories with shared width, locale and theme globals', async () => {
+    const story = await readFile(new URL('../src/stories/creator-offer-editor.stories.tsx', import.meta.url), 'utf8');
+    expect([...story.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
+      'PriceIntent',
+      'ActualRoute',
+      'ActualOwnedOffers',
+    ]);
+    expect(story).toContain('play: priceIntent');
+    expect(story).toContain('play: pageReady');
+    expect(story).not.toMatch(/viewport|maxWidth/);
+    const preview = await readFile(new URL('../.storybook/preview.tsx', import.meta.url), 'utf8');
+    expect(preview).toContain("phone390: { name: 'Phone 390', styles: { width: '390px'");
+    expect(preview).toContain("desktop1280: { name: 'Desktop 1280', styles: { width: '1280px'");
+    expect(preview).toContain("['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es']");
+    expect(preview).toContain("items: ['light', 'dark']");
+  });
   test('ASCII price intent scales exactly and rejects ambiguous or excessive precision without rounding', () => {
     for (const [input, raw] of [
       ['12.99', 1299],

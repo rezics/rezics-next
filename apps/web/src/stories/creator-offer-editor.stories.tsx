@@ -12,12 +12,6 @@ const meta = {
   title: 'Pages/Commerce/Creator Offer Editor',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-      },
-    },
     docs: {
       description: {
         component:
@@ -69,18 +63,14 @@ async function priceIntent({ canvasElement }: { canvasElement: HTMLElement }) {
     view.getByText(`${formatMinorAmount(getLocale(), 'eur', 1299, rule.unit)} · EUR · ${m.commerce_before_tax()}`),
   ).toBeVisible();
 }
-export const PriceIntent390: Story = {
-  globals: { viewport: { value: 'phone390' } },
+export const PriceIntent: Story = {
   render: () => <PriceExample />,
   play: priceIntent,
 };
-export const PriceIntent1280: Story = { ...PriceIntent390, globals: { viewport: { value: 'desktop1280' } } };
-export const ActualRoute390: Story = {
-  globals: { viewport: { value: 'phone390' } },
+export const ActualRoute: Story = {
   render: () => <PageStory visitor="Signed In" path="/creator/offers/new" />,
   play: pageReady,
 };
-export const ActualRoute1280: Story = { ...ActualRoute390, globals: { viewport: { value: 'desktop1280' } } };
 export const ActualOwnedOffers: Story = {
   render: () => <PageStory visitor="Signed In" path="/creator/offers" />,
   play: pageReady,

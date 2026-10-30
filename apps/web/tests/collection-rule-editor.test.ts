@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -27,6 +28,20 @@ const filter = parseFilter({
 });
 const request = () =>
   new Request('https://web.test/action', { method: 'POST', headers: { authorization: 'Bearer current-viewer' } });
+
+test('canonical rule stories distinguish unavailable draft, actual create, private route and denial at shared widths', async () => {
+  const story = await readFile(new URL('../src/stories/library-collection-rule.stories.tsx', import.meta.url), 'utf8');
+  expect([...story.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
+    'Draft',
+    'ActualCreate',
+    'PrivateUnavailable',
+    'Denied',
+  ]);
+  expect(story).toContain("admitted: ['collection.create', 'collection_rule.get', 'collection_rule.update']");
+  expect(story).toContain('choices: unavailableRuleChoices()');
+  expect(story).toContain('play: pageReady');
+  expect(story).not.toMatch(/viewport|maxWidth/);
+});
 
 test('private native create and revision edit keep all Boolean leaves and retry the exact intent without claiming source success', async () => {
   const calls: Request[] = [];

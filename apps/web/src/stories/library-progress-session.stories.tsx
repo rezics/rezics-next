@@ -12,14 +12,9 @@ import {
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PageStory, libraryProgressSessionReady, pagePaths, pageReady } from './page';
 
-const viewports = {
-  phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
-  desktop: { name: 'Desktop', styles: { width: '1280px', height: '900px' } },
-};
-
 const meta = {
   title: 'Pages/Library/Progress Session',
-  parameters: { layout: 'fullscreen', viewport: { options: viewports } },
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -95,9 +90,8 @@ function manualStory(id: string) {
   return <PageStory visitor="Signed In" path={`/library/progress/${id}`} />;
 }
 
-export const HistoricScalar390: Story = {
-  name: 'Historic scalar, presentation unavailable at 390',
-  parameters: { viewport: { defaultViewport: 'phone' } },
+export const HistoricScalar: Story = {
+  name: 'Historic scalar, presentation unavailable',
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.library_history_unavailable());
@@ -105,12 +99,6 @@ export const HistoricScalar390: Story = {
     expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument();
   },
   render: () => manualStory(manualScalarId),
-};
-
-export const HistoricScalar1280: Story = {
-  ...HistoricScalar390,
-  name: 'Historic scalar, presentation unavailable at 1280',
-  parameters: { viewport: { defaultViewport: 'desktop' } },
 };
 
 export const SparseHistory: Story = {

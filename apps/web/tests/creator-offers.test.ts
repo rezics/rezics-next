@@ -17,6 +17,24 @@ const { isSignedInPath } = await import('../src/session/guard');
 const request = () =>
   new Request('https://site.test/en/creator/offers', { headers: { authorization: 'Bearer current-creator' } });
 
+test('creator offer stories retain every fixture once and inherit shared viewport selection', async () => {
+  const story = await readFile(new URL('../src/stories/creator-offers.stories.tsx', import.meta.url), 'utf8');
+  expect([...story.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
+    'History',
+    'SecondPage',
+    'Empty',
+    'Denied',
+    'Unavailable',
+    'Error',
+    'Stale',
+    'Preparing',
+    'LongTitle',
+  ]);
+  expect(story).toContain("render('long-title')");
+  expect(story).toContain("view.queryByRole('link', { name: delistedCreatorOfferFixture.title })");
+  expect(story).not.toMatch(/viewport|maxWidth|width\??:/);
+});
+
 test('private bounded caller forwards only current credential and signed cursor without owner selection or fanout', async () => {
   const calls: Parameters<CreatorOffersCaller['get']>[0][] = [];
   const caller: CreatorOffersCaller = {

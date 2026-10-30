@@ -13,9 +13,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function render(state: CreatorSalesStory, width?: number) {
+function render(state: CreatorSalesStory) {
   return (
-    <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8" style={width ? { maxWidth: width } : undefined}>
+    <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8">
       <CreatorSalesPage
         page={creatorSalesStoryPage(state)}
         locale={getLocale()}
@@ -62,14 +62,6 @@ export const UnknownUnit: Story = { render: () => render('unknown-unit') };
 export const LongTitle: Story = { render: () => render('long-title') };
 export const OtherCreatorSameRoute: Story = { render: () => render('other-creator') };
 export const OtherCreatorDenied: Story = { render: () => render('denied') };
-export const Mobile390: Story = {
-  render: () => render('long-title', 390),
-  globals: { viewport: { value: 'phone390' } },
-};
-export const Desktop1280: Story = {
-  render: () => render('history', 1280),
-  globals: { viewport: { value: 'desktop1280' } },
-};
 // The real route deliberately stays unavailable until the native generated binding is delivered.
 export const ActualRoute: Story = {
   render: () => <PageStory visitor="Signed In" path="/creator/sales" />,

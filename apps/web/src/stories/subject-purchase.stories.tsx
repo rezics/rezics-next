@@ -39,12 +39,10 @@ function PurchaseStory({
   state = 'ready',
   signedIn = false,
   actualAdapter = false,
-  width,
 }: {
   state?: SubjectPurchaseStoryState;
   signedIn?: boolean;
   actualAdapter?: boolean;
-  width?: number;
 }) {
   const [client] = useState(() => {
     const queryClient = new QueryClient();
@@ -65,10 +63,7 @@ function PurchaseStory({
             privateRegion: SubjectOwnedBenefitsRegion,
           }}
         >
-          <main
-            className="min-h-screen min-w-0 bg-background p-4 sm:p-8"
-            style={width ? { maxWidth: width } : undefined}
-          >
+          <main className="min-h-screen min-w-0 bg-background p-4 sm:p-8">
             <header className="max-w-4xl min-w-0">
               <h1 className="text-2xl font-semibold">The Little Prince</h1>
               <SubjectPurchaseSlot
@@ -112,19 +107,6 @@ export const LongTitle: Story = { render: () => <PurchaseStory state="long-title
 export const MappedPriceUnknown: Story = { render: () => <PurchaseStory state="mapped-price-unknown" signedIn /> };
 export const UnknownMapping: Story = { render: () => <PurchaseStory state="unknown-mapping" /> };
 export const ActualAdapterUnavailable: Story = { render: () => <PurchaseStory actualAdapter signedIn /> };
-export const SignedOut390: Story = {
-  render: () => <PurchaseStory width={390} />,
-  globals: { viewport: { value: 'phone390' } },
-};
-export const SignedOut1280: Story = {
-  render: () => <PurchaseStory width={1280} />,
-  globals: { viewport: { value: 'desktop1280' } },
-};
-export const SignedIn390: Story = {
-  render: () => <PurchaseStory state="long-title" signedIn width={390} />,
-  globals: { viewport: { value: 'phone390' } },
-};
-export const SignedIn1280: Story = {
-  render: () => <PurchaseStory signedIn width={1280} />,
-  globals: { viewport: { value: 'desktop1280' } },
+export const SignedInLongTitle: Story = {
+  render: () => <PurchaseStory state="long-title" signedIn />,
 };

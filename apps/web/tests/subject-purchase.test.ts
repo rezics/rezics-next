@@ -1,4 +1,5 @@
 import { expect, mock, spyOn, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -43,6 +44,30 @@ const input: SubjectOffersInput = { subjectId, locale: 'en', credentialMode: 'se
 const page = { offers: [subjectOfferFixture], next: 'native-signed-next', projectionState: 'ready' as const };
 const currentRequest = (authorization: string | null = actor) =>
   new Request('https://site.test/en', { headers: authorization ? { authorization } : {} });
+
+test('canonical purchase stories preserve signed-in long content separately from signed-out and actual adapter states', async () => {
+  const story = await readFile(new URL('../src/stories/subject-purchase.stories.tsx', import.meta.url), 'utf8');
+  expect([...story.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
+    'SignedOut',
+    'SignedIn',
+    'Pending',
+    'Empty',
+    'Preparing',
+    'PartialPreparing',
+    'DeniedSignedIn',
+    'Unavailable',
+    'CursorError',
+    'LongTitle',
+    'MappedPriceUnknown',
+    'UnknownMapping',
+    'ActualAdapterUnavailable',
+    'SignedInLongTitle',
+  ]);
+  expect(story).toContain('<PurchaseStory state="long-title" signedIn />');
+  expect(story).toContain("await userEvent.click(view.getByRole('button', { name: m.subject_purchase_next() }))");
+  expect(story).toContain("findByRole('link', { name: m.subject_purchase_records() })");
+  expect(story).not.toMatch(/viewport|maxWidth|width\??:/);
+});
 
 test('Subject benefit entry into the actual offer/checkout/owned benefit journey', async () => {
   setLocale('en', { reload: false });

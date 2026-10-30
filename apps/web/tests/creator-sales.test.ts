@@ -32,6 +32,30 @@ const render = (data: CreatorSalesData, cursor?: string) =>
   );
 
 describe("Creator's real private sales history page and statement navigation", () => {
+  test('canonical sales stories retain actor, unknown, preparing and actual unavailable route coverage', async () => {
+    const story = await readFile(new URL('../src/stories/creator-sales.stories.tsx', import.meta.url), 'utf8');
+    expect([...story.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
+      'History',
+      'SecondPage',
+      'Empty',
+      'Denied',
+      'Unavailable',
+      'Error',
+      'Stale',
+      'Loading',
+      'Preparing',
+      'Incomplete',
+      'UnknownUnit',
+      'LongTitle',
+      'OtherCreatorSameRoute',
+      'OtherCreatorDenied',
+      'ActualRoute',
+    ]);
+    expect(story).toContain('canvasElement.querySelector(\'a[href*="/orders/"]\')');
+    expect(story).toContain('findByText(m.creator_sales_unavailable())');
+    expect(story).not.toMatch(/viewport|maxWidth|width\??:/);
+  });
+
   test('one bounded current-credential read, signed cursor and same-route creator isolation without account selection', async () => {
     const calls: Parameters<CreatorSalesCaller['get']>[0][] = [];
     const caller: CreatorSalesCaller = {

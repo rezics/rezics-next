@@ -11,12 +11,6 @@ const meta = {
   title: 'Pages/Library/My published logs',
   parameters: {
     layout: 'fullscreen',
-    viewport: {
-      options: {
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-      },
-    },
     docs: {
       description: {
         component:
@@ -24,7 +18,6 @@ const meta = {
       },
     },
   },
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   beforeEach() {
     setMyLogsStory('ready');
     return () => setMyLogsStory();
@@ -46,13 +39,7 @@ async function ready({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(canvas.queryByText(m.library_logs_empty())).toBeNull();
 }
 
-export const Desktop: Story = { name: 'Desktop 1280', render, play: ready };
-export const Phone: Story = {
-  name: 'Phone 390',
-  render,
-  play: ready,
-  globals: { viewport: { value: 'phone390', isRotated: false } },
-};
+export const Owner: Story = { render, play: ready };
 export const Empty: Story = {
   render,
   beforeEach: scenario('empty'),
@@ -63,7 +50,6 @@ export const Empty: Story = {
 export const Long: Story = {
   render,
   beforeEach: scenario('long'),
-  globals: { viewport: { value: 'phone390', isRotated: false } },
 };
 export const UnknownSubject: Story = { render, beforeEach: scenario('unknown') };
 export const Denied: Story = {
