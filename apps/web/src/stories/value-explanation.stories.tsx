@@ -12,7 +12,7 @@ function WhyStory({ scenario = 'selected' }: { scenario?: ValueScenario }) {
   const locale = getLocale();
   const fixture = useMemo(() => valueExplanationFixture(scenario, locale), [scenario, locale]);
   return (
-    <PatternStory visitor="Signed Out" path="/">
+    <PatternStory visitor="Signed In" path="/">
       <AppShell>
         <ValueExplanation key={`${scenario}:${locale}`} locale={locale} transport={fixture.transport} />
       </AppShell>

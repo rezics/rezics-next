@@ -89,7 +89,15 @@ export function ValueExplanationPage({
           <dl className="space-y-3 rounded-xl border border-border bg-card p-4 text-sm">
             <div>
               <dt className="text-muted-foreground">{m.context_title({}, o)}</dt>
-              <dd>{page.context === candidateContext ? m.context_global({}, o) : m.context_unnamed({}, o)}</dd>
+              <dd>
+                {page.context === candidateContext ? (
+                  m.context_global({}, o)
+                ) : (
+                  <span>
+                    {m.context_unnamed({}, o)} <code className="break-all text-xs">{page.context}</code>
+                  </span>
+                )}
+              </dd>
             </div>
             {statement && (
               <>

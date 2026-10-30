@@ -23,8 +23,9 @@ export const valueLastCursor = 'opaque:/review?=last';
 /** Generated-client response examples for this consumer; no runtime producer or mutation is installed. */
 export function valueExplanationFixture(scenario: ValueScenario = 'selected', locale = 'en') {
   const { id, read } = catalogueSourcesFixture();
-  const property = 'schema:isbn';
-  const selected = read.subject.statements[property]![0]!;
+  const property = scenario === 'document' ? 'schema:abstract' : 'schema:isbn';
+  const selected = read.subject.statements['schema:isbn']![0]!;
+  selected.property.id = property;
   selected.id = '00000000-0000-8000-8000-000000000025';
   selected.rank = 'preferred';
   selected.rezics = { release: definitions.digest, revision: 2 };

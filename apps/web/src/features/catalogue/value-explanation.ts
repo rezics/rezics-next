@@ -1,7 +1,7 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { candidateContext, type CandidateSlot } from '../../subject/candidates';
 import { originalLanguage } from '../../subject/language';
-import { defaultReader } from '../../subject/reader';
+import { defaultReader, type Reader } from '../../subject/reader';
 import { subjectHref } from '../../subject/subject-href';
 import { bestRank, pageText, spoilerLevel } from '../pages/shared';
 import { fetchGuideRelease, type GuideRelease } from './definition-guide';
@@ -127,6 +127,7 @@ export async function readValueExplanation(
   input: ValueRequest,
   options: {
     authorization?: string;
+    reader?: Reader | Promise<Reader>;
     definitions?: (digest: string) => Promise<GuideRelease>;
     detail?: RevisionDetailPort;
   } = {},
@@ -162,7 +163,8 @@ export async function readValueExplanation(
       return { kind: 'ready', page };
     }
     // A link is not permission to reveal a spoiler that the current reader has not opened.
-    if (spoilerLevel(statement) > defaultReader.spoilerLevel) {
+    const reader = await Promise.resolve(options.reader ?? defaultReader).catch(() => defaultReader);
+    if (spoilerLevel(statement) > reader.spoilerLevel) {
       page.absence = 'withheld';
       return { kind: 'ready', page };
     }
@@ -185,6 +187,7 @@ export async function readValueExplanation(
         ...(session ? { session } : {}),
       }).catch((): DetailRead => ({ kind: 'unavailable' })),
     ]);
+    let continuationSession = detail.kind === 'ready' ? (detail.session ?? session) : session;
     page.typeLabel = pageText(definitions?.types[subject.type]?.labels, input.locale);
     page.propertyLabel = pageText(
       related[input.property]?.labels ?? definitions?.properties[input.property]?.labels,
@@ -237,6 +240,7 @@ export async function readValueExplanation(
       if (!candidates) page.competition = { kind: 'unavailable' };
       else if (candidates.status !== 200 || !candidates.data) page.competition = failure(candidates.status);
       else {
+        continuationSession = new Headers(candidates.headers).get('rezics-session-token') ?? continuationSession;
         const candidate = candidates.data.candidates.find(
           (row) => row.id === selected.id && !('deleted' in row && row.deleted === true),
         );
@@ -252,7 +256,7 @@ export async function readValueExplanation(
           : { kind: 'not-returned', next: candidates.data.next };
       }
     }
-    return { kind: 'ready', page, ...(session ? { session } : {}) };
+    return { kind: 'ready', page, ...(continuationSession ? { session: continuationSession } : {}) };
   } catch {
     return { kind: 'unavailable' };
   }

@@ -82,6 +82,15 @@ test('current unresolved, concealed, changed and unknown values remain different
     context: '00000000-0000-8000-8000-000000000099',
   });
   expect(mismatched).toEqual({ kind: 'unavailable' });
+  fixture.selected.qualifiers.push({
+    property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+    value: { type: 'value', content: { amount: '1', unit: '1' } },
+  });
+  expect(html(await fixture.transport())).toContain(m.value_withheld());
+  const revealed = await readValueExplanation(fixture.client, fixture.address, {
+    reader: { spoilerLevel: 1, suitability: 'blur' },
+  });
+  expect(html(revealed)).toContain('9780156012195');
 });
 
 test('documents use only the current authorized representation and the existing renderer; safe details must match the selected origin', async () => {
