@@ -743,8 +743,9 @@ no second worker, coordinator, membership writer or ACK. The current membership 
 provisional. This source delivery is therefore not native integration or full lifecycle proof. Access's native
 inventory already includes source, best-candidate and cursor account locators; custody forbids deleting source
 or terminal decision before a native consumer closure is provided. Older work lacking the bound Content episode
-stays unavailable rather than being relabelled as applied. Shared history currently declares all non-preference
-command and work producers undelivered; this constructor adds no receipt, event or work producer of its own.
+stays unavailable rather than being relabelled as applied. Installed native role-provenance hooks record grant
+changes with the existing executor transaction identity, including destructive removal. This constructor adds no
+receipt, event or work producer of its own.
 
 Cost per segment: one released exact account-home source read, one Realm source and progress key, at most 100 raw
 current role keys including lookahead, bounded exact account/tombstone/interval comparisons, and final candidate,
