@@ -27,7 +27,10 @@ export declare function within<T>(deadline: number, work: () => Promise<T>): Pro
 export declare function deadlineClient(client: AccessClient, deadline: number): AccessClient;
 /** Each factory owns its key cache and its opaque, immutable request identities. */
 export declare function createAuthenticator(configuration?: AuthenticationConfig, clock?: KernelClock): {
-    authenticate: (token: string, context: AccessContext) => Promise<AccountActor>;
+    authenticate: (token: string, context: {
+        pool: import("pg").Pool;
+        deadline: number;
+    }) => Promise<AccountActor>;
     approvalScope: Readonly<{}>;
     durableScope: Readonly<{}>;
     /** Private operation proof, not a row/Actor registration API. */

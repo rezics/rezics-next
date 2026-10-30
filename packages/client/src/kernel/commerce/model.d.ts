@@ -7,7 +7,40 @@ export declare const MAX_ORDER_TRANSACTIONS = 256;
 /** Historical purchase outcome, independent of provider cash availability and current benefit permission. */
 export type Settlement = 'pending' | 'paid' | 'failed' | 'unknown';
 export type RevokeReason = 'refund' | 'dispute';
+/** Closed native Content identity; a subject is never a substitute for this binding. */
+export type ContentEditionBenefit = Readonly<{
+    kind: 'content-edition';
+    resourceType: 'content.edition';
+    resource: Readonly<{
+        route: number;
+        id: string;
+    }>;
+    version: Readonly<{
+        revisionId: string;
+        sha256: string;
+    }>;
+    action: 'edition:read';
+}>;
+/** Commerce's bounded immutable delivery terms. Content supplies every source fact.
+ * This DTO describes storage, not Content's pending sale-port callable declaration.
+ */
+export type CapturedContentEdition = Readonly<{
+    benefit: ContentEditionBenefit;
+    creatorAccountId: string;
+    targetSubjectId: string;
+    source: Readonly<{
+        threadId: string;
+        postId: string;
+        licence: string;
+    }>;
+    saleTermsReference: string;
+    delivery: 'fixed-content-edition';
+    acquisition: 'one-time-account-bound';
+    quantity: 1;
+}>;
 export type Offer = {
+    /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
+    contentEdition?: CapturedContentEdition | null;
     id: string;
     creatorAccountId: string;
     targetSubjectId: string;
@@ -23,6 +56,8 @@ export type Offer = {
     revision: number;
 };
 export type Order = {
+    /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
+    contentEdition?: CapturedContentEdition | null;
     id: string;
     buyerAccountId: string;
     offerId: string;
@@ -46,6 +81,8 @@ export type Order = {
     revision: number;
 };
 export type Entitlement = {
+    /** Null for historical subject-only rows; omission is accepted only in older receipts/fixtures. */
+    contentEdition?: CapturedContentEdition | null;
     id: string;
     accountId: string;
     offerId: string;

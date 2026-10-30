@@ -1,3 +1,4 @@
+import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
 import { type AuthoritativeTime, type CommandAuthorization } from '../command/command.ts';
@@ -17,6 +18,8 @@ export type Actor = AccountActor | {
 export type Resource = {
     route: number;
     id: string;
+    /** Server-only exact selector, never entitlement evidence. */
+    authenticatedBenefit?: ContentEditionBenefit;
     eligibility?: ResourceEligibility;
     /** Compatibility spelling; uses the same opaque capability and evaluator. */
     anonymousEligibility?: ResourceEligibility;
@@ -70,6 +73,8 @@ export type AccessConfig = {
     actions: ActionCatalogue;
     resourceRoles?: ResourceRoleCatalogue;
     realmRoleReader?: AccessRealmRoleReader;
+    /** Trusted Commerce current native reader; never supplied by HTTP input. */
+    contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
     /** Outside a command, permission checks bind this instant. Absent uses PostgreSQL clock_timestamp(). */
     clock?: () => Date;
 };
@@ -78,6 +83,7 @@ export type AccessFactory = (config: AccessConfig) => Access;
 export type AccessContext = {
     pool: Pool;
     deadline: number;
+    time?: AuthoritativeTime;
 };
 export type AccessClient = Pick<PoolClient, 'query'>;
 /** Ordinary permission plus the same formula with public floor and grant roles disabled. */
@@ -129,7 +135,11 @@ export type AccessCommandAuthorization = CommandAuthorization & {
     readonly check: AccessCheck;
 };
 export interface Access {
-    authenticate(token: string, context: AccessContext): Promise<AccountActor>;
+    /** Authentication has no authorization-time input; preserve its native request contract. */
+    authenticate(token: string, context: {
+        pool: Pool;
+        deadline: number;
+    }): Promise<AccountActor>;
     prepareReadDecisions?(input: PrepareReadDecisionsInput): Promise<ReadDecisions>;
     prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
     preparePage?(actor: Actor, action: string, page: ResourcePage, context: AccessContext): Promise<unknown>;

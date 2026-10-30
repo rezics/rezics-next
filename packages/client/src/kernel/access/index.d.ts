@@ -3,6 +3,7 @@ export { ERASURE_PARTICIPANTS, ERASURE_PARTICIPANT_VERSION, acknowledgeErasure, 
 export { readPublicViews, type PublicViews } from './public-views.ts';
 export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
 export { AccessUnavailableError } from './unavailable.ts';
+export { createContentEditionBuyerFact, type ContentEditionBenefit, type ContentEditionBuyerFact, type ContentEditionBuyerFactInput, type ContentEditionBuyerFactReader, } from './authenticated-benefit.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
 export { accessClock } from './access-clock.ts';
 import type { Access, AccessConfig as KernelAccessConfig, AccessClient, AccessContext, Actor, Resource, ActionCatalogue } from '../request/access.ts';

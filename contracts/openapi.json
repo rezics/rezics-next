@@ -49765,6 +49765,122 @@
                           "active": {
                             "type": "boolean"
                           },
+                          "contentEdition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "acquisition": {
+                                "const": "one-time-account-bound",
+                                "type": "string"
+                              },
+                              "benefit": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "action": {
+                                    "const": "edition:read",
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "content-edition",
+                                    "type": "string"
+                                  },
+                                  "resource": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "route": {
+                                        "maximum": 65535,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "route",
+                                      "id"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "resourceType": {
+                                    "const": "content.edition",
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "revisionId": {
+                                        "type": "string"
+                                      },
+                                      "sha256": {
+                                        "pattern": "^[a-f0-9]{64}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "revisionId",
+                                      "sha256"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "resourceType",
+                                  "resource",
+                                  "version",
+                                  "action"
+                                ],
+                                "type": "object"
+                              },
+                              "creatorAccountId": {
+                                "type": "string"
+                              },
+                              "delivery": {
+                                "const": "fixed-content-edition",
+                                "type": "string"
+                              },
+                              "quantity": {
+                                "const": 1,
+                                "type": "number"
+                              },
+                              "saleTermsReference": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "source": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "licence": {
+                                    "maxLength": 256,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "licence"
+                                ],
+                                "type": "object"
+                              },
+                              "targetSubjectId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "benefit",
+                              "creatorAccountId",
+                              "targetSubjectId",
+                              "source",
+                              "saleTermsReference",
+                              "delivery",
+                              "acquisition",
+                              "quantity"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "grantedAt": {
                             "type": "string"
                           },
@@ -49984,6 +50100,7 @@
                           }
                         },
                         "required": [
+                          "contentEdition",
                           "id",
                           "offerId",
                           "orderId",
@@ -50524,6 +50641,122 @@
                         "active": {
                           "type": "boolean"
                         },
+                        "contentEdition": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acquisition": {
+                              "const": "one-time-account-bound",
+                              "type": "string"
+                            },
+                            "benefit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "edition:read",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "content-edition",
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "route": {
+                                      "maximum": 65535,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "route",
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "resourceType": {
+                                  "const": "content.edition",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "revisionId": {
+                                      "type": "string"
+                                    },
+                                    "sha256": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "sha256"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resourceType",
+                                "resource",
+                                "version",
+                                "action"
+                              ],
+                              "type": "object"
+                            },
+                            "creatorAccountId": {
+                              "type": "string"
+                            },
+                            "delivery": {
+                              "const": "fixed-content-edition",
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "saleTermsReference": {
+                              "maxLength": 256,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "licence": {
+                                  "maxLength": 256,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "licence"
+                              ],
+                              "type": "object"
+                            },
+                            "targetSubjectId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "benefit",
+                            "creatorAccountId",
+                            "targetSubjectId",
+                            "source",
+                            "saleTermsReference",
+                            "delivery",
+                            "acquisition",
+                            "quantity"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "grantedAt": {
                           "type": "string"
                         },
@@ -50743,6 +50976,7 @@
                         }
                       },
                       "required": [
+                        "contentEdition",
                         "id",
                         "offerId",
                         "orderId",
@@ -85759,40 +85993,81 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "currency": {
-                    "pattern": "^[a-z]{3}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "contentEditionId": {
+                        "type": "string"
+                      },
+                      "currency": {
+                        "pattern": "^[a-z]{3}$",
+                        "type": "string"
+                      },
+                      "taxCode": {
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "pattern": "\\S",
+                        "type": "string"
+                      },
+                      "unitAmountMinor": {
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "contentEditionId",
+                      "title",
+                      "currency",
+                      "unitAmountMinor",
+                      "taxCode"
+                    ],
+                    "type": "object"
                   },
-                  "targetSubjectId": {
-                    "type": "string"
-                  },
-                  "taxCode": {
-                    "maxLength": 256,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "title": {
-                    "maxLength": 1024,
-                    "minLength": 1,
-                    "pattern": "\\S",
-                    "type": "string"
-                  },
-                  "unitAmountMinor": {
-                    "maximum": 9007199254740991,
-                    "minimum": 1,
-                    "type": "integer"
+                  {
+                    "additionalProperties": false,
+                    "description": "Historical offer receipt replay only; fresh sales require contentEditionId.",
+                    "properties": {
+                      "currency": {
+                        "pattern": "^[a-z]{3}$",
+                        "type": "string"
+                      },
+                      "targetSubjectId": {
+                        "type": "string"
+                      },
+                      "taxCode": {
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "maxLength": 1024,
+                        "minLength": 1,
+                        "pattern": "\\S",
+                        "type": "string"
+                      },
+                      "unitAmountMinor": {
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "targetSubjectId",
+                      "title",
+                      "currency",
+                      "unitAmountMinor",
+                      "taxCode"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "targetSubjectId",
-                  "title",
-                  "currency",
-                  "unitAmountMinor",
-                  "taxCode"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -85808,6 +86083,122 @@
                     "offer": {
                       "additionalProperties": false,
                       "properties": {
+                        "contentEdition": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acquisition": {
+                              "const": "one-time-account-bound",
+                              "type": "string"
+                            },
+                            "benefit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "edition:read",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "content-edition",
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "route": {
+                                      "maximum": 65535,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "route",
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "resourceType": {
+                                  "const": "content.edition",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "revisionId": {
+                                      "type": "string"
+                                    },
+                                    "sha256": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "sha256"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resourceType",
+                                "resource",
+                                "version",
+                                "action"
+                              ],
+                              "type": "object"
+                            },
+                            "creatorAccountId": {
+                              "type": "string"
+                            },
+                            "delivery": {
+                              "const": "fixed-content-edition",
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "saleTermsReference": {
+                              "maxLength": 256,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "licence": {
+                                  "maxLength": 256,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "licence"
+                              ],
+                              "type": "object"
+                            },
+                            "targetSubjectId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "benefit",
+                            "creatorAccountId",
+                            "targetSubjectId",
+                            "source",
+                            "saleTermsReference",
+                            "delivery",
+                            "acquisition",
+                            "quantity"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "currency": {
                           "type": "string"
                         },
@@ -86013,6 +86404,7 @@
                         }
                       },
                       "required": [
+                        "contentEdition",
                         "id",
                         "targetSubjectId",
                         "summary",
@@ -86542,6 +86934,122 @@
                     "offer": {
                       "additionalProperties": false,
                       "properties": {
+                        "contentEdition": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acquisition": {
+                              "const": "one-time-account-bound",
+                              "type": "string"
+                            },
+                            "benefit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "edition:read",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "content-edition",
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "route": {
+                                      "maximum": 65535,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "route",
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "resourceType": {
+                                  "const": "content.edition",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "revisionId": {
+                                      "type": "string"
+                                    },
+                                    "sha256": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "sha256"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resourceType",
+                                "resource",
+                                "version",
+                                "action"
+                              ],
+                              "type": "object"
+                            },
+                            "creatorAccountId": {
+                              "type": "string"
+                            },
+                            "delivery": {
+                              "const": "fixed-content-edition",
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "saleTermsReference": {
+                              "maxLength": 256,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "licence": {
+                                  "maxLength": 256,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "licence"
+                              ],
+                              "type": "object"
+                            },
+                            "targetSubjectId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "benefit",
+                            "creatorAccountId",
+                            "targetSubjectId",
+                            "source",
+                            "saleTermsReference",
+                            "delivery",
+                            "acquisition",
+                            "quantity"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "currency": {
                           "type": "string"
                         },
@@ -86747,6 +87255,7 @@
                         }
                       },
                       "required": [
+                        "contentEdition",
                         "id",
                         "targetSubjectId",
                         "subject",
@@ -87206,6 +87715,122 @@
                     "offer": {
                       "additionalProperties": false,
                       "properties": {
+                        "contentEdition": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acquisition": {
+                              "const": "one-time-account-bound",
+                              "type": "string"
+                            },
+                            "benefit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "edition:read",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "content-edition",
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "route": {
+                                      "maximum": 65535,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "route",
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "resourceType": {
+                                  "const": "content.edition",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "revisionId": {
+                                      "type": "string"
+                                    },
+                                    "sha256": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "sha256"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resourceType",
+                                "resource",
+                                "version",
+                                "action"
+                              ],
+                              "type": "object"
+                            },
+                            "creatorAccountId": {
+                              "type": "string"
+                            },
+                            "delivery": {
+                              "const": "fixed-content-edition",
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "saleTermsReference": {
+                              "maxLength": 256,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "licence": {
+                                  "maxLength": 256,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "licence"
+                              ],
+                              "type": "object"
+                            },
+                            "targetSubjectId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "benefit",
+                            "creatorAccountId",
+                            "targetSubjectId",
+                            "source",
+                            "saleTermsReference",
+                            "delivery",
+                            "acquisition",
+                            "quantity"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "currency": {
                           "type": "string"
                         },
@@ -87411,6 +88036,7 @@
                         }
                       },
                       "required": [
+                        "contentEdition",
                         "id",
                         "targetSubjectId",
                         "summary",
@@ -88121,6 +88747,122 @@
                     "offer": {
                       "additionalProperties": false,
                       "properties": {
+                        "contentEdition": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acquisition": {
+                              "const": "one-time-account-bound",
+                              "type": "string"
+                            },
+                            "benefit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "edition:read",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "content-edition",
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "route": {
+                                      "maximum": 65535,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "route",
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "resourceType": {
+                                  "const": "content.edition",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "revisionId": {
+                                      "type": "string"
+                                    },
+                                    "sha256": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "sha256"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resourceType",
+                                "resource",
+                                "version",
+                                "action"
+                              ],
+                              "type": "object"
+                            },
+                            "creatorAccountId": {
+                              "type": "string"
+                            },
+                            "delivery": {
+                              "const": "fixed-content-edition",
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "saleTermsReference": {
+                              "maxLength": 256,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "licence": {
+                                  "maxLength": 256,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "licence"
+                              ],
+                              "type": "object"
+                            },
+                            "targetSubjectId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "benefit",
+                            "creatorAccountId",
+                            "targetSubjectId",
+                            "source",
+                            "saleTermsReference",
+                            "delivery",
+                            "acquisition",
+                            "quantity"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "currency": {
                           "type": "string"
                         },
@@ -88326,6 +89068,7 @@
                         }
                       },
                       "required": [
+                        "contentEdition",
                         "id",
                         "targetSubjectId",
                         "summary",
@@ -89890,6 +90633,122 @@
                               "null"
                             ]
                           },
+                          "contentEdition": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "acquisition": {
+                                "const": "one-time-account-bound",
+                                "type": "string"
+                              },
+                              "benefit": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "action": {
+                                    "const": "edition:read",
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "content-edition",
+                                    "type": "string"
+                                  },
+                                  "resource": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "route": {
+                                        "maximum": 65535,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "route",
+                                      "id"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "resourceType": {
+                                    "const": "content.edition",
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "revisionId": {
+                                        "type": "string"
+                                      },
+                                      "sha256": {
+                                        "pattern": "^[a-f0-9]{64}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "revisionId",
+                                      "sha256"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "resourceType",
+                                  "resource",
+                                  "version",
+                                  "action"
+                                ],
+                                "type": "object"
+                              },
+                              "creatorAccountId": {
+                                "type": "string"
+                              },
+                              "delivery": {
+                                "const": "fixed-content-edition",
+                                "type": "string"
+                              },
+                              "quantity": {
+                                "const": 1,
+                                "type": "number"
+                              },
+                              "saleTermsReference": {
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "source": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "licence": {
+                                    "maxLength": 256,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "licence"
+                                ],
+                                "type": "object"
+                              },
+                              "targetSubjectId": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "benefit",
+                              "creatorAccountId",
+                              "targetSubjectId",
+                              "source",
+                              "saleTermsReference",
+                              "delivery",
+                              "acquisition",
+                              "quantity"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string"
                           },
@@ -89934,6 +90793,7 @@
                           }
                         },
                         "required": [
+                          "contentEdition",
                           "id",
                           "offerId",
                           "settlement",
@@ -90501,6 +91361,122 @@
                             "null"
                           ]
                         },
+                        "contentEdition": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acquisition": {
+                              "const": "one-time-account-bound",
+                              "type": "string"
+                            },
+                            "benefit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "edition:read",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "content-edition",
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "route": {
+                                      "maximum": 65535,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "route",
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "resourceType": {
+                                  "const": "content.edition",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "revisionId": {
+                                      "type": "string"
+                                    },
+                                    "sha256": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "sha256"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resourceType",
+                                "resource",
+                                "version",
+                                "action"
+                              ],
+                              "type": "object"
+                            },
+                            "creatorAccountId": {
+                              "type": "string"
+                            },
+                            "delivery": {
+                              "const": "fixed-content-edition",
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "saleTermsReference": {
+                              "maxLength": 256,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "licence": {
+                                  "maxLength": 256,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "licence"
+                              ],
+                              "type": "object"
+                            },
+                            "targetSubjectId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "benefit",
+                            "creatorAccountId",
+                            "targetSubjectId",
+                            "source",
+                            "saleTermsReference",
+                            "delivery",
+                            "acquisition",
+                            "quantity"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "createdAt": {
                           "type": "string"
                         },
@@ -90527,6 +91503,7 @@
                         }
                       },
                       "required": [
+                        "contentEdition",
                         "id",
                         "offerId",
                         "settlement",
@@ -91158,6 +92135,122 @@
                             "null"
                           ]
                         },
+                        "contentEdition": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "acquisition": {
+                              "const": "one-time-account-bound",
+                              "type": "string"
+                            },
+                            "benefit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "edition:read",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "content-edition",
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "route": {
+                                      "maximum": 65535,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "route",
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "resourceType": {
+                                  "const": "content.edition",
+                                  "type": "string"
+                                },
+                                "version": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "revisionId": {
+                                      "type": "string"
+                                    },
+                                    "sha256": {
+                                      "pattern": "^[a-f0-9]{64}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "revisionId",
+                                    "sha256"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "resourceType",
+                                "resource",
+                                "version",
+                                "action"
+                              ],
+                              "type": "object"
+                            },
+                            "creatorAccountId": {
+                              "type": "string"
+                            },
+                            "delivery": {
+                              "const": "fixed-content-edition",
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "saleTermsReference": {
+                              "maxLength": 256,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "licence": {
+                                  "maxLength": 256,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "licence"
+                              ],
+                              "type": "object"
+                            },
+                            "targetSubjectId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "benefit",
+                            "creatorAccountId",
+                            "targetSubjectId",
+                            "source",
+                            "saleTermsReference",
+                            "delivery",
+                            "acquisition",
+                            "quantity"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "createdAt": {
                           "type": "string"
                         },
@@ -91371,6 +92464,7 @@
                         }
                       },
                       "required": [
+                        "contentEdition",
                         "id",
                         "offerId",
                         "title",
@@ -148087,8 +149181,8 @@
                         },
                         "required": [
                           "id",
-                          "lastModified",
-                          "address"
+                          "address",
+                          "lastModified"
                         ],
                         "type": "object"
                       },
@@ -200021,7 +201115,7 @@
                 {
                   "maximum": 10,
                   "minimum": 1,
-                  "type": "number"
+                  "type": "integer"
                 },
                 {
                   "type": "string"
@@ -208940,7 +210034,10 @@
           }
         ],
         "x-action": "zone:configure",
-        "x-exposure": "public"
+        "x-exposure": "public",
+        "x-resource-types": [
+          "semantic.zone"
+        ]
       },
       "put": {
         "operationId": "zone.configure",
@@ -210227,7 +211324,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "semantic.zone"
+        ]
       }
     },
     "/v1/zones/{id}:publish": {
@@ -211293,7 +212393,10 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        }
+        },
+        "x-resource-types": [
+          "semantic.zone"
+        ]
       }
     },
     "/v1/zones/{id}:readPage": {

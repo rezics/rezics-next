@@ -1,4 +1,3 @@
-type TrendingProblem = { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: "not_applicable" | "not_applied"; request_id: string; detail?: string; errors?: { pointer: string; code: never }[] };
 import { type SubjectSummary } from '../../semantic/summaries.ts';
 import type { Resource, AccessCheck } from '../../request/access.ts';
 import type { Pool } from 'pg';
@@ -79,18 +78,93 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
             get: {
                 body: unknown;
                 params: {};
-                query: { language: string; limit?: number };
+                query: {
+                    language: string;
+                    limit?: string | number;
+                };
                 headers: unknown;
                 response: {
-                    200: { trendingSearches: { query: string; display: string }[]; next: null };
-                    400: TrendingProblem;
-                    401: TrendingProblem;
-                    403: TrendingProblem;
-                    503: TrendingProblem;
+                    200: {
+                        trendingSearches: {
+                            query: string;
+                            display: string;
+                        }[];
+                        next: null;
+                    };
+                    400: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    401: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    403: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: string;
+                    };
+                    503: {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail?: string;
+                        errors?: {
+                            pointer: string;
+                            code: never;
+                        }[];
+                    };
                 };
                 error: never;
             };
         };
+    };
+} & {
+    v1: {
         subjects: {
             $search: {
                 post: {

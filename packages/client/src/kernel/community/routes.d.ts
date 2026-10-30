@@ -4090,8 +4090,8 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                         200: {
                             items: {
                                 id: string;
-                                lastModified: string;
                                 address: string;
+                                lastModified: string;
                             }[];
                             next: string | null;
                         };

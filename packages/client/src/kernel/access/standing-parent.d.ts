@@ -20,6 +20,7 @@ export declare function installStandingParentGrant(input: {
     resource: Readonly<{
         route: number;
         id: string;
+        authenticatedBenefit?: import("./authenticated-benefit.ts").ContentEditionBenefit;
         eligibility?: import("./eligibility.ts").ResourceEligibility;
         anonymousEligibility?: import("./eligibility.ts").ResourceEligibility;
     }>;

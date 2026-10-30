@@ -69,6 +69,7 @@ export declare const SOURCE_RECORD_METADATA_CHANGED = "com.rezics.source-record.
 /** Independent tuple-home command. Authorization is prepared afresh by runCommand before every receipt read. */
 export declare function writeSourceRecordMetadata(pool: Pool, options: {
     command: SourceRecordMetadataCommand;
+    validated?: boolean;
     routeKey: Uint8Array;
     actor: AccountActor;
     authorization: CommandAuthorization;

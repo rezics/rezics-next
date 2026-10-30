@@ -1,3 +1,4 @@
+import { type ContentEditionBuyerFactReader } from './authenticated-benefit.ts';
 import { type Account } from './account-data.ts';
 import { type AuthoritativeTime } from '../command/command.ts';
 import { type ResourcePage, type AccessRealmRoleReader, type ReadDecisions, type Access, type AccessClient, type AccessContext, type AccessCheck, type AccountActor, type ActionCatalogue, type Actor, type Resource } from '../request/access.ts';
@@ -23,6 +24,7 @@ export type PermissionConfig = {
      * Following is not membership. Missing verifier or required proof denies.
      */
     realmRoleReader?: RealmRoleReader;
+    contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
     /** Outside a command, bind this instant. Absent uses PostgreSQL clock_timestamp(). */
     clock?: () => Date;
 };

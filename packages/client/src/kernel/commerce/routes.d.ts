@@ -3983,6 +3983,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             offer: {
+                                contentEdition: {
+                                    benefit: {
+                                        kind: "content-edition";
+                                        resourceType: "content.edition";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        version: {
+                                            revisionId: string;
+                                            sha256: string;
+                                        };
+                                        action: "edition:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    source: {
+                                        licence: string;
+                                    };
+                                    saleTermsReference: string;
+                                    delivery: "fixed-content-edition";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
                                 id: string;
                                 targetSubjectId: string;
                                 subject: {
@@ -4105,6 +4129,12 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         offers: {
             post: {
                 body: {
+                    contentEditionId: string;
+                    title: string;
+                    currency: string;
+                    unitAmountMinor: number;
+                    taxCode: string;
+                } | {
                     targetSubjectId: string;
                     title: string;
                     currency: string;
@@ -4126,10 +4156,46 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             unitAmountMinor: number;
                             state: "active" | "delisted";
                             summary: SubjectSummary | null;
+                            contentEdition: {
+                                benefit: import("./model.ts").ContentEditionBenefit;
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: string;
+                                delivery: 'fixed-content-edition';
+                                acquisition: 'one-time-account-bound';
+                                quantity: 1;
+                                source: {
+                                    licence: string;
+                                };
+                            } | null;
                         };
                     };
                     201: {
                         offer: {
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             targetSubjectId: string;
                             summary: {
@@ -4267,6 +4333,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             offer: {
+                                contentEdition: {
+                                    benefit: {
+                                        kind: "content-edition";
+                                        resourceType: "content.edition";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        version: {
+                                            revisionId: string;
+                                            sha256: string;
+                                        };
+                                        action: "edition:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    source: {
+                                        licence: string;
+                                    };
+                                    saleTermsReference: string;
+                                    delivery: "fixed-content-edition";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
                                 id: string;
                                 targetSubjectId: string;
                                 summary: {
@@ -4432,6 +4522,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         response: {
                             200: {
                                 offer: {
+                                    contentEdition: {
+                                        benefit: {
+                                            kind: "content-edition";
+                                            resourceType: "content.edition";
+                                            resource: {
+                                                route: number;
+                                                id: string;
+                                            };
+                                            version: {
+                                                revisionId: string;
+                                                sha256: string;
+                                            };
+                                            action: "edition:read";
+                                        };
+                                        creatorAccountId: string;
+                                        targetSubjectId: string;
+                                        source: {
+                                            licence: string;
+                                        };
+                                        saleTermsReference: string;
+                                        delivery: "fixed-content-edition";
+                                        acquisition: "one-time-account-bound";
+                                        quantity: 1;
+                                    } | null;
                                     id: string;
                                     targetSubjectId: string;
                                     summary: {
@@ -4574,11 +4688,47 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             checkoutUrl: string | null;
                             checkoutExpiresAt: string | null;
                             entitlementId: string | null;
+                            contentEdition: {
+                                benefit: import("./model.ts").ContentEditionBenefit;
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: string;
+                                delivery: 'fixed-content-edition';
+                                acquisition: 'one-time-account-bound';
+                                quantity: 1;
+                                source: {
+                                    licence: string;
+                                };
+                            } | null;
                             createdAt: string;
                         };
                     };
                     201: {
                         order: {
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             offerId: string;
                             settlement: "failed" | "paid" | "pending" | "unknown";
@@ -4691,6 +4841,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 response: {
                     200: {
                         orders: {
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             offerId: string;
                             settlement: "failed" | "paid" | "pending" | "unknown";
@@ -4810,6 +4984,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     response: {
                         200: {
                             order: {
+                                contentEdition: {
+                                    benefit: {
+                                        kind: "content-edition";
+                                        resourceType: "content.edition";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        version: {
+                                            revisionId: string;
+                                            sha256: string;
+                                        };
+                                        action: "edition:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    source: {
+                                        licence: string;
+                                    };
+                                    saleTermsReference: string;
+                                    delivery: "fixed-content-edition";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
                                 id: string;
                                 offerId: string;
                                 title: string;
@@ -4944,6 +5142,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 response: {
                     200: {
                         entitlements: {
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             offerId: string;
                             orderId: string;
@@ -5105,6 +5327,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     response: {
         200: import("typebox").TObject<{
             entitlement: import("typebox").TObject<{
+                contentEdition: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                    benefit: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"content-edition">;
+                        resourceType: import("typebox").TLiteral<"content.edition">;
+                        resource: import("typebox").TObject<{
+                            route: import("typebox").TInteger;
+                            id: import("typebox").TString;
+                        }>;
+                        version: import("typebox").TObject<{
+                            revisionId: import("typebox").TString;
+                            sha256: import("typebox").TString;
+                        }>;
+                        action: import("typebox").TLiteral<"edition:read">;
+                    }>;
+                    creatorAccountId: import("typebox").TString;
+                    targetSubjectId: import("typebox").TString;
+                    source: import("typebox").TObject<{
+                        licence: import("typebox").TString;
+                    }>;
+                    saleTermsReference: import("typebox").TString;
+                    delivery: import("typebox").TLiteral<"fixed-content-edition">;
+                    acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                    quantity: import("typebox").TLiteral<1>;
+                }>]>;
                 id: import("typebox").TString;
                 offerId: import("typebox").TString;
                 orderId: import("typebox").TString;
@@ -5212,6 +5458,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     status: import("elysia").SelectiveStatus<{
         200: {
             entitlement: {
+                contentEdition: {
+                    benefit: {
+                        kind: "content-edition";
+                        resourceType: "content.edition";
+                        resource: {
+                            route: number;
+                            id: string;
+                        };
+                        version: {
+                            revisionId: string;
+                            sha256: string;
+                        };
+                        action: "edition:read";
+                    };
+                    creatorAccountId: string;
+                    targetSubjectId: string;
+                    source: {
+                        licence: string;
+                    };
+                    saleTermsReference: string;
+                    delivery: "fixed-content-edition";
+                    acquisition: "one-time-account-bound";
+                    quantity: 1;
+                } | null;
                 id: string;
                 offerId: string;
                 orderId: string;
@@ -5304,6 +5574,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     problem: import("elysia").SelectiveProblem<{
         200: {
             entitlement: {
+                contentEdition: {
+                    benefit: {
+                        kind: "content-edition";
+                        resourceType: "content.edition";
+                        resource: {
+                            route: number;
+                            id: string;
+                        };
+                        version: {
+                            revisionId: string;
+                            sha256: string;
+                        };
+                        action: "edition:read";
+                    };
+                    creatorAccountId: string;
+                    targetSubjectId: string;
+                    source: {
+                        licence: string;
+                    };
+                    saleTermsReference: string;
+                    delivery: "fixed-content-edition";
+                    acquisition: "one-time-account-bound";
+                    quantity: 1;
+                } | null;
                 id: string;
                 offerId: string;
                 orderId: string;
@@ -5400,6 +5694,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         response: {
             200: import("typebox").TObject<{
                 entitlement: import("typebox").TObject<{
+                    contentEdition: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                        benefit: import("typebox").TObject<{
+                            kind: import("typebox").TLiteral<"content-edition">;
+                            resourceType: import("typebox").TLiteral<"content.edition">;
+                            resource: import("typebox").TObject<{
+                                route: import("typebox").TInteger;
+                                id: import("typebox").TString;
+                            }>;
+                            version: import("typebox").TObject<{
+                                revisionId: import("typebox").TString;
+                                sha256: import("typebox").TString;
+                            }>;
+                            action: import("typebox").TLiteral<"edition:read">;
+                        }>;
+                        creatorAccountId: import("typebox").TString;
+                        targetSubjectId: import("typebox").TString;
+                        source: import("typebox").TObject<{
+                            licence: import("typebox").TString;
+                        }>;
+                        saleTermsReference: import("typebox").TString;
+                        delivery: import("typebox").TLiteral<"fixed-content-edition">;
+                        acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                        quantity: import("typebox").TLiteral<1>;
+                    }>]>;
                     id: import("typebox").TString;
                     offerId: import("typebox").TString;
                     orderId: import("typebox").TString;
@@ -5549,6 +5867,18 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         revokedAt: string | null;
         revokeReason: import("./model.ts").RevokeReason | null;
         active: boolean;
+        contentEdition: {
+            benefit: import("./model.ts").ContentEditionBenefit;
+            creatorAccountId: string;
+            targetSubjectId: string;
+            saleTermsReference: string;
+            delivery: 'fixed-content-edition';
+            acquisition: 'one-time-account-bound';
+            quantity: 1;
+            source: {
+                licence: string;
+            };
+        } | null;
         summary: SubjectSummary | null;
     };
 }>, {
@@ -5558,6 +5888,30 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     response: {
         200: import("typebox").TObject<{
             entitlement: import("typebox").TObject<{
+                contentEdition: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                    benefit: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"content-edition">;
+                        resourceType: import("typebox").TLiteral<"content.edition">;
+                        resource: import("typebox").TObject<{
+                            route: import("typebox").TInteger;
+                            id: import("typebox").TString;
+                        }>;
+                        version: import("typebox").TObject<{
+                            revisionId: import("typebox").TString;
+                            sha256: import("typebox").TString;
+                        }>;
+                        action: import("typebox").TLiteral<"edition:read">;
+                    }>;
+                    creatorAccountId: import("typebox").TString;
+                    targetSubjectId: import("typebox").TString;
+                    source: import("typebox").TObject<{
+                        licence: import("typebox").TString;
+                    }>;
+                    saleTermsReference: import("typebox").TString;
+                    delivery: import("typebox").TLiteral<"fixed-content-edition">;
+                    acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                    quantity: import("typebox").TLiteral<1>;
+                }>]>;
                 id: import("typebox").TString;
                 offerId: import("typebox").TString;
                 orderId: import("typebox").TString;
