@@ -97,6 +97,7 @@ export async function nativeFixture() {
     trustedAccess: bindings.trustedAccess,
     access: bindings.workflowPorts,
     accountOperations,
+    recoveryDelivery: { async deliver() {} },
     stagingKey: randomBytes(32),
     executorId: `erasure-${randomUUID()}`,
     maintenanceSchedule: '* * * * * *',

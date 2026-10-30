@@ -50,6 +50,11 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     expect(staged.effectRef).toBeString();
     const recovery = await f.call('/recovery/start', { email: victim.email });
     expect(recovery.status).toBe(200);
+    expect((await f.pool.query('SELECT 1 FROM auth_recovery WHERE account_id=$1', [owner])).rowCount).toBe(1);
+    const counterKeys = (
+      await f.pool.query<{ key: string }>('SELECT key FROM auth_attempt_account WHERE account_id=$1', [owner])
+    ).rows;
+    expect(counterKeys.length).toBeGreaterThan(0);
     const options = await f.call('/passkeys/register/options', {}, victim.cookie);
     expect(options.status).toBe(200);
     expect(
@@ -119,10 +124,13 @@ test('existing deletion caller drains real Auth stores before user deletion; def
       ['auth_registration_stage', 'account_id'],
       ['auth_provisioning_receipt', 'account_id'],
       ['auth_recovery', 'account_id'],
+      ['auth_attempt_account', 'account_id'],
       ['auth_client', 'userId'],
     ] as const) {
       expect((await f.pool.query(`SELECT 1 FROM "${table}" WHERE "${column}"=$1 LIMIT 1`, [owner])).rowCount).toBe(0);
     }
+    for (const { key } of counterKeys)
+      expect((await f.pool.query('SELECT 1 FROM auth_attempt_counter WHERE key=$1', [key])).rowCount).toBe(0);
     expect(
       (await f.pool.query('SELECT id FROM "oauthAccessToken" WHERE "clientId" LIKE $1 LIMIT 1', ['owned-%'])).rowCount,
     ).toBe(0);
