@@ -83,8 +83,10 @@ Current implementation evidence is narrower than the capability:
   Integrated tables, typed ports, outcome interfaces and missing-driver verifiers are not runtime completion.
 - `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
-- Semantic identity STORE/mapping/participants/coordinator and whole-query Source2a remain contracts without
-  runtime producers. Existing point Access/disclosure, `subjectSource` and projection checkpoints do not close them.
+- Semantic's `identity-epoch-store.ts:identityEpochStore`, admission/receiving custody, native birth mappings and
+  bootstrap are implemented. Mapping maintenance, fixed participants, final coordinator and whole-query Source2a
+  remain missing runtime producers. Existing point Access/disclosure, `subjectSource` and projection checkpoints
+  do not close them.
   Content reaction commands exist, but inspected worktree/dev has no `readLiked`/`readLikedVersion` implementation;
   obtain actual raw/version and DDL receipts rather than inferring delivery from an earlier receipt description.
 - `work-module.ts` registers Collection listing and the [terminal participant boundary](erasure-participant.md).
@@ -174,6 +176,32 @@ account/source admission and stale destination rejection. Follow-only completion
 participant or independent ACK. Consume the semantic scoped concurrent closure through the
 [owner plan](../../../../docs/library-owner-queries.md#shared-operational-identity-and-disclosure-producers);
 actual native participant, whole-query Source2a and custody proofs remain required pending.
+
+### Native identity participant prerequisites
+
+The [Semantic contract](../semantic/identity-epoch-contract.md#complete-library-canonical-coverage-under-the-fixed-participant)
+owns the fixed participant protocol. The following inventory identifies existing native seams and their missing
+custody; it defines no replacement writer or completion interface.
+
+| Existing producer | Native boundary still required |
+| --- | --- |
+| `collection-source-native.ts:readNativeCollectionRawPage` | Member, entry, label, session and copy ranges exist. The function rejects `driver: 'output'`; its metadata reports dynamic output as `unavailable_output`. There is no installed complete-output activation/freeze source to observe. |
+| `canonical-source-store.ts` exported observation, repair and publication functions | Every function throws `dependency_unavailable`. `canonical_source_state` and `canonical_source_fact` describe storage, without an installed generation writer, source registration, first-apply capture or final writer closure. Table absence or emptiness cannot establish coverage. |
+| `follow-store.ts:applyFollow`, `readFollow`, `pageFollows` | These operate on the owner-home raw follow row. The installed Library schema has no canonical follow pair/support/total, negative-apply, target-fence or released source/receiving receipt stores. The existing public Collection listing aggregate is a different source and cannot supply this custody. |
+| `owner-fact-version.ts:readOwnerFactVersion` and native entry/copy/session/label stores | Raw facts and a mutation head exist; a complete structural inverse directory and native registration/birth/late-writer closure do not. Neither a head nor `canonical_source_fact` is a substitute membership authority. |
+
+There is also a native effect-admission boundary to resolve with Semantic before owner-home directory effects:
+`IdentityEffect` currently offers `structural {job, original}` and `follow-count {original, terminal, epoch}`.
+`identityEpochStore.admitHomeEffect` requires structural commands to run in the **original's** partition and lock
+that original's pending home gate. The follow-count branch runs in the terminal's partition and rejects a pending
+gate. Neither branch admits a pending identity rekey in an independent Library owner's partition. A released
+pre-read cannot replace the required same-transaction admission, and relabelling an owner as a catalogue original
+would not bind the admitted immutable input.
+
+Until the actual source owners and Semantic provide these native boundaries, ALL-role completion and its positive
+custody/growth schedules remain unavailable. In particular, empty derived tables cannot acknowledge Library
+publication. Published undo additionally requires actual mapping, Search and coordinator publication; a locally
+finished Library page cannot supply it. No successful participant export or native acceptance is claimed here.
 
 ### Native owner state-write sequencing (required; runtime incomplete)
 
