@@ -513,6 +513,57 @@ listing worker reads source then releases its connection before target apply, wi
 contract's stamps/zero tombstones and reverse cleanup; an asynchronous zero alone cannot satisfy immediate public
 count concealment.
 
+### Retained independent copies
+
+A copy is an independent owner-local identity, even when several holdings refer to the same edition.
+`copy.deletion_id`, `deleted_at` and `restore_until` retain one exact deletion episode in that existing row;
+`partition_no` is generated from its route. A fresh DELETE requires its numeric revision. Its exact native receipt
+keeps the existing original Copy result; HTTP remains empty `204` and derives `Library-Copy-Deletion-Id` from that
+receipt's transaction ID and `Library-Copy-Deletion-Revision` from its original revision plus one. An omitted guard
+can only replay an already authorized old receipt. The closed `POST /v1/copies/:copyId:restore` body is
+`{ deletionId, revision }`, using `copy:update` and `personal_library`, without a new role or scope. The shared
+caller problem catalogue in `http/problem.ts` defines `copy_restore_stale`, `copy_restore_occupied` and
+`copy_restore_expired`. Missing/foreign identities remain concealed. DTOs expose no retained state or accepted pin.
+
+Delete advances the revision and live fact head once. The live read/list/raw-source SQL excludes retained rows;
+current profile migration excludes them too. Undo restores the same original subject, accepted pin, kind/status,
+user values and creation/update times, with a higher revision and a fresh transaction ID. Current original and
+terminal disclosure still apply, but an absent/retired current profile cannot reject the original accepted pinned
+value. Exact authorized receipt replay precedes deferred source/profile failures and produces no new fact/receipt/event.
+Native current admission and the owning account fence precede receipt lookup. Terminal account deletion cannot be undone.
+
+`copy_retention_episode` enforces the original strict 720-hour deadline; equality is expired, and retries never renew
+it. Live partial indexes lead with `(route, account_id)`; `copy_retention_due` leads with
+`(partition_no, restore_until, route, copy_id)`. The existing all-state owner/created index remains authoritative for
+`purgeAccountFactsPage(kind: 'copy')`, which erases both live and deleted holdings under the existing terminal barrier.
+There are no copy children, a second ownership graph, retained payload table, or permanent private tombstone.
+
+The single Library WorkModule installs `library.copyRetention` and its exact-episode durable consumer on the existing
+maintenance queue. Its real ten-minute DBOS schedule starts a partition-major sweep. Discovery uses an indexed native
+keyset, at most eight raw keys and 4096 serialized bytes. Each physical owning-partition transaction holds the current
+native owner fence and rechecks exact copy/owner/episode/revision/original deadline against native time. Early, stale,
+consumed and restored episodes do nothing. A segment performs at most eight discovery pages, then persists a deterministic
+continuation with its original cutoff and raw-key cursor. SDK checkpoints/recovery provide committed progress; a crash
+after physical commit safely replays to a no-op. Retained physical purge does not raise the live fact head again.
+
+Disposition of all added state: the three episode columns, generated partition and four partial indexes disappear with
+the owning copy row on ordinary due purge or earlier terminal cleanup. The existing `account-fact-purge.ts` / `account-fact-purge-copy.sql` source purger remains the
+owning callsite; this adds no participant or acknowledgement. `fact_source_head` must still be erased last in complete
+terminal orchestration. Shared copies include `core.receipt` results for create/update/delete/restore (original Copy
+values, never pins), ID-only copy updated/deleted outbox envelopes and write basis, plus DBOS inputs/checkpoints for
+partition, cutoff, exact due locators and boolean purge results. Locators for shared receipt/event/work copies and their
+minimizer custody remain explicitly pending under the existing shared-history owner; no fake ACK/NoData or blanket
+account-erasure claim follows from local purge. Current dev has no `erasure-participant.ts`, `erasure-copy.sql`,
+`erasure-collection-member.sql` or installed terminal acknowledgement callback. The native source purger's current
+terminal-owner transaction is the available local disposition; no alternate participant or guessed binding is added.
+The complete copy row, including subject/owner references, pin, private values and episode metadata, is personal
+in every state and is removed whole. Existing safe public Collection references contain no copy values.
+
+Native acceptance covers independent identity, authorization, strict JSON/CAS, original pins/times, hidden-source replay,
+strict expiry while parked, stale work after restore/redelete, rollback, commit-before-checkpoint recovery, the default
+scheduler/queue and the terminal owner barrier. The growth fixture uses the shared capture and occurrence APIs at
+64/512/4096 native unrelated live/deleted holdings and histories, including actual default worker/SDK work and bytes.
+
 ### Bounded automatic purge and shared authority gaps
 
 For an ordinary record tombstone, personal/private payload is automatically due at `restoreUntil`, without a platform
@@ -1218,14 +1269,20 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 ### Follow
 
+Create/refollow requires real current target authority at native command T through prepared command support.
+Stored source originals never change when Semantic identity moves. Exact authorized receipt replay precedes deferred
+target failure; replay/no-op emits no new invalidation or replacement. Explicit removal remains negative across
+later Library/membership intent. The [Accounts follow research](../../../../docs/research/accounts-design-follows.md)
+is evidence for this split; this contract and the private-count owner document retain authority.
+
 - Touches: An account admit, then a target resolve. A subject uses `subject:read`. A Collection is one primary-key read and must be active and public, unlisted, or curated by the actor. A Space uses `space:read` and one Space read. The command then upserts one `follow` primary key and reads it back. An unchanged row aborts before the receipt. The event subject is the account id. Follows are not counted in public.
 - Bound: The follow body is `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus the admit, the target resolve, authorization and the envelope. The Space and subject resolves add their own Access and semantic bounds.
 - Growth check: `test/library/follows.test.ts`: `statements per follow, membership step and page stay equal as unrelated follows grow`. Explicit Collection follows keep statement counts equal as unrelated follows grow. Blocks are not classified. `test/library/follow-store.test.ts`: `apply and page statement counts and examined rows stay constant as unrelated follows grow` applies intent `follow` as unrelated follows grow: one statement, one `library.follow` row, no sequential scan, constant rows and logarithmic blocks.
 
 ### Unfollow
 
-- Touches: The same admit, target resolve, follow upsert and read-back as follow, with intent `unfollow`. A string target first reads the existing row so the stored target type is kept. An explicit unfollow is not overridden by a later implied follow. The event subject is the account id.
-- Bound: The same body as follow: `R` `O(1)`, `B` `O(L(N))`, `S` 2, plus one extra primary-key read when the caller passes only an id, the admit, the resolve, authorization and the envelope.
+- Touches: Current own-account `follow:delete` uses the native scope/principal/grant/denial formula before receipt replay. An existing own edge supplies its immutable original target identity/type; removal never resolves that target or reads its private payload, including after hiding, deletion or unavailability. An absent own edge conveys no target-type authority and still requires the ordinary current target resolution. An explicit unfollow is not overridden by a later implied follow. The event subject is the account id.
+- Bound: `R` `O(1)`, `B` `O(L(N))`; one own-edge read before preparation, one recheck, one upsert and one read-back, plus current own-account admission and the envelope. A stored removal has no target-home read. Only absence adds target resolution.
 - Growth check: `test/library/growth-personal-writes.test.ts`: `Unfollow has constant rows and statements as follows grow` checks the whole command at scales 1, 4 and 16 while the owner's follows, other accounts' follows in the same and another partition, Collection targets, Access accounts, receipts, outbox events and write-basis rows grow by 500 × scale per relation.
 
 ### Membership follow
@@ -1326,6 +1383,21 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   required resource identity optional under unchecked-index protection. This pre-existing frozen acceptance
   assertion remains unchanged. Native acceptance is deferred under the current minimal verification instruction;
   neither local typing nor shared occurrence-custody delivery establishes a calibrated native pass.
+
+### Maintain and read private follow counts
+
+The [private-count authority](../../../../docs/private-follow-counts.md) owns disclosure, canonical totals,
+readiness and terminal custody. The default Library worker installs bounded source/target bootstrap, current-source
+delivery, account admission and the partition health tree. `GET /v1/followCounts/:targetType/:targetId` and
+`GET /v1/followCounts/outgoing` consume those maintained rows through native bearer, scope, platform admission and
+management checks. No count or follower identity is added to a public DTO.
+
+Cost: source/target work touches indexed original, support, total and exact receiving locator keys; bootstrap and
+account pages examine at most 100 immutable keys. Terminal work withdraws at most 100 exact locators or source rows
+per phase and retains source evidence until receiving commit. A count reads constant root metadata at both ends and
+one indexed total (or own counter), with O(log N) index depth independent of followers/history/group size. Health
+sampling probes indexed oldest work and reduces at most 16 children on each of three levels. Native all-outcome,
+identity/custody and cost proof is pending; source typing does not certify these bounds or open the platform gate.
 
 ### Follow read
 
@@ -1512,57 +1584,6 @@ Cost for existing owner cover:
 - Growth check: the same native suite grows unrelated media variants/source tuples/history/grants, captures actual
   statements/plans/rows/blocks/wire bytes across registered pools, and covers current source-hidden/tuple/media loss,
   viewer scope reduction and a real late Collection visibility change. Shared capture rules and allowances are unchanged.
-
-## Retained independent copies
-
-A copy is an independent owner-local identity, even when several holdings refer to the same edition.
-`copy.deletion_id`, `deleted_at` and `restore_until` retain one exact deletion episode in that existing row;
-`partition_no` is generated from its route. A fresh DELETE requires its numeric revision. Its exact native receipt
-keeps the existing original Copy result; HTTP remains empty `204` and derives `Library-Copy-Deletion-Id` from that
-receipt's transaction ID and `Library-Copy-Deletion-Revision` from its original revision plus one. An omitted guard
-can only replay an already authorized old receipt. The closed `POST /v1/copies/:copyId:restore` body is
-`{ deletionId, revision }`, using `copy:update` and `personal_library`, without a new role or scope. The shared
-caller problem catalogue in `http/problem.ts` defines `copy_restore_stale`, `copy_restore_occupied` and
-`copy_restore_expired`. Missing/foreign identities remain concealed. DTOs expose no retained state or accepted pin.
-
-Delete advances the revision and live fact head once. The live read/list/raw-source SQL excludes retained rows;
-current profile migration excludes them too. Undo restores the same original subject, accepted pin, kind/status,
-user values and creation/update times, with a higher revision and a fresh transaction ID. Current original and
-terminal disclosure still apply, but an absent/retired current profile cannot reject the original accepted pinned
-value. Exact authorized receipt replay precedes deferred source/profile failures and produces no new fact/receipt/event.
-Native current admission and the owning account fence precede receipt lookup. Terminal account deletion cannot be undone.
-
-`copy_retention_episode` enforces the original strict 720-hour deadline; equality is expired, and retries never renew
-it. Live partial indexes lead with `(route, account_id)`; `copy_retention_due` leads with
-`(partition_no, restore_until, route, copy_id)`. The existing all-state owner/created index remains authoritative for
-`purgeAccountFactsPage(kind: 'copy')`, which erases both live and deleted holdings under the existing terminal barrier.
-There are no copy children, a second ownership graph, retained payload table, or permanent private tombstone.
-
-The single Library WorkModule installs `library.copyRetention` and its exact-episode durable consumer on the existing
-maintenance queue. Its real ten-minute DBOS schedule starts a partition-major sweep. Discovery uses an indexed native
-keyset, at most eight raw keys and 4096 serialized bytes. Each physical owning-partition transaction holds the current
-native owner fence and rechecks exact copy/owner/episode/revision/original deadline against native time. Early, stale,
-consumed and restored episodes do nothing. A segment performs at most eight discovery pages, then persists a deterministic
-continuation with its original cutoff and raw-key cursor. SDK checkpoints/recovery provide committed progress; a crash
-after physical commit safely replays to a no-op. Retained physical purge does not raise the live fact head again.
-
-Disposition of all added state: the three episode columns, generated partition and four partial indexes disappear with
-the owning copy row on ordinary due purge or earlier terminal cleanup. The existing `account-fact-purge.ts` / `account-fact-purge-copy.sql` source purger remains the
-owning callsite; this adds no participant or acknowledgement. `fact_source_head` must still be erased last in complete
-terminal orchestration. Shared copies include `core.receipt` results for create/update/delete/restore (original Copy
-values, never pins), ID-only copy updated/deleted outbox envelopes and write basis, plus DBOS inputs/checkpoints for
-partition, cutoff, exact due locators and boolean purge results. Locators for shared receipt/event/work copies and their
-minimizer custody remain explicitly pending under the existing shared-history owner; no fake ACK/NoData or blanket
-account-erasure claim follows from local purge. Current dev has no `erasure-participant.ts`, `erasure-copy.sql`,
-`erasure-collection-member.sql` or installed terminal acknowledgement callback. The native source purger's current
-terminal-owner transaction is the available local disposition; no alternate participant or guessed binding is added.
-The complete copy row, including subject/owner references, pin, private values and episode metadata, is personal
-in every state and is removed whole. Existing safe public Collection references contain no copy values.
-
-Native acceptance covers independent identity, authorization, strict JSON/CAS, original pins/times, hidden-source replay,
-strict expiry while parked, stale work after restore/redelete, rollback, commit-before-checkpoint recovery, the default
-scheduler/queue and the terminal owner barrier. The growth fixture uses the shared capture and occurrence APIs at
-64/512/4096 native unrelated live/deleted holdings and histories, including actual default worker/SDK work and bytes.
 
 ### Selected occurrence removal and transfer
 

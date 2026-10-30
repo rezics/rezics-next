@@ -1,3 +1,4 @@
+import { createFollowCountReads } from './follow-count-reads.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { customMethod } from '../http/custom-method.ts';
@@ -602,6 +603,36 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         );
         session.record(result);
         return { copy: copyView(result.value) };
+      },
+    )
+    .get(
+      '/v1/followCounts/outgoing',
+      {
+        query: t.Object({}, closed),
+        response: { 200: t.Object({ followingCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }, closed),
+          ...failures, 503: problemSchema('dependency_unavailable') },
+        detail: detail('follow_count.outgoing', 'follow:list'),
+      },
+      async ({ actor, admission, job, set }) => {
+        const result = await admission.run('normal', job, () => createFollowCountReads(config()).outgoing(actor, job.deadline));
+        set.headers['Cache-Control'] = 'private, no-store';
+        return result;
+      },
+    )
+    .get(
+      '/v1/followCounts/:targetType/:targetId',
+      {
+        query: t.Object({}, closed),
+        params: t.Object({ targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]), targetId: id }, closed),
+        response: { 200: t.Object({ targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]),
+          targetId: id, followerCount: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }, closed),
+          ...failures, 503: problemSchema('dependency_unavailable') },
+        detail: detail('follow_count.target', 'follow:list'),
+      },
+      async ({ actor, params, admission, job, set }) => {
+        const result = await admission.run('normal', job, () => createFollowCountReads(config()).target(actor, params, job.deadline));
+        set.headers['Cache-Control'] = 'private, no-store';
+        return result;
       },
     )
     .put(

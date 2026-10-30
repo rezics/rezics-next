@@ -16,7 +16,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
-import type { AccountActor, Actor } from '../request/access.ts';
+import { accessCommandAuthorization, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 
@@ -95,7 +95,7 @@ function activeAccountAuthorization(accountId: string, route: number): CommandAu
 }
 
 /** Shared command boundary for account-owned library data and durable workflow steps. */
-export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelClock }) {
+export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelClock; access?: Access }) {
   const { pool, clock } = config;
 
   async function runOwnAccount<T>(
@@ -109,12 +109,22 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     const route = routeOf(owner.accountId);
     if (route === null) throw new GrantDeniedError();
     const identity = principalCommandIdentity(owner);
+    const native = config.access
+      ? await accessCommandAuthorization(
+          config.access, owner, request.action, { route, id: owner.accountId },
+          { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) }, () => new GrantDeniedError(),
+        )
+      : undefined;
     const authorization: CommandAuthorization = {
       action: request.action,
       resource: Object.freeze({ route, id: owner.accountId }),
       denied: () => new GrantDeniedError(),
-      ...(prepare ? { prepare } : {}),
-      async authorize(tx, attempt) {
+      async prepare(attempt) {
+        const evidence = await native?.prepare?.(attempt);
+        await prepare?.(attempt);
+        return evidence;
+      },
+      async authorize(tx, attempt, evidence) {
         try {
           await shareAccount(tx, owner.accountId);
         } catch (error) {
@@ -134,6 +144,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
         )
           throw new GrantDeniedError();
         await authorizePrepared?.(tx, attempt);
+        if (native && (await native.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
         return 'execute';
       },
     };

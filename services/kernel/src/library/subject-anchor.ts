@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type AccessContext, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
@@ -34,10 +34,11 @@ export async function resolveSubject(
   actor: Actor,
   subjectId: string,
   at?: AuthoritativeTime,
+  context?: AccessContext,
 ): Promise<ResolvedSubject | null> {
   if (routeOf(subjectId) === null) return null;
   const mapping = await identityEpochStore.readMapping(deps.pool, subjectId);
-  return resolveMappedSubject(deps, actor, subjectId, mapping, at);
+  return resolveMappedSubject(deps, actor, subjectId, mapping, at, context);
 }
 
 async function resolveMappedSubject(
@@ -46,12 +47,13 @@ async function resolveMappedSubject(
   subjectId: string,
   mapping: IdentityMapping,
   at?: AuthoritativeTime,
+  context?: AccessContext,
 ): Promise<ResolvedSubject | null> {
   async function authorizeAnchor(id: string) {
     const route = routeOf(id);
     if (route === null) return null;
     const resource = { route, id, eligibility: subjectReadEligibility({ route, id }) };
-    const check = await accessCheck(deps.access, actor, 'subject:read', resource, {
+    const check = await accessCheck(deps.access, actor, 'subject:read', resource, context ?? {
       pool: deps.pool,
       deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
     });

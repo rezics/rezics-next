@@ -1,8 +1,10 @@
 # Private follow counts
 
-This is the count authority for the first public scope in [scope.md](scope.md). It specifies future runtime work;
-this change installs no route, projection, migration, consumer or production driver. The native outcome suite remains
-red without its real driver. Existing follows and the existing own outgoing page remain the source contract.
+This is the count authority for the first public scope in [scope.md](scope.md). The native source hook, bounded bootstrap, current-source delivery, target pair/support/total maintenance,
+account-state admission, health metadata and private count HTTP are installed in source. Their native outcome
+proof and full identity/custody integration remain pending; counts remain behind the existing platform gate.
+The native outcome suite remains red without its real driver. Existing follows and the existing own outgoing page
+remain the source contract.
 The adopted design uses the [simplification report](research/follow-counts-simplest.md) as evidence; this document
 owns the contract, including the maintained canonical aggregate and the kernel maintenance-readiness gate.
 
@@ -18,12 +20,13 @@ owns the contract, including the maintained canonical aggregate and the kernel m
 | `community/space.ts`, `community/README.md`                                                          | `updateSpace` uses ordinary `space:manage` on the Space identity. Installed `community.space.owner` supplies management through native resource roles. Count code must use that evaluator.                                                                                                               |
 | `access/account-data.ts`, account public reader SQL                                                  | `readPublicAccountByAgent(pool, subjectId)` follows the verified subject pointer, checks the actual account's active state and reciprocal agent binding, then returns public identity with account `id`. Empty means no usable public account resolution.                                                |
 | `library/listing.ts`, `listing-source.sql`, `listing-apply.sql`, `listing-counts.ts`                 | Existing projection counts public Collection membership only; it is not a follow projection or an incoming-count adapter.                                                                                                                                                                                |
-| `command/command.ts`, `events/effects.ts`, `work/queues.ts`                                          | Native commands commit changes, receipts and outbox together. Effects provide deterministic workflow IDs, retries and release-before-delivery; queue concurrency does not order target application. Source delivery rows with per-edge revisions and durable maintenance work still need implementation. |
+| `command/command.ts`, `events/effects.ts`, `work/queues.ts`                                          | Native commands commit changes, receipts and outbox together. Effects provide deterministic workflow IDs, retries and release-before-delivery; queue concurrency does not order target application. `Effect.admit(client, event)` commits owner admission before enqueue/checkpoint and releases its connection before delivery. |
+| `20261029061530_follow_count_source.sql`                                                           | The installed follow trigger maintains per-original bigint revisions, negative replacements, oldest pending age and an owner-local observed live counter. Owners remain bootstrap-incomplete; this counter is not yet a disclosed outgoing total. |
 
-Paths in this inventory are relative to `services/kernel/src/` except the migration in
-`services/kernel/db/library/migrations/20261025164145_library_follows.sql`. Existing event schemas and source
-writers have been inspected; the delivery rows, canonical aggregate and health facility below are requirements,
-not implemented APIs or tables.
+Paths in this inventory are relative to `services/kernel/src/` except migrations in
+`services/kernel/db/library/migrations/`. Source delivery rows, bounded bootstrap/delivery, canonical aggregates and health sampling now have runtime
+implementations; source presence does not establish native outcome proof. No source-storage or admission
+registration alone establishes count readiness.
 
 ## Disclosure authority
 
@@ -60,7 +63,7 @@ confers no right to another account's outgoing page or count. No follower identi
 Use the existing camel-case route convention, embedded routable UUID parameters and problem responses. A route is
 derived with `routeOf(id)`; there is no client-supplied partition, route, owner or principal parameter.
 
-`GET /v1/followCounts/:targetType/:targetId` is the proposed private target read. `targetType` is exactly `subject`,
+`GET /v1/followCounts/:targetType/:targetId` is the private target read. `targetType` is exactly `subject`,
 `collection` or `space`; `targetId` is a lowercase routable v7/v8 UUID and must identify that type. Invalid target
 identity, wrong type, unknown and concealed identities return the same not-found result; malformed route/query shape
 returns `400 invalid_request`. There is no query or request body. The closed success DTO is:
@@ -82,19 +85,19 @@ Keep `GET /v1/follows?limit=...&cursor=...` and its existing closed `{follows,ne
 maximum 100 rows, optional authorized views and stale-epoch behavior. There is no new account selector. The outgoing
 disclosure requirement is satisfied by this existing page; it does not itself require a new outgoing-count route.
 The frozen native outcome binding additionally reserves `GET /v1/followCounts/outgoing`, with closed DTO
-`{followingCount: number}`, for exact own-account counts. That is a proposed surface tested by that binding, not an
-implemented endpoint or a premise needed to preserve the existing page. It accepts no query/body; `?accountId=...`
-returns `400 invalid_request`. If implementing this binding, use a maintained own-account live counter, updated in
+`{followingCount: number}`, for exact own-account counts. The native personal routes mount this surface beside the target count and existing outgoing page. It accepts no query/body; `?accountId=...`
+returns `400 invalid_request`. Use the maintained own-account live counter, updated in
 the same source command as changed follows (including implied paths), not `COUNT` over even the follower's own history.
 No-op, tombstone replay and duplicate effects must not increment it. It counts current outgoing source edges; only
 active authenticated followers can read it. Outgoing count and list need no target management permission.
 
-Both proposed count reads require real bearer authentication, `follow:list`, `gate:personal_library` and normal read
+Both count reads require real bearer authentication, `follow:list`, `gate:personal_library` and normal read
 admission. Target management additionally evaluates its existing action scope in the ordinary formula. Missing
 `follow:list` is `403 forbidden`; a viewer with list scope but no management authority receives concealed 404.
 Anonymous is `401 authentication_required`; a suspended requester's bearer is below the authentication floor and
 receives `401 invalid_credentials`;
-stale/revoked authentication is `401 invalid_credentials`; closed exposure gate is `404 not_found`. Existing own
+stale/revoked authentication is `401 invalid_credentials`; closed exposure gate is `403 platform_closed` under the
+[Accounts platform-gate authority](accounts.md#8-platform-gates). Existing own
 outgoing requests retain their native authentication/gate checks.
 Never mount the route with optional authentication or substitute caller-asserted identity.
 
@@ -102,7 +105,7 @@ Success uses `Cache-Control: private, no-store`. Errors use `application/problem
 `type=https://rezics.com/problems/<code>`, without either count field. Unavailable Access or unavailable/incomplete
 maintenance readiness returns retryable `503 dependency_unavailable` with `Retry-After` after ordinary request
 admission; it never returns zero. The queue-age gate below defines the bound for both count reads.
-This proposed count-specific mapping does not claim existing Access errors already use that problem code.
+This count-specific mapping does not claim existing Access errors already use that problem code.
 Counts add no field to public subject, Collection, Space, account-agent responses or public listing DTOs. Private
 follow effects change no public FTS, public counts, sitemap, notification or public response artifact.
 
@@ -129,8 +132,8 @@ Every active/suspended/fenced/terminal account state change commits its outbox e
 transaction. Library does not install a trigger on Access account state. Its effect admits the account maintenance
 item through `Effect.admit`, using the event's `time` as the item's change time, before the workflow is enqueued and
 before the relay checkpoint advances. An event is acknowledged only once its item exists; queued, pending or failed
-workflows therefore leave an unprocessed item. The admission hook is owned by the accounts implementation and is
-not part of this work. Kernel records each relay consumer's oldest pending envelope time and observation time in
+workflows therefore leave an unprocessed item. The shared `Effect.admit` ABI and relay ordering are owned by Accounts; Library registers its own
+account-work admission on that real delivered hook. Kernel records each relay consumer's oldest pending envelope time and observation time in
 `core.consumer_lag`; `readConsumerLag` reads that row and `consumerReady` reports false for missing, stale or old
 pending work. Readiness requires Library's oldest unprocessed item age and `consumerReady` for the `effects` consumer
 to each remain within five minutes of the change. Suspension/reactivation pages only that account's own follows in stable
@@ -174,7 +177,7 @@ This applies to account-agent verification and reversal as well as ordinary merg
 a derived account agent into a catalogue survivor despite the ordinary account-agent merge prohibition. Source
 follows keep their original subject IDs. Re-key only the affected originals' derived pairs and support into the new
 canonical partition, in durable pages of at most 100 rows, as a registered Library step inside
-[Semantic's serialized identity epoch job](../services/kernel/src/semantic/README.md#durable-publication-and-caller-contract).
+[Semantic's scoped identity epoch job](../services/kernel/src/semantic/README.md#durable-publication-and-caller-contract).
 Total merge/unmerge work is O(pairs of the affected originals), with indexed probes per row. Reads never pay that cost.
 
 The ordering obligation is:
@@ -238,8 +241,8 @@ not automatically zero; only an initialized, ready total can report zero.
 Bootstrap closes count readiness, enables every source writer hook before bounded backfill, applies by per-edge
 revision and opens only after backfill and its pending work drain. Reject old prepared writers at the storage
 boundary. Initialize new targets' totals in their native transaction. Install a new source partition in the health
-topology as unready before accepting count-affecting writes. This health facility and SQL work indexes still need
-implementation; no existing queue API alone supplies them.
+topology as unready before accepting count-affecting writes. The runtime uses the installed native partition topology, a fan-out-16 depth-three health tree and indexed
+source/account pending probes. No queue heartbeat alone supplies readiness.
 
 ## Cost bounds and operational limits
 
@@ -306,18 +309,40 @@ and never triggers purge by itself; legal-order purge requires platform authorit
 account-private work or introduces restoration. Shared owners must reconcile replay promises with immediate
 bounded payload erasure.
 
-## Runtime slices and verification
+## Runtime status and verification
 
-Each future implementation slice is at most 400 changed implementation lines / eight files; split further if needed.
-These are parallel ownership boundaries with concrete existing code edges, not claims that prerequisites have landed.
+Source bootstrap, current-source delivery, canonical pair/support/total maintenance, health/lifecycle work, count
+HTTP and the full native driver form one capability. Source storage does not establish a separately ready tier.
 
-| Slice                            | Required work                                                                                                                                                                                                   | Dependency                                                        |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Source SQL/writer hooks          | `follow-store.ts`, follow SQL/migration, `follows.ts`, `entries.ts`, `community/work.ts`: delivery revisions, pending work and same-transaction own counter; account transition producer hooks and stable pages | Existing command/account barriers                                 |
-| Canonical target SQL/effects     | Pair/support/total transactions, negative first applications, native current-source reconciliation and release-before-target delivery                                                                           | Source delivery rows                                              |
-| Health and lifecycle integration | Kernel projection-name queue-age reducer, bootstrap, Library terminal erasure/fences/locators and registered identity re-key participant                                                                        | Source/target SQL; shared evidence custody; Semantic identity job |
-| HTTP authority                   | `personal-routes.ts`, `request/access.ts`, `community/space.ts`, `access/account-data.ts`: closed routes, ready total reader, one ordinary management check, existing gate/scopes, no public fields             | Ready aggregate; existing Access/resolver                         |
-| Native binding and evidence      | `http/kernel.ts` real `createKernel`, Auth/Access, native fixture commands, isolated databases, captures/faults and honest SQL instrumentation                                                                  | Runtime slices; every frozen outcome                              |
+`follow-count-source.ts` and `follow-count-bootstrap.ts` own finite source/target coverage and native current-source
+reconciliation. Bootstrap continuation commits through the same operational client; no positive snapshot is stored
+in workflow inputs. `follow-count-target.ts` applies higher per-original revisions atomically with support and total,
+stages exact source-home receiving locators before target checkout, and serializes all applies with terminal fences.
+`follow-count-lifecycle.ts` registers atomic keyed account-event admission and revision-bound own-source pages.
+`follow-count-health.ts` reduces indexed pending ages and idle samples; initial coverage and pending drain precede
+readiness. `follow-count-work.ts` installs dispatch on the default Library WorkModule. The two count routes are
+mounted by `personal-routes.ts` in `createKernel`, with native bearer/scopes/gate/admission, closed DTOs and no-store.
+
+`erasure-follow-counts.ts` extends the existing fixed Library participant with exact destination withdrawals and
+source/negative/never-positive cleanup before ordinary follow purge. Its real terminal admission hook retains
+oldest pending age and a payload-free source fence against late relay replay. It does not ACK the participant or minimize
+shared command/event/work copies. Terminal fences contain only physical partition and account identity. The
+participant continues to report unresolved whole-role custody as pending. Identity re-key/fence receiving custody
+and the full original-Response native driver still require integration; no native/full-suite capability claim follows
+from the compiler-only source landing. OpenAPI/client/schema regeneration is deferred to the controller.
+
+The actual [Semantic producer inventory](../services/kernel/src/semantic/identity-epoch-contract.md#independently-landable-producer-boundaries)
+delivers `identityEpochStore`, bootstrap and scoped current mapping reads. The required
+`semantic/identity-epoch-mapping.ts:stepIdentityEpochMapping` and
+`semantic/identity-epoch-coordinator.ts:resumeIdentityEpochJob` / `waitIdentityEpochPublished` are absent, including
+the default fixed-participant composition. The native `nativeMappingStep` and `nativeCutoverCoordinator` helpers
+address those exact modules. Store admission cannot replace their mapping, re-key callback or publication delivery.
+The merged-original verification/reversal and delayed-first-apply-across-epoch outcomes require those real producers.
+
+The installed [Library terminal participant](../services/kernel/src/library/erasure-participant.md) also records
+unresolved whole-participant roles and returns pending after local exhaustion. Count-role exhaustion cannot satisfy
+the frozen terminal outcome's `purge.complete === true` until that actual participant completes. No separate count
+ACK, replacement participant or driver completion flag can close that boundary.
 
 `specs/follow-counts-driver.ts` is only a test binding returning original Responses. Dispatch starts held. Capture
 parks a real pending per-edge replacement after releasing the source client. Delivery invokes native current-source
@@ -350,12 +375,6 @@ Native implementation verification must additionally prove:
 - One indexed total read at three geometric scales of followers and group size, including a 4,096-original group;
   no read-time union, original-total sum or group scan. Identity changes during a read cannot disclose a partial total.
 
-Run `bun test specs/follow-counts-contract.test.ts` for shape/identity fixtures only, and `bun scripts/typecheck.ts` from
-the root. The specification acceptance command is:
-
-```sh
-bun specs/support/verify-outcome-suite.ts specs/follow-counts-outcomes.test.ts FOLLOW_COUNTS_DRIVER 'Follow count outcome driver is required'
-```
-
-It must prove all 17 native scenarios execute red only for the missing driver, with zero skips/todos. Passing this
-verifier and pure fixture tests establishes an executable specification, never a native implementation pass.
+The frozen outcome suite and existing meaningful native/security/growth cases remain later integration proof.
+This source landing runs only the foreground local kernel typecheck. The controller owns schema, OpenAPI and
+client regeneration and the later acceptance command; typing proves neither native readiness nor all seventeen outcomes.

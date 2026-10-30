@@ -255,6 +255,8 @@ const typed = [
   'DELETE /v1/follows/:targetId',
   'GET /v1/follows/:targetId',
   'GET /v1/follows',
+  'GET /v1/followCounts/outgoing',
+  'GET /v1/followCounts/:targetType/:targetId',
   'POST /v1/collections',
   'GET /v1/collections',
   'GET /v1/accounts/:accountId/collections',

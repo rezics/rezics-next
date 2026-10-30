@@ -1,3 +1,4 @@
+import { admitFollowCountErasure, purgeFollowCountsPage } from './erasure-follow-counts.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
 import { ERASURE_PARTICIPANTS } from '../access/erasure.ts';
@@ -65,11 +66,15 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
     },
     { name: 'library.purgeErasureFactsPage', ...COMMAND_STEP_RETRIES },
   );
+  const countPage = DBOS.registerStep(
+    async (accountId: string) => purgeFollowCountsPage({ pool, client }, accountId),
+    { name: 'library.purgeErasureFollowCountsPage', ...COMMAND_STEP_RETRIES },
+  );
   const graphPage = DBOS.registerStep(
     async (input: Parameters<typeof purgeOwnedGraphPage>[1]) => purgeOwnedGraphPage(pool, input),
     { name: 'library.purgeErasureOwnedPage', ...COMMAND_STEP_RETRIES },
   );
-  type Continuation = { segment: number; factKind: number; factAfter: FactInput['after']; graph: GraphCheckpoint };
+  type Continuation = { countsComplete?: boolean; segment: number; factKind: number; factAfter: FactInput['after']; graph: GraphCheckpoint };
   const continueErasure = DBOS.registerStep(
     async (accountId: string, next: Continuation) => {
       await client.enqueue(
@@ -97,8 +102,15 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
         graph: initialGraphCheckpoint(),
       };
       const facts = { pages: 0, examined: 0, removed: 0 };
+      const counts = { pages: 0, examined: 0 };
+      while (!cursor.countsComplete && counts.pages < 100) {
+        const page = await countPage(accountId);
+        counts.pages++;
+        counts.examined += page.examined;
+        cursor.countsComplete = page.complete;
+      }
       const kinds = ['entry', 'copy', 'follow'] as const;
-      while (cursor.factKind < kinds.length && facts.pages < 100) {
+      while (cursor.countsComplete && cursor.factKind < kinds.length && counts.pages + facts.pages < 100) {
         const page = await purgePage(accountId, kinds[cursor.factKind]!, cursor.factAfter);
         facts.pages++;
         facts.examined += page.examined;
@@ -112,18 +124,19 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
         }
       }
       const graph =
-        cursor.factKind === kinds.length
+        cursor.countsComplete && cursor.factKind === kinds.length
           ? await runOwnedGraphSegment(accountId, cursor.segment, cursor.graph, graphPage)
           : null;
       if (graph) cursor.graph = graph.cursor;
       const continuation =
-        cursor.factKind < kinds.length || !graph?.exhausted ? { ...cursor, segment: cursor.segment + 1 } : null;
+        !cursor.countsComplete || cursor.factKind < kinds.length || !graph?.exhausted ? { ...cursor, segment: cursor.segment + 1 } : null;
       if (continuation) await continueErasure(accountId, continuation);
       const final = await inspect(accountId);
       if (final.outcome !== null) return { state: 'acknowledged', outcome: final.outcome };
       // Local exhaustion is not proof of foreign copies or shared producer custody.
       return {
         state: 'pending',
+        counts,
         facts,
         owned: graph?.stats ?? { pages: 0, removed: 0 },
         continuation,
@@ -144,6 +157,7 @@ export function registerLibraryErasure({ pool, client, addEffects }: WorkContext
     {
       name: 'library_account_erasure',
       types: [TOMBSTONED],
+      admit: admitFollowCountErasure,
       async run(event) {
         if (!Value.Check(ACCESS_EVENTS[TOMBSTONED], event.data)) throw new TypeError('Invalid Library erasure event');
         const { accountId } = event.data as { accountId: string };

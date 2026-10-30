@@ -154,6 +154,10 @@ Test barriers observe and control timing; they never replace native receipt, que
 
 ## Operational transactions
 
+Library follow-count source bootstrap and current-source work are active work-step consumers. Their owner-local
+counter mutex and native account-state share bind bounded immutable-key coverage; source continuation intents use
+the same operational client and contain locators only.
+
 The additive [operational executor](operational.ts) supports the Collection members GET exception in
 [dynamic Collections](../../../../docs/dynamic-collections.md). It is not a command. It writes only the
 consumer module's derived preparation records and durable work intents. It writes no receipt, domain event,

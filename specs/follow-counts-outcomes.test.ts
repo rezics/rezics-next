@@ -142,7 +142,7 @@ test('anonymous suspended no-scope and closed gate requests fail closed without 
   await problem(await native().request(f.manager.credential, targetPath(f.unknown)), 404, 'not_found');
   await native().gate(false);
   for (const path of [targetPath(f.target), '/v1/followCounts/outgoing', '/v1/follows'])
-    await problem(await native().request(f.manager.credential, path), 404, 'not_found');
+    await problem(await native().request(f.manager.credential, path), 403, 'platform_closed');
   await native().gate(true);
 });
 
