@@ -275,7 +275,18 @@ remain stored but unreadable throughout the restore window.
 elapsed it returns 204, restores the same revisions, raises the security revision and emits
 `com.rezics.content.post.restored.v1` with `postId` and `securityRevision`. At the 30-day boundary, after purge starts,
 or for another account it returns the same 404 as an unknown post. A review whose slot holds another live review
-returns 409. Author reply candidates are rebuilt from retained creation metadata by the restored event; author thread,
+returns 409 `conflict`, optionally with `existingThreadId` using the same standard problem extension as creation.
+After the genuine native uniqueness failure has rolled back and discovery abort has resolved,
+`readCurrentRestorationConflict(deps: ContentReadDependencies, postId: string, context: ReadContext)` returns
+`Promise<{ existingThreadId: string } | null>`. It reads only the original opening review's immutable author/board/subject
+metadata under fresh native `post:erase` authority and restoration eligibility, then reuses `live-review-read.sql`'s
+bounded author/board/subject probe. Its result is data until a fresh ordinary `readThread` with the actual request
+actor and fixed deadline independently permits disclosure and matches that original identity. Each home is released
+before foreign authority preparation; ordinary scope, subject, board, Realm, Space, ancestor and source fences remain
+in force. Hidden, revoked or disappeared destinations omit the extension; typed native unavailability can still fail
+the request. Null means unknown, not absence or authority. Replies never manufacture an opening-review hint.
+The HTTP route supplies its real native Access and token dependencies; consumers need no new route or claims.
+Author reply candidates are rebuilt from retained creation metadata by the restored event; author thread,
 board and subject thread candidates and reaction totals are retained, and current disclosure re-admits their content
 at once.
 

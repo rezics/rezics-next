@@ -10,6 +10,7 @@ import { parseItem } from 'structured-headers';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { softDeletePost } from './erase-post.ts';
 import { restorePost } from './restore-post.ts';
+import { readCurrentRestorationConflict } from './restoration-conflict.ts';
 import { postEraseReceiptAccess } from './operations.ts';
 import { appealRoutes } from './appeal-routes.ts';
 import { moderationRoutes } from './moderation-routes.ts';
@@ -736,7 +737,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         headers: commandHeaders,
-        response: { 204: withHeaders(t.Void(), sessionHeader), 409: problemSchema('conflict'), ...writeFailures },
+        response: {
+          204: withHeaders(t.Void(), sessionHeader),
+          409: problemSchema('conflict', { existingThreadId: t.Optional(t.String({ format: 'uuid' })) }),
+          ...writeFailures,
+        },
         detail: {
           operationId: 'post.restore',
           'x-exposure': 'public',
@@ -748,9 +753,18 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
       async ({ params: { id }, actor, request, admission, job, session, set }) => {
         await contentOperation(async () => {
-          const result = await admission.run('normal', job, () =>
-            restorePost(dependencies, actor, id, requestContext(request, job.deadline)),
-          );
+          const result = await admission.run('normal', job, async () => {
+            try {
+              return await restorePost(dependencies, actor, id, requestContext(request, job.deadline));
+            } catch (error) {
+              if (!(error instanceof ReviewConflictError)) throw error;
+              const reference = await readCurrentRestorationConflict(dependencies, id, {
+                actor,
+                deadline: job.deadline,
+              });
+              throw new ProblemError('conflict', { ...(reference ? { extensions: reference } : {}) });
+            }
+          });
           session.record(result);
           set.status = 204;
         });
