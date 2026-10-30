@@ -11,6 +11,7 @@ import { PendingPage } from '../../../shell/pending';
 import { m } from '../../../paraglide/messages.js';
 import { threadHref } from '../../../threads/thread-href';
 import { PatternStory } from '../../page';
+import { deletedOrganizationThreadId } from '../../../kernel/fake';
 import thread from '../../../kernel/recorded/thread.json';
 import owned from '../../../kernel/recorded/thread-owned.json';
 import history from '../../../kernel/recorded/thread-history-thread.json';
@@ -19,6 +20,8 @@ import community from '../../../kernel/recorded/board-realm-thread.json';
 export type ReadingState =
   | 'populated'
   | 'community'
+  | 'existing-reply'
+  | 'deleted-organization'
   | 'deleted'
   | 'withheld'
   | 'own'
@@ -27,10 +30,23 @@ export type ReadingState =
   | 'unavailable'
   | 'denied';
 
+function readingThread(state: ReadingState) {
+  if (state === 'deleted-organization') return { id: deletedOrganizationThreadId, title: owned.thread.title };
+  return (
+    state === 'own' || state === 'existing-reply'
+      ? owned
+      : state === 'history'
+        ? history
+        : state === 'community'
+          ? community
+          : thread
+  ).thread;
+}
+
 function Connected({ state }: { state: ReadingState }) {
-  const source = state === 'own' ? owned : state === 'history' ? history : state === 'community' ? community : thread;
-  const id = source.thread.id;
-  const returnTo = threadHref(source.thread);
+  const source = readingThread(state);
+  const id = source.id;
+  const returnTo = threadHref(source);
   const queryClient = useQueryClient();
   const { state: session } = useSession();
   const pageQuery = useQuery(threadPageQuery(id, undefined, 'anonymous'));
@@ -89,9 +105,11 @@ function Connected({ state }: { state: ReadingState }) {
 export function ThreadReadingPreview({
   state = 'populated',
   shell = false,
+  visitor = 'Signed In',
 }: {
   state?: ReadingState;
   shell?: boolean;
+  visitor?: 'Signed In' | 'Signed Out';
 }) {
   const content =
     state === 'loading' ? (
@@ -104,7 +122,7 @@ export function ThreadReadingPreview({
       <Connected state={state} />
     );
   return (
-    <PatternStory visitor="Signed In" path={threadHref(thread.thread)}>
+    <PatternStory visitor={visitor} path={threadHref(readingThread(state))}>
       {shell ? <AppShell>{content}</AppShell> : <div className="p-3 md:p-6">{content}</div>}
     </PatternStory>
   );

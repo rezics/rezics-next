@@ -1852,10 +1852,11 @@ Realm and batch identity reads supply context; absent rules/images are omitted a
 Rendering is linear in the returned page and adds no data requests.
 
 `src/stories/patterns/thread-reading` holds the complete Pattern docs/behaviors. Pages reuse them inside `AppShell`.
-Both use `phone390`/`desktop1280` and existing locale/theme globals. Story suffixes are `populated`, `community`,
-`selected-parent`, `cancelled-parent`, `deleted-post`, `withheld-post`, `own-edit`, `history`, `report`, `loading`,
-`unavailable` and `current-denial`; the respective ID prefixes are `patterns-community-thread-reading--` and
-`pages-community-thread-reading--`. These are review inputs; typing alone establishes no native or visual pass.
+Both use `phone390`/`desktop1280` and existing locale/theme globals. The shared stories cover signed-in and signed-out
+reading, rich documents with edited and unedited posts, community context, an existing recorded reply relationship,
+parent selection/cancellation, deleted and withheld posts, a deleted organization byline with readable posts, own edit,
+both recorded history versions, reporting, loading, unavailable and current denial states. These are review inputs;
+typing alone establishes no native or visual pass.
 
 ### Realm appearance and rules
 

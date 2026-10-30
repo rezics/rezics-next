@@ -1,7 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../../../paraglide/messages.js';
+import { getLocale } from '../../../paraglide/runtime.js';
 import { ThreadReadingPreview } from './thread-reading-preview';
+import thread from '../../../kernel/recorded/thread.json';
+import owned from '../../../kernel/recorded/thread-owned.json';
+import subject from '../../../kernel/recorded/subject.json';
+import historyThread from '../../../kernel/recorded/thread-history-thread.json';
+import historyRealm from '../../../kernel/recorded/thread-history-realm.json';
+import historyAccounts from '../../../kernel/recorded/thread-history-accounts.json';
 
 const meta = {
   title: 'Patterns/Community/Thread reading',
@@ -18,8 +25,52 @@ const meta = {
 } satisfies Meta<typeof ThreadReadingPreview>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Populated: Story = {};
+
+async function populatedReading({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('heading', { level: 1, name: thread.thread.title });
+  await canvas.findByRole('heading', { level: 2, name: m.thread_posts_heading() });
+  await canvas.findAllByText(m.thread_post_edited());
+  await expect(canvas.getAllByText(m.thread_post_edited())).toHaveLength(1);
+  const labels = subject.subject.labels as Record<string, string>;
+  await canvas.findByRole('link', { name: labels[getLocale()] ?? labels.en! });
+  await canvas.findByRole('heading', { level: 2, name: 'Flight notes' });
+  const note = await canvas.findByText('Watch the baobabs');
+  const asteroid = await canvas.findByRole('link', { name: 'The asteroid' });
+  const items = await canvas.findAllByRole('listitem');
+  await expect(items.some((item) => item.contains(note))).toBe(true);
+  await expect(items.some((item) => item.contains(asteroid))).toBe(true);
+  await userEvent.click(await canvas.findByRole('button', { name: m.thread_reveal_spoiler() }));
+  await expect(canvas.getByText('The rose was unique')).toBeVisible();
+  return canvas;
+}
+
+export const Populated: Story = {
+  play: async (context) => {
+    const canvas = await populatedReading(context);
+    const editor = await canvas.findByRole('textbox', { name: m.thread_reply_label() });
+    await waitFor(() => expect(editor).toHaveClass('ProseMirror'));
+  },
+};
+export const SignedOut: Story = {
+  args: { visitor: 'Signed Out' },
+  play: async (context) => {
+    const canvas = await populatedReading(context);
+    await expect(await canvas.findByRole('link', { name: m.threads_sign_in_to_reply() })).toBeVisible();
+    await expect(canvas.queryByRole('textbox', { name: m.thread_reply_label() })).toBeNull();
+  },
+};
 export const Community: Story = { args: { state: 'community' } };
+export const ExistingReplyRelationship: Story = {
+  args: { state: 'existing-reply', visitor: 'Signed Out' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const parent = await canvas.findByRole('link', { name: m.thread_reply_parent() });
+    await expect(parent).toBeVisible();
+    await expect(parent).toHaveAttribute('href', `#post-${owned.thread.firstPost.id}`);
+    await expect(canvasElement.querySelector(`#post-${owned.thread.firstPost.id}`)).toBeVisible();
+  },
+};
 async function selectParent({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
   const editor = await canvas.findByRole('textbox', { name: m.thread_reply_label() });
@@ -46,6 +97,17 @@ export const CancelledParent: Story = {
   },
 };
 export const DeletedPost: Story = { args: { state: 'deleted' } };
+export const DeletedOrganization: Story = {
+  args: { state: 'deleted-organization', visitor: 'Signed Out' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 1, name: owned.thread.title });
+    await canvas.findByRole('heading', { level: 2, name: 'Watering plan' });
+    const bylines = await canvas.findAllByText(m.thread_author_deleted_organization());
+    for (const byline of bylines) await expect(byline).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: m.thread_author_deleted_organization() })).toBeNull();
+  },
+};
 export const WithheldPost: Story = { args: { state: 'withheld' } };
 export const OwnEdit: Story = {
   args: { state: 'own' },
@@ -62,9 +124,29 @@ export const History: Story = {
   args: { state: 'history' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { level: 1, name: historyThread.thread.title });
+    await canvas.findByRole('link', { name: historyRealm.realm.title });
     await userEvent.click((await canvas.findAllByRole('button', { name: m.thread_history_show() }))[0]!);
-    await expect(await canvas.findByRole('region', { name: m.thread_history_heading() })).toBeVisible();
+    const history = await canvas.findByRole('region', { name: m.thread_history_heading() });
+    await expect(history).toBeVisible();
     await expect(await canvas.findByText(m.thread_history_version({ number: '1' }))).toBeVisible();
+    const list = history.querySelector(':scope > ol');
+    if (!list) throw new Error('The captured history has no revision list.');
+    const versions = Array.from(list.children) as HTMLElement[];
+    await expect(versions).toHaveLength(2);
+    await within(versions[0]!).findByRole('heading', { name: m.thread_history_version({ number: '1' }) });
+    await within(versions[0]!).findByText('The first words stay visible.');
+    await within(versions[0]!).findByRole('link', { name: 'An example link' });
+    await within(versions[0]!).findByRole('list');
+    await within(versions[0]!).findByText('const saved = true;');
+    await expect(versions[0]!).not.toHaveTextContent('The current version adds this sentence.');
+    await within(versions[1]!).findByRole('heading', { name: m.thread_history_version({ number: '2' }) });
+    await within(versions[1]!).findByText('The current version adds this sentence.');
+    const author = historyAccounts.accounts[0];
+    if (!author?.handle) throw new Error('The captured history has no current author handle.');
+    await within(versions[0]!).findByText(`@${author.handle}`, { exact: true });
+    await within(versions[1]!).findByText(`@${author.handle}`, { exact: true });
+    await expect(history).toHaveTextContent('LicenseRef-rezics-terms');
   },
 };
 export const Report: Story = {

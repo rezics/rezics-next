@@ -6,9 +6,12 @@ import * as ThreadReading from './thread-reading.stories';
 # Thread reading
 
 Pattern and Page stories share the delivered `ThreadReading` region and native post/header components; Pages add
-`AppShell`. Existing thread, owned-thread, Realm-thread and history recordings supply their data. Explicit lifecycle
-examples use null current bodies. The existing state components represent loading, unavailable and current denial.
-Play interactions reach selected/cancelled parent, own edit, history and report states.
+`AppShell`. Existing thread, owned-thread, Realm-thread and history recordings supply their data. The populated
+signed-in and signed-out stories retain rich document and edited/unedited post coverage. The existing reply example
+uses the recorded parent relationship; selection and cancellation act on the same composer. The deleted organization
+example uses the existing identity fixture and keeps the readable post body, separately from a deleted post.
+Explicit post lifecycle examples use null current bodies. The existing state components represent loading,
+unavailable and current denial. Play interactions reach own edit, both recorded history versions and report states.
 
 See the web README's Thread reading source contract for layout, privacy and data bounds. Review the same story IDs
 with `phone390` and `desktop1280` viewport globals and existing locale/theme globals. These stories establish no
