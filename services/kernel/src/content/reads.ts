@@ -16,7 +16,11 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext } from '../request/access.ts';
 import type { ContentEditionSource } from './edition-model.ts';
 import { prepareEditionSubject, type EditionSourceAuthorization } from './edition-subject.ts';
-import { DurableInitiatorUnavailableError, type DurableOperationAnchor, type InitiatorRestorer } from '../access/durable-initiator.ts';
+import {
+  DurableInitiatorUnavailableError,
+  type DurableOperationAnchor,
+  type InitiatorRestorer,
+} from '../access/durable-initiator.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -583,7 +587,9 @@ async function observeBoard(
 ): Promise<{ result: Anchored<BoardView | null>; recheck: () => Promise<boolean> }> {
   const observed = await snapshot(dependencies, boardId, context, (client) => point(client, 'board', boardId));
   const row = observed.value;
-  const check = row ? await prepare(dependencies, row, context, observed, false, false, undefined, false, accessContext) : null;
+  const check = row
+    ? await prepare(dependencies, row, context, observed, false, false, undefined, false, accessContext)
+    : null;
   const checked = async (client: AccessClient): Promise<Row | null> => {
     const current = await point(client, 'board', boardId);
     if (
@@ -1995,8 +2001,9 @@ export function prepareEditionSource(
   accessContext: AccessContext,
   ordinarySource: boolean,
 ) {
-  return prepareEditionSourceAuthority(dependencies, source, time, accessContext, ordinarySource,
-    (action, anchor) => accessCheck(dependencies.access, context.actor, action, anchor.resource, accessContext));
+  return prepareEditionSourceAuthority(dependencies, source, time, accessContext, ordinarySource, (action, anchor) =>
+    accessCheck(dependencies.access, context.actor, action, anchor.resource, accessContext),
+  );
 }
 
 /** Native publisher checks restore separately for every action and exact resource.
@@ -2009,22 +2016,25 @@ export function prepareEditionPublisherSource(
   time: AuthoritativeTime,
   accessContext: AccessContext,
 ) {
-  return prepareEditionSourceAuthority(dependencies, source, time, accessContext, true,
-    async (action, anchor) => {
-      try {
-        const actor = await restorer.restoreInitiator({ operation, action, anchor, context: accessContext }, time);
-        if (actor.accountId !== source.creatorAccountId) throw new AccessUnavailableError('overloaded');
-        const publisherContext = commandAccessContext(accessContext, {
-          time, partition: partitionOf(anchor.resource.route), basis: {
-            actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy,
-          },
-        });
-        return accessCheck(dependencies.access, actor, action, anchor.resource, publisherContext);
-      } catch (error) {
-        if (error instanceof DurableInitiatorUnavailableError) throw new AccessUnavailableError('overloaded');
-        throw error;
-      }
-    });
+  return prepareEditionSourceAuthority(dependencies, source, time, accessContext, true, async (action, anchor) => {
+    try {
+      const actor = await restorer.restoreInitiator({ operation, action, anchor, context: accessContext }, time);
+      if (actor.accountId !== source.creatorAccountId) throw new AccessUnavailableError('overloaded');
+      const publisherContext = commandAccessContext(accessContext, {
+        time,
+        partition: partitionOf(anchor.resource.route),
+        basis: {
+          actorAccountId: actor.accountId,
+          clientId: actor.clientId,
+          requestedBy: actor.requestedBy,
+        },
+      });
+      return accessCheck(dependencies.access, actor, action, anchor.resource, publisherContext);
+    } catch (error) {
+      if (error instanceof DurableInitiatorUnavailableError) throw new AccessUnavailableError('overloaded');
+      throw error;
+    }
+  });
 }
 
 async function prepareEditionSourceAuthority(
@@ -2042,89 +2052,152 @@ async function prepareEditionSourceAuthority(
   const subject = await prepareEditionSubject(dependencies, source.targetSubjectId, time, accessContext, authorize);
   if (!subject) return null;
   const live = (value: Chain | null): value is Chain =>
-    !!value && !!value.revision && value.revision.id === source.revisionId &&
-    value.revision.parent_id === source.postId && value.revision.availability === 'available' &&
+    !!value &&
+    !!value.revision &&
+    value.revision.id === source.revisionId &&
+    value.revision.parent_id === source.postId &&
+    value.revision.availability === 'available' &&
     value.revision.subject_ids.includes(source.targetSubjectId) &&
-    value.revision.sha256?.toString('hex') === source.sha256 && value.revision.licence === source.licence &&
+    value.revision.sha256?.toString('hex') === source.sha256 &&
+    value.revision.licence === source.licence &&
     value.posts[0]?.author_id === source.creatorAccountId &&
-    [value.thread, ...value.posts].every((row) =>
-      row.availability === 'available' && ['published', 'protected'].includes(row.visibility));
-  const observed = await snapshot(dependencies, source.threadId, context,
-    (client) => chain(client, source.threadId, source.postId, source.revisionId));
+    [value.thread, ...value.posts].every(
+      (row) => row.availability === 'available' && ['published', 'protected'].includes(row.visibility),
+    );
+  const observed = await snapshot(dependencies, source.threadId, context, (client) =>
+    chain(client, source.threadId, source.postId, source.revisionId),
+  );
   const initial = observed.value;
   if (!live(initial) || !initial.thread.board_id) return null;
   const boardId = initial.thread.board_id;
   const board = (await snapshot(dependencies, boardId, context, (client) => point(client, 'board', boardId))).value;
-  if (!board || board.availability !== 'available' || !['published', 'protected'].includes(board.visibility)) return null;
+  if (!board || board.availability !== 'available' || !['published', 'protected'].includes(board.visibility))
+    return null;
   const boardValid = async (client: AccessClient) => {
     const current = await point(client, 'board', boardId);
     return !!current && signature(current) === signature(board);
   };
   const boardCheck = await authorize('board:read', {
-    resource: readResource(board, board), validate: boardValid,
+    resource: readResource(board, board),
+    validate: boardValid,
   });
-  const boardAllowed = async () => (await snapshot(dependencies, boardId, context,
-    async (client) => await boardValid(client) && await boardCheck(client, time))).value;
+  const boardAllowed = async () =>
+    (
+      await snapshot(
+        dependencies,
+        boardId,
+        context,
+        async (client) => (await boardValid(client)) && (await boardCheck(client, time)),
+      )
+    ).value;
   if (!(await boardAllowed())) return null;
   const realmId = board.realm_id;
-  const parent = realmId ? (await snapshot(dependencies, realmId, context, async (client) =>
-    (await client.query<{ space_id: string; head_revision_id: string }>(
-      `SELECT r.space_id,r.head_revision_id FROM community.realm r
+  const parent = realmId
+    ? (
+        await snapshot(
+          dependencies,
+          realmId,
+          context,
+          async (client) =>
+            (
+              await client.query<{ space_id: string; head_revision_id: string }>(
+                `SELECT r.space_id,r.head_revision_id FROM community.realm r
        JOIN community.space s ON s.route=r.route AND s.space_id=r.space_id
        WHERE r.route=$1 AND r.realm_id=$2 AND r.state='active' AND s.state='active'
          AND r.created_at <= $3::timestamptz AND s.created_at <= $3::timestamptz`,
-      [route(realmId),realmId,authoritativeTimeValue(time)])).rows[0] ?? null)).value : null;
+                [route(realmId), realmId, authoritativeTimeValue(time)],
+              )
+            ).rows[0] ?? null,
+        )
+      ).value
+    : null;
   if (realmId && !parent) return null;
-  const realmResource = realmId ? {
-    route: route(realmId), id: realmId,
-    eligibility: realmReadEligibility({ route: route(realmId), id: realmId }),
-  } : null;
-  const spaceResource = parent ? { route: route(parent.space_id), id: parent.space_id,
-    eligibility: spaceReadEligibility({ route: route(parent.space_id), id: parent.space_id }) } : null;
+  const realmResource = realmId
+    ? {
+        route: route(realmId),
+        id: realmId,
+        eligibility: realmReadEligibility({ route: route(realmId), id: realmId }),
+      }
+    : null;
+  const spaceResource = parent
+    ? {
+        route: route(parent.space_id),
+        id: parent.space_id,
+        eligibility: spaceReadEligibility({ route: route(parent.space_id), id: parent.space_id }),
+      }
+    : null;
   const realmValid = async (client: AccessClient) => {
-    const current = (await client.query<{ space_id: string; head_revision_id: string }>(
-      `SELECT space_id,head_revision_id FROM community.realm
+    const current = (
+      await client.query<{ space_id: string; head_revision_id: string }>(
+        `SELECT space_id,head_revision_id FROM community.realm
        WHERE route=$1 AND realm_id=$2 AND state='active' AND created_at <= $3::timestamptz`,
-      [route(realmId!), realmId, authoritativeTimeValue(time)])).rows[0];
+        [route(realmId!), realmId, authoritativeTimeValue(time)],
+      )
+    ).rows[0];
     return !!current && current.space_id === parent!.space_id && current.head_revision_id === parent!.head_revision_id;
   };
-  const spaceValid = async (client: AccessClient) => (await client.query(
-    `SELECT space_id FROM community.space WHERE route=$1 AND space_id=$2 AND state='active'
+  const spaceValid = async (client: AccessClient) =>
+    (
+      await client.query(
+        `SELECT space_id FROM community.space WHERE route=$1 AND space_id=$2 AND state='active'
        AND created_at <= $3::timestamptz`,
-    [route(parent!.space_id), parent!.space_id, authoritativeTimeValue(time)])).rows.length === 1;
-  const realmCheck = realmResource ? await authorize('realm:read', { resource: realmResource, validate: realmValid }) : null;
-  const spaceCheck = spaceResource ? await authorize('space:read', { resource: spaceResource, validate: spaceValid }) : null;
-  const realmAllowed = async () => !realmId || (await snapshot(dependencies, realmId, context,
-    async (client) => {
-      const current = (await client.query<{ space_id: string; head_revision_id: string }>(
-        `SELECT r.space_id,r.head_revision_id FROM community.realm r
+        [route(parent!.space_id), parent!.space_id, authoritativeTimeValue(time)],
+      )
+    ).rows.length === 1;
+  const realmCheck = realmResource
+    ? await authorize('realm:read', { resource: realmResource, validate: realmValid })
+    : null;
+  const spaceCheck = spaceResource
+    ? await authorize('space:read', { resource: spaceResource, validate: spaceValid })
+    : null;
+  const realmAllowed = async () =>
+    !realmId ||
+    (
+      await snapshot(dependencies, realmId, context, async (client) => {
+        const current = (
+          await client.query<{ space_id: string; head_revision_id: string }>(
+            `SELECT r.space_id,r.head_revision_id FROM community.realm r
          JOIN community.space s ON s.route=r.route AND s.space_id=r.space_id
          WHERE r.route=$1 AND r.realm_id=$2 AND r.state='active' AND s.state='active'`,
-        [route(realmId),realmId])).rows[0];
-      return !!current && current.space_id === parent!.space_id &&
-        current.head_revision_id === parent!.head_revision_id && await realmCheck!(client,time) &&
-        await spaceCheck!(client,time);
-    })).value;
+            [route(realmId), realmId],
+          )
+        ).rows[0];
+        return (
+          !!current &&
+          current.space_id === parent!.space_id &&
+          current.head_revision_id === parent!.head_revision_id &&
+          (await realmCheck!(client, time)) &&
+          (await spaceCheck!(client, time))
+        );
+      })
+    ).value;
   // Native pending erasure is checked at the creator's independently anchored home.
-  const fenceOpen = async () => (await snapshot(dependencies, source.creatorAccountId, context, async (client) => {
-    const result = await client.query<{ open: boolean }>(
-      `SELECT a.state='active' AND NOT EXISTS (
+  const fenceOpen = async () =>
+    (
+      await snapshot(dependencies, source.creatorAccountId, context, async (client) => {
+        const result = await client.query<{ open: boolean }>(
+          `SELECT a.state='active' AND NOT EXISTS (
          SELECT 1 FROM content.erasure_fence f WHERE f.route=a.route AND f.account_id=a.account_id
          AND f.closed_at IS NOT NULL) AS open
        FROM access.account a WHERE a.route=$1 AND a.account_id=$2`,
-      [route(source.creatorAccountId), source.creatorAccountId]);
-    return result.rows[0]?.open === true;
-  })).value;
+          [route(source.creatorAccountId), source.creatorAccountId],
+        );
+        return result.rows[0]?.open === true;
+      })
+    ).value;
   if (!(await realmAllowed()) || !(await fenceOpen())) return null;
   const rows = [initial.thread, ...initial.posts.filter((row, index) => ordinarySource || index > 0)];
   const checks: AccessCheck[] = [];
-  for (const row of rows) checks.push(await authorize(`${row.kind}:read`, {
-    resource: readResource(row, observed),
-    async validate(client) {
-      const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
-      return !!current && signature(current) === signature(row);
-    },
-  }));
+  for (const row of rows)
+    checks.push(
+      await authorize(`${row.kind}:read`, {
+        resource: readResource(row, observed),
+        async validate(client) {
+          const current = await point(client, row.kind, row.id, row.thread_id ?? row.id);
+          return !!current && signature(current) === signature(row);
+        },
+      }),
+    );
   const check = async (client: AccessClient): Promise<boolean> => {
     const current = await chain(client, source.threadId, source.postId, source.revisionId);
     if (!live(current) || fingerprint(current) !== fingerprint(initial)) return false;
@@ -2134,7 +2207,8 @@ async function prepareEditionSourceAuthority(
   return {
     check,
     async final() {
-      if (!(await subject.final()) || !(await boardAllowed()) || !(await realmAllowed()) || !(await fenceOpen())) return false;
+      if (!(await subject.final()) || !(await boardAllowed()) || !(await realmAllowed()) || !(await fenceOpen()))
+        return false;
       return (await snapshot(dependencies, source.threadId, context, check)).value;
     },
   };

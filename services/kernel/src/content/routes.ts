@@ -359,13 +359,16 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       throw new AuthenticationError(401, 'Bearer');
   });
 
-  const routes = editionRoutes(appealRoutes(
-    moderationRoutes(
-      reportRoutes(
-        documentRoutes(
-          mediaImportRoutes(
-            mediaModerationRoutes(
-              sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+  const routes = editionRoutes(
+    appealRoutes(
+      moderationRoutes(
+        reportRoutes(
+          documentRoutes(
+            mediaImportRoutes(
+              mediaModerationRoutes(
+                sourceFenceGovernanceRoutes(sourceFenceRoutes(app, dependencies), dependencies),
+                dependencies,
+              ),
               dependencies,
             ),
             dependencies,
@@ -377,7 +380,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       dependencies,
     ),
     dependencies,
-  ), dependencies)
+  )
     .get(
       '/v1/boards',
       {

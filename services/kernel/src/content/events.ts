@@ -23,8 +23,10 @@ const threadIndexFields = {
 };
 
 /** Closed content event catalogue. Envelope identity and ordering belong to the kernel. */
-const editionEvent = Type.Object({ editionId: UUID,
-  editionRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) }, { additionalProperties: false });
+const editionEvent = Type.Object(
+  { editionId: UUID, editionRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+  { additionalProperties: false },
+);
 
 export const CONTENT_EVENTS = {
   'com.rezics.content.edition.created.v1': editionEvent,

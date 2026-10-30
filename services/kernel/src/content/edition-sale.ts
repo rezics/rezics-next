@@ -10,7 +10,8 @@ export { mountContentEditionConsent } from './edition-sale-consent.ts';
 // Content/community/Access dependency graph until a read actually starts.
 export async function readContentEditionSaleAuthority(
   dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
-  editionId: string, context: ReadContext,
+  editionId: string,
+  context: ReadContext,
 ): Promise<ContentEditionSaleAuthority | null> {
   const native = await import('./edition-sale-native.ts');
   return native.readContentEditionSaleAuthority(dependencies, editionId, context);
@@ -19,7 +20,8 @@ export async function readContentEditionSaleAuthority(
 /** Server-only Commerce eligibility port. It never authorizes delivery to a buyer. */
 export async function readContentEditionMechanicalSaleAuthority(
   dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
-  editionId: string, context: Readonly<{ deadline: number }>,
+  editionId: string,
+  context: Readonly<{ deadline: number }>,
 ): Promise<ContentEditionSaleAuthority | null> {
   const native = await import('./edition-sale-native.ts');
   return native.readContentEditionMechanicalSaleAuthority(dependencies, editionId, context);
@@ -27,9 +29,13 @@ export async function readContentEditionMechanicalSaleAuthority(
 
 export async function prepareContentEditionSale(
   dependencies: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
-  editionId: string, context: ReadContext, time: AuthoritativeTime,
+  editionId: string,
+  context: ReadContext,
+  time: AuthoritativeTime,
 ): Promise<Readonly<{
-  row: EditionRow; authority: ContentEditionSaleAuthority; final(): Promise<boolean>;
+  row: EditionRow;
+  authority: ContentEditionSaleAuthority;
+  final(): Promise<boolean>;
 }> | null> {
   const native = await import('./edition-sale-native.ts');
   return native.prepareContentEditionSale(dependencies, editionId, context, time);

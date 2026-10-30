@@ -610,20 +610,41 @@ export const OperationSchema = t.Unsafe<Operation>(
   ]),
 );
 
-
-export const ContentEditionInputSchema = t.Object({
-  postId: ContentIdSchema, revisionId: ContentIdSchema, targetSubjectId: ContentIdSchema,
-}, closed);
-export const ContentEditionSchema = t.Object({
-  editionId: ContentIdSchema, editionRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
-  state: t.Union([t.Literal('draft'), t.Literal('published'), t.Literal('withdrawn')]),
-  targetSubjectId: ContentIdSchema, creatorAccountId: ContentIdSchema, revisionId: ContentIdSchema,
-  sha256: t.String({ pattern: '^[0-9a-f]{64}$' }), licence: t.String(),
-}, closed);
-export const ContentEditionRevisionSchema = t.Object({
-  editionId: ContentIdSchema, revisionId: ContentIdSchema,
-  sha256: t.String({ pattern: '^[0-9a-f]{64}$' }), licence: t.String(), body: DocumentSnapshotSchema,
-}, closed);
-export const ContentEditionCommandSchema = t.Object({
-  editionId: ContentIdSchema, editionRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
-}, closed);
+export const ContentEditionInputSchema = t.Object(
+  {
+    postId: ContentIdSchema,
+    revisionId: ContentIdSchema,
+    targetSubjectId: ContentIdSchema,
+  },
+  closed,
+);
+export const ContentEditionSchema = t.Object(
+  {
+    editionId: ContentIdSchema,
+    editionRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
+    state: t.Union([t.Literal('draft'), t.Literal('published'), t.Literal('withdrawn')]),
+    targetSubjectId: ContentIdSchema,
+    creatorAccountId: ContentIdSchema,
+    revisionId: ContentIdSchema,
+    sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+    licence: t.String(),
+  },
+  closed,
+);
+export const ContentEditionRevisionSchema = t.Object(
+  {
+    editionId: ContentIdSchema,
+    revisionId: ContentIdSchema,
+    sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+    licence: t.String(),
+    body: DocumentSnapshotSchema,
+  },
+  closed,
+);
+export const ContentEditionCommandSchema = t.Object(
+  {
+    editionId: ContentIdSchema,
+    editionRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
+  },
+  closed,
+);

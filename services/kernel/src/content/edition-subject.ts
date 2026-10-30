@@ -20,16 +20,18 @@ export async function prepareEditionSubject(
 ): Promise<Readonly<{ final(): Promise<boolean> }> | null> {
   const route = routeOf(targetSubjectId);
   if (route === null) return null;
-  const resource = { route, id: targetSubjectId,
-    eligibility: subjectReadEligibility({ route, id: targetSubjectId }) };
+  const resource = { route, id: targetSubjectId, eligibility: subjectReadEligibility({ route, id: targetSubjectId }) };
   const validate = async (client: Parameters<Access['authorize']>[0]) => {
     const subject = await readSubjectReference.run(client, { route, subject_id: targetSubjectId });
     return !!subject && subject.id === targetSubjectId && subject.redirect === null;
   };
   if (!(await editionSnapshot(deps, targetSubjectId, accessContext, validate)).value) return null;
   const allowed = await authorize('subject:read', { resource, validate });
-  const final = async () => (await editionSnapshot(deps, targetSubjectId, accessContext, async (client) => {
-    return await validate(client) && await allowed(client, time);
-  })).value;
-  return await final() ? { final } : null;
+  const final = async () =>
+    (
+      await editionSnapshot(deps, targetSubjectId, accessContext, async (client) => {
+        return (await validate(client)) && (await allowed(client, time));
+      })
+    ).value;
+  return (await final()) ? { final } : null;
 }
