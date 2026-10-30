@@ -63,7 +63,8 @@ function assertPlans(raw: Capture, present: number, requested: number) {
 }
 
 test('entry tile raw input bounds and absent entries perform no session probes', async () => {
-  const actor = (await f.identity(scopes)).actor;
+  const owner = await f.identity(scopes),
+    actor = owner.actor;
   const input = { route: routeOf(actor.accountId)!, accountId: actor.accountId, subjectIds: [] as string[] };
   const empty = await capture(db, () => readLibraryEntryTiles(db.pool, input));
   expect(empty.value.size).toBe(0);
@@ -77,7 +78,7 @@ test('entry tile raw input bounds and absent entries perform no session probes',
     expect(invalid.capture.statements).toEqual([]);
   }
   const subject = await f.createSubject('record');
-  const response = await f.send((await f.identity(scopes)).bearer, 'POST', '/v1/progressSessions', {
+  const response = await f.send(owner.bearer, 'POST', '/v1/progressSessions', {
     subjectId: subject,
     mode: 'scalar_amount',
     unit: 'track',
