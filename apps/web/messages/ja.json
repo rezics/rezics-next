@@ -1036,5 +1036,18 @@
   "settings_profile_label_limit": "ラベルは 1～64 文字で入力してください。",
   "settings_profile_https_link": "ログイン情報や空白を含まない、2,048 文字以内の完全な HTTPS URL を入力してください。",
   "settings_profile_visibility_help": "これらの設定は公開リストの表示を変更します。個々のコンテンツへのアクセス権限は変わりません。",
-  "settings_profile_save_activity": "アクティビティ設定を保存"
+  "settings_profile_save_activity": "アクティビティ設定を保存",
+  "settings_reading_uncertain_title": "保存結果を確認できません",
+  "settings_reading_uncertain_text": "編集中の内容は残っています。元の保存を再試行して結果を確認してから、その後の変更を保存してください。再読み込みでも編集中の内容は失われません。",
+  "settings_reading_retry_original": "元の保存を再試行",
+  "settings_reading_review_title": "閲覧設定の変更を確認",
+  "settings_reading_review_text": "操作欄には編集中の内容が表示されています。最後に確認できた設定と比べて、変更を保存するか、確認済みの設定を使ってください。",
+  "settings_reading_save_draft": "確認した変更を保存",
+  "settings_reading_use_current": "確認済みの設定を使う",
+  "settings_reading_current": "最後に確認した設定：{spoilers}、{images}。",
+  "settings_reading_blur": "配慮が必要な画像をぼかす",
+  "settings_reading_show": "配慮が必要な画像を表示",
+  "settings_display_heading": "表示",
+  "settings_display_text": "言語と外観はこのブラウザーに適用されます。外観を変更するとページが再読み込みされます。",
+  "settings_reading_review_changes": "自分の変更を確認"
 }

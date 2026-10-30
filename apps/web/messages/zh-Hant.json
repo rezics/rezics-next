@@ -1036,5 +1036,18 @@
   "settings_profile_label_limit": "標籤須為 1–64 個字元。",
   "settings_profile_https_link": "請輸入不超過 2,048 個字元的完整 HTTPS 網址，不含登入資訊或空格。",
   "settings_profile_visibility_help": "這些選項僅控制公開清單，不會改變個別內容的存取權限，也不會授予權限。",
-  "settings_profile_save_activity": "儲存動態設定"
+  "settings_profile_save_activity": "儲存動態設定",
+  "settings_reading_uncertain_title": "尚未確認儲存結果",
+  "settings_reading_uncertain_text": "草稿已保留。請先重試原來的儲存，再儲存後續修改。重新載入會查詢目前設定，並保留草稿。",
+  "settings_reading_retry_original": "重試原來的儲存",
+  "settings_reading_review_title": "檢視閱讀選擇",
+  "settings_reading_review_text": "控制項仍顯示你的草稿。請與上次確認的設定比較，再儲存選擇或採用已確認的設定。",
+  "settings_reading_save_draft": "儲存檢視後的選擇",
+  "settings_reading_use_current": "採用已確認的設定",
+  "settings_reading_current": "上次確認：{spoilers}；{images}。",
+  "settings_reading_blur": "模糊顯示敏感圖片",
+  "settings_reading_show": "顯示敏感圖片",
+  "settings_display_heading": "顯示",
+  "settings_display_text": "語言與外觀設定適用於這個瀏覽器。變更外觀會重新載入頁面。",
+  "settings_reading_review_changes": "檢視我的變更"
 }

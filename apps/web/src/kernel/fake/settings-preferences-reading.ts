@@ -1,0 +1,133 @@
+import type { FakeRoute } from '../fake-modules';
+import recording from '../recorded/settings-preferences.json';
+import { parsePreferenceChange, type PreferenceChange, type ReadingPreferences } from '../../settings/preferences';
+import type { ReadingIO } from '../../settings/reading-preferences';
+
+export type ReadingScenario = 'default' | 'delayed' | 'lost' | 'conflict' | 'unavailable' | 'closed' | 'denied';
+
+/** Interface-only account preference responses, including historical receipts and an independent current version. */
+export function readingFixture(scenario: ReadingScenario = 'default') {
+  const initial: ReadingPreferences = { spoilerLevel: 0, suitability: 'blur', version: 0 };
+  let current = { ...initial };
+  let notifications = { ...recording.notifications };
+  const receipts = new Map<string, { input: string; preferences: ReadingPreferences }>();
+  const calls: Readonly<PreferenceChange>[] = [];
+  let reads = 0;
+  let release = () => {};
+  const delay = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const io: ReadingIO = {
+    async save(input) {
+      calls.push(input);
+      if (scenario === 'closed')
+        return { ok: false, reason: 'closed', failure: { status: 403, code: 'platform_closed' } };
+      if (scenario === 'denied') return { ok: false, reason: 'forbidden', failure: { status: 403, code: 'forbidden' } };
+      const prior = receipts.get(input.idempotencyKey);
+      if (prior)
+        return prior.input === JSON.stringify(input)
+          ? { ok: true, preferences: prior.preferences }
+          : { ok: false, reason: 'invalid', failure: { status: 422 } };
+      if (scenario === 'conflict' && calls.length === 1) {
+        current = { spoilerLevel: 2, suitability: 'show', version: current.version + 1 };
+        notifications = { reply: false, mention: true };
+      }
+      if (scenario === 'delayed') await delay;
+      if (input.expectedVersion !== current.version)
+        return { ok: false, reason: 'conflict', failure: { status: 409, code: 'conflict' } };
+      const next: ReadingPreferences = {
+        spoilerLevel: input.spoilerLevel ?? current.spoilerLevel,
+        suitability: input.suitability ?? current.suitability,
+        version: current.version,
+      };
+      if (next.spoilerLevel !== current.spoilerLevel || next.suitability !== current.suitability) next.version++;
+      current = next;
+      receipts.set(input.idempotencyKey, { input: JSON.stringify(input), preferences: { ...current } });
+      if ((scenario === 'lost' || scenario === 'unavailable') && calls.length === 1)
+        return { ok: false, reason: 'unavailable', failure: { status: null } };
+      return { ok: true, preferences: { ...current } };
+    },
+    async read() {
+      reads++;
+      if (scenario === 'unavailable')
+        return {
+          signedIn: true,
+          state: 'preparing',
+          failure: { status: 503, code: 'dependency_unavailable' },
+          securityHref: null,
+        };
+      if (scenario === 'closed')
+        return {
+          signedIn: true,
+          state: 'closed',
+          failure: { status: 403, code: 'platform_closed' },
+          securityHref: null,
+        };
+      return { signedIn: true, preferences: { ...current }, notifications: { ...notifications }, securityHref: null };
+    },
+  };
+  return {
+    initial,
+    io,
+    calls,
+    release,
+    reads: () => reads,
+    current: () => ({ ...current, notifications: { ...notifications } }),
+    concurrent: (values: Partial<Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>> = {}) => {
+      current = { ...current, ...values, version: current.version + 1 };
+      notifications = { reply: false, mention: true };
+    },
+  };
+}
+
+const fixtures = new WeakMap<object, ReturnType<typeof readingFixture>>();
+function pageFixture() {
+  const context = (globalThis as typeof globalThis & { __rezicsStoryContext?: { url?: string } }).__rezicsStoryContext;
+  if (!context) return;
+  const scenario = new URL(context.url ?? '/', 'https://rezics.local').searchParams.get('reading-state');
+  if (
+    scenario !== 'default' &&
+    scenario !== 'lost' &&
+    scenario !== 'conflict' &&
+    scenario !== 'unavailable' &&
+    scenario !== 'closed'
+  )
+    return;
+  let fixture = fixtures.get(context);
+  if (!fixture) {
+    fixture = readingFixture(scenario);
+    fixtures.set(context, fixture);
+  }
+  return fixture;
+}
+
+export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: /^\/v1\/accounts\/[^/]+\/preferences$/,
+    story: async () => {
+      const fixture = pageFixture();
+      if (!fixture) return;
+      const result = await fixture.io.read();
+      if ('preferences' in result)
+        return { status: 200, ...result.preferences, notifications: result.notifications, shelf: {} };
+      if (result.signedIn && 'failure' in result)
+        return { status: result.failure.status ?? 503, code: result.failure.code };
+    },
+  },
+  {
+    method: 'PATCH',
+    path: /^\/v1\/accounts\/[^/]+\/preferences$/,
+    story: async ({ request }) => {
+      const fixture = pageFixture();
+      if (!fixture) return;
+      const body: object = await request.json();
+      const input = parsePreferenceChange({ ...body, idempotencyKey: request.headers.get('idempotency-key') });
+      if (!input) return;
+      const result = await fixture.io.save(input);
+      return result.ok
+        ? { status: 200, ...result.preferences, notifications: fixture.current().notifications, shelf: {} }
+        : { status: result.failure?.status ?? 503, code: result.failure?.code ?? 'dependency_unavailable' };
+    },
+  },
+];

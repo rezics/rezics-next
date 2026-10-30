@@ -1037,5 +1037,18 @@
   "settings_profile_label_limit": "Enter a label of 1–64 characters.",
   "settings_profile_https_link": "Use an absolute HTTPS URL of at most 2,048 characters, without sign-in details or spaces.",
   "settings_profile_visibility_help": "These choices control public lists. They do not change access to individual items or grant permissions.",
-  "settings_profile_save_activity": "Save activity choices"
+  "settings_profile_save_activity": "Save activity choices",
+  "settings_reading_uncertain_title": "Save not confirmed",
+  "settings_reading_uncertain_text": "Your draft is kept. Retry the original save to find out what happened before saving later edits. Reload checks your current settings without discarding the draft.",
+  "settings_reading_retry_original": "Retry original save",
+  "settings_reading_review_title": "Review your reading choices",
+  "settings_reading_review_text": "Your draft is still in the controls. Compare it with the last confirmed settings, then save your choices or use those settings.",
+  "settings_reading_save_draft": "Save reviewed choices",
+  "settings_reading_use_current": "Use confirmed settings",
+  "settings_reading_current": "Last confirmed: {spoilers}; {images}.",
+  "settings_reading_blur": "Blur sensitive images",
+  "settings_reading_show": "Show sensitive images",
+  "settings_display_heading": "Display",
+  "settings_display_text": "Language and appearance apply in this browser. Changing appearance reloads this page.",
+  "settings_reading_review_changes": "Review my changes"
 }

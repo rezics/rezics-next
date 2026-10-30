@@ -1,0 +1,169 @@
+import { expect, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
+import { readingMutation, readReading, sendReading, type ReadingValues } from '../src/settings/reading-preferences';
+import { DisplayPreferences } from '../src/settings/display-preferences';
+import { locales, setLocale } from '../src/paraglide/runtime.js';
+
+const latest = () => 0;
+
+test('Reading changes preserve the exact in-flight key and payload across response loss and reload actual current preference version', async () => {
+  const fixture = readingFixture('lost');
+  const draft: ReadingValues = { spoilerLevel: 1, suitability: 'blur' };
+  const original = readingMutation(fixture.initial, draft)!;
+  const originalJson = JSON.stringify(original);
+  expect(Object.isFrozen(original)).toBe(true);
+  expect(await sendReading(fixture.io, original, false, latest)).toMatchObject({ kind: 'uncertain' });
+  draft.suitability = 'show';
+  // An independent device changes reading and notices after the first save committed.
+  fixture.concurrent({ spoilerLevel: 2 });
+  const result = await sendReading(fixture.io, original, true, latest);
+  expect(result).toMatchObject({
+    kind: 'confirmed',
+    receipt: { spoilerLevel: 1, suitability: 'blur', version: 1 },
+    preferences: { spoilerLevel: 2, suitability: 'blur', version: 2 },
+  });
+  expect(fixture.calls).toEqual([original, original]);
+  expect(fixture.calls[1]).toBe(original);
+  expect(JSON.stringify(original)).toBe(originalJson);
+  expect(fixture.reads()).toBe(1);
+  expect(draft).toEqual({ spoilerLevel: 1, suitability: 'show' });
+  if (result.kind !== 'confirmed') throw new Error('Expected a confirmed readback');
+  const reviewed = readingMutation(result.preferences, draft)!;
+  expect(reviewed.idempotencyKey).not.toBe(original.idempotencyKey);
+  expect(reviewed).toMatchObject({ expectedVersion: 2, spoilerLevel: 1, suitability: 'show' });
+  expect(await sendReading(fixture.io, reviewed, false, () => 2)).toMatchObject({ kind: 'confirmed' });
+  expect(fixture.current()).toEqual({
+    spoilerLevel: 1,
+    suitability: 'show',
+    version: 3,
+    notifications: { reply: false, mention: true },
+  });
+});
+
+test('A concurrent preference update produces reviewable conflict rather than overwriting newer notification or reading values', async () => {
+  const fixture = readingFixture('conflict');
+  const draft: ReadingValues = { spoilerLevel: 1, suitability: 'blur' };
+  const pending = readingMutation(fixture.initial, draft)!;
+  expect(await sendReading(fixture.io, pending, false, latest)).toMatchObject({ kind: 'rejected', reason: 'conflict' });
+  expect(fixture.current()).toEqual({
+    spoilerLevel: 2,
+    suitability: 'show',
+    version: 1,
+    notifications: { reply: false, mention: true },
+  });
+  expect(fixture.calls).toHaveLength(1);
+  const current = await readReading(fixture.io, 0);
+  expect(current.ok).toBe(true);
+  expect(fixture.calls).toHaveLength(1); // Reading current values never resubmits a draft.
+  expect(draft).toEqual({ spoilerLevel: 1, suitability: 'blur' });
+  if (!current.ok) throw new Error('Expected current preferences');
+  const reviewed = readingMutation(current.preferences, draft)!;
+  expect(reviewed.expectedVersion).toBe(1);
+  expect(reviewed).not.toHaveProperty('notifications');
+  expect(reviewed.idempotencyKey).not.toBe(pending.idempotencyKey);
+  expect(await sendReading(fixture.io, reviewed, false, () => 1)).toMatchObject({ kind: 'confirmed' });
+  expect(fixture.current().notifications).toEqual({ reply: false, mention: true });
+});
+
+test('an unavailable or closed readback never turns an original retry into success or supplies defaults', async () => {
+  const fixture = readingFixture('unavailable');
+  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  expect(await sendReading(fixture.io, input, false, latest)).toMatchObject({ kind: 'uncertain' });
+  expect(await sendReading(fixture.io, input, true, latest)).toMatchObject({ kind: 'uncertain', reason: 'preparing' });
+  expect(fixture.calls[1]).toBe(input);
+  expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'preparing' });
+  const closed = readingFixture('closed');
+  expect(await readReading(closed.io, 0)).toMatchObject({ ok: false, reason: 'closed' });
+});
+
+test('a shared notification version arriving during a save requires current readback before confirmation', async () => {
+  const fixture = readingFixture('delayed');
+  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  let version = 0;
+  const result = sendReading(fixture.io, input, false, () => version);
+  fixture.release();
+  await Promise.resolve();
+  fixture.concurrent();
+  version = fixture.current().version;
+  expect(await result).toMatchObject({ kind: 'confirmed', preferences: { version } });
+  expect(fixture.reads()).toBe(1);
+});
+
+test('Current locale and theme settings reuse the shell preferences without inventing server storage', () => {
+  setLocale('en', { reload: false });
+  const html = renderToStaticMarkup(createElement(DisplayPreferences));
+  const options = [...html.matchAll(/<option[^>]*value="([^"]+)"/g)].map((match) => match[1]);
+  expect(options).toEqual([...locales, 'system', 'light', 'dark']);
+  for (const language of ['English', '繁體中文', '简体中文', '日本語', '한국어', 'Deutsch', 'Français', 'Español'])
+    expect(html).toContain(language);
+  expect(html).toContain('apply in this browser');
+  expect(html).not.toContain('<form');
+  expect(html).not.toContain('Accounts');
+});
+
+test('a notification update arriving during recovery GET cannot confirm an older reading snapshot', async () => {
+  const fixture = readingFixture('lost');
+  const original = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  expect(await sendReading(fixture.io, original, false, latest)).toMatchObject({ kind: 'uncertain' });
+  let beginRead = () => {};
+  let releaseRead = () => {};
+  const reading = new Promise<void>((resolve) => {
+    beginRead = resolve;
+  });
+  const delay = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
+  let version = 1;
+  const result = sendReading(
+    {
+      ...fixture.io,
+      async read() {
+        const snapshot = await fixture.io.read();
+        beginRead();
+        await delay;
+        return snapshot;
+      },
+    },
+    original,
+    true,
+    () => version,
+  );
+  await reading;
+  fixture.concurrent();
+  version = fixture.current().version;
+  releaseRead();
+  expect(await result).toMatchObject({ kind: 'uncertain', reason: 'unavailable' });
+  expect(await sendReading(fixture.io, original, true, () => version)).toMatchObject({
+    kind: 'confirmed',
+    preferences: { version: 2 },
+    receipt: { version: 1 },
+  });
+  expect(fixture.calls).toEqual([original, original, original]);
+  expect(fixture.current().notifications).toEqual({ reply: false, mention: true });
+});
+
+test('a definite conflict resolves an original attempt whose request was lost before applying', async () => {
+  const fixture = readingFixture();
+  const original = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  let attempts = 0;
+  const io = {
+    ...fixture.io,
+    async save(input: typeof original) {
+      expect(input).toBe(original);
+      if (++attempts === 1) throw new TypeError('Failed to fetch');
+      return fixture.io.save(input);
+    },
+  };
+  expect(await sendReading(io, original, false, latest)).toMatchObject({ kind: 'uncertain' });
+  fixture.concurrent({ spoilerLevel: 2 });
+  expect(await sendReading(io, original, true, latest)).toMatchObject({ kind: 'rejected', reason: 'conflict' });
+  expect(fixture.current()).toEqual({
+    spoilerLevel: 2,
+    suitability: 'blur',
+    version: 1,
+    notifications: { reply: false, mention: true },
+  });
+  expect(fixture.reads()).toBe(0);
+});

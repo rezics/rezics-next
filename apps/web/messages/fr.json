@@ -1036,5 +1036,18 @@
   "settings_profile_label_limit": "Saisissez un libellé de 1 à 64 caractères.",
   "settings_profile_https_link": "Utilisez une URL HTTPS absolue de 2 048 caractères maximum, sans identifiants de connexion ni espaces.",
   "settings_profile_visibility_help": "Ces choix règlent l’affichage des listes publiques. Ils ne modifient pas l’accès aux contenus et n’accordent aucune autorisation.",
-  "settings_profile_save_activity": "Enregistrer les choix d’activité"
+  "settings_profile_save_activity": "Enregistrer les choix d’activité",
+  "settings_reading_uncertain_title": "Enregistrement non confirmé",
+  "settings_reading_uncertain_text": "Votre brouillon est conservé. Réessayez d’abord l’enregistrement initial avant d’enregistrer les modifications suivantes. Recharger vérifie les réglages actuels sans effacer le brouillon.",
+  "settings_reading_retry_original": "Réessayer l’enregistrement initial",
+  "settings_reading_review_title": "Vérifier vos choix de lecture",
+  "settings_reading_review_text": "Les commandes affichent toujours votre brouillon. Comparez-le aux derniers réglages confirmés, puis enregistrez vos choix ou reprenez ces réglages.",
+  "settings_reading_save_draft": "Enregistrer les choix vérifiés",
+  "settings_reading_use_current": "Reprendre les réglages confirmés",
+  "settings_reading_current": "Dernière confirmation : {spoilers} ; {images}.",
+  "settings_reading_blur": "Flouter les images sensibles",
+  "settings_reading_show": "Afficher les images sensibles",
+  "settings_display_heading": "Affichage",
+  "settings_display_text": "La langue et l’apparence s’appliquent à ce navigateur. Changer l’apparence recharge cette page.",
+  "settings_reading_review_changes": "Examiner mes modifications"
 }

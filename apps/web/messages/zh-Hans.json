@@ -1037,5 +1037,18 @@
   "settings_profile_label_limit": "标签需为 1–64 个字符。",
   "settings_profile_https_link": "请输入不超过 2,048 个字符的完整 HTTPS 网址，不含登录信息或空格。",
   "settings_profile_visibility_help": "这些选项仅控制公开列表，不会改变单个内容的访问权限，也不会授予权限。",
-  "settings_profile_save_activity": "保存动态设置"
+  "settings_profile_save_activity": "保存动态设置",
+  "settings_reading_uncertain_title": "尚未确认保存结果",
+  "settings_reading_uncertain_text": "草稿已保留。请先重试原来的保存，再保存后续修改。重新加载会查询当前设置，并保留草稿。",
+  "settings_reading_retry_original": "重试原来的保存",
+  "settings_reading_review_title": "检查阅读选择",
+  "settings_reading_review_text": "控件仍显示你的草稿。请与上次确认的设置比较，再保存选择或采用已确认的设置。",
+  "settings_reading_save_draft": "保存检查后的选择",
+  "settings_reading_use_current": "采用已确认的设置",
+  "settings_reading_current": "上次确认：{spoilers}；{images}。",
+  "settings_reading_blur": "模糊显示敏感图片",
+  "settings_reading_show": "显示敏感图片",
+  "settings_display_heading": "显示",
+  "settings_display_text": "语言与外观设置适用于这个浏览器。更改外观会重新加载页面。",
+  "settings_reading_review_changes": "查看我的更改"
 }

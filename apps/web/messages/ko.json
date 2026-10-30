@@ -1036,5 +1036,18 @@
   "settings_profile_label_limit": "이름은 1~64자로 입력하세요.",
   "settings_profile_https_link": "로그인 정보나 공백 없이 2,048자 이내의 완전한 HTTPS URL을 입력하세요.",
   "settings_profile_visibility_help": "이 설정은 공개 목록의 표시만 바꿉니다. 개별 콘텐츠의 접근 권한을 변경하거나 권한을 부여하지 않습니다.",
-  "settings_profile_save_activity": "활동 설정 저장"
+  "settings_profile_save_activity": "활동 설정 저장",
+  "settings_reading_uncertain_title": "저장 결과를 확인하지 못했습니다",
+  "settings_reading_uncertain_text": "편집한 내용은 유지됩니다. 이후 변경 사항을 저장하기 전에 원래 저장을 다시 시도해 결과를 확인하세요. 새로고침해도 편집한 내용은 유지됩니다.",
+  "settings_reading_retry_original": "원래 저장 다시 시도",
+  "settings_reading_review_title": "읽기 설정 검토",
+  "settings_reading_review_text": "입력란에는 편집 중인 내용이 표시됩니다. 마지막으로 확인된 설정과 비교한 뒤 변경 사항을 저장하거나 확인된 설정을 사용하세요.",
+  "settings_reading_save_draft": "검토한 변경 사항 저장",
+  "settings_reading_use_current": "확인된 설정 사용",
+  "settings_reading_current": "마지막 확인: {spoilers}, {images}.",
+  "settings_reading_blur": "민감한 이미지 흐리게 표시",
+  "settings_reading_show": "민감한 이미지 표시",
+  "settings_display_heading": "화면 표시",
+  "settings_display_text": "언어와 화면 설정은 이 브라우저에 적용됩니다. 화면 설정을 바꾸면 페이지를 다시 불러옵니다.",
+  "settings_reading_review_changes": "내 변경 사항 검토"
 }

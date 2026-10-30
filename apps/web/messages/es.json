@@ -1036,5 +1036,18 @@
   "settings_profile_label_limit": "Escribe una etiqueta de entre 1 y 64 caracteres.",
   "settings_profile_https_link": "Usa una URL HTTPS absoluta de hasta 2.048 caracteres, sin datos de acceso ni espacios.",
   "settings_profile_visibility_help": "Estas opciones controlan las listas públicas. No cambian el acceso a cada contenido ni conceden permisos.",
-  "settings_profile_save_activity": "Guardar opciones de actividad"
+  "settings_profile_save_activity": "Guardar opciones de actividad",
+  "settings_reading_uncertain_title": "Guardado sin confirmar",
+  "settings_reading_uncertain_text": "Tu borrador se conserva. Vuelve a intentar el guardado original antes de guardar los cambios posteriores. Recargar comprueba los ajustes actuales sin borrar el borrador.",
+  "settings_reading_retry_original": "Reintentar el guardado original",
+  "settings_reading_review_title": "Revisa tus opciones de lectura",
+  "settings_reading_review_text": "Los controles siguen mostrando tu borrador. Compáralo con los últimos ajustes confirmados y guarda tus opciones o recupera esos ajustes.",
+  "settings_reading_save_draft": "Guardar las opciones revisadas",
+  "settings_reading_use_current": "Usar los ajustes confirmados",
+  "settings_reading_current": "Última confirmación: {spoilers}; {images}.",
+  "settings_reading_blur": "Difuminar imágenes sensibles",
+  "settings_reading_show": "Mostrar imágenes sensibles",
+  "settings_display_heading": "Pantalla",
+  "settings_display_text": "El idioma y la apariencia se aplican en este navegador. Cambiar la apariencia vuelve a cargar la página.",
+  "settings_reading_review_changes": "Revisar mis cambios"
 }

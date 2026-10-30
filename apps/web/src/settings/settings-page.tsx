@@ -1,44 +1,23 @@
 import { exposureQuery, useSession } from '../session/query';
 import { useQuery } from '@tanstack/react-query';
-import { useId, useLayoutEffect, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
-import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
-import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { csrfHeaders } from '../threads/composer';
-import { readSettingsPage, savePreferences } from './actions';
 import { ProfileSection } from './profile';
+import { ReadingCard } from './reading-card';
+import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
-import type { NativePreferenceFailure, ReadingPreferences, SettingsPage, SpoilerLevel } from './preferences';
+import type { NativePreferenceFailure, SettingsPage } from './preferences';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { useOperation } from '../kernel/exposure';
 import { AccountSafetyCard } from './account-safety';
 import { SectionsNavigation, settingsSections } from './sections-navigation';
-
-type Signal =
-  | 'idle'
-  | 'saving'
-  | 'saved'
-  | 'conflict'
-  | 'reloading'
-  | 'failed'
-  | 'closed'
-  | 'preparing'
-  | 'unavailable';
-
-function failureSignal(reason: string): Signal {
-  if (reason === 'closed') return 'closed';
-  if (reason === 'preparing') return 'preparing';
-  if (reason === 'unavailable') return 'unavailable';
-  return 'failed';
-}
 
 function SettingsFailure({
   state,
@@ -88,188 +67,6 @@ function SettingsFailure({
   );
 }
 
-const levels: { value: SpoilerLevel; title: () => string; text: () => string }[] = [
-  { value: 0, title: () => m.settings_spoiler_0_title(), text: () => m.settings_spoiler_0_text() },
-  { value: 1, title: () => m.settings_spoiler_1_title(), text: () => m.settings_spoiler_1_text() },
-  { value: 2, title: () => m.settings_spoiler_2_title(), text: () => m.settings_spoiler_2_text() },
-];
-
-function ReadingCard({
-  initial,
-  version,
-  onVersionChange,
-}: {
-  initial: ReadingPreferences;
-  version: number;
-  onVersionChange: (version: number) => void;
-}) {
-  const { csrfToken } = useSession();
-  const ids = useId();
-  const [hydrated, setHydrated] = useState(false);
-  // What the server last confirmed, and what the controls show. They differ after a stale write.
-  const [known, setKnown] = useState(initial);
-  const [choice, setChoice] = useState(initial);
-  const [signal, setSignal] = useState<Signal>('idle');
-  const [responseFailure, setResponseFailure] = useState<NativePreferenceFailure | null>(null);
-  // Set in the same commit that marks the document hydrated, so the controls enable with it.
-  useLayoutEffect(() => setHydrated(true), []);
-  const busy = signal === 'saving' || signal === 'reloading';
-
-  async function change(next: Partial<Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>>) {
-    if (!hydrated || !csrfToken || busy) return;
-    setChoice((current) => ({ ...current, ...next }));
-    setSignal('saving');
-    try {
-      const result = await savePreferences({
-        data: { expectedVersion: version, idempotencyKey: crypto.randomUUID(), ...next },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) {
-        setKnown(result.preferences);
-        setChoice(result.preferences);
-        onVersionChange(result.preferences.version);
-        setSignal('saved');
-        setResponseFailure(null);
-      } else {
-        setResponseFailure(result.failure ?? null);
-        setSignal(result.reason === 'conflict' ? 'conflict' : failureSignal(result.reason));
-      }
-    } catch {
-      setResponseFailure(null);
-      setSignal('failed');
-    }
-  }
-
-  async function reload() {
-    if (busy) return;
-    setSignal('reloading');
-    try {
-      const page = await readSettingsPage();
-      if (!('preferences' in page)) {
-        setResponseFailure(page.signedIn ? page.failure : null);
-        setSignal(page.signedIn ? page.state : 'failed');
-        return;
-      }
-      setKnown(page.preferences);
-      setChoice(page.preferences);
-      onVersionChange(page.preferences.version);
-      setResponseFailure(null);
-      setSignal('idle');
-    } catch {
-      setResponseFailure(null);
-      setSignal('failed');
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
-        </CardTitle>
-        <CardDescription>{m.settings_reading_text()}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <FieldGroup>
-          <div role="group" aria-labelledby={`${ids}-spoilers`} className="flex flex-col gap-3">
-            <div className="space-y-1">
-              <div id={`${ids}-spoilers`} className="font-medium">
-                {m.settings_spoiler_legend()}
-              </div>
-              <FieldDescription>{m.settings_spoiler_text()}</FieldDescription>
-            </div>
-            <RadioGroup
-              value={String(choice.spoilerLevel)}
-              disabled={!hydrated || !csrfToken || busy}
-              onValueChange={(value) => void change({ spoilerLevel: Number(value) as SpoilerLevel })}
-              aria-labelledby={`${ids}-spoilers`}
-            >
-              {levels.map((level) => (
-                <FieldLabel key={level.value} htmlFor={`${ids}-level-${level.value}`}>
-                  <Field orientation="horizontal">
-                    <FieldContent>
-                      <FieldTitle id={`${ids}-level-${level.value}-title`}>{level.title()}</FieldTitle>
-                      <FieldDescription id={`${ids}-level-${level.value}-text`}>{level.text()}</FieldDescription>
-                    </FieldContent>
-                    <RadioGroupItem
-                      id={`${ids}-level-${level.value}`}
-                      value={String(level.value)}
-                      aria-labelledby={`${ids}-level-${level.value}-title`}
-                      aria-describedby={`${ids}-level-${level.value}-text`}
-                    />
-                  </Field>
-                </FieldLabel>
-              ))}
-            </RadioGroup>
-          </div>
-          <FieldLabel htmlFor={`${ids}-suitability`}>
-            <Field orientation="horizontal">
-              <FieldContent>
-                <FieldTitle id={`${ids}-suitability-title`}>{m.settings_suitability_title()}</FieldTitle>
-                <FieldDescription id={`${ids}-suitability-text`}>{m.settings_suitability_text()}</FieldDescription>
-              </FieldContent>
-              <Switch
-                id={`${ids}-suitability`}
-                checked={choice.suitability === 'show'}
-                disabled={!hydrated || !csrfToken || busy}
-                onCheckedChange={(checked) => void change({ suitability: checked ? 'show' : 'blur' })}
-                aria-labelledby={`${ids}-suitability-title`}
-                aria-describedby={`${ids}-suitability-text`}
-              />
-            </Field>
-          </FieldLabel>
-        </FieldGroup>
-        <div aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
-          {signal === 'saving' ? m.settings_saving() : null}
-          {signal === 'saved' ? m.settings_saved() : null}
-        </div>
-        {signal === 'conflict' || signal === 'reloading' ? (
-          <Alert>
-            <AlertTitle>{m.settings_conflict_title()}</AlertTitle>
-            <AlertDescription>
-              <p>{m.settings_conflict_text()}</p>
-              <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void reload()}>
-                {m.settings_reload()}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {signal === 'failed' || signal === 'closed' || signal === 'preparing' || signal === 'unavailable' ? (
-          <Alert
-            variant="destructive"
-            data-response-status={responseFailure?.status ?? ''}
-            data-response-code={responseFailure?.code ?? ''}
-          >
-            <AlertTitle>
-              {signal === 'closed'
-                ? m.settings_closed_title()
-                : signal === 'preparing'
-                  ? m.settings_preparing_title()
-                  : signal === 'unavailable'
-                    ? m.settings_unavailable_title()
-                    : m.settings_failed_title()}
-            </AlertTitle>
-            <AlertDescription className="space-y-3">
-              <p>
-                {signal === 'closed'
-                  ? m.settings_closed_text()
-                  : signal === 'preparing'
-                    ? m.settings_preparing_text()
-                    : signal === 'unavailable'
-                      ? m.settings_unavailable_text()
-                      : m.settings_failed_text()}
-              </p>
-              <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void reload()}>
-                {m.settings_reload()}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
 function SettingsSections({
   page,
   csrfToken,
@@ -296,6 +93,7 @@ function SettingsSections({
     <div className="grid gap-8 lg:grid-cols-[12rem_minmax(0,48rem)] lg:justify-center">
       <SectionsNavigation
         sections={settingsSections({
+          display: true,
           notifications: 'preferences' in page,
           collections: collectionsAdmitted,
           verification: showVerification,
@@ -307,14 +105,17 @@ function SettingsSections({
         <section id="reading" aria-labelledby="settings-reading-heading" className="scroll-mt-6">
           {'preferences' in page ? (
             <ReadingCard
-              key={page.preferences.version}
               initial={page.preferences}
               version={version}
-              onVersionChange={setVersion}
+              csrfToken={formCsrfToken}
+              onVersionChange={(next) => setVersion((current) => Math.max(current, next))}
             />
           ) : (
             <SettingsFailure state={page.state} failure={page.failure} onRetry={() => void router.invalidate()} />
           )}
+        </section>
+        <section id="display" aria-labelledby="settings-display-heading" className="scroll-mt-6">
+          <DisplayPreferences />
         </section>
         {'preferences' in page ? (
           <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">

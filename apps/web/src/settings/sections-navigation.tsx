@@ -1,17 +1,19 @@
 import { m } from '../paraglide/messages.js';
 
 export type SettingsSection = {
-  id: 'reading' | 'notifications' | 'privacy' | 'verification' | 'profile' | 'public-activity' | 'account';
+  id: 'reading' | 'display' | 'notifications' | 'privacy' | 'verification' | 'profile' | 'public-activity' | 'account';
   label: string;
   status?: string | undefined;
 };
 
 export function settingsSections({
+  display,
   notifications,
   collections,
   verification,
   readingState,
 }: {
+  display?: boolean;
   notifications: boolean;
   collections: boolean;
   verification: boolean;
@@ -30,6 +32,7 @@ export function settingsSections({
               ? m.settings_unavailable_title()
               : undefined,
     },
+    ...(display ? [{ id: 'display' as const, label: m.settings_display_heading() }] : []),
     ...(notifications ? [{ id: 'notifications' as const, label: m.settings_notifications_heading() }] : []),
     ...(collections ? [{ id: 'privacy' as const, label: m.settings_privacy_heading() }] : []),
     ...(verification ? [{ id: 'verification' as const, label: m.settings_verification_heading() }] : []),
