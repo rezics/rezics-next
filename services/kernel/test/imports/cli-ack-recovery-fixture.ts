@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchStatement, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { converter_revision as bangumiRevision } from '../../../../packages/conversion/src/bangumi.ts';
 import { converter_revision as libraryRevision } from '../../../../packages/conversion/src/open-library.ts';
 import edition from '../../../../specs/fixtures/imports/open-library/edition.json';
@@ -335,7 +335,9 @@ export async function runCliAckRecoveryJourney() {
     async function subject(id: string, context: string) {
       const response = await runtime.request(`/v1/subjects/${id}?context=${context}`);
       expect(response.status).toBe(200);
-      return (await response.json()) as { subject: { statements: Record<string, unknown[]> } };
+      const body = (await response.json()) as { subject: { statements: Record<string, unknown[]> } };
+      const listing = await candidates(id, context);
+      return { statements: body.subject.statements['schema:name'], adoption: listing.body.adoption };
     }
     async function nativeEffects(id: string) {
       const parameters = [routeOf(id), id];
@@ -378,10 +380,31 @@ export async function runCliAckRecoveryJourney() {
       const context = (contextResponse.body.context as { id: string }).id;
       const listed = await candidates(id, context);
       const candidate = (listed.body.candidates as unknown as Candidate[])[0]!;
-      expect(candidate.source.source).toBe(feed.source);
+      expect(candidate.source!.source).toBe(feed.source);
       expect(
         (
           await editor.http(`/v1/subjects/${id}/candidates/${candidate.id}:accept`, {
+            context,
+            expected_head: null,
+          })
+        ).status,
+      ).toBe(200);
+      const independent = await editor.http(`/v1/subjects/${id}/candidates`, {
+        statement: {
+          property: { id: 'schema:name' },
+          value: { type: 'value', content: { language: 'en', text: 'Independent community title' } },
+          references:
+            candidate.statement.references?.map((reference) => ({
+              parts: reference.parts.map((part) => ({ property: { id: part.property.id }, value: part.value })),
+            })) ?? [],
+        },
+      });
+      expect(independent.status).toBe(201);
+      const independentId = independent.body.candidate as string;
+      expect(independentId).not.toBe(candidate.id);
+      expect(
+        (
+          await editor.http(`/v1/subjects/${id}/candidates/${independentId}:accept`, {
             context,
             expected_head: null,
           })
@@ -394,12 +417,12 @@ export async function runCliAckRecoveryJourney() {
             property: 'schema:name',
             mode: 'replace',
             expected_head: null,
-            selection: [{ candidate: candidate.id, rank: 'normal' }],
+            selection: [{ candidate: independentId, rank: 'normal' }],
           })
         ).status,
       ).toBe(200);
       const selection = await subject(id, context);
-      expect(selection.subject.statements['schema:name']).toHaveLength(1);
+      expect(selection.statements).toHaveLength(1);
       const bootstrap = local.journals.filter((journal) =>
         (JSON.parse(journal.bytes) as BatchWriteRequest).commands.some((command) => command.op === 'create'),
       );
@@ -440,6 +463,9 @@ export async function runCliAckRecoveryJourney() {
       const loss = committedBeforeLoss.at(-1)!;
       expect(local.pending.map((pending) => pending.bytes)).toEqual([loss.exchange.bytes]);
       expect(local.pending.flatMap((pending) => pending.keys)).toEqual(loss.exchange.keys);
+      expect(local.journals.filter((journal) => loss.exchange.keys.includes(journal.key))).toHaveLength(
+        loss.exchange.keys.length,
+      );
       expect(
         local.journals
           .filter((journal) => loss.exchange.keys.includes(journal.key))
@@ -496,7 +522,7 @@ export async function runCliAckRecoveryJourney() {
       const proposals = (listing.body.candidates as unknown as Candidate[]).filter(
         (candidate) =>
           writtenIds.includes(candidate.id) &&
-          candidate.source.source === child.feed.source &&
+          candidate.source?.source === child.feed.source &&
           candidate.source.digest === local.record.baseline!.digest,
       );
       expect(proposals.length).toBeGreaterThan(0);
