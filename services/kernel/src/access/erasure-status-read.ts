@@ -52,10 +52,15 @@ export async function readManagedErasureStatus(
             readAccount(deadlineClient(connection, deadline), routeOf(identity.accountId)!, identity.accountId),
           );
           if (
-            !current || current.kind !== 'actor' || current.state !== 'active' || current.fenced ||
-            !Number.isSafeInteger(identity.authnEpoch) || identity.authnEpoch < 1 ||
+            !current ||
+            current.kind !== 'actor' ||
+            current.state !== 'active' ||
+            current.fenced ||
+            !Number.isSafeInteger(identity.authnEpoch) ||
+            identity.authnEpoch < 1 ||
             BigInt(identity.authnEpoch) < current.minimumAuthnEpoch
-          ) throw new ProblemError('forbidden');
+          )
+            throw new ProblemError('forbidden');
           await withConnection(pool, async (connection) => {
             const client = deadlineClient(connection, deadline);
             const home = await readPartition(client, partitionOf(GLOBAL_CONTEXT.route));

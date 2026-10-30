@@ -60,7 +60,11 @@ async function grant(accountId: string, heldAction: string, target = GLOBAL_CONT
   );
 }
 async function actor(accountId: string, scopes = [action], requestedBy: string | null = null) {
-  return authenticateAccount(access, { pool, ...context() }, { accountId, clientId: 'erasure-reader', scopes, requestedBy });
+  return authenticateAccount(
+    access,
+    { pool, ...context() },
+    { accountId, clientId: 'erasure-reader', scopes, requestedBy },
+  );
 }
 async function governor() {
   const accountId = await person();
@@ -70,18 +74,33 @@ async function governor() {
 async function root(state: 'pending' | 'complete' | 'retention-outstanding' = 'pending') {
   const accountId = await person();
   await pool.query("UPDATE access.account SET state='deleted',authn_fenced=true WHERE route=$1 AND account_id=$2", [
-    routeOf(accountId), accountId,
+    routeOf(accountId),
+    accountId,
   ]);
   await pool.query(
     `INSERT INTO access.erasure(route,account_id,version,at,completed_at,frontier,workflow_until)
      VALUES($1,$2,1,$3,$4,$5,NULL)`,
-    [routeOf(accountId), accountId, barrier, state === 'pending' ? null : completedAt, state === 'pending' ? null : '[]'],
+    [
+      routeOf(accountId),
+      accountId,
+      barrier,
+      state === 'pending' ? null : completedAt,
+      state === 'pending' ? null : '[]',
+    ],
   );
   const participants = state === 'pending' ? ['access'] : ERASURE_PARTICIPANTS[1];
   for (const participant of participants) {
-    const retained = state === 'retention-outstanding' && participant === 'commerce'
-      ? [{ store: 'private_financial_store', fields: ['private_financial_field'], purpose: 'private purpose', expiresAt: '2027-01-01T00:00:00Z' }]
-      : [];
+    const retained =
+      state === 'retention-outstanding' && participant === 'commerce'
+        ? [
+            {
+              store: 'private_financial_store',
+              fields: ['private_financial_field'],
+              purpose: 'private purpose',
+              expiresAt: '2027-01-01T00:00:00Z',
+            },
+          ]
+        : [];
     await pool.query(
       `INSERT INTO access.erasure_acknowledgement(route,account_id,participant,outcome,retained)
        VALUES($1,$2,$3,$4,$5)`,
@@ -109,9 +128,14 @@ test('platform erasure progress read requires exact current direct Global author
   const native = await readErasureStatus(pool, accountId);
   expect(native?.state).toBe('pending');
   expect(await read(governorAccount.actor, accountId)).toEqual({
-    accountId, state: 'pending', at: barrier.toISOString(), completedAt: null,
+    accountId,
+    state: 'pending',
+    at: barrier.toISOString(),
+    completedAt: null,
     pendingParticipants: ERASURE_PARTICIPANTS[1].filter((name) => name !== 'access'),
-    retentionOutstanding: false, lateItems: false, effectsFrontier: true,
+    retentionOutstanding: false,
+    lateItems: false,
+    effectsFrontier: true,
   });
   expect(await readErasureStatus(pool, accountId)).toEqual(native);
 
@@ -149,10 +173,11 @@ test('missing native root is null only after both Global checks; final revocatio
   let prepares = 0;
   const revoked = deriveAccess(access, {
     async prepare(identity, requestedAction, resource, ctx) {
-      if (++prepares === 2) await pool.query(
-        'DELETE FROM access.resource_role_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2',
-        [GLOBAL_CONTEXT.id, governorAccount.accountId],
-      );
+      if (++prepares === 2)
+        await pool.query('DELETE FROM access.resource_role_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2', [
+          GLOBAL_CONTEXT.id,
+          governorAccount.accountId,
+        ]);
       return access.prepare!(identity, requestedAction, resource, ctx);
     },
   });
@@ -167,9 +192,14 @@ test('native complete and outstanding retention project only fixed names and boo
     const native = await readErasureStatus(pool, accountId);
     const projected = await read(governorAccount.actor, accountId);
     expect(projected).toEqual({
-      accountId, state: native!.state, at: native!.at, completedAt: native!.completedAt,
-      pendingParticipants: [], retentionOutstanding: state === 'retention-outstanding',
-      lateItems: native!.outstanding.lateItems, effectsFrontier: native!.outstanding.effectsFrontier,
+      accountId,
+      state: native!.state,
+      at: native!.at,
+      completedAt: native!.completedAt,
+      pendingParticipants: [],
+      retentionOutstanding: state === 'retention-outstanding',
+      lateItems: native!.outstanding.lateItems,
+      effectsFrontier: native!.outstanding.effectsFrontier,
     });
     expect(JSON.stringify(projected)).not.toContain('private');
     expect(JSON.stringify(projected)).not.toContain('retained');
@@ -182,7 +212,8 @@ test('current principal assignment, both grants, account floor and denial still 
   const request = newId(routeOf(principal)!);
   await pool.query(
     `INSERT INTO access.principal_assignment(route,principal_id,request_id,assigned_actor_id,valid,transaction_id)
-     VALUES($1,$2,$3,$4,'(,)',$3)`, [routeOf(principal), principal, request, g.accountId],
+     VALUES($1,$2,$3,$4,'(,)',$3)`,
+    [routeOf(principal), principal, request, g.accountId],
   );
   const delegated = await actor(g.accountId, [action], `urn:rezics:request:${principal}:${request}`);
   const accountId = await root();
@@ -190,11 +221,14 @@ test('current principal assignment, both grants, account floor and denial still 
   await role(principal);
   expect((await read(delegated, accountId))?.state).toBe('pending');
   await pool.query('DELETE FROM access.principal_assignment WHERE route=$1 AND principal_id=$2 AND request_id=$3', [
-    routeOf(principal), principal, request,
+    routeOf(principal),
+    principal,
+    request,
   ]);
   await refuses(read(delegated, accountId), 'forbidden');
   await pool.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2', [
-    routeOf(g.accountId), g.accountId,
+    routeOf(g.accountId),
+    g.accountId,
   ]);
   await refuses(read(g.actor, accountId), 'forbidden');
 });
@@ -203,7 +237,9 @@ test('real mounted transport declares narrow metadata, private status and typed 
   const declaration = kernel.routes.find((route) => route.path === '/v1/accounts/:accountId/erasureStatus');
   expect(declaration?.method).toBe('GET');
   expect(declaration?.hooks?.detail).toMatchObject({
-    operationId: 'account.read_erasure_status', 'x-action': action, 'x-exposure': 'gate:account_erasure',
+    operationId: 'account.read_erasure_status',
+    'x-action': action,
+    'x-exposure': 'gate:account_erasure',
     security: [{ bearerAuth: [] }],
   });
   expect(actionCatalogue(kernel).get(action)).toEqual({ anonymous: false });
@@ -212,17 +248,25 @@ test('real mounted transport declares narrow metadata, private status and typed 
   const g = await governor();
   const token = await accountToken({ accountId: g.accountId, clientId: 'erasure-reader', scopes: [action] });
   const accountId = await root();
-  const response = await kernel.handle(new Request(`http://kernel.test/v1/accounts/${accountId}/erasureStatus`, {
-    headers: { authorization: `Bearer ${token}` },
-  }));
+  const response = await kernel.handle(
+    new Request(`http://kernel.test/v1/accounts/${accountId}/erasureStatus`, {
+      headers: { authorization: `Bearer ${token}` },
+    }),
+  );
   expect(response.status, await response.clone().text()).toBe(200);
   expect(response.headers.get('cache-control')).toBe('private, no-store');
   expect(await response.json()).toEqual(await read(g.actor, accountId));
-  const missing = await kernel.handle(new Request(`http://kernel.test/v1/accounts/${newId(0x7351)}/erasureStatus`, {
-    headers: { authorization: `Bearer ${token}` },
-  }));
+  const missing = await kernel.handle(
+    new Request(`http://kernel.test/v1/accounts/${newId(0x7351)}/erasureStatus`, {
+      headers: { authorization: `Bearer ${token}` },
+    }),
+  );
   expect(missing.status).toBe(404);
-  const unavailable = deriveAccess(access, { async prepare() { throw new Error('secret SQL or locator'); } });
+  const unavailable = deriveAccess(access, {
+    async prepare() {
+      throw new Error('secret SQL or locator');
+    },
+  });
   try {
     await read(g.actor, accountId, unavailable);
     throw new Error('Expected unavailable status');
