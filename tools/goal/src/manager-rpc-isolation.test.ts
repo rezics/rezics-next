@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createConnection, createServer, type Server, type Socket } from 'node:net';
 import { createInterface } from 'node:readline';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { run } from './cli.ts';
 import { openDb } from './db.ts';
