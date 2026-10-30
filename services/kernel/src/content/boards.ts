@@ -365,6 +365,7 @@ export async function listBoardThreads(
   const currentPositions: BoardPageAfter[] = [];
   for (const [index, result] of finalItems.entries()) {
     if (!result.value || result.value.boardId !== boardId) continue;
+    if (result.value.firstPost.availability === 'withheld') continue;
     if (query && result.value.firstPost.availability !== 'available') continue;
     current.push(result.value);
     currentPositions.push(entryPositions[index]!);

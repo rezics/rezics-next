@@ -9,4 +9,3 @@ FROM input i
 JOIN community.realm h ON h.route = i.route AND h.realm_id = i.id
 JOIN community.realm_revision r
   ON r.route = h.route AND r.realm_id = h.realm_id AND r.revision_id = h.head_revision_id
-WHERE (h.route, h.realm_id) = ANY(SELECT route, id FROM input);

@@ -17,7 +17,7 @@ SELECT 'board'::text AS kind, b.board_id AS id, NULL::uuid AS thread_id,
        NULL::boolean AS matches
 FROM input i
 JOIN content.board b ON (b.route, b.board_id) = (i.route, i.id)
-WHERE i.kind = 'board' AND (b.route, b.board_id) = ANY(SELECT route, id FROM input)
+WHERE i.kind = 'board'
 UNION ALL
 SELECT 'thread', t.thread_id, t.thread_id, t.board_id, NULL::uuid, t.author_account_id,
        NULL::uuid, t.first_post_id, t.title, t.visibility, t.security_revision::text,
@@ -26,7 +26,7 @@ SELECT 'thread', t.thread_id, t.thread_id, t.board_id, NULL::uuid, t.author_acco
        false, NULL::uuid, NULL::boolean
 FROM input i
 JOIN content.thread t ON (t.route, t.thread_id) = (i.route, i.id)
-WHERE i.kind = 'thread' AND (t.route, t.thread_id) = ANY(SELECT route, id FROM input)
+WHERE i.kind = 'thread'
 UNION ALL
 SELECT 'post', p.post_id, p.thread_id, NULL::uuid, p.reply_to_post_id, p.author_account_id,
        p.head_revision_id, NULL::uuid, NULL::text, p.visibility, p.security_revision::text,
@@ -43,7 +43,7 @@ JOIN content.revision h ON h.route = p.route AND h.thread_id = p.thread_id
   AND h.post_id = p.post_id AND h.revision_id = p.head_revision_id
 LEFT JOIN content.moderation_decision d ON d.route = p.route AND d.target_kind = 'post'
   AND d.target_id = p.post_id AND d.security_revision = p.security_revision
-WHERE i.kind = 'post' AND (p.route, p.post_id) = ANY(SELECT route, id FROM input)
+WHERE i.kind = 'post'
 UNION ALL
 SELECT 'revision', r.revision_id, r.thread_id, r.board_id, r.post_id, NULL::uuid,
        NULL::uuid, NULL::uuid, NULL::text, NULL::text, NULL::text,
@@ -56,4 +56,4 @@ SELECT 'revision', r.revision_id, r.thread_id, r.board_id, r.post_id, NULL::uuid
            @@ plainto_tsquery('simple'::regconfig, i.query), false) END
 FROM input i
 JOIN content.revision r ON r.route = i.route AND r.revision_id = i.id AND r.thread_id = i.thread_id
-WHERE i.kind = 'revision' AND (r.route, r.revision_id) = ANY(SELECT route, id FROM input);
+WHERE i.kind = 'revision';
