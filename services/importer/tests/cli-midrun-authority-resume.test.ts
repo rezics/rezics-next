@@ -13,14 +13,33 @@ test('CLI denial closes handles and retains prepared writes and baseline for a s
     const state = join(directory, 'state.sqlite');
     const keyPath = join(directory, 'operator.jwk');
     const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
-    await writeFile(keyPath, JSON.stringify({
-      ...(await crypto.subtle.exportKey('jwk', pair.privateKey)), kid: 'local-unit', alg: 'ES256',
-    }), { mode: 0o600 });
+    await writeFile(
+      keyPath,
+      JSON.stringify({
+        ...(await crypto.subtle.exportKey('jwk', pair.privateKey)),
+        kid: 'local-unit',
+        alg: 'ES256',
+      }),
+      { mode: 0o600 },
+    );
     await writeFile(state, '', { mode: 0o600 });
     const argv = [
-      '--source', 'bangumi', '--dump', '-', '--state', state,
-      '--api', 'https://kernel.unit.test', '--auth', 'https://auth.unit.test',
-      '--account-key', keyPath, '--account', randomUUID(), '--client', 'unit',
+      '--source',
+      'bangumi',
+      '--dump',
+      '-',
+      '--state',
+      state,
+      '--api',
+      'https://kernel.unit.test',
+      '--auth',
+      'https://auth.unit.test',
+      '--account-key',
+      keyPath,
+      '--account',
+      randomUUID(),
+      '--client',
+      'unit',
     ];
     const receipts = new Map<string, { bytes: string; result: BatchWriteResult['results'][number] }>();
     let denied = false;
@@ -29,9 +48,13 @@ test('CLI denial closes handles and retains prepared writes and baseline for a s
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url);
       if (url.origin === 'https://auth.unit.test') {
-        if (url.pathname === '/signin/key') return Response.json({}, {
-          headers: { 'set-cookie': 'unit-session=private; Secure; HttpOnly' },
-        });
+        if (url.pathname === '/signin/key')
+          return Response.json(
+            {},
+            {
+              headers: { 'set-cookie': 'unit-session=private; Secure; HttpOnly' },
+            },
+          );
         expect(url.pathname).toBe('/token');
         return Response.json({ access_token: 'unit-token', token_type: 'Bearer', expires_in: 300 });
       }
@@ -41,20 +64,27 @@ test('CLI denial closes handles and retains prepared writes and baseline for a s
       sent.push({ bytes, status: denied ? 403 : 200 });
       if (denied) return Response.json({ code: 'forbidden' }, { status: 403 });
       const body = JSON.parse(bytes) as BatchWriteRequest;
-      return Response.json({ results: body.commands.map((command) => {
-        const prior = receipts.get(command.key);
-        if (prior) {
-          expect(JSON.stringify(command)).toBe(prior.bytes);
-          return prior.result;
-        }
-        const result = {
-          key: command.key, status: 200 as const,
-          value: command.op === 'create' ? { id: randomUUID(), revision: 1 }
-            : command.op === 'propose' ? { candidate: randomUUID(), revision: 1 } : { revision: 1 },
-        };
-        receipts.set(command.key, { bytes: JSON.stringify(command), result });
-        return result;
-      }) });
+      return Response.json({
+        results: body.commands.map((command) => {
+          const prior = receipts.get(command.key);
+          if (prior) {
+            expect(JSON.stringify(command)).toBe(prior.bytes);
+            return prior.result;
+          }
+          const result = {
+            key: command.key,
+            status: 200 as const,
+            value:
+              command.op === 'create'
+                ? { id: randomUUID(), revision: 1 }
+                : command.op === 'propose'
+                  ? { candidate: randomUUID(), revision: 1 }
+                  : { revision: 1 },
+          };
+          receipts.set(command.key, { bytes: JSON.stringify(command), result });
+          return result;
+        }),
+      });
     }) as typeof fetch;
     async function invoke(name: string) {
       let consumed = 0;

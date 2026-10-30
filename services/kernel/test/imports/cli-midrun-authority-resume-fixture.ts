@@ -141,9 +141,10 @@ export async function runJourney() {
       const rows = [];
       for (const key of keys) {
         const command = commands.get(key)!;
-        const route = command.op === 'create'
-          ? tupleRoute(identity.routeKey, source, command.source.external_id)
-          : routeOf(command.subject)!;
+        const route =
+          command.op === 'create'
+            ? tupleRoute(identity.routeKey, source, command.source.external_id)
+            : routeOf(command.subject)!;
         const result = await runtime.database.admin.query(
           'SELECT transaction_id,response,xmin::text FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2 AND principal_id=$3 AND command_kind=$4 AND idempotency_key=$5',
           [partitionOf(route), 'account', identity.bulk.accountId, `subject.batch_${command.op}`, key],
@@ -163,116 +164,141 @@ export async function runJourney() {
       const phases = new Map<string, string>();
       const authPaths: string[] = [];
       const start = exchanges.length;
-      const result = await runImportCli([
-        '--source', source, '--dump', '-', '--state', state, '--api', api,
-        '--auth', auth, '--account-key', keyPath, '--account', identity.bulk.accountId,
-        '--client', identity.client.clientId,
-      ], {
-        stdin: (async function* () {
-          const bytes = new TextEncoder().encode(text);
-          consumed += bytes.length;
-          yield bytes;
-          ended = true;
-        })(),
-        createImporter(options) {
-          // Observe the existing default-width executor; do not replace or serialize it.
-          options.observer = {
-            onRecordActive(phase, recordKey, active) {
-              if (active) phases.set(recordKey, phase);
-              else phases.delete(recordKey);
-            },
-          };
-          return createImporter(options);
-        },
-        observer: {
-          onAccountKey(_path, observation) {
-            expect(observation.regularFile).toBe(true);
-            expect(observation.mode & 0o777).toBe(0o600);
-            expect(observation.importedKey.extractable).toBe(false);
-          },
-          onCoordinator({ importer, registration, converterModule }) {
-            coordinator = importer;
-            revisions.push({ leg, source: registration.source, converter: registration.converter_revision });
-            expect(registration.converter_revision).toBe(converter_revision);
-            expect(converterModule).toBe(import.meta.resolve('../../../../packages/conversion/src/bangumi.ts'));
-            const seal = importer.session.store.seal.bind(importer.session.store);
-            importer.session.store.seal = (run, input) => {
-              const result = seal(run, input);
-              seals.push(result);
-              sealed = result.status === 'ready';
-              return result;
+      const result = await runImportCli(
+        [
+          '--source',
+          source,
+          '--dump',
+          '-',
+          '--state',
+          state,
+          '--api',
+          api,
+          '--auth',
+          auth,
+          '--account-key',
+          keyPath,
+          '--account',
+          identity.bulk.accountId,
+          '--client',
+          identity.client.clientId,
+        ],
+        {
+          stdin: (async function* () {
+            const bytes = new TextEncoder().encode(text);
+            consumed += bytes.length;
+            yield bytes;
+            ended = true;
+          })(),
+          createImporter(options) {
+            // Observe the existing default-width executor; do not replace or serialize it.
+            options.observer = {
+              onRecordActive(phase, recordKey, active) {
+                if (active) phases.set(recordKey, phase);
+                else phases.delete(recordKey);
+              },
             };
-            const active = importer.session.store.activeRun(source);
-            if (active) sealed = importer.session.store.pagePending(active, { limit: 100 }).length > 0;
+            return createImporter(options);
           },
+          observer: {
+            onAccountKey(_path, observation) {
+              expect(observation.regularFile).toBe(true);
+              expect(observation.mode & 0o777).toBe(0o600);
+              expect(observation.importedKey.extractable).toBe(false);
+            },
+            onCoordinator({ importer, registration, converterModule }) {
+              coordinator = importer;
+              revisions.push({ leg, source: registration.source, converter: registration.converter_revision });
+              expect(registration.converter_revision).toBe(converter_revision);
+              expect(converterModule).toBe(import.meta.resolve('../../../../packages/conversion/src/bangumi.ts'));
+              const seal = importer.session.store.seal.bind(importer.session.store);
+              importer.session.store.seal = (run, input) => {
+                const result = seal(run, input);
+                seals.push(result);
+                sealed = result.status === 'ready';
+                return result;
+              };
+              const active = importer.session.store.activeRun(source);
+              if (active) sealed = importer.session.store.pagePending(active, { limit: 100 }).length > 0;
+            },
+          },
+          fetch: (async (input, init) => {
+            const request = input instanceof Request ? input : new Request(input, init);
+            const url = new URL(request.url);
+            expect(sealed).toBe(true);
+            if (url.origin === auth) {
+              authPaths.push(url.pathname);
+              return native.host.service.handler(request);
+            }
+            expect(url.origin).toBe(api);
+            expect(request.headers.has('cookie')).toBe(false);
+            const claims = decodeJwt(request.headers.get('authorization')!.slice(7));
+            expect(claims.sub).toBe(identity.bulk.accountId);
+            expect(String(claims.scope).split(' ').sort()).toEqual([...IMPORTER_SCOPES].sort());
+            const bytes = request.method === 'GET' ? '' : await request.clone().text();
+            const bulk = url.pathname === '/v1/subjects:batchWrite';
+            const body = bulk ? (JSON.parse(bytes) as BatchWriteRequest) : null;
+            for (const command of body?.commands ?? []) {
+              expect(command.source.source).toBe(source);
+              const prior = commands.get(command.key);
+              if (prior) expect(command).toEqual(prior);
+              commands.set(command.key, command);
+            }
+            const keys = body?.commands.map((command) => command.key) ?? [];
+            const phase = body ? (phases.get(body.commands[0]!.source.external_id) ?? null) : null;
+            const first =
+              leg === 'denied' &&
+              bulk &&
+              !firstForwarded &&
+              body!.commands.every((command) => command.source.external_id === firstRecord);
+            if (first) firstForwarded = true;
+            if (leg === 'denied' && bulk && !first) {
+              // The actual request is held BEFORE Access sees it. Other records keep their native concurrency.
+              heldRequests.push({ bytes, keys, arrived: Date.now() });
+              hasHeldRequest.resolve();
+              await release.promise;
+            }
+            const saved = first ? request.clone() : undefined;
+            const response = await runtime.replay(request);
+            const responseBytes = await response.clone().text();
+            const exchange: Exchange = {
+              leg,
+              ordinal: ++ordinal,
+              path: url.pathname,
+              bytes,
+              keys,
+              phase,
+              status: response.status,
+              response: responseBytes,
+            };
+            exchanges.push(exchange);
+            if (first) {
+              expect(response.status, responseBytes).toBe(200);
+              const results = (JSON.parse(responseBytes) as BatchWriteResult).results;
+              for (const entry of results) expect('value' in entry, JSON.stringify(entry)).toBe(true);
+              successfulRequest = saved;
+              successfulExchange = exchange;
+              try {
+                await hasHeldRequest.promise;
+                await native.renewManagement();
+                await identity.setBulkPermission(false);
+                revocation = { afterResponse: exchange.ordinal, held: heldRequests.length, releasedAtMs: Date.now() };
+              } finally {
+                release.resolve();
+              }
+            }
+            if (url.pathname === '/v1/media:importFromUrl' && response.status === 202) {
+              if (!workerStarted) {
+                await runtime.mediaBoundary.start();
+                workerStarted = true;
+              }
+              const accepted = JSON.parse(responseBytes) as { media: { id: string } };
+              await runtime.mediaBoundary.drain({ mediaIds: [accepted.media.id], maxJobs: 16, signal: request.signal });
+            }
+            return response;
+          }) as typeof fetch,
         },
-        fetch: (async (input, init) => {
-          const request = input instanceof Request ? input : new Request(input, init);
-          const url = new URL(request.url);
-          expect(sealed).toBe(true);
-          if (url.origin === auth) {
-            authPaths.push(url.pathname);
-            return native.host.service.handler(request);
-          }
-          expect(url.origin).toBe(api);
-          expect(request.headers.has('cookie')).toBe(false);
-          const claims = decodeJwt(request.headers.get('authorization')!.slice(7));
-          expect(claims.sub).toBe(identity.bulk.accountId);
-          expect(String(claims.scope).split(' ').sort()).toEqual([...IMPORTER_SCOPES].sort());
-          const bytes = request.method === 'GET' ? '' : await request.clone().text();
-          const bulk = url.pathname === '/v1/subjects:batchWrite';
-          const body = bulk ? JSON.parse(bytes) as BatchWriteRequest : null;
-          for (const command of body?.commands ?? []) {
-            expect(command.source.source).toBe(source);
-            const prior = commands.get(command.key);
-            if (prior) expect(command).toEqual(prior);
-            commands.set(command.key, command);
-          }
-          const keys = body?.commands.map((command) => command.key) ?? [];
-          const phase = body ? phases.get(body.commands[0]!.source.external_id) ?? null : null;
-          const first = leg === 'denied' && bulk && !firstForwarded &&
-            body!.commands.every((command) => command.source.external_id === firstRecord);
-          if (first) firstForwarded = true;
-          if (leg === 'denied' && bulk && !first) {
-            // The actual request is held BEFORE Access sees it. Other records keep their native concurrency.
-            heldRequests.push({ bytes, keys, arrived: Date.now() });
-            hasHeldRequest.resolve();
-            await release.promise;
-          }
-          const saved = first ? request.clone() : undefined;
-          const response = await runtime.replay(request);
-          const responseBytes = await response.clone().text();
-          const exchange: Exchange = {
-            leg, ordinal: ++ordinal, path: url.pathname, bytes, keys, phase,
-            status: response.status, response: responseBytes,
-          };
-          exchanges.push(exchange);
-          if (first) {
-            expect(response.status, responseBytes).toBe(200);
-            const results = (JSON.parse(responseBytes) as BatchWriteResult).results;
-            for (const entry of results) expect('value' in entry, JSON.stringify(entry)).toBe(true);
-            successfulRequest = saved;
-            successfulExchange = exchange;
-            try {
-              await hasHeldRequest.promise;
-              await native.renewManagement();
-              await identity.setBulkPermission(false);
-              revocation = { afterResponse: exchange.ordinal, held: heldRequests.length, releasedAtMs: Date.now() };
-            } finally {
-              release.resolve();
-            }
-          }
-          if (url.pathname === '/v1/media:importFromUrl' && response.status === 202) {
-            if (!workerStarted) {
-              await runtime.mediaBoundary.start();
-              workerStarted = true;
-            }
-            const accepted = JSON.parse(responseBytes) as { media: { id: string } };
-            await runtime.mediaBoundary.drain({ mediaIds: [accepted.media.id], maxJobs: 16, signal: request.signal });
-          }
-          return response;
-        }) as typeof fetch,
-      });
+      );
       expect(result.openHandles).toBe(0);
       expect(phases.size).toBe(0);
       expect(coordinator).toBeDefined();
@@ -295,8 +321,14 @@ export async function runJourney() {
       const rows = [];
       for (const [kind, sql] of [
         ['subject', 'SELECT * FROM semantic.subject WHERE route=$1 AND subject_id=$2'],
-        ['candidate', 'SELECT * FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100'],
-        ['retraction', 'SELECT * FROM semantic.retraction WHERE route=$1 AND subject_id=$2 ORDER BY revision,candidate_id LIMIT 100'],
+        [
+          'candidate',
+          'SELECT * FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100',
+        ],
+        [
+          'retraction',
+          'SELECT * FROM semantic.retraction WHERE route=$1 AND subject_id=$2 ORDER BY revision,candidate_id LIMIT 100',
+        ],
         ['revision', 'SELECT * FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision LIMIT 100'],
       ] as const) {
         const result = await runtime.database.admin.query(sql, [routeOf(id), id]);
@@ -337,21 +369,40 @@ export async function runJourney() {
     const created = await editor.http('/v1/contexts', { labels: { en: 'Independent authority review' } });
     expect(created.status).toBe(201);
     const context = (created.body.context as { id: string }).id;
-    expect((await editor.http(`/v1/subjects/${id}/candidates/${candidate}:accept`, { context, expected_head: null })).status).toBe(200);
-    const current = await editor.http(`/v1/subjects/${id}/candidates?property=schema:name&limit=100&context=${context}`);
+    expect(
+      (await editor.http(`/v1/subjects/${id}/candidates/${candidate}:accept`, { context, expected_head: null })).status,
+    ).toBe(200);
+    const current = await editor.http(
+      `/v1/subjects/${id}/candidates?property=schema:name&limit=100&context=${context}`,
+    );
     expect(current.status).toBe(200);
-    expect((await editor.http(`/v1/subjects/${id}:adopt`, {
-      context, property: 'schema:name', mode: 'replace', selection: [{ candidate, rank: 'normal' }],
-      expected_head: (current.body.adoption as { head: number } | null)?.head ?? null,
-    })).status).toBe(200);
+    expect(
+      (
+        await editor.http(`/v1/subjects/${id}:adopt`, {
+          context,
+          property: 'schema:name',
+          mode: 'replace',
+          selection: [{ candidate, rank: 'normal' }],
+          expected_head: (current.body.adoption as { head: number } | null)?.head ?? null,
+        })
+      ).status,
+    ).toBe(200);
     async function selection() {
       const read = await editor.http(`/v1/subjects/${id}?context=${context}`);
-      const candidates = await editor.http(`/v1/subjects/${id}/candidates?property=schema:name&limit=100&context=${context}`);
+      const candidates = await editor.http(
+        `/v1/subjects/${id}/candidates?property=schema:name&limit=100&context=${context}`,
+      );
       expect(read.status).toBe(200);
       expect(candidates.status).toBe(200);
-      const chosen = (candidates.body.candidates as (Candidate & { head: number | null })[]).find((c) => c.id === candidate);
+      const chosen = (candidates.body.candidates as (Candidate & { head: number | null })[]).find(
+        (c) => c.id === candidate,
+      );
       expect(chosen).toBeDefined();
-      return { statements: (read.body.subject as Subject).statements['schema:name'], adoption: candidates.body.adoption, accepted: chosen };
+      return {
+        statements: (read.body.subject as Subject).statements['schema:name'],
+        adoption: candidates.body.adoption,
+        accepted: chosen,
+      };
     }
     const independentSelectionBefore = await selection();
     expect(independentSelectionBefore.statements).toHaveLength(1);
@@ -360,7 +411,8 @@ export async function runJourney() {
     expect(denied.code, denied.stderr).toBe(4);
     expect(revocation).toBeDefined();
     expect(revocation!.held).toBeGreaterThan(0);
-    if (!successfulRequest || !successfulExchange) throw new Error('No actual changed envelope committed before revocation');
+    if (!successfulRequest || !successfulExchange)
+      throw new Error('No actual changed envelope committed before revocation');
     const successful = successfulExchange as Exchange;
     expect(successful.keys.length).toBeGreaterThan(0);
     const afterDenial = inspect();
@@ -382,10 +434,16 @@ export async function runJourney() {
       expect((JSON.parse(pending.bytes) as BatchWriteRequest).commands.map((c) => c.key)).toEqual(pending.keys);
       expect(nativeDenials.some((exchange) => exchange.bytes === pending.bytes)).toBe(true);
     }
-    const successfulKeys = [...new Set(exchanges.filter((e) => e.status === 200 && e.keys.length).flatMap((e) => {
-      const result = JSON.parse(e.response) as BatchWriteResult;
-      return result.results.filter((entry) => 'value' in entry).map((entry) => entry.key);
-    }))];
+    const successfulKeys = [
+      ...new Set(
+        exchanges
+          .filter((e) => e.status === 200 && e.keys.length)
+          .flatMap((e) => {
+            const result = JSON.parse(e.response) as BatchWriteResult;
+            return result.results.filter((entry) => 'value' in entry).map((entry) => entry.key);
+          }),
+      ),
+    ];
     const originalReceiptRowsBefore = await receipts(successfulKeys);
     const committedEffectsBefore = await nativeEffects(ids[0]!);
     const mediaBefore = [];
@@ -415,12 +473,16 @@ export async function runJourney() {
     expect(afterResume.completed.source.count).toBe(17);
     expect(afterResume.completed.rows.every((row) => row?.converter_revision === converter_revision)).toBe(true);
     expect(afterResume.completed.rows.every((row) => row?.recordRevision === 'unversioned')).toBe(true);
-    for (let i = 0; i < 17; i++) expect(afterResume.completed.rows[i]!.digest).not.toBe(before.completed.rows[i]!.digest);
-    const drainExchanges = resumed.exchanges.filter((e) => e.path === '/v1/subjects:batchWrite' && e.phase === 'resumed');
+    for (let i = 0; i < 17; i++)
+      expect(afterResume.completed.rows[i]!.digest).not.toBe(before.completed.rows[i]!.digest);
+    const drainExchanges = resumed.exchanges.filter(
+      (e) => e.path === '/v1/subjects:batchWrite' && e.phase === 'resumed',
+    );
     expect(drainExchanges).toHaveLength(afterDenial.pending.length);
     // Compare in the durable keyset order, preserving actual captured body/key values.
-    const orderedReplays = drainExchanges.toSorted((a, b) =>
-      pendingBytes.indexOf(a.bytes) - pendingBytes.indexOf(b.bytes));
+    const orderedReplays = drainExchanges.toSorted(
+      (a, b) => pendingBytes.indexOf(a.bytes) - pendingBytes.indexOf(b.bytes),
+    );
     const replayedBodies = orderedReplays.map((e) => e.bytes);
     const replayedKeys = orderedReplays.map((e) => e.keys);
     expect(replayedBodies).toEqual(pendingBytes);
@@ -444,8 +506,9 @@ export async function runJourney() {
       }
     }
     const effectsAfterResume = await Promise.all(ids.map(nativeEffects));
-    const duplicateEffects = effectsAfterResume.flat().filter((effect) =>
-      effect.kind === 'candidate' && !acceptedCandidates.has(effect.row.candidate_id as string));
+    const duplicateEffects = effectsAfterResume
+      .flat()
+      .filter((effect) => effect.kind === 'candidate' && !acceptedCandidates.has(effect.row.candidate_id as string));
     expect(duplicateEffects).toEqual([]);
     const independentSelectionAfter = await selection();
     expect(independentSelectionAfter).toEqual(independentSelectionBefore);
@@ -461,7 +524,8 @@ export async function runJourney() {
     const final = inspect();
     expect(final.active).toBeNull();
     expect(final.claims).toEqual(before.claims);
-    for (let i = 0; i < 17; i++) expect(final.completed.rows[i]!.digest).not.toBe(afterResume.completed.rows[i]!.digest);
+    for (let i = 0; i < 17; i++)
+      expect(final.completed.rows[i]!.digest).not.toBe(afterResume.completed.rows[i]!.digest);
     expect(await selection()).toEqual(independentSelectionBefore);
     expect(await receipts(successfulKeys)).toEqual(originalReceiptRowsBefore);
     for (const old of mediaBefore) expect(await runtime.mediaBoundary.observe(old.row.id)).toEqual(old);
@@ -469,17 +533,41 @@ export async function runJourney() {
     expect(worker.executedJobs).toBeGreaterThan(0);
     expect(worker.liveInternetRequests).toEqual([]);
     const evidence = {
-      revisions, bundleDigest: bundledDigest,
+      revisions,
+      bundleDigest: bundledDigest,
       inputs: { initial: initial.inputSha256, changed: denied.inputSha256, successor: successor.inputSha256 },
       seals: { initial: initial.seals, denied: denied.seals, resumed: resumed.seals, successor: successor.seals },
-      completedBaselineBefore, completedBaselineAfterDenial, pending: afterDenial.pending,
-      resumedRows: afterResume.completed.rows, successorRows: final.completed.rows,
-      successful, revocation, heldRequests, nativeDenials, revokedReplay, replayedBodies, replayedKeys,
-      originalReceiptRowsBefore, originalReceiptRowsAfter, committedEffectsBefore, effectsAfterResume,
-      journalsBefore: before.journals, journalsAfter: afterResume.journals, mediaJournals: afterDenial.media,
-      media: mediaBefore, independentSelectionBefore, independentSelectionAfter, duplicateEffects,
-      pendingLastEffect, successorFirstEffect, exchanges,
-      worker: { jobs: worker.executedJobs, calls: worker.calls, registrations: worker.registrations.map((r) => r.name) },
+      completedBaselineBefore,
+      completedBaselineAfterDenial,
+      pending: afterDenial.pending,
+      resumedRows: afterResume.completed.rows,
+      successorRows: final.completed.rows,
+      successful,
+      revocation,
+      heldRequests,
+      nativeDenials,
+      revokedReplay,
+      replayedBodies,
+      replayedKeys,
+      originalReceiptRowsBefore,
+      originalReceiptRowsAfter,
+      committedEffectsBefore,
+      effectsAfterResume,
+      journalsBefore: before.journals,
+      journalsAfter: afterResume.journals,
+      mediaJournals: afterDenial.media,
+      media: mediaBefore,
+      independentSelectionBefore,
+      independentSelectionAfter,
+      duplicateEffects,
+      pendingLastEffect,
+      successorFirstEffect,
+      exchanges,
+      worker: {
+        jobs: worker.executedJobs,
+        calls: worker.calls,
+        registrations: worker.registrations.map((r) => r.name),
+      },
     };
     expect(isDeepStrictEqual(completedBaselineBefore, completedBaselineAfterDenial)).toBe(true);
     const evidenceDirectory = resolve(import.meta.dir, '../../../../.temp/goal/cli-midrun-authority-resume');
@@ -487,10 +575,26 @@ export async function runJourney() {
     await writeFile(join(evidenceDirectory, 'native-evidence.json'), JSON.stringify(evidence, null, 2));
     console.log('CLI mid-run authority native evidence', JSON.stringify(evidence));
     return {
-      initial, denied, nativeDenials, completedBaselineBefore, completedBaselineAfterDenial,
-      pendingBytes, pendingKeys, revokedReplay, resumed, replayedBodies, replayedKeys,
-      originalReceiptRowsBefore, originalReceiptRowsAfter, duplicateEffects, successor,
-      pendingLastEffect, successorFirstEffect, independentSelectionBefore, independentSelectionAfter, close,
+      initial,
+      denied,
+      nativeDenials,
+      completedBaselineBefore,
+      completedBaselineAfterDenial,
+      pendingBytes,
+      pendingKeys,
+      revokedReplay,
+      resumed,
+      replayedBodies,
+      replayedKeys,
+      originalReceiptRowsBefore,
+      originalReceiptRowsAfter,
+      duplicateEffects,
+      successor,
+      pendingLastEffect,
+      successorFirstEffect,
+      independentSelectionBefore,
+      independentSelectionAfter,
+      close,
     };
   } catch (error) {
     await close();
