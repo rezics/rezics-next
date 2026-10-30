@@ -1321,6 +1321,7 @@ test('stack-free placement: the actual Web compiler invocation runs locally with
   const web = join(fixture.root, 'apps/web');
   const priorLedger = process.env.REZICS_CHECK_LEDGER_DIR;
   mkdirSync(web, { recursive: true });
+  writeFileSync(join(web, 'package.json'), JSON.stringify({ name: '@fixture/web', private: true, type: 'module' }));
   writeFileSync(
     join(web, 'tsconfig.json'),
     JSON.stringify({ compilerOptions: { noEmit: true, strict: true }, files: ['source.ts'] }),
@@ -1330,7 +1331,7 @@ test('stack-free placement: the actual Web compiler invocation runs locally with
     workerEnv(fixture, hosts);
     process.env.REZICS_CHECK_LEDGER_DIR = join(fixture.root, '.temp/check-ledger');
     const status = await runWorkerCheck(
-      ['bun', 'check', '--no-script', '-p', 'tsconfig.json'],
+      [process.execPath, 'check', '--no-script', '-p', 'tsconfig.json'],
       web,
       false,
       join(fixture.root, 'web-compiler.log'),
