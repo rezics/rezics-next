@@ -5,7 +5,7 @@ import { setCopyKindsStory } from '../kernel/fake/copies-kinds';
 import recording from '../kernel/recorded/library-copies.json';
 import { unprofiledSubjectId } from '../kernel/fake/library-unprofiled-subject';
 import { m } from '../paraglide/messages.js';
-import { PageStory, pagePaths } from './page';
+import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = { title: 'Pages/Library/Copies', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -29,16 +29,16 @@ export const ManyCopies: Story = {
     const recordedCopy = recording.copies[1];
     const coverMedia = recordedCopy?.subject.cover?.media;
     if (!recordedCopy || typeof coverMedia !== 'string' || !recordedCopy.note) {
-      throw new Error('The recorded Kokoro copy has no cover media or identifying note.');
+      throw new globalThis.Error('The recorded Kokoro copy has no cover media or identifying note.');
     }
     const kokoro = (await canvas.findByText(recordedCopy.note, { exact: true })).closest('li');
-    if (!kokoro) throw new Error('The recorded Kokoro copy did not render in the list.');
+    if (!kokoro) throw new globalThis.Error('The recorded Kokoro copy did not render in the list.');
     expect(kokoro.textContent).toContain('Kokoro');
     expect(kokoro?.textContent).toContain('Digital');
     expect(kokoro?.textContent).not.toContain('Physical');
     const image = kokoro.querySelector('[data-slot="cover"] img');
     if (!image?.getAttribute('src')?.includes(`/media/${coverMedia}/`)) {
-      throw new Error('The recorded Kokoro copy cover did not render from its /media/ fixture.');
+      throw new globalThis.Error('The recorded Kokoro copy cover did not render from its /media/ fixture.');
     }
     await userEvent.hover(kokoro);
   },
@@ -52,6 +52,33 @@ export const OneCopy: Story = {
   name: 'Owner, one copy',
   render: () => <CopiesStory mode="one" />,
   play: ready,
+};
+
+export const LongContent: Story = {
+  name: 'Long content',
+  render: () => <CopiesStory mode="long" />,
+  async play({ canvasElement }) {
+    await ready({ canvasElement });
+    await within(canvasElement).findByText('Library copy story 12');
+  },
+};
+
+export const Unavailable: Story = {
+  name: 'Unavailable',
+  render: () => <CopiesStory mode="unavailable" />,
+  async play(context) {
+    await pageReady(context);
+    await within(context.canvasElement).findByRole('heading', { level: 1, name: m.error_heading() });
+  },
+};
+
+export const Error: Story = {
+  name: 'Error',
+  render: () => <CopiesStory mode="error" />,
+  async play(context) {
+    await pageReady(context);
+    await within(context.canvasElement).findByRole('heading', { level: 1, name: m.error_heading() });
+  },
 };
 
 function ProfileStory({ retired = false }: { retired?: boolean }) {

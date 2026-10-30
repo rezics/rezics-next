@@ -7,6 +7,10 @@ import { readLibraryResult } from './reads';
 import { progressView } from './progress-label';
 import type { ProgressLabelInput } from './progress-label';
 import { libraryLabelApi, type LibraryLabelSummary } from './subject-labels.ts';
+import { readRelease } from '../subject/definitions';
+import { requestLocale } from '../kernel/client';
+import { libraryStateLabel } from './profiles';
+import { m } from '../paraglide/messages.js';
 
 export type LabelShelfEntry = {
   id: string;
@@ -15,6 +19,7 @@ export type LabelShelfEntry = {
   revision: number;
   subject: LibrarySubject | null;
   state?: string;
+  stateLabel?: string;
   activeProgressSession?: ProgressLabelInput | null;
 };
 
@@ -79,6 +84,8 @@ export async function loadLabelShelfPage(
       next: string | null;
     };
     if (!page.label || page.label.id !== input.labelId) throw new Error('Label shelf page omitted its label summary');
+    const locale = requestLocale() ?? 'en';
+    const release = await readRelease().catch(() => undefined);
     return {
       state: 'loaded',
       label: page.label,
@@ -89,6 +96,12 @@ export async function loadLabelShelfPage(
             ? (row.libraryEntry as { state?: unknown; activeProgressSession?: unknown })
             : null;
         const state = typeof entry?.state === 'string' ? entry.state : undefined;
+        const stateLabel =
+          state && release && subject?.type
+            ? (libraryStateLabel(release, subject.type, state, locale)?.text ?? m.library_other())
+            : state
+              ? m.library_other()
+              : undefined;
         const progress = entry?.activeProgressSession;
         return {
           id: row.id,
@@ -97,6 +110,7 @@ export async function loadLabelShelfPage(
           revision: row.revision,
           subject,
           ...(state ? { state } : {}),
+          ...(stateLabel ? { stateLabel } : {}),
           ...(progress && typeof progress === 'object'
             ? { activeProgressSession: progress as ProgressLabelInput }
             : {}),

@@ -1,5 +1,6 @@
 import type { FakeRoute } from '../fake-modules.ts';
 import type { KernelRecording } from '../fake.ts';
+import { recordedBookState } from './library-entry-states.ts';
 
 const outcomes: Record<string, string> = {
   'book-one': 'ok',
@@ -21,11 +22,14 @@ function known(subjectId: string): boolean {
 }
 function currentEntry(subjectId: string, recordings: Record<string, KernelRecording>) {
   const entries = ['library-entries', 'library-continue-entries'].flatMap(
-    (name) => (recordings[name]?.libraryEntries as { subjectId: string; subject?: unknown }[] | undefined) ?? [],
+    (name) =>
+      (recordings[name]?.libraryEntries as { subjectId: string; state?: string; subject?: unknown }[] | undefined) ??
+      [],
   );
+  const recorded = entries.find((entry) => entry.subjectId === subjectId);
   return {
     subjectId,
-    state: 'planned',
+    ...(recordedBookState(0) ? { state: recordedBookState(0) } : recorded?.state ? { state: recorded.state } : {}),
     revision: 3,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
@@ -46,7 +50,10 @@ const remove: FakeRoute['story'] = ({ match }) => {
 const read: FakeRoute['story'] = ({ match, recordings }) => {
   const id = decodeURIComponent(match![1]!);
   if (!known(id)) return;
-  return { status: 200, libraryEntry: { ...currentEntry(id, recordings), state: 'completed', revision: 15 } };
+  return {
+    status: 200,
+    libraryEntry: { ...currentEntry(id, recordings), state: recordedBookState(2), revision: 15 },
+  };
 };
 const restore: FakeRoute['story'] = async ({ request, match, recordings }) => {
   const id = decodeURIComponent(match![1]!);

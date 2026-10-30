@@ -4,6 +4,7 @@ import { Exposure, useOperation } from '../kernel/exposure';
 import { undoToast } from '@rezics/ui/undo-toast';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { useQueryClient } from '@tanstack/react-query';
+import { Menu } from '@rezics/ui/menu';
 import {
   Select,
   SelectContent,
@@ -34,8 +35,8 @@ import type {
   SubjectLibraryMutationResponse,
   SubjectLibrarySlotData,
 } from './subject-slot';
-import { subjectSlotStateLabel } from './subject-slot';
-import { normalizeLibraryLabelName, type LibraryLabelSummary, type SubjectLabel } from './subject-labels.ts';
+import { normalizeLibraryLabelName } from './subject-label-name';
+import type { LibraryLabelSummary, SubjectLabel } from './subject-labels.ts';
 
 type SubjectSlotProps = {
   subject: SubjectReference;
@@ -55,6 +56,7 @@ function LibraryStateSelect({
   disabled,
   hasEntry,
   selectedState,
+  selectedStateLabel,
   stateOptions,
   onChoose,
 }: {
@@ -62,14 +64,13 @@ function LibraryStateSelect({
   disabled: boolean;
   hasEntry: boolean;
   selectedState: string;
+  selectedStateLabel: string;
   stateOptions: readonly (readonly [LibraryEntryStateWrite, string])[];
   onChoose: (value: string) => void;
 }) {
   const knownState = stateOptions.some(([value]) => value === selectedState);
   const choices = [
-    ...(hasEntry && selectedState && !knownState
-      ? [{ value: otherStateValue, label: subjectSlotStateLabel(selectedState) }]
-      : []),
+    ...(hasEntry && selectedState && !knownState ? [{ value: otherStateValue, label: selectedStateLabel }] : []),
     ...stateOptions.map(([value, label]) => ({ value, label })),
     ...(hasEntry ? [{ value: removeValue, label: m.library_subject_remove() }] : []),
   ];
@@ -116,9 +117,10 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   const [collections, setCollections] = useState(data.collections);
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
   const [collectionsProblem, setCollectionsProblem] = useState<'closed' | 'unavailable' | null>(null);
-  const [collectionMenuOpen, setCollectionMenuOpen] = useState(data.collectionsLoaded);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const restoreAdmitted = useOperation('library_entry.restore');
+  const entryPutAdmitted = useOperation('library_entry.put');
+  const entryDeleteAdmitted = useOperation('library_entry.delete');
   const [labels, setLabels] = useState(data.labels ?? []);
   const [labelQuery, setLabelQuery] = useState('');
   const [labelChoices, setLabelChoices] = useState<LibraryLabelSummary[]>([]);
@@ -130,13 +132,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   const [labelNotice, setLabelNotice] = useState(data.labelResult);
   const [labelUndo, setLabelUndo] = useState(data.labelUndo);
   const latestLabelQuery = useRef('');
-  const stateOptions = [
-    ['planned', m.library_subject_state_planned()],
-    ['in_progress', m.library_subject_state_in_progress()],
-    ['completed', m.library_subject_state_completed()],
-    ['paused', m.library_subject_state_paused()],
-    ['dropped', m.library_subject_state_dropped()],
-  ] as const;
+  const stateOptions = (data.stateOptions ?? []).map(({ id, label }) => [id, label.text] as const);
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
     const loadedEntry =
@@ -183,11 +179,13 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
             ? m.library_subject_collection_full()
             : result === 'closed'
               ? m.library_subject_closed()
-              : result === 'conflict'
-                ? m.library_conflict()
-                : result === 'unavailable'
-                  ? m.library_subject_unavailable()
-                  : null;
+              : result === 'unsupported_library_profile'
+                ? m.library_entry_profile_unsupported()
+                : result === 'conflict'
+                  ? m.library_conflict()
+                  : result === 'unavailable'
+                    ? m.library_subject_unavailable()
+                    : null;
 
   function applyEntryResult(response: SubjectLibraryMutationResponse, previous: string) {
     if (response.result === 'saved' && response.entry) {
@@ -338,7 +336,6 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
       setCollections(response.collections);
       setCollectionsLoaded(response.state === 'loaded');
       setCollectionsProblem(response.state === 'loaded' ? null : response.state);
-      setCollectionMenuOpen(true);
     } catch {
       setCollectionsProblem('unavailable');
     }
@@ -505,7 +502,7 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
             />
           </noscript>
         ) : null}
-        {data.session === 'signed-in' && data.entryAvailable ? (
+        {data.session === 'signed-in' && data.entryAvailable && stateOptions.length > 0 && entryPutAdmitted ? (
           <Exposure operation="library_entry.put">
             <form
               data-library-entry
@@ -525,62 +522,83 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
                 hasEntry={entry !== null}
                 onChoose={choose}
                 selectedState={selectedState}
+                selectedStateLabel={data.entryStateLabel ?? m.library_other()}
                 stateOptions={stateOptions}
               />
             </form>
           </Exposure>
         ) : null}
 
+        {data.session === 'signed-in' && data.entryAvailable && entry && (!stateOptions.length || !entryPutAdmitted) ? (
+          <div data-library-entry className="flex items-center gap-2">
+            <span data-library-entry-state>{data.entryStateLabel ?? m.library_other()}</span>
+            {entryDeleteAdmitted ? (
+              <Exposure operation="library_entry.delete">
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={!hydrated || pending}
+                  onClick={() => choose('remove')}
+                >
+                  {m.library_subject_remove()}
+                </button>
+              </Exposure>
+            ) : null}
+          </div>
+        ) : null}
+
         {data.session === 'signed-in' ? (
           <Exposure operation="collection_member.create">
-            <details
-              data-add-to-collection
-              open={collectionMenuOpen}
-              onToggle={(event) => setCollectionMenuOpen(event.currentTarget.open)}
-              className="relative"
-            >
-              <summary className={`${buttonClass} cursor-pointer list-none`}>
-                {m.library_subject_add_collection()}
-              </summary>
-              <div className="absolute end-0 z-20 mt-2 w-72 max-w-[90vw] rounded-xl border border-border bg-background p-4 shadow-xl">
-                <p className="mb-3 text-sm text-muted-foreground">
-                  {m.library_subject_add_subject()} <SubjectRef subject={subject} />
-                </p>
-                {collectionsLoaded && collections ? (
-                  collections.length ? (
-                    <ul className="space-y-2">
-                      {collections.map((collection) => (
-                        <li key={collection.id}>
-                          <button
-                            className={`${linkClass} inline-flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-start hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60`}
-                            type="button"
-                            disabled={!hydrated}
-                            onClick={() => void addToCollection(collection.id)}
-                          >
-                            <span className="truncate">{collection.title}</span>
-                            <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{m.library_subject_no_collections()}</p>
-                  )
-                ) : (
-                  <form method="get" action={action} onSubmit={(event) => void loadCollections(event)}>
-                    <input type="hidden" name="slot" value="collections" />
-                    <button className={buttonClass} type="submit">
-                      {m.library_subject_load_collections()}
-                    </button>
-                  </form>
-                )}
-                {collectionsProblem ? (
-                  <p role="alert" className="mt-3 text-sm text-muted-foreground">
-                    {collectionsProblem === 'closed' ? m.library_subject_closed() : m.library_subject_unavailable()}
+            <Menu
+              title={m.library_subject_add_collection()}
+              closeOnNavigation
+              trigger={
+                <button data-add-to-collection type="button" className={buttonClass}>
+                  {m.library_subject_add_collection()}
+                </button>
+              }
+              entries={[]}
+              content={
+                <div className="max-h-[70vh] w-full min-w-0 overflow-y-auto p-4 sm:w-72">
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    {m.library_subject_add_subject()} <SubjectRef subject={subject} />
                   </p>
-                ) : null}
-              </div>
-            </details>
+                  {collectionsLoaded && collections ? (
+                    collections.length ? (
+                      <ul className="space-y-2">
+                        {collections.map((collection) => (
+                          <li key={collection.id}>
+                            <button
+                              className={`${linkClass} inline-flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-start hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60`}
+                              type="button"
+                              disabled={!hydrated}
+                              onClick={() => void addToCollection(collection.id)}
+                            >
+                              <span className="truncate">{collection.title}</span>
+                              <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">{m.library_subject_no_collections()}</p>
+                    )
+                  ) : (
+                    <form method="get" action={action} onSubmit={(event) => void loadCollections(event)}>
+                      <input type="hidden" name="slot" value="collections" />
+                      <button className={buttonClass} type="submit">
+                        {m.library_subject_load_collections()}
+                      </button>
+                    </form>
+                  )}
+                  {collectionsProblem ? (
+                    <p role="alert" className="mt-3 text-sm text-muted-foreground">
+                      {collectionsProblem === 'closed' ? m.library_subject_closed() : m.library_subject_unavailable()}
+                    </p>
+                  ) : null}
+                </div>
+              }
+            />
           </Exposure>
         ) : data.session === 'signed-out' ? (
           <Exposure operation="library_entry.put">

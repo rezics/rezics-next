@@ -12,7 +12,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Menu } from './menu.tsx';
+import { Menu, type MenuEntry } from './menu.tsx';
 import { ReportDialog, type ReportDialogLabels, type ReportSubmission } from './report-dialog.tsx';
 
 export const contentActionsLabels = {
@@ -34,6 +34,7 @@ interface ContentActionsCommonProps {
   onCopyLink: () => void | Promise<void>;
   labels?: Partial<ContentActionsLabels>;
   triggerRef?: Ref<HTMLButtonElement>;
+  extraEntries?: MenuEntry[];
 }
 
 export interface OwnerContentActionsProps extends ContentActionsCommonProps {
@@ -96,6 +97,7 @@ export function ContentActions(props: ContentActionsProps) {
         }
         entries={[
           { type: 'item', label: `${labels.copyLink}`, onSelect: props.onCopyLink },
+          ...(props.extraEntries?.length ? [...props.extraEntries, { type: 'separator' as const }] : []),
           ...(props.ownsContent
             ? [{ type: 'item' as const, label: labels.edit, onSelect: props.onEdit }]
             : [{ type: 'item' as const, label: labels.report, onSelect: () => setReportOpen(true) }]),

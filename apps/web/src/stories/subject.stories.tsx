@@ -8,6 +8,9 @@ import { SubjectPage, type SubjectPageData } from '../features/pages/subject';
 import { RatingsView } from '../features/pages/subject-ratings-view';
 import { subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import subjectPageRecording from '../kernel/recorded/subject-page.json';
+import definitions from '../kernel/recorded/definitions-release.json';
+import { libraryStateOptions } from '../library/profiles';
+import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime';
 import { subjectTabs } from '../features/pages/views';
 import { PageStory, exposureStory, pagePaths, pageReady } from './page';
@@ -56,6 +59,12 @@ function CountUnavailablePageStory() {
 const meta = { title: 'Pages/Subjects/Subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+const recordedRelease = definitions.release as unknown as Release;
+
+function bookStateLabel(index: number): string {
+  return libraryStateOptions(recordedRelease, 'schema:Book', getLocale())[index]?.label.text ?? m.library_other();
+}
 async function subjectReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const canvas = within(context.canvasElement);
@@ -80,6 +89,40 @@ export const SignedOut: Story = {
   name: 'Signed out',
   play: subjectReady,
   render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
+};
+
+export const LibrarySlotMenuPhone: Story = {
+  name: 'Library Collection menu on phone',
+  parameters: { viewport: phone390 },
+  play: async (context) => {
+    await subjectReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_subject_add_collection() }));
+    const sheet = document.querySelector('[data-slot="drawer-content"]');
+    await expect(sheet).toBeVisible();
+    await expect(
+      within(sheet as HTMLElement).getByRole('button', { name: m.library_subject_load_collections() }),
+    ).toBeVisible();
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
+};
+
+export const LibrarySlotMenuDesktop: Story = {
+  name: 'Library Collection menu on desktop',
+  parameters: {
+    viewport: {
+      viewports: { desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } } },
+      defaultViewport: 'desktop1280',
+    },
+  },
+  play: async (context) => {
+    await subjectReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_subject_add_collection() }));
+    const menu = await within(document.body).findByRole('menu');
+    await expect(within(menu).getByRole('button', { name: m.library_subject_load_collections() })).toBeVisible();
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
 
 export const OverviewReactionsEnglishPhone: Story = {
@@ -376,7 +419,7 @@ export const UndoRestored: Story = {
     await waitFor(() =>
       expect(
         within(context.canvasElement).getByRole('combobox', { name: m.library_subject_entry() }),
-      ).toHaveTextContent(m.library_subject_state_planned()),
+      ).toHaveTextContent(bookStateLabel(0)),
     );
   },
   render: () => <SubjectUndoStory />,
@@ -390,9 +433,7 @@ function refusedSubjectRestore(reason: 'occupied' | 'stale' | 'expired') {
     await expect(await view.findByText(m[`library_restore_${reason}`]())).toBeVisible();
     if (reason === 'occupied')
       await waitFor(() =>
-        expect(view.getByRole('combobox', { name: m.library_subject_entry() })).toHaveTextContent(
-          m.library_subject_state_completed(),
-        ),
+        expect(view.getByRole('combobox', { name: m.library_subject_entry() })).toHaveTextContent(bookStateLabel(2)),
       );
   };
 }

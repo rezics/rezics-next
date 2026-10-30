@@ -14,6 +14,7 @@ import { readRelease } from '../subject/definitions';
 import { readCollectionFilterParams } from './collection-filter-params';
 import { facetProperties } from '@rezics/filter';
 import { requestLocale } from '../kernel/client';
+import { m } from '../paraglide/messages.js';
 
 function validatePageInput(input: unknown): {
   id: string;
@@ -38,7 +39,8 @@ function validatePageInput(input: unknown): {
   const search: Record<string, string | string[]> = {};
   if ('search' in input && input.search && typeof input.search === 'object') {
     for (const [key, value] of Object.entries(input.search).slice(0, 16)) {
-      if (
+      if (key === 'type' && typeof value === 'string' && value.length <= 128) search[key] = value;
+      else if (
         /^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key) &&
         (typeof value === 'string' || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
       )
@@ -53,6 +55,13 @@ function validatePageInput(input: unknown): {
   };
 }
 
+function hasActiveFilter(search: Record<string, string | string[]> | undefined): boolean {
+  return Object.entries(search ?? {}).some(([key, value]) => {
+    if (!/^(f|r)\./.test(key)) return false;
+    return Array.isArray(value) ? value.some(Boolean) : Boolean(value);
+  });
+}
+
 export const readCollectionPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
   .handler(async ({ data }): Promise<CollectionPageResult> => {
@@ -63,7 +72,14 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
         ? import.meta.env.DEV
         : configuredFilters === true || configuredFilters === 'true';
     let filter: ReturnType<typeof readCollectionFilterParams> | undefined;
-    let filterProperties: { id: string; label: string; datatype: string; unit?: string }[] = [];
+    let filterStatus: 'failed' | undefined = !filtersOn && hasActiveFilter(data.search) ? 'failed' : undefined;
+    let filterProperties: {
+      id: string;
+      label: string;
+      datatype: string;
+      unit?: string;
+      targets?: readonly string[];
+    }[] = [];
     const requested = data.search ?? {};
     const type = typeof requested.type === 'string' ? requested.type : 'schema:Book';
     if (filtersOn) {
@@ -80,8 +96,9 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
               {
                 id,
                 datatype: definition.datatype,
-                label: labels[locale] ?? labels[locale.split('-')[0]!] ?? labels.en ?? id,
+                label: labels[locale] ?? labels[locale.split('-')[0]!] ?? labels.en ?? m.collection_filters(),
                 ...(definition.units?.[0] ? { unit: definition.units[0] } : {}),
+                ...(definition.targets ? { targets: definition.targets } : {}),
               },
             ];
           });
@@ -95,7 +112,7 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
           type,
         );
       } catch {
-        /* Missing definitions leave the collection readable without an unadmitted filter. */
+        if (hasActiveFilter(requested)) filterStatus = 'failed';
       }
     }
     const page = await loadEditableCollectionPage(
@@ -105,6 +122,7 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
       {
         ...data,
         ...(filter?.document ? { filter: filter.document } : {}),
+        ...(filterStatus ? { filterStatus } : {}),
         ...(filter ? { filterIgnored: filter.ignored, filterType: type, filterProperties, filterParams: filter } : {}),
       },
       data.credentialMode,
@@ -132,7 +150,8 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
     const search: Record<string, string | string[]> = {};
     if ('search' in input && input.search && typeof input.search === 'object') {
       for (const [key, value] of Object.entries(input.search).slice(0, 16))
-        if (
+        if (key === 'type' && typeof value === 'string' && value.length <= 128) search[key] = value;
+        else if (
           /^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key) &&
           (typeof value === 'string' || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
         )
@@ -158,8 +177,18 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
       configuredFilters === undefined
         ? import.meta.env.DEV
         : configuredFilters === true || configuredFilters === 'true';
+    if (!filtersOn && hasActiveFilter(data.search))
+      return {
+        members: [],
+        next: null,
+        preparing: false,
+        retryAfterMs: 1000,
+        unavailable: false,
+        filterStatus: 'failed',
+      };
     if (filtersOn && data.search) {
       try {
+        const type = typeof data.search.type === 'string' ? data.search.type : 'schema:Book';
         filter = readCollectionFilterParams(
           new URLSearchParams(
             Object.entries(data.search).flatMap(([key, value]) =>
@@ -167,10 +196,18 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
             ),
           ),
           await readRelease(),
-          'schema:Book',
+          type,
         ).document;
       } catch {
-        /* An unavailable definitions release keeps the member read unfiltered. */
+        if (hasActiveFilter(data.search))
+          return {
+            members: [],
+            next: null,
+            preparing: false,
+            retryAfterMs: 1000,
+            unavailable: false,
+            filterStatus: 'failed',
+          };
       }
     }
     return loadDynamicMembers(

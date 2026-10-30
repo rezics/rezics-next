@@ -1,13 +1,16 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
-import { nameSubjectTypes } from '../subject/definitions';
+import type { Locale } from '../paraglide/runtime.js';
+import { kernelClient, requestLocale } from '../kernel/client';
+import { nameSubjectTypes, readRelease } from '../subject/definitions';
+import { m } from '../paraglide/messages.js';
 import type { SessionEnv } from '../session/client';
 import {
   changePersonalLibraryEntry,
   libraryEntryStateWrite,
   loadPersonalLibrary,
+  presentLibraryStateLabels,
   removePersonalLibraryEntry,
   restorePersonalLibraryEntry,
   type LibraryChangeInput,
@@ -16,10 +19,53 @@ import {
   type LibraryRestoreInput,
   type LibraryRestoreResult,
   type PersonalLibraryView,
+  type ReloadedLibraryEntry,
 } from './entries-read';
+import { libraryStateLabel, libraryStateOptions } from './profiles';
 
 async function nameConflict(result: LibraryMutationResult): Promise<LibraryMutationResult> {
-  if (!result.ok && result.reason === 'conflict') await nameSubjectTypes([result.entry.subject]);
+  if (!result.ok && result.reason === 'conflict') {
+    await nameSubjectTypes([result.entry.subject]);
+    const type = result.entry.subject?.type;
+    const locale = requestLocale() ?? 'en';
+    const release = await readRelease().catch(() => undefined);
+    if (!release || !type)
+      return {
+        ...result,
+        entry: { ...result.entry, stateLabel: m.library_other({}, { locale: locale as Locale }), stateOptions: [] },
+      };
+    return {
+      ...result,
+      entry: {
+        ...result.entry,
+        stateLabel:
+          libraryStateLabel(release, type, result.entry.state, locale)?.text ??
+          m.library_other({}, { locale: locale as Locale }),
+        stateOptions: libraryStateOptions(release, type, locale),
+      },
+    };
+  }
+  return result;
+}
+
+async function nameRestoredEntry(entry: ReloadedLibraryEntry): Promise<ReloadedLibraryEntry> {
+  const locale = requestLocale() ?? 'en';
+  await nameSubjectTypes([entry.subject]);
+  const release = await readRelease().catch(() => undefined);
+  const type = entry.subject?.type;
+  return {
+    ...entry,
+    stateLabel:
+      release && type
+        ? (libraryStateLabel(release, type, entry.state, locale)?.text ??
+          m.library_other({}, { locale: locale as Locale }))
+        : m.library_other({}, { locale: locale as Locale }),
+  };
+}
+
+async function nameRestoreResult(result: LibraryRestoreResult): Promise<LibraryRestoreResult> {
+  if (result.ok) return { ...result, entry: await nameRestoredEntry(result.entry) };
+  if (result.reason === 'occupied' && result.entry) return { ...result, entry: await nameRestoredEntry(result.entry) };
   return result;
 }
 
@@ -80,10 +126,10 @@ export const readPersonalLibrary = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<PersonalLibraryView> => {
     setResponseHeader('cache-control', 'private, no-store');
     const view = await loadPersonalLibrary(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
-    if (view.signedIn) {
-      await nameSubjectTypes(view.entries.map((entry) => entry.subject));
-    }
-    return view;
+    if (!view.signedIn) return view;
+    await nameSubjectTypes(view.entries.map((entry) => entry.subject));
+    const release = await readRelease().catch(() => undefined);
+    return presentLibraryStateLabels(view, release, requestLocale() ?? 'en');
   });
 
 export const savePersonalLibraryEntry = createServerFn({ method: 'POST' })
@@ -125,5 +171,7 @@ export const restorePersonalLibraryEntryAction = createServerFn({ method: 'POST'
   .validator(validateRestore)
   .handler(async ({ data }): Promise<LibraryRestoreResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return restorePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return nameRestoreResult(
+      await restorePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data),
+    );
   });

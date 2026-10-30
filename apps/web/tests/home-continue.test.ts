@@ -531,9 +531,6 @@ function continueReads() {
   return calls.filter((call) => call.method === 'GET' && call.path === '/v1/libraryContinue');
 }
 
-function legacyLibraryReads() {
-  return calls.filter((call) => call.method === 'GET' && call.path === '/v1/libraryEntries');
-}
 function readsTo(path: string) {
   return browserReads.filter((call) => call.path === path);
 }
@@ -678,18 +675,18 @@ test(
 );
 
 test(
-  'when exposure does not list library_continue.list, home keeps the legacy Continue reads',
+  'when exposure does not list library_continue.list, home shows no Continue row and makes no library reads',
   async () => {
     const cookie = await alice();
     reset();
     continueOperationExposed = false;
     const page = await readPage('/en', cookie);
     expect(page.status).toBe(200);
-    expect(personal(page.html)).toContain('Newest read');
+    expect(personal(page.html)).toBeUndefined();
+    expect(page.html).toContain('name="q"');
     expect(continueReads()).toHaveLength(0);
-    expect(legacyLibraryReads()).toHaveLength(1);
-    expect(legacyLibraryReads()[0]).toMatchObject({ view: 'FULL', state: 'in_progress', limit: '6' });
-    expect(readsTo('/v1/progressSessions')).toHaveLength(3);
+    expect(readsTo('/v1/libraryEntries')).toHaveLength(0);
+    expect(readsTo('/v1/progressSessions')).toHaveLength(0);
   },
   timeout,
 );

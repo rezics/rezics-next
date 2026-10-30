@@ -14,6 +14,7 @@ import { demoAgentAccounts, demoAgentSubjects } from './agent-fixtures';
 import { answerFakeRoute, discoveredRecordings, mergeFakeFixtures } from './fake-modules.ts';
 import defaultFixtures from './fixtures.json' with { type: 'json' };
 import { languageList, localizeRecording } from './fake/languages.ts';
+import { recordedBookState } from './fake/library-entry-states.ts';
 import homePageRecording from './recorded/home-page.json';
 import missingSubjectPageRecording from './recorded/missing-subject-page.json';
 import missingSubjectRecording from './recorded/missing-subject.json';
@@ -422,7 +423,8 @@ async function selectRecording(
   if (request.method === 'GET' && pathname === '/v1/libraryEntries') {
     const url = new URL(request.url);
     const continueEntries = recordings['library-continue-entries'];
-    if (url.searchParams.get('state') === 'in_progress' && continueEntries)
+    const activeState = recordedBookState(1);
+    if (activeState && url.searchParams.get('state') === activeState && continueEntries)
       return requestedRecording('library-continue-entries', request, recordings) ?? continueEntries;
   }
   if (request.method === 'GET' && pathname === '/v1/progressSessions') {

@@ -5,7 +5,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import type { ZonePublic } from '../../../../services/kernel/src/zones/contract.ts';
 import { SubjectFrame, subjectFrame, SubjectViewPage } from '../features/pages/subject-frame';
-import { SubjectPage, subjectPageTitle, type SubjectPageData } from '../features/pages/subject';
+import { SubjectPage, subjectPageTitle, subjectPageType, type SubjectPageData } from '../features/pages/subject';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { SubjectHeaderActions } from '../features/pages/subject-reactions-view';
 import { loadSubjectReactions } from '../features/pages/subject-reactions';
@@ -161,19 +161,27 @@ export function ZonePageSurface({
 
 const subjectInputId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const personalInput = (input: unknown) => {
+  const subjectType =
+    typeof input === 'object' && input !== null && 'subjectType' in input ? input.subjectType : undefined;
   if (
     typeof input !== 'object' ||
     input === null ||
     !('id' in input) ||
     typeof input.id !== 'string' ||
     !subjectInputId.test(input.id) ||
+    (subjectType !== undefined && (typeof subjectType !== 'string' || subjectType.length > 128)) ||
     !('locale' in input) ||
     typeof input.locale !== 'string' ||
     !('overview' in input) ||
     typeof input.overview !== 'boolean'
   )
     throw notFound();
-  return { id: input.id, locale: input.locale, overview: input.overview };
+  return {
+    id: input.id,
+    locale: input.locale,
+    overview: input.overview,
+    ...(typeof subjectType === 'string' ? { subjectType } : {}),
+  };
 };
 
 const loadZoneSubjectPersonal = createServerFn({ method: 'GET', strict: false })
@@ -186,7 +194,17 @@ const loadZoneSubjectPersonal = createServerFn({ method: 'GET', strict: false })
     const [reader, library, reactions] = await Promise.all([
       loadReader(client, request, sessionEnv),
       data.overview
-        ? loadSubjectLibrarySlot(client, request, sessionEnv, data.id)
+        ? loadSubjectLibrarySlot(
+            client,
+            request,
+            sessionEnv,
+            data.id,
+            false,
+            undefined,
+            undefined,
+            undefined,
+            data.subjectType,
+          )
         : Promise.resolve<SubjectLibrarySlotData | undefined>(undefined),
       data.overview
         ? loadSubjectReactions(client, request, sessionEnv, data.id)
@@ -228,7 +246,10 @@ function ZoneSubjectPage({
   useEffect(() => {
     if (!subjectId) return;
     let active = true;
-    void loadZoneSubjectPersonal({ data: { id: subjectId, locale, overview: view === 'overview' } })
+    const subjectType = common?.overview ? subjectPageType(common.overview) : undefined;
+    void loadZoneSubjectPersonal({
+      data: { id: subjectId, locale, overview: view === 'overview', ...(subjectType ? { subjectType } : {}) },
+    })
       .then((data) => {
         if (active) setPersonal(data);
       })

@@ -5,19 +5,16 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
   loadSubjectLibraryCollections,
-  libraryEntryStatesWrite,
-  type LibraryEntryStateWrite,
   type SubjectLibraryMutation,
   type SubjectLibraryMutationResponse,
 } from './subject-slot';
+import { libraryEntryStateWrite } from './entries-read';
 import { applySubjectLibraryMutation } from './subject-slot-mutation';
 import { restorePersonalLibraryEntry, type LibraryRestoreInput } from './entries-read';
 import { applySubjectLabelMutation, searchSubjectLabels, type SubjectLabelMutationInput } from './subject-labels.ts';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const incarnationIdPattern = idempotencyKeyPattern;
-const writableEntryStates = new Set<LibraryEntryStateWrite>(libraryEntryStatesWrite);
-
 function validateMutation(input: unknown): SubjectLibraryMutation {
   if (
     !input ||
@@ -39,7 +36,7 @@ function validateMutation(input: unknown): SubjectLibraryMutation {
   if (
     'state' in input &&
     input.state !== undefined &&
-    (typeof input.state !== 'string' || !writableEntryStates.has(input.state as LibraryEntryStateWrite))
+    (typeof input.state !== 'string' || libraryEntryStateWrite(input.state) === undefined)
   )
     throw new Error('Invalid subject library action');
   if (

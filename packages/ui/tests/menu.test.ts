@@ -20,6 +20,7 @@ test('package menus share the responsive menu implementation', () => {
   expect(menu).toContain('onClickCapture={closeAfterNavigation}');
   expect(menu).toContain('focus');
   expect(menu).toMatch(/type: 'link'/);
+  expect(menu).toContain("aria-current={entry.current ? 'page' : undefined}");
   expect(menu).toContain("'destructive'");
 
   for (const component of [

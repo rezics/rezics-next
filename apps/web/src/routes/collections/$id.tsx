@@ -28,7 +28,8 @@ export const Route = createFileRoute('/collections/$id')({
     );
     const filters: Record<string, string | string[]> = {};
     for (const [key, value] of Object.entries(search))
-      if (
+      if (key === 'type' && typeof value === 'string' && value.length <= 128) filters[key] = value;
+      else if (
         /^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key) &&
         (typeof value === 'string' || (Array.isArray(value) && value.every((entry) => typeof entry === 'string')))
       )

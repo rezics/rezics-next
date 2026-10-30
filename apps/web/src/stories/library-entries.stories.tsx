@@ -10,6 +10,14 @@ import entries from '../kernel/recorded/library-entries.json';
 const meta = { title: 'Pages/Library/Entries', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+function filteredEntriesPath(title: string): string {
+  const row = entries.libraryEntries.find(
+    (entry) => displayLibraryTitle(entry.subject.label, getLocale()).text === title,
+  );
+  if (!row) throw new Error(`No recorded entry exists for ${title}.`);
+  return `${pagePaths['library-entries']}?state=${encodeURIComponent(row.state)}&layout=list`;
+}
 export const SignedIn: Story = {
   name: 'Owner',
   play: libraryEntriesReady,
@@ -61,21 +69,21 @@ export const RestoreOccupied: Story = {
   tags: ['!dev'],
   name: 'Restore blocked by existing entry',
   play: removalStory('I Am a Cat', 'occupied'),
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?state=dropped&layout=list`} />,
+  render: () => <PageStory visitor="Signed In" path={filteredEntriesPath('I Am a Cat')} />,
 };
 
 export const RestoreStale: Story = {
   tags: ['!dev'],
   name: 'Restore blocked by changed entry',
   play: removalStory('The Tale of Genji', 'stale'),
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?state=paused&layout=list`} />,
+  render: () => <PageStory visitor="Signed In" path={filteredEntriesPath('The Tale of Genji')} />,
 };
 
 export const RestoreExpired: Story = {
   tags: ['!dev'],
   name: 'Restore window expired',
   play: removalStory('Norwegian Wood', 'expired'),
-  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?state=planned&layout=list`} />,
+  render: () => <PageStory visitor="Signed In" path={filteredEntriesPath('Norwegian Wood')} />,
 };
 
 export const UndoRestored: Story = {

@@ -589,17 +589,17 @@ test(
     reset();
     const { page } = await open(`/en/subjects/${subjectId}`);
     try {
-      const popover = page.locator('details[data-add-to-collection]');
-      await popover.locator('summary').click();
-      await popover.getByRole('button', { name: /load collections/i }).click();
-      await popover.getByRole('button', { name: /my shelf/i }).click();
+      await page.getByRole('button', { name: /add to collection/i }).click();
+      const menu = page.getByRole('menu');
+      await menu.getByRole('button', { name: /load collections/i }).click();
+      await menu.getByRole('button', { name: /my shelf/i }).click();
       await eventually(() => members.has(shelfId));
       const write = calls.find(
         (call) => call.method === 'POST' && call.path.endsWith(`/collections/${shelfId}/members`),
       )!;
       expect(write.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(write.body).toEqual({ subjectId });
-      await popover.getByRole('button', { name: /full shelf/i }).click();
+      await menu.getByRole('button', { name: /full shelf/i }).click();
       await eventually(async () => /5,?000/.test(await page.getByRole('alert').innerText()));
     } finally {
       await page.context().close();
@@ -638,7 +638,7 @@ test(
     reset();
     const { page, origin } = await open(`/en/subjects/${subjectId}`);
     try {
-      await page.locator('details[data-add-to-collection] summary').click();
+      await page.getByRole('button', { name: /add to collection/i }).click();
       const links = page.locator('[data-library-subject-links]');
       expect(await links.getByRole('link', { name: /start progress/i }).getAttribute('href')).toBe(
         `/library/progress?subjectId=${subjectId}`,

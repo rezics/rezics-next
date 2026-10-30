@@ -24,9 +24,10 @@ export type MenuEntry =
       label: string;
       onSelect: () => void;
       disabled?: boolean;
+      current?: boolean;
       keepOpen?: boolean;
     }
-  | { type: 'link'; label: string; href: string; disabled?: boolean }
+  | { type: 'link'; label: string; href: string; disabled?: boolean; current?: boolean }
   | { type: 'separator' }
   | { type: 'submenu'; label: string; entries: MenuEntry[] }
   | {
@@ -134,7 +135,11 @@ function DropdownEntries({
       );
     if (entry.type === 'link')
       return (
-        <D.DropdownMenuItem key={index} disabled={entry.disabled} render={<a href={entry.href} />}>
+        <D.DropdownMenuItem
+          key={index}
+          disabled={entry.disabled}
+          render={<a href={entry.href} aria-current={entry.current ? 'page' : undefined} />}
+        >
           {entry.label}
         </D.DropdownMenuItem>
       );
@@ -142,6 +147,7 @@ function DropdownEntries({
       <D.DropdownMenuItem
         key={index}
         disabled={entry.disabled}
+        aria-current={entry.current ? 'page' : undefined}
         variant={entry.type === 'destructive' ? 'destructive' : 'default'}
         onClick={() => select(entry)}
       >
@@ -428,6 +434,7 @@ export function Menu({
                       <a
                         key={index}
                         href={entry.href}
+                      aria-current={entry.current ? 'page' : undefined}
                         className="flex min-h-11 items-center rounded-xl px-3 text-sm hover:bg-accent"
                         onClick={() => close()}
                       >
@@ -440,6 +447,7 @@ export function Menu({
                       variant="ghost"
                       className={`min-h-11 justify-start ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
                       disabled={entry.disabled}
+                      aria-current={entry.current ? 'page' : undefined}
                       onClick={() => select(entry)}
                     >
                       {entry.label}

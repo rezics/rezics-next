@@ -494,6 +494,7 @@ Each server render and browser session has its own query cache. Public reads sta
   reading cookies. Credential reads use the account resolved by their existing session read; server functions and
   suggestions read session identity before admission so signed-in sessions share an account key. Other reads use a
   valid session or login cookie, then the client IP.
+- **Keys:** public page documents are keyed by client IP alone, since they never read the session; signed-in pages, server functions and suggestions by active account, then session, then login cookie, then IP.
 - **Bound:** 2 `limit()` calls; at most one `SESSIONS.signedIn()` read for a server function or suggestion with a
   session cookie, reused by its session query; 0 K/R/A; refusals stop before K
 - **Growth check:** `tests/checkout-cost.test.ts`: `read rate limits stay within their bound as s grows`
@@ -844,13 +845,25 @@ Space response at 390 and 1280 pixels.
   at most 100 entries. No per-entry reads.
 - **Growth check:** `tests/library-entries-cost.test.ts`: `personal library view and state change stay within their bounds as entries grow`
 
-### Shelf page
+### Library navigation
 
-- **Touches:** All: five `GET /v1/libraryEntries` reads, one per status, 12 entries each. A status tab: one read of 48
-  entries. A status change or removal: one write and, on conflict, one entry read.
-- **Bound:** Constant reads per page view, independent of the library's size; entries rendered at most 60 for All and
-  48 for a tab.
-- **Growth check:** `tests/shelf-page.test.ts`: `the page renders without JavaScript and makes five entry reads for All and one for a status tab, with libraries of 10, 1,000 and 10,000 entries`
+- **Touches:** One `GET /v1/libraryPins?limit=8` and one owner Collections first-page read per signed-in Library document, after hydration; each pin target comes in the pins response.
+- **Bound:** One pins request and one Collections request, with at most 8 pins rendered and no per-Collection reads.
+- **Growth check:** `tests/library-pins.test.ts` counts the pins and owner Collections reads with 0, 8 and 100 pins and no per-Collection read.
+
+### Library pins
+
+- **Touches:** One `GET /v1/libraryPins?limit=100` on All Collections or a Collection page.
+- **Bound:** One request; at most 100 pins, the list's maximum.
+- **Growth check:** `tests/library-pins.test.ts` counts one pins read on All Collections with 0, 8 and 100 pins.
+
+### Tracked entries
+
+- **Touches:** One `GET /v1/libraryEntries?view=FULL` page, optionally filtered by an exact profile state ID and cursor.
+  A state change or removal sends one write with the current revision and, when present, entry incarnation.
+- **Bound:** One request and at most 100 entries per page; no per-entry reads. A mutation is one write, with a bounded
+  current-entry read only when resolving a conflict or stale incarnation.
+- **Growth check:** `tests/library-entries-cost.test.ts`: `personal library view and state change stay within their bounds as entries grow`
 
 ### Copies
 

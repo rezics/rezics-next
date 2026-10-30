@@ -39,6 +39,7 @@ const ownerActions = {
   copy: fn(),
   edit: fn(),
   delete: fn(async () => undefined),
+  pin: fn(),
 };
 
 const OwnerActionsDemo = () => (
@@ -46,6 +47,7 @@ const OwnerActionsDemo = () => (
     onCopyLink={ownerActions.copy}
     onDelete={ownerActions.delete}
     onEdit={ownerActions.edit}
+    extraEntries={[{ type: 'item', label: 'Pin Collection', onSelect: ownerActions.pin }]}
     ownsContent
   />
 );
@@ -108,9 +110,16 @@ export const OwnerActions: Story = {
     const menu = await settled(await screen.findByRole('menu'));
     await expect(within(menu).getByRole('menuitem', { name: 'Copy link' })).toBeVisible();
     await expect(within(menu).getByRole('menuitem', { name: 'Edit' })).toBeVisible();
+    await expect(within(menu).getByRole('menuitem', { name: 'Pin Collection' })).toBeVisible();
     await expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toBeVisible();
     await expect(within(menu).queryByRole('menuitem', { name: 'Report' })).not.toBeInTheDocument();
-    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Copy link' }));
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Pin Collection' }));
+    await expect(ownerActions.pin).toHaveBeenCalledTimes(1);
+    await dismissed('menu');
+
+    await userEvent.click(canvas.getByRole('button', { name: 'More actions' }));
+    const copyMenu = await settled(await screen.findByRole('menu'));
+    await userEvent.click(within(copyMenu).getByRole('menuitem', { name: 'Copy link' }));
     await expect(ownerActions.copy).toHaveBeenCalledTimes(1);
     await dismissed('menu');
 

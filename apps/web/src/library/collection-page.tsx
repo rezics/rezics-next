@@ -11,7 +11,7 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { useRouter } from '@tanstack/react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EllipsisIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react';
 import type { ShelfLayout } from './shelf-params';
@@ -35,6 +35,9 @@ import {
 } from './collection-edit';
 import type { EditableCollectionPage } from './collection-load';
 import { pageHead, type HeadContext } from '../shell/head';
+import { LibraryNavigation } from './library-nav';
+import { libraryNavigationQuery } from './pins-read';
+import { PinControl, PinControlNotice, usePinControlActions } from './pin-control';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
@@ -308,6 +311,10 @@ export function CollectionPage({
   const queryClient = useQueryClient();
   const admitted = useOperation('collection.update');
   const owner = page.visibility !== null && admitted;
+  const navigation = useQuery(libraryNavigationQuery(getLocale(), 100));
+  const pins = navigation.data?.pins ?? { state: 'closed' as const };
+  const navigationCollections = navigation.data?.collections ?? [];
+  const pinActions = usePinControlActions({ collectionId: page.id, pins, mode: 'collection' });
   const [hydrated, setHydrated] = useState(false);
   const [members, setMembers] = useState(page.members);
   const [editing, setEditing] = useState(false);
@@ -513,336 +520,358 @@ export function CollectionPage({
   const canEditMembers = owner && editing;
   const ratio = rowRatio(members.map((member) => member.subject));
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-3">
-        <div className="flex items-start justify-between gap-4">
-          <PageHeading>{page.title}</PageHeading>
-          {owner ? (
-            hydrated ? (
-              <ContentActions
-                ownsContent
-                labels={{
-                  moreActions: m.library_collection_actions(),
-                  copyLink: m.library_collection_copy(),
-                  edit: m.library_collection_edit(),
-                  delete: m.library_collection_delete(),
-                  confirmDelete: m.library_collection_delete_confirm(),
-                  deleteTitle: m.library_collection_delete_title(),
-                  deleteDescription: m.library_collection_delete_description(),
-                  cancel: m.library_collection_cancel(),
-                }}
-                onCopyLink={() => {
-                  void navigator.clipboard.writeText(`${location.origin}${collectionHref(page.id)}`).catch(() => {});
-                }}
-                onEdit={() => {
-                  setFailure('');
-                  setEditing(true);
-                }}
-                onDelete={removeCollection}
-              />
-            ) : (
-              <button
-                aria-label={m.library_collection_actions()}
-                className="inline-flex size-8 items-center justify-center rounded-lg hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                disabled
-                type="button"
-              >
-                <EllipsisIcon aria-hidden="true" className="size-4" />
-              </button>
-            )
-          ) : null}
-        </div>
-        {page.description !== null ? <p className="whitespace-pre-wrap">{page.description}</p> : null}
-        <p data-slot="collection-metadata" className="text-sm text-muted-foreground">
-          <MetaLine
-            items={[
-              <span>
-                <span>{m.library_curator()}</span>{' '}
-                {page.curator ? (
-                  <>
-                    <a
-                      href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle ?? '')}`}
-                      className="text-primary underline-offset-4 hover:underline"
-                    >
-                      {page.curator.displayName ?? page.curator.handle}
-                    </a>
-                    {page.curator.handle ? <span> @{page.curator.handle}</span> : null}
-                  </>
-                ) : (
-                  <AccountRef account={null} />
-                )}
-              </span>,
-              !page.filter && page.memberCount !== null ? m.library_member_count({ count: page.memberCount }) : null,
-              <span>
-                {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
-              </span>,
-            ]}
-          />
-        </p>
-        {atLimit ? <p>{m.library_collection_full()}</p> : null}
-        {page.visibility ? <p data-visibility={page.visibility}>{visibilityLabel(page.visibility)}</p> : null}
-        {following !== null ? (
-          <Exposure operation="follow.put">
-            <div className="flex flex-wrap items-center gap-3">
-              {following ? <p>{m.library_following()}</p> : null}
-              <button
-                className={buttonClass}
-                disabled={!hydrated || pending}
-                onClick={() => void toggleFollow()}
-                type="button"
-              >
-                {following ? m.library_follow_unfollow() : m.library_follow()}
-              </button>
-            </div>
-          </Exposure>
-        ) : null}
-        {owner && editing ? (
-          <form className="space-y-4" onSubmit={(event) => void save(event)}>
-            <label className="block">
-              {m.library_collection_title()}
-              <input className={fieldClass} onChange={(event) => setTitle(event.target.value)} required value={title} />
-            </label>
-            <label className="block">
-              {m.library_collection_description()}
-              <textarea
-                className={fieldClass}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={4}
-                value={description}
-              />
-            </label>
-            <VisibilityField onChange={setVisibility} value={visibility} />
-            {conflict ? (
-              <p role="alert">
-                {m.library_collection_conflict()}{' '}
-                <a
-                  className="text-primary underline-offset-4 hover:underline"
-                  href={collectionHref(page.id)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    void reloadCollection();
+    <div className="min-w-0 max-w-7xl space-y-6 text-foreground">
+      <LibraryNavigation
+        current={{ collectionId: page.id }}
+        pins={pins}
+        collections={navigationCollections}
+        activeCollection={{ id: page.id, title: page.title }}
+      />
+      <article className="min-w-0 max-w-4xl space-y-8 text-foreground">
+        <header className="space-y-3">
+          <div className="flex items-start justify-between gap-4">
+            <PageHeading>{page.title}</PageHeading>
+            {owner ? (
+              hydrated ? (
+                <ContentActions
+                  ownsContent
+                  labels={{
+                    moreActions: m.library_collection_actions(),
+                    copyLink: m.library_collection_copy(),
+                    edit: m.library_collection_edit(),
+                    delete: m.library_collection_delete(),
+                    confirmDelete: m.library_collection_delete_confirm(),
+                    deleteTitle: m.library_collection_delete_title(),
+                    deleteDescription: m.library_collection_delete_description(),
+                    cancel: m.library_collection_cancel(),
                   }}
+                  extraEntries={pinActions.entries}
+                  onCopyLink={() => {
+                    void navigator.clipboard.writeText(`${location.origin}${collectionHref(page.id)}`).catch(() => {});
+                  }}
+                  onEdit={() => {
+                    setFailure('');
+                    setEditing(true);
+                  }}
+                  onDelete={removeCollection}
+                />
+              ) : (
+                <button
+                  aria-label={m.library_collection_actions()}
+                  className="inline-flex size-8 items-center justify-center rounded-lg hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled
+                  type="button"
                 >
-                  {m.library_collection_reload()}
-                </a>
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              <button className={buttonClass} disabled={!hydrated || pending} type="submit">
-                {m.library_collection_save()}
-              </button>
-              <button className={buttonClass} onClick={() => setEditing(false)} type="button">
-                {m.library_collection_cancel()}
-              </button>
-            </div>
-          </form>
-        ) : null}
-        {failure ? <p role="alert">{failure}</p> : null}
-      </header>
-      <section className="space-y-4" aria-labelledby="collection-members-heading">
-        {page.filterProperties && page.filterParams ? (
-          <CollectionFilters
-            id={page.id}
-            type={page.filterType ?? 'schema:Book'}
-            properties={page.filterProperties}
-            params={page.filterParams}
-          />
-        ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="collection-members-heading" className="text-xl font-semibold">
-            {m.library_collection_members()}
-          </h2>
-          <CollectionLayoutLinks
-            id={page.id}
-            layout={layout}
-            search={{
-              ...(cursor ? { cursor } : {}),
-              ...(search ? { filters: search } : {}),
-            }}
-          />
-        </div>
-        <CollectionFilterFeedback
-          id={page.id}
-          {...(page.filter === undefined ? {} : { filter: page.filter })}
-          {...(page.filterIgnored === undefined ? {} : { ignored: page.filterIgnored })}
-          {...(page.filterStatus === undefined ? {} : { status: page.filterStatus })}
-          empty={members.length === 0}
-          emptyLabel={m.library_collection_empty()}
-          buttonClass={buttonClass}
-        />
-        {members.length && layout === 'grid' ? (
-          <div className="[&_[data-slot=cover-grid]]:grid-cols-1 md:[&_[data-slot=cover-grid]]:grid-cols-2 xl:[&_[data-slot=cover-grid]]:grid-cols-3">
-            <CoverGrid ratio={ratio}>
-              {members.map((member, index) => {
-                const subject = member.subject;
-                const locale = getLocale();
-                const localizedTitle = subject ? pageText(libraryTitleValue(subject.label), locale) : null;
-                const title = localizedTitle?.text ?? m.library_subject_unavailable();
-                const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
-                return (
-                  <div
-                    key={member.id}
-                    data-member={member.id}
-                    data-slot="collection-member-card"
-                    className="min-w-0 self-start space-y-2"
-                    onPointerDown={
-                      canEditMembers && hydrated && !pending
-                        ? (event) => {
-                            const target = event.target;
-                            if (!(target instanceof Element) || !target.closest('[data-drag-handle]')) return;
-                            event.currentTarget.setPointerCapture(event.pointerId);
-                            draggedMember.current = {
-                              id: member.id,
-                              dropped: false,
-                            };
-                            event.currentTarget.dataset.dragging = member.id;
-                          }
-                        : undefined
-                    }
-                    onPointerUp={
-                      canEditMembers
-                        ? (event) => {
-                            if (event.currentTarget.dataset.dragging !== member.id) return;
-                            delete event.currentTarget.dataset.dragging;
-                            const drag = draggedMember.current;
-                            if (drag?.id === member.id && drag.dropped) return;
-                            if (drag?.id === member.id) drag.dropped = true;
-                            dropMember(member.id, event);
-                          }
-                        : undefined
-                    }
-                    onDragOver={canEditMembers && hydrated && !pending ? (event) => event.preventDefault() : undefined}
-                    onDrop={
-                      canEditMembers && hydrated && !pending
-                        ? (event) => {
-                            event.preventDefault();
-                            const memberId =
-                              draggedMember.current?.id ||
-                              event.dataTransfer.getData('application/x-rezics-collection-member') ||
-                              document.querySelector<HTMLElement>('[data-member][data-dragging]')?.dataset.dragging ||
-                              '';
-                            if (memberId) {
-                              draggedMember.current = {
-                                id: memberId,
-                                dropped: true,
-                              };
-                              placeMember(memberId, member.id);
-                            }
-                          }
-                        : undefined
-                    }
-                  >
-                    {canEditMembers ? (
-                      <ListRowControl className="flex justify-end">
-                        <span
-                          aria-hidden="true"
-                          className="inline-block h-10 w-6 cursor-grab touch-none select-none rounded-sm border border-border/70"
-                          data-drag-handle=""
-                          draggable={hydrated && !pending}
-                          onDragStart={(event) => {
-                            draggedMember.current = {
-                              id: member.id,
-                              dropped: false,
-                            };
-                            event.currentTarget
-                              .closest<HTMLElement>('[data-member]')
-                              ?.setAttribute('data-dragging', member.id);
-                            event.dataTransfer.setData(collectionMemberDragType, member.id);
-                            event.dataTransfer.effectAllowed = 'move';
-                          }}
-                          onDragEnd={(event) => {
-                            const drag = draggedMember.current;
-                            if (drag?.id === member.id && !drag.dropped) {
-                              drag.dropped = true;
-                              dropMemberAt(member.id, event.clientX, event.clientY);
-                            }
-                            event.currentTarget.closest<HTMLElement>('[data-member]')?.removeAttribute('data-dragging');
-                            if (drag?.id === member.id) draggedMember.current = null;
-                          }}
-                        />
-                      </ListRowControl>
-                    ) : null}
-                    <CoverCard
-                      {...(href ? { href } : {})}
-                      title={title}
-                      {...(localizedTitle?.lang ? { titleLang: localizedTitle?.lang } : {})}
-                      cover={{
-                        subject: subject
-                          ? { id: subject.id, title, types: subject.types }
-                          : { id: 'unavailable', title, types: [] },
-                        cover: subject?.cover ?? null,
-                        src: coverSrc,
-                        labels: {
-                          withheld: m.thread_cover_withheld(),
-                          reveal: m.thread_cover_reveal(),
-                          credit: m.thread_cover_credit(),
-                          via: m.thread_cover_via(),
-                        },
-                      }}
-                      secondary={subject?.typeLabel}
-                      linkLabel={title}
-                    />
-                    {member.note ? <MemberNote note={member.note} layout="grid" /> : null}
-                    {canEditMembers ? (
-                      <ListRowControl className="space-y-2">
-                        <MemberRowControls
-                          member={member}
-                          index={index}
-                          members={members}
-                          firstPage={page.firstPage}
-                          busy={!hydrated || pending}
-                          moveMember={moveMember}
-                          saveNote={saveNote}
-                          removeMember={removeMember}
-                        />
-                      </ListRowControl>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </CoverGrid>
+                  <EllipsisIcon aria-hidden="true" className="size-4" />
+                </button>
+              )
+            ) : (
+              <PinControl collectionId={page.id} pins={pins} mode="collection" />
+            )}
+            {owner ? <PinControlNotice notice={pinActions.notice} /> : null}
           </div>
-        ) : null}
-        {members.length && layout === 'list' ? (
-          <ul className="space-y-1">
-            {members.map((member, index) => (
-              <MemberRow
-                key={member.id}
-                member={member}
-                index={index}
-                members={members}
-                firstPage={page.firstPage}
-                owner={canEditMembers}
-                ratio={ratio}
-                locale={getLocale()}
-                busy={!hydrated || pending}
-                moveMember={moveMember}
-                saveNote={saveNote}
-                removeMember={removeMember}
-                placeMember={placeMember}
-                dropMember={dropMember}
-                dropMemberAt={dropMemberAt}
-              />
-            ))}
-          </ul>
-        ) : null}
-        {page.next ? (
-          <Exposure operation="collection_member.list">
-            <nav aria-label={m.library_collection_members()}>
-              <a
-                href={collectionLayoutHref(page.id, layout, {
-                  ...(page.next ? { cursor: page.next } : {}),
-                  ...(search ? { filters: search } : {}),
+          {page.description !== null ? <p className="whitespace-pre-wrap">{page.description}</p> : null}
+          <p data-slot="collection-metadata" className="text-sm text-muted-foreground">
+            <MetaLine
+              items={[
+                <span>
+                  <span>{m.library_curator()}</span>{' '}
+                  {page.curator ? (
+                    <>
+                      <a
+                        href={`/${getLocale()}/@${encodeURIComponent(page.curator.handle ?? '')}`}
+                        className="text-primary underline-offset-4 hover:underline"
+                      >
+                        {page.curator.displayName ?? page.curator.handle}
+                      </a>
+                      {page.curator.handle ? <span> @{page.curator.handle}</span> : null}
+                    </>
+                  ) : (
+                    <AccountRef account={null} />
+                  )}
+                </span>,
+                !page.filter && page.memberCount !== null ? m.library_member_count({ count: page.memberCount }) : null,
+                <span>
+                  {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
+                </span>,
+              ]}
+            />
+          </p>
+          {atLimit ? <p>{m.library_collection_full()}</p> : null}
+          {page.visibility ? <p data-visibility={page.visibility}>{visibilityLabel(page.visibility)}</p> : null}
+          {following !== null ? (
+            <Exposure operation="follow.put">
+              <div className="flex flex-wrap items-center gap-3">
+                {following ? <p>{m.library_following()}</p> : null}
+                <button
+                  className={buttonClass}
+                  disabled={!hydrated || pending}
+                  onClick={() => void toggleFollow()}
+                  type="button"
+                >
+                  {following ? m.library_follow_unfollow() : m.library_follow()}
+                </button>
+              </div>
+            </Exposure>
+          ) : null}
+          {owner && editing ? (
+            <form className="space-y-4" onSubmit={(event) => void save(event)}>
+              <label className="block">
+                {m.library_collection_title()}
+                <input
+                  className={fieldClass}
+                  onChange={(event) => setTitle(event.target.value)}
+                  required
+                  value={title}
+                />
+              </label>
+              <label className="block">
+                {m.library_collection_description()}
+                <textarea
+                  className={fieldClass}
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={4}
+                  value={description}
+                />
+              </label>
+              <VisibilityField onChange={setVisibility} value={visibility} />
+              {conflict ? (
+                <p role="alert">
+                  {m.library_collection_conflict()}{' '}
+                  <a
+                    className="text-primary underline-offset-4 hover:underline"
+                    href={collectionHref(page.id)}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void reloadCollection();
+                    }}
+                  >
+                    {m.library_collection_reload()}
+                  </a>
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <button className={buttonClass} disabled={!hydrated || pending} type="submit">
+                  {m.library_collection_save()}
+                </button>
+                <button className={buttonClass} onClick={() => setEditing(false)} type="button">
+                  {m.library_collection_cancel()}
+                </button>
+              </div>
+            </form>
+          ) : null}
+          {failure ? <p role="alert">{failure}</p> : null}
+        </header>
+        <section className="space-y-4" aria-labelledby="collection-members-heading">
+          {page.filterProperties && page.filterParams ? (
+            <CollectionFilters
+              id={page.id}
+              type={page.filterType ?? 'schema:Book'}
+              properties={page.filterProperties}
+              params={page.filterParams}
+            />
+          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="collection-members-heading" className="text-xl font-semibold">
+              {m.library_collection_members()}
+            </h2>
+            <CollectionLayoutLinks
+              id={page.id}
+              layout={layout}
+              search={{
+                ...(cursor ? { cursor } : {}),
+                ...(search ? { filters: search } : {}),
+              }}
+            />
+          </div>
+          <CollectionFilterFeedback
+            id={page.id}
+            {...(page.filter === undefined ? {} : { filter: page.filter })}
+            {...(page.filterIgnored === undefined ? {} : { ignored: page.filterIgnored })}
+            {...(page.filterStatus === undefined ? {} : { status: page.filterStatus })}
+            {...(page.filterType === undefined ? {} : { filterType: page.filterType })}
+            empty={members.length === 0}
+            emptyLabel={m.library_collection_empty()}
+            buttonClass={buttonClass}
+          />
+          {members.length && layout === 'grid' ? (
+            <div className="[&_[data-slot=cover-grid]]:grid-cols-1 md:[&_[data-slot=cover-grid]]:grid-cols-2 xl:[&_[data-slot=cover-grid]]:grid-cols-3">
+              <CoverGrid ratio={ratio}>
+                {members.map((member, index) => {
+                  const subject = member.subject;
+                  const locale = getLocale();
+                  const localizedTitle = subject ? pageText(libraryTitleValue(subject.label), locale) : null;
+                  const title = localizedTitle?.text ?? m.library_subject_unavailable();
+                  const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()).href : undefined;
+                  return (
+                    <div
+                      key={member.id}
+                      data-member={member.id}
+                      data-slot="collection-member-card"
+                      className="min-w-0 self-start space-y-2"
+                      onPointerDown={
+                        canEditMembers && hydrated && !pending
+                          ? (event) => {
+                              const target = event.target;
+                              if (!(target instanceof Element) || !target.closest('[data-drag-handle]')) return;
+                              event.currentTarget.setPointerCapture(event.pointerId);
+                              draggedMember.current = {
+                                id: member.id,
+                                dropped: false,
+                              };
+                              event.currentTarget.dataset.dragging = member.id;
+                            }
+                          : undefined
+                      }
+                      onPointerUp={
+                        canEditMembers
+                          ? (event) => {
+                              if (event.currentTarget.dataset.dragging !== member.id) return;
+                              delete event.currentTarget.dataset.dragging;
+                              const drag = draggedMember.current;
+                              if (drag?.id === member.id && drag.dropped) return;
+                              if (drag?.id === member.id) drag.dropped = true;
+                              dropMember(member.id, event);
+                            }
+                          : undefined
+                      }
+                      onDragOver={
+                        canEditMembers && hydrated && !pending ? (event) => event.preventDefault() : undefined
+                      }
+                      onDrop={
+                        canEditMembers && hydrated && !pending
+                          ? (event) => {
+                              event.preventDefault();
+                              const memberId =
+                                draggedMember.current?.id ||
+                                event.dataTransfer.getData('application/x-rezics-collection-member') ||
+                                document.querySelector<HTMLElement>('[data-member][data-dragging]')?.dataset.dragging ||
+                                '';
+                              if (memberId) {
+                                draggedMember.current = {
+                                  id: memberId,
+                                  dropped: true,
+                                };
+                                placeMember(memberId, member.id);
+                              }
+                            }
+                          : undefined
+                      }
+                    >
+                      {canEditMembers ? (
+                        <ListRowControl className="flex justify-end">
+                          <span
+                            aria-hidden="true"
+                            className="inline-block h-10 w-6 cursor-grab touch-none select-none rounded-sm border border-border/70"
+                            data-drag-handle=""
+                            draggable={hydrated && !pending}
+                            onDragStart={(event) => {
+                              draggedMember.current = {
+                                id: member.id,
+                                dropped: false,
+                              };
+                              event.currentTarget
+                                .closest<HTMLElement>('[data-member]')
+                                ?.setAttribute('data-dragging', member.id);
+                              event.dataTransfer.setData(collectionMemberDragType, member.id);
+                              event.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragEnd={(event) => {
+                              const drag = draggedMember.current;
+                              if (drag?.id === member.id && !drag.dropped) {
+                                drag.dropped = true;
+                                dropMemberAt(member.id, event.clientX, event.clientY);
+                              }
+                              event.currentTarget
+                                .closest<HTMLElement>('[data-member]')
+                                ?.removeAttribute('data-dragging');
+                              if (drag?.id === member.id) draggedMember.current = null;
+                            }}
+                          />
+                        </ListRowControl>
+                      ) : null}
+                      <CoverCard
+                        {...(href ? { href } : {})}
+                        title={title}
+                        {...(localizedTitle?.lang ? { titleLang: localizedTitle?.lang } : {})}
+                        cover={{
+                          subject: subject
+                            ? { id: subject.id, title, types: subject.types }
+                            : { id: 'unavailable', title, types: [] },
+                          cover: subject?.cover ?? null,
+                          src: coverSrc,
+                          labels: {
+                            withheld: m.thread_cover_withheld(),
+                            reveal: m.thread_cover_reveal(),
+                            credit: m.thread_cover_credit(),
+                            via: m.thread_cover_via(),
+                          },
+                        }}
+                        secondary={subject?.typeLabel}
+                        linkLabel={title}
+                      />
+                      {member.note ? <MemberNote note={member.note} layout="grid" /> : null}
+                      {canEditMembers ? (
+                        <ListRowControl className="space-y-2">
+                          <MemberRowControls
+                            member={member}
+                            index={index}
+                            members={members}
+                            firstPage={page.firstPage}
+                            busy={!hydrated || pending}
+                            moveMember={moveMember}
+                            saveNote={saveNote}
+                            removeMember={removeMember}
+                          />
+                        </ListRowControl>
+                      ) : null}
+                    </div>
+                  );
                 })}
-                className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
-              >
-                {m.library_collection_more()}
-              </a>
-            </nav>
-          </Exposure>
-        ) : null}
-      </section>
-    </article>
+              </CoverGrid>
+            </div>
+          ) : null}
+          {members.length && layout === 'list' ? (
+            <ul className="space-y-1">
+              {members.map((member, index) => (
+                <MemberRow
+                  key={member.id}
+                  member={member}
+                  index={index}
+                  members={members}
+                  firstPage={page.firstPage}
+                  owner={canEditMembers}
+                  ratio={ratio}
+                  locale={getLocale()}
+                  busy={!hydrated || pending}
+                  moveMember={moveMember}
+                  saveNote={saveNote}
+                  removeMember={removeMember}
+                  placeMember={placeMember}
+                  dropMember={dropMember}
+                  dropMemberAt={dropMemberAt}
+                />
+              ))}
+            </ul>
+          ) : null}
+          {page.next ? (
+            <Exposure operation="collection_member.list">
+              <nav aria-label={m.library_collection_members()}>
+                <a
+                  href={collectionLayoutHref(page.id, layout, {
+                    ...(page.next ? { cursor: page.next } : {}),
+                    ...(search ? { filters: search } : {}),
+                  })}
+                  className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+                >
+                  {m.library_collection_more()}
+                </a>
+              </nav>
+            </Exposure>
+          ) : null}
+        </section>
+      </article>
+    </div>
   );
 }
 

@@ -25,34 +25,33 @@ import { type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
-import {
-  libraryEntryStateWrite,
-  libraryEntryStateLabel,
-  shelfSectionOrder,
-  type LibraryEntryStateRead,
-  type PersonalLibraryEntry,
-} from './entries-read';
+import { libraryEntryStateWrite, type LibraryEntryStateRead, type PersonalLibraryEntry } from './entries-read';
 import { coverSubject } from './subject-row';
 import { displayLibraryTitle } from './title';
 import { progressView } from './progress-label';
 import { shelfHref, type ShelfLayout, type ShelfSize } from './shelf-params';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
 import type { LibrarySubject } from './reads';
-import { labelShelfProgress, type LabelShelfEntry } from './label-shelf-read';
+import type { LabelShelfEntry } from './label-shelf-read';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@rezics/ui/shadcn/table';
 
-export function stateLabel(state: LibraryEntryStateRead): string | undefined {
-  return libraryEntryStateWrite(state) ? libraryEntryStateLabel(state) : undefined;
+export function stateLabel(state: LibraryEntryStateRead, label?: string): string | undefined {
+  return state ? (label ?? m.library_other()) : undefined;
 }
 function failureText(reason: ShelfFailure): string {
   if (reason === 'closed') return m.platform_closed_message();
   if (reason === 'signed-out') return m.library_sign_in();
+  if (reason === 'unsupported_library_profile') return m.library_entry_profile_unsupported();
   return m.error_message();
 }
 const densities: Record<ShelfSize, CoverDensity> = { s: 'small', m: 'medium', l: 'large' };
 function entryProgress(entry: PersonalLibraryEntry, locale: string) {
   const view = progressView(entry.activeProgressSession ?? null, locale);
   return view ? { value: view.percent == null ? null : view.percent / 100, label: view.text } : undefined;
+}
+function labelEntryProgress(entry: LabelShelfEntry, locale: string) {
+  const view = progressView(entry.activeProgressSession ?? null, locale);
+  return view ? { value: view.percent === null ? null : view.percent / 100, label: view.text } : undefined;
 }
 function titleOf(entry: PersonalLibraryEntry, locale: string) {
   return entry.subject
@@ -100,12 +99,14 @@ function EntryMenu({
 }) {
   const navigate = useNavigate();
   const admitted = useOperation('library_entry.put');
+  const deleteAdmitted = useOperation('library_entry.delete');
   const progressAdmitted = useOperation('progress_session.list');
   const { entry } = row;
   const title = titleOf(entry, controls.locale).text;
   const subjectId = entry.subject?.id;
-  const entries: ItemMenuEntry[] = [
-    {
+  const entries: ItemMenuEntry[] = [];
+  if (admitted && entry.stateOptions?.length) {
+    entries.push({
       type: 'submenu',
       label: m.library_menu_status(),
       entries: [
@@ -113,50 +114,46 @@ function EntryMenu({
           type: 'radio',
           label: m.library_menu_status(),
           value: entry.state,
-          options: shelfSectionOrder.map((state) => ({ value: state, label: libraryEntryStateLabel(state) })),
+          options: entry.stateOptions.map(({ id, label }) => ({ value: id, label: label.text })),
           onValueChange: (value) => void controls.changeState(entry.subjectId, value),
         },
       ],
-    },
-    ...(subjectId
-      ? [
-          {
-            type: 'item' as const,
-            label: m.library_menu_open(),
-            onSelect: () => {
-              if (entry.subject) {
-                const href = subjectHref(
-                  { id: entry.subject.id, label: displayLibraryTitle(entry.subject.label, controls.locale).text },
-                  controls.locale,
-                );
-                void navigate({ to: href.to, params: href.params });
-              }
-            },
-          },
-        ]
-      : []),
-    ...(subjectId
-      ? [
-          {
-            type: 'item' as const,
-            label: m.library_entry_copies(),
-            onSelect: () => void navigate({ to: '/library/copies', search: { subjectId } }),
-          },
-          ...(progressAdmitted
-            ? [
-                {
-                  type: 'item' as const,
-                  label: m.library_entry_progress(),
-                  onSelect: () => void navigate({ to: '/library/progress', search: { subjectId } }),
-                },
-              ]
-            : []),
-        ]
-      : []),
-    { type: 'separator' },
-    { type: 'item', label: m.library_remove_from_library(), onSelect: () => controls.askRemove(entry.subjectId) },
-  ];
-  if (!admitted) return children;
+    });
+  }
+  if (subjectId) {
+    entries.push({
+      type: 'item',
+      label: m.library_menu_open(),
+      onSelect: () => {
+        if (!entry.subject) return;
+        const href = subjectHref(
+          { id: entry.subject.id, label: displayLibraryTitle(entry.subject.label, controls.locale).text },
+          controls.locale,
+        );
+        void navigate({ to: href.to, params: href.params });
+      },
+    });
+    entries.push({
+      type: 'item',
+      label: m.library_entry_copies(),
+      onSelect: () => void navigate({ to: '/library/copies', search: { subjectId } }),
+    });
+    if (progressAdmitted)
+      entries.push({
+        type: 'item',
+        label: m.library_entry_progress(),
+        onSelect: () => void navigate({ to: '/library/progress', search: { subjectId } }),
+      });
+  }
+  if (deleteAdmitted) {
+    entries.push({ type: 'separator' });
+    entries.push({
+      type: 'item',
+      label: m.library_remove_from_library(),
+      onSelect: () => controls.askRemove(entry.subjectId),
+    });
+  }
+  if (!entries.length) return children;
   return (
     <ItemMenu
       entries={entries}
@@ -188,7 +185,7 @@ function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
     <CoverGrid ratio="5:7" density={densities[size]} fixedDensity>
       {rows.map((row) => {
         const { entry } = row;
-        const status = stateLabel(entry.state);
+        const status = stateLabel(entry.state, entry.stateLabel);
         const statusHref = stateHref(entry.state, locale);
         const progress = entryProgress(entry, locale);
         const title = titleOf(entry, locale);
@@ -225,7 +222,7 @@ function ListView({ controls }: { controls: Controls }) {
         const { entry } = row;
         const localizedTitle = titleOf(entry, locale);
         const title = localizedTitle.text;
-        const status = stateLabel(entry.state);
+        const status = stateLabel(entry.state, entry.stateLabel);
         const href = stateHref(entry.state, locale);
         const progress = entryProgress(entry, locale);
         return (
@@ -277,7 +274,7 @@ function TableView({ controls }: { controls: Controls }) {
   ];
   const tableRows: ShelfTableRow[] = rows.map((row) => {
     const { entry } = row;
-    const status = stateLabel(entry.state);
+    const status = stateLabel(entry.state, entry.stateLabel);
     const href = stateHref(entry.state, locale);
     const title = titleOf(entry, locale);
     return {
@@ -447,7 +444,7 @@ export function LabelShelfEntries({
                 <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />
               </div>
             );
-          const progress = labelShelfProgress(entry, locale);
+          const progress = labelEntryProgress(entry, locale);
           return (
             <CoverCard
               key={entry.id}
@@ -455,7 +452,7 @@ export function LabelShelfEntries({
               title={title(entry)}
               cover={shelfCover(entry.subject)}
               {...(progress ? { progress } : {})}
-              {...(entry.state ? { status: { label: libraryEntryStateLabel(entry.state) } } : {})}
+              {...(entry.state ? { status: { label: entry.stateLabel ?? m.library_other() } } : {})}
             />
           );
         })}
@@ -472,7 +469,7 @@ export function LabelShelfEntries({
                 <LabelAssignmentRemoveForm entry={entry} labelName={label.name} locale={locale} csrfToken={csrfToken} />
               </li>
             );
-          const progress = labelShelfProgress(entry, locale);
+          const progress = labelEntryProgress(entry, locale);
           return (
             <ShelfListRow
               key={entry.id}
@@ -480,7 +477,7 @@ export function LabelShelfEntries({
               cover={shelfCover(entry.subject)}
               title={title(entry)}
               meta={entry.subject.typeLabel}
-              {...(entry.state ? { status: libraryEntryStateLabel(entry.state) } : {})}
+              {...(entry.state ? { status: entry.stateLabel ?? m.library_other() } : {})}
               {...(progress ? { progress } : {})}
               labels={{ select: title(entry), menu: m.library_menu_open() }}
             />
@@ -518,7 +515,7 @@ export function LabelShelfEntries({
               </TableRow>
             );
           const cover = shelfCover(entry.subject);
-          const progress = labelShelfProgress(entry, locale);
+          const progress = labelEntryProgress(entry, locale);
           return (
             <TableRow key={entry.id}>
               <TableCell>
@@ -535,7 +532,7 @@ export function LabelShelfEntries({
                 </a>
               </TableCell>
               <TableCell>{entry.subject.typeLabel}</TableCell>
-              <TableCell>{entry.state ? libraryEntryStateLabel(entry.state) : null}</TableCell>
+              <TableCell>{entry.state ? (entry.stateLabel ?? m.library_other()) : null}</TableCell>
               <TableCell>{progress ? <ProgressRow {...progress} /> : null}</TableCell>
             </TableRow>
           );

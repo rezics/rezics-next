@@ -11,7 +11,7 @@ import { homePageQuery } from '../features/pages/home-queries';
 import { homeJsonLd } from '../features/pages/jsonld';
 import { RoutePage, routePageJsonLd } from '../features/pages/route';
 import { ContinueSection } from '../library/continue';
-import { homeContinueQuery, loadContinue, loadLegacyContinue } from '../library/continue-read';
+import { homeContinueQuery, loadContinue } from '../library/continue-read';
 import { Exposure, operationGroups } from '../kernel/exposure';
 import type { SessionEnv } from '../session/client';
 import { pageHead } from '../shell/head';
@@ -26,19 +26,7 @@ const readHomeContinue = createServerFn({ method: 'GET' })
     const { env } = await import('cloudflare:workers');
     const request = getRequest();
     setResponseHeader('Cache-Control', 'private, no-store');
-    return loadContinue(kernelClient(locale), request, env as Partial<SessionEnv>, locale);
-  });
-
-const readLegacyHomeContinue = createServerFn({ method: 'GET' })
-  .validator((locale: unknown) => {
-    if (typeof locale !== 'string' || locale.length === 0 || locale.length > 35) throw new Error('Invalid locale');
-    return locale;
-  })
-  .handler(async ({ data: locale }) => {
-    const { env } = await import('cloudflare:workers');
-    const request = getRequest();
-    setResponseHeader('Cache-Control', 'private, no-store');
-    return loadLegacyContinue(kernelClient(locale), request, env as Partial<SessionEnv>, locale);
+    return loadContinue(kernelClient(locale), request, env as Partial<SessionEnv>);
   });
 
 /** The public page query calls loadRoutePage() once on the server. */
@@ -67,7 +55,7 @@ function Home() {
   const exposureReady = viewerGroups !== undefined;
   const { data: resume = [], isPending } = useQuery({
     ...homeContinueQuery(getLocale(), () =>
-      hasContinueList ? readHomeContinue({ data: getLocale() }) : readLegacyHomeContinue({ data: getLocale() }),
+      hasContinueList ? readHomeContinue({ data: getLocale() }) : Promise.resolve([]),
     ),
     enabled: personalRead.enabled && state === 'signed-in' && exposureReady,
   });

@@ -1,5 +1,6 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
+import { recordedBookState } from './library-entry-states.ts';
 
 const labelIds = Array.from(
   { length: 32 },
@@ -91,7 +92,7 @@ function labelShelf(labelIdValue: string, request: Request): KernelRecording | u
       libraryEntry:
         index === 0
           ? {
-              state: 'in_progress',
+              state: recordedBookState(1),
               activeProgressSession: {
                 mode: 'scalar_amount',
                 amount: '42',
@@ -104,7 +105,7 @@ function labelShelf(labelIdValue: string, request: Request): KernelRecording | u
               },
             }
           : index === 1
-            ? { state: 'completed', activeProgressSession: null }
+            ? { state: recordedBookState(2), activeProgressSession: null }
             : null,
     };
   }).filter((row) => !removedAssignments.has(row.id));

@@ -52,6 +52,7 @@ function FilterRegion({ search }: { search: Record<string, string> }) {
         {...(data.filter ? { filter: data.filter } : {})}
         {...(data.filterIgnored ? { ignored: data.filterIgnored } : {})}
         {...(data.filterStatus ? { status: data.filterStatus } : {})}
+        {...(data.filterType ? { filterType: data.filterType } : {})}
         empty={data.members.length === 0}
         unavailable={'unavailable' in data && data.unavailable}
         emptyLabel={m.library_collection_empty()}
@@ -72,13 +73,15 @@ function render(search: Record<string, string>) {
 
 async function regionReady(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
+  await userEvent.click(await canvas.findByRole('button', { name: m.collection_filters() }));
   if (window.innerWidth < 1024) {
-    await userEvent.click(await canvas.findByRole('button', { name: m.collection_filters() }));
     const dialog = await within(document.body).findByRole('dialog');
     await expect(dialog).toBeVisible();
     return { canvas, fields: within(dialog) };
   }
-  return { canvas, fields: canvas };
+  const menu = await within(document.body).findByRole('menu');
+  await expect(menu).toBeVisible();
+  return { canvas, fields: within(menu) };
 }
 
 async function selectedState(
@@ -138,4 +141,27 @@ export const Preparing: Story = {
   name: 'Results preparing',
   play: ({ canvasElement }) => selectedState(canvasElement, 'preparing'),
   render: () => render(states.preparing),
+};
+
+export const FilterSourceUnavailable: Story = {
+  name: 'Filter source unavailable',
+  render: () => (
+    <PatternStory>
+      <CollectionFilterFeedback
+        id={id}
+        filterType="schema:Book"
+        status="failed"
+        empty
+        emptyLabel={m.library_collection_empty()}
+      />
+    </PatternStory>
+  ),
+  play: async (context) => {
+    const canvas = within(context.canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent(m.collection_filter_failed());
+    await expect(canvas.getByRole('link', { name: m.collection_filter_clear() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/collections/${encodeURIComponent(id)}?type=schema%3ABook`,
+    );
+  },
 };

@@ -4,6 +4,8 @@ import type { Locale } from '../paraglide/runtime.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import type { ProgressLabelInput } from './progress-label';
+import { libraryAnyStateLabel, libraryStateLabel, libraryStateOptions, type LibraryStateChoice } from './profiles';
+import type { Release } from '../subject/definitions.ts';
 import { prepareSession, viewerCredential } from '../session/request';
 import {
   libraryFullQuery,
@@ -14,35 +16,16 @@ import {
   type LibrarySubject,
 } from './reads';
 
-export const libraryEntryStates = ['planned', 'in_progress', 'completed', 'paused', 'dropped'] as const;
-export type LibraryEntryStateWrite = (typeof libraryEntryStates)[number];
+export type LibraryEntryStateWrite = string;
 export type LibraryEntryStateRead = string;
 
-const writableEntryStates = new Set<string>(libraryEntryStates);
-
-function isWritableEntryState(value: string): value is LibraryEntryStateWrite {
-  return writableEntryStates.has(value);
-}
+const entryStateId = /^[a-z][a-z0-9_.-]{0,63}$(?![\s\S])/;
 
 export function libraryEntryStateWrite(value: string | undefined): LibraryEntryStateWrite | undefined {
-  return value !== undefined && isWritableEntryState(value) ? value : undefined;
+  return value !== undefined && entryStateId.test(value) ? value : undefined;
 }
 
 export function libraryEntryStateLabel(state: LibraryEntryStateRead, locale?: string): string {
-  if (state === 'planned')
-    return locale === undefined ? m.library_state_planned() : m.library_state_planned({}, { locale: locale as Locale });
-  if (state === 'in_progress')
-    return locale === undefined
-      ? m.library_state_in_progress()
-      : m.library_state_in_progress({}, { locale: locale as Locale });
-  if (state === 'completed')
-    return locale === undefined
-      ? m.library_state_completed()
-      : m.library_state_completed({}, { locale: locale as Locale });
-  if (state === 'paused')
-    return locale === undefined ? m.library_state_paused() : m.library_state_paused({}, { locale: locale as Locale });
-  if (state === 'dropped')
-    return locale === undefined ? m.library_state_dropped() : m.library_state_dropped({}, { locale: locale as Locale });
   return locale === undefined ? m.library_other() : m.library_other({}, { locale: locale as Locale });
 }
 
@@ -53,24 +36,23 @@ export type PersonalLibraryEntry = {
   incarnationId?: string | null;
   createdAt: string;
   updatedAt: string;
+  stateLabel?: string;
+  stateOptions?: LibraryStateChoice[];
   activeProgressSession?: ProgressLabelInput | null;
   subject: LibrarySubject | null;
   changeKey: string;
   removeKey: string;
 };
 
-/** The supported state IDs that web can label and offer as filters. */
-export const shelfSectionOrder: readonly LibraryEntryStateWrite[] = [
-  'in_progress',
-  'planned',
-  'completed',
-  'paused',
-  'dropped',
-];
-
 export type PersonalLibraryView =
   | { signedIn: false }
-  | { signedIn: true; state?: LibraryEntryStateWrite; entries: PersonalLibraryEntry[]; next: string | null };
+  | {
+      signedIn: true;
+      state?: LibraryEntryStateWrite;
+      stateLabel?: string;
+      entries: PersonalLibraryEntry[];
+      next: string | null;
+    };
 
 export type SavedLibraryEntry = {
   subjectId: string;
@@ -85,7 +67,7 @@ export type ReloadedLibraryEntry = Omit<PersonalLibraryEntry, 'changeKey' | 'rem
 export type LibraryMutationResult =
   | { ok: true; entry?: SavedLibraryEntry; undo?: { deletionId: string; revision: number } }
   | { ok: false; reason: 'conflict'; entry: ReloadedLibraryEntry }
-  | { ok: false; reason: 'closed' | 'missing' | 'unavailable' | 'signed-out' };
+  | { ok: false; reason: 'closed' | 'missing' | 'unavailable' | 'signed-out' | 'unsupported_library_profile' };
 
 export type LibraryChangeInput = {
   subjectId: string;
@@ -132,27 +114,6 @@ function presentEntry(entry: RawEntry): ReloadedLibraryEntry {
   };
 }
 
-// Waits for the generated client update from commerce's incarnation-guard contract.
-type IncarnationLibraryClient = {
-  libraryEntries: (params: { subjectId: string }) => {
-    put: (
-      body: { state: LibraryEntryStateWrite; revision?: number; incarnationId?: string },
-      options: { headers: { 'idempotency-key': string } },
-    ) => Promise<{
-      status?: number;
-      error?: { status?: number; value?: unknown } | null;
-      data?: { libraryEntry: RawEntry } | null;
-    }>;
-    delete: (
-      body: undefined,
-      options: {
-        query: { revision: number; incarnationId?: string };
-        headers: { 'idempotency-key': string };
-      },
-    ) => Promise<{ status?: number; error?: { status?: number; value?: unknown } | null }>;
-  };
-};
-
 function statusOf(result: { status?: number; error?: { status?: number } | null }): number | undefined {
   if (typeof result.status === 'number') return result.status;
   if (result.error && typeof result.error.status === 'number') return result.error.status;
@@ -168,8 +129,7 @@ function codeOf(error: unknown): string | undefined {
 }
 
 function writeHeaders(authorization: string, idempotencyKey: string) {
-  // The treaty header type names only Idempotency-Key. The bearer is still sent.
-  return { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string };
+  return { authorization, 'idempotency-key': idempotencyKey };
 }
 
 async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promise<string | null> {
@@ -198,6 +158,32 @@ function presentShelfEntries(rows: RawEntry[]): PersonalLibraryEntry[] {
     changeKey: crypto.randomUUID(),
     removeKey: crypto.randomUUID(),
   }));
+}
+
+/** Add profile-owned labels and ordered choices after the exact-ID kernel page has been read. */
+export function presentLibraryStateLabels(
+  view: PersonalLibraryView,
+  release: Release | undefined,
+  locale: string,
+): PersonalLibraryView {
+  if (!view.signedIn) return view;
+  const other = libraryEntryStateLabel('', locale);
+  return {
+    ...view,
+    ...(view.state
+      ? { stateLabel: release ? (libraryAnyStateLabel(release, view.state, locale)?.text ?? other) : other }
+      : {}),
+    entries: view.entries.map((entry) => {
+      const type = entry.subject?.type;
+      const stateLabel = release && type ? libraryStateLabel(release, type, entry.state, locale)?.text : undefined;
+      const stateOptions = release && type ? libraryStateOptions(release, type, locale) : [];
+      return {
+        ...entry,
+        stateLabel: stateLabel ?? other,
+        stateOptions,
+      };
+    }),
+  };
 }
 
 /**
@@ -265,16 +251,14 @@ export async function changePersonalLibraryEntry(
   try {
     const authorization = await bearer(request, sessionEnv);
     if (!authorization) return { ok: false, reason: 'signed-out' };
-    const result = await (client as unknown as IncarnationLibraryClient)
-      .libraryEntries({ subjectId: input.subjectId })
-      .put(
-        {
-          state: input.state,
-          ...(input.revision === undefined ? {} : { revision: input.revision }),
-          ...(typeof input.incarnationId === 'string' ? { incarnationId: input.incarnationId } : {}),
-        },
-        { headers: writeHeaders(authorization, input.idempotencyKey) },
-      );
+    const result = await client.libraryEntries({ subjectId: input.subjectId }).put(
+      {
+        state: input.state,
+        ...(input.revision === undefined ? {} : { revision: input.revision }),
+        ...(typeof input.incarnationId === 'string' ? { incarnationId: input.incarnationId } : {}),
+      },
+      { headers: writeHeaders(authorization, input.idempotencyKey) },
+    );
     if (!result.error && result.data) {
       const saved = (result.data as { libraryEntry: RawEntry }).libraryEntry;
       return {
@@ -291,6 +275,8 @@ export async function changePersonalLibraryEntry(
     const conflict = await explainConflict(client, authorization, input.subjectId, result);
     if (conflict) return conflict;
     if (statusOf(result) === 404) return { ok: false, reason: 'missing' };
+    if (statusOf(result) === 422 && codeOf(result.error) === 'unsupported_library_profile')
+      return { ok: false, reason: 'unsupported_library_profile' };
     return { ok: false, reason: 'unavailable' };
   } catch (error) {
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
@@ -308,8 +294,7 @@ export async function removePersonalLibraryEntry(
   try {
     const authorization = await bearer(request, sessionEnv);
     if (!authorization) return { ok: false, reason: 'signed-out' };
-    const entryClient = client as unknown as IncarnationLibraryClient;
-    const result = await entryClient.libraryEntries({ subjectId: input.subjectId }).delete(undefined, {
+    const result = await client.libraryEntries({ subjectId: input.subjectId }).delete(undefined, {
       query: {
         revision: input.revision,
         ...(typeof input.incarnationId === 'string' ? { incarnationId: input.incarnationId } : {}),

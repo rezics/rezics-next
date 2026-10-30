@@ -284,19 +284,37 @@ export function CoverGrid({
   );
 }
 
+const coverRowDensityClasses: Record<CoverDensity, string> = {
+  small: '[&>*]:w-[calc((100%-1.5rem)/4)] sm:[&>*]:w-[6rem]',
+  medium: '[&>*]:w-[calc((100%-1rem)/3)] sm:[&>*]:w-[7.5rem]',
+  large: '[&>*]:w-[calc((100%-0.5rem)/2)] sm:[&>*]:w-[9rem]',
+};
+
 /** A keyboard-reachable, snapping subject row; shadcn does not provide this layout. */
-export function CoverRow({ ratio, label, children }: { ratio: CoverRatio; label: string; children: ReactNode }) {
+export function CoverRow({
+  ratio,
+  label,
+  density = 'medium',
+  children,
+}: {
+  ratio: CoverRatio;
+  label: string;
+  density?: CoverDensity;
+  children: ReactNode;
+}) {
   return (
     <RatioContext.Provider value={ratio}>
-      <div
-        role="region"
-        aria-label={label}
-        tabIndex={0}
-        data-slot="cover-row"
-        className={`flex snap-x snap-mandatory gap-2 overflow-x-auto ${coverRadius} focus-visible:outline-2 focus-visible:outline-ring [&>*]:w-[7.5rem] [&>*]:shrink-0 [&>*]:snap-start`}
-      >
-        {children}
-      </div>
+      <DensityContext.Provider value={density}>
+        <div
+          role="region"
+          aria-label={label}
+          tabIndex={0}
+          data-slot="cover-row"
+          className={`flex snap-x snap-mandatory gap-2 overflow-x-auto ${coverRadius} focus-visible:outline-2 focus-visible:outline-ring ${coverRowDensityClasses[density]} [&>*]:shrink-0 [&>*]:snap-start`}
+        >
+          {children}
+        </div>
+      </DensityContext.Provider>
     </RatioContext.Provider>
   );
 }

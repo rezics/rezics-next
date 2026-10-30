@@ -1,11 +1,13 @@
 import { useNavigate } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { Toaster } from '@rezics/ui/shadcn/toast';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
-import { CollectionShortcuts } from './collection-shortcuts';
 import { ContinueSection } from './continue';
+import { LibraryNavigation } from './library-nav';
+import { libraryNavigationQuery } from './pins-read';
 import type { ContinueEntry } from './continue-read';
 import type {
   LibraryEntryStateWrite,
@@ -17,7 +19,7 @@ import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { shelfHref, shelfLayouts, shelfSizes, type ShelfLayout, type ShelfSize } from './shelf-params';
-import { ShelfEntries, stateLabel } from './shelf-view';
+import { ShelfEntries } from './shelf-view';
 import { useHydrated } from './shelf-rows';
 import { LabelShelfEntries } from './shelf-view';
 import type { LabelShelfPageData } from './label-shelf-read';
@@ -160,6 +162,7 @@ export function PersonalLibraryPage({
   restore?: LibraryRestoreResult;
   csrfToken?: string | null;
 }) {
+  const navigation = useQuery(libraryNavigationQuery(locale));
   if (!page.signedIn)
     return (
       <div className="container mx-auto max-w-7xl px-4 py-8">
@@ -167,7 +170,7 @@ export function PersonalLibraryPage({
       </div>
     );
   const heading = page.state
-    ? m.library_tracked_entries_state({ status: stateLabel(page.state) ?? m.library_tracked_entries() })
+    ? m.library_tracked_entries_state({ status: page.stateLabel ?? m.library_other() })
     : m.library_tracked_entries();
   return (
     <Toaster>
@@ -182,8 +185,16 @@ export function PersonalLibraryPage({
         </header>
         {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
         {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
-        <ContinueSection entries={continueEntries} locale={locale} />
-        <CollectionShortcuts />
+        <ContinueSection
+          entries={continueEntries}
+          locale={locale}
+          density={display.size === 's' ? 'small' : display.size === 'l' ? 'large' : 'medium'}
+        />
+        <LibraryNavigation
+          current="tracked"
+          pins={navigation.data?.pins ?? { state: 'closed' }}
+          collections={navigation.data?.collections ?? []}
+        />
         <section aria-labelledby="tracked-entries-heading" className="space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h2 id="tracked-entries-heading" className="text-2xl font-semibold">
@@ -195,7 +206,7 @@ export function PersonalLibraryPage({
           </div>
           {page.state ? (
             <p className="text-sm text-muted-foreground">
-              {m.library_filtered_by({ status: stateLabel(page.state) ?? '' })}
+              {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
             </p>
           ) : null}
           {page.entries.length ? (
@@ -210,7 +221,7 @@ export function PersonalLibraryPage({
               kind={page.state ? 'no-match' : 'library'}
               title={
                 page.state
-                  ? m.library_filter_empty_title({ status: stateLabel(page.state) ?? '' })
+                  ? m.library_filter_empty_title({ status: page.stateLabel ?? m.library_other() })
                   : m.library_empty_title()
               }
               description={page.state ? m.library_filter_empty_description() : m.library_empty_description()}

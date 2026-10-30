@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../kernel/exposure';
 import { sharedRatio } from '@rezics/ui/cover';
-import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
+import { CoverCard, CoverRow, type CoverDensity } from '@rezics/ui/cover-card';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { coverSrc } from '../media/cover-src';
@@ -20,7 +20,15 @@ import type { ContinueEntry } from './continue-read';
  * holds the cover, the title and one progress row. It uses the same scrollable cover row and card size at every
  * viewport, so it stays aligned with the catalogue rows.
  */
-export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; locale: string }) {
+export function ContinueRow({
+  entries,
+  locale,
+  density = 'medium',
+}: {
+  entries: ContinueEntry[];
+  locale: string;
+  density?: CoverDensity;
+}) {
   const admitted = useOperation('progress_session.list');
   const rowHost = useRef<HTMLDivElement>(null);
   const [canScrollBack, setCanScrollBack] = useState(false);
@@ -42,6 +50,7 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
     return (
       <CoverCard
         key={entry.subjectId}
+        density={density}
         {...(admitted ? { href } : {})}
         cover={{ subject, cover: coverOf(entry.summary), src: coverSrc }}
         title={title}
@@ -86,7 +95,7 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
     <>
       <SectionHeading>{m.home_continue_heading()}</SectionHeading>
       <div ref={rowHost} className="relative">
-        <CoverRow ratio={ratio} label={m.home_continue_heading()}>
+        <CoverRow ratio={ratio} label={m.home_continue_heading()} density={density}>
           {cards}
         </CoverRow>
         <Button
@@ -127,9 +136,17 @@ export function ContinueRow({ entries, locale }: { entries: ContinueEntry[]; loc
 }
 
 /** Keep the signed-in slot's final height while the browser waits for personal library data. */
-export function ContinueSection({ entries, locale }: { entries: ContinueEntry[]; locale: string }) {
+export function ContinueSection({
+  entries,
+  locale,
+  density = 'medium',
+}: {
+  entries: ContinueEntry[];
+  locale: string;
+  density?: CoverDensity;
+}) {
   return entries.length > 0 ? (
-    <ContinueRow entries={entries} locale={locale} />
+    <ContinueRow entries={entries} locale={locale} density={density} />
   ) : (
     <div aria-hidden="true" className="min-h-[20rem] sm:min-h-[24rem]" />
   );

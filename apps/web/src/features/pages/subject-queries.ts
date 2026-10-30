@@ -29,6 +29,7 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
       value.id.length > 128 ||
       typeof value.locale !== 'string' ||
       value.locale.length > 35 ||
+      (value.subjectType !== undefined && (typeof value.subjectType !== 'string' || value.subjectType.length > 128)) ||
       (value.view !== undefined && !isView(value.view))
     )
       throw notFound();
@@ -53,6 +54,7 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
     return {
       id: value.id,
       locale: value.locale,
+      subjectType: value.subjectType as string | undefined,
       view: value.view,
       cursor: value.cursor as string | undefined,
     };
@@ -154,6 +156,7 @@ const readSubjectLibrary = createServerFn({ method: 'GET', strict: false })
       value.id.length > 128 ||
       typeof value.locale !== 'string' ||
       value.locale.length > 35 ||
+      (value.subjectType !== undefined && (typeof value.subjectType !== 'string' || value.subjectType.length > 128)) ||
       (value.loadCollections !== undefined && typeof value.loadCollections !== 'boolean') ||
       (value.labelResult !== undefined && (typeof value.labelResult !== 'string' || value.labelResult.length > 64)) ||
       (value.labelUndo !== undefined &&
@@ -173,6 +176,7 @@ const readSubjectLibrary = createServerFn({ method: 'GET', strict: false })
     return {
       id: value.id,
       locale: value.locale,
+      subjectType: value.subjectType as string | undefined,
       loadCollections: value.loadCollections === true,
       labelResult: value.labelResult as string | undefined,
       labelUndo: value.labelUndo as SubjectLabelUndo | undefined,
@@ -190,6 +194,7 @@ const readSubjectLibrary = createServerFn({ method: 'GET', strict: false })
       undefined,
       data.labelResult,
       data.labelUndo,
+      data.subjectType,
     );
   });
 
@@ -356,6 +361,7 @@ export const subjectLibraryQuery = (
   loadCollections = false,
   labelResult?: string,
   labelUndo?: SubjectLabelUndo,
+  subjectType?: string,
 ) =>
   queryOptions({
     ...personalRead,
@@ -363,6 +369,7 @@ export const subjectLibraryQuery = (
       'subject-library',
       id,
       locale,
+      subjectType ?? null,
       ...(loadCollections ? [true] : []),
       ...(labelResult !== undefined || labelUndo
         ? [{ labelResult: labelResult ?? null, labelUndo: labelUndo ?? null }]
@@ -370,7 +377,7 @@ export const subjectLibraryQuery = (
     ] as const,
     queryFn: () =>
       readSubjectLibrary({
-        data: { id, locale, loadCollections, labelResult, labelUndo },
+        data: { id, locale, loadCollections, labelResult, labelUndo, subjectType },
       }),
     retry: false,
   });

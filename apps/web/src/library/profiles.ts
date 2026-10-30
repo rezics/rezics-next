@@ -7,6 +7,8 @@ import type {
   LibraryProgressUnit,
 } from '@rezics/definitions';
 import type { Release } from '../subject/definitions.ts';
+import { m } from '../paraglide/messages.js';
+import type { Locale } from '../paraglide/runtime.js';
 
 type ProfileState = NonNullable<LibraryProfile['entryStateSet']>['states'][number];
 type ProfileKind = NonNullable<LibraryProfile['copies']>['kinds'][number];
@@ -21,6 +23,7 @@ export type LibraryUnitPresentation = {
   dimension?: string;
 };
 export type LibraryStateRole = NonNullable<ProfileState['role']>;
+export type LibraryStateChoice = { id: string; label: LibraryLabel };
 
 export type LibraryChoices = {
   states: { id: string; role?: LibraryStateRole }[];
@@ -79,6 +82,18 @@ export function libraryChoices(release: Release, type: string): LibraryChoices |
       })),
     })),
   };
+}
+
+/** The accepting type's writable entry states, in the order declared by its current profile. */
+export function libraryStateOptions(release: Release, type: string, locale: string): LibraryStateChoice[] {
+  const states = libraryProfile(release, type)?.entryStateSet?.states ?? [];
+  return states.map((state) => ({
+    id: state.id,
+    label:
+      localizedLabel(state.labels, locale) ??
+      libraryStateLabel(release, type, state.id, locale) ??
+      ({ text: m.library_other({}, { locale: locale as Locale }), lang: locale } satisfies LibraryLabel),
+  }));
 }
 
 /** Resolve one profile's ordered declarations to constant-time ID lookups. */
@@ -143,6 +158,28 @@ export function libraryStateLabel(
   locale: string,
 ): LibraryLabel | undefined {
   const state = currentThenLegacy(release, type, (profile) => index(profile).states.get(stateId));
+  return state ? localizedLabel(state.labels, locale) : undefined;
+}
+
+/** Resolve a filter title without a subject type by searching released profiles, then the fixed legacy vocabulary. */
+export function libraryAnyStateLabel(release: Release, stateId: string, locale: string): LibraryLabel | undefined {
+  const profiles = release.libraryProfiles;
+  if (!profiles) return undefined;
+  for (const [id, profile] of Object.entries(profiles)) {
+    if (id === 'legacy-fixed-v1') continue;
+    const state = index(profile).states.get(stateId);
+    const label = state ? localizedLabel(state.labels, locale) : undefined;
+    if (label) return label;
+  }
+  const legacy = profiles['legacy-fixed-v1'];
+  const state = legacy ? index(legacy).states.get(stateId) : undefined;
+  return state ? localizedLabel(state.labels, locale) : undefined;
+}
+
+/** Resolve a legacy value when its subject type is unavailable. */
+export function libraryLegacyStateLabel(release: Release, stateId: string, locale: string): LibraryLabel | undefined {
+  const profile = legacyProfile(release);
+  const state = profile ? index(profile).states.get(stateId) : undefined;
   return state ? localizedLabel(state.labels, locale) : undefined;
 }
 

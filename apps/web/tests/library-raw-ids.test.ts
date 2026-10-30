@@ -152,14 +152,14 @@ test('library reads keep unknown IDs, render neutral labels, and retain their ex
   const entryStateLabel = (entriesRead as unknown as { libraryEntryStateLabel?: (state: string) => string })
     .libraryEntryStateLabel;
   expect(entryStateLabel?.(unknownState)).toBe('Other');
-  expect(entryStateLabel?.('planned')).toBe(m.library_state_planned());
+  expect(entryStateLabel?.('planned')).toBe(m.library_other());
   const copyStatusLabel = (copiesRead as unknown as { copyStatusLabel?: (status: string) => string }).copyStatusLabel;
   expect(copyStatusLabel?.(unknownStatus)).toBe('Other');
   expect(copyStatusLabel?.('owned')).toBe(m.library_copy_status_owned());
   const slotStateLabel = (subjectSlot as unknown as { subjectSlotStateLabel?: (state: string) => string })
     .subjectSlotStateLabel;
   expect(slotStateLabel?.(unknownState)).toBe('Other');
-  expect(slotStateLabel?.('planned')).toBe(m.library_subject_state_planned());
+  expect(slotStateLabel?.('planned')).toBe(m.library_other());
   expect(
     progressView(
       {

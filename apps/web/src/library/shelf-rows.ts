@@ -10,12 +10,19 @@ import {
 } from './entries-actions';
 import { libraryEntryStateWrite, type PersonalLibraryEntry } from './entries-read';
 
-export type ShelfFailure = 'closed' | 'unavailable' | 'signed-out';
+export type ShelfFailure = 'closed' | 'unavailable' | 'signed-out' | 'unsupported_library_profile';
 /** One entry as the shelf holds it: what the kernel last said, and what happened to the last write. */
 export type ShelfRow = { entry: PersonalLibraryEntry; conflict: boolean; failure: ShelfFailure | null };
 
+function withoutIncarnation(entry: PersonalLibraryEntry): PersonalLibraryEntry {
+  const current = { ...entry };
+  delete current.incarnationId;
+  return current;
+}
+
 function failureOf(reason: string): ShelfFailure {
-  return reason === 'closed' || reason === 'signed-out' ? reason : 'unavailable';
+  if (reason === 'closed' || reason === 'signed-out' || reason === 'unsupported_library_profile') return reason;
+  return 'unavailable';
 }
 
 /** True once the page has hydrated; writes need JavaScript, so their controls stay disabled until then. */
@@ -55,7 +62,14 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
     async (subjectId: string, value: string) => {
       const row = rows.find((item) => item.entry.subjectId === subjectId);
       const state = libraryEntryStateWrite(value);
-      if (!row || !state || state === row.entry.state || pending) return;
+      if (
+        !row ||
+        !state ||
+        !row.entry.stateOptions?.some((option) => option.id === state) ||
+        state === row.entry.state ||
+        pending
+      )
+        return;
       setPending(true);
       try {
         const { entry } = row;
@@ -71,24 +85,37 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
         });
         if (result.ok && result.entry) {
           const saved = result.entry;
-          patch(subjectId, (current) => ({
-            entry: {
-              ...current.entry,
-              state: saved.state,
-              revision: saved.revision,
-              ...(saved.incarnationId === undefined ? {} : { incarnationId: saved.incarnationId }),
-              updatedAt: saved.updatedAt,
-              changeKey: crypto.randomUUID(),
-            },
-            conflict: false,
-            failure: null,
-          }));
+          patch(subjectId, (current) => {
+            const stateLabel =
+              current.entry.stateOptions?.find((option) => option.id === saved.state)?.label.text ??
+              current.entry.stateLabel;
+            return {
+              entry: {
+                ...withoutIncarnation(current.entry),
+                state: saved.state,
+                ...(stateLabel === undefined ? {} : { stateLabel }),
+                revision: saved.revision,
+                ...(saved.incarnationId === undefined ? {} : { incarnationId: saved.incarnationId }),
+                updatedAt: saved.updatedAt,
+                changeKey: crypto.randomUUID(),
+              },
+              conflict: false,
+              failure: null,
+            };
+          });
         } else if (!result.ok && result.reason === 'conflict') {
-          patch(subjectId, (current) => ({
-            entry: { ...current.entry, ...result.entry, changeKey: crypto.randomUUID() },
-            conflict: true,
-            failure: null,
-          }));
+          patch(subjectId, (current) => {
+            return {
+              entry: {
+                ...withoutIncarnation(current.entry),
+                ...result.entry,
+                ...(result.entry.incarnationId === undefined ? {} : { incarnationId: result.entry.incarnationId }),
+                changeKey: crypto.randomUUID(),
+              },
+              conflict: true,
+              failure: null,
+            };
+          });
         } else if (!result.ok && result.reason === 'missing') {
           patch(subjectId, () => null);
         } else if (!result.ok) {
@@ -159,11 +186,18 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
           );
         }
       } else if (result.reason === 'conflict') {
-        patch(subjectId, (current) => ({
-          entry: { ...current.entry, ...result.entry, removeKey: crypto.randomUUID() },
-          conflict: true,
-          failure: null,
-        }));
+        patch(subjectId, (current) => {
+          return {
+            entry: {
+              ...withoutIncarnation(current.entry),
+              ...result.entry,
+              ...(result.entry.incarnationId === undefined ? {} : { incarnationId: result.entry.incarnationId }),
+              removeKey: crypto.randomUUID(),
+            },
+            conflict: true,
+            failure: null,
+          };
+        });
       } else {
         patch(subjectId, (current) => ({ ...current, failure: failureOf(result.reason) }));
       }

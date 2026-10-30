@@ -2,7 +2,7 @@ import { resetCopyKindsStory } from './copies-kinds';
 import type { FakeRoute } from '../fake-modules.ts';
 import recording from '../recorded/library-copies.json';
 
-export type CopiesStoryMode = 'none' | 'one' | 'many' | 'refusal';
+export type CopiesStoryMode = 'none' | 'one' | 'many' | 'long' | 'unavailable' | 'error' | 'refusal';
 let mode: CopiesStoryMode = 'many';
 
 /** Set the copies fixture before mounting a page story. */
@@ -32,7 +32,22 @@ export const routes: FakeRoute[] = [
   {
     method: 'GET',
     path: '/v1/copies',
-    story: () => ({ status: 200, copies: mode === 'none' ? [] : mode === 'one' ? base.slice(0, 1) : many, next: null }),
+    story: () => {
+      if (mode === 'unavailable')
+        return { status: 503, type: 'https://rezics.com/problems/unavailable', code: 'unavailable' };
+      if (mode === 'error')
+        return { status: 500, type: 'https://rezics.com/problems/internal_error', code: 'internal_error' };
+      if (mode === 'long') {
+        const template = many[0]!;
+        const copies = Array.from({ length: 12 }, (_, index) => ({
+          ...template,
+          id: `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`,
+          note: `Library copy story ${index + 1}`,
+        }));
+        return { status: 200, copies, next: null };
+      }
+      return { status: 200, copies: mode === 'none' ? [] : mode === 'one' ? base.slice(0, 1) : many, next: null };
+    },
   },
   {
     method: 'POST',

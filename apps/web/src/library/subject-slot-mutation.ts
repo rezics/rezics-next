@@ -2,11 +2,8 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { changePersonalLibraryEntry, removePersonalLibraryEntry } from './entries-read';
-import { libraryEntryStatesWrite, type LibraryEntryStateWrite } from './subject-slot';
+import { changePersonalLibraryEntry, libraryEntryStateWrite, removePersonalLibraryEntry } from './entries-read';
 import type { SubjectLibraryMutation, SubjectLibraryMutationResponse, SubjectSlotEntry } from './subject-slot';
-
-const writableEntryStates = new Set<LibraryEntryStateWrite>(libraryEntryStatesWrite);
 
 function problemCode(value: unknown): string | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -45,7 +42,7 @@ export async function applySubjectLibraryMutation(
           };
         return { result: removed.reason === 'closed' ? 'closed' : 'unavailable' };
       }
-      if (!input.state || !writableEntryStates.has(input.state)) return { result: 'unavailable' };
+      if (!input.state || libraryEntryStateWrite(input.state) === undefined) return { result: 'unavailable' };
       const saved = await changePersonalLibraryEntry(client, request, sessionEnv, {
         subjectId: input.subjectId,
         state: input.state,
@@ -65,6 +62,7 @@ export async function applySubjectLibraryMutation(
             ...(saved.entry.incarnationId === undefined ? {} : { incarnationId: saved.entry.incarnationId }),
           },
         };
+      if (saved.reason === 'unsupported_library_profile') return { result: 'unsupported_library_profile' };
       return { result: saved.reason === 'closed' ? 'closed' : 'unavailable' };
     }
     await prepareSession(request, sessionEnv);

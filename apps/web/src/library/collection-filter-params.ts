@@ -27,6 +27,7 @@ export function readCollectionFilterParams(
   );
   const clauses: FilterDocument[] = [];
   for (const [key, values] of groupParams(params)) {
+    if (key === 'type') continue;
     if (key.startsWith('l.')) continue;
     const match = /^(f|r)\.(.+)$/.exec(key);
     if (!match || !facets.includes(match[2]!)) {
@@ -119,8 +120,10 @@ export function collectionFilterAddress(
   selected: Record<string, string[]>,
   ranges: CollectionFilterParams['ranges'],
   selectedLabels: Record<string, string> = {},
+  type?: string,
 ): string {
   const params = new URLSearchParams();
+  if (type) params.set('type', type);
   for (const [property, values] of Object.entries(selected))
     for (const value of values) params.append(`f.${property}`, value);
   for (const [property, label] of Object.entries(selectedLabels))

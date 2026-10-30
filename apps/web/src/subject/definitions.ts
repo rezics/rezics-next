@@ -24,6 +24,8 @@ export type Release = FilterRelease & {
     {
       labels?: Record<string, string>;
       datatype: string;
+      targets?: readonly string[];
+      units?: readonly string[];
       value?: { pattern?: string };
       relation?: { group?: string; symmetric?: boolean; inverseLabels?: Record<string, string> };
     }

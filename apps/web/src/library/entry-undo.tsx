@@ -3,7 +3,7 @@ import { QueryClientContext } from '@tanstack/react-query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
-import { libraryEntryStateLabel, type LibraryRestoreInput, type LibraryRestoreResult } from './entries-read';
+import type { LibraryRestoreInput, LibraryRestoreResult } from './entries-read';
 import { LibraryTitle } from './title';
 
 export type EntryFormContext = { locale: string; csrfToken?: string | null; returnTo?: string };
@@ -105,7 +105,7 @@ export function EntryRestoreFeedback({ restore, locale }: { restore: LibraryRest
               m.library_subject_unavailable()
             )}
           </p>
-          <p className="text-sm text-muted-foreground">{libraryEntryStateLabel(entry.state)}</p>
+          <p className="text-sm text-muted-foreground">{entry.stateLabel ?? m.library_other()}</p>
         </article>
       ) : null}
     </div>

@@ -1,6 +1,7 @@
 import entriesRecording from '../recorded/library-continue-entries.json';
 import sessionsRecording from '../recorded/library-continue-progress-sessions.json';
 import homePageRecording from '../recorded/home-page.json';
+import { recordedBookState } from './library-entry-states.ts';
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import { chosenLabels, isRecord } from './languages.ts';
@@ -54,11 +55,12 @@ export function setContinueStorySize(size: number): void {
 }
 
 function subjects(): Record<string, unknown>[] {
-  const entries = entriesRecording.libraryEntries.filter((entry) => entry.state === 'in_progress');
+  const activeState = recordedBookState(1);
+  const entries = entriesRecording.libraryEntries.filter((entry) => entry.state === activeState);
   const available: Record<string, unknown>[] = [
     ...entries.slice(0, 3).map((entry, index) => ({
       subjectId: entry.subjectId,
-      state: index === 0 ? 'in_progress' : index === 1 ? 'not-a-state-id' : null,
+      state: index === 0 ? activeState : index === 1 ? 'not-a-state-id' : null,
       lastActivityAt: `2026-10-28T00:38:4${index}.000Z`,
       activeProgressSession:
         sessionsRecording.progressSessions.find((item) => item.subjectId === entry.subjectId) ?? null,
@@ -75,7 +77,7 @@ function subjects(): Record<string, unknown>[] {
     const subjectId = `01a17ff1-0000-7000-8000-${String(index + 1).padStart(12, '0')}`;
     available.push({
       subjectId,
-      state: index % 2 === 0 ? 'in_progress' : null,
+      state: index % 2 === 0 ? activeState : null,
       lastActivityAt: `2026-10-28T00:39:${String(index).padStart(2, '0')}.000Z`,
       activeProgressSession: {
         ...entrylessSession,

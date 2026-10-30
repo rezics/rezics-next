@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
+import { normalizeLibraryLabelName } from './subject-label-name';
 import { readSubjectSlotSession } from './subject-slot';
 
 export type SubjectLabel = { id: string; labelId: string; name: string; revision: number };
@@ -124,14 +125,6 @@ function refused(result: Result<unknown>, intent: SubjectLabelMutationInput['int
     if (code === 'library_label_restore_capacity') return { ok: false, reason: 'restore-capacity' };
   }
   return { ok: false, reason: 'unavailable' };
-}
-
-/** Version-one label names: NFC, Unicode whitespace collapse, case-preserving and bounded by scalar value count. */
-export function normalizeLibraryLabelName(value: string): string {
-  return value
-    .normalize('NFC')
-    .replace(/\p{White_Space}+/gu, ' ')
-    .replace(/^ +| +$/g, '');
 }
 
 function validLabelName(name: string): boolean {

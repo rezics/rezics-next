@@ -3,10 +3,13 @@ import type { LibrarySubject } from './reads';
 import type { FilterDocument } from '@rezics/filter';
 import type { CollectionFilterProperty } from './collection-filters';
 import type { CollectionFilterParams } from './collection-filter-params';
+import type { LibraryPinsRead } from './pins-read';
+import type { MineCollection } from './mine-collections';
 
 export type DynamicBuiltinKind = 'everything' | 'state' | 'liked' | (string & {});
 export type DynamicCollectionRead = {
   id: string;
+  curatorAccountId?: string;
   membershipKind: 'dynamic';
   builtinKind: DynamicBuiltinKind;
   builtinLabels?: Record<string, string>;
@@ -47,6 +50,9 @@ export type DynamicCollectionPage = {
   filterStatus?: 'unsupported' | 'preparing' | 'failed';
   filterProperties?: CollectionFilterProperty[];
   filterParams?: CollectionFilterParams;
+  pins?: LibraryPinsRead;
+  navigationCollections?: MineCollection[];
+  following?: boolean | null;
 };
 
 export function dynamicCollectionTitle(

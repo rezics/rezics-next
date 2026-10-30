@@ -4,11 +4,13 @@ import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { configured, type SessionEnv } from '../session/client';
 import { cookie, SESSION_COOKIE, validId } from '../session/cookies';
-import { libraryEntryStates, type LibraryEntryStateWrite } from './entries-read';
+import { type LibraryEntryStateWrite } from './entries-read';
+import { libraryStateLabel, libraryStateOptions, type LibraryStateChoice } from './profiles';
+import { readRelease } from '../subject/definitions';
+import { requestLocale } from '../kernel/client';
 import { libraryFullQuery, libraryListQuery, readLibraryResult } from './reads';
 import { readSubjectLabelAssignments, type SubjectLabel } from './subject-labels.ts';
 
-export const libraryEntryStatesWrite = libraryEntryStates;
 export type { LibraryEntryStateWrite };
 export type LibraryEntryStateRead = string;
 export type SubjectSlotEntry = {
@@ -18,12 +20,7 @@ export type SubjectSlotEntry = {
   incarnationId?: string | null;
 };
 
-export function subjectSlotStateLabel(state: LibraryEntryStateRead): string {
-  if (state === 'planned') return m.library_subject_state_planned();
-  if (state === 'in_progress') return m.library_subject_state_in_progress();
-  if (state === 'completed') return m.library_subject_state_completed();
-  if (state === 'paused') return m.library_subject_state_paused();
-  if (state === 'dropped') return m.library_subject_state_dropped();
+export function subjectSlotStateLabel(_state: LibraryEntryStateRead): string {
   return m.library_other();
 }
 export type SubjectSlotCollection = {
@@ -47,6 +44,7 @@ export type SubjectLibrarySlotResult =
   | 'collection-full'
   | 'conflict'
   | 'closed'
+  | 'unsupported_library_profile'
   | 'unavailable'
   | 'label-capacity'
   | 'label-restore-stale'
@@ -60,6 +58,8 @@ export type SubjectLibrarySlotData = {
   csrfToken: string | null;
   entryAvailable: boolean;
   entry: SubjectSlotEntry | null;
+  stateOptions?: LibraryStateChoice[];
+  entryStateLabel?: string;
   publicCollections: SubjectPublicCollection[] | null;
   publicCollectionsNext: string | null;
   collectionsLoaded: boolean;
@@ -92,7 +92,7 @@ export type SubjectSlotCollectionsResult = {
   collections: SubjectSlotCollection[] | null;
 };
 
-type EntryResult = { libraryEntry: SubjectSlotEntry };
+type EntryResult = { libraryEntry: SubjectSlotEntry & { subject?: { type?: string } | null } };
 type PublicCollectionsResult = { collections: SubjectPublicCollection[]; next: string | null };
 type CollectionsResult = { collections: SubjectSlotCollection[]; next: string | null };
 export type SubjectSlotSession =
@@ -125,14 +125,13 @@ async function readEntry(
   client: KernelClient,
   subjectId: string,
   authorization: string,
-): Promise<SubjectSlotEntry | null> {
+): Promise<(SubjectSlotEntry & { subject?: { type?: string } | null }) | null> {
   const result = await client.libraryEntries({ subjectId }).get({
     query: libraryFullQuery(),
     headers: { authorization },
   });
   if (result.status === 404) return null;
-  const entry = readLibraryResult<EntryResult>(result as never).libraryEntry as SubjectSlotEntry;
-  return entry;
+  return readLibraryResult<EntryResult>(result as never).libraryEntry;
 }
 
 async function readPublicCollections(client: KernelClient, subjectId: string): Promise<PublicCollectionsResult> {
@@ -180,6 +179,7 @@ export async function loadSubjectLibrarySlot(
   resultValue?: string,
   labelResultValue?: string,
   labelUndo?: SubjectLabelUndo,
+  subjectType?: string,
 ): Promise<SubjectLibrarySlotData> {
   const identityPromise = readSubjectSlotSession(request, sessionEnv);
   const publicPromise = readPublicCollections(client, subjectId).then(
@@ -189,6 +189,9 @@ export async function loadSubjectLibrarySlot(
   const [identity, publicResult] = await Promise.all([identityPromise, publicPromise]);
   let entryAvailable = false;
   let entry: SubjectSlotEntry | null = null;
+  let entryType = subjectType;
+  let stateOptions: LibraryStateChoice[] = [];
+  let entryStateLabel: string | undefined;
   let collections: SubjectSlotCollection[] | null = null;
   let collectionsLoaded = false;
   let labels: SubjectLabel[] | null = null;
@@ -218,6 +221,16 @@ export async function loadSubjectLibrarySlot(
     ]);
     entryAvailable = entryResult.available;
     entry = entryResult.value;
+    entryType ??= entryResult.value?.subject?.type;
+    if (entryType) {
+      const release = await readRelease().catch(() => undefined);
+      if (release) {
+        const locale = requestLocale() ?? 'en';
+        stateOptions = libraryStateOptions(release, entryType, locale);
+        if (entry)
+          entryStateLabel = libraryStateLabel(release, entryType, entry.state, locale)?.text ?? m.library_other();
+      }
+    }
     collectionsLoaded = collectionResult.loaded;
     collections = collectionResult.value;
     labels = labelsResult;
@@ -229,6 +242,7 @@ export async function loadSubjectLibrarySlot(
     resultValue === 'collection-full' ||
     resultValue === 'conflict' ||
     resultValue === 'closed' ||
+    resultValue === 'unsupported_library_profile' ||
     resultValue === 'unavailable' ||
     resultValue === 'label-capacity' ||
     resultValue === 'label-restore-stale' ||
@@ -254,6 +268,8 @@ export async function loadSubjectLibrarySlot(
     csrfToken: identity.csrfToken,
     entryAvailable,
     entry,
+    stateOptions,
+    ...(entryStateLabel === undefined ? {} : { entryStateLabel }),
     publicCollections: publicResult.available ? publicResult.collections : null,
     publicCollectionsNext: publicResult.next,
     collectionsLoaded,

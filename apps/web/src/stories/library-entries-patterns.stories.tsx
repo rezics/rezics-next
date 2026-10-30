@@ -8,8 +8,11 @@ import type { LibraryEntryStateWrite } from '../library/entries-read';
 import type { ShelfLayout, ShelfSize } from '../library/shelf-params';
 import { displayLibraryTitle } from '../library/title';
 import entries from '../kernel/recorded/library-entries.json';
+import definitions from '../kernel/recorded/definitions-release.json';
+import { libraryStateLabel, libraryStateOptions } from '../library/profiles';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import type { Release } from '../subject/definitions';
 import { PatternStory, pagePaths } from './page';
 
 const viewports = {
@@ -23,6 +26,11 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+const recordedRelease = definitions.release as unknown as Release;
+const activeStateId = libraryStateOptions(recordedRelease, 'schema:Book', 'en')[1]?.id;
+const activeStateLabel = () =>
+  libraryStateOptions(recordedRelease, 'schema:Book', getLocale())[1]?.label.text ?? m.library_other();
 
 function EntriesPattern({
   layout,
@@ -79,7 +87,7 @@ function story(name: string, layout: ShelfLayout, size: ShelfSize = 'm', state?:
         );
       }
       if (state) {
-        const status = m.library_state_in_progress();
+        const status = activeStateLabel();
         await view.findByRole('heading', { name: m.library_tracked_entries_state({ status }) });
         await view.findByRole('link', { name: m.library_clear_state() });
       }
@@ -93,7 +101,9 @@ export const ListLayout: Story = story('List layout', 'list');
 export const TableLayout: Story = story('Table layout', 'table');
 export const SmallGrid: Story = story('Small cards', 'grid', 's');
 export const LargeGrid: Story = story('Large cards', 'grid', 'l');
-export const InProgress: Story = story('In-progress filter', 'grid', 'm', 'in_progress');
+export const StateFilter: Story = activeStateId
+  ? story('State filter', 'grid', 'm', activeStateId)
+  : story('State filter', 'grid');
 
 export const PhoneTileMenuOpen: Story = {
   name: 'Phone tile actions open',

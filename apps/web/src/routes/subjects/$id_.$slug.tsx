@@ -267,7 +267,7 @@ function SubjectRoute() {
   const { data: publicReactions } = useSuspenseQuery(subjectReactionsQuery(id, locale));
   const { data: publicRatings } = useSuspenseQuery(subjectRatingQuery(id, locale));
   const { data: library } = useQuery({
-    ...subjectLibraryQuery(id, locale, slot === 'collections', labelResult, labelUndo),
+    ...subjectLibraryQuery(id, locale, slot === 'collections', labelResult, labelUndo, subjectPageType(page)),
     enabled: session === 'signed-in',
   });
   const { data: reader } = useQuery({ ...subjectReaderQuery(id, locale), enabled: session === 'signed-in' });

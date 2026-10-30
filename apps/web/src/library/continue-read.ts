@@ -1,8 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
 import type { KernelClient } from '@rezics/client';
 import { personalRead } from '../kernel/query';
 import type { SubjectSummary } from '../media/summary';
@@ -10,12 +8,8 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import type { ProgressLabelInput } from './progress-label';
 import { libraryLabel } from './reads';
-import { libraryEntryStateLabel, readEntryPage } from './entries-read';
-
-export const readContinueEntries = createServerFn({ method: 'GET' }).handler(async () => {
-  setResponseHeader('cache-control', 'private, no-store');
-  return loadContinue(kernelClient(), getRequest(), env as Partial<SessionEnv>);
-});
+import { libraryStateLabel } from './profiles';
+import type { Release } from '../subject/definitions';
 
 /** The Continue row shows at most this many subjects. */
 export const CONTINUE_LIMIT = 6;
@@ -60,10 +54,14 @@ type ContinueKernelClient = KernelClient & {
   };
 };
 
-const knownStates = new Set(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
-
-function stateText(state: string | null, locale: string): string | undefined {
-  return state !== null && knownStates.has(state) ? libraryEntryStateLabel(state, locale) : undefined;
+function stateText(
+  release: Release | undefined,
+  type: string,
+  state: string | null,
+  locale: string,
+): string | undefined {
+  if (!release || state === null) return undefined;
+  return libraryStateLabel(release, type, state, locale)?.text;
 }
 
 export function continueProgress(session: (ProgressLabelInput & { id: string }) | null): ContinueProgress | null {
@@ -90,6 +88,27 @@ export function homeContinueQuery(locale: string, read: () => Promise<ContinueEn
   });
 }
 
+const readLibraryContinuePage = createServerFn({ method: 'GET' }).handler(async () => {
+  const { env } = await import('cloudflare:workers');
+  const { kernelClient } = await import('../kernel/client');
+  setResponseHeader('Cache-Control', 'private, no-store');
+  return loadContinue(kernelClient(), getRequest(), env as Partial<SessionEnv>);
+});
+
+/** The Library's Continue row reads the same bounded, private API page as Home. */
+export const readContinueEntries = readLibraryContinuePage;
+
+/** Continue is one bounded, private read, started only after the browser confirms operation exposure. */
+export function libraryContinueQuery(locale: string) {
+  return queryOptions({
+    ...personalRead,
+    enabled: personalRead.enabled,
+    queryKey: ['library-continue', locale],
+    queryFn: () => readLibraryContinuePage(),
+    retry: false,
+  });
+}
+
 type RawSubject = {
   id: string;
   type: string;
@@ -108,42 +127,11 @@ function summaryOf(subject: RawSubject): SubjectSummary {
   };
 }
 
-/** The active session of the subject itself, or null when the read fails or the subject has none. */
-export async function readProgress(
-  client: KernelClient,
-  subjectId: string,
-  authorization: string,
-): Promise<ContinueProgress | null> {
-  try {
-    const result = await client.progressSessions.get({
-      query: { subjectId, limit: 5 },
-      headers: { authorization },
-    });
-    const session = result.data?.progressSessions.find(
-      (item) => item.state === 'active' && item.subjectId === subjectId,
-    );
-    if (!session) return null;
-    return {
-      sessionId: session.id,
-      mode: session.mode,
-      unit: session.unit,
-      amount: session.amount,
-      total: session.total,
-      completedUnitCount: session.completedUnitCount,
-      locator: session.locator,
-      position: session.position,
-    };
-  } catch {
-    return null;
-  }
-}
-
 /** Continue preview: one private list read and one batched subject-header read, with no reads when signed out. */
 export async function loadContinue(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  readerLocale?: string,
 ): Promise<ContinueEntry[]> {
   try {
     await prepareSession(request, sessionEnv, { refresh: false });
@@ -161,7 +149,7 @@ export async function loadContinue(
     );
     const page = await reader.pages.$read.post({ reads, headers: { authorization } });
     const results = page.data?.reads ?? {};
-    const { release, locale, progressSessionProfile } = await progressProfiles(request, readerLocale);
+    const { release, locale, progressSessionProfile } = await progressProfiles(request);
     return subjects.flatMap((item) => {
       const header = results[`subject:${item.subjectId}`];
       const subject = header?.status === 200 ? header.body?.subject : undefined;
@@ -169,7 +157,7 @@ export async function loadContinue(
       const title = libraryLabel(subject.label, item.subjectId);
       const language = typeof title === 'object' ? title.language : undefined;
       const progress = continueProgress(item.activeProgressSession);
-      const label = stateText(item.state, locale);
+      const label = stateText(release, subject.type, item.state, locale);
       return [
         {
           subjectId: item.subjectId,
@@ -189,54 +177,11 @@ export async function loadContinue(
   }
 }
 
-/** The compatibility path for kernels that have not exposed the Continue operation yet. */
-export async function loadLegacyContinue(
-  client: KernelClient,
-  request: Request,
-  sessionEnv: Partial<SessionEnv>,
-  readerLocale?: string,
-): Promise<ContinueEntry[]> {
-  try {
-    await prepareSession(request, sessionEnv, { refresh: false });
-    const authorization = viewerCredential(request);
-    if (!authorization) return [];
-    const page = await readEntryPage(client, authorization, undefined, 'in_progress', CONTINUE_LIMIT);
-    const { release, locale, progressSessionProfile } = await progressProfiles(request, readerLocale);
-    return await Promise.all(
-      page.libraryEntries.flatMap((entry) => {
-        const subject = entry.subject as RawSubject | null | undefined;
-        if (!subject) return [];
-        const label = libraryLabel(subject.label, entry.subjectId);
-        const language = typeof label === 'object' ? label.language : undefined;
-        const stateLabel = stateText(entry.state, locale);
-        return [
-          readProgress(client, entry.subjectId, authorization).then((progress): ContinueEntry => ({
-            subjectId: entry.subjectId,
-            label: typeof label === 'string' ? label : label.value,
-            ...(language ? { language } : {}),
-            summary: summaryOf(subject),
-            progress:
-              progress && release
-                ? {
-                    ...progress,
-                    ...progressSessionProfile(release, subject.type, progress.mode, progress.unit, locale),
-                  }
-                : progress,
-            ...(stateLabel ? { stateLabel } : {}),
-          })),
-        ];
-      }),
-    );
-  } catch {
-    return [];
-  }
-}
-
-const progressProfiles = createServerOnlyFn(async (request: Request, readerLocale?: string) => {
+const progressProfiles = createServerOnlyFn(async (request: Request) => {
   const release = await import('../subject/definitions')
     .then(({ readRelease }) => readRelease())
     .catch(() => undefined);
-  const locale = readerLocale ?? (await import('../kernel/client')).requestLocale(request) ?? 'en';
+  const locale = (await import('../kernel/client')).requestLocale(request) ?? 'en';
   const { progressSessionProfile } = await import('./progress-profile');
   return { release, locale, progressSessionProfile };
 });

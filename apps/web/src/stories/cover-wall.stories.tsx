@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { DropdownMenuItem } from '@rezics/ui/shadcn/dropdown-menu';
 import { sharedRatio, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
 import { subjectHref } from '../subject/subject-href';
@@ -137,7 +136,7 @@ function Wall({ density }: { density?: CoverDensity }) {
             {...(progress ? { progress } : {})}
             {...(!progress && state != null ? { state } : {})}
             menuLabel={`More actions for ${subject.title}`}
-            menu={<DropdownMenuItem>Remove</DropdownMenuItem>}
+            menuEntries={[{ type: 'item', label: 'Remove', onSelect: () => {} }]}
           />
         ))}
       </CoverGrid>
