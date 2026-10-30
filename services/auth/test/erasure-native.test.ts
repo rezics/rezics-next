@@ -173,7 +173,7 @@ test('existing deletion caller drains real Auth stores before user deletion; def
       credential: {
         kind: 'key',
         kid: 'committed-native-key',
-        publicJwk: { ...(await exportJWK(committedKey.publicKey)), alg: 'ES256' },
+        publicJwk: { ...(await exportJWK(committedKey.publicKey)), kid: 'committed-native-key', alg: 'ES256' },
       },
     });
     const commitInput = { ...committedStage, subjectAccountId: owner, headers: new Headers({ cookie: victim.cookie }) };
