@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
-import { ReporterStatusView } from '../src/moderation/reporter-status-view';
+import { ReporterStatusPage, ReporterStatusView } from '../src/moderation/reporter-status-view';
 import { reporterStatusResponse, type ReporterStatus } from '../src/moderation/reporter-status-model';
 import { isSignedInPath } from '../src/session/guard';
 
@@ -67,4 +67,67 @@ test('successful receipt is retained and the served status route uses the privat
   expect(reader).toContain('private, no-store');
   expect(reader).toContain('result.status === 404');
   expect(isSignedInPath('/en/moderation/reports/report-1')).toBe(true);
+});
+
+test('the served receipt explains its actioned disposition and separates submitted evidence, timeline and copyable reference', () => {
+  const report = reporterStatusResponse({
+    report: {
+      ...submission,
+      outcome: 'actioned',
+      resolvedAt: '2026-10-31T10:00:00.000Z',
+      moderatorNotes: 'Private moderator discussion',
+      otherReports: ['Another reporter’s evidence'],
+      body: 'Currently withheld target body',
+      appeal: { outcome: 'reversed' },
+    },
+  });
+  const html = renderToStaticMarkup(createElement(ReporterStatusPage, { report }));
+  for (const value of [
+    'Your report',
+    'Actioned',
+    'a later appeal does not change it',
+    'Submitted',
+    'Reviewed',
+    'Your submission',
+    'Evidence you submitted',
+    'The original evidence I submitted.',
+    'This content is unavailable.',
+    'Report reference',
+    'Copy reference',
+    'Back to inbox',
+  ])
+    expect(html).toContain(value);
+  expect(html).toContain(`dateTime="${submission.createdAt}"`);
+  expect(html).toContain('dateTime="2026-10-31T10:00:00.000Z"');
+  expect(html).toContain('<details');
+  expect(html).toContain(submission.id);
+  expect(html).toContain('post post-1');
+  expect(html).toContain('revision-1');
+  expect(html.match(/href=/g)).toHaveLength(1);
+  expect(html).toMatch(/href="(?:\/en)?\/inbox"/);
+  for (const hidden of [
+    'Private moderator discussion',
+    'Another reporter’s evidence',
+    'Currently withheld target body',
+    'reversed',
+    submission.reporterId,
+  ])
+    expect(html).not.toContain(hidden);
+});
+
+test('the served error state offers an explicit retry and inbox return without a fabricated report', () => {
+  const html = renderToStaticMarkup(createElement(ReporterStatusPage, { onRetry: () => undefined }));
+  expect(html).toContain('Your report');
+  expect(html).toContain('role="alert"');
+  expect(html).toContain('Your report could not be loaded. Try again.');
+  expect(html).toContain('Try again');
+  expect(html).toContain('Back to inbox');
+  for (const value of [
+    'Pending review',
+    'Actioned',
+    'Dismissed',
+    'Report reference',
+    submission.evidence ?? 'missing evidence',
+  ])
+    expect(html).not.toContain(value);
 });

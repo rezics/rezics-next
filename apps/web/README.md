@@ -1105,6 +1105,19 @@ at phone390 and desktop1280 through viewport, locale and theme globals.
   script once per page and only after opening a dialog
 - **Growth check:** `tests/report-cost.test.ts`: `report submission keeps K/D/R/A fixed as stored reports and sessions grow`
 
+### Report receipt (`/moderation/reports/<id>`)
+
+The existing report notice destination, `/moderation/reports/<id>`, is a private receipt. Its shared
+`ReporterStatusPage`/`ReporterStatusView` presents the owner's reason and evidence separately, explains the native
+pending/actioned/dismissed disposition, and shows Submitted/Reviewed times without inventing a review date.
+Actioned is the report disposition and survives an appeal. Current target availability never authorizes a target
+read or a guessed target link; unavailable targets retain the reporter's own submission. Reference IDs and any
+submitted revision expand for copying with explicit clipboard success/failure. The contextual return link uses the
+existing Inbox route. The source remains one exact report GET with private no-store responses, unrelated/missing
+404s and explicit retry for dependency failure; presentation adds no kernel, count, identity or content reads.
+`Patterns/Reporter status` documents its states and interactions; `Pages/Reporter status` uses the real route and
+shared shell. The same IDs use phone390/desktop1280 and locale/theme globals for later visual review.
+
 ### Notifications inbox (`/inbox`)
 
 - **Touches:** One private notification page read, one optional batched public identity read for its distinct actors, then at most one existing post, decision or report read per distinct target; the navigation badge reads the capped count after hydration.

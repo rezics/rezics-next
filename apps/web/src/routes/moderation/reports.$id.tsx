@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { readReporterStatus } from '../../moderation/reporter-status-read';
-import { ReporterStatusFailure, ReporterStatusView } from '../../moderation/reporter-status-view';
+import { ReporterStatusPage } from '../../moderation/reporter-status-view';
 import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
@@ -16,22 +16,10 @@ export const Route = createFileRoute('/moderation/reports/$id')({
 });
 
 function ReporterStatusRoute() {
-  return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <ReporterStatusView report={Route.useLoaderData()} />
-    </main>
-  );
+  return <ReporterStatusPage report={Route.useLoaderData()} />;
 }
 
 function ReporterStatusError() {
   const router = useRouter();
-  return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <ReporterStatusFailure
-        onRetry={() => {
-          void router.invalidate();
-        }}
-      />
-    </main>
-  );
+  return <ReporterStatusPage onRetry={() => router.invalidate()} />;
 }
