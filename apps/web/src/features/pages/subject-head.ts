@@ -1,13 +1,14 @@
-import { documentText } from '@rezics/document';
 import { pickLanguage } from '@rezics/composition';
-import { coverImagePreload, type CoverSummary } from '@rezics/ui/cover';
+import { coverImagePreload } from '@rezics/ui/cover';
 import { coverSrc } from '../../media/cover-src';
+import { publicCardImage, publicCover } from '../../media/public-card';
 import { originalLanguage } from '../../subject/language';
 import { locales, type Locale } from '../../paraglide/runtime.js';
 import { pageHead, type PagePaths } from '../../shell/head';
 import { subjectBody, subjectDisplayLabel, subjectPageJsonLd, type SubjectPageData } from './subject';
 import { bestRank, isRecord, pageText, spoilerLevel, type Stmt } from './shared';
 import { readableDocument } from './values';
+import { publicDocumentText } from './jsonld';
 
 type SubjectHeadContext = {
   origin: string;
@@ -26,7 +27,6 @@ type SubjectHeadContext = {
 };
 
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
-const GLOBAL = '00000000-0000-8000-8000-000000000000';
 
 function pathForLocale(path: string, locale: string): string {
   const prefix = `/${encodeURIComponent(locale)}`;
@@ -48,8 +48,16 @@ function releaseYear(
   for (const property of DATE_PROPERTIES) {
     const chosen = bestRank(Object.hasOwn(statements, property) ? (statements[property] ?? []) : []);
     for (const statement of chosen) {
+      if (spoilerLevel(statement) > 0 || statement.property.data_type !== 'time') continue;
       const content = statement.value.type === 'value' ? statement.value.content : undefined;
-      if (!isRecord(content) || typeof content.time !== 'string') continue;
+      if (
+        !isRecord(content) ||
+        typeof content.time !== 'string' ||
+        typeof content.precision !== 'number' ||
+        !Number.isInteger(content.precision) ||
+        content.precision < 9
+      )
+        continue;
       const match = /^\+?(\d{4,})-/.exec(content.time);
       if (!match) continue;
       const date = new Date(0);
@@ -79,7 +87,7 @@ function summaryText(subject: NonNullable<ReturnType<typeof subjectBody>>['subje
     original,
   );
   const selected = documents.find((document) => document.language === language) ?? documents[0]!;
-  return documentText(selected.document);
+  return publicDocumentText(selected.document);
 }
 
 function descriptionFor(
@@ -94,19 +102,6 @@ function visibleStatement(subject: NonNullable<ReturnType<typeof subjectBody>>['
   return Object.values(subject.statements).some((statements) =>
     bestRank(statements as unknown as Stmt[]).some((statement) => spoilerLevel(statement) === 0),
   );
-}
-
-function coverOf(subjectSummary: unknown): CoverSummary | undefined {
-  if (!isRecord(subjectSummary) || !isRecord(subjectSummary.cover)) return;
-  const cover = subjectSummary.cover;
-  if (
-    typeof cover.media !== 'string' ||
-    !Array.isArray(cover.variants) ||
-    cover.variants.length === 0 ||
-    cover.withheld === 'suitability'
-  )
-    return;
-  return cover as unknown as CoverSummary;
 }
 
 /** Subject metadata and preload data use the same public page read, cover summary and locale fallback as the page. */
@@ -130,8 +125,8 @@ export function subjectHead(page: SubjectPageData, context: SubjectHeadContext) 
   const title = `${titleLabel}${parts.length ? ` (${parts.join(', ')})` : ''}`;
   const titleWithView = context.viewLabel || context.view ? `${title} – ${context.viewLabel ?? context.view}` : title;
   const description = descriptionFor(read.subject, locale);
-  const cover = coverOf(read.summary);
-  const largest = cover?.variants.reduce((current, variant) => (variant.width > current.width ? variant : current));
+  const cover = publicCover(read.summary?.cover);
+  const image = publicCardImage(cover, titleLabel);
   const jsonLd =
     context.includeJsonLd === false
       ? undefined
@@ -145,16 +140,7 @@ export function subjectHead(page: SubjectPageData, context: SubjectHeadContext) 
     {
       title: titleWithView,
       ...(description ? { description } : {}),
-      ...(cover && largest
-        ? {
-            image: {
-              url: coverSrc(cover.media, largest.format, largest.width),
-              width: largest.width,
-              height: Math.round((cover.height * largest.width) / Math.max(cover.width, 1)),
-              alt: titleLabel,
-            },
-          }
-        : {}),
+      ...(image ? { image } : {}),
       ...(context.cursor !== undefined || (context.view === 'relations' && (context.page ?? 1) > 1)
         ? { robots: 'noindex, follow' }
         : !description && !cover && !visibleStatement(read.subject)

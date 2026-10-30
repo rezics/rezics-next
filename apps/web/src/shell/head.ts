@@ -58,8 +58,10 @@ export function pageHead(options: PageHeadOptions, context?: HeadContext) {
       : [
           { name: 'description', content: description },
           { property: 'og:description', content: description },
+          { name: 'twitter:description', content: description },
         ]),
     { property: 'og:title', content: title },
+    { name: 'twitter:title', content: title },
     { property: 'og:url', content: canonical },
     { property: 'og:type', content: options.type ?? 'website' },
     { property: 'og:site_name', content: 'REZICS' },
@@ -68,6 +70,8 @@ export function pageHead(options: PageHeadOptions, context?: HeadContext) {
     { property: 'og:image:width', content: String(image.width) },
     { property: 'og:image:height', content: String(image.height) },
     { property: 'og:image:alt', content: image.alt },
+    { name: 'twitter:image', content: imageUrl.href },
+    { name: 'twitter:image:alt', content: image.alt },
     { name: 'twitter:card', content: 'summary_large_image' },
     ...(options.robots ? [{ name: 'robots', content: options.robots }] : []),
   ];

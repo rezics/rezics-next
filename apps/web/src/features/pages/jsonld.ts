@@ -1,8 +1,16 @@
 import { pickLanguage } from '@rezics/composition';
-import { checkDocument, documentParagraphs, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
-import { spoilerLevel, type Stmt } from './shared.tsx';
+import {
+  checkDocument,
+  documentParagraphs,
+  documentText,
+  type DocumentNode,
+  type DocumentSnapshot,
+} from '@rezics/document';
+import { spoilerLevel, webUrl, type Stmt } from './shared.tsx';
+import { publicCardImage } from '../../media/public-card';
 import { originalLanguage } from '../../subject/language.ts';
-import type { Related, Subject } from '../../subject/types.ts';
+import { subjectHref } from '../../subject/subject-href';
+import type { Related, Subject, Summary } from '../../subject/types.ts';
 
 type JsonValue = string | number | JsonValue[] | { [key: string]: JsonValue };
 // The kernel client infers statement values as one union. Indexing it is too large for the compiler,
@@ -30,7 +38,34 @@ const reserved = new Set([
   'description',
   'alternateName',
   'identifier',
+  'image',
+  'aggregateRating',
 ]);
+
+/** Released explicit class, existing schema CURIE mapping, then the truthful generic fallback. */
+function schemaType(type: string, annotation?: string): string {
+  return (
+    /^https:\/\/schema\.org\/([A-Za-z0-9_-]+)$/.exec(annotation ?? '')?.[1] ??
+    /^schema:([A-Za-z0-9_-]+)$/.exec(type)?.[1] ??
+    'Thing'
+  );
+}
+
+/** The public label and concrete type are supplied by the native read; handles are never guessed. */
+export function publicSubjectReference(
+  id: string,
+  label: string | undefined,
+  type: string | undefined,
+  locale: string,
+  origin: string,
+): Record<string, JsonValue> {
+  return {
+    '@id': `${idBase}${id}`,
+    ...(label === undefined ? {} : { name: label }),
+    ...(type ? { '@type': schemaType(type) } : {}),
+    ...(type && label ? { url: `${origin}${subjectHref({ id, label }, locale).href}` } : {}),
+  };
+}
 
 function text<T extends string | string[]>(
   values: Record<string, T>,
@@ -87,6 +122,12 @@ function publicNode(node: DocumentNode): DocumentNode | undefined {
     ...node,
     ...(node.content ? { content: node.content.flatMap((child) => publicNode(child) ?? []) } : {}),
   };
+}
+
+/** Use the document reader's text while omitting concealed inline branches. */
+export function publicDocumentText(document: DocumentSnapshot): string {
+  const doc = publicNode(document.doc);
+  return doc ? documentText({ ...document, doc }) : '';
 }
 
 function instructions(content: unknown): JsonValue[] | undefined {
@@ -150,6 +191,10 @@ function statementValue(
     return statement.property.data_type === 'quantity' ? cookTime(content) : undefined;
   if (property === 'schema:recipeInstructions')
     return statement.property.data_type === 'document' ? instructions(content) : undefined;
+  if (property === 'schema:sameAs')
+    return statement.property.data_type === 'url' && typeof content === 'string' && webUrl(content)
+      ? content
+      : undefined;
   switch (statement.property.data_type) {
     case 'wikibase-item':
       return typeof content === 'string' ? references.get(content) : undefined;
@@ -186,6 +231,7 @@ export function subjectJsonLd({
   subjectLabel,
   schemaOrgType,
   ratings,
+  summary,
 }: {
   subject: Subject;
   related: Related;
@@ -196,15 +242,15 @@ export function subjectJsonLd({
   subjectLabel?: string;
   schemaOrgType?: string;
   ratings?: { figures: { population: string; count: number; mean?: number; remaining?: number }[] };
+  summary?: Summary | null;
 }): Record<string, JsonValue> {
   const original = originalLanguage(subject);
   const site = (origin ?? new URL(url).origin).replace(/\/+$/, '');
   const label = subjectLabel ?? text(subject.labels, locale, original) ?? '';
-  const schemaType = /^https:\/\/schema\.org\/([A-Za-z0-9_-]+)$/.exec(schemaOrgType ?? '')?.[1];
   const entries: [string, JsonValue][] = [
     ['@context', 'https://schema.org'],
     ['@id', `${idBase}${subject.id}`],
-    ['@type', schemaType ?? (subject.type.startsWith('schema:') ? subject.type.slice(7) : 'Thing')],
+    ['@type', schemaType(subject.type, schemaOrgType)],
     ['url', url],
   ];
   if (!subject.type.startsWith('schema:')) {
@@ -218,12 +264,23 @@ export function subjectJsonLd({
   if (name !== undefined) entries.push(['name', name]);
   if (description !== undefined) entries.push(['description', description]);
   if (aliases !== undefined) entries.push(['alternateName', [...aliases]]);
+  const image = publicCardImage(summary?.cover, label);
+  if (image)
+    entries.push([
+      'image',
+      {
+        '@type': 'ImageObject',
+        url: new URL(image.url, `${site}/`).href,
+        width: image.width,
+        height: image.height,
+      },
+    ]);
 
   // Select each related label once, even when many statements reference the same subject.
   const references = new Map<string, JsonValue>();
   for (const [id, entry] of Object.entries(related)) {
     const label = text(entry.labels, locale);
-    references.set(id, { '@id': `${idBase}${entry.redirect ?? id}`, ...(label === undefined ? {} : { name: label }) });
+    references.set(id, publicSubjectReference(entry.redirect ?? id, label, entry.type, locale, site));
   }
 
   const identifiers: JsonValue[] = [];
@@ -271,7 +328,16 @@ export function subjectJsonLd({
   }
   if (identifiers.length) entries.push(['identifier', identifiers]);
   const global = ratings?.figures.find((figure) => figure.population === '00000000-0000-8000-8000-000000000000');
-  if (global && global.count > 0 && global.mean !== undefined && global.remaining === undefined) {
+  if (
+    global &&
+    Number.isSafeInteger(global.count) &&
+    global.count > 0 &&
+    global.mean !== undefined &&
+    Number.isFinite(global.mean) &&
+    global.mean >= 0 &&
+    global.mean <= 20 &&
+    global.remaining === undefined
+  ) {
     entries.push([
       'aggregateRating',
       {

@@ -62,6 +62,15 @@ Every indexed page sets, per locale:
   link previews, or a generated card with the cover placeholder when there is no image;
 - `<html lang>` matching the URL's locale.
 
+Subject sharing currently uses the largest supplied anonymous-readable cover variant, with its actual aspect
+ratio and the page's localized title as its text alternative. Withheld, withdrawn and missing covers use the
+existing 1200 × 630 `/cards/default.png`, whose text alternative is “REZICS”; they never put a subject title or
+slug into a fallback image. This static card remains an interim fallback, not the required generated placeholder.
+The Web owner must select the raster renderer and public card route for the existing `Cover` typographic
+placeholder before generated cards replace it. The selected route must read current anonymous page data, conceal
+unavailable targets, and obey the public-cache owner's withdrawal policy; the HTML/CSS cover primitives alone do
+not provide a sharing-image renderer.
+
 ## Structured data
 
 The home page's `WebSite` carries a `SearchAction` with a target URL template and a `query-input` that names its placeholder.

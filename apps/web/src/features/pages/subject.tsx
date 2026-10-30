@@ -11,7 +11,8 @@ import type { Related, Subject, Summary } from '../../subject/types';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { dataComponents, PageData, pageText, SubjectSources, type PageMessages } from './data';
-import { serializeJsonLd, subjectJsonLd } from './jsonld';
+import { publicSubjectReference, serializeJsonLd, subjectJsonLd } from './jsonld';
+import { holderItems } from './overview';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
 import { CompositionRender, type PageDocument } from './render';
 import { linkClass, linkColor } from './shared';
@@ -171,23 +172,48 @@ export function subjectPageJsonLd(
   } = {},
 ): string | undefined {
   const read = subjectBody(page);
-  return read
-    ? serializeJsonLd(
-        subjectJsonLd({
-          subject: read.subject,
-          related: read.related,
-          locale,
-          ...(options.origin ? { origin: options.origin } : {}),
-          ...(options.typeLabel ? { typeLabel: options.typeLabel } : {}),
-          subjectLabel: subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject)),
-          ...(options.schemaOrgType ? { schemaOrgType: options.schemaOrgType } : {}),
-          ...(options.ratings ? { ratings: options.ratings } : {}),
-          url: `${(options.origin ?? 'https://rezics.com').replace(/\/+$/, '')}${
-            subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale).href
-          }`,
-        }),
-      )
-    : undefined;
+  if (!read) return;
+  const origin = (options.origin ?? 'https://rezics.com').replace(/\/+$/, '');
+  const json = subjectJsonLd({
+    subject: read.subject,
+    related: read.related,
+    ...(read.summary === undefined ? {} : { summary: read.summary }),
+    locale,
+    ...(options.origin ? { origin: options.origin } : {}),
+    ...(options.typeLabel ? { typeLabel: options.typeLabel } : {}),
+    subjectLabel: subjectDisplayLabel(read.subject.labels, locale, originalLanguage(read.subject)),
+    ...(options.schemaOrgType ? { schemaOrgType: options.schemaOrgType } : {}),
+    ...(options.ratings ? { ratings: options.ratings } : {}),
+    url: `${origin}${subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale).href}`,
+  });
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
+  // These are inverse properties of visible SubjectLists, never a second lookup or a complete edition inventory.
+  const inverse = new Map([
+    ['schema:exampleOfWork', 'workExample'],
+    ['schema:isPartOf', 'hasPart'],
+  ]);
+  const visit = (content: readonly unknown[]): void => {
+    for (const node of content) {
+      if (!isRecord(node) || !isRecord(node.props)) continue;
+      const key = typeof node.props.id === 'string' ? plan.nodes[node.props.id] : undefined;
+      const planned = key ? plan.reads[key] : undefined;
+      const result = key ? page.reads[key] : undefined;
+      if (node.type === 'SubjectList' && planned?.kind === 'links' && planned.id === page.subject) {
+        const property = inverse.get(planned.property);
+        if (property && result?.status === 200 && isRecord(result.body)) {
+          const limit = node.props.paged === true ? planned.limit : Math.min(planned.limit, 12);
+          const found = holderItems(result.body, limit);
+          const items = found?.items.map((item) =>
+            publicSubjectReference(item.id, item.label.text || undefined, item.type, locale, origin),
+          );
+          if (items?.length) json[property] = items;
+        }
+      }
+      for (const value of Object.values(node.props)) if (Array.isArray(value)) visit(value);
+    }
+  };
+  visit(page.document.content);
+  return serializeJsonLd(json);
 }
 
 /** Whether the template places a slot of this name anywhere in the document. */
