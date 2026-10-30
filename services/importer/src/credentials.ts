@@ -210,7 +210,7 @@ type AuthRequest = {
   origin: string;
   body: string;
   cookie?: string;
-  signal?: AbortSignal;
+  signal: AbortSignal | undefined;
 };
 
 async function authRequest(options: AuthRequest): Promise<{ response: Response; bytes: Uint8Array }> {
