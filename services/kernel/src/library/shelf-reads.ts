@@ -217,10 +217,10 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         const typeId = await resolve(client, route, accountId, type);
         const query = normalizeShelfQuery({
           ...selected,
-          state: value.state as string | undefined,
+          state: (value.state as string | undefined) ?? null,
           typeId,
           orderBy: value.orderBy as ShelfOrder,
-          direction: value.direction as 'asc' | 'desc' | undefined,
+          direction: (value.direction as 'asc' | 'desc' | undefined) ?? 'desc',
         });
         const base = shelfCursorBinding(accountId, query);
         const binding = { ...base, query: { ...base.query, ...generation } };
