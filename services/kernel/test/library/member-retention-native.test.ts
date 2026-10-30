@@ -173,3 +173,17 @@ test('original placement collision rolls back; deleted parents never revive thro
   expect((await f.send(owner.bearer, 'DELETE', `${m.root}?revision=${parent.revision}`)).status).toBe(204);
   expect((await f.send(owner.bearer, 'POST', m.path + ':restore', removed)).status).toBe(404);
 });
+
+test('fresh Undo rechecks current native subject concealment without exposing the retained note', async () => {
+  const m = await make();
+  const removed = await m.remove();
+  const hidden = await f.send('steward', 'POST', `/v1/subjects/${m.subjectId}:hide`, {
+    reason: 'Current occurrence subject disclosure',
+  });
+  expect(hidden.status).toBe(200);
+  const before = await m.snapshot();
+  const response = await f.send(owner.bearer, 'POST', m.path + ':restore', removed);
+  expect(response.status).toBe(404);
+  expect(await response.text()).not.toContain('original note');
+  expect(await m.snapshot()).toEqual(before);
+});
