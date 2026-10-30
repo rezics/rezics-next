@@ -89,6 +89,7 @@ let currentPosts = new Map<string, FixturePost>();
 let currentTitle: string | null = 'A close reading';
 let restoreConflict = false;
 const writes: { method: string; path: string; key: string | null; authorization: string | null }[] = [];
+const kernelRequests: { method: string; path: string }[] = [];
 const accessSubjects = new Map<string, string>();
 let lastAccessToken = '';
 let tokenSequence = 0;
@@ -250,6 +251,7 @@ const fake = Bun.serve({
 
     const authorization = request.headers.get('authorization');
     const key = request.headers.get('idempotency-key');
+    kernelRequests.push({ method: request.method, path: url.pathname });
     if (request.method !== 'GET') writes.push({ method: request.method, path: url.pathname, key, authorization });
 
     if (request.method === 'GET' && url.pathname === `/v1/boards/${boardId}`) return json(board);
@@ -471,6 +473,7 @@ test(
       expect(access).toBeTruthy();
       const before = await slot.boundingBox();
       writes.length = 0;
+      kernelRequests.length = 0;
       await deleteFromMenu(page, replyId);
       await eventually(
         () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'More actions'),
@@ -489,6 +492,10 @@ test(
         ['POST', `/v1/posts/${replyId}:restore`],
       ]);
       expect(writes.every((write) => write.authorization === `Bearer ${access}`)).toBe(true);
+      expect(kernelRequests).toEqual([
+        { method: 'DELETE', path: `/v1/posts/${replyId}` },
+        { method: 'POST', path: `/v1/posts/${replyId}:restore` },
+      ]);
     } finally {
       await page.context().close();
     }
