@@ -7,6 +7,7 @@ import { startWorker } from '../../src/worker.ts';
 import { identityEpochStore as store, identityJobPartition } from '../../src/semantic/identity-epoch-store.ts';
 import { resumeIdentityEpochJob, waitIdentityEpochPublished } from '../../src/semantic/identity-epoch-coordinator.ts';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import type { IdentityJobRef } from '../../src/semantic/identity-epoch-contract.ts';
 import { readSearchConfig } from '../../src/search/work.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -24,6 +25,8 @@ beforeAll(async () => {
   f = await cutoverFixture();
   db = await openGrowthDatabase(f.pool.options.connectionString);
   db.pool.options.max = 1;
+  nativePool = db.pool;
+  await installIdentityEpochBootstrap(nativePool);
   const env = workerTestEnv({
     ...process.env,
     DATABASE_URL: db.url,
@@ -37,7 +40,8 @@ beforeAll(async () => {
       databaseUrl: db.url,
       poolSize: 1,
       kernelPool() {
-        nativePool = db.openPool({ max: 1 });
+        // Commands, native observations, SDK and relays share the SAME max-one pool.
+        // A second observation pool would invalidate the original backend bound.
         // Both startWorker and GrowthDatabase own cleanup. Share their actual close operation.
         const end = nativePool.end.bind(nativePool);
         let closing: Promise<void> | undefined;
@@ -188,6 +192,7 @@ test('actual fixed coordinator publication and receipt replay stay bounded acros
     rule: 'series',
     warmups: 1,
     repetitions: 3,
+    includeBackends: true,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
     async grow(_database, scale, previous) {
@@ -227,6 +232,10 @@ test('actual fixed coordinator publication and receipt replay stay bounded acros
         'semantic.identity_epoch_input',
         'semantic.identity_epoch_step',
         'semantic.identity_epoch_ack',
+        'semantic.identity_epoch_native_commit',
+        'semantic.identity_epoch_receiving_record',
+        'semantic.identity_epoch_receiving_effect',
+        'semantic.identity_epoch_receiving_custody',
         'core.partition',
         'dbos.operation_outputs',
       ]) {
@@ -238,5 +247,10 @@ test('actual fixed coordinator publication and receipt replay stay bounded acros
       // Do not filter SDK, control, catalogue, failed-attempt or another participant's statements.
     }
     expect(sample.statementRepetitions).toHaveLength(3);
+    expect(sample.backendRepetitions).toHaveLength(3);
+    for (const backends of sample.backendRepetitions ?? []) {
+      expect(backends.length).toBeGreaterThan(0);
+      expect(backends.length).toBeLessThanOrEqual(1);
+    }
   }
 }, 600_000);
