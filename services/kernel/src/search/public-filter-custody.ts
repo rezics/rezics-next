@@ -171,7 +171,8 @@ async function engine<T>(
     timeoutMs: Math.max(1, context.deadline - Date.now()),
   });
   meter.bytes += Buffer.byteLength(encode(response.body));
-  if (path.endsWith('/_search')) meter.engineIteratorSteps += (response.body as { _shards: { total: number } })._shards.total;
+  if (path.endsWith('/_search'))
+    meter.engineIteratorSteps += (response.body as { _shards: { total: number } })._shards.total;
   return response.body;
 }
 async function native(
@@ -245,7 +246,8 @@ async function read(
 ): Promise<CustodyFound> {
   check(context);
   queried(request.queried);
-  if (request.execution !== undefined) text(request.execution);
+  const execution = request.execution;
+  if (execution !== undefined) text(execution);
   const q = request.queried;
   const result = await sql(pool, meter, readSql, [
     partition(q.snapshot.observation),
@@ -253,7 +255,7 @@ async function read(
     encode(q),
     q.consumer.incarnation,
     Date.now(),
-    request.execution ?? null,
+    execution ?? null,
   ]);
   const row = result.rows[0];
   if (!row) throw new Failure('observation_lost');
@@ -265,7 +267,7 @@ async function read(
     definition: definition.data,
     queried: decode(row.queried),
     covered: decode(row.covered),
-    execution: request.execution === undefined ? null : decode(row.execution),
+    execution: execution === undefined ? null : decode(row.execution),
     cost: meter,
   };
 }
@@ -345,7 +347,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
       meter,
       `WITH retained AS (INSERT INTO search.public_filter_observation (partition_no,observation,registration,queried,covered,expires_at,state,prepared_rows)
       SELECT r.partition_no,$3,r.id,$4,$5,$6,'open',$7 FROM search.public_filter_registration r JOIN search.public_filter_target t USING (partition_no,physical_target)
-      WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND t.incarnation=$8 RETURNING partition_no,observation), owned AS (INSERT INTO search.public_filter_pit SELECT partition_no,observation,$9,$10,'owned' FROM retained WHERE $10::text IS NOT NULL) SELECT observation FROM retained`,
+      WHERE (r.partition_no,r.id)=($1,$2) AND r.state='active' AND t.incarnation=$8 FOR SHARE OF r,t RETURNING partition_no,observation), owned AS (INSERT INTO search.public_filter_pit SELECT partition_no,observation,$9,$10,'owned' FROM retained WHERE $10::text IS NOT NULL) SELECT observation FROM retained`,
       [
         value.partition,
         value.id,
@@ -506,7 +508,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           SELECT o.partition_no,o.observation FROM search.public_filter_observation o
           JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
           JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
-          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open' AND o.expires_at>$4 AND r.state='active' AND t.incarnation=$7 FOR UPDATE OF o)
+          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open' AND o.expires_at>$4 AND r.state='active' AND t.incarnation=$7 FOR UPDATE OF o FOR SHARE OF r,t)
           INSERT INTO search.public_filter_reference SELECT partition_no,observation,$5,$6 FROM locked RETURNING token`,
           [
             partition(input.snapshot.observation),
@@ -589,7 +591,12 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
             context,
             'POST',
             '/_search',
-            { size: 0, track_total_hits: false, query: { match_none: {} }, pit: { id: input.snapshot.pit, keep_alive: `${keepAliveMs}ms` } },
+            {
+              size: 0,
+              track_total_hits: false,
+              query: { match_none: {} },
+              pit: { id: input.snapshot.pit, keep_alive: `${keepAliveMs}ms` },
+            },
           );
           if (response.timed_out || response._shards.failed) throw new Failure('observation_lost');
           const successor: PublicFilterQueriedObservation = {
@@ -610,8 +617,9 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
           const updated = await sql(
             pool,
             meter,
-            `UPDATE search.public_filter_observation SET queried=$4,expires_at=$5,revision=revision+1
-            WHERE (partition_no,observation)=($1,$2) AND queried=$3 AND revision=$6 AND state='open' AND expires_at>$7 RETURNING observation`,
+            `UPDATE search.public_filter_observation o SET queried=$4,expires_at=$5,revision=o.revision+1 FROM search.public_filter_registration r JOIN search.public_filter_target t USING (partition_no,physical_target)
+            WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.revision=$6 AND o.state='open' AND o.expires_at>$7
+            AND (r.partition_no,r.id)=(o.partition_no,o.registration) AND r.state='active' AND t.incarnation=$8 RETURNING o.observation`,
             [
               partition(input.snapshot.observation),
               input.snapshot.observation,
@@ -620,6 +628,7 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
               renewedAt + keepAliveMs,
               old.rows[0].revision,
               Date.now(),
+              input.consumer.incarnation,
             ],
           );
           if (!updated.rowCount) throw new Failure('observation_lost');
@@ -642,10 +651,21 @@ export function createPublicFilterCustody(pool: Pool): PublicFilterCustody {
         );
         if (!barrier.rowCount) throw new Failure('observation_lost');
         if (barrier.rows[0].state === 'closed') return { status: 'closed' as const, cost: meter };
-        const refs = await sql(pool, meter, 'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) ORDER BY expires_at DESC LIMIT 1', values);
-        if (refs.rows[0]) await Bun.sleep(Math.max(0, Math.min(Number(refs.rows[0].expires_at) + 1, context.deadline) - Date.now()));
+        const refs = await sql(
+          pool,
+          meter,
+          'SELECT expires_at FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) ORDER BY expires_at DESC LIMIT 1',
+          values,
+        );
+        if (refs.rows[0])
+          await Bun.sleep(Math.max(0, Math.min(Number(refs.rows[0].expires_at) + 1, context.deadline) - Date.now()));
         check(context);
-        await sql(pool, meter, 'DELETE FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3', [...values, Date.now()]);
+        await sql(
+          pool,
+          meter,
+          'DELETE FROM search.public_filter_reference WHERE (partition_no,observation)=($1,$2) AND expires_at<=$3',
+          [...values, Date.now()],
+        );
         for (;;) {
           const owned = await sql(
             pool,

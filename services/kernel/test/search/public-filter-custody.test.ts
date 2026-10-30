@@ -230,14 +230,22 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
   const reached = new Promise<void>((resolve) => {
     both = resolve;
   });
+  const cleanup: unknown[] = [];
   const concurrentSearch: typeof search = {
     ...search,
-    async request<T>(method: Parameters<typeof search.request>[0], path: string, body?: unknown, options?: Parameters<typeof search.request>[3]) {
+    async request<T>(
+      method: Parameters<typeof search.request>[0],
+      path: string,
+      body?: unknown,
+      options?: Parameters<typeof search.request>[3],
+    ) {
       if (path === '/_search') {
         if (++entered === 2) both();
         await reached;
       }
-      return search.request<T>(method, path, body, options);
+      const result = await search.request<T>(method, path, body, options);
+      if (method === 'DELETE') cleanup.push(result.body);
+      return result;
     },
   };
   const results = await Promise.all([
@@ -263,6 +271,12 @@ test('native PIT lifecycle concurrent execution close and rollback retain exact 
   }
   expect((await registry.read({ queried: winner.queried }, context())).status).toBe('found');
   await registry.closeObservation(winner.queried, search, context());
+  await pool.query(`ALTER TABLE search.public_filter_observation ADD CONSTRAINT custody_test_rollback CHECK (registration <> '${renew.registration.id}') NOT VALID`);
+  try {
+    const failed = await registry.openPit({registration:renew.registration,covered:cut(),keepAliveMs:60000},concurrentSearch,context());
+    expect(failed.status).toBe('unavailable');
+    expect(cleanup).toMatchObject([{pits:[{successful:true}]}]);
+  } finally { await pool.query('ALTER TABLE search.public_filter_observation DROP CONSTRAINT custody_test_rollback'); }
   const prepared = await registry.retainPrepared(
     {
       registration: renew.registration,
