@@ -209,7 +209,8 @@ test(
       const filterButton = main.getByRole('button', { name: 'Filters (2)' });
       expect(await filterButton.count()).toBe(1);
       const result = main.getByRole('link', { name: 'Kokoro', exact: true });
-      const queryBox = await main.locator('#search-form').boundingBox();
+      const queryForm = page.locator('form').filter({ has: page.locator('input[name="q"]') });
+      const queryBox = await queryForm.boundingBox();
       const filterBox = await filterButton.boundingBox();
       const resultBox = await result.boundingBox();
       expect(queryBox && filterBox && resultBox && queryBox.y < filterBox.y && filterBox.y < resultBox.y).toBe(true);

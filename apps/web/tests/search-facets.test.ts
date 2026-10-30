@@ -398,7 +398,8 @@ test(
       expect(await filterButton.count()).toBe(1);
       const result = main.getByRole('link', { name: 'Kokoro', exact: true });
       expect(await result.isVisible()).toBe(true);
-      const queryBox = await main.locator('#search-form').boundingBox();
+      const queryForm = page.locator('form').filter({ has: page.locator('input[name="q"]') });
+      const queryBox = await queryForm.boundingBox();
       const filterBox = await filterButton.boundingBox();
       const mobileResultBox = await result.boundingBox();
       expect(
