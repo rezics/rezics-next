@@ -59,7 +59,17 @@ function navigationHref(zone: ZonePublic, locale: string, route: string): string
   return `/${encodeURIComponent(locale)}/zones/${encodeURIComponent(zone.id)}${suffix}`;
 }
 
-export function ZoneShell({ zone, locale, children }: { zone: ZonePublic; locale: string; children: ReactNode }) {
+export function ZoneShell({
+  zone,
+  locale,
+  route = '',
+  children,
+}: {
+  zone: ZonePublic;
+  locale: string;
+  route?: string;
+  children: ReactNode;
+}) {
   const label = zoneLabel(zone, locale);
   return (
     <div data-zone-shell className="flex min-w-0 flex-col gap-6">
@@ -73,14 +83,14 @@ export function ZoneShell({ zone, locale, children }: { zone: ZonePublic; locale
         )}
         {zone.navigation.length > 0 && (
           <nav aria-label={m.zone_navigation()} className="flex flex-wrap gap-x-5 gap-y-2">
-            {zone.navigation.map(({ route }) => (
+            {zone.navigation.map(({ route: destination }) => (
               <a
-                key={route}
-                href={navigationHref(zone, locale, route)}
-                aria-current={route === '' ? 'page' : undefined}
+                key={destination}
+                href={navigationHref(zone, locale, destination)}
+                aria-current={destination === route ? 'page' : undefined}
                 className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {zoneRouteHeading(route, locale)}
+                {zoneRouteHeading(destination, locale)}
               </a>
             ))}
           </nav>
@@ -107,7 +117,10 @@ export function ZoneReadBoundary({
   request: Omit<ZonePageInput, 'cursor'>;
   children: (page: Extract<ZonePageRouteOutcome, { kind: 'page' }>) => ReactNode;
 }) {
-  const [outcome, setOutcome] = useState(initial);
+  const [state, setState] = useState({ initial, outcome: initial });
+  // A fresh loader result replaces any page retained by this mounted boundary immediately.
+  if (state.initial !== initial) setState({ initial, outcome: initial });
+  const outcome = state.initial === initial ? state.outcome : initial;
   const [continuation, setContinuation] = useState(0);
   const kind = outcome.kind;
   const cursor = outcome.kind === 'preparing' ? outcome.cursor : undefined;
@@ -125,15 +138,16 @@ export function ZoneReadBoundary({
               id: request.id,
               locale: request.locale,
               target: JSON.parse(targetKey) as ZonePageInput['target'],
+              ...(request.credentialMode === undefined ? {} : { credentialMode: request.credentialMode }),
               ...(cursor === undefined ? {} : { cursor }),
             },
           });
           if (active) {
-            setOutcome(next);
+            setState({ initial, outcome: next });
             if (next.kind === 'preparing') setContinuation((step) => step + 1);
           }
         } catch {
-          if (active) setOutcome({ kind: 'error' });
+          if (active) setState({ initial, outcome: { kind: 'error' } });
         }
       },
       retryDelay(retryAfter ?? '1'),
@@ -142,7 +156,7 @@ export function ZoneReadBoundary({
       active = false;
       clearTimeout(timer);
     };
-  }, [kind, cursor, retryAfter, request.id, request.locale, targetKey, continuation]);
+  }, [initial, kind, cursor, retryAfter, request.id, request.locale, request.credentialMode, targetKey, continuation]);
 
   if (outcome.kind === 'page') return children(outcome);
   if (outcome.kind === 'preparing')

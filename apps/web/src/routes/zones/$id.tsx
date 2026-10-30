@@ -32,10 +32,11 @@ export const Route = createFileRoute('/zones/$id')({
 function ZoneHomeRoute() {
   const { id } = Route.useParams();
   const initial = Route.useLoaderData();
+  const { credentialMode } = Route.useRouteContext();
   const locale = getLocale();
   const nonce = useRouter().options.ssr?.nonce;
   return (
-    <ZoneReadBoundary initial={initial} request={{ id, locale, target: { route: '' } }}>
+    <ZoneReadBoundary initial={initial} request={{ id, locale, target: { route: '' }, credentialMode }}>
       {(outcome) => {
         const zone = outcome.page.zone;
         return (

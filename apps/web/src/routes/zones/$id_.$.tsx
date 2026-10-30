@@ -44,15 +44,16 @@ function ConfiguredZoneRoute() {
   const { id } = Route.useParams();
   const route = routeOf(Route.useParams()._splat);
   const initial = Route.useLoaderData();
+  const { credentialMode } = Route.useRouteContext();
   const locale = getLocale();
   const nonce = useRouter().options.ssr?.nonce;
   const target = { route } as const;
   return (
-    <ZoneReadBoundary initial={initial} request={{ id, locale, target }}>
+    <ZoneReadBoundary initial={initial} request={{ id, locale, target, credentialMode }}>
       {(outcome) => {
         const zone = outcome.page.zone;
         return (
-          <ZoneShell zone={zone} locale={locale}>
+          <ZoneShell zone={zone} locale={locale} route={route}>
             <ZonePageSurface zone={zone} document={outcome.page.document as CompositionDocument}>
               {(document) => (
                 <RoutePage

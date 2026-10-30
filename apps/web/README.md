@@ -1290,6 +1290,10 @@ Full subject views page through their owner list read with the first page's para
   be reused for another viewer.
 - **Growth check:** `tests/native/native-static-zones.host.test.ts` measures the same configured page at 1, 8, and 64
   unrelated Zones and asserts one `readPage` request at each size.
+- **Story data:** `src/zones/static-fakes.ts` supplies explicitly contract-shaped static pages in all launch locales;
+  the subject link uses the existing `subject.json` recording. These fakes do not establish native authorization.
+  The native fixture preserves its real response capture in `.temp/native-static-zones-recording.json` for later
+  recording adoption. A fresh loader result replaces retained page content, including after a concealed read.
 
 ### Sitemap export
 

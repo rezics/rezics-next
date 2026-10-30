@@ -2,7 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import type { View } from '@rezics/composition';
 import { notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
-import { setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
+import { getRequest, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import type { ZonePageRequest, ZonePageResponse } from '../../../../services/kernel/src/zones/contract.ts';
 import type { ZonePageQuery, ZonePageReadProgress } from '../../../../services/kernel/src/zones/page-continuation.ts';

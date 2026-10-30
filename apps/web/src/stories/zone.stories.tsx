@@ -2,10 +2,12 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import staticGuide from '../kernel/recorded/zone-static-guide.json';
-import staticHome from '../kernel/recorded/zone-static-home.json';
-import staticOwnerHome from '../kernel/recorded/zone-static-owner-home.json';
-import staticSubject from '../kernel/recorded/zone-static-subject.json';
+import {
+  staticZoneGuideFake as staticGuide,
+  staticZoneHomeFake as staticHome,
+  staticZoneOwnerFake as staticOwnerHome,
+} from '../zones/static-fakes';
+import staticSubject from '../kernel/recorded/subject.json';
 import { PageStory, pageReady } from './page';
 
 const zone = staticHome.zone.id;
@@ -99,7 +101,7 @@ export const Home: Story = {
 export const PrivateOwner: Story = {
   name: 'Private page for its owner',
   play: privateOwnerReady,
-  render: () => <PageStory visitor="Signed In" path={`/zones/${privateZone}`} />,
+  render: () => <PageStory visitor="Signed In" credentialMode="session" path={`/zones/${privateZone}`} />,
 };
 
 export const Subject: Story = {
