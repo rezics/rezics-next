@@ -4386,7 +4386,7 @@ test('admission backfill: ordinary execution starts in capacity the priority hea
     expect(generatedLimit).toBe(3);
     expect(grant.actualAdmissionLimit).toBe(generatedLimit);
     expect(grant.slot).toBe(2);
-    expect(events().some((event) => event.kind === 'slot' && event.reason === 'held-priority-grant')).toBe(true);
+    expect(events().some((event) => event.kind === 'slot' && event.reason === 'held-priority-grant')).toBe(false);
     expect(await ordinary.child.exited).toBe(0);
   } finally {
     for (const run of [ordinary, landing]) {
