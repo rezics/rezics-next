@@ -35,6 +35,12 @@ export type LandingRequest = AttemptRef & {
   protectedPaths?: readonly string[];
   gate: readonly string[];
   affectedTests?: readonly AffectedTestResult[];
+  /** Original worker acceptance is retained when the owning manager advances an already accepted attempt. */
+  managerLanding?: {
+    managerId: string;
+    acceptedCommit: string;
+    acceptanceCommand: readonly string[];
+  };
 };
 
 /** Implemented by the integration side. */

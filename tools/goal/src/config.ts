@@ -13,6 +13,7 @@ import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { SqliteLandingQueue } from './land.ts';
+import { requestManagerLanding } from './manager-landing.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { deliverDueReminders, parseNotes } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
@@ -380,8 +381,26 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     );
   let train!: MergeTrain;
   const pump = () => train.pump();
-  // Short commands hand the train to a detached process, so recovering an orphan never makes `status` wait for a gate.
-  const afterSettle = () => (options.trainMode === 'detached' ? handOff() : pump());
+  const managerContext = () => {
+    if (process.env.GOAL_MANAGER) return true;
+    const threadId = process.env.CODEX_THREAD_ID;
+    if (!threadId) return false;
+    try {
+      if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='manager_sessions'").get()) return false;
+      return (db.query('SELECT state FROM manager_sessions').all() as { state: string }[]).some(
+        ({ state }) => JSON.parse(state).threadId === threadId,
+      );
+    } catch {
+      return false;
+    }
+  };
+  // A manager must authorize its accepted landing before the controller starts the train; that request hands off the
+  // same durable queue entry. Worker and orphan recovery still start the ordinary train as before.
+  const afterSettle = () => {
+    if (managerContext()) return Promise.resolve();
+    // Short commands hand the train to a detached process, so recovering an orphan never makes `status` wait for a gate.
+    return options.trainMode === 'detached' ? handOff() : pump();
+  };
   const job = new WorkerJob(tasks, queue, inbox, undefined, afterSettle);
   const handOff = () =>
     new Promise<void>((resolve, reject) => {
@@ -456,6 +475,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       gate: task.brief.acceptance.command,
     };
   };
+  const managerLand: NonNullable<IntegrationRuntime['managerLand']> = (taskId, managerId) =>
+    requestManagerLanding(taskId, managerId, store, queue, landing);
   const checkCompletion = completionChecker({
     ...settings,
     runGate,
@@ -528,6 +549,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     supermanager: settings.integration.supermanager,
     managerServices,
     landing,
+    managerLand,
+    handoffTrain: handOff,
     manager,
     pump,
     hostCommand: command,

@@ -33,6 +33,10 @@ export type IntegrationRuntime = {
   pump?(): Promise<void>;
   drain?(): Promise<void>;
   drainJobs?(): Promise<void>;
+  /** Enqueue manager-owned accepted work through the durable landing queue. */
+  managerLand?(task: string, manager: string): boolean;
+  /** Start the existing controller train without running gates in the manager command process. */
+  handoffTrain?(): Promise<void>;
   hostCommand?: string[];
   hostSweepIntervalMs?: number;
   codeIsCurrent?(): boolean;
@@ -590,7 +594,17 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
   const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
   const queue = runtime.queue ?? new SqliteLandingQueue(runtime.db, runtime.fence);
   if (command === 'land' && subcommand) {
+    if (flags.length) throw new Error('usage: land <task>');
+    if (process.env.GOAL_TASK_ID || process.env.GOAL_ATTEMPT)
+      throw new Error('Workers cannot use the manager-owned land command');
+    const manager = callingManager(runtime);
     await recordManagerCommand(runtime);
+    if (manager) {
+      if (!runtime.managerLand) throw new Error('Manager-owned landing is unavailable in this runtime');
+      if (!runtime.managerLand(subcommand, manager)) return 0;
+      await runtime.handoffTrain?.();
+      return 0;
+    }
     queue.enqueue(runtime.landing(subcommand));
     if (runtime.pump) {
       await runtime.pump();
