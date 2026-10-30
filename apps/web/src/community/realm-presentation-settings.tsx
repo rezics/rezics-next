@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -100,14 +100,24 @@ export function RealmAppearanceSettings({
   const [selection, setSelection] = useState<Selection | null>(null);
   const [clear, setClear] = useState<RealmImageSlot | 'rules' | null>(null);
   const ids = useId();
+  const incoming = useRef(initial);
+  const read = initial !== incoming.current ? initial : state.read;
+  useLayoutEffect(() => {
+    incoming.current = initial;
+    control.observe(initial);
+  }, [control, initial]);
   useEffect(() => () => control.cancelUpload(), [control]);
-  if (state.read.kind === 'hidden') return null;
+  if (
+    read.kind === 'hidden' ||
+    (read.kind === 'ready' && (read.snapshot.state !== 'active' || read.snapshot.realmId !== realmId))
+  )
+    return null;
   const heading = (
     <h2 id={`${ids}-heading`} className="text-xl font-semibold">
       {m.realm_appearance_heading()}
     </h2>
   );
-  if (state.read.kind !== 'ready' || !state.draft)
+  if (read.kind !== 'ready' || !state.draft)
     return (
       <section aria-labelledby={`${ids}-heading`} className="space-y-4 rounded-2xl border p-4 sm:p-6">
         {heading}
@@ -117,8 +127,21 @@ export function RealmAppearanceSettings({
         </Button>
       </section>
     );
-  const { draft } = state;
-  const { snapshot } = state.read;
+  const { snapshot } = read;
+  const retained = state.draft;
+  // Preserve the local intent, while current optional reads replace cached facts for the same selected source.
+  const draft = {
+    ...retained,
+    avatar:
+      retained.presentation.avatarMediaId === snapshot.presentation.avatarMediaId ? snapshot.avatar : retained.avatar,
+    banner:
+      retained.presentation.bannerMediaId === snapshot.presentation.bannerMediaId ? snapshot.banner : retained.banner,
+    rules:
+      retained.presentation.rules?.postId === snapshot.presentation.rules?.postId &&
+      retained.presentation.rules?.revisionId === snapshot.presentation.rules?.revisionId
+        ? snapshot.rules
+        : retained.rules,
+  };
   const editable = control.editable() && !selection;
   const label = (slot: RealmImageSlot | 'rules') =>
     slot === 'avatar'

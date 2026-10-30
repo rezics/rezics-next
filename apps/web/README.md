@@ -1908,7 +1908,8 @@ A lost save response retains the complete request, expected head, key, selected 
 replays that request; a refresh cannot silently rebase it. A definite conflict retains the draft, requires a current read,
 shows current selection summaries, and offers an explicit review before a new save uses the new head/key. Drafts are
 local to the mounted region. New current data or a refreshed CSRF token does not reset an in-flight intent. Current
-native removal, orphaning or denial hides the region and prevents changes.
+native removal, orphaning or denial hides the region and prevents changes. Refreshed unavailable reads conceal
+retained previews immediately; an older in-flight save response cannot replace that current read.
 
 Story review uses the existing `phone390`/`desktop1280`, theme and locale globals, with no dimension/locale exports:
 

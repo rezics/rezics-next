@@ -187,3 +187,28 @@ test('draft selections, uploaded references and original requests survive manual
   await hidden.save();
   expect(commands).toHaveLength(3);
 });
+
+test('current unavailable reads conceal retained previews and cannot be overwritten by an older save response', async () => {
+  let respond: ((value: Awaited<ReturnType<RealmAppearanceAdapter['change']>>) => void) | undefined;
+  const adapter: RealmAppearanceAdapter = {
+    read: async () => ({ kind: 'unavailable' }),
+    change: () =>
+      new Promise((resolve) => {
+        respond = resolve;
+      }),
+    select: async () => ({ kind: 'unavailable' }),
+    upload: async () => ({ id }),
+    resume: async () => ({ id }),
+  };
+  const control = createRealmAppearance(realmId, { kind: 'ready', snapshot: current }, adapter, () => id);
+  const pending = control.save();
+  const attempt = structuredClone(control.getSnapshot().attempt);
+  control.observe({ kind: 'unavailable' });
+  expect(control.getSnapshot().read).toEqual({ kind: 'unavailable' });
+  respond?.({ kind: 'confirmed', snapshot: { ...current, head: revisionId } });
+  await pending;
+  expect(control.getSnapshot().read).toEqual({ kind: 'unavailable' });
+  expect(control.getSnapshot().draft?.presentation).toEqual(current.presentation);
+  expect(control.getSnapshot().attempt).toEqual(attempt);
+  expect(control.getSnapshot().phase).toBe('uncertain');
+});

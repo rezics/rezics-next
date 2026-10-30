@@ -133,6 +133,7 @@ export function createRealmAppearance(
     pendingUpload: null,
   };
   let uploadAbort: AbortController | null = null;
+  let readVersion = 0;
   const listeners = new Set<() => void>();
   function update(change: Partial<RealmAppearanceState>) {
     state = { ...state, ...change };
@@ -140,8 +141,24 @@ export function createRealmAppearance(
   }
   function editable() {
     return (
-      admitted(state.read) && state.read.snapshot.canManage && !state.busy && !state.attempt && !state.pendingUpload
+      admitted(state.read) &&
+      state.read.snapshot.canManage &&
+      !state.busy &&
+      !state.attempt &&
+      !state.pendingUpload &&
+      (state.phase === 'idle' || state.phase === 'saved')
     );
+  }
+  function observe(incoming: RealmAppearanceRead) {
+    const read = incoming.kind === 'ready' && !admitted(incoming) ? { kind: 'hidden' as const } : incoming;
+    if (read === state.read) return;
+    readVersion++;
+    const changed = admitted(read) && admitted(state.read) && read.snapshot.head !== state.read.snapshot.head;
+    update({
+      read,
+      draft: state.draft ?? (admitted(read) ? read.snapshot : null),
+      ...(changed && !state.attempt && !state.busy ? { phase: 'conflict' as const, reviewed: true } : {}),
+    });
   }
   function choose(slot: RealmImageSlot | 'rules', selection: RealmAppearanceSelection) {
     if (!editable() || !state.draft) return;
@@ -212,7 +229,10 @@ export function createRealmAppearance(
   async function save() {
     if (state.busy || !admitted(state.read) || !state.read.snapshot.canManage || !state.draft || state.pendingUpload)
       return;
+    if (state.phase === 'conflict') return;
     if (state.attempt && state.phase !== 'uncertain') return;
+    const contextId = state.read.snapshot.contextId;
+    const version = readVersion;
     const attempt =
       state.attempt ??
       v.parse(realmAppearanceCommandSchema, {
@@ -228,13 +248,17 @@ export function createRealmAppearance(
     } catch {
       result = { kind: 'unavailable' };
     }
+    if (version !== readVersion) {
+      update({ busy: false, phase: 'uncertain' });
+      return;
+    }
     if (result.kind === 'confirmed') {
       const snapshot = result.snapshot;
       if (
         snapshot.realmId !== realmId ||
         snapshot.state !== 'active' ||
         !snapshot.head ||
-        snapshot.contextId !== state.read.snapshot.contextId ||
+        snapshot.contextId !== contextId ||
         !sameRealmPresentation(snapshot.presentation, attempt.presentation)
       ) {
         update({ busy: false, phase: 'uncertain' });
@@ -269,6 +293,10 @@ export function createRealmAppearance(
         : await adapter.upload(realmId, slot, file!, abort.signal);
       mediaId = media.id;
       if (abort.signal.aborted) return;
+      if (!admitted(state.read) || !state.read.snapshot.canManage) {
+        update({ busy: false, phase: 'idle', pendingUpload: { slot, mediaId } });
+        return;
+      }
       update({ pendingUpload: { slot, mediaId } });
       const choice = await adapter.select({
         kind: 'image',
@@ -277,6 +305,10 @@ export function createRealmAppearance(
         purpose: slot === 'avatar' ? 'realm-icon' : 'realm-banner',
       });
       if (abort.signal.aborted) return;
+      if (!admitted(state.read) || !state.read.snapshot.canManage) {
+        update({ busy: false, phase: 'idle', pendingUpload: { slot, mediaId } });
+        return;
+      }
       if (
         choice.kind !== 'image' ||
         choice.image.id !== mediaId ||
@@ -304,6 +336,7 @@ export function createRealmAppearance(
       };
     },
     editable,
+    observe,
     choose,
     clear,
     refresh,
