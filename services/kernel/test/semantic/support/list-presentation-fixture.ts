@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { Source, BatchCommand } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { Actor } from '../../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
@@ -237,6 +237,7 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     });
     return published.digest as string;
   }
+  if ((await activeRelease(pool))?.digest !== bundledDigest) await publish(bundledRelease);
   async function deps(as: Persona = 'anonymous') {
     kernel.compile();
     const deadline = Date.now() + 30_000;
