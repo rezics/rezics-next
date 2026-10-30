@@ -938,7 +938,7 @@ async function authorizedCollection(
   collectionId: string,
   time: Parameters<typeof authoritativeTimeValue>[0],
   allowDeleted: boolean,
-): Promise<{ curatorAccountId: string | null }> {
+): Promise<NonNullable<Awaited<ReturnType<typeof authorizationCollection.run>>>> {
   authoritativeTimeValue(time);
   const current = await authorizationCollection.run(client, { route, collection_id: collectionId });
   if (!current || (!allowDeleted && current.state === 'deleted')) throw notFound();

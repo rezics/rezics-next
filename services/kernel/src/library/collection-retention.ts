@@ -33,7 +33,7 @@ type Segment = { root: string; sequence: number; cutoff: string; cursor: Cursor;
 export type CollectionCleanupPage = Readonly<{
   status: 'progress' | 'purged' | 'stale' | 'not_due' | 'retained';
   removed: number;
-  custody?: 'collection_source_and_destination_disposition' | 'account_fence';
+  custody?: 'collection_source_and_destination_disposition' | 'native_source_capture' | 'account_fence';
 }>;
 type LockedCollection = NonNullable<Awaited<ReturnType<typeof lock.run>>>;
 
@@ -81,6 +81,9 @@ async function removeLocalPage(
   tx: CommandTransaction, route: number, collectionId: string, accountId: string, parent: LockedCollection,
 ): Promise<CollectionCleanupPage> {
   if (parent.publicCustody) return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
+  // Capture/hold/release are native source evidence, not an ordinary retirement authority.
+  // Preserve the exact source graph even for private captures until that authority disposes it.
+  if (parent.sourceCustody) return { status: 'retained', removed: 0, custody: 'native_source_capture' };
   const args = { route, collection_id: collectionId };
   // At most one nonempty child page per transaction; empty seeks are a fixed bound.
   for (const query of [members, facts]) {

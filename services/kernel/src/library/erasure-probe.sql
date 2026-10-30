@@ -5,6 +5,7 @@ WITH input AS NOT MATERIALIZED (
 ),
 probe AS (
   SELECT
+    EXISTS (SELECT 1 FROM library.native_source_capture WHERE route = input.route AND account_id = input.account_id) AS native_source_capture,
     EXISTS (SELECT 1 FROM library.identity_epoch_participant_work WHERE partition_no = (input.route >> 4) AND owner_id = input.account_id) AS identity_epoch_participant_work,
     EXISTS (SELECT 1 FROM library.identity_epoch_source_basis WHERE partition_no = (input.route >> 4) AND owner_id = input.account_id) AS identity_epoch_source_basis,
     EXISTS (SELECT 1 FROM library.owner_identity_scope WHERE partition_no = (input.route >> 4) AND owner_id = input.account_id) AS owner_identity_scope,
@@ -35,6 +36,7 @@ probe AS (
 SELECT stores.store
 FROM probe
 CROSS JOIN LATERAL (VALUES
+  (native_source_capture, 'native_source_capture'::text),
   (identity_epoch_participant_work, 'identity_epoch_participant_work'::text),
   (identity_epoch_source_basis, 'identity_epoch_source_basis'::text),
   (owner_identity_scope, 'owner_identity_scope'::text),

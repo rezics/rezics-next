@@ -866,7 +866,7 @@ No payload, permission claim, source readiness or foreign disposition enters a c
 
 Every ordinary physical page holds the native active-account share fence before locking the owning Collection.
 It rechecks the current owner, deletion ID, revision, original strict 720-hour deadline at Core authoritative time,
-and public custody. Restore/redelete therefore defeats an old page. A terminal/fenced account is left to the one
+and public/native capture custody. Restore/redelete therefore defeats an old page. A terminal/fenced account is left to the one
 terminal participant. Each cleanup transaction removes at most 64 raw children from the first remaining indexed
 prefix, so a commit lost before a DBOS checkpoint can safely repeat that exact episode. No live fact generation,
 public count or listing decrement is emitted at physical purge. Expiry cannot extend Undo.
@@ -886,6 +886,12 @@ is used. The fixed empty probes plus one nonempty 64-key page stay below 100 raw
 erasure scope; `erasure-owned-graph.ts` calls it through its existing receipted workflow. It rechecks the exact
 current owner/head and erases independent local work without a second participant or account runtime. Its local
 result never acknowledges Access erasure. Public/previously-public source evidence stays retained in both paths.
+An existing `native_source_capture` also retains its exact private graph. The Collection-leading capture index
+provides one bounded existence probe under the locked head, and the account-leading index feeds the existing
+terminal erasure probe. Captures, native receipts, holds and writer fences remain with their producer. The actual
+`createNativeLibrarySourceCustody` factory exposes capture/finish/hold/revalidate/release operations; none supplies
+ordinary source retirement or destination disposition. A released hold, absent hold or incomplete capture cannot
+authorize physical source erasure. These guards create no capture, permission evidence or second Source engine.
 `createCollectionSource` and canonical publication functions are still unavailable implementations in this tree;
 there is no ordinary destination-disposition export to bind. Current metadata/raw readers, listing stamps, DBOS
 success and an empty destination page cannot replace that authority. No public skeleton or completed public purge

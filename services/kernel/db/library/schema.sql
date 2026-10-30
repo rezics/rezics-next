@@ -2714,6 +2714,8 @@ CREATE TABLE library.native_source_capture (
   complete boolean NOT NULL DEFAULT false,
   PRIMARY KEY (route,capture_id)
 );
+CREATE INDEX native_source_capture_collection ON library.native_source_capture (route, collection_id, capture_id);
+CREATE INDEX native_source_capture_account ON library.native_source_capture (route, account_id, capture_id);
 CREATE TABLE library.native_source_receipt (
   route integer NOT NULL,
   capture_id uuid NOT NULL,
