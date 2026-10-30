@@ -1,7 +1,7 @@
 import { DocumentBody } from '../document-body';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -20,7 +20,35 @@ import {
   type EditionCreateApi,
   type EditionSourceIdentity,
   type EditionResumeRead,
+  type EditionPreviewImage,
 } from './edition-create';
+
+type NativeDocumentImageProps = { image: EditionPreviewImage | null; alt: string; locale: string };
+// The sole document-media component owns derivative selection, credit and the authorized Worker URL.
+const NativeDocumentImage =
+  (() => {
+    try {
+      return import.meta.glob<ComponentType<NativeDocumentImageProps>>('../threads/document-media.ts', {
+        eager: true,
+        import: 'NativeDocumentImage',
+      })['../threads/document-media.ts'];
+    } catch {
+      return undefined;
+    }
+  })() ??
+  function UnavailableImage({ alt, locale }: NativeDocumentImageProps) {
+    const label = m.content_edition_image_unavailable({}, { locale: locale as never });
+    return (
+      <span
+        className="block rounded-xl bg-muted p-5 text-sm text-muted-foreground"
+        role="img"
+        aria-label={alt || label}
+      >
+        {label}
+        {alt ? ` — ${alt}` : ''}
+      </span>
+    );
+  };
 
 /** Route composition keeps token refresh independent of the mounted publication intent. */
 export function EditionPublicationPanel({
@@ -124,6 +152,15 @@ export function EditionPublication({
     failure?.kind === 'unavailable' ||
     failure?.kind === 'missing';
   const edition = concealed ? null : (state.review?.edition ?? state.edition);
+  const previewSource = concealed ? null : source;
+  // Media is part of the exact delivered source, never a separately retained image query.
+  const images = useMemo(
+    () =>
+      new Map(
+        previewSource?.media.kind === 'ready' ? previewSource.media.images.map((image) => [image.id, image]) : [],
+      ),
+    [previewSource],
+  );
   const published =
     edition?.state === 'published' &&
     (state.resumeEditionId !== null || source !== null) &&
@@ -246,39 +283,41 @@ export function EditionPublication({
           <p className="font-mono text-xs">{edition.editionId}</p>
         </section>
       ) : null}
-      {source ? (
+      {previewSource ? (
         <section className="min-w-0 space-y-5" aria-label={m.edition_publication_preview()}>
           <div className="space-y-3 border-b border-border pb-5">
             <h2 className="text-lg font-semibold">{m.edition_publication_preview()}</h2>
             <a
               className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
-              href={exactRevisionHref(source, locale)}
+              href={exactRevisionHref(previewSource, locale)}
             >
               {m.edition_publication_open_revision()}
             </a>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="font-medium">{m.exact_revision_post()}</dt>
-                <dd>{source.postId}</dd>
+                <dd>{previewSource.postId}</dd>
               </div>
               <div>
                 <dt className="font-medium">{m.exact_revision_id()}</dt>
-                <dd>{source.revisionId}</dd>
+                <dd>{previewSource.revisionId}</dd>
               </div>
               <div>
                 <dt className="font-medium">{m.edition_publication_licence()}</dt>
-                <dd>{source.licence}</dd>
+                <dd>{previewSource.licence}</dd>
               </div>
               <div>
                 <dt className="font-medium">SHA-256</dt>
-                <dd className="font-mono text-xs">{source.sha256}</dd>
+                <dd className="font-mono text-xs">{previewSource.sha256}</dd>
               </div>
             </dl>
           </div>
           <DocumentBody
-            document={source.body}
+            document={previewSource.body}
             locale={locale}
-            renderImage={() => <p className="text-sm text-muted-foreground">{m.content_edition_image_unavailable()}</p>}
+            renderImage={({ mediaId, alt }) => (
+              <NativeDocumentImage image={images.get(mediaId) ?? null} alt={alt} locale={locale} />
+            )}
           />
           <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5">
             <label className="block text-sm font-medium" htmlFor={subjectId}>
@@ -293,7 +332,7 @@ export function EditionPublication({
               onChange={(event) => controller.chooseSubject(event.target.value)}
             >
               <option value="">{m.edition_publication_choose_subject()}</option>
-              {source.subjectIds.map((id) => (
+              {previewSource.subjectIds.map((id) => (
                 <option key={id} value={id}>
                   {id}
                 </option>

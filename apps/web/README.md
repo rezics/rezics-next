@@ -2436,9 +2436,26 @@ subject, edition ID, state and command version before the UI reports a draft or 
 The selector retains the original immutable revision's bounded subject IDs and displays those identifiers without
 per-row enrichment. Exactly one selected subject receives a current native point read, with redirects refused, before
 each command. Today's post head never supplies extra subjects. Native source reads retain live Context and ancestor
-authority; the UI constructs no fallback Context or permission formula. DocumentBody renders the canonical snapshot;
-images without producer derivative summaries remain explicitly unavailable. No borrowed cover or original media URL
-is attached to an edition.
+authority; the UI constructs no fallback Context or permission formula. The existing Web DocumentBody wrapper renders
+the canonical snapshot with an explicit NativeDocumentImage callback from the sole `threads/document-media.ts`
+export. That component owns actual variant selection, native credit, accessible alt and the authorized Worker
+download route through `coverSrc`.
+
+The creator source binds one media result to the exact delivered document. Only original declared media IDs actually
+referenced by its image nodes enter one batch, with at most 32 unique declarations. Repeated images share that batch;
+undeclared references and omitted results render unavailable. Commands and source-entry admission do not load image
+presentations. The original exact source and action checks remain independent; final source disclosure repeats the
+body digest, licence, subjects and declared-media binding after the media read. Media success supplies no publication
+permission or licence inference. A new selection or refresh clears the old source and images synchronously; a late
+read cannot replace the newly selected version.
+
+This checkout lacks both `threads/document-media.ts` and Content's `media-presentation.ts`. An isolated consumer-local
+declaration follows the specified DocumentImagePresentation shape, and exact optional Vite bindings consume only the
+original `loadDocumentMedia` and `NativeDocumentImage` exports when delivered. Absent exports and source errors are
+typed unavailable. The consumer adds no media HTTP reader or derivative renderer. It supplies no object key, original
+variant, guessed width, external image URL or fabricated image. Native media presentation and each Worker byte
+download retain their own current media/container/ancestor/fence/lifecycle authorization; paid edition access grants
+no generic post or image rights. These bindings do not prove the missing native presentation source is available.
 
 Returning creators open `/editions/new?editionId=<native ID>`. This parameter takes precedence over source
 selection, even if malformed; missing, hidden or removed editions never fall through to creation. The signed-in
@@ -2492,6 +2509,7 @@ The reusable EditionPublication Pattern and actual creator-route Pages expose th
 - `patterns-content-editionpublication--reloaded-published`
 - `patterns-content-editionpublication--resumed-conflict`
 - `patterns-content-editionpublication--uncertain-publish`
+- `patterns-content-editionpublication--image-preview-unavailable`
 - `pages-content-editionpublication--selection`
 - `pages-content-editionpublication--draft`
 - `pages-content-editionpublication--published`
@@ -2502,6 +2520,7 @@ The reusable EditionPublication Pattern and actual creator-route Pages expose th
 - `pages-content-editionpublication--reloaded-published`
 - `pages-content-editionpublication--resumed-conflict`
 - `pages-content-editionpublication--uncertain-publish`
+- `pages-content-editionpublication--image-preview-unavailable`
 
 Selection and Uncertain retain their focused interaction cases. ResumedDraft reads a saved wire resource into a new
 controller and confirms publication of that same ID without source reconstruction. ReloadedPublished reads current
@@ -2509,7 +2528,10 @@ publication without writes; ResumedConflict requires explicit version review; Un
 key and quoted version. Published checks readiness of the localized offer
 link for the confirmed native edition and the separate reader link. These stories exercise the real controller and
 wire adapter with constructed closed producer responses. Pages mount `EditionCreateRoute` in the existing AppShell
-with one main. Use
+with one main. ImagePreviewUnavailable adds an actual declared image reference to the authored snapshot and shows
+its accessible unavailable state while independent native publication remains possible. ResumedDraft continues to
+show saved immutable metadata: there is no native creator draft-body source in this checkout, so it has no image
+references to resolve. It never maps the revision to today's post or calls buyer delivery for draft bytes. Use
 existing phone390/desktop1280, light/dark and locale globals; Web owns visual review. English messages use the configured
 base-locale fallback pending localization review. `tests/edition-publication.test.ts` records the assigned boundary
 journey and privacy/late-response case for integration; acceptance, native, browser and visual execution are deferred by

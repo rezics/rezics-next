@@ -8,7 +8,7 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, parseDocument } from '@rezics/document';
 import { editionCreateSearch, EditionPublicationController } from '../../../content-editions/edition-create';
 import { createNativeEditionCreateApi } from '../../../content-editions/edition-create-native';
 import { editionDocumentDigest } from '../../../content-editions/edition-model';
@@ -28,8 +28,10 @@ export const creatorId = '0192f3a0-6c1e-7b2a-9d4e-000000000090';
 export const identity = { postId, revisionId };
 export const fixedText =
   'The quiet ending leaves room for the reader to pause. This authored revision is the fixed source of the edition.';
+export const imageAlt = 'An illustration accompanying the fixed source.';
 export type PublicationExampleState =
   | 'selection'
+  | 'image-preview-unavailable'
   | 'draft'
   | 'published'
   | 'refused'
@@ -42,7 +44,22 @@ export type PublicationExampleState =
 
 /** Constructed producer DTOs exercise the real typed wire adapter, never native proof or product defaults. */
 export async function publicationFixture(state: PublicationExampleState) {
-  const body = fromPlainText(fixedText);
+  const text = fromPlainText(fixedText);
+  const imageId = '0192f3a0-6c1e-7b2a-9d4e-000000000040';
+  const body =
+    state === 'image-preview-unavailable'
+      ? parseDocument({
+          ...text,
+          profile: 'blocks',
+          doc: {
+            type: 'doc',
+            content: [
+              ...text.doc.content!,
+              { type: 'image', attrs: { id: 'illustration', src: imageId, alt: imageAlt } },
+            ],
+          },
+        })
+      : text;
   const sha256 = await editionDocumentDigest(body);
   const revision: ExactRevision = {
     id: postId,
@@ -58,7 +75,7 @@ export async function publicationFixture(state: PublicationExampleState) {
     createdAt: '2026-10-31T12:00:00Z',
     revisedAt: null,
     sha256,
-    mediaIds: [],
+    mediaIds: state === 'image-preview-unavailable' ? [imageId] : [],
     licence: 'CC-BY-SA-4.0',
     subjectIds: [subjectId],
     voteCitation: null,
@@ -144,7 +161,7 @@ export async function publicationFixture(state: PublicationExampleState) {
   const api = createNativeEditionCreateApi('https://kernel.example', 'Bearer story-creator', creatorId, fetcher);
   let controller = new EditionPublicationController(api);
   await controller.select(identity);
-  if (state !== 'selection') {
+  if (state !== 'selection' && state !== 'image-preview-unavailable') {
     controller.chooseSubject(subjectId);
     await controller.create();
     if (state === 'published' || state === 'refused' || state === 'conflict' || state === 'reloaded-published')

@@ -523,3 +523,120 @@ test('resumed publish repeats current admission and native source checks; denial
   await late.retry();
   expect(native.calls).toHaveLength(before);
 });
+
+test('Current native media in exact authored edition creation and resumed draft preview', async () => {
+  const { parseDocument } = await import('@rezics/document');
+  const { editionPreviewImageIds } = await import('../src/content-editions/edition-create');
+  const native = await fixture();
+  const imageId = id(40);
+  native.revision.body = parseDocument({
+    ...native.revision.body,
+    profile: 'blocks',
+    doc: {
+      type: 'doc',
+      content: [
+        ...native.revision.body.doc.content!,
+        { type: 'image', attrs: { id: 'illustration', src: imageId, alt: 'The authored illustration' } },
+        { type: 'image', attrs: { id: 'repeated-illustration', src: imageId, alt: '' } },
+        { type: 'image', attrs: { id: 'undeclared-illustration', src: id(41), alt: 'Unavailable illustration' } },
+      ],
+    },
+  });
+  native.revision.mediaIds = [id(42), imageId];
+  native.revision.sha256 = await editionDocumentDigest(native.revision.body);
+  expect(editionPreviewImageIds(native.revision.body, native.revision.mediaIds)).toEqual([imageId]);
+  expect(editionPreviewImageIds(native.revision.body, [imageId, imageId])).toBeNull();
+  expect(
+    editionPreviewImageIds(
+      native.revision.body,
+      Array.from({ length: 33 }, (_, index) => id(100 + index)),
+    ),
+  ).toBeNull();
+
+  const controller = new EditionPublicationController(native.api, () => 'media-preview-create');
+  await controller.select(identity);
+  expect(controller.snapshot().source?.body).toEqual(native.revision.body);
+  // This checkout has no original reusable media producer. It must not substitute uploader GETs or guessed facts.
+  expect(controller.snapshot().source?.media).toEqual({ kind: 'unavailable' });
+  expect(controller.snapshot().failure).toBeNull();
+  controller.chooseSubject(subject);
+  await controller.create();
+  await controller.retry();
+  expect(controller.snapshot().edition?.state).toBe('draft');
+  const before = native.calls.length;
+  const resumed = new EditionPublicationController(native.api);
+  await resumed.resume(editionId);
+  expect(resumed.snapshot().edition?.editionId).toBe(editionId);
+  expect(resumed.snapshot().source).toBeNull(); // Metadata supplies neither a post identity nor draft body references.
+  expect(
+    native.calls
+      .slice(before)
+      .every((call) => call.path === `/v1/contentEditions/${editionId}` || call.path === '/v1/viewerActions'),
+  ).toBe(true);
+  expect(native.calls.some((call) => /\/media\/[^/]+$|\/revision$|\/posts\/[^/]+$/.test(call.path))).toBe(false);
+});
+
+test('a changed source clears images synchronously and late media cannot replace the selected version', async () => {
+  const { parseDocument } = await import('@rezics/document');
+  const native = await fixture();
+  const selected = await native.api.source(identity);
+  if (selected.kind !== 'source') throw new Error('Fixture source was not admitted');
+  const oldSource = {
+    ...selected.source,
+    body: parseDocument({
+      ...selected.source.body,
+      profile: 'blocks',
+      doc: {
+        type: 'doc',
+        content: [
+          { type: 'image', attrs: { id: 'old-illustration', src: id(40), alt: 'Earlier source illustration' } },
+        ],
+      },
+    }),
+    media: {
+      kind: 'ready' as const,
+      images: [
+        {
+          id: id(40),
+          containerId: id(30),
+          digest: 'a'.repeat(64),
+          width: 320,
+          height: 200,
+          variants: [{ format: 'webp' as const, width: 320, height: 200 }],
+          placeholder: null,
+          focalPoint: null,
+          credit: null,
+        },
+      ],
+    },
+  };
+  oldSource.sha256 = await editionDocumentDigest(oldSource.body);
+  const pendingIdentity = { ...identity, revisionId: id(4) };
+  const currentIdentity = { ...identity, revisionId: id(5) };
+  let complete!: (result: typeof selected) => void;
+  const controller = new EditionPublicationController({
+    ...native.api,
+    source: async (requested) =>
+      requested.revisionId === pendingIdentity.revisionId
+        ? new Promise((resolve) => {
+            complete = resolve;
+          })
+        : {
+            kind: 'source',
+            source:
+              requested.revisionId === identity.revisionId ? oldSource : { ...selected.source, ...currentIdentity },
+          },
+  });
+  await controller.select(identity);
+  expect(controller.snapshot().source?.media).toBe(oldSource.media);
+  const pending = controller.select(pendingIdentity);
+  expect(controller.snapshot().source).toBeNull();
+  await controller.select(currentIdentity);
+  complete({ kind: 'source', source: { ...oldSource, ...pendingIdentity } });
+  await pending;
+  expect(controller.snapshot().source?.revisionId).toBe(currentIdentity.revisionId);
+  expect(controller.snapshot().source?.media).toEqual({ kind: 'ready', images: [] });
+  await controller.select({ ...identity, revisionId: id(6) });
+  expect(controller.snapshot().source).toBeNull();
+  expect(controller.snapshot().failure).toMatchObject({ kind: 'unavailable', reason: 'binding' });
+});

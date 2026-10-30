@@ -20,3 +20,4 @@ export const ResumedDraft: Story = { ...pattern.ResumedDraft };
 export const ReloadedPublished: Story = { ...pattern.ReloadedPublished };
 export const ResumedConflict: Story = { ...pattern.ResumedConflict };
 export const UncertainPublish: Story = { ...pattern.UncertainPublish };
+export const ImagePreviewUnavailable: Story = { ...pattern.ImagePreviewUnavailable };

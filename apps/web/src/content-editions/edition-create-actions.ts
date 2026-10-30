@@ -51,7 +51,7 @@ export const readEditionResume = createServerFn({ method: 'GET' })
 export const readEditionCreateEntry = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(identity, input))
   .handler(async ({ data }) => {
-    const result = await (await api()).source(data);
+    const result = await (await api()).source(data, false);
     return result.kind === 'source' ? { kind: 'available' as const } : result;
   });
 

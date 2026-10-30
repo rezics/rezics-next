@@ -1,14 +1,49 @@
-import type { DocumentSnapshot } from '@rezics/document';
+import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
+import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { EditionMetadata } from './edition-api';
 
 export const editionContentId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export type EditionSourceIdentity = { postId: string; revisionId: string };
+/** Consumer-local declaration of Content's DocumentImagePresentation until its original module lands. */
+export type EditionPreviewImage = Readonly<{
+  id: string;
+  containerId: string;
+  digest: string;
+  width: number;
+  height: number;
+  variants: readonly { format: 'avif' | 'webp'; width: number; height: number }[];
+  placeholder: { thumbhash: string; color: string } | null;
+  focalPoint: { x: number; y: number } | null;
+  credit: MediaImportRequest['credit'] | null;
+}>;
+export type EditionPreviewMedia =
+  | Readonly<{ kind: 'ready'; images: readonly EditionPreviewImage[] }>
+  | Readonly<{ kind: 'unavailable' }>;
+
+/** Only original declared IDs actually used by this exact document enter the single media batch. */
+export function editionPreviewImageIds(body: DocumentSnapshot, declared: readonly string[]): string[] | null {
+  if (
+    declared.length > 32 ||
+    new Set(declared).size !== declared.length ||
+    declared.some((id) => !editionContentId.test(id))
+  )
+    return null;
+  const referenced = new Set<string>();
+  const visit = (node: DocumentNode) => {
+    if (node.type === 'image' && typeof node.attrs?.src === 'string') referenced.add(node.attrs.src);
+    for (const child of node.content ?? []) visit(child);
+  };
+  visit(body.doc);
+  return declared.filter((id) => referenced.has(id));
+}
+
 export type EditionCreateSource = EditionSourceIdentity & {
   creatorAccountId: string;
   body: DocumentSnapshot;
   sha256: string;
   licence: string;
   subjectIds: string[];
+  media: EditionPreviewMedia;
 };
 export type EditionCreateFailure = {
   kind: 'refused' | 'missing' | 'unavailable' | 'conflict' | 'uncertain';
@@ -39,7 +74,7 @@ export type EditionReviewRead =
   | { kind: 'review'; source: EditionCreateSource | null; edition: EditionMetadata | null }
   | EditionCreateFailure;
 export interface EditionCreateApi {
-  source(identity: EditionSourceIdentity): Promise<EditionSourceRead>;
+  source(identity: EditionSourceIdentity, includeMedia?: boolean): Promise<EditionSourceRead>;
   resume(editionId: string): Promise<EditionResumeRead>;
   command(intent: EditionPublicationIntent): Promise<EditionCommandRead>;
   review(identity: EditionSourceIdentity | null, editionId: string | null): Promise<EditionReviewRead>;
@@ -181,7 +216,7 @@ export class EditionPublicationController {
       });
   }
   async select(identity: EditionSourceIdentity) {
-    if (this.state.busy || this.state.intent || this.state.edition || this.state.resumeEditionId !== null) return;
+    if (this.state.intent || this.state.edition || this.state.resumeEditionId !== null) return;
     const generation = ++this.generation;
     this.set({ identity, source: null, targetSubjectId: '', failure: null, review: null, busy: true });
     let result: EditionSourceRead;
@@ -191,8 +226,17 @@ export class EditionPublicationController {
       result = { kind: 'unavailable', status: 503, reason: 'dependency' };
     }
     if (generation !== this.generation) return;
-    if (result.kind === 'source') this.set({ source: result.source, busy: false });
-    else this.set({ failure: result, busy: false });
+    if (
+      result.kind === 'source' &&
+      result.source.postId === identity.postId &&
+      result.source.revisionId === identity.revisionId
+    )
+      this.set({ source: result.source, busy: false });
+    else
+      this.set({
+        failure: result.kind === 'source' ? { kind: 'unavailable', status: 502, reason: 'binding' } : result,
+        busy: false,
+      });
   }
   chooseSubject(targetSubjectId: string) {
     if (

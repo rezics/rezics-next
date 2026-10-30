@@ -6,13 +6,59 @@ import {
   editionContentId,
   editionMatchesSource,
   editionBindingMatches,
+  editionPreviewImageIds,
   type EditionCreateApi,
   type EditionCreateFailure,
   type EditionCreateSource,
   type EditionPublicationIntent,
   type EditionSourceIdentity,
   type EditionSourceRead,
+  type EditionPreviewImage,
+  type EditionPreviewMedia,
 } from './edition-create';
+
+type DocumentMediaLoader = (
+  client: KernelClient,
+  ids: readonly string[],
+  authorization?: string,
+) => Promise<{ kind: 'ready'; images: ReadonlyMap<string, EditionPreviewImage> } | { kind: 'unavailable' }>;
+
+// Bind only the original reusable export. An absent producer stays unavailable, including in non-Vite consumers.
+const loadDocumentMedia = (() => {
+  try {
+    return import.meta.glob<DocumentMediaLoader>('../threads/document-media.ts', {
+      eager: true,
+      import: 'loadDocumentMedia',
+    })['../threads/document-media.ts'];
+  } catch {
+    return undefined;
+  }
+})();
+
+async function previewMedia(
+  client: KernelClient,
+  authorization: string,
+  revision: { body: EditionCreateSource['body']; mediaIds: readonly string[] },
+): Promise<EditionPreviewMedia> {
+  const ids = editionPreviewImageIds(revision.body, revision.mediaIds);
+  if (!ids) return { kind: 'unavailable' };
+  if (!ids.length) return { kind: 'ready', images: [] };
+  if (!loadDocumentMedia) return { kind: 'unavailable' };
+  try {
+    const media = await loadDocumentMedia(client, ids, authorization);
+    if (media.kind !== 'ready') return { kind: 'unavailable' };
+    // Omitted and unrelated results confer no image availability or authority.
+    return {
+      kind: 'ready',
+      images: ids.flatMap((id) => {
+        const image = media.images.get(id);
+        return image?.id === id ? [image] : [];
+      }),
+    };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
 
 const commandSchema = v.strictObject({
   editionId: v.pipe(v.string(), v.regex(editionContentId)),
@@ -43,6 +89,7 @@ export async function readEditionCreateSource(
   authorization: string,
   viewerId: string,
   identity: EditionSourceIdentity,
+  includeMedia = true,
 ): Promise<EditionSourceRead> {
   const auth = { headers: { authorization }, fetch: { redirect: 'manual' as const } };
   try {
@@ -77,6 +124,9 @@ export async function readEditionCreateSource(
       )
     )
       return { kind: 'refused', status: 403 };
+    const media: EditionPreviewMedia = includeMedia
+      ? await previewMedia(client, authorization, revision)
+      : { kind: 'unavailable' };
     // Exact GET owns the live Context/ancestor authority; never reconstruct it from a board or identity.
     const final = await client.posts({ id: identity.postId }).revisions({ revisionId: identity.revisionId }).get(auth);
     if (final.error || !final.data) return failure(final.status);
@@ -91,7 +141,9 @@ export async function readEditionCreateSource(
       current.boardId !== revision.boardId ||
       current.threadId !== revision.threadId ||
       current.visibility !== revision.visibility ||
-      JSON.stringify(current.subjectIds) !== JSON.stringify(revision.subjectIds)
+      JSON.stringify(current.subjectIds) !== JSON.stringify(revision.subjectIds) ||
+      JSON.stringify(current.mediaIds) !== JSON.stringify(revision.mediaIds) ||
+      (await editionDocumentDigest(current.body)) !== revision.sha256
     )
       return { kind: 'conflict', status: 412 };
     return {
@@ -103,6 +155,7 @@ export async function readEditionCreateSource(
         sha256: revision.sha256,
         licence: revision.licence,
         subjectIds: [...revision.subjectIds],
+        media,
       },
     };
   } catch {
@@ -132,8 +185,8 @@ export function createNativeEditionCreateApi(
     { preconnect: (...args: Parameters<typeof fetch.preconnect>) => fetcher.preconnect?.(...args) },
   );
   const client = createKernelClient(origin, { fetch: transport });
-  const source = (identity: EditionSourceIdentity) =>
-    readEditionCreateSource(client, authorization, viewerId, identity);
+  const source = (identity: EditionSourceIdentity, includeMedia = true) =>
+    readEditionCreateSource(client, authorization, viewerId, identity, includeMedia);
   async function metadata(id: string): Promise<EditionMetadata | EditionCreateFailure> {
     const response = await transport(new URL(`/v1/contentEditions/${encodeURIComponent(id)}`, origin), {
       headers: { authorization },
@@ -168,7 +221,7 @@ export function createNativeEditionCreateApi(
   async function currentSource(
     intent: EditionPublicationIntent & { source: EditionSourceIdentity },
   ): Promise<EditionCreateSource | EditionCreateFailure> {
-    const selected = await source(intent.source);
+    const selected = await source(intent.source, false);
     if (selected.kind !== 'source') return selected;
     if (!selected.source.subjectIds.includes(intent.targetSubjectId))
       return { kind: 'refused', status: 404, reason: 'source' };

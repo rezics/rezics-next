@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../../../paraglide/messages.js';
 import { localizeHref } from '../../../paraglide/runtime.js';
-import { EditionPublicationExample, editionId, fixedText, subjectId } from './edition-publication-fixtures';
+import { EditionPublicationExample, editionId, fixedText, imageAlt, subjectId } from './edition-publication-fixtures';
 
 const meta = {
   title: 'Patterns/Content/EditionPublication',
@@ -108,5 +108,20 @@ export const UncertainPublish: Story = {
     await expect(canvas.queryByRole('link', { name: m.edition_publication_create_offer() })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.edition_publication_retry() }));
     await canvas.findByRole('heading', { name: m.edition_publication_published_heading() });
+  },
+};
+
+export const ImagePreviewUnavailable: Story = {
+  args: { state: 'image-preview-unavailable' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText(fixedText);
+    await expect(await canvas.findByRole('img', { name: imageAlt })).toHaveTextContent(
+      m.content_edition_image_unavailable(),
+    );
+    await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.edition_publication_subject() }), subjectId);
+    // A missing independent media presentation neither grants nor refuses native edition creation.
+    await expect(canvas.getByRole('button', { name: m.edition_publication_create() })).toBeEnabled();
+    await expect(canvas.queryByRole('link', { name: m.edition_publication_create_offer() })).toBeNull();
   },
 };
