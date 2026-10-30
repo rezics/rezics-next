@@ -1,9 +1,6 @@
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import {
-  lockRecordPurgeAuthoritySource,
-  type RecordPurgeAuthority,
-} from '../semantic/record-purge-authority.ts';
+import { lockRecordPurgeAuthoritySource, type RecordPurgeAuthority } from '../semantic/record-purge-authority.ts';
 import lock from './authored-field-retention-lock.sql';
 import purge from './authored-field-retention-purge.sql';
 import bind from './authored-field-retention-bind.sql';
@@ -71,13 +68,11 @@ export async function purgeAuthoredFieldForDeletedRecord(
   if (!alreadyErased) {
     if (row.availability !== 'available' || row.body_is_null)
       throw new Error('Invalid authored field physical custody');
-    if ((await purge.run(tx, binding)) === null)
-      throw new Error('Authored field physical purge did not complete');
+    if ((await purge.run(tx, binding)) === null) throw new Error('Authored field physical purge did not complete');
   }
   // The INSERT independently requires the exact native tombstone with NULL bytes.
   // A failed INSERT aborts the same transaction as the body change and source lock.
-  if ((await bind.run(tx, binding)).length !== 1)
-    throw new Error('Authored field purge source binding did not commit');
+  if ((await bind.run(tx, binding)).length !== 1) throw new Error('Authored field purge source binding did not commit');
   return {
     documentId: reference.documentId,
     deletionGeneration: reference.deletionGeneration,

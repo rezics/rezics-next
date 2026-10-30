@@ -21,14 +21,20 @@ async function authored() {
     type: 'schema:Recipe',
     labels: { en: 'Authored custody control' },
     statements: {
-      'schema:abstract': [{
-        property: { id: 'schema:abstract' },
-        value: {
-          type: 'value',
-          content: { document: fromPlainText('Retained until physical purge.'), licence: 'CC-BY-4.0', language: 'en' },
+      'schema:abstract': [
+        {
+          property: { id: 'schema:abstract' },
+          value: {
+            type: 'value',
+            content: {
+              document: fromPlainText('Retained until physical purge.'),
+              licence: 'CC-BY-4.0',
+              language: 'en',
+            },
+          },
+          references: [{ parts: [fixture.snak('schema:url', 'https://example.test/recipe')] }],
         },
-        references: [{ parts: [fixture.snak('schema:url', 'https://example.test/recipe')] }],
-      }],
+      ],
     },
   });
   fixture.status(created, 201);
@@ -67,11 +73,14 @@ test('exact authored tuple stores physical NULL and an exact idempotent generati
   const tx = await fixture.pool.connect();
   try {
     await tx.query('BEGIN');
-    expect((await lock.run(tx, input))).toMatchObject({ recorded: false, body_is_null: false });
+    expect(await lock.run(tx, input)).toMatchObject({ recorded: false, body_is_null: false });
     expect(await purge.run(tx, input)).toEqual({ id: field.stored.id });
     expect(await bind.run(tx, input)).toEqual([{ document_id: field.stored.id }]);
-    expect((await lock.run(tx, input))).toMatchObject({
-      recorded: true, same_source: true, body_is_null: true, availability: 'erased',
+    expect(await lock.run(tx, input)).toMatchObject({
+      recorded: true,
+      same_source: true,
+      body_is_null: true,
+      availability: 'erased',
     });
     expect(await purge.run(tx, input)).toBeNull();
     await tx.query('COMMIT');
@@ -80,7 +89,9 @@ test('exact authored tuple stores physical NULL and an exact idempotent generati
     tx.release();
   }
   expect(await readAuthoredField(fixture.admin, field.route, field.stored.id)).toEqual({
-    ...field.stored, body: null, availability: 'erased',
+    ...field.stored,
+    body: null,
+    availability: 'erased',
   });
 });
 
@@ -103,8 +114,10 @@ test('Content SQL refuses another authored tuple and exposes a stored generation
     expect((await readAuthoredField(tx, field.route, field.stored.id))?.body).toEqual(field.stored.body);
     await purge.run(tx, input);
     await bind.run(tx, input);
-    expect((await lock.run(tx, { ...input, deletion_generation: randomUUID() }))).toMatchObject({
-      recorded: true, same_source: false, body_is_null: true,
+    expect(await lock.run(tx, { ...input, deletion_generation: randomUUID() })).toMatchObject({
+      recorded: true,
+      same_source: false,
+      body_is_null: true,
     });
   } finally {
     await tx.query('ROLLBACK');
@@ -124,7 +137,7 @@ test('rollback preserves physical authored bytes and removes the tentative sourc
     expect((await lock.run(tx, input))?.recorded).toBe(true);
     await tx.query('ROLLBACK');
     expect(await readAuthoredField(tx, field.route, field.stored.id)).toEqual(field.stored);
-    expect((await lock.run(tx, input))).toMatchObject({ recorded: false, body_is_null: false });
+    expect(await lock.run(tx, input)).toMatchObject({ recorded: false, body_is_null: false });
   } finally {
     await tx.query('ROLLBACK');
     tx.release();
@@ -136,19 +149,32 @@ test('native issuance refuses an active record and a structural payload cannot a
   const payload = binding(field);
   // This assertion deliberately requires the real issuer to answer. Unavailable
   // is a failure of native acceptance, never a successful ineligibility result.
-  expect(await prepareRecordPurgeAuthority({ pool: fixture.pool, clock: fixture.clock }, {
-    subjectId: field.stored.subject,
-    candidateId: field.stored.candidate,
-    revision: field.stored.revision,
-    documentId: field.stored.id,
-    deletionGeneration: payload.deletion_generation,
-  }, { deadline: Date.now() + 10_000 })).toBeNull();
+  expect(
+    await prepareRecordPurgeAuthority(
+      { pool: fixture.pool, clock: fixture.clock },
+      {
+        subjectId: field.stored.subject,
+        candidateId: field.stored.candidate,
+        revision: field.stored.revision,
+        documentId: field.stored.id,
+        deletionGeneration: payload.deletion_generation,
+      },
+      { deadline: Date.now() + 10_000 },
+    ),
+  ).toBeNull();
   // Deliberately cross the untyped input boundary; this is a rejection control,
   // never a fabricated authority used to exercise a successful purge.
-  await expect(runCommand(fixture.pool, {
-    partition: partitionOf(field.route), deadline: Date.now() + 10_000, clock: fixture.clock,
-  }, async (tx) => noEffect(await Reflect.apply(purgeAuthoredFieldForDeletedRecord, undefined, [tx, payload]))))
-    .rejects.toThrow();
+  await expect(
+    runCommand(
+      fixture.pool,
+      {
+        partition: partitionOf(field.route),
+        deadline: Date.now() + 10_000,
+        clock: fixture.clock,
+      },
+      async (tx) => noEffect(await Reflect.apply(purgeAuthoredFieldForDeletedRecord, undefined, [tx, payload])),
+    ),
+  ).rejects.toThrow();
   expect(await readAuthoredField(fixture.admin, field.route, field.stored.id)).toEqual(field.stored);
-  expect((await lock.run(fixture.admin, payload))).toMatchObject({ recorded: false, body_is_null: false });
+  expect(await lock.run(fixture.admin, payload)).toMatchObject({ recorded: false, body_is_null: false });
 });
