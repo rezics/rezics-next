@@ -245,7 +245,6 @@
   "library_nav_collections": "コレクション",
   "library_nav_labels": "ラベル",
   "library_nav_following": "フォロー中",
-  "library_nav_labels": "ラベル",
   "library_nav_library": "ライブラリ",
   "library_navigation": "ライブラリ",
   "library_other": "その他",
@@ -820,5 +819,14 @@
   "moderation_appeal_upheld": "決定を維持しました",
   "moderation_appeal_reversed": "決定を取り消しました",
   "moderation_appeal_other_moderator": "この異議申し立ては別のモデレーターが審査します。",
-  "moderation_appeal_action_failed": "異議申し立てを処理できませんでした。もう一度お試しください。"
+  "moderation_appeal_action_failed": "異議申し立てを処理できませんでした。もう一度お試しください。",
+  "library_tracked_entries": "記録した作品",
+  "library_tracked_entries_state": "記録した作品 · {status}",
+  "library_filtered_by": "{status}で絞り込み中",
+  "library_clear_state": "絞り込みを解除",
+  "library_filter_empty_title": "「{status}」の項目はまだありません",
+  "library_filter_empty_description": "状態の絞り込みを解除すると、記録したすべての項目が表示されます。",
+  "library_collections": "コレクション",
+  "library_all_collections": "すべてのコレクション",
+  "library_next_page": "次のページ"
 }

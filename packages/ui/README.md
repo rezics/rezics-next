@@ -221,9 +221,10 @@ the shelf or its cover tiles starts by reading the reference source kept in the 
 `packages/browser/src/components/book/BookCard.tsx`. Learn the density, spacing and progress placement there and
 implement them in this stack.
 
-- **Structure.** Status tabs with counts (All, In progress, Planned, Completed, Paused, Dropped, Collections). All is
-  an overview with one section per status, In progress first as Continue, empty sections hidden. A type filter row
-  (books, anime, …) appears when the library holds more than one type.
+- **Structure.** Continue appears above Collection shortcuts and one paged list of tracked entries. Each tile shows a
+  status chip when web knows its label; state filters the same list. A type filter row (books, anime, …) appears when
+  the library holds more than one type. Collection shortcuts show the first eight owner Collections and link to All
+  Collections.
 - **Layouts.** Grid (default), List, and Table on wide screens; on narrow screens Table shows as List. The grid has
   three sizes (small, medium by default, large), each with a minimum card width. Columns follow the container width
   as [Cover cards](#cover-cards) describes; at wide widths small fits more cards and large fits fewer.

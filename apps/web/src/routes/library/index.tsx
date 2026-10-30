@@ -8,6 +8,7 @@ import { readPersonalLibrary } from '../../library/entries-actions';
 import { shelfDisplay, validateShelfSearch } from '../../library/shelf-params';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import { readContinueEntries } from '../../library/continue-read';
 
 export const Route = createFileRoute('/library/')({
   beforeLoad: async (context) => {
@@ -21,13 +22,15 @@ export const Route = createFileRoute('/library/')({
     const { state, cursor } = validateShelfSearch(search);
     return { state, cursor };
   },
-  loader: ({ deps }) =>
-    readPersonalLibrary({
-      data: {
-        ...(deps.state ? { state: deps.state } : {}),
-        ...(deps.cursor ? { cursor: deps.cursor } : {}),
-      },
-    }),
+  loader: async ({ deps }) => {
+    const [page, continueEntries] = await Promise.all([
+      readPersonalLibrary({
+        data: { ...(deps.state ? { state: deps.state } : {}), ...(deps.cursor ? { cursor: deps.cursor } : {}) },
+      }),
+      readContinueEntries(),
+    ]);
+    return { page, continueEntries };
+  },
   head: ({ match }) =>
     pageHead({ title: m.library_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: LibraryRoute,
@@ -37,10 +40,11 @@ function LibraryRoute() {
   const search = validateShelfSearch(Route.useSearch());
   return (
     <PersonalLibraryPage
-      page={Route.useLoaderData()}
+      page={Route.useLoaderData().page}
+      continueEntries={Route.useLoaderData().continueEntries}
       locale={getLocale()}
       display={shelfDisplay(search)}
-      cursor={search.cursor}
+      {...(search.cursor ? { cursor: search.cursor } : {})}
     />
   );
 }

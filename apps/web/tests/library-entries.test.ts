@@ -16,8 +16,6 @@ const login = '__Host-rezics_login';
 // The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
 const resource = 'https://api.rezics.test';
 const scopes = ['library_entry:list', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
-const sectionLimit = '12';
-const tabLimit = '48';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
@@ -529,7 +527,7 @@ test(
     expect(page.cache).toMatch(/\bno-store\b/);
     const body = main(page.html);
     expect(body).toContain('Library');
-    // The All tab has a section per status that holds entries, each newest first: Planned, then Completed.
+    // The one tracked-entries page keeps the kernel's newest-first order across states.
     expect(body.indexOf('Unavailable')).toBeLessThan(body.indexOf('Apple story'));
     expect(body.indexOf('Apple story')).toBeLessThan(body.indexOf('Zebra story'));
     // The fake serves no definitions, so the type has no name to show and its raw value stays out.
@@ -548,30 +546,18 @@ test(
       `/en/subjects/${id(12)}/${slug('Apple story')}`,
     );
     expect(found.some((link) => link.href.includes(hiddenSubjectId) || link.text === hiddenSubjectId)).toBe(false);
-    const tab = (text: string) => found.find((link) => link.text === text);
-    expect(tab('All')).toMatchObject({ href: '/en/library', current: true });
-    expect(tab('Planned')?.href).toBe('/en/library?state=planned');
-    expect(tab('In progress')?.href).toBe('/en/library?state=in_progress');
-    expect(tab('Completed')?.href).toBe('/en/library?state=completed');
-    expect(tab('Paused')?.href).toBe('/en/library?state=paused');
-    expect(tab('Dropped')?.href).toBe('/en/library?state=dropped');
-    expect(tab('Planned')?.current).toBe(false);
-    // One read per status, each of the first twelve entries.
+    expect(found.some((link) => link.text === 'All')).toBe(false);
+    expect(found.some((link) => link.text === 'Collections')).toBe(false);
+    expect(found.find((link) => link.text === 'Planned')?.href).toBe('/en/library?state=planned');
+    // One paged owner read returns entries across states.
     const reads = libraryReads();
-    expect(reads).toHaveLength(5);
-    expect(reads.map((read) => read.state).sort()).toEqual([
-      'completed',
-      'dropped',
-      'in_progress',
-      'paused',
-      'planned',
-    ]);
-    for (const read of reads)
+    expect(reads.filter((read) => read.state === null)).toHaveLength(1);
+    for (const read of reads.filter((read) => read.state === null))
       expect(read).toMatchObject({
         method: 'GET',
         path: '/v1/libraryEntries',
         view: 'FULL',
-        limit: sectionLimit,
+        limit: '100',
         cursor: null,
         authorization: `Bearer ${aliceAccess}`,
       });
@@ -583,14 +569,11 @@ test(
     expect(completedMain).toContain('Zebra story');
     expect(completedMain).not.toContain('Apple story');
     expect(completedMain).not.toContain('Unavailable');
-    expect(links(completed.html).find((link) => link.text === 'Completed')).toMatchObject({
-      href: '/en/library?state=completed',
-      current: true,
-    });
-    expect(libraryReads()).toHaveLength(1);
-    expect(libraryReads()[0]).toMatchObject({
+    expect(links(completed.html).find((link) => link.text === 'Completed')?.href).toBe('/en/library?state=completed');
+    expect(libraryReads().filter((read) => read.state === 'completed')).toHaveLength(1);
+    expect(libraryReads().find((read) => read.state === 'completed')).toMatchObject({
       view: 'FULL',
-      limit: tabLimit,
+      limit: '100',
       cursor: null,
       state: 'completed',
       authorization: `Bearer ${aliceAccess}`,
@@ -601,13 +584,13 @@ test(
     const plannedMain = main(planned.html);
     expect(plannedMain).not.toContain('Zebra story');
     expect(plannedMain.indexOf('Unavailable')).toBeLessThan(plannedMain.indexOf('Apple story'));
-    expect(links(planned.html).find((link) => link.text === 'Planned')?.current).toBe(true);
+    expect(links(planned.html).find((link) => link.text === 'Clear filter')?.href).toBe('/en/library');
 
     calls.length = 0;
     const empty = await readPage('/en/library?state=in_progress', cookie);
     expect(main(empty.html)).toContain('Nothing in In progress yet');
     expect(main(empty.html)).not.toContain('Zebra story');
-    expect(libraryReads()[0]?.state).toBe('in_progress');
+    expect(libraryReads().filter((read) => read.state === 'in_progress')).toHaveLength(2);
 
     const japanese = await readPage('/ja/library', cookie);
     expect(japanese.status).toBe(200);
@@ -623,11 +606,11 @@ test(
     expect(first.status).toBe(200);
     const firstMain = main(first.html);
     expect(firstMain.indexOf('Entry 001')).toBeLessThan(firstMain.indexOf('Entry 002'));
-    expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 048'));
-    expect(firstMain).not.toContain('Entry 049');
-    const firstRead = libraryReads()[0];
-    expect(firstRead).toMatchObject({ view: 'FULL', limit: tabLimit, cursor: null, state: 'planned' });
-    const more = links(first.html).find((link) => link.text === 'More');
+    expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 100'));
+    expect(firstMain).not.toContain('Entry 101');
+    const firstRead = libraryReads().find((read) => read.state === 'planned');
+    expect(firstRead).toMatchObject({ view: 'FULL', limit: '100', cursor: null, state: 'planned' });
+    const more = links(first.html).find((link) => link.text === 'Next page');
     expect(more?.href).toContain('/en/library?');
     expect(new URL(more!.href, 'http://site.test').searchParams.get('state')).toBe('planned');
     const cursor = new URL(more!.href, 'http://site.test').searchParams.get('cursor');
@@ -637,9 +620,14 @@ test(
     const second = await readPage(more!.href, cookie);
     expect(second.status).toBe(200);
     const secondMain = main(second.html);
-    expect(secondMain).toContain('Entry 049');
+    expect(secondMain).toContain('Entry 101');
     expect(secondMain).not.toContain('Entry 001');
-    expect(libraryReads()[0]).toMatchObject({ view: 'FULL', limit: tabLimit, cursor, state: 'planned' });
+    expect(libraryReads().find((read) => read.state === 'planned')).toMatchObject({
+      view: 'FULL',
+      limit: '100',
+      cursor,
+      state: 'planned',
+    });
   },
   timeout,
 );
@@ -737,10 +725,8 @@ test(
     expect(menuLinks.find((link) => link.text === 'Library')?.href).toBe('/en/library');
     expect(menuLinks.find((link) => link.text === 'Collections')?.href).toBe('/en/collections');
     expect(menuLinks.find((link) => link.text === 'Following')?.href).toBe('/en/following');
-    const tabs = /<nav\b[^>]*aria-label="States"[^>]*>([\s\S]*?)<\/nav>/.exec(main(english.html))?.[1] ?? '';
-    const tabLinks = linksIn(tabs);
-    expect(tabLinks.find((link) => link.text === 'All')).toMatchObject({ href: '/en/library', current: true });
-    expect(tabLinks.find((link) => link.text === 'Collections')?.href).toBe('/en/library/collections');
+    expect(links(english.html).some((link) => link.text === 'All')).toBe(false);
+    expect(links(english.html).some((link) => link.text === 'Collections')).toBe(false);
 
     const japanese = await readPage('/ja/library', cookie);
     expect(japanese.status).toBe(200);
@@ -749,13 +735,8 @@ test(
     expect(japaneseLinks.find((link) => link.text === 'ライブラリ')?.href).toBe('/ja/library');
     expect(japaneseLinks.find((link) => link.text === 'コレクション')?.href).toBe('/ja/collections');
     expect(japaneseLinks.find((link) => link.text === 'フォロー中')?.href).toBe('/ja/following');
-    const japaneseTabs = /<nav\b[^>]*aria-label="状態"[^>]*>([\s\S]*?)<\/nav>/.exec(main(japanese.html))?.[1] ?? '';
-    const japaneseTabLinks = linksIn(japaneseTabs);
-    expect(japaneseTabLinks.find((link) => link.text === 'すべて')).toMatchObject({
-      href: '/ja/library',
-      current: true,
-    });
-    expect(japaneseTabLinks.find((link) => link.text === 'コレクション')?.href).toBe('/ja/library/collections');
+    expect(links(japanese.html).some((link) => link.text === 'すべて')).toBe(false);
+    expect(links(japanese.html).some((link) => link.text === 'コレクション')).toBe(false);
   },
   timeout,
 );

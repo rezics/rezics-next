@@ -246,7 +246,6 @@
   "library_nav_collections": "收藏集",
   "library_nav_labels": "标签",
   "library_nav_following": "关注",
-  "library_nav_labels": "标签",
   "library_nav_library": "书架",
   "library_navigation": "书架",
   "library_other": "其他",
@@ -821,5 +820,14 @@
   "moderation_appeal_upheld": "已维持决定",
   "moderation_appeal_reversed": "已撤销决定",
   "moderation_appeal_other_moderator": "请由另一位版主处理此申诉。",
-  "moderation_appeal_action_failed": "无法处理此申诉，请重试。"
+  "moderation_appeal_action_failed": "无法处理此申诉，请重试。",
+  "library_tracked_entries": "已追踪条目",
+  "library_tracked_entries_state": "已追踪条目 · {status}",
+  "library_filtered_by": "已按“{status}”筛选",
+  "library_clear_state": "清除筛选",
+  "library_filter_empty_title": "还没有状态为“{status}”的条目",
+  "library_filter_empty_description": "清除状态筛选即可查看所有已追踪条目。",
+  "library_collections": "收藏集",
+  "library_all_collections": "所有收藏集",
+  "library_next_page": "下一页"
 }

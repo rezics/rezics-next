@@ -245,7 +245,6 @@
   "library_nav_collections": "컬렉션",
   "library_nav_labels": "라벨",
   "library_nav_following": "팔로잉",
-  "library_nav_labels": "라벨",
   "library_nav_library": "라이브러리",
   "library_navigation": "라이브러리",
   "library_other": "기타",
@@ -820,5 +819,14 @@
   "moderation_appeal_upheld": "결정을 유지했습니다",
   "moderation_appeal_reversed": "결정을 번복했습니다",
   "moderation_appeal_other_moderator": "다른 모더레이터가 이의 제기를 처리해야 합니다.",
-  "moderation_appeal_action_failed": "이의 제기를 처리하지 못했습니다. 다시 시도하세요."
+  "moderation_appeal_action_failed": "이의 제기를 처리하지 못했습니다. 다시 시도하세요.",
+  "library_tracked_entries": "기록한 항목",
+  "library_tracked_entries_state": "기록한 항목 · {status}",
+  "library_filtered_by": "{status}(으)로 필터링됨",
+  "library_clear_state": "필터 지우기",
+  "library_filter_empty_title": "아직 {status} 상태인 항목이 없습니다",
+  "library_filter_empty_description": "상태 필터를 지우면 기록한 모든 항목을 볼 수 있습니다.",
+  "library_collections": "컬렉션",
+  "library_all_collections": "모든 컬렉션",
+  "library_next_page": "다음 페이지"
 }

@@ -243,9 +243,8 @@
   "library_menu_status": "Status ändern",
   "library_more": "Mehr",
   "library_nav_collections": "Sammlungen",
-  "library_nav_labels": "Schlagwörter",
-  "library_nav_following": "Folge ich",
   "library_nav_labels": "Labels",
+  "library_nav_following": "Folge ich",
   "library_nav_library": "Bibliothek",
   "library_navigation": "Bibliothek",
   "library_other": "Sonstiges",
@@ -820,5 +819,14 @@
   "moderation_appeal_upheld": "Entscheidung bestätigt",
   "moderation_appeal_reversed": "Entscheidung aufgehoben",
   "moderation_appeal_other_moderator": "Eine andere Moderation muss diese Beschwerde bearbeiten.",
-  "moderation_appeal_action_failed": "Die Beschwerde konnte nicht bearbeitet werden. Versuche es erneut."
+  "moderation_appeal_action_failed": "Die Beschwerde konnte nicht bearbeitet werden. Versuche es erneut.",
+  "library_tracked_entries": "Erfasste Einträge",
+  "library_tracked_entries_state": "Erfasste Einträge · {status}",
+  "library_filtered_by": "Gefiltert nach {status}",
+  "library_clear_state": "Filter entfernen",
+  "library_filter_empty_title": "Noch keine Einträge mit dem Status {status}",
+  "library_filter_empty_description": "Entfernen Sie den Statusfilter, um alle erfassten Einträge zu sehen.",
+  "library_collections": "Sammlungen",
+  "library_all_collections": "Alle Sammlungen",
+  "library_next_page": "Nächste Seite"
 }

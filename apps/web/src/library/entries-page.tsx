@@ -1,228 +1,132 @@
+import { useNavigate } from '@tanstack/react-router';
+import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { Toaster } from '@rezics/ui/shadcn/toast';
-import { EntryUndoForm, EntryRestoreFeedback } from './entry-undo';
-import type { LibraryRestoreInput, LibraryRestoreResult } from './entries-read';
-import { Exposure } from '../kernel/exposure';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { EntryRestoreFeedback, EntryUndoForm } from './entry-undo';
+import { CollectionShortcuts } from './collection-shortcuts';
+import { ContinueSection } from './continue';
+import type { ContinueEntry } from './continue-read';
+import type {
+  LibraryEntryStateWrite,
+  LibraryRestoreInput,
+  LibraryRestoreResult,
+  PersonalLibraryView,
+} from './entries-read';
+import { Exposure } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { shelfSectionOrder, type LibraryEntryStateWrite, type PersonalLibraryView } from './entries-read';
 import { shelfHref, shelfLayouts, shelfSizes, type ShelfLayout, type ShelfSize } from './shelf-params';
 import { ShelfEntries, stateLabel } from './shelf-view';
+import { useHydrated } from './shelf-rows';
 
 type Display = { layout: ShelfLayout; size: ShelfSize };
-type SignedIn = Extract<PersonalLibraryView, { signedIn: true }>;
-
-const tabClass =
-  'shrink-0 border-b-2 border-transparent px-3 py-3 text-sm text-muted-foreground aria-[current=page]:border-primary aria-[current=page]:font-semibold aria-[current=page]:text-foreground';
-
 function layoutLabel(layout: ShelfLayout): string {
-  if (layout === 'grid') return m.library_layout_grid();
-  if (layout === 'list') return m.library_layout_list();
-  return m.library_layout_table();
+  return layout === 'grid'
+    ? m.library_layout_grid()
+    : layout === 'list'
+      ? m.library_layout_list()
+      : m.library_layout_table();
 }
-
 function sizeLabel(size: ShelfSize): string {
-  if (size === 's') return m.library_size_small();
-  if (size === 'm') return m.library_size_medium();
-  return m.library_size_large();
+  return size === 's' ? m.library_size_small() : size === 'm' ? m.library_size_medium() : m.library_size_large();
 }
-
-/** The status tabs. Each is a link, so they work without JavaScript, and each keeps the chosen layout and size. */
-function Tabs({ state, locale, display }: { state: LibraryEntryStateWrite | null; locale: string; display: Display }) {
-  const tabs: { state: LibraryEntryStateWrite | null; label: string }[] = [
-    { state: null, label: m.library_state_all() },
-    ...shelfSectionOrder.map((tab) => ({ state: tab, label: stateLabel(tab) })),
-  ];
-  return (
-    <nav aria-label={m.library_states()} className="flex min-w-0 gap-1 overflow-x-auto border-b">
-      <Exposure operation="library_entry.list">
-        {tabs.map((tab) => (
-          <a
-            key={tab.state ?? 'all'}
-            href={shelfHref(locale, { state: tab.state, ...display })}
-            {...(state === tab.state ? { 'aria-current': 'page' as const } : {})}
-            className={tabClass}
-          >
-            {tab.label}
-          </a>
-        ))}
-      </Exposure>
-      <Exposure operation="collection.list">
-        <a href={`/${locale}/library/collections`} className={tabClass}>
-          {m.library_nav_collections()}
-        </a>
-      </Exposure>
-      <Exposure operation="library_label.list">
-        <a href={`/${locale}/library/labels`} className={tabClass}>
-          {m.library_labels_heading()}
-        </a>
-      </Exposure>
-    </nav>
-  );
-}
-
-/** Layout and grid size, as links that rewrite the address; the table is for wide screens only. */
-function DisplayLinks({
+function DisplayControls({
   state,
   locale,
   display,
 }: {
-  state: LibraryEntryStateWrite | null;
+  state?: LibraryEntryStateWrite;
   locale: string;
   display: Display;
 }) {
-  const link = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <nav aria-label={m.library_layout()} className="flex gap-1">
-        {shelfLayouts.map((layout) => (
-          <a
-            key={layout}
-            href={shelfHref(locale, { state, ...display, layout })}
-            {...(display.layout === layout ? { 'aria-current': 'true' as const } : {})}
-            className={`${link(display.layout === layout)}${layout === 'table' ? ' max-sm:hidden' : ''}`}
-          >
-            {layoutLabel(layout)}
-          </a>
-        ))}
-      </nav>
-      {display.layout === 'grid' ? (
-        <nav aria-label={m.library_size()} className="flex gap-1">
-          {shelfSizes.map((size) => (
+  const hydrated = useHydrated();
+  const navigate = useNavigate();
+  const stateSearch = state ? { state } : {};
+  if (!hydrated) {
+    const selected = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
+    return (
+      <div className="flex flex-wrap items-center gap-4">
+        <nav aria-label={m.library_layout()} className="flex gap-1">
+          {shelfLayouts.map((layout) => (
             <a
-              key={size}
-              href={shelfHref(locale, { state, ...display, size })}
-              {...(display.size === size ? { 'aria-current': 'true' as const } : {})}
-              className={link(display.size === size)}
+              key={layout}
+              href={shelfHref(locale, { ...stateSearch, ...display, layout })}
+              aria-current={display.layout === layout ? 'page' : undefined}
+              className={`${selected(display.layout === layout)}${layout === 'table' ? ' max-sm:hidden' : ''}`}
             >
-              {sizeLabel(size)}
+              {layoutLabel(layout)}
             </a>
           ))}
         </nav>
-      ) : null}
-    </div>
-  );
-}
-
-function Overview({
-  page,
-  locale,
-  display,
-}: {
-  page: Extract<SignedIn, { state: null }>;
-  locale: string;
-  display: Display;
-}) {
-  return (
-    <div className="space-y-10">
-      {page.sections.map((section) => (
-        <ShelfEntries
-          key={section.state}
-          entries={section.entries}
-          shelf={section.state}
-          locale={locale}
-          {...display}
-          section={{
-            title: section.state === 'in_progress' ? m.library_continue() : stateLabel(section.state),
-            href: shelfHref(locale, { state: section.state, ...display }),
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function StatusTab({
-  page,
-  cursor,
-  locale,
-  display,
-}: {
-  page: Extract<SignedIn, { state: LibraryEntryStateWrite }>;
-  cursor: string | undefined;
-  locale: string;
-  display: Display;
-}) {
-  return (
-    <div className="space-y-6">
-      {page.entries.length ? (
-        <ShelfEntries
-          key={`${page.state}:${cursor ?? ''}`}
-          entries={page.entries}
-          shelf={page.state}
-          locale={locale}
-          {...display}
-        />
-      ) : (
-        <ShelfEmpty
-          kind="tab"
-          title={m.library_tab_empty_title({ status: stateLabel(page.state) })}
-          description={m.library_tab_empty_description()}
-          actions={
-            <Exposure operation="library_entry.list">
-              <a href={shelfHref(locale, display)} className={buttonVariants({ variant: 'outline' })}>
-                {m.library_view_all()}
+        {display.layout === 'grid' ? (
+          <nav aria-label={m.library_size()} className="flex gap-1">
+            {shelfSizes.map((size) => (
+              <a
+                key={size}
+                href={shelfHref(locale, { ...stateSearch, ...display, size })}
+                aria-current={display.size === size ? 'page' : undefined}
+                className={selected(display.size === size)}
+              >
+                {sizeLabel(size)}
               </a>
-            </Exposure>
-          }
-        />
-      )}
-      {page.next ? (
-        <Exposure operation="library_entry.list">
+            ))}
+          </nav>
+        ) : null}
+        {state ? (
           <a
-            href={shelfHref(locale, { state: page.state, ...display, cursor: page.next })}
-            className={buttonVariants({ variant: 'outline', size: 'lg' })}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            href={shelfHref(locale, { layout: display.layout, size: display.size })}
           >
-            {m.library_more()}
+            {m.library_clear_state()}
           </a>
-        </Exposure>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <ToggleGroup
+        aria-label={m.library_layout()}
+        value={[display.layout]}
+        onValueChange={(values) => {
+          const layout = values[0] as ShelfLayout | undefined;
+          if (layout) void navigate({ to: '/library', search: { ...stateSearch, layout, size: display.size } });
+        }}
+        variant="outline"
+      >
+        {shelfLayouts.map((layout) => (
+          <ToggleGroupItem key={layout} value={layout} className={layout === 'table' ? 'max-sm:hidden' : undefined}>
+            {layoutLabel(layout)}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      {display.layout === 'grid' ? (
+        <ToggleGroup
+          aria-label={m.library_size()}
+          value={[display.size]}
+          onValueChange={(values) => {
+            const size = values[0] as ShelfSize | undefined;
+            if (size) void navigate({ to: '/library', search: { ...stateSearch, layout: display.layout, size } });
+          }}
+          variant="outline"
+        >
+          {shelfSizes.map((size) => (
+            <ToggleGroupItem key={size} value={size}>
+              {sizeLabel(size)}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      ) : null}
+      {state ? (
+        <a
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          href={shelfHref(locale, { layout: display.layout, size: display.size })}
+        >
+          {m.library_clear_state()}
+        </a>
       ) : null}
     </div>
-  );
-}
-
-function SignedInLibrary({
-  page,
-  cursor,
-  locale,
-  display,
-}: {
-  page: SignedIn;
-  cursor: string | undefined;
-  locale: string;
-  display: Display;
-}) {
-  const empty = page.state === null && page.sections.length === 0;
-  return (
-    <>
-      <Tabs state={page.state} locale={locale} display={display} />
-      {empty ? (
-        <ShelfEmpty
-          kind="library"
-          title={m.library_empty_title()}
-          description={m.library_empty_description()}
-          actions={
-            <a href={`/${locale}/search`} className={buttonVariants()}>
-              {m.library_browse()}
-            </a>
-          }
-        />
-      ) : (
-        <>
-          {page.state === null || page.entries.length ? (
-            <Exposure operation="library_entry.list">
-              <DisplayLinks state={page.state} locale={locale} display={display} />
-            </Exposure>
-          ) : null}
-          {page.state === null ? (
-            <Overview page={page} locale={locale} display={display} />
-          ) : (
-            <StatusTab page={page} cursor={cursor} locale={locale} display={display} />
-          )}
-        </>
-      )}
-    </>
   );
 }
 
@@ -231,6 +135,7 @@ export function PersonalLibraryPage({
   locale,
   display,
   cursor,
+  continueEntries = [],
   undo,
   restore,
   csrfToken,
@@ -238,18 +143,87 @@ export function PersonalLibraryPage({
   page: PersonalLibraryView;
   locale: string;
   display: Display;
-  cursor?: string | undefined;
+  cursor?: string;
+  continueEntries?: ContinueEntry[];
   undo?: LibraryRestoreInput;
   restore?: LibraryRestoreResult;
   csrfToken?: string | null;
 }) {
+  if (!page.signedIn)
+    return (
+      <div className="container mx-auto max-w-7xl px-4 py-8">
+        <p>{m.library_sign_in()}</p>
+      </div>
+    );
+  const heading = page.state
+    ? m.library_tracked_entries_state({ status: stateLabel(page.state) ?? m.library_tracked_entries() })
+    : m.library_tracked_entries();
   return (
     <Toaster>
-      <div className="max-w-6xl space-y-6 text-foreground">
-        <PageHeading>{m.library_heading()}</PageHeading>
+      <div className="container mx-auto max-w-7xl space-y-8 px-4 py-8">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <PageHeading>{m.library_heading()}</PageHeading>
+          <Exposure operation="library_label.list">
+            <a href={`/${locale}/library/labels`} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+              {m.library_nav_labels()}
+            </a>
+          </Exposure>
+        </header>
         {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
         {restore ? <EntryRestoreFeedback restore={restore} locale={locale} /> : null}
-        <SignedInLibrary page={page as SignedIn} cursor={cursor} locale={locale} display={display} />
+        <ContinueSection entries={continueEntries} locale={locale} />
+        <CollectionShortcuts />
+        <section aria-labelledby="tracked-entries-heading" className="space-y-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 id="tracked-entries-heading" className="text-2xl font-semibold">
+              {heading}
+            </h2>
+            <Exposure operation="library_entry.list">
+              <DisplayControls {...(page.state ? { state: page.state } : {})} locale={locale} display={display} />
+            </Exposure>
+          </div>
+          {page.state ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_filtered_by({ status: stateLabel(page.state) ?? '' })}
+            </p>
+          ) : null}
+          {page.entries.length ? (
+            <ShelfEntries
+              key={`${page.state ?? 'all'}:${cursor ?? ''}`}
+              entries={page.entries}
+              locale={locale}
+              {...display}
+            />
+          ) : (
+            <ShelfEmpty
+              kind={page.state ? 'no-match' : 'library'}
+              title={
+                page.state
+                  ? m.library_filter_empty_title({ status: stateLabel(page.state) ?? '' })
+                  : m.library_empty_title()
+              }
+              description={page.state ? m.library_filter_empty_description() : m.library_empty_description()}
+              actions={
+                <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
+                  {m.library_browse()}
+                </a>
+              }
+            />
+          )}
+          {page.next ? (
+            <a
+              className={buttonVariants({ variant: 'outline' })}
+              href={shelfHref(locale, {
+                ...(page.state ? { state: page.state } : {}),
+                cursor: page.next,
+                layout: display.layout,
+                size: display.size,
+              })}
+            >
+              {m.library_next_page()}
+            </a>
+          ) : null}
+        </section>
       </div>
     </Toaster>
   );

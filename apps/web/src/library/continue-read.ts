@@ -1,5 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
-import { createServerOnlyFn } from '@tanstack/react-start';
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
+import { kernelClient } from '../kernel/client';
 import type { KernelClient } from '@rezics/client';
 import { personalRead } from '../kernel/query';
 import type { SubjectSummary } from '../media/summary';
@@ -8,6 +11,11 @@ import { prepareSession, viewerCredential } from '../session/request';
 import type { ProgressLabelInput } from './progress-label';
 import { libraryLabel } from './reads';
 import { libraryEntryStateLabel, readEntryPage } from './entries-read';
+
+export const readContinueEntries = createServerFn({ method: 'GET' }).handler(async () => {
+  setResponseHeader('cache-control', 'private, no-store');
+  return loadContinue(kernelClient(), getRequest(), env as Partial<SessionEnv>);
+});
 
 /** The Continue row shows at most this many subjects. */
 export const CONTINUE_LIMIT = 6;

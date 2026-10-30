@@ -1,5 +1,5 @@
-import { EntryRemoveForm } from './entry-undo';
 import { Exposure, useOperation } from '../kernel/exposure';
+import { EntryRemoveForm } from './entry-undo';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
@@ -16,18 +16,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@rezics/ui/shadcn/dropdown-menu';
 import { useNavigate } from '@tanstack/react-router';
-import { ChevronDownIcon, EllipsisIcon } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { EllipsisIcon } from 'lucide-react';
+import { type ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
@@ -36,42 +28,32 @@ import {
   libraryEntryStateLabel,
   shelfSectionOrder,
   type LibraryEntryStateRead,
-  type LibraryEntryStateWrite,
   type PersonalLibraryEntry,
 } from './entries-read';
 import { coverSubject } from './subject-row';
 import { displayLibraryTitle } from './title';
 import { progressView } from './progress-label';
-import type { ShelfLayout, ShelfSize } from './shelf-params';
+import { shelfHref, type ShelfLayout, type ShelfSize } from './shelf-params';
 import { useHydrated, useShelfRows, type ShelfFailure, type ShelfRow } from './shelf-rows';
 
-export function stateLabel(state: LibraryEntryStateRead): string {
-  return libraryEntryStateLabel(state);
+export function stateLabel(state: LibraryEntryStateRead): string | undefined {
+  return libraryEntryStateWrite(state) ? libraryEntryStateLabel(state) : undefined;
 }
-
-function selectedStateValue(state: LibraryEntryStateRead): string {
-  return libraryEntryStateWrite(state) ?? '__library_other__';
-}
-
 function failureText(reason: ShelfFailure): string {
   if (reason === 'closed') return m.platform_closed_message();
   if (reason === 'signed-out') return m.library_sign_in();
   return m.error_message();
 }
-
 const densities: Record<ShelfSize, CoverDensity> = { s: 'small', m: 'medium', l: 'large' };
-
 function entryProgress(entry: PersonalLibraryEntry, locale: string) {
   const view = progressView(entry.activeProgressSession ?? null, locale);
   return view ? { value: view.percent == null ? null : view.percent / 100, label: view.text } : undefined;
 }
-
 function titleOf(entry: PersonalLibraryEntry, locale: string) {
   return entry.subject
     ? displayLibraryTitle(entry.subject.label, locale)
     : { text: m.library_subject_unavailable(), lang: undefined };
 }
-
 function coverOf(entry: PersonalLibraryEntry) {
   return {
     subject: coverSubject(entry.subject),
@@ -85,17 +67,16 @@ function coverOf(entry: PersonalLibraryEntry) {
     },
   };
 }
-
 type Controls = ReturnType<typeof useShelfRows> & { locale: string; hydrated: boolean };
-
 function hrefOf(entry: PersonalLibraryEntry, locale: string): string {
-  // A subject nobody can read has no page; its card stays on the library.
   return entry.subject
     ? subjectHref({ id: entry.subject.id, label: displayLibraryTitle(entry.subject.label, locale).text }, locale).href
     : `/${locale}/library`;
 }
-
-/** The item menu of one entry: change its status, open its subject, remove it. */
+function stateHref(state: LibraryEntryStateRead, locale: string) {
+  const writable = libraryEntryStateWrite(state);
+  return writable ? shelfHref(locale, { state: writable }) : undefined;
+}
 function EntryMenu({
   row,
   controls,
@@ -123,8 +104,8 @@ function EntryMenu({
         {
           type: 'radio',
           label: m.library_menu_status(),
-          value: selectedStateValue(entry.state),
-          options: shelfSectionOrder.map((state) => ({ value: state, label: stateLabel(state) })),
+          value: entry.state,
+          options: shelfSectionOrder.map((state) => ({ value: state, label: libraryEntryStateLabel(state) })),
           onValueChange: (value) => void controls.changeState(entry.subjectId, value),
         },
       ],
@@ -146,7 +127,6 @@ function EntryMenu({
           },
         ]
       : []),
-    // The copies and reading progress of a subject are reached from here; their pages take the subject in the address.
     ...(subjectId
       ? [
           {
@@ -191,38 +171,22 @@ function EntryMenu({
     </ItemMenu>
   );
 }
-
-function StatusRadios({ row, controls }: { row: ShelfRow; controls: Controls }) {
-  return (
-    <DropdownMenuRadioGroup
-      value={selectedStateValue(row.entry.state)}
-      onValueChange={(value) => void controls.changeState(row.entry.subjectId, value)}
-    >
-      {shelfSectionOrder.map((state) => (
-        <DropdownMenuRadioItem key={state} value={state} closeOnClick>
-          {stateLabel(state)}
-        </DropdownMenuRadioItem>
-      ))}
-    </DropdownMenuRadioGroup>
-  );
-}
-
 function Updated({ entry, locale }: { entry: PersonalLibraryEntry; locale: string }) {
   return <RelativeTime value={entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
-
-function GridView({ controls, shelf, size }: { controls: Controls; shelf: LibraryEntryStateWrite; size: ShelfSize }) {
+function GridView({ controls, size }: { controls: Controls; size: ShelfSize }) {
   const { rows, locale } = controls;
   return (
     <CoverGrid ratio="5:7" density={densities[size]} fixedDensity>
       {rows.map((row) => {
         const { entry } = row;
+        const status = stateLabel(entry.state);
+        const statusHref = stateHref(entry.state, locale);
         const progress = entryProgress(entry, locale);
         const title = titleOf(entry, locale);
         const notes =
-          row.conflict || row.failure || entry.state !== shelf ? (
+          row.conflict || row.failure ? (
             <div className="space-y-1">
-              {entry.state !== shelf ? <Badge variant="secondary">{stateLabel(entry.state)}</Badge> : null}
               {row.conflict ? <p role="status">{m.library_conflict()}</p> : null}
               {row.failure ? <p role="alert">{failureText(row.failure)}</p> : null}
             </div>
@@ -235,11 +199,7 @@ function GridView({ controls, shelf, size }: { controls: Controls; shelf: Librar
               {...(title.lang ? { titleLang: title.lang } : {})}
               cover={coverOf(entry)}
               {...(progress ? { progress } : {})}
-              secondary={
-                <>
-                  {m.library_updated()} <Updated entry={entry} locale={locale} />
-                </>
-              }
+              {...(status ? { status: { label: status, ...(statusHref ? { href: statusHref } : {}) } } : {})}
               menuTrigger={<ItemMenuTriggerSlot />}
               {...(notes ? { state: notes } : {})}
             />
@@ -249,17 +209,17 @@ function GridView({ controls, shelf, size }: { controls: Controls; shelf: Librar
     </CoverGrid>
   );
 }
-
 function ListView({ controls }: { controls: Controls }) {
-  const admitted = useOperation('library_entry.put');
-  const { rows, locale, hydrated, pending } = controls;
+  const { rows, locale } = controls;
   return (
     <ShelfList>
       {rows.map((row) => {
         const { entry } = row;
-        const progress = entryProgress(entry, locale);
         const localizedTitle = titleOf(entry, locale);
         const title = localizedTitle.text;
+        const status = stateLabel(entry.state);
+        const href = stateHref(entry.state, locale);
+        const progress = entryProgress(entry, locale);
         return (
           <ShelfListRow
             key={entry.subjectId}
@@ -269,9 +229,20 @@ function ListView({ controls }: { controls: Controls }) {
             {...(localizedTitle.lang ? { titleLang: localizedTitle.lang } : {})}
             meta={entry.subject?.typeLabel}
             {...(progress ? { progress } : {})}
-            status={stateLabel(entry.state)}
-            {...(admitted && hydrated && !pending
-              ? { statusMenu: <StatusRadios row={row} controls={controls} /> }
+            {...(status
+              ? {
+                  status: href ? (
+                    <a
+                      href={href}
+                      aria-label={status}
+                      className="rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground underline"
+                    >
+                      {status}
+                    </a>
+                  ) : (
+                    status
+                  ),
+                }
               : {})}
             date={
               <span className="inline-flex items-center gap-1">
@@ -287,10 +258,8 @@ function ListView({ controls }: { controls: Controls }) {
     </ShelfList>
   );
 }
-
 function TableView({ controls }: { controls: Controls }) {
-  const admitted = useOperation('library_entry.put');
-  const { rows, locale, hydrated, pending } = controls;
+  const { rows, locale } = controls;
   const columns: ShelfColumn[] = [
     { id: 'cover', label: '', visible: true },
     { id: 'title', label: m.library_column_title(), visible: true },
@@ -300,7 +269,8 @@ function TableView({ controls }: { controls: Controls }) {
   ];
   const tableRows: ShelfTableRow[] = rows.map((row) => {
     const { entry } = row;
-    const progress = entryProgress(entry, locale);
+    const status = stateLabel(entry.state);
+    const href = stateHref(entry.state, locale);
     const title = titleOf(entry, locale);
     return {
       id: entry.subjectId,
@@ -308,21 +278,16 @@ function TableView({ controls }: { controls: Controls }) {
       title: title.text,
       ...(title.lang ? { titleLang: title.lang } : {}),
       cover: coverOf(entry),
-      ...(progress ? { progress: <ProgressRow {...progress} /> } : {}),
+      ...(entryProgress(entry, locale) ? { progress: <ProgressRow {...entryProgress(entry, locale)!} /> } : {}),
       type: entry.subject?.typeLabel,
-      status: admitted ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="outline" size="sm" disabled={!hydrated || pending} />}>
-            {stateLabel(entry.state)}
-            <ChevronDownIcon aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-40">
-            <StatusRadios row={row} controls={controls} />
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        stateLabel(entry.state)
-      ),
+      status:
+        status && href ? (
+          <a href={href} className="underline">
+            {status}
+          </a>
+        ) : (
+          status
+        ),
       lastActivity: (
         <span className="inline-flex items-center gap-1">
           <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
@@ -334,35 +299,24 @@ function TableView({ controls }: { controls: Controls }) {
   });
   return <ShelfTable rows={tableRows} columns={columns} onSort={() => {}} />;
 }
-
-/**
- * The entries of one shelf in the chosen layout, with the item menu of each and the removal confirmation. The table
- * shows as the list below the `sm` width, so both are in the page and the width decides which one is visible.
- */
 export function ShelfEntries({
   entries,
-  shelf,
   locale,
   layout,
   size,
-  section,
 }: {
   entries: PersonalLibraryEntry[];
-  shelf: LibraryEntryStateWrite;
   locale: string;
   layout: ShelfLayout;
   size: ShelfSize;
-  /** On the All tab each status is a section that names itself and links to its tab, and goes when it empties. */
-  section?: { title: string; href: string };
 }) {
   const hydrated = useHydrated();
   const shelfRows = useShelfRows(entries);
   const controls: Controls = { ...shelfRows, locale, hydrated };
   const leaving = shelfRows.rows.find((row) => row.entry.subjectId === shelfRows.removing)?.entry;
   const notices = layout === 'grid' ? [] : shelfRows.rows.filter((row) => row.conflict || row.failure);
-  const sectionId = useId();
-  if (shelfRows.rows.length === 0 && !shelfRows.restoreMessage) return null;
-  const body = (
+  if (!shelfRows.rows.length && !shelfRows.restoreMessage) return null;
+  return (
     <>
       {shelfRows.restoreMessage ? (
         <p role="status" className="text-sm">
@@ -389,7 +343,7 @@ export function ShelfEntries({
           </div>
         ))}
       </noscript>
-      {layout === 'grid' ? <GridView controls={controls} shelf={shelf} size={size} /> : null}
+      {layout === 'grid' ? <GridView controls={controls} size={size} /> : null}
       {layout === 'list' ? <ListView controls={controls} /> : null}
       {layout === 'table' ? (
         <>
@@ -424,22 +378,5 @@ export function ShelfEntries({
         </AlertDialog>
       </Exposure>
     </>
-  );
-  if (!section) return body;
-  return (
-    <section aria-labelledby={sectionId} className="space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id={sectionId} className="text-xl font-semibold">
-          {section.title}
-        </h2>
-        <Exposure operation="library_entry.list">
-          <a href={section.href} className="text-sm text-primary underline-offset-4 hover:underline">
-            {m.library_view_all()}
-            <span className="sr-only"> {stateLabel(shelf)}</span>
-          </a>
-        </Exposure>
-      </div>
-      {body}
-    </section>
   );
 }

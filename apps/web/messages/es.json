@@ -245,7 +245,6 @@
   "library_nav_collections": "Colecciones",
   "library_nav_labels": "Etiquetas",
   "library_nav_following": "Siguiendo",
-  "library_nav_labels": "Etiquetas",
   "library_nav_library": "Biblioteca",
   "library_navigation": "Biblioteca",
   "library_other": "Otro",
@@ -820,5 +819,14 @@
   "moderation_appeal_upheld": "Decisión confirmada",
   "moderation_appeal_reversed": "Decisión revocada",
   "moderation_appeal_other_moderator": "Otra persona moderadora debe resolver esta apelación.",
-  "moderation_appeal_action_failed": "No se pudo resolver la apelación. Inténtalo de nuevo."
+  "moderation_appeal_action_failed": "No se pudo resolver la apelación. Inténtalo de nuevo.",
+  "library_tracked_entries": "Entradas registradas",
+  "library_tracked_entries_state": "Entradas registradas · {status}",
+  "library_filtered_by": "Filtrado por {status}",
+  "library_clear_state": "Quitar filtro",
+  "library_filter_empty_title": "Aún no hay entradas con el estado {status}",
+  "library_filter_empty_description": "Quita el filtro de estado para ver todas las entradas registradas.",
+  "library_collections": "Colecciones",
+  "library_all_collections": "Todas las colecciones",
+  "library_next_page": "Página siguiente"
 }

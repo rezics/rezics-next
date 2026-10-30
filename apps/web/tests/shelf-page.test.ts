@@ -408,14 +408,6 @@ const text = (markup: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 const count = (markup: string, pattern: RegExp) => [...markup.matchAll(pattern)].length;
-/** The shelf sections of the All tab: the heading text, the markup and the links they carry. */
-function sections(html: string) {
-  return [...main(html).matchAll(/<section\b[\s\S]*?<\/section>/g)].map((match) => ({
-    markup: match[0],
-    title: text(/<h2\b[\s\S]*?<\/h2>/.exec(match[0])?.[0] ?? ''),
-    links: linksIn(match[0]),
-  }));
-}
 function linksIn(html: string) {
   const found: { href: string; text: string; current: boolean }[] = [];
   for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
@@ -465,66 +457,52 @@ afterAll(async () => {
 });
 
 test(
-  'the All tab shows one section per status that has entries, In progress first titled Continue, each section linking to its tab, and no section for an empty status',
+  'the library has one tracked-entries list, state chips filter through a single owner page, and Collection navigation is separate',
   async () => {
     reset([...showcase(), ...many('planned', 'Queued', 15, 100)]);
     const cookie = await alice();
     const page = await readPage('/en/library', cookie);
     expect(page.status).toBe(200);
-    const shown = sections(page.html);
-    // In progress comes first and is titled Continue; Paused and Dropped hold nothing, so they have no section.
-    expect(shown.map((section) => section.title)).toEqual(['Continue', 'Planned', 'Completed']);
-    const target = (section: (typeof shown)[number]) =>
-      section.links.find((link) => link.text.startsWith('View all'))?.href;
-    expect(shown.map((section) => params(target(section)!).get('state'))).toEqual([
-      'in_progress',
-      'planned',
-      'completed',
-    ]);
-    expect(target(shown[0]!)!.startsWith('/en/library?')).toBe(true);
-    // Each section shows its first 12 entries as cards, newest first.
-    expect(count(shown[0]!.markup, /<article\b/g)).toBe(1);
-    expect(text(shown[0]!.markup)).toContain('Kokoro');
-    expect(count(shown[1]!.markup, /<article\b/g)).toBe(12);
-    expect(text(shown[1]!.markup)).toContain('Apple story');
-    expect(text(shown[1]!.markup)).not.toContain('Queued 011');
-    expect(text(shown[2]!.markup)).toContain('Moon story');
-    // The relative last update is the card's secondary line.
-    expect(text(shown[0]!.markup)).toContain('Updated 3 days ago');
-    // Five reads, one per status, 12 entries each, in parallel.
-    const done = reads();
-    expect(done).toHaveLength(5);
-    expect(done.map((call) => call.state).sort()).toEqual([...statuses].sort());
-    for (const call of done) expect(call.limit).toBe('12');
+    const body = main(page.html);
+    expect(text(body)).toContain('Tracked entries');
+    expect(text(body)).not.toContain('Everything');
+    expect(count(body, /<article\b/g)).toBeGreaterThan(0);
+    expect(links(page.html).some((link) => link.text === 'Collections')).toBe(false);
+    expect(links(page.html).some((link) => link.text === 'All Collections')).toBe(true);
+    expect(links(page.html).find((link) => link.text === 'Planned')?.href).toBe('/en/library?state=planned');
+    expect(reads().filter((call) => !call.state)).toHaveLength(1);
 
-    // The layout and size carry into the sections and their links.
-    const listed = await readPage('/en/library?layout=list&size=l', cookie);
-    const listSections = sections(listed.html);
-    expect(listSections.map((section) => section.title)).toEqual(['Continue', 'Planned', 'Completed']);
-    expect(count(listSections[1]!.markup, /<li\b/g)).toBe(12);
-    expect(count(listSections[1]!.markup, /<article\b/g)).toBe(0);
-    const viewAll = params(target(listSections[1]!)!);
-    expect([viewAll.get('state'), viewAll.get('layout'), viewAll.get('size')]).toEqual(['planned', 'list', 'l']);
-    expect(links(listed.html).find((link) => link.text === 'Paused')?.current).toBe(false);
+    const filtered = await readPage('/en/library?state=planned', cookie);
+    expect(text(main(filtered.html))).toContain('Tracked entries · Planned');
+    expect(links(filtered.html).find((link) => link.text === 'Clear filter')?.href).toBe('/en/library');
+    expect(reads().filter((call) => call.state === 'planned')).toHaveLength(1);
+
+    const listed = await readPage('/en/library?layout=list', cookie);
+    expect(count(main(listed.html), /<li\b/g)).toBeGreaterThan(0);
+    expect(count(main(listed.html), /<article\b/g)).toBe(0);
   },
   timeout,
 );
 
 test(
-  "a status tab shows that status's entries as a CoverGrid of CoverCards by default, and layout=list and layout=table show the shelf list and the shelf table; layout, grid size and status survive paging, and an unknown value falls back to the default",
+  'a state filter shows its status in the heading, and grid, list and table layouts page the same list',
   async () => {
-    reset([...showcase(), ...many('planned', 'Queued', 58, 100)]);
+    reset([...showcase(), ...many('planned', 'Queued', 106, 100)]);
     const cookie = await alice();
-    // 60 planned entries: Apple, Zebra and 58 queued.
+    // 108 planned entries: Apple, Zebra and 106 queued.
     const grid = await readPage('/en/library?state=planned', cookie);
     const gridMain = main(grid.html);
-    expect(count(gridMain, /<article\b/g)).toBe(48);
+    expect(count(gridMain, /<article\b/g)).toBe(100);
     expect(count(gridMain, /<table\b/g)).toBe(0);
     expect(count(gridMain, /<li\b/g)).toBe(0);
     expect(gridMain).toContain('grid-cols-3');
-    expect(reads()).toHaveLength(1);
-    expect(reads()[0]).toMatchObject({ state: 'planned', limit: '48', cursor: null });
-    const more = links(grid.html).find((link) => link.text === 'More')!;
+    expect(reads().filter((read) => read.state === 'planned')).toHaveLength(1);
+    expect(reads().find((read) => read.state === 'planned')).toMatchObject({
+      state: 'planned',
+      limit: '100',
+      cursor: null,
+    });
+    const more = links(grid.html).find((link) => link.text === 'Next page')!;
     expect(params(more.href).get('state')).toBe('planned');
     expect(params(more.href).get('cursor')).toBeTruthy();
     expect(params(more.href).has('layout')).toBe(false);
@@ -532,29 +510,23 @@ test(
     // List and table, with a size, survive paging and a change of tab.
     const listed = await readPage('/en/library?state=planned&layout=list&size=l', cookie);
     const listMain = main(listed.html);
-    expect(count(listMain, /<li\b/g)).toBe(48);
+    expect(count(listMain, /<li\b/g)).toBe(100);
     expect(count(listMain, /<article\b/g)).toBe(0);
     expect(count(listMain, /<table\b/g)).toBe(0);
-    const next = links(listed.html).find((link) => link.text === 'More')!;
+    const next = links(listed.html).find((link) => link.text === 'Next page')!;
     const kept = params(next.href);
     expect([kept.get('state'), kept.get('layout'), kept.get('size')]).toEqual(['planned', 'list', 'l']);
-    const completedTab = links(listed.html).find((link) => link.text === 'Completed')!;
-    const tabParams = params(completedTab.href);
-    expect([tabParams.get('state'), tabParams.get('layout'), tabParams.get('size')]).toEqual([
-      'completed',
-      'list',
-      'l',
-    ]);
-    expect(tabParams.has('cursor')).toBe(false);
+    const clearFilter = links(listed.html).find((link) => link.text === 'Clear filter')!;
+    expect([params(clearFilter.href).get('layout'), params(clearFilter.href).get('size')]).toEqual(['list', 'l']);
     const second = await readPage(next.href, cookie);
-    expect(count(main(second.html), /<li\b/g)).toBe(12);
-    expect(links(second.html).some((link) => link.text === 'More')).toBe(false);
+    expect(count(main(second.html), /<li\b/g)).toBe(8);
+    expect(links(second.html).some((link) => link.text === 'Next page')).toBe(false);
 
     const table = await readPage('/en/library?state=planned&layout=table', cookie);
     const tableMain = main(table.html);
     expect(count(tableMain, /<table\b/g)).toBe(1);
     expect(count(tableMain, /<article\b/g)).toBe(0);
-    expect(count(/<tbody[\s\S]*<\/tbody>/.exec(tableMain)?.[0] ?? '', /<tr\b/g)).toBe(48);
+    expect(count(/<tbody[\s\S]*<\/tbody>/.exec(tableMain)?.[0] ?? '', /<tr\b/g)).toBe(100);
 
     // The grid sizes are four, three and two columns on a phone.
     expect(main((await readPage('/en/library?state=planned&size=s', cookie)).html)).toContain('grid-cols-4');
@@ -564,13 +536,12 @@ test(
     const unknown = await readPage('/en/library?state=bogus&layout=bogus&size=huge', cookie);
     expect(unknown.status).toBe(200);
     const unknownMain = main(unknown.html);
-    expect(sections(unknown.html).length).toBeGreaterThan(0);
+    expect(text(unknownMain)).toContain('Tracked entries');
     expect(count(unknownMain, /<article\b/g)).toBeGreaterThan(0);
     expect(count(unknownMain, /<table\b/g)).toBe(0);
     expect(unknownMain).toContain('grid-cols-3');
-    expect(links(unknown.html).find((link) => link.text === 'All')?.current).toBe(true);
-    // The Collections tab is a link to the person's collections; the tabs hold no counts.
-    expect(links(unknown.html).find((link) => link.text === 'Collections')?.href).toBe('/en/library/collections');
+    expect(links(unknown.html).some((link) => link.text === 'All')).toBe(false);
+    expect(links(unknown.html).some((link) => link.text === 'Collections')).toBe(false);
     expect(text(unknownMain)).not.toMatch(/\bAll\s+\d/);
   },
   timeout,
@@ -654,20 +625,12 @@ test(
       await page.context().close();
     }
 
-    // In the list, the status chip opens the status menu.
+    // In the list, the state chip links to the exact state filter.
     reset();
     const listed = await open('/en/library?state=completed&layout=list', await alice());
     try {
-      calls.length = 0;
       const row = listed.locator('main li').filter({ hasText: 'Moon story' });
-      await row.getByRole('button', { name: 'Completed' }).click();
-      await listed.getByRole('menuitemradio', { name: 'Planned' }).click();
-      await eventually(() => calls.some((call) => call.method === 'PUT'));
-      expect(calls.find((call) => call.method === 'PUT')).toMatchObject({
-        path: `/v1/libraryEntries/${id(14)}`,
-        body: { state: 'planned', revision: 1 },
-      });
-      await eventually(async () => (await row.innerText()).includes('Planned'));
+      await expect(row.getByRole('link', { name: 'Completed' })).toHaveAttribute('href', '/en/library?state=completed');
     } finally {
       await listed.context().close();
     }
@@ -676,7 +639,7 @@ test(
 );
 
 test(
-  'an empty library shows Nothing here yet with a link to browse, and an empty status tab says that status has nothing yet',
+  'an empty tracked list and empty state filter have honest headings and the filter can be cleared',
   async () => {
     reset([]);
     const cookie = await alice();
@@ -684,7 +647,7 @@ test(
     expect(empty.status).toBe(200);
     expect(text(main(empty.html))).toContain('Nothing here yet');
     expect(links(empty.html).find((link) => link.text === 'Browse')?.href).toBe('/en/search');
-    expect(sections(empty.html)).toHaveLength(0);
+    expect(text(main(empty.html))).toContain('Tracked entries');
     // There are no filters yet, so there is no "nothing matches" state and no unfinished controls.
     expect(text(main(empty.html))).not.toMatch(/Select|Sort|Filter|nothing matches/i);
 
@@ -694,7 +657,7 @@ test(
     expect(text(main(tab.html))).toContain('Nothing in Paused yet');
     expect(text(main(tab.html))).not.toContain('Nothing here yet');
     expect(count(main(tab.html), /<article\b/g)).toBe(0);
-    expect(links(tab.html).find((link) => link.text === 'Paused')?.current).toBe(true);
+    expect(links(tab.html).find((link) => link.text === 'Clear filter')?.href).toBe('/en/library');
     // The Chinese page says it in its own words.
     const own = (await Bun.file(join(app, 'messages', 'zh-Hans.json')).json()) as Record<string, string>;
     const chinese = await readPage('/zh-Hans/library', cookie);
@@ -704,7 +667,7 @@ test(
 );
 
 test(
-  'the page renders without JavaScript and makes five entry reads for All and one for a status tab, with libraries of 10, 1,000 and 10,000 entries',
+  'the page renders bounded tracked-entry and state pages with constant owner reads as libraries grow',
   async () => {
     const cookie = await alice();
     for (const size of [10, 1000, 10_000]) {
@@ -715,18 +678,23 @@ test(
       );
       const all = await readPage('/en/library', cookie);
       expect(all.status).toBe(200);
-      // Plain HTML, no script needed: the cards and the sections are in the document.
+      // Plain HTML, no script needed: one bounded page of tracked entries is in the document.
       const cards = count(main(all.html), /<article\b/g);
-      expect(cards).toBe(Math.min(size, 60));
-      expect(sections(all.html)).toHaveLength(5);
-      expect(reads(), `All at ${size}`).toHaveLength(5);
+      expect(cards).toBe(Math.min(size, 100));
+      expect(
+        reads().filter((call) => !call.state),
+        `All at ${size}`,
+      ).toHaveLength(1);
       expect(calls.filter((call) => call.path !== '/v1/libraryEntries')).toHaveLength(0);
 
       calls.length = 0;
       const tab = await readPage('/en/library?state=planned', cookie);
       expect(tab.status).toBe(200);
-      expect(count(main(tab.html), /<article\b/g)).toBe(Math.min(size / 5, 48));
-      expect(reads(), `tab at ${size}`).toHaveLength(1);
+      expect(count(main(tab.html), /<article\b/g)).toBe(Math.min(Math.ceil(size / 5), 100));
+      expect(
+        reads().filter((call) => call.state === 'planned'),
+        `tab at ${size}`,
+      ).toHaveLength(1);
       expect(calls).toHaveLength(1);
       calls.length = 0;
     }

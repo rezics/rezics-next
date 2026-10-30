@@ -246,7 +246,6 @@
   "library_nav_collections": "Collections",
   "library_nav_labels": "Labels",
   "library_nav_following": "Following",
-  "library_nav_labels": "Labels",
   "library_nav_library": "Library",
   "library_navigation": "Library",
   "library_other": "Other",
@@ -821,5 +820,14 @@
   "moderation_appeal_upheld": "Decision upheld",
   "moderation_appeal_reversed": "Decision reversed",
   "moderation_appeal_other_moderator": "Another moderator must resolve this appeal.",
-  "moderation_appeal_action_failed": "This appeal could not be resolved. Try again."
+  "moderation_appeal_action_failed": "This appeal could not be resolved. Try again.",
+  "library_tracked_entries": "Tracked entries",
+  "library_tracked_entries_state": "Tracked entries · {status}",
+  "library_filtered_by": "Filtered by {status}",
+  "library_clear_state": "Clear filter",
+  "library_filter_empty_title": "No entries in {status} yet",
+  "library_filter_empty_description": "Clear the state filter to see all tracked entries.",
+  "library_collections": "Collections",
+  "library_all_collections": "All Collections",
+  "library_next_page": "Next page"
 }
