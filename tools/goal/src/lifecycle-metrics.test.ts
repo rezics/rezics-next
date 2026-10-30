@@ -266,6 +266,36 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   });
 });
 
+test('orphaned landings require an undelivered queue record for the current task and attempt, without request events', () => {
+  const { db } = database('orphan-identity.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12, 0);
+  insertTask(db, 'missing-event-and-queue', 1, 'landing');
+  insertTask(db, 'delivered-queue', 2, 'landing');
+  insertTask(db, 'stale-attempt-queue', 3, 'landing', 2);
+  insertTask(db, 'current-queue', 4, 'landing', 2);
+  insertTask(db, 'ready-without-queue', 5, 'ready');
+  insertTask(db, 'integrated-without-queue', 6, 'integrated');
+  const insertQueue = db.query('INSERT INTO landing_queue(task, attempt, request, delivered) VALUES (?, ?, ?, ?)');
+  for (const [taskId, attempt, delivered] of [
+    ['delivered-queue', 1, 1],
+    ['stale-attempt-queue', 1, 0],
+    ['current-queue', 2, 0],
+  ] as const)
+    insertQueue.run(taskId, attempt, JSON.stringify({ taskId, attempt }), delivered);
+
+  expect(db.query('SELECT count(*) AS count FROM worker_events').get()).toEqual({ count: 0 });
+  const expected = {
+    available: true,
+    count: 3,
+    taskIds: ['missing-event-and-queue', 'delivered-queue', 'stale-attempt-queue'],
+  };
+  expect(lifecycleMetrics(db, now).orphanedLandings).toEqual(expected);
+
+  // Request-event schema availability cannot hide tasks whose handoff was never recorded.
+  db.exec('DROP TABLE worker_events');
+  expect(lifecycleMetrics(db, now).orphanedLandings).toEqual(expected);
+});
+
 test('Live-sized settled history does not require decoding all task/attempt JSON on each host sweep and hourly emission is durable/deduplicated', () => {
   const { db, path, store } = database('history.sqlite');
   const insertTaskRow = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');

@@ -86,7 +86,7 @@ export type LifecycleMetrics = {
     entries: LifecycleMetricEntry[];
     queues: LifecycleMetricEntry[];
   };
-  /** Current landing tasks with a landing request and no undelivered request for that exact attempt. */
+  /** Current landing tasks with no undelivered queue record for their exact current attempt, even without a request event. */
   orphanedLandings: {
     available: boolean;
     count: number | null;
@@ -284,11 +284,7 @@ function currentStateWaits(db: Database, nowMs: number, hasTransitions: boolean)
 }
 
 function orphanedLandings(db: Database): LifecycleMetrics['orphanedLandings'] {
-  if (
-    !hasTable(db, 'worker_tasks') ||
-    !hasTable(db, 'worker_events') ||
-    !hasTable(db, 'landing_queue')
-  )
+  if (!hasTable(db, 'worker_tasks') || !hasTable(db, 'landing_queue'))
     return { available: false, count: null, taskIds: [] };
   const taskIds = (
     db
@@ -297,10 +293,6 @@ function orphanedLandings(db: Database): LifecycleMetrics['orphanedLandings'] {
         FROM worker_tasks AS t
         WHERE json_extract(t.body, '$.state') = 'landing'
           AND t.current_attempt > 0
-          AND EXISTS (
-            SELECT 1 FROM worker_events AS e
-            WHERE e.task_id=t.id AND e.attempt=t.current_attempt AND e.kind='landing-requested'
-          )
           AND NOT EXISTS (
             SELECT 1 FROM landing_queue AS l
             WHERE l.task=t.id AND l.attempt=t.current_attempt AND l.delivered=0
