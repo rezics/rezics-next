@@ -334,25 +334,39 @@ export async function verifyAccountAgent(
   const source = await loadAccountIdentitySource(pool, receipt);
   if (source.input.intent.kind !== 'merge' || source.input.intent.survivor !== options.catalogue)
     throw accountIdentityUnavailable('caller catalogue does not match original verification');
-  const node = await readAgentSubject(pool, agentId);
-  const catalogue = await readAgentSubject(pool, options.catalogue);
-  const before = await accountAgentForNode(pool, agentId);
-  if (!node || !catalogue || catalogue.redirect || !before || before.account !== account || before.agent_id !== agentId)
-    throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
-  if (node.type !== 'schema:Person' && node.type !== 'schema:Organization')
-    throw new AccountAgentVerificationError('Only person and organization account agents can be verified');
-  if (node.type !== catalogue.type)
-    throw new AccountAgentVerificationError('The catalogue subject must match the account agent kind');
-  if (before.verified) {
-    if (before.subject !== options.catalogue || before.receipt_id !== options.receipt)
-      throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
-  } else {
+  const { lookupIdentityBinding } = await import('./identity-epoch-binding.ts');
+  // An admitted original delivery owns its recovery even while mapping is between native commits.
+  const bound = await lookupIdentityBinding(pool, {}, source.input);
+  if (!bound) {
+    const node = await readAgentSubject(pool, agentId);
+    const catalogue = await readAgentSubject(pool, options.catalogue);
+    const before = await accountAgentForNode(pool, agentId);
     if (
-      node.redirect ||
-      before.subject !== agentId ||
-      (await accountAgentsForSubjects(pool, [options.catalogue])).has(options.catalogue)
+      !node ||
+      !catalogue ||
+      catalogue.redirect ||
+      !before ||
+      before.account !== account ||
+      before.agent_id !== agentId
     )
-      throw new AccountAgentVerificationError('The catalogue subject is already linked or the account agent is merged');
+      throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
+    if (node.type !== 'schema:Person' && node.type !== 'schema:Organization')
+      throw new AccountAgentVerificationError('Only person and organization account agents can be verified');
+    if (node.type !== catalogue.type)
+      throw new AccountAgentVerificationError('The catalogue subject must match the account agent kind');
+    if (before.verified) {
+      if (before.subject !== options.catalogue || before.receipt_id !== options.receipt)
+        throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
+    } else {
+      if (
+        node.redirect ||
+        before.subject !== agentId ||
+        (await accountAgentsForSubjects(pool, [options.catalogue])).has(options.catalogue)
+      )
+        throw new AccountAgentVerificationError(
+          'The catalogue subject is already linked or the account agent is merged',
+        );
+    }
   }
   await deliverAccountIdentity(pool, receipt);
   const mapping = await accountAgentForNode(pool, agentId);

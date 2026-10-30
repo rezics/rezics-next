@@ -1101,7 +1101,10 @@ async function reverse(
     },
     (tx, { transactionId }) => {
       if (!undo) throw new AgentVerificationConflictError();
-      return commitReversal(tx, input.accountId, transactionId, actor.accountId, kind, input.reason ?? null, undo);
+      return commitReversal(tx, input.accountId, transactionId, actor.accountId, kind, input.reason ?? null, undo, {
+        kind: `access.agent-verification.${kind}`,
+        key: input.key,
+      });
     },
   );
 }
@@ -1115,6 +1118,7 @@ async function commitReversal(
   kind: AgentVerificationReversal['kind'],
   reason: string | null,
   undo: Awaited<ReturnType<typeof publishedAccountIdentityUndo>>,
+  commandReceipt: { kind: string; key: string },
 ) {
   const [previous] = rows(
     await accountReverse.run(tx as PoolClient, {
@@ -1151,6 +1155,8 @@ async function commitReversal(
     decidedBy: kind === 'revoked' ? requestedBy : null,
     requestId: null,
     pendingReceipt: receiptId,
+    commandReceipt,
+    undo,
     verificationReceipt: previous.verificationReceiptId,
     disposition: kind,
     reason,
@@ -1195,7 +1201,10 @@ export async function reverseDeletedAccountAgent(pool: Pool, accountId: string):
       },
     },
     (tx, { transactionId }) =>
-      commitReversal(tx, accountId, transactionId, accountId, 'revoked', 'Account deleted', undo),
+      commitReversal(tx, accountId, transactionId, accountId, 'revoked', 'Account deleted', undo, {
+        kind: 'access.agent-verification.deleted',
+        key: `delete:${account.agentVerificationReceiptId}`,
+      }),
   );
 }
 

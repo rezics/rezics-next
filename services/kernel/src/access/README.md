@@ -498,12 +498,17 @@ keyed by `(route,account_id,direction,receipt_id)`. Verification retains the ori
 its separate account command receipt; reversal retains its original command receipt and the actual prior published
 undo job. Native source reads check the account fence before looking up the receipt. Released source custody is
 private to the existing Semantic binding bridge; mutable pending markers and raw receipt JSON grant no authority.
+An initially deferred native constraint checks the executor's exact stored receipt key, transaction and component
+in the same database transaction. Reversal insertion also rechecks its immutable prior source at the current owner
+epoch. The source guard currently refuses updates and deletion while consumer-aware minimization is unfinished.
 
 The existing DBOS workflows redrive source/admission/publication with durable sleep outside steps, preserving their
 original ids and receipts through retryable failures. Page writes, approval completion, reversal page removal and
 pending cleanup require indexed native mapping and both fixed participant completions. The typed adapter accepts
 only the actual coordinator's resume/wait exports. Its module is absent here, so delivery stays pending rather than
 returning success. Missing historical source custody reports its original locator and also stays pending.
+Original DBOS step positions remain unchanged; the extra final publication step verifies recovery even when the
+old merge/unmerge and subsequent stages were already journalled. Uncached original stages probe before acting.
 
 The existing erasure inventory includes the source account, requester and decider with role-first indexes and typed
 primary keys. Receiving Semantic claims/jobs bind these same roles. Consumer-aware source minimization and shared

@@ -35,6 +35,12 @@ type WorkResult =
   | { ok: false; pending?: false; problem: { type: string; detail: string } };
 
 function retryable(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+  if (
+    typeof code === 'string' &&
+    ['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH'].includes(code)
+  )
+    return true;
   return (
     classifyUnavailability(error) !== undefined ||
     (error instanceof IdentityEpochStoreError &&
@@ -117,7 +123,6 @@ export function registerAgentVerificationWork(context: WorkContext): void {
   DBOS.registerWorkflow(
     async (decision: AgentVerificationReversal) => {
       await redrive(() => unmerge(decision));
-      await redrive(() => publication(decision.accountId, decision.receiptId, 'account-agent.unverify'));
       await redrive(async () => {
         await removePage(decision);
         return { ok: true as const };
@@ -130,6 +135,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await synchronizeAgent(decision);
         return { ok: true as const };
       });
+      await redrive(() => publication(decision.accountId, decision.receiptId, 'account-agent.unverify'));
     },
     { name: reversalWorkflow },
   );
@@ -265,8 +271,10 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         return;
       }
 
-      await redrive(() => publication(request.accountId, receiptId, 'account-agent.verify'));
-      if (request.state === 'approved') return;
+      if (request.state === 'approved') {
+        await redrive(() => publication(request.accountId, receiptId, 'account-agent.verify'));
+        return;
+      }
 
       const page = await redrive(() => writePage(request, receiptId));
       if (!page.ok) {
@@ -283,6 +291,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await finish(request, receiptId);
         return { ok: true as const };
       });
+      await redrive(() => publication(request.accountId, receiptId, 'account-agent.verify'));
     },
     { name: workflowName },
   );

@@ -30,6 +30,11 @@ CREATE TABLE access.agent_identity_intent (
     undo_job_epoch bigint,
     delivery_key text NOT NULL,
     workflow_id text NOT NULL,
+    native_command_kind text NOT NULL,
+    native_receipt_key text NOT NULL,
+    CHECK ((direction='account-agent.verify' AND native_command_kind='access.agent-verification.pending')
+        OR (direction='account-agent.unverify' AND native_command_kind IN
+          ('access.agent-verification.released','access.agent-verification.revoked','access.agent-verification.deleted'))),
     minimized boolean NOT NULL DEFAULT false,
     PRIMARY KEY(route,account_id,direction,receipt_id),
     CHECK (route = get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11)),
@@ -50,17 +55,28 @@ CREATE INDEX erasure_agent_identity_intent_requested_by ON access.agent_identity
 CREATE INDEX erasure_agent_identity_intent_decided_by ON access.agent_identity_intent
     (decided_by,route,account_id,direction,receipt_id);
 
--- Only the owner minimizer may discard personal source payload. No delivery may rewrite history.
+CREATE FUNCTION access.validate_agent_identity_intent() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.minimized OR NEW.requested_by IS NULL OR
+       NOT EXISTS (SELECT 1 FROM core.receipt r
+          WHERE r.partition_no=NEW.source_partition AND r.principal_kind='account'
+            AND r.principal_id=NEW.requested_by AND r.command_kind=NEW.native_command_kind
+            AND r.idempotency_key=NEW.native_receipt_key
+            AND r.transaction_id=NEW.source_transaction_id AND r.epoch=NEW.source_epoch
+            AND r.position=NEW.source_position AND r.xmin::text=pg_current_xact_id()::text) THEN
+        RAISE EXCEPTION 'Account identity intent lacks original same-command native receipt' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE CONSTRAINT TRIGGER agent_identity_intent_native_commit AFTER INSERT ON access.agent_identity_intent
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.validate_agent_identity_intent();
+
+-- Keep source proof until a consumer-aware owner minimizer supplies receiving custody.
 CREATE FUNCTION access.guard_agent_identity_intent() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP='DELETE' THEN
         RAISE EXCEPTION 'Account identity source requires receiving erasure custody';
-    END IF;
-    IF NOT OLD.minimized AND NEW.minimized
-       AND NEW.requested_by IS NULL AND NEW.decided_by IS NULL AND NEW.reason IS NULL
-       AND (to_jsonb(NEW)-ARRAY['minimized','requested_by','decided_by','reason']) =
-           (to_jsonb(OLD)-ARRAY['minimized','requested_by','decided_by','reason']) THEN
-        RETURN NEW;
     END IF;
     RAISE EXCEPTION 'Immutable account identity source';
 END;
@@ -71,3 +87,4 @@ CREATE TRIGGER agent_identity_intent_immutable BEFORE UPDATE OR DELETE ON access
 -- migrate:down
 DROP TABLE access.agent_identity_intent;
 DROP FUNCTION access.guard_agent_identity_intent();
+DROP FUNCTION access.validate_agent_identity_intent();

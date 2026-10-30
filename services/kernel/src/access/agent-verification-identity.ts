@@ -3,6 +3,7 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import { encodeReceiptKey, receiptKeysFor } from '../command/receipt-key.ts';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -34,6 +35,8 @@ type Source = {
   decidedBy: string | null;
   requestId: string | null;
   pendingReceipt: string;
+  commandReceipt?: { kind: string; key: string };
+  undo?: Awaited<ReturnType<typeof publishedAccountIdentityUndo>>;
   decision?: Awaited<ReturnType<typeof readOriginalAgentIdentityDecision>>;
   verificationReceipt?: string;
   disposition?: 'released' | 'revoked';
@@ -94,6 +97,21 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
       source.decision.account_kind !== source.accountKind)
   )
     throw new TypeError('Verification source requires actual released original Global decision custody');
+  if (
+    source.receipt.kind === 'account-agent.unverify' &&
+    (!source.undo ||
+      !publishedUndos.has(source.undo) ||
+      source.intent.kind !== 'unmerge' ||
+      source.undo.job.jobId !== source.intent.undoJob.jobId ||
+      source.undo.job.epoch !== source.intent.undoJob.epoch ||
+      source.undo.source.input.receipt.kind !== 'account-agent.verify' ||
+      source.undo.source.input.receipt.account !== source.account ||
+      source.undo.source.input.receipt.receipt !== source.verificationReceipt ||
+      source.undo.source.input.intent.kind !== 'merge' ||
+      source.undo.source.input.intent.survivor !== source.catalogue ||
+      source.undo.source.input.intent.release !== source.intent.release)
+  )
+    throw new TypeError('Reversal source requires actual released published undo custody');
   const input = { intent: source.intent, receipt: source.receipt };
   if (
     (source.receipt.kind === 'account-agent.verify' &&
@@ -113,6 +131,17 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
     source.receipt.kind === 'account-agent.verify'
       ? `accounts.agent-verification:${source.requestId}:${source.receipt.receipt}`
       : `accounts.agent-verification-reversal:${source.account}:${source.receipt.receipt}`;
+  const commandReceipt =
+    source.receipt.kind === 'account-agent.verify'
+      ? { kind: 'access.agent-verification.pending', key: `${source.requestId}:pending` }
+      : source.commandReceipt;
+  if (!commandReceipt) throw new TypeError('Reversal source requires its original native command key');
+  const nativeReceiptKey = encodeReceiptKey(
+    receiptKeysFor(tx),
+    commandReceipt.kind,
+    { kind: 'account', id: source.requestedBy },
+    commandReceipt.key,
+  );
   const inserted = await tx.query(insert.sql, [
     route,
     source.account,
@@ -142,6 +171,9 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
     source.decision?.epoch ?? null,
     source.decision?.position ?? null,
     source.decision?.transaction_id ?? null,
+    commandReceipt.kind,
+    nativeReceiptKey,
+    source.undo?.source.digest ?? null,
   ]);
   // A duplicate is possible only through the original native command receipt replay, which skips this body.
   // It must never rebind an existing historical source from a new command.
@@ -342,7 +374,9 @@ export async function publishedAccountIdentityUndo(
     saved.participants['library-private-follow-counts']?.state !== 'complete'
   )
     throw accountIdentityUnavailable(`prior undo is unpublished ${keyOf(receipt)}`);
-  return { job: saved.ref, source };
+  const undo = Object.freeze({ job: Object.freeze(saved.ref), source });
+  publishedUndos.add(undo);
+  return undo;
 }
 
 /** Actual Global decision locator, resolved before the account home is acquired. */
@@ -382,6 +416,7 @@ export async function readOriginalAgentIdentityDecision(pool: Pool, requestId: s
   return decision;
 }
 const originalDecisions = new WeakSet<object>();
+const publishedUndos = new WeakSet<object>();
 
 /** Effects-free publication probe; retained history and unrelated jobs are never scanned. */
 export function probeAccountIdentityPublication(pool: Pool, receipt: AccountReceipt): Promise<IdentityJobRef> {
