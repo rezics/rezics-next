@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { pageHead, pageLinks } from '../src/shell/head.ts';
 import { validatePublicOrigin } from '../src/shell/origin.ts';
+import { errorPageHead, routeFailure } from '../src/shell/error-state';
+import { PlatformClosedError } from '../src/kernel/platform-closed';
+import { notFound } from '@tanstack/react-router';
 
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 const origin = 'https://public.example';
@@ -66,4 +69,37 @@ test('public origin must be an absolute HTTP origin', () => {
     expect(() => validatePublicOrigin(value)).toThrow(/PUBLIC_ORIGIN/);
   }
   expect(validatePublicOrigin(origin)).toBe(origin);
+});
+
+test('shared route errors preserve native failures, conceal missing targets and exclude successful locale paths', () => {
+  const root = { status: 'success' };
+  const generic = { status: 'error', error: new Error('private dependency detail') };
+  expect(routeFailure([root, generic])?.status).toBe(500);
+  expect(routeFailure([root, generic], 503)?.status).toBe(503);
+  expect(routeFailure([root, { status: 'notFound', error: notFound() }])?.status).toBe(404);
+  expect(routeFailure([root, { status: 'error', error: new PlatformClosedError(403, {}) }])?.status).toBe(403);
+  const unavailable = routeFailure([
+    root,
+    {
+      status: 'error',
+      error: { problem: { status: 503 }, headers: { 'retry-after': '7', 'x-private-cause': 'secret' } },
+    },
+  ]);
+  expect(unavailable).toEqual({ status: 503, closed: false, missing: false, retryAfter: '7' });
+  for (const status of [200, 302, 600, NaN]) {
+    expect(routeFailure([root, { status: 'error', error: { status } }])?.status).toBe(500);
+  }
+  expect(routeFailure([root, { status: 'success' }])).toBeUndefined();
+  for (const locale of locales) {
+    const head = errorPageHead({
+      origin,
+      locale,
+      path: '/failed',
+      paths: Object.fromEntries(locales.map((l) => [l, '/private-title'])) as Record<typeof locale, string>,
+    });
+    expect(head.meta).toContainEqual({ name: 'robots', content: 'noindex' });
+    expect(head.meta).toContainEqual({ property: 'og:url', content: `${origin}/${locale}/failed` });
+    expect(JSON.stringify(head)).not.toContain('private');
+    expect(head.scripts).toEqual([]);
+  }
 });

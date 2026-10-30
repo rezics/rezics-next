@@ -862,6 +862,8 @@
   "shell_theme_light": "浅色",
   "shell_theme_system": "跟随系统",
   "status_home": "首页",
+  "status_retry": "重试",
+  "status_retrying": "正在重试…",
   "status_search": "搜索",
   "subject_about": "简介",
   "subject_aliases": "又名",

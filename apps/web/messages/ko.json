@@ -861,6 +861,8 @@
   "shell_theme_light": "밝게",
   "shell_theme_system": "시스템 설정",
   "status_home": "홈",
+  "status_retry": "다시 시도",
+  "status_retrying": "다시 시도 중…",
   "status_search": "검색",
   "subject_about": "소개",
   "subject_aliases": "다른 이름",

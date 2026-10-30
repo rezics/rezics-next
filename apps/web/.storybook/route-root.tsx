@@ -1,9 +1,9 @@
 import { Outlet } from '@tanstack/react-router';
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { Route } from '../src/routes/__root';
 import { AppShell } from '../src/shell/shell';
 
-function StorybookDocument() {
+function StorybookDocument({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     const moveSkipLink = () => {
       const skipLink = document.querySelector('[data-slot="skip-nav-link"]');
@@ -16,12 +16,8 @@ function StorybookDocument() {
     return () => observer.disconnect();
   }, []);
 
-  return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
-  );
+  return <AppShell>{children}</AppShell>;
 }
 
 // Storybook owns the iframe document. Keep the real root route but mount its AppShell in the story canvas.
-Route.update({ component: StorybookDocument });
+Route.update({ component: Outlet, shellComponent: StorybookDocument });

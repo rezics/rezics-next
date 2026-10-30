@@ -9,13 +9,14 @@ import {
 } from '@tanstack/react-router';
 import type { QueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
-import { setResponseStatus } from '@tanstack/react-start/server';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { getResponseStatus, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { env } from 'cloudflare:workers';
 import { PreferencesScript } from '../shell/preferences-script';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell, NotFoundPage } from '../shell/shell';
-import { ClosedErrorPage, ClosedPage, closedPageHead } from '../shell/closed.tsx';
+import { ClosedErrorPage, ClosedPage } from '../shell/closed.tsx';
+import { errorPageHead, routeFailure } from '../shell/error-state';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential.ts';
 import { useSession } from '../session/query.ts';
@@ -43,8 +44,15 @@ export const commerceNavigation = createNavigation([
   },
 ]);
 
-const setClosedResponseStatus = createIsomorphicFn()
-  .server(() => setResponseStatus(403, 'Forbidden'))
+const preserveErrorResponse = createIsomorphicFn()
+  .server((matches: Parameters<typeof routeFailure>[0]) => {
+    const failure = routeFailure(matches, getResponseStatus());
+    if (!failure) return;
+    setResponseStatus(failure.status);
+    setResponseHeader('cache-control', 'private, no-store');
+    setResponseHeader('x-robots-tag', 'noindex');
+    if (failure.retryAfter) setResponseHeader('retry-after', failure.retryAfter);
+  })
   .client(() => undefined);
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
@@ -65,15 +73,9 @@ export const Route = createRootRouteWithContext<{
     const data = last?.loaderData as { paths?: PagePaths } | undefined;
     const path = last?.pathname ?? '/';
     const origin = publicOrigin();
-    const closed = matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error));
-    const missing =
-      matches.length === 1 ||
-      matches.some(
-        (match) =>
-          (match as { _notFound?: boolean })._notFound === true ||
-          match.status === 'notFound' ||
-          (match.status === 'error' && isNotFound(match.error)),
-      );
+    const failure = routeFailure(matches);
+    preserveErrorResponse(matches);
+    const missing = failure?.missing;
     const hiddenAgentHandle = missing && /^\/(?:[^/]+\/)?@[^/]+(?:\/[^/]+)?$/.test(path);
     const safePath = hiddenAgentHandle ? `/${locale}` : path;
     const context = {
@@ -82,20 +84,21 @@ export const Route = createRootRouteWithContext<{
       path: safePath,
       ...(data?.paths && !hiddenAgentHandle ? { paths: data.paths } : {}),
     };
-    const head = closed ? closedPageHead(context) : pageHead(missing ? { robots: 'noindex' } : {}, context);
+    const head = failure ? errorPageHead(context) : pageHead({}, context);
     return {
       meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, ...head.meta],
       links: [
         { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
-        ...pageLinks(origin, locale, safePath, hiddenAgentHandle ? undefined : data?.paths),
+        ...pageLinks(origin, locale, safePath, failure || hiddenAgentHandle ? undefined : data?.paths),
       ],
     };
   },
-  component: Root,
+  shellComponent: Root,
+  component: Outlet,
   notFoundComponent: NotFoundPage,
   errorComponent: ClosedErrorPage,
 });
-function Root() {
+function Root({ children }: { children: ReactNode }) {
   const router = useRouter();
   const nonce = router.options.ssr?.nonce;
   const { state: session } = useSession();
@@ -129,7 +132,6 @@ function Root() {
       }),
   });
   const credentialMode = useRef<ReadCredentialMode>(anonymousReadMode);
-  if (platformClosed) setClosedResponseStatus();
   useEffect(() => {
     if (session !== 'signed-in' || !rereadPage || credentialMode.current === 'session') return;
     credentialMode.current = 'session';
@@ -147,7 +149,7 @@ function Root() {
         <HeadContent />
       </head>
       <body>
-        <AppShell navigation={commerceNavigation}>{platformClosed ? <ClosedPage /> : <Outlet />}</AppShell>
+        <AppShell navigation={commerceNavigation}>{platformClosed ? <ClosedPage /> : children}</AppShell>
         <Scripts />
       </body>
     </html>

@@ -861,6 +861,8 @@
   "shell_theme_light": "Claro",
   "shell_theme_system": "Sistema",
   "status_home": "Inicio",
+  "status_retry": "Reintentar",
+  "status_retrying": "Reintentando…",
   "status_search": "Buscar",
   "subject_about": "Acerca de",
   "subject_aliases": "También conocido como",

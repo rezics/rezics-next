@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { chromium } from 'playwright';
+import offer from '../src/kernel/recorded/offer.json';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -25,6 +27,8 @@ const kernelCalls: { path: string; authorization: string | null }[] = [];
 let counter = 0;
 // How Auth answers the next refresh grants; null issues new tokens.
 let refusal: (() => Response) | null = null;
+let offerOutcome: 'missing' | 'closed' | 'unavailable' | 'error' | 'ready' = 'missing';
+let offerReads = 0;
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
@@ -85,6 +89,19 @@ const fake = Bun.serve({
       }
       if (form.get('grant_type') === 'refresh_token') return refusal ? refusal() : issue('alice');
       return json({ error: 'unsupported_grant_type' }, 400);
+    }
+    if (url.pathname === `/v1/offers/${offer.offer.id}`) {
+      offerReads++;
+      if (offerOutcome === 'ready') return json({ offer: { ...offer.offer, revision: 1 } });
+      const status = { missing: 404, closed: 403, unavailable: 503, error: 500 }[offerOutcome];
+      const code = offerOutcome === 'closed' ? 'platform_closed' : 'dependency_unavailable';
+      return Response.json(
+        { code, detail: 'private upstream cause' },
+        {
+          status,
+          headers: { 'cache-control': 'private, no-store', 'retry-after': '7' },
+        },
+      );
     }
     if (url.pathname.startsWith('/v1/media/')) {
       kernelCalls.push({ path: url.pathname + url.search, authorization: request.headers.get('authorization') });
@@ -247,6 +264,65 @@ test(
       const recovered = await download(value);
       expect(refreshes(), name).toBe(before + 2);
       expect(recovered.call?.authorization, name).toBe(`Bearer ${accessTokens.at(-1)}`);
+    }
+  },
+  timeout,
+);
+
+test(
+  'generic route errors retain native failure status and noindex while exposing bounded real retry recovery in the sole shell main',
+  async () => {
+    const path = `/en/offers/${offer.offer.id}`;
+    const origin = await site();
+    for (const [outcome, status] of [
+      ['missing', 404],
+      ['closed', 403],
+      ['unavailable', 503],
+      ['error', 500],
+    ] as const) {
+      offerOutcome = outcome;
+      const response = await fetch(`${origin}${path}`, { redirect: 'manual' });
+      const html = await response.text();
+      expect(response.status, outcome).toBe(status);
+      expect(response.headers.get('cache-control')).toContain('no-store');
+      expect(response.headers.get('cache-control')).toContain('private');
+      expect(html).toMatch(/name="robots"[^>]*content="noindex/);
+      expect((html.match(/<main\b/g) ?? []).length).toBe(1);
+      expect(html).not.toContain('private upstream cause');
+      expect(html).not.toContain(offer.offer.title);
+      if (status >= 500) expect(response.headers.get('retry-after')).toBe('7');
+    }
+
+    offerOutcome = 'unavailable';
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      const response = await page.goto(`${origin}${path}`);
+      expect(response?.status()).toBe(503);
+      await page.locator('html[data-hydrated]').waitFor();
+      const main = page.getByRole('main');
+      expect(await main.count()).toBe(1);
+      const retry = main.getByRole('button', { name: 'Try again', exact: true });
+      await retry.waitFor();
+      expect(await main.getByRole('link', { name: 'Home', exact: true }).getAttribute('href')).toBe('/en');
+      expect(await main.getByRole('link', { name: 'Search', exact: true }).getAttribute('href')).toBe('/en/search');
+      const before = offerReads;
+      await retry.click();
+      await retry.waitFor();
+      // A failed explicit attempt keeps noindex and never discloses the target or signs the reader in.
+      expect(offerReads).toBe(before + 1);
+      expect(await page.locator('meta[name="robots"]').getAttribute('content')).toContain('noindex');
+      expect(await main.innerText()).not.toContain(offer.offer.title);
+      expect(page.url()).toBe(`${origin}${path}`);
+      offerOutcome = 'ready';
+      await retry.click();
+      await main.getByRole('heading', { name: offer.offer.title, exact: true }).waitFor();
+      expect(offerReads).toBe(before + 2);
+      expect(await main.count()).toBe(1);
+      expect(await retry.count()).toBe(0);
+      expect(page.url()).toBe(`${origin}${path}`);
+    } finally {
+      await browser.close();
     }
   },
   timeout,

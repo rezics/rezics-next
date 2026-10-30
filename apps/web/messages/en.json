@@ -891,6 +891,8 @@
   "shell_theme_light": "Light",
   "shell_theme_system": "System",
   "status_home": "Home",
+  "status_retry": "Try again",
+  "status_retrying": "Trying again…",
   "status_search": "Search",
   "subject_about": "About",
   "subject_aliases": "Also known as",

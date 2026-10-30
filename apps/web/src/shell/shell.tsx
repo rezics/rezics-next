@@ -540,13 +540,28 @@ function ShellContent({ children, search }: Pick<AppShellProps, 'children' | 'se
     </PhoneCreationProvider>
   );
 }
-export function StatusPage({ heading, message }: { heading: string; message: string }) {
+export function StatusPage({
+  heading,
+  message,
+  onRetry,
+  retrying = false,
+}: {
+  heading: string;
+  message: string;
+  onRetry?: (() => void) | undefined;
+  retrying?: boolean | undefined;
+}) {
   const locale = getLocale();
   return (
     <div className="max-w-prose space-y-4">
       <PageHeading>{heading}</PageHeading>
       <p className="leading-7">{message}</p>
       <div className="flex flex-wrap items-center gap-2">
+        {onRetry ? (
+          <Button className={statusControlClass} size="lg" onClick={onRetry} disabled={retrying} aria-busy={retrying}>
+            {retrying ? m.status_retrying() : m.status_retry()}
+          </Button>
+        ) : null}
         <a data-slot="button" className={cn(buttonVariants({ size: 'lg' }), statusControlClass)} href={`/${locale}`}>
           {m.status_home()}
         </a>
@@ -567,6 +582,9 @@ export function HomePage() {
 export function NotFoundPage() {
   return <StatusPage heading={m.not_found_heading()} message={m.not_found_message()} />;
 }
-export function ErrorPage() {
-  return <StatusPage heading={m.error_heading()} message={m.error_message()} />;
+export function ErrorPage({
+  onRetry,
+  retrying,
+}: { onRetry?: (() => void) | undefined; retrying?: boolean | undefined } = {}) {
+  return <StatusPage heading={m.error_heading()} message={m.error_message()} onRetry={onRetry} retrying={retrying} />;
 }

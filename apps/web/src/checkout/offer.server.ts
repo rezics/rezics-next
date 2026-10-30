@@ -1,7 +1,7 @@
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../kernel/client';
-import { dependencyUnavailable } from '../media/kernel';
+import { dependencyUnavailable, MediaProblem } from '../media/kernel';
 import type { OfferPageData } from './offer';
 import { formatOfferPrice } from './price';
 import { benefitCreatorName, capturedBenefit } from './benefit';
@@ -16,6 +16,11 @@ async function readOnce(id: string, locale: string): Promise<OfferPageData> {
     .get({ query: { languages: locale } });
   if (result.error) {
     if (result.status === 404 || result.error.status === 404) throw notFound();
+    if (result.status >= 500 && result.status <= 599) {
+      const failure = dependencyUnavailable(result.status);
+      const retryAfter = new Headers(result.headers).get('retry-after');
+      throw new MediaProblem(failure.problem, retryAfter ? { 'retry-after': retryAfter } : undefined);
+    }
     throw new Error('Kernel offer read failed');
   }
   const offer = result.data?.offer;

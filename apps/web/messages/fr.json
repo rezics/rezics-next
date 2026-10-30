@@ -861,6 +861,8 @@
   "shell_theme_light": "Clair",
   "shell_theme_system": "Système",
   "status_home": "Accueil",
+  "status_retry": "Réessayer",
+  "status_retrying": "Nouvelle tentative…",
   "status_search": "Recherche",
   "subject_about": "À propos",
   "subject_aliases": "Aussi connu sous le nom de",

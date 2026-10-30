@@ -861,6 +861,8 @@
   "shell_theme_light": "淺色",
   "shell_theme_system": "跟隨系統",
   "status_home": "首頁",
+  "status_retry": "再試一次",
+  "status_retrying": "正在重試…",
   "status_search": "搜尋",
   "subject_about": "簡介",
   "subject_aliases": "又名",

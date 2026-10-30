@@ -97,6 +97,10 @@ export function setResponseHeader(_name: string, _value: string): void {}
 
 export function setResponseStatus(_status: number, _statusText?: string): void {}
 
+export function getResponseStatus(): number {
+  return 200;
+}
+
 /** Story handlers execute locally against the fake, including server-only transports. */
 export function createServerOnlyFn<T extends (...args: never[]) => unknown>(handler: T): T {
   return handler;

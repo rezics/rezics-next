@@ -861,6 +861,8 @@
   "shell_theme_light": "ライト",
   "shell_theme_system": "システム設定",
   "status_home": "ホーム",
+  "status_retry": "再試行",
+  "status_retrying": "再試行中…",
   "status_search": "検索",
   "subject_about": "概要",
   "subject_aliases": "別名",
