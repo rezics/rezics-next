@@ -12,6 +12,5 @@ FROM input CROSS JOIN unnest(:candidate_ids::uuid[], :revisions::integer[])
 JOIN LATERAL (
   SELECT source FROM semantic.revision
   WHERE route = input.route AND subject_id = input.subject_id AND revision = wanted.revision
-  OFFSET 0
 ) r ON true
 ORDER BY wanted.ordinal;

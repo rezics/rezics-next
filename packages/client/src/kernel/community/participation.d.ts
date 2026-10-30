@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
-import { type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
 export type RealmParticipationReadDecision = {
     readable?: boolean;
 };
@@ -18,6 +18,16 @@ export type RealmParticipationResult = Readonly<{
  * checks out its content anchor. Both decisions belong to the supplied command T.
  */
 export declare function prepareRealmParticipationResult(pool: Pool, check: RealmParticipationCheck | undefined, actor: Actor, realmId: string | null, time: AuthoritativeTime, deadline: number): Promise<RealmParticipationResult>;
+/** The native participation eligibility shared by checks and parent validation. */
+export declare function realmParticipationAnchor(resource: Resource): {
+    resource: {
+        eligibility: import("../access/eligibility.ts").ResourceEligibility;
+        route: number;
+        id: string;
+        anonymousEligibility?: import("../access/eligibility.ts").ResourceEligibility;
+    };
+    visibility: () => "protected" | "public" | null;
+};
 /** Checks participation and the independent Realm read anchor at one T.
  * The participation action uses its exact denial check. A protected Realm also
  * requires realm:read, while the single Realm head read supplies public eligibility.
