@@ -14,7 +14,6 @@ import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
 import {
   emptyInboxPagination,
-  inboxTransportFailure,
   nextInboxPage,
   readableInboxPage,
   receiveInboxPage,
@@ -138,7 +137,7 @@ export function InboxPageView({ loadPage = readPage }: { loadPage?: typeof readP
     enabled: personalRead.enabled && state === 'signed-in',
     retry: false,
   });
-  const received = receiveInboxPage(pagination, pageQuery.isError ? inboxTransportFailure : pageQuery.data);
+  const received = receiveInboxPage(pagination, pageQuery.data, pageQuery.isError);
   // Reconcile in this render so a native denial cannot commit even one frame of retained rows.
   if (received !== pagination) setPagination(received);
   const readable = readableInboxPage(received);

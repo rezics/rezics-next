@@ -86,7 +86,7 @@ test('refreshes replace a page and fresh duplicate IDs replace cached target det
   const refreshed = receiveInboxPage(second, ready([item('replacement')], 'refreshed.signed.cursor'));
   expect(readableInboxPage(refreshed)?.items).toEqual([hidden, item('replacement')]);
   expect(nextInboxPage(refreshed).cursor).toBe('refreshed.signed.cursor');
-  const transportFailed = receiveInboxPage(refreshed, inboxTransportFailure);
+  const transportFailed = receiveInboxPage(refreshed, refreshed.result, true);
   expect(readableInboxPage(transportFailed)).toEqual(readableInboxPage(refreshed));
   expect(transportFailed.cursor).toBe(secondCursor);
 });
@@ -107,6 +107,7 @@ test('signed-out, closed and non-transient native failures erase retained rows p
   for (const failure of failures) {
     const cleared = receiveInboxPage(nextInboxPage(loaded), failure);
     expect(readableInboxPage(cleared)).toBeNull();
+    expect(readableInboxPage(receiveInboxPage(nextInboxPage(loaded), failure, true))).toBeNull();
     expect(readableInboxPage(receiveInboxPage(cleared, undefined))).toBeNull();
     expect(readableInboxPage(receiveInboxPage(cleared, inboxTransportFailure))).toBeNull();
     expect(readableInboxPage(receiveInboxPage(cleared, ready([item('fresh')], null)))?.items).toEqual([item('fresh')]);

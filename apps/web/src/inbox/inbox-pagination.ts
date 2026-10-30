@@ -29,7 +29,14 @@ function transient(result: InboxPage): boolean {
 }
 
 /** Consume every refreshed response, including native privacy failures, before rendering. */
-export function receiveInboxPage(state: InboxPagination, result: InboxPage | undefined): InboxPagination {
+export function receiveInboxPage(
+  state: InboxPagination,
+  data: InboxPage | undefined,
+  transportFailed = false,
+): InboxPagination {
+  // A failed refetch can retain query data; a known native denial still takes precedence.
+  const result =
+    transportFailed && (!data || (data.signedIn && data.state === 'ready')) ? inboxTransportFailure : data;
   if (state.result === result) return state;
   if (result?.signedIn && result.state === 'ready') {
     const refreshed = new Map(result.items.map((item) => [item.id, item]));
