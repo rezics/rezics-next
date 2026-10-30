@@ -30,6 +30,7 @@ async function startWorker(
 ) {
   const task = h.dispatch(file, [], ['true'], goal);
   writePlan(task.worktree, file, content);
+  installNoProgressWorker(h);
   await job.start(task.id);
   await job.drain();
   return task;
@@ -280,6 +281,7 @@ test('batch rebases capture the cumulative target after earlier members change i
     const secondTask = h.dispatch(file, [], ['true'], 'fixture');
     writePlan(firstTask.worktree, file, 'first worker Storybook entry\n');
     writePlan(secondTask.worktree, file, 'second worker Storybook entry\n');
+    installNoProgressWorker(h);
     await job.start(firstTask.id);
     await job.drain();
     await job.start(secondTask.id);
@@ -312,16 +314,19 @@ test('a stale attempt cannot publish its worker commit', async () => {
     h.ensureDev();
     const task = await startWorker(h, job, 'stale-storybook-entry.ts', 'fixture');
     const targetBefore = h.head('dev');
-    h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
-      current.currentAttempt = 2;
-      current.state = 'ready';
-    });
+    await job.start(task.id);
+    await job.drain();
+    const newerRequest = h.store.db
+      .query('SELECT id FROM landing_queue WHERE task=? AND attempt=2')
+      .get(task.id) as { id: number };
+    h.queue.acknowledge(newerRequest.id);
 
     const outcomes = await runTrain(h, job);
 
     expect(outcomes).toEqual([]);
     expect(h.head('dev')).toBe(targetBefore);
-    expect(h.store.task(task.id).state).toBe('ready');
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(h.store.task(task.id).state).not.toBe('integrated');
     expect(h.store.events(task.id).filter((event) => event.kind === 'gate-outcome')).toEqual([]);
   } finally {
     h.dispose();
@@ -341,12 +346,17 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const plan = JSON.parse(readFileSync('.temp/worker-plan.json', 'utf8'));
-for (const file of plan.files) {
-  mkdirSync(dirname(file.path), { recursive: true });
-  writeFileSync(file.path, file.content);
-  spawnSync('git', ['add', '--', file.path]);
+let count = 0;
+try { count = Number(readFileSync('.temp/worker-attempt-count', 'utf8')); } catch {}
+writeFileSync('.temp/worker-attempt-count', String(count + 1));
+if (count === 0) {
+  for (const file of plan.files) {
+    mkdirSync(dirname(file.path), { recursive: true });
+    writeFileSync(file.path, file.content);
+    spawnSync('git', ['add', '--', file.path]);
+  }
+  spawnSync('git', ['commit', '-qm', 'Complete fixture']);
 }
-spawnSync('git', ['commit', '-qm', 'Complete fixture']);
 console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));
 console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
@@ -355,5 +365,27 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
   writeFileSync(
     join(worktree, '.temp/worker-plan.json'),
     JSON.stringify({ files: files.map((file) => ({ path: file.path, content: file.content })) }),
+  );
+}
+
+function installNoProgressWorker(h: ReturnType<typeof integrationHarness>): void {
+  writeFileSync(
+    h.settings.pools[0]!.command,
+    `#!/usr/bin/env bun
+import { readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+const plan = JSON.parse(readFileSync('.temp/worker-plan.json', 'utf8'));
+let count = 0;
+try { count = Number(readFileSync('.temp/worker-attempt-count', 'utf8')); } catch {}
+writeFileSync('.temp/worker-attempt-count', String(count + 1));
+if (count === 0) {
+  writeFileSync(plan.file, plan.content);
+  spawnSync('git', ['add', '--', plan.file]);
+  spawnSync('git', ['commit', '-qm', 'Complete fixture']);
+}
+console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`,
   );
 }
