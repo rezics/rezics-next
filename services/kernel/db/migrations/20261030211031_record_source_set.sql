@@ -52,7 +52,7 @@ CREATE TRIGGER record_history_preserve_source_set_copy BEFORE UPDATE OR DELETE O
 CREATE INDEX record_history_receiving_pending ON core.record_history_locator(source_key,next_attempt,partition_no,artifact_type,locator)
  WHERE state='pending' OR gap='record-source-native-release-pending';
 -- Resumable native member-to-set discovery, not a copy of a member vector.
-ALTER TABLE core.record_history_purge ADD COLUMN set_frontier bytea,
+ALTER TABLE core.record_history_purge ADD COLUMN set_frontier bytea CHECK(set_frontier IS NULL OR octet_length(set_frontier) BETWEEN 1 AND 256),
  ADD COLUMN set_inventory_sealed boolean NOT NULL DEFAULT false;
 CREATE TABLE core.record_history_purge_set (
  source_key text COLLATE "C" NOT NULL,

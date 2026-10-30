@@ -41,6 +41,11 @@ export async function enrollRecordHistorySourceSets(
   if (row.set_inventory_sealed) return null;
   const page = await producer.readRecordSourceSetMembership(tx, authority, row.set_frontier, 1);
   if (page.sets.length > 1) throw new TypeError('Native source-set reverse page exceeded bound');
+  if (
+    page.frontier !== null &&
+    (!(page.frontier instanceof Uint8Array) || page.frontier.byteLength < 1 || page.frontier.byteLength > 256)
+  )
+    throw new TypeError('Native source-set reverse frontier exceeded metadata bound');
   for (const set of page.sets) {
     validateRecordSourceSetCommitment(set);
     if (!(await producer.verifyRecordSourceSet(tx, set)))
