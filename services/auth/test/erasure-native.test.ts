@@ -50,6 +50,7 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     expect(staged.effectRef).toBeString();
     const recovery = await f.call('/recovery/start', { email: victim.email });
     expect(recovery.status).toBe(200);
+    expect(f.deliveries.map((message) => message.accountId)).toEqual([owner]);
     expect((await f.pool.query('SELECT 1 FROM auth_recovery WHERE account_id=$1', [owner])).rowCount).toBe(1);
     const counterKeys = (
       await f.pool.query<{ key: string }>('SELECT key FROM auth_attempt_account WHERE account_id=$1', [owner])

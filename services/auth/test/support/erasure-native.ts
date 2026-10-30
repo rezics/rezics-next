@@ -82,6 +82,7 @@ export async function nativeFixture() {
     resolveForCaller: (token, reference, operation, ctx) =>
       approvals.resolveForCaller(token, reference, operation as never, ctx as never),
   };
+  const deliveries: { accountId: string; token: string }[] = [];
   const key = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'native-erasure',
@@ -97,7 +98,11 @@ export async function nativeFixture() {
     trustedAccess: bindings.trustedAccess,
     access: bindings.workflowPorts,
     accountOperations,
-    recoveryDelivery: { async deliver() {} },
+    recoveryDelivery: {
+      async deliver(message) {
+        deliveries.push(message);
+      },
+    },
     stagingKey: randomBytes(32),
     executorId: `erasure-${randomUUID()}`,
     maintenanceSchedule: '* * * * * *',
@@ -120,6 +125,7 @@ export async function nativeFixture() {
     key,
     bindings,
     approvals,
+    deliveries,
     context,
     call,
     routeOf: modules.routeOf,

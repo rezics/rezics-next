@@ -117,6 +117,28 @@ export const nativeErasureStores: readonly Store[] = [
 const subjectPhases = nativeErasureStores.flatMap((store) => store.roles.map((role) => ({ store, role })));
 const clientPhases = nativeErasureStores.filter((store) => store.client);
 const quote = (key: string) => `"${key}"`;
+// A fixed adopted role inventory, not a walk over owners or protocol payloads.
+// Capture positive applicability at acceptance, before any native page or
+// independent expiry worker can remove its last applicable row.
+const initialRoles = [
+  ...nativeErasureStores.flatMap((store) => store.roles.map((role) => ({ table: store.table, role }))),
+  { table: 'user', role: 'id' },
+  { table: 'auth_client', role: 'userId' },
+  { table: 'auth_public_key', role: 'account_id' },
+  { table: 'auth_key_assertion', role: 'account_id' },
+  { table: 'auth_attempt_account', role: 'account_id' },
+  { table: 'auth_consent', role: 'account_id' },
+  ...[
+    'erasure_subject_id',
+    'erasure_human_id',
+    'erasure_operator_id',
+    'erasure_member_id',
+    'erasure_previous_operator_id',
+  ].map((role) => ({ table: 'auth_workflow_request', role })),
+];
+const initialApplicability = initialRoles
+  .map(({ table, role }) => `EXISTS (SELECT 1 FROM ${quote(table)} WHERE ${quote(role)}=$1 LIMIT 1)`)
+  .join(' OR ');
 
 async function transaction<T>(pool: Pool, action: (connection: PoolClient) => Promise<T>): Promise<T> {
   const connection = await pool.connect();
@@ -143,7 +165,7 @@ export async function startNativeErasure(pool: Pool, accountId: string, barrier:
     await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-erasure:${accountId}`]);
     const row = (
       await connection.query<{ id: string }>(
-        `INSERT INTO auth_erasure (account_id,barrier,version) VALUES ($1,$2,$3)
+        `INSERT INTO auth_erasure (account_id,barrier,version,applicable) VALUES ($1,$2,$3,${initialApplicability})
        ON CONFLICT (account_id) DO UPDATE SET account_id=EXCLUDED.account_id RETURNING id`,
         [accountId, barrier, ERASURE_VERSION],
       )
