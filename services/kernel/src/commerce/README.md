@@ -490,7 +490,7 @@ actual terms or owned entitlement; it must not mint another key to retry purchas
 
 Only verified native disposition releases an order: first physical definitive no-creation rejection with matching
 unretried creation evidence; terminal cancelled PaymentIntent with a terminal unpaid Session and complete no-charge
-associations; or a completed full successful refund/final lost dispute with associated native movements and no
+associations and no retained native cash; or a completed full successful refund/final lost dispute with associated native movements and no
 pending refund/dispute obligation. Revision-fenced creation/refresh application records this atomically. Mere failed
 settlement, expiry, elapsed time, pending adverse evidence and missing associations retain pending and known-order
 repair. Unsupported release proof remains pending; no cancellation or new payment engine is added. A late old

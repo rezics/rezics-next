@@ -50,8 +50,8 @@ export async function admitBenefitAcquisition(
 ): Promise<void> {
   const input = key(buyer.accountId, capture);
   await lockBenefitAcquisition(client, { id: orderId, buyerAccountId: buyer.accountId, contentEdition: capture });
-  const active = (await owned.run(client, input))[0];
-  const unresolved = active ? undefined : (await pending.run(client, input))[0];
+  const active = await owned.run(client, input);
+  const unresolved = active ? null : await pending.run(client, input);
   const priorId = active?.orderId ?? unresolved?.id;
   if (priorId !== undefined) {
     // Validate the actual native own order as well as the exact entitlement, never a projected locator.
@@ -74,7 +74,7 @@ export async function canActivateBenefit(client: Client, order: Order): Promise<
   if (!order.contentEdition) return false;
   const incumbent = await lockBenefitAcquisition(client, order);
   if (incumbent !== order.id) return false;
-  const active = (await owned.run(client, key(order.buyerAccountId, order.contentEdition)))[0];
+  const active = await owned.run(client, key(order.buyerAccountId, order.contentEdition));
   return !active || active.orderId === order.id;
 }
 export type AcquisitionRelease = 'no-creation' | 'cancelled-no-charge' | 'refunded' | 'lost-dispute';
@@ -108,7 +108,11 @@ export function verifiedAcquisitionRelease(order: Order, snapshot: CheckoutSnaps
   return null;
 }
 /** Native order revision is held by the creation/refresh apply; this metadata never rewrites money/history. */
-export async function recordAcquisitionDisposition(client: Client, order: Order, release: AcquisitionRelease | null) {
+export async function recordAcquisitionDisposition(
+  client: Client,
+  order: Pick<Order, 'id' | 'buyerAccountId' | 'contentEdition' | 'revision'>,
+  release: AcquisitionRelease | null,
+) {
   if (!order.contentEdition) return false;
   if ((release === 'no-creation' || release === 'cancelled-no-charge') &&
       (await cash.run(client, { route: routeOf(order.id)!, order_id: order.id })).hasCash) release = null;
