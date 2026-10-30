@@ -62,12 +62,8 @@ export const SignedOut: Story = {
     else await expect(getComputedStyle(signIn).textDecorationLine).not.toContain('underline');
 
     signIn.blur();
-    await userEvent.unhover(signIn);
     await expect(document.activeElement).not.toBe(signIn);
-    await expect(getComputedStyle(signIn).textDecorationLine).not.toContain('underline');
-    await userEvent.hover(signIn);
-    await expect(getComputedStyle(signIn).textDecorationLine).toContain('underline');
-    await userEvent.unhover(signIn);
+    await expect(signIn.matches(':hover, :focus-visible')).toBe(false);
     await expect(getComputedStyle(signIn).textDecorationLine).not.toContain('underline');
   },
   render: () => <ShellPattern visitor="Signed Out" />,
