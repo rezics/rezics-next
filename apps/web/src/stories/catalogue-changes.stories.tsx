@@ -10,7 +10,9 @@ import { m } from '../paraglide/messages.js';
 import { pageText } from '../features/pages/shared';
 import { sourceDefinitions } from '../kernel/fake/catalogue-sources';
 
-/** Consumer presentation examples only. These do not claim a served native detail DTO. */
+/** Preserve the existing presentation outcomes and plays. The terms sample is future consumer copy;
+ * the bound native read serves record/candidate/decision/adoption only, never terms.
+ */
 function ChangesStory({
   scenario = 'ready',
   limited = false,

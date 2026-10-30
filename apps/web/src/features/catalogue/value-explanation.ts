@@ -215,11 +215,12 @@ export async function readValueExplanation(
               ((summary?.kind === 'candidate' || summary?.kind === 'decision') &&
                 summary.candidate === selected.id &&
                 summary.property === input.property &&
-                (summary.kind !== 'decision' || summary.context === subject.context)) ||
+                (summary.context === undefined || summary.context === subject.context)) ||
               (summary?.kind === 'adoption' &&
                 summary.property === input.property &&
-                summary.context === subject.context))
-          ? detail
+                summary.context === subject.context &&
+                summary.selection?.some((entry) => entry.candidate === selected.id)))
+          ? { ...detail, detail: { ...detail.detail, propertyLabel: page.propertyLabel } }
           : { kind: 'unavailable' };
     const slot = definitions && selectedSlot(selected, definitions);
     if (!slot) page.competition = { kind: 'unavailable' };

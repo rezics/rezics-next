@@ -18,6 +18,12 @@ export type ChangesPage = {
   next: string | null;
 };
 export type ChangesRead = ChangesFailure | { kind: 'ready'; page: ChangesPage; session?: string };
+export type NativeRevisionDetail = NonNullable<
+  Awaited<ReturnType<ReturnType<ReturnType<KernelClient['subjects']>['revisions']>['get']>>['data']
+>;
+type NativeCandidate = Extract<NativeRevisionDetail['change'], { kind: 'candidate' }>;
+type NativeDecision = Extract<NativeRevisionDetail['change'], { kind: 'decision' }>;
+type NativeAdoption = Extract<NativeRevisionDetail['change'], { kind: 'adoption' }>;
 
 /** Presentation port, NOT a declaration of the producer's wire DTO or its tag spellings.
  * Only an adapter of the published closed producer response may supply these values.
@@ -26,13 +32,17 @@ export type ChangesRead = ChangesFailure | { kind: 'ready'; page: ChangesPage; s
 export type ChangeSummary =
   | { kind: 'limited' }
   | { kind: 'terms'; fields: ('label' | 'description' | 'alias')[]; languages: string[] }
-  | { kind: 'candidate'; candidate: string; property: string }
-  | { kind: 'decision'; candidate: string; property: string; context: string; decision: 'accept' | 'reject' }
-  | { kind: 'adoption'; property: string; context: string };
+  | (Pick<NativeCandidate, 'kind' | 'candidate' | 'property'> & Partial<Pick<NativeCandidate, 'context' | 'reading'>>)
+  | (Pick<NativeDecision, 'kind' | 'candidate' | 'property' | 'context'> & {
+      decision: NativeDecision['verdict'];
+    } & Partial<Pick<NativeDecision, 'head' | 'reading'>>)
+  | (Pick<NativeAdoption, 'kind' | 'property' | 'context'> &
+      Partial<Pick<NativeAdoption, 'head' | 'mode' | 'selection'>>);
 export type ChangeDetail = {
   id: string;
   revision: number;
   summary: ChangeSummary;
+  metadata?: NativeRevisionDetail['revision'];
   /** Localized, emitted definition labels. Missing labels remain neutral. */
   propertyLabel?: ReturnType<typeof pageText>;
 };
@@ -169,7 +179,12 @@ export async function readSubjectChange(
   client: KernelClient,
   id: string,
   revision: number,
-  options: { authorization?: string | undefined; session?: string | undefined; locale?: string } = {},
+  options: {
+    authorization?: string | undefined;
+    session?: string | undefined;
+    locale?: string;
+    definitions?: Promise<SourceDefinitions | undefined>;
+  } = {},
   port: RevisionDetailPort = readSubjectRevisionDetail,
 ): Promise<DetailRead> {
   if (!uuid.test(id) || !Number.isSafeInteger(revision) || revision < 1) return { kind: 'invalid' };
@@ -187,6 +202,13 @@ export async function readSubjectChange(
     if (current.data.subject.id !== id) return { kind: 'unavailable', scope: 'subject' };
     if (detail.kind === 'ready' && (detail.detail.id !== id || detail.detail.revision !== revision))
       return { kind: 'unavailable' };
+    if (detail.kind === 'ready' && 'property' in detail.detail.summary && options.definitions) {
+      const definitions = await options.definitions.catch(() => undefined);
+      detail.detail.propertyLabel = pageText(
+        definitions?.properties[detail.detail.summary.property]?.labels,
+        options.locale ?? 'en',
+      );
+    }
     return detail;
   } catch {
     return { kind: 'unavailable' };

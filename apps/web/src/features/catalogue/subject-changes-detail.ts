@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
-import type { DetailRead } from './subject-changes';
+import * as v from 'valibot';
+import { changesFailure, type DetailRead, type NativeRevisionDetail } from './subject-changes';
 
 export type RevisionDetailPort = (
   client: KernelClient,
@@ -12,9 +13,83 @@ export type RevisionDetailPort = (
   },
 ) => Promise<DetailRead>;
 
-/** Temporary consumer port until Semantic's closed revision-detail DTO lands.
- * The generated client in this checkout exposes revisions.get only. Bind the actual
- * producer here during integration; do not guess wire tags or fetch a snapshot API.
- * A missing implementation is unavailable, never an empty or successful detail.
- */
-export const readSubjectRevisionDetail: RevisionDetailPort = async () => ({ kind: 'unavailable' });
+const uuid = v.pipe(v.string(), v.uuid());
+const positive = v.pipe(v.number(), v.safeInteger(), v.minValue(1));
+const verdict = v.picklist(['accept', 'reject', 'abstain']);
+const reading = v.strictObject({
+  decision: v.nullable(v.strictObject({ head: positive, verdict, revision: positive })),
+  selected: v.boolean(),
+  rank: v.nullable(v.picklist(['normal', 'preferred', 'deprecated'])),
+});
+const candidate = { candidate: uuid, property: v.string(), context: uuid, reading };
+// Validate the delivered closed wire shape; the generated producer remains the type authority.
+const detailSchema = v.strictObject({
+  subject: uuid,
+  revision: v.strictObject({ revision: positive, kind: v.string(), release: v.string() }),
+  change: v.variant('kind', [
+    v.strictObject({ kind: v.literal('record') }),
+    v.strictObject({ kind: v.literal('candidate'), ...candidate }),
+    v.strictObject({ kind: v.literal('decision'), ...candidate, head: positive, verdict }),
+    v.strictObject({
+      kind: v.literal('adoption'),
+      property: v.string(),
+      context: uuid,
+      head: positive,
+      mode: v.picklist(['inherit', 'replace', 'suppress']),
+      selection: v.pipe(
+        v.array(v.strictObject({ candidate: uuid, rank: v.picklist(['normal', 'preferred']) })),
+        v.maxLength(32),
+      ),
+    }),
+  ]),
+}) satisfies v.GenericSchema<NativeRevisionDetail>;
+
+/** One exact native read. Current disclosure, including Source and erasure, stays with the producer. */
+export const readSubjectRevisionDetail: RevisionDetailPort = async (client, input) => {
+  if (
+    !v.is(uuid, input.id) ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision < 1 ||
+    input.revision > 2147483647
+  )
+    return { kind: 'invalid' };
+  try {
+    const response = await client
+      .subjects({ id: input.id })
+      .revisions({ revision: input.revision })
+      .get({
+        headers: {
+          ...(input.authorization ? { authorization: input.authorization } : {}),
+          ...(input.session ? { 'rezics-session-token': input.session } : {}),
+        },
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      });
+    if (response.status !== 200) return changesFailure(response.status);
+    const parsed = v.safeParse(detailSchema, response.data);
+    if (!parsed.success) return { kind: 'unavailable' };
+    const { subject, revision, change } = parsed.output;
+    if (subject !== input.id || revision.revision !== input.revision) return { kind: 'unavailable' };
+    const summary =
+      change.kind === 'record'
+        ? { kind: 'limited' as const }
+        : change.kind === 'decision'
+          ? {
+              kind: change.kind,
+              candidate: change.candidate,
+              property: change.property,
+              context: change.context,
+              decision: change.verdict,
+              head: change.head,
+              reading: change.reading,
+            }
+          : change;
+    const session = new Headers(response.headers).get('rezics-session-token') ?? input.session;
+    return {
+      kind: 'ready',
+      detail: { id: subject, revision: revision.revision, metadata: revision, summary },
+      ...(session ? { session } : {}),
+    };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+};

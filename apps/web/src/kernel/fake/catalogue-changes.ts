@@ -16,14 +16,26 @@ export type ChangesScenario =
 export const changesCursor = 'opaque:+/next?=visible';
 export const changesLastCursor = 'opaque:/last?=page';
 
-/** Existing subject fixture plus a small generated-client listing seam.
- * Successful detail presentation samples belong to stories, never the runtime fake.
+/** Existing subject fixture plus generated-client list and optional native detail responses.
+ * Without a supplied response, this fixture deliberately exercises unavailable detail.
  */
-export function catalogueChangesFixture(scenario: ChangesScenario = 'ready', locale = 'en', port?: RevisionDetailPort) {
+export function catalogueChangesFixture(
+  scenario: ChangesScenario = 'ready',
+  locale = 'en',
+  port?: RevisionDetailPort,
+  nativeDetail?: (revision: number) => Response | Promise<Response>,
+) {
   const { id, read } = catalogueSourcesFixture();
   let outcome = scenario;
   let subjectStatus = 200;
-  const calls: { path: string; cursor: string | null; authorization: string | null; session: string | null }[] = [];
+  const calls: {
+    path: string;
+    cursor: string | null;
+    authorization: string | null;
+    session: string | null;
+    cache: RequestCache;
+    redirect: RequestRedirect;
+  }[] = [];
   const client = createKernelClient('http://changes.test', {
     fetch: (async (input, init) => {
       const request = input instanceof Request ? input : new Request(String(input), init);
@@ -33,6 +45,8 @@ export function catalogueChangesFixture(scenario: ChangesScenario = 'ready', loc
         cursor: url.searchParams.get('cursor'),
         authorization: request.headers.get('authorization'),
         session: request.headers.get('rezics-session-token'),
+        cache: request.cache,
+        redirect: request.redirect,
       });
       const json = (body: unknown, status = 200) =>
         new Response(JSON.stringify(body), {
@@ -41,6 +55,9 @@ export function catalogueChangesFixture(scenario: ChangesScenario = 'ready', loc
         });
       if (url.pathname === `/v1/subjects/${id}`)
         return json(subjectStatus === 200 ? read : { code: 'not_found' }, subjectStatus);
+      const detailPath = `/v1/subjects/${id}/revisions/`;
+      if (url.pathname.startsWith(detailPath))
+        return nativeDetail?.(Number(url.pathname.slice(detailPath.length))) ?? json({ code: 'overloaded' }, 503);
       if (url.pathname !== `/v1/subjects/${id}/revisions`) return json({ code: 'not_found' }, 404);
       if (outcome === 'loading') return new Promise<Response>(() => {});
       const status =

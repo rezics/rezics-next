@@ -6,6 +6,7 @@ import type { Snak } from '../pages/shared';
 import { candidateContext } from '../../subject/candidates';
 import { m } from '../../paraglide/messages.js';
 import type { ValuePage, ValueRead, ValueTransport } from './value-explanation';
+import { ChangeExplanation } from './subject-changes-page';
 
 function Part({ snak, page, locale }: { snak: Snak; page: ValuePage; locale: string }) {
   const label = page.labels[snak.property.id];
@@ -212,21 +213,13 @@ export function ValueExplanationPage({
                 <h2 id="value-change" className="text-xl font-semibold">
                   {m.value_change({}, o)}
                 </h2>
-                <p>
-                  {change?.kind === 'ready'
-                    ? change.detail.summary.kind === 'limited'
-                      ? m.changes_limited({}, o)
-                      : change.detail.summary.kind === 'candidate'
-                        ? m.changes_proposal_detail({}, o)
-                        : change.detail.summary.kind === 'decision'
-                          ? change.detail.summary.decision === 'accept'
-                            ? m.changes_accepted_detail({}, o)
-                            : m.changes_rejected_detail({}, o)
-                          : m.changes_adopted_detail({}, o)
-                    : change?.kind === 'denied'
-                      ? m.value_metadata_denied({}, o)
-                      : m.value_change_unavailable({}, o)}
-                </p>
+                {change?.kind === 'ready' ? (
+                  <ChangeExplanation detail={change.detail} locale={locale} />
+                ) : (
+                  <p>
+                    {change?.kind === 'denied' ? m.value_metadata_denied({}, o) : m.value_change_unavailable({}, o)}
+                  </p>
+                )}
               </section>
             </>
           ) : (

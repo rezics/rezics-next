@@ -2434,6 +2434,8 @@
   "changes_proposal_detail": "A value was proposed. A proposal does not establish publication.",
   "changes_accepted_detail": "A candidate was accepted in a Context. Acceptance alone does not establish selection.",
   "changes_rejected_detail": "A candidate was rejected in a Context.",
+  "changes_abstained_detail": "The review decision is abstain; it does not establish acceptance or selection.",
+  "changes_rank_deprecated": "Deprecated",
   "changes_adopted_detail": "A Context selection was recorded. Open the current reading to see what is available now.",
   "changes_empty_page": "No visible revisions on this page. Continue to check the next page.",
   "board_community_about": "About this board",

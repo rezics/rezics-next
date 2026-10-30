@@ -40,7 +40,8 @@ silently fall back to Global; the existing Realm resolver still owns that native
 
 The session BFF preserves caller authorization and continuity and marks responses private/no-store. The existing
 safe change-detail adapter can explain the selected statement’s exact revision when supplied and matched; its
-currently absent native binding stays explicitly unavailable. No historical snapshot or write authority is assumed.
+generated native binding validates the exact Subject/revision and supported closed response before explaining it.
+Concealed, denied and unavailable detail stays explicit. No historical snapshot or write authority is assumed.
 
 ## Browser flow: subject contributions
 
@@ -59,8 +60,8 @@ availability, disclosure and action authority. Initial creation remains separate
 PATCH, and citations never become ingestion Source metadata or a permission grant.
 
 Navigation adds no producer call or per-row hydration read. Existing forms, readers, drafts, concurrency and request
-keys remain with their owning components. Terms mutation and detailed Changes producers still require their actual
-native bindings; a menu link establishes neither availability nor a successful write. The Contribute stories use
+keys remain with their owning components. Detailed Changes consumes the delivered native read; terms mutation still
+requires its native write adapter. A menu link establishes neither availability nor a successful write. The Contribute stories use
 actual routes for navigation and the existing terms page for explicit denied/unavailable samples. Native acceptance,
 interaction execution and phone/desktop visual review remain integration work.
 
@@ -262,10 +263,9 @@ use bounded authoritative term heads, without scanning the Subject's complete hi
 cache. Existing personal-payload locators and minimizers must cover every new persisted payload and receipt/event
 role while preserving communal identity, the nonpersonal change skeleton, account time T and legal holds.
 
-The mutation is not mounted yet. The selected authorship signatures are known, but their native
-`semantic/authorship.ts` implementation and the actual `recordSubjectPageTransition` producer are absent
-from this checkout. The subject-page candidate reader and readiness route do not implement that publication
-hook. These are required native inputs: a throwing authorship adapter can support independent implementation,
+The mutation is not mounted yet. Native authorship initialization and the actual `recordSubjectPageTransition`
+publication hook remain required write-adapter obligations; delivery of the safe revision read does not deliver
+those mutation effects. A throwing authorship adapter can support independent implementation,
 but cannot satisfy release, and a replacement publication or authority writer is not authorized here.
 Existing Subject reads resolve final terms through their exact original revision Source; a correction must
 preserve those locators when adding bounded current heads. Focused acceptance cases retain the complete
@@ -326,6 +326,16 @@ An adoption's selection describes that recorded adoption only. Revision order ne
 
 The existing revision, candidate, decision and adoption stores remain authoritative. Three Subject/revision
 indexes locate the relevant record without enumerating history; candidate hydration and current selection retain
-the native selection bounds. No second history or personal-payload store is introduced. Native outcome checks,
-generated client/OpenAPI refresh and complete mutation integration remain deferred; type checking alone does
-not prove these acceptance outcomes.
+the native selection bounds. No second history or personal-payload store is introduced. The generated client now
+binds this read in the existing Changes browser and selected-value explanation, through their private/no-store
+session BFF. Runtime validation rejects mismatched identities, unknown tags, extra fields, nonpositive heads and
+selection beyond 32. Candidate and decision readings describe the current native Context; adoption mode and selection
+describe only the recorded adoption. The existing terms presentation sample is not a served native tag. Native
+outcome checks and complete term/deletion write-adapter integration remain separate; type checking alone does not
+prove those outcomes.
+
+Web owns the normal next visual review using the unchanged `pages-catalogue-changes--` IDs: `revisions`,
+`continue-and-explain`, `proposal`, `limited-safe-detail`, `loading`, `empty`, `denied`, `invalid`, `conflict`,
+`concealed`, `unavailable-retry`, `detail-retry` and `detail-loading`. The unchanged
+`pages-catalogue-why-this-value--` stories retain their existing outcomes and plays. Root samples direction;
+there is no capture restart.

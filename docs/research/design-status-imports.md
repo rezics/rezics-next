@@ -12,7 +12,7 @@ and [statistics](../../services/kernel/src/rating/README.md) own their mechanism
 | Journey                            | Current integration and remaining work                                                                                                                                                                                                                                                                                                                                              |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Provider dump → proposals → reader | Four pure converters and the terminal importer retain provider identity, field-level evidence, bounded acquisition, fences, recovery and ordinary automated-account authority. Native batch proposal/retraction, media import and provider statistics feed the existing catalogue; unchanged input writes nothing.                                                                  |
-| Reader → create or correct         | Canonical subject routes connect generic initial-term creation, actual terms PATCH, scalar cited correction, exact-slot relations/credits, current candidate review and selected public reading. These integrations still need Web page/visual review.                                                                                                                              |
+| Reader → create or correct         | Canonical subject routes connect generic initial-term creation, scalar cited correction, exact-slot relations/credits, current candidate review and selected public reading. Terms PATCH retains its declared `{subject, revision}` result and reread flow, but its native write adapter remains pending. Web visual review remains pending.                                        |
 | Reader → Edit facts                | The released Type drives a coherent multi-field workspace. It reuses scalar controls, stages an explicit bounded changed set and reports each existing candidate POST separately. Exact returned candidates lead to review; selection remains explicit. Web review and integrated native outcome verification remain pending.                                                       |
 | Work → edition/release             | Creation retains the chosen work and independently identified publication grain, using emitted profiles and the existing native creation contract. Web review remains pending.                                                                                                                                                                                                      |
 | Provider review queue → decisions  | Current prepared suggestions use bounded explicit per-candidate decisions. Acceptance does not imply adoption or publication. Web review and producer binding must be distinguished from a story sample.                                                                                                                                                                            |
@@ -41,11 +41,15 @@ Wikidata structured-data terms do not license linked text/images. Recipe-site in
   and complete reader attribution beyond this selected-support slice remain deferred. See the
   [changed importer contract](../../services/importer/README.md#reviewed-provider-metadata).
 - The strict statistics clear is owner-delivered; the approved alias producer and zero-refresh/alias consumer
-  still require their declared integration. Explicit zero clears; UNKNOWN partial values never clear. Preserve
+  are integrated in code, with native integration proof pending. Explicit zero clears; UNKNOWN partial values never clear. Preserve
   exact claim/fence identity, one subject/provider slot and independent native votes.
 - Custom definition publication, advanced identity operations, reviewed vocabulary/seeds/classification/forms
   and measured-input expansion stay under their existing gates. No new scope is opened by a generic editor.
 - The [broader discovery matrix](../goals/imports.capabilities.md) remains open/deferred where previously declared.
   Search owns discovery and public page composition; this work creates no Imports search or page pipeline.
-- Delivered code, declared adapters, native binding and Web/Root visual review are distinct states. New page
-  stories need phone390/desktop1280 and both themes reviewed by Web and Root before the journeys count done.
+- The safe revision-detail read is bound through the generated client in Changes and Why this value. Current
+  reading metadata and recorded adoption selection remain distinct. Term/deletion write adapters remain pending;
+  delivery of the read establishes no mutation success or served terms-change tag.
+- Delivered code, declared adapters, native binding and visual review are distinct states. Web owns the normal
+  phone390/desktop1280 and both-theme review of the existing story IDs; Root samples direction. No capture restart
+  is required by this read binding.

@@ -85,3 +85,221 @@ test('failed detail reads keep list and selection but discard prior detail; curr
   ).toEqual({ kind: 'missing', scope: 'subject' });
   expect(changesState(initial, { type: 'detail', result: detail })).toEqual({ failure: detail });
 });
+
+// Delivered native DTOs go through the generated endpoint and the production adapter.
+import { mock } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import type { NativeRevisionDetail } from '../src/features/catalogue/subject-changes';
+import { readValueExplanation } from '../src/features/catalogue/value-explanation';
+import release from '../src/kernel/recorded/definitions-release.json';
+import { m } from '../src/paraglide/messages.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+function nativeDetailFixture() {
+  let body: unknown;
+  let status = 200;
+  const fixture = catalogueChangesFixture('ready', 'en', undefined, () =>
+    Response.json(body, { status, headers: { 'rezics-session-token': 'native-detail-session' } }),
+  );
+  const selected = fixture.read.subject.statements['schema:isbn']![0]!;
+  selected.rezics.revision = 5;
+  const dto: NativeRevisionDetail = {
+    subject: fixture.id,
+    revision: { revision: 5, kind: 'propose', release: selected.rezics.release },
+    change: {
+      kind: 'candidate',
+      candidate: selected.id,
+      property: 'schema:isbn',
+      context: fixture.read.subject.context,
+      reading: { decision: { head: 8, verdict: 'accept', revision: 6 }, selected: true, rank: 'preferred' },
+    },
+  };
+  body = dto;
+  return {
+    ...fixture,
+    dto,
+    selected,
+    respond: (next: unknown, code = 200) => {
+      body = next;
+      status = code;
+    },
+    value: () =>
+      readValueExplanation(
+        fixture.client,
+        {
+          id: fixture.id,
+          statement: selected.id,
+          property: 'schema:isbn',
+          locale: 'en',
+        },
+        {
+          authorization: 'Bearer value-viewer',
+          definitions: async () => ({ digest: release.digest, ...release.release }),
+        },
+      ),
+  };
+}
+
+test('actual native safe revision detail is rendered through the existing browser and selected-value explanation while concealed or unavailable detail stays truthful', async () => {
+  const { SubjectChangesPage } = await import('../src/features/catalogue/subject-changes-page');
+  const { ValueExplanationPage } = await import('../src/features/catalogue/value-explanation-page');
+  const fixture = nativeDetailFixture();
+  const list = await fixture.transport.list();
+  const detail = await fixture.transport.detail(5, 'previous-session');
+  expect(detail).toMatchObject({
+    kind: 'ready',
+    session: 'native-detail-session',
+    detail: { id: fixture.id, revision: 5, metadata: fixture.dto.revision, summary: fixture.dto.change },
+  });
+  const state = changesState(
+    changesState(changesState({}, { type: 'list', result: list, more: false }), {
+      type: 'detail-start',
+      revision: 5,
+    }),
+    { type: 'detail', result: detail },
+  );
+  const browser = renderToStaticMarkup(createElement(SubjectChangesPage, { state, locale: 'en' }));
+  expect(browser).toContain(m.changes_proposal_detail());
+  expect(browser).toContain(m.context_selected());
+  expect(browser).toContain(m.candidate_rank_preferred());
+  expect(browser).toContain('/subjects/');
+  const nativeCall = fixture.calls.find((call) => call.path.endsWith('/revisions/5'))!;
+  expect(nativeCall).toMatchObject({
+    authorization: 'Bearer story',
+    session: 'previous-session',
+    cache: 'no-store',
+    redirect: 'manual',
+  });
+  expect(
+    fixture.calls
+      .filter((call) => call.path === `/v1/subjects/${fixture.id}`)
+      .every((call) => call.authorization === null),
+  ).toBe(true);
+
+  const value = await fixture.value();
+  expect(value.kind === 'ready' && value.page.change).toMatchObject({ kind: 'ready' });
+  const view = renderToStaticMarkup(createElement(ValueExplanationPage, { result: value, locale: 'en' }));
+  expect(view).toContain('9780156012195');
+  expect(view).toContain(m.changes_proposal_detail());
+  expect(view).toContain(m.context_selected());
+
+  fixture.respond({ code: 'not_found', private: 'CONCEALED DETAIL' }, 404);
+  const concealed = await fixture.transport.detail(5);
+  expect(concealed).toEqual({ kind: 'missing' });
+  const failed = changesState(changesState(state, { type: 'detail-start', revision: 5 }), {
+    type: 'detail',
+    result: concealed,
+  });
+  expect(failed.page).toBe(state.page);
+  expect(failed.selected).toBe(5);
+  const hidden = renderToStaticMarkup(createElement(SubjectChangesPage, { state: failed, locale: 'en' }));
+  expect(hidden).toContain(m.changes_missing());
+  expect(hidden).not.toContain(m.changes_proposal_detail());
+  expect(hidden).not.toContain('CONCEALED DETAIL');
+  const hiddenValue = await fixture.value();
+  const hiddenView = renderToStaticMarkup(createElement(ValueExplanationPage, { result: hiddenValue, locale: 'en' }));
+  expect(hiddenView).toContain('9780156012195');
+  expect(hiddenView).toContain(m.value_change_unavailable());
+  expect(hiddenView).not.toContain(m.context_selected());
+  fixture.conceal();
+  expect(await fixture.transport.detail(5)).toEqual({ kind: 'missing', scope: 'subject' });
+});
+
+test('native record, abstention and recorded adoption keep their actual readings and positive heads', async () => {
+  const { ChangeExplanation } = await import('../src/features/catalogue/subject-changes-page');
+  const fixture = nativeDetailFixture();
+  if (fixture.dto.change.kind !== 'candidate') throw new Error('Expected candidate fixture');
+  const changes: NativeRevisionDetail['change'][] = [
+    { kind: 'record' },
+    {
+      ...fixture.dto.change,
+      kind: 'decision',
+      head: 9,
+      verdict: 'abstain',
+      reading: {
+        decision: { head: 10, verdict: 'reject', revision: 11 },
+        selected: false,
+        rank: 'deprecated',
+      },
+    },
+    {
+      kind: 'adoption',
+      property: 'schema:isbn',
+      context: fixture.read.subject.context,
+      head: 12,
+      mode: 'replace',
+      selection: [{ candidate: fixture.selected.id, rank: 'preferred' }],
+    },
+  ];
+  for (const change of changes) {
+    fixture.respond({ ...fixture.dto, change });
+    const result = await fixture.transport.detail(5);
+    if (result.kind !== 'ready') throw new Error('Expected supported native detail');
+    const html = renderToStaticMarkup(createElement(ChangeExplanation, { detail: result.detail, locale: 'en' }));
+    if (change.kind === 'record') expect(html).toContain(m.changes_limited());
+    if (change.kind === 'decision') {
+      expect(result.detail.summary).toMatchObject({ head: 9, decision: 'abstain', reading: change.reading });
+      expect(html).toContain(m.changes_abstained_detail());
+      expect(html).toContain(m.candidate_rejected_state());
+      expect(html).toContain(m.changes_rank_deprecated());
+    }
+    if (change.kind === 'adoption') {
+      expect(result.detail.summary).toEqual(change);
+      expect(html).toContain(m.changes_adopted_detail());
+      expect(html).toContain(m.context_replace());
+      expect(html).toContain(m.candidate_rank_preferred());
+    }
+    expect(html).not.toContain(m.context_selected());
+  }
+});
+
+test('unsupported, malformed and mismatched native detail never becomes a guessed explanation or current selection', async () => {
+  const fixture = nativeDetailFixture();
+  const dto = fixture.dto;
+  if (dto.change.kind !== 'candidate') throw new Error('Expected candidate fixture');
+  const adoption: NativeRevisionDetail['change'] = {
+    kind: 'adoption',
+    property: 'schema:isbn',
+    context: fixture.read.subject.context,
+    head: 1,
+    mode: 'replace',
+    selection: Array.from({ length: 32 }, () => ({ candidate: fixture.selected.id, rank: 'normal' })),
+  };
+  fixture.respond({ ...dto, change: adoption });
+  expect((await fixture.transport.detail(5)).kind).toBe('ready');
+  for (const body of [
+    { ...dto, subject: crypto.randomUUID() },
+    { ...dto, revision: { ...dto.revision, revision: 6 } },
+    { ...dto, change: { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] } },
+    {
+      ...dto,
+      change: {
+        ...dto.change,
+        reading: { ...dto.change.reading, decision: { head: 0, verdict: 'accept', revision: 1 } },
+      },
+    },
+    { ...dto, change: { ...adoption, selection: [...adoption.selection, adoption.selection[0]] } },
+    { ...dto, actor: 'PRIVATE ACTOR' },
+    { ...dto, change: { ...dto.change, payload: 'PRIVATE OLD TEXT' } },
+  ]) {
+    fixture.respond(body);
+    expect(await fixture.transport.detail(5)).toEqual({ kind: 'unavailable' });
+  }
+  for (const [status, kind] of [
+    [403, 'denied'],
+    [404, 'missing'],
+    [503, 'unavailable'],
+    [302, 'unavailable'],
+  ] as const) {
+    fixture.respond({ private: 'PRIVATE OLD TEXT' }, status);
+    expect(await fixture.transport.detail(5)).toEqual({ kind });
+  }
+  fixture.respond({ ...dto, change: { ...dto.change, context: crypto.randomUUID() } });
+  const wrongContext = await fixture.value();
+  expect(wrongContext.kind === 'ready' && wrongContext.page.change).toEqual({ kind: 'unavailable' });
+  fixture.respond({ ...dto, change: { ...adoption, selection: [{ candidate: crypto.randomUUID(), rank: 'normal' }] } });
+  const otherSelection = await fixture.value();
+  expect(otherSelection.kind === 'ready' && otherSelection.page.change).toEqual({ kind: 'unavailable' });
+});

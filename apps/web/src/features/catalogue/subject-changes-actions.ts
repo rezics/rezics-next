@@ -54,9 +54,11 @@ export const loadSubjectChange = createServerFn({ method: 'POST', strict: false 
   })
   .handler(async ({ data }): Promise<DetailRead> => {
     const { client, authorization } = await context(data.locale);
+    const { readRelease } = await import('../../subject/definitions');
     return readSubjectChange(client, data.id, data.revision, {
       authorization,
       session: data.session,
       locale: data.locale,
+      definitions: readRelease().catch(() => undefined),
     });
   });

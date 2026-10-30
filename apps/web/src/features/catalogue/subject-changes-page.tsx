@@ -3,6 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
 import { viewTabLabels } from '../pages/route-support';
 import { languageName } from '../../subject/language';
+import { candidateContext } from '../../subject/candidates';
 import { m } from '../../paraglide/messages.js';
 import {
   changesState,
@@ -49,9 +50,16 @@ function revisionKind(kind: string, locale: string) {
           ? m.changes_adoption({}, o)
           : m.changes_recorded({}, o);
 }
-function Explanation({ detail, locale }: { detail: ChangeDetail; locale: string }) {
+export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; locale: string }) {
   const o = { locale: locale as never };
   const summary = detail.summary;
+  const reading = summary.kind === 'candidate' || summary.kind === 'decision' ? summary.reading : undefined;
+  const rank = (value: 'normal' | 'preferred' | 'deprecated') =>
+    value === 'normal'
+      ? m.candidate_rank_normal({}, o)
+      : value === 'preferred'
+        ? m.candidate_rank_preferred({}, o)
+        : m.changes_rank_deprecated({}, o);
   const field = (kind: 'label' | 'description' | 'alias') =>
     kind === 'label'
       ? m.changes_name({}, o)
@@ -70,7 +78,9 @@ function Explanation({ detail, locale }: { detail: ChangeDetail; locale: string 
               : summary.kind === 'decision'
                 ? summary.decision === 'accept'
                   ? m.changes_accepted_detail({}, o)
-                  : m.changes_rejected_detail({}, o)
+                  : summary.decision === 'reject'
+                    ? m.changes_rejected_detail({}, o)
+                    : m.changes_abstained_detail({}, o)
                 : m.changes_adopted_detail({}, o)}
       </p>
       {summary.kind === 'terms' && (
@@ -93,6 +103,52 @@ function Explanation({ detail, locale }: { detail: ChangeDetail; locale: string 
         <p lang={detail.propertyLabel.lang} className="font-medium">
           {detail.propertyLabel.text}
         </p>
+      )}
+      {'context' in summary && summary.context && (
+        <dl className="space-y-2 text-sm">
+          <dt className="text-muted-foreground">{m.context_title({}, o)}</dt>
+          <dd>{summary.context === candidateContext ? m.context_global({}, o) : m.context_unnamed({}, o)}</dd>
+        </dl>
+      )}
+      {reading && (
+        <section className="space-y-2 text-sm" aria-label={m.changes_current({}, o)}>
+          <h3 className="font-medium">{m.changes_current({}, o)}</h3>
+          <p>
+            {reading.decision === null
+              ? m.candidate_unresolved({}, o)
+              : reading.decision.verdict === 'accept'
+                ? m.value_accepted({}, o)
+                : reading.decision.verdict === 'reject'
+                  ? m.candidate_rejected_state({}, o)
+                  : m.changes_abstained_detail({}, o)}
+          </p>
+          <p>{reading.selected ? m.context_selected({}, o) : m.value_not_selected({}, o)}</p>
+          {reading.rank !== null && (
+            <p>
+              {m.candidate_rank({}, o)}: {rank(reading.rank)}
+            </p>
+          )}
+        </section>
+      )}
+      {summary.kind === 'adoption' && summary.mode && (
+        <section className="space-y-2 text-sm" aria-label={m.changes_recorded({}, o)}>
+          <h3 className="font-medium">{m.changes_recorded({}, o)}</h3>
+          <p>
+            {m.context_mode({}, o)}:{' '}
+            {summary.mode === 'inherit'
+              ? m.context_inherit({}, o)
+              : summary.mode === 'replace'
+                ? m.context_replace({}, o)
+                : m.context_suppress({}, o)}
+          </p>
+          <ol className="space-y-1">
+            {summary.selection?.map((entry, index) => (
+              <li key={entry.candidate}>
+                {m.facts_selected_value({ number: String(index + 1) }, o)} · {rank(entry.rank)}
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
     </div>
   );
@@ -194,7 +250,7 @@ export function SubjectChangesPage({ state, locale, currentHref, onMore, onSelec
               </h2>
               {state.selected === undefined && <p className="text-muted-foreground">{m.changes_choose({}, o)}</p>}
               {state.loading === 'detail' && <p role="status">{m.changes_detail_loading({}, o)}</p>}
-              {state.detail?.kind === 'ready' && <Explanation detail={state.detail.detail} locale={locale} />}
+              {state.detail?.kind === 'ready' && <ChangeExplanation detail={state.detail.detail} locale={locale} />}
               {state.detail && state.detail.kind !== 'ready' && (
                 <div className="space-y-3">
                   <Failure failure={state.detail} locale={locale} />
