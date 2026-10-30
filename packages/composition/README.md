@@ -235,8 +235,15 @@ a work's cast and staff are found; `filter` and `type` apply to `inverse` only. 
 the subject's statements of that property in statement order, previewed to `limit` with their
 count.
 
-`RatingSummary`, `ThreadList` and `ReviewList` plan no read: ratings, reviews and subject threads
-have no page read yet. They render an honest empty state with an invitation until each gets one.
+`RatingSummary` and `ReviewList` plan no composition read. `ThreadList` retains its population-aware composition
+read and native continuation. Web binds ratings separately and supplements placed Global review/discussion regions
+with Content's public subject-thread reader and native last-activity order. These public previews request five items
+and full views twenty, preserving each opaque continuation without draining it. One public account batch supplies
+bylines; no per-row subject or account read is needed. Existing Realm discussion bindings retain their selected
+Context and current native authority; the Global supplement never relabels its output as Realm content.
+Failures and platform closure remain distinct from a successful empty page. A zero-item page with a continuation
+invites continuation rather than claiming the subject has no posts. Creation uses a returned thread's actual board;
+no default board or Realm association is inferred for an empty list.
 
 A section whose read did not succeed says so and offers a retry; the rest of the page renders.
 

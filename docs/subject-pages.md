@@ -207,7 +207,7 @@ other view. Sections a type does not support are left out; the rest keep this or
 5. **Characters.** Main characters first, then supporting, each with portrait, name, role and cast.
 6. **Credits.** Principal staff by role, in credit order.
 7. **Ratings.** The score distribution, count and population, the reader's Realm scores, and a link to Reviews.
-8. **Reviews and discussion.** The most helpful reviews and the most active threads.
+8. **Reviews and discussion.** Public Global reviews and discussions in Content’s native last-activity order, with summaries, bylines, canonical thread links and bounded continuation. Realm reviews remain closed until their population binding is delivered; existing Realm discussions retain native Context authority.
 9. **Lists.** Public collections and reading orders that include the subject.
 10. **Sources.** Cover credits, source records for the facts shown with each source's licence and attribution,
     external identifiers, and a link to Details.

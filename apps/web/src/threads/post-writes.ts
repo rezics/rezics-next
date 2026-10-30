@@ -22,7 +22,7 @@ export type VoteCitation = { questionId: string; units: number; revision: number
 export type StartThreadInput = StartThreadBase &
   (
     | { kind: 'review'; subjectId: string; voteCitation?: VoteCitation }
-    | { kind?: undefined; subjectId?: undefined; voteCitation?: undefined }
+    | { kind?: undefined; subjectId?: string; voteCitation?: undefined }
   );
 
 /** Reads the optional author-owned review id returned by the native conflict response. */
@@ -55,7 +55,7 @@ export async function startThreadRequest(
               subjectIds: [input.subjectId],
               ...(input.voteCitation ? { voteCitation: input.voteCitation } : {}),
             }
-          : { subjectIds: [] }),
+          : { subjectIds: input.subjectId ? [input.subjectId] : [] }),
         visibility: 'published',
         ...(input.mediaIds === undefined || input.mediaIds.length === 0 ? {} : { mediaIds: input.mediaIds }),
       },

@@ -66,6 +66,7 @@ function NewThreadPage() {
             onVoteCitationChange={setVoteCitation}
           />
         ) : null}
+        {!review && presetSubjectTitle ? <p className="text-sm text-muted-foreground">{presetSubjectTitle}</p> : null}
         <PostComposer
           initialKey={idempotencyKey}
           titleRequired
@@ -84,7 +85,9 @@ function NewThreadPage() {
                       subjectId: subjectId!,
                       ...(voteCitation ? { voteCitation } : {}),
                     }
-                  : {}),
+                  : subjectId
+                    ? { subjectId }
+                    : {}),
                 ...(mediaIds.length > 0 ? { mediaIds } : {}),
               },
               headers: { 'X-CSRF-Token': csrfToken ?? '' },

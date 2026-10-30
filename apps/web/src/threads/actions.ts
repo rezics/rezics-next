@@ -135,11 +135,16 @@ function validateThreadDraft(input: unknown): StartThreadInput {
     };
   }
   if (
-    ('subjectId' in input && input.subjectId !== undefined) ||
+    ('subjectId' in input &&
+      input.subjectId !== undefined &&
+      (typeof input.subjectId !== 'string' || !uuid.test(input.subjectId))) ||
     ('voteCitation' in input && input.voteCitation !== undefined)
   )
     throw new Error('Invalid discussion draft');
-  return base;
+  return {
+    ...base,
+    ...('subjectId' in input && typeof input.subjectId === 'string' ? { subjectId: input.subjectId } : {}),
+  };
 }
 
 function parseRetryAfter(value: unknown): number | undefined {

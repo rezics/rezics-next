@@ -2,6 +2,7 @@ import { threadLocation } from '../../threads/thread-href';
 import type { SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
+import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
 import { pickLanguage, type PageRead } from '@rezics/composition';
 import { Cover as CoverFrame, type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
@@ -819,45 +820,6 @@ export function Summary(props: Record<string, unknown>) {
   );
 }
 
-function FeatureEmpty({
-  slot,
-  id,
-  title,
-  text,
-  view,
-}: {
-  slot: string;
-  id: unknown;
-  title: string;
-  text: string;
-  view: string;
-}) {
-  const state = useOverview(id);
-  if (!state?.section) return null;
-  const { value, section } = state;
-  const href = viewHref(value, view);
-  const key = typeof id === 'string' ? id : slot;
-  if (!section.ok) return <Failed slot={slot} id={key} title={title} locale={value.locale} />;
-  return (
-    <section data-slot={slot} data-state="empty" aria-labelledby={`${key}-title`} className={sectionClass}>
-      <h2 id={`${key}-title`} className={headingClass}>
-        {title}
-      </h2>
-      <Empty className="border p-6">
-        <EmptyHeader>
-          <EmptyTitle className="sr-only">{title}</EmptyTitle>
-          <EmptyDescription>{text}</EmptyDescription>
-        </EmptyHeader>
-        {href && (
-          <a href={href} className={`${linkClass} ${linkColor} text-sm font-medium hover:underline`}>
-            {title}
-          </a>
-        )}
-      </Empty>
-    </section>
-  );
-}
-
 export function RatingSummary(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
   if (!value?.subject) return null;
@@ -872,7 +834,7 @@ export function RatingSummary(props: Record<string, unknown>) {
   );
 }
 
-export function ThreadList(props: Record<string, unknown>) {
+function ContextThreadList(props: Record<string, unknown>) {
   const state = useOverview(props.id);
   if (!state) return null;
   const { value, section } = state;
@@ -934,22 +896,44 @@ export function ThreadList(props: Record<string, unknown>) {
   );
 }
 
-export function ReviewList(props: Record<string, unknown>) {
+function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 'review' | 'discussion' }) {
   const value = useContext(OverviewContext);
-  const locale = (value?.locale ?? 'en') as never;
-  if (value?.context?.population.kind === 'realm')
-    return (
-      <Failed slot="review-list" id={String(props.id)} title={m.subject_reviews({}, { locale })} locale={locale} />
+  const data = useSubjectCommunity(kind);
+  if (!value?.subject) return null;
+  if (value.context?.population.kind === 'realm') {
+    return kind === 'discussion' ? (
+      <ContextThreadList {...props} />
+    ) : (
+      <Failed
+        slot="review-list"
+        id={String(props.id)}
+        title={m.subject_reviews({}, { locale: value.locale as never })}
+        locale={value.locale}
+      />
     );
+  }
+  if (!data) return kind === 'discussion' ? <ContextThreadList {...props} /> : null;
+  const href = viewHref(value, kind === 'review' ? 'reviews' : 'discussion');
+  if (!href) return null;
   return (
-    <FeatureEmpty
-      slot="review-list"
-      id={props.id}
-      title={m.subject_reviews({}, { locale })}
-      text={m.subject_reviews_empty({}, { locale })}
-      view="reviews"
+    <SubjectCommunityRegion
+      id={typeof props.id === 'string' ? props.id : kind}
+      kind={kind}
+      {...data}
+      subject={{ id: value.subject, label: value.subjectLabel ?? value.unlabelled }}
+      locale={value.locale}
+      href={href}
+      paged={props.paged === true}
     />
   );
+}
+
+export function ThreadList(props: Record<string, unknown>) {
+  return <CommunityList {...props} kind="discussion" />;
+}
+
+export function ReviewList(props: Record<string, unknown>) {
+  return <CommunityList {...props} kind="review" />;
 }
 
 /** Cover credit, fact sources and external identifiers, then a link to Details. */

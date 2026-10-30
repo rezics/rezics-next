@@ -1010,5 +1010,12 @@
   "discovery_unnamed_account": "Unnamed account",
   "discovery_verified_as": "Verified as {name}",
   "library_history_unavailable": "Historical meaning is unavailable. Stored values are shown unchanged.",
-  "library_current_choices": "Current choices"
+  "library_current_choices": "Current choices",
+  "subject_community_loading": "Loading community posts…",
+  "subject_community_continue": "More posts may follow. Continue to see the next page.",
+  "subject_community_board_unavailable": "Choose a board to contribute. No board can be selected from this page yet.",
+  "subject_community_board": "Open board",
+  "subject_community_review": "Write a review on this board",
+  "subject_community_discuss": "Start a discussion on this board",
+  "subject_community_more": "More posts"
 }

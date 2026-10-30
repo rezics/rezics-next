@@ -25,6 +25,8 @@ import { CompositionRender, type PageDocument } from './render';
 import { linkClass, linkColor } from './shared';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
+import type { SubjectCommunity } from './subject-community';
+import { SubjectCommunityContext } from './subject-community-view';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -35,6 +37,7 @@ export type SubjectPageData = {
   account?: { id: string; handle: string };
   context?: SelectedContext | undefined;
   continuation?: PageContinuation | undefined;
+  community?: SubjectCommunity;
   profile: string;
   template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
   document: PageDocument;
@@ -402,12 +405,14 @@ export function SubjectPage({
             )}
             {!overview && bar}
             {overview && !header && afterHeader}
-            <CompositionRender
-              document={page.document}
-              definitions={pageDefinitions}
-              components={{ ...layoutComponents, ...dataComponents }}
-              root={PageRoot}
-            />
+            <SubjectCommunityContext.Provider value={page.community}>
+              <CompositionRender
+                document={page.document}
+                definitions={pageDefinitions}
+                components={{ ...layoutComponents, ...dataComponents }}
+                root={PageRoot}
+              />
+            </SubjectCommunityContext.Provider>
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
             {curation}
           </div>

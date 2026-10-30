@@ -12,10 +12,12 @@ import { validatePageRealm, validatePageNode, validateViewCursor } from './view-
 import { loadSubjectPage } from './subject';
 import { readRatings, readOwnRating } from './subject-ratings';
 import { readReactionCounts, readOwnReaction } from './subject-reactions';
+import { communityOverview, withSubjectCommunity } from './subject-community';
 
-const subjectKernelClient = createServerOnlyFn(async (locale: string) => {
+const subjectKernelClient = createServerOnlyFn(async (locale: string, realm?: string) => {
   const { kernelClient } = await import('../../kernel/client');
   // Eden's treaty client is thenable; wrap it so this async boundary does not make a request to /v1.
+  if (realm === undefined) return { client: kernelClient(locale), authorization: undefined };
   const { env } = await import('cloudflare:workers');
   const { prepareSession, viewerCredential } = await import('../../session/request');
   setResponseHeader('cache-control', 'private, no-store');
@@ -43,8 +45,9 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
-    const { client, authorization } = await subjectKernelClient(data.locale);
-    return loadSubjectPage(client, data.id, data.view, data.locale, { realm: data.realm, authorization });
+    const { client, authorization } = await subjectKernelClient(data.locale, data.realm);
+    const loaded = await loadSubjectPage(client, data.id, data.view, data.locale, { realm: data.realm, authorization });
+    return withSubjectCommunity(client, loaded, data.view);
   });
 
 const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
@@ -71,12 +74,30 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     const { loadViewPages } = await import('./subject-frame');
-    const { client, authorization } = await subjectKernelClient(data.locale);
-    return loadViewPages(client, data.id, data.view, data.locale, data.cursor, {
-      realm: data.realm,
-      node: data.node,
-      authorization,
-    });
+    const { client, authorization } = await subjectKernelClient(data.locale, data.realm);
+    // Public community cursors belong to their anonymous Content reads, not another composition stream.
+    const communityView = data.realm === undefined && (data.view === 'reviews' || data.view === 'discussion');
+    const loaded = await loadViewPages(
+      client,
+      data.id,
+      data.view,
+      data.locale,
+      communityView ? undefined : data.cursor,
+      {
+        realm: data.realm,
+        node: communityView ? undefined : data.node,
+        authorization,
+      },
+    );
+    if (loaded.kind !== 'page') return loaded;
+    const result = await withSubjectCommunity(client, { kind: 'page', page: loaded.page }, data.view, data.cursor);
+    if (result.kind !== 'page') return result;
+    return {
+      ...loaded,
+      page: result.page,
+      overview: communityOverview(loaded.overview),
+      ...(communityView ? { next: undefined, node: undefined } : {}),
+    };
   });
 
 const readSubjectCanonical = createServerFn({ method: 'GET', strict: false })

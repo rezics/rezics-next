@@ -1009,5 +1009,12 @@
   "discovery_unnamed_account": "Unbenanntes Konto",
   "discovery_verified_as": "Verifiziert als {name}",
   "library_history_unavailable": "Die historische Bedeutung ist nicht verfügbar. Gespeicherte Werte werden unverändert angezeigt.",
-  "library_current_choices": "Aktuelle Auswahl"
+  "library_current_choices": "Aktuelle Auswahl",
+  "subject_community_loading": "Beiträge werden geladen…",
+  "subject_community_continue": "Weitere Beiträge können folgen. Öffne die nächste Seite.",
+  "subject_community_board_unavailable": "Wähle ein Forum, um einen Beitrag zu schreiben. Hier kann noch kein Forum ausgewählt werden.",
+  "subject_community_board": "Forum öffnen",
+  "subject_community_review": "In diesem Forum eine Rezension schreiben",
+  "subject_community_discuss": "In diesem Forum eine Diskussion beginnen",
+  "subject_community_more": "Weitere Beiträge"
 }

@@ -1009,5 +1009,12 @@
   "discovery_unnamed_account": "Cuenta sin nombre",
   "discovery_verified_as": "Identidad verificada: {name}",
   "library_history_unavailable": "El significado histórico no está disponible. Se muestran los valores guardados sin cambios.",
-  "library_current_choices": "Opciones actuales"
+  "library_current_choices": "Opciones actuales",
+  "subject_community_loading": "Cargando publicaciones…",
+  "subject_community_continue": "Puede haber más publicaciones. Continúa a la página siguiente.",
+  "subject_community_board_unavailable": "Elige un foro para participar. Aún no se puede seleccionar uno desde esta página.",
+  "subject_community_board": "Abrir foro",
+  "subject_community_review": "Escribir una reseña en este foro",
+  "subject_community_discuss": "Iniciar una discusión en este foro",
+  "subject_community_more": "Más publicaciones"
 }

@@ -11,6 +11,7 @@ import {
 import { accountOf, viewIsPublic, type AccountProfile } from './account-read';
 import { countFromLinks, sumCounts, type Count } from '../count';
 import { bestRank, isRecord, type Stmt } from './shared';
+import type { SubjectCommunity } from './subject-community';
 
 /** One tab of a subject page: a view, and how many items its data has when that is known. */
 export type ViewTab = { view: View; count?: Count };
@@ -193,6 +194,7 @@ export function subjectTabs(page: {
   document: unknown;
   reads: Record<string, Read>;
   views?: readonly string[] | undefined;
+  community?: SubjectCommunity;
 }): ViewTab[] {
   const defined = new Set((page.views ?? ['overview', 'discussion', 'details']).filter(isView));
   const document = page.document as CompositionDocument;
@@ -234,6 +236,12 @@ export function subjectTabs(page: {
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
     const planned = key === undefined ? undefined : plan.reads[key];
     if (planned && (planned.kind !== 'subjectThreads' || (key !== undefined && page.reads[key]?.status === 200)))
+      openReads.add(view);
+    if (
+      page.context?.population.kind !== 'realm' &&
+      ((node.type === 'ReviewList' && page.community?.regions.review) ||
+        (node.type === 'ThreadList' && page.community?.regions.discussion))
+    )
       openReads.add(view);
     const counted = previewCount(node, planned, key === undefined ? undefined : page.reads[key]);
     if (counted) {
