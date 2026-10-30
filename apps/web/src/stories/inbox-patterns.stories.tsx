@@ -73,7 +73,7 @@ export const UnreadUnavailable: Story = {
   ),
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await expect(view.getByLabelText(m.inbox_unread_unavailable())).toHaveTextContent('?');
+    await expect(view.getByRole('img', { name: m.inbox_unread_unavailable() })).toBeEmptyDOMElement();
     await userEvent.click(view.getByRole('link', { name: new RegExp(m.inbox_heading()) }));
     await view.findByRole('list');
   },

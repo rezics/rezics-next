@@ -454,3 +454,43 @@ test.serial(
   },
   timeout,
 );
+
+test.serial(
+  'the accepted phone shell shows actual unread counts or an honest unknown dot',
+  async () => {
+    const own = await messages('en');
+    const session = await signedInState();
+    try {
+      for (const count of [3, 100, 0, null]) {
+        unreadFixture = count === null ? null : { count, capped: count === 100 };
+        const page = await open(pages('en')[0]!, { viewport: phone, storageState: session });
+        const tabs = page.getByRole('navigation', { name: own.shell_phone_tabs!, exact: true });
+        const inbox = tabs.locator('a[href="/en/inbox"]');
+        const unknown = inbox.getByRole('img', { name: own.inbox_unread_unavailable!, exact: true });
+        if (count === null) {
+          await unknown.waitFor();
+          expect(await unknown.textContent()).toBe('');
+          const dot = await unknown.boundingBox();
+          expect(dot!.width).toBeGreaterThan(0);
+          expect(dot!.width).toBe(dot!.height);
+          expect(dot!.width).toBeLessThanOrEqual(8);
+        } else if (count === 0) {
+          await unknown.waitFor({ state: 'hidden' });
+          expect(await inbox.locator('[aria-label]').count()).toBe(0);
+        } else {
+          const label = count === 100 ? '99+' : String(count);
+          const badge = inbox.getByLabel(own.inbox_unread_count!.replace('{count}', label), { exact: true });
+          await badge.waitFor();
+          expect(await badge.textContent()).toBe(label);
+          expect(await unknown.count()).toBe(0);
+        }
+        expect(await inbox.textContent()).not.toContain('?');
+        expect(await inbox.textContent()).not.toContain('0');
+        await page.context().close();
+      }
+    } finally {
+      unreadFixture = { count: 0, capped: false };
+    }
+  },
+  timeout,
+);

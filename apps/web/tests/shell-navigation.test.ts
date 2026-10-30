@@ -492,3 +492,32 @@ test.serial(
   },
   timeout,
 );
+
+test.serial(
+  'signed-in desktop navigation retains Library and Inbox',
+  async () => {
+    const session = await signedInState();
+    for (const locale of ['en', 'ja'] as const) {
+      const own = await messages(locale);
+      const page = await open(`/${locale}`, { viewport: desktop, storageState: session });
+      const navigation = page.getByRole('navigation', { name: own.shell_navigation!, exact: true });
+      const library = navigation.locator(`a[href="/${locale}/library"]`);
+      const inbox = navigation.locator(`a[href="/${locale}/inbox"]`);
+      await library.waitFor();
+      expect(await library.textContent()).toBe(own.nav_library!);
+      expect(await inbox.isVisible()).toBe(true);
+      expect(await inbox.textContent()).toContain(own.nav_inbox!);
+      for (const path of [`/${locale}/library/shelf`, `/${locale}/inbox`]) {
+        await visit(page, path);
+        const current = path.endsWith('/inbox') ? inbox : library;
+        expect(await current.getAttribute('aria-current')).toBe('page');
+        expect(await (path.endsWith('/inbox') ? library : inbox).getAttribute('aria-current')).toBeNull();
+      }
+      await page.getByRole('button', { name: own.shell_collapse_navigation!, exact: true }).click();
+      expect(await library.isVisible()).toBe(true);
+      expect(await inbox.isVisible()).toBe(true);
+      await page.context().close();
+    }
+  },
+  timeout,
+);

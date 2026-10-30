@@ -11,12 +11,20 @@ export function unreadBadgeLabel(count: { count: number; capped: boolean }): str
 }
 
 export function UnreadBadgeView({ data, failed = false }: { data?: UnreadCount | undefined; failed?: boolean }) {
-  const unavailable = failed || (data?.signedIn && data.state === 'unavailable');
-  const label = unavailable ? '?' : data?.signedIn && data.state === 'ready' ? unreadBadgeLabel(data) : null;
+  if (!failed && data?.signedIn === false) return null;
+  if (failed || !data?.signedIn || data.state !== 'ready')
+    return (
+      <span
+        role="img"
+        aria-label={m.inbox_unread_unavailable()}
+        title={m.inbox_unread_unavailable()}
+        className="ms-auto inline-block size-2 shrink-0 rounded-full bg-primary"
+      />
+    );
+  const label = unreadBadgeLabel(data);
   return label ? (
     <span
-      aria-label={unavailable ? m.inbox_unread_unavailable() : m.inbox_unread_count({ count: label })}
-      title={unavailable ? m.inbox_unread_unavailable() : undefined}
+      aria-label={m.inbox_unread_count({ count: label })}
       className="ms-auto inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold leading-none text-primary-foreground"
     >
       {label}

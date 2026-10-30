@@ -153,14 +153,53 @@ export const Unread: Story = {
   render: () => <Example state="unread" />,
   play: async (context) => {
     await pageReady(context);
-    if (phone()) await expect(within(context.canvasElement).getByLabelText(m.shell_new_activity())).toBeVisible();
+    const canvas = within(context.canvasElement);
+    if (phone()) await expect(canvas.getByLabelText(m.shell_new_activity())).toBeVisible();
+    const navigation = canvas.getByRole('navigation', { name: phone() ? m.shell_phone_tabs() : m.shell_navigation() });
+    await expect(within(navigation).getByLabelText(m.inbox_unread_count({ count: '3' }))).toHaveTextContent('3');
   },
 };
 export const UnreadUnavailable: Story = {
   render: () => <Example state="unavailable" />,
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).queryByLabelText(m.shell_new_activity())).toBeNull();
+    const canvas = within(context.canvasElement);
+    await expect(canvas.queryByLabelText(m.shell_new_activity())).toBeNull();
+    const navigation = canvas.getByRole('navigation', { name: phone() ? m.shell_phone_tabs() : m.shell_navigation() });
+    await expect(within(navigation).getByRole('img', { name: m.inbox_unread_unavailable() })).toBeEmptyDOMElement();
+  },
+};
+export const DesktopPersonalNavigation: Story = {
+  globals: { viewport: { value: 'desktop1280' } },
+  play: async (context) => {
+    await pageReady(context);
+    const navigation = within(within(context.canvasElement).getByRole('navigation', { name: m.shell_navigation() }));
+    await expect(await navigation.findByRole('link', { name: m.nav_library(), exact: true })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/library`,
+    );
+    await expect(navigation.getByRole('link', { name: m.nav_inbox(), exact: true })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/inbox`,
+    );
+  },
+};
+export const DesktopPersonalUnavailable: Story = {
+  globals: { viewport: { value: 'desktop1280' } },
+  parameters: { admitted: [] },
+  play: async (context) => {
+    await pageReady(context);
+    const navigation = within(within(context.canvasElement).getByRole('navigation', { name: m.shell_navigation() }));
+    const library = await navigation.findByRole('link', {
+      name: `${m.nav_library()}: ${m.library_subject_unavailable()}`,
+      exact: true,
+    });
+    await expect(library).toHaveAttribute('aria-disabled', 'true');
+    await expect(library).not.toHaveAttribute('href');
+    await expect(navigation.getByRole('link', { name: m.nav_inbox(), exact: true })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/inbox`,
+    );
   },
 };
 export const SearchEmpty: Story = {

@@ -210,7 +210,8 @@ test('unread failures remain unavailable rather than a zero badge, with one priv
     expect(data).toMatchObject({ signedIn: true, state: 'unavailable' });
     const markup = renderToStaticMarkup(createElement(UnreadBadgeView, { data }));
     expect(markup).toContain(m.inbox_unread_unavailable());
-    expect(markup).toContain('?');
+    expect(markup).toContain('role="img"');
+    expect(markup).not.toContain('?');
     expect(data).not.toHaveProperty('count');
     expect(requests).toBe(1);
     expect(owner.reads()).toBe(1);
@@ -238,6 +239,28 @@ test('unread failures remain unavailable rather than a zero badge, with one priv
       createElement(UnreadBadgeView, { data: { signedIn: true, state: 'ready', count: 0, capped: false } }),
     ),
   ).toBe('');
+});
+
+test('unknown and pending unread counts use the same honest dot while ready counts retain their native value', () => {
+  for (const props of [{}, { failed: true }, { data: { signedIn: false } as const, failed: true }]) {
+    const markup = renderToStaticMarkup(createElement(UnreadBadgeView, props));
+    expect(markup).toContain('role="img"');
+    expect(markup).toContain(m.inbox_unread_unavailable());
+    expect(markup).not.toMatch(/>[^<]+<|\?/);
+  }
+  expect(renderToStaticMarkup(createElement(UnreadBadgeView, { data: { signedIn: false } }))).toBe('');
+  for (const [count, capped, label] of [
+    [3, false, '3'],
+    [100, true, '99+'],
+  ] as const) {
+    const markup = renderToStaticMarkup(
+      createElement(UnreadBadgeView, {
+        data: { signedIn: true, state: 'ready', count, capped },
+      }),
+    );
+    expect(markup).toContain(m.inbox_unread_count({ count: label }));
+    expect(markup).toContain(`>${label}</span>`);
+  }
 });
 
 test('Inbox retains native privacy, moderation targets, bylines and cursor bounds without converting dependency or unread failure to successful rows', async () => {

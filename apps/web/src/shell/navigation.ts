@@ -17,6 +17,10 @@ export type NavigationContribution = Readonly<
     icon?: LucideIcon;
     match?: 'exact' | 'prefix';
     signedIn?: boolean;
+    /** Preserve an existing desktop-only destination without adding it to phone menus. */
+    desktopOnly?: boolean;
+    /** Keep a disabled destination visible when its existing operation is not offered. */
+    retainWhenUnavailable?: boolean;
     /** Affordance only; the native destination still authorizes every read and command. */
     operation?: NavigationOperation;
   } & ({ kind: 'navigation'; group: 'primary' | 'personal' } | { kind: 'creation'; group: 'create' })
@@ -28,6 +32,7 @@ export type ResolvedNavigationEntry = Readonly<
     path: `/${string}`;
     href: string;
     current: boolean;
+    unavailable?: boolean;
   }
 >;
 const groups = { primary: 0, personal: 1, create: 2 } as const;

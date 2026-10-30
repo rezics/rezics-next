@@ -29,7 +29,6 @@ import { UnreadBadge } from '../inbox/unread-badge';
 import {
   Folders,
   Globe,
-  Inbox as InboxIcon,
   Library,
   LogIn,
   LogOut,
@@ -115,7 +114,7 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
       <SidebarContent className="overflow-visible!">
         <SidebarGroup>
           <SidebarMenu>
-            <NavigationEntries context={{ locale: getLocale(), pathname }} session={session}>
+            <NavigationEntries context={{ locale: getLocale(), pathname }} session={session} desktop>
               {(item) => {
                 const Icon = item.icon;
                 return (
@@ -123,30 +122,28 @@ function Navigation({ pathname, session }: { pathname: string; session: ShellSes
                     <SidebarMenuButton
                       className="h-10"
                       isActive={item.current}
-                      tooltip={item.label}
-                      render={/[?#]/.test(item.path) ? <a href={item.href} /> : <Link<AnyRouter> to={item.path} />}
+                      aria-current={item.current ? 'page' : undefined}
+                      aria-disabled={item.unavailable || undefined}
+                      tooltip={item.unavailable ? `${item.label}: ${m.library_subject_unavailable()}` : item.label}
+                      render={
+                        item.unavailable ? (
+                          <span role="link" />
+                        ) : /[?#]/.test(item.path) ? (
+                          <a href={item.href} />
+                        ) : (
+                          <Link<AnyRouter> to={item.path} />
+                        )
+                      }
                     >
                       {Icon && <Icon aria-hidden="true" className="text-sidebar-primary" />}
                       <span>{item.label}</span>
+                      {item.unavailable && <span className="sr-only">{`: ${m.library_subject_unavailable()}`}</span>}
+                      {item.id === 'shell.inbox' && <UnreadBadge />}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
               }}
             </NavigationEntries>
-            {session === 'signed-in' ? (
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  className="h-10"
-                  isActive={pathname === '/inbox'}
-                  tooltip={messages.nav_inbox()}
-                  render={<Link to="/inbox" />}
-                >
-                  <InboxIcon aria-hidden="true" className="text-sidebar-primary" />
-                  <span>{messages.nav_inbox()}</span>
-                  <UnreadBadge />
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ) : null}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
@@ -167,7 +164,7 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
     <noscript>
       <nav aria-label={m.shell_navigation()} className="border-b border-border/60 px-3 py-2 md:hidden">
         <ul className="flex flex-wrap gap-1">
-          <NavigationEntries context={{ locale: getLocale(), pathname }} session={session}>
+          <NavigationEntries context={{ locale: getLocale(), pathname }} session={session} desktop>
             {(item) => {
               const Icon = item.icon;
               return (
@@ -184,18 +181,6 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
               );
             }}
           </NavigationEntries>
-          {session === 'signed-in' ? (
-            <li>
-              <Link
-                to="/inbox"
-                aria-current={pathname === '/inbox' ? 'page' : undefined}
-                className="flex min-h-9 items-center gap-2 rounded-xl px-3 text-sm aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
-              >
-                <InboxIcon aria-hidden="true" className="size-4 text-sidebar-primary" />
-                {messages.nav_inbox()}
-              </Link>
-            </li>
-          ) : null}
         </ul>
       </nav>
       <style>{'[data-open-navigation]{display:none!important}'}</style>

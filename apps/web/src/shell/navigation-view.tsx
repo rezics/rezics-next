@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { House, Library, ReceiptText, Search } from 'lucide-react';
+import { House, Inbox, Library, ReceiptText, Search } from 'lucide-react';
 import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import {
@@ -41,6 +41,7 @@ export const defaultNavigation = createNavigation([
     match: 'prefix',
     signedIn: true,
     operation: 'library_entry.list',
+    retainWhenUnavailable: true,
   },
   {
     id: 'shell.orders',
@@ -53,6 +54,18 @@ export const defaultNavigation = createNavigation([
     match: 'prefix',
     signedIn: true,
     operation: 'order.list',
+  },
+  {
+    id: 'shell.inbox',
+    kind: 'navigation',
+    group: 'personal',
+    order: 20,
+    href: '/inbox',
+    label: ({ locale }) => m.nav_inbox({}, { locale }),
+    icon: Inbox,
+    match: 'prefix',
+    signedIn: true,
+    desktopOnly: true,
   },
 ]);
 const NavigationContextValue = createContext(defaultNavigation);
@@ -69,9 +82,15 @@ export function NavigationProvider({
 }
 
 const subscribe = () => () => {};
-function OperationEntry({ entry, children }: { entry: ResolvedNavigationEntry; children: ReactNode }) {
+function OperationEntry({
+  entry,
+  children,
+}: {
+  entry: ResolvedNavigationEntry;
+  children: (entry: ResolvedNavigationEntry) => ReactNode;
+}) {
   const offered = useOperation(entry.operation!);
-  return offered ? children : null;
+  return offered ? children(entry) : entry.retainWhenUnavailable ? children({ ...entry, unavailable: true }) : null;
 }
 
 /** Shared by the desktop rail, script-free links and phone menus/CreateSheet. */
@@ -79,11 +98,13 @@ export function NavigationEntries({
   context,
   session,
   kind,
+  desktop = false,
   children,
 }: {
   context: NavigationContext;
   session: NavigationSession;
   kind?: NavigationContribution['kind'];
+  desktop?: boolean;
   children: (entry: ResolvedNavigationEntry) => ReactNode;
 }) {
   const entries = useContext(NavigationContextValue);
@@ -93,7 +114,12 @@ export function NavigationEntries({
     () => false,
   );
   return resolveNavigation(entries, context).map((entry) => {
-    if ((kind && entry.kind !== kind) || (entry.signedIn && (!hydrated || session !== 'signed-in'))) return null;
+    if (
+      (kind && entry.kind !== kind) ||
+      (entry.desktopOnly && !desktop) ||
+      (entry.signedIn && (!hydrated || session !== 'signed-in'))
+    )
+      return null;
     return (
       <NavigationEntry key={entry.id} entry={entry}>
         {children}
@@ -109,8 +135,7 @@ function NavigationEntry({
   entry: ResolvedNavigationEntry;
   children: (entry: ResolvedNavigationEntry) => ReactNode;
 }) {
-  const content = children(entry);
-  return entry.operation ? <OperationEntry entry={entry}>{content}</OperationEntry> : content;
+  return entry.operation ? <OperationEntry entry={entry}>{children}</OperationEntry> : children(entry);
 }
 
 export function NavigationLinks({
@@ -126,6 +151,20 @@ export function NavigationLinks({
       <NavigationEntries {...props}>
         {(entry) => {
           const Icon = entry.icon;
+          if (entry.unavailable)
+            return (
+              <span
+                role="link"
+                aria-disabled="true"
+                aria-current={entry.current ? 'page' : undefined}
+                title={m.library_subject_unavailable({}, { locale: props.context.locale })}
+                className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-muted-foreground"
+              >
+                {Icon && <Icon aria-hidden="true" className="size-4" />}
+                {entry.label}
+                <span className="sr-only">{`: ${m.library_subject_unavailable({}, { locale: props.context.locale })}`}</span>
+              </span>
+            );
           return (
             <a
               href={entry.href}
