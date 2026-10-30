@@ -155,6 +155,7 @@ test('Identical redacted failure fingerprints on different files/heads or with n
     installProgressWorker(h);
     await job.start(task.id);
     await job.drain();
+    expect(h.store.task(task.id).state).toBe('landing');
     const firstTarget = advanceMain(h, fileA, 'main Storybook entry reorganization\n');
     const first = await runTrain(h, job, { sameRedactedFingerprint: true });
     const firstSource = first[0]!.rebaseConflict!.workerCommit;
