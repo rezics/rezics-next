@@ -19,6 +19,15 @@ import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from '../content/support
 import { createPartyLocatorEffect } from '../../src/community/party-locator.ts';
 import { eraseAccountCommunityRecordsPage } from '../../src/community/account-erasure-records.ts';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
+import { approveRealmClaim } from '../../src/access/realm-claim.ts';
+import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../src/community/realm-claim-approval.ts';
+import { lockRealmOwnershipSource } from '../../src/community/realm-continuity.ts';
+import {
+  eraseAccountMembershipsPage,
+  eraseAccountRealmOwnership,
+} from '../../src/community/account-erasure-memberships.ts';
+import { createRealmOwnershipCommands } from '../../src/access/realm-ownership.ts';
+import { COMMUNITY_PLATFORM_BASIS } from '../../src/community/party-locator.ts';
 
 let system: NativeContentSystem;
 let at: string;
@@ -302,4 +311,278 @@ test('pending requester custody uses the existing erasure obligation and event r
       )
     ).rows,
   ).toEqual([]);
+});
+
+test('native claim source refuses clones and another command, and approval state rolls back with its writer', async () => {
+  at = new Date().toISOString();
+  await system.clock.setCommandTime(at);
+  const realm = await createRealm();
+  await orphan(realm.realmId);
+  const pending = await requestRealmClaim(deps(), owner().actor, realm.realmId, context());
+  const options = {
+    partition: partitionOf(routeOf(realm.realmId)!),
+    basis: COMMUNITY_PLATFORM_BASIS,
+    clock: () => new Date(at),
+    deadline: Date.now() + 30_000,
+  };
+  const input = { realmId: realm.realmId, requestId: pending.value.requestId };
+  const saved = await runCommand(system.database.pool, options, async (tx) => {
+    const source = await lockRealmClaimApprovalSource(tx, input);
+    if (!source) throw new Error('Native pending claim source is missing');
+    return noEffect(source);
+  });
+  await expect(
+    runCommand(system.database.pool, options, async (tx) => {
+      await applyRealmClaimApproval(tx, saved.value);
+      return noEffect(null);
+    }),
+  ).rejects.toMatchObject({ code: 'conflict' });
+  const rollback = new Error('Rollback after native claim application');
+  await expect(
+    runCommand(system.database.pool, options, async (tx) => {
+      const source = await lockRealmClaimApprovalSource(tx, input);
+      if (!source) throw new Error('Native pending claim source is missing');
+      expect(source.orphanedAt).toBe(pending.value.orphanedAt);
+      await expect(applyRealmClaimApproval(tx, { ...source })).rejects.toMatchObject({ code: 'conflict' });
+      const applied = await applyRealmClaimApproval(tx, source);
+      expect(applied).toMatchObject({ ...input, state: 'owned', orphanedAt: pending.value.orphanedAt });
+      const current = await lockRealmOwnershipSource(tx, realm.realmId);
+      expect(current).toMatchObject({ ownershipState: 'owned', orphanedAt: null, claimEligibleAt: null });
+      throw rollback;
+    }),
+  ).rejects.toBe(rollback);
+  const row = (
+    await system.database.pool.query(
+      `SELECT r.ownership_state,r.orphaned_at::text,r.claim_eligible_at::text,c.state,c.approved_at
+     FROM community.realm r JOIN community.realm_claim_request c USING(route,realm_id)
+     WHERE r.route=$1 AND r.realm_id=$2 AND c.request_id=$3`,
+      [routeOf(realm.realmId), realm.realmId, pending.value.requestId],
+    )
+  ).rows[0];
+  expect(row).toEqual({
+    ownership_state: 'orphaned',
+    orphaned_at: pending.value.orphanedAt,
+    claim_eligible_at: pending.value.claimEligibleAt,
+    state: 'pending',
+    approved_at: null,
+  });
+});
+
+test('native platform claim approval installs a real owner, replays after its state change and rechecks current direct Global authority', async () => {
+  at = new Date().toISOString();
+  await system.clock.setCommandTime(at);
+  const realm = await createRealm();
+  await orphan(realm.realmId);
+  const claimant = system.actors.author;
+  const approver = system.actors.moderator;
+  const pending = await requestRealmClaim(deps(), claimant.actor, realm.realmId, context());
+  const input = { realmId: realm.realmId, requestId: pending.value.requestId };
+  const key = crypto.randomUUID();
+  await expect(approveRealmClaim(deps(), owner().actor, input, context(key))).rejects.toMatchObject({
+    name: 'GrantDeniedError',
+  });
+  await seedGovernanceAuthority(
+    system.database.pool,
+    PLATFORM_RESOURCE.route,
+    PLATFORM_RESOURCE.id,
+    approver.actor.accountId,
+    ['realm:approve_claim'],
+  );
+  const first = await approveRealmClaim(deps(), approver.actor, input, context(key));
+  expect(first.value).toMatchObject({
+    ...input,
+    claimantAccountId: claimant.actor.accountId,
+    state: 'owned',
+    orphanedAt: pending.value.orphanedAt,
+  });
+  const replay = await approveRealmClaim(deps(), approver.actor, input, context(key));
+  expect(replay.replayed).toBe(true);
+  expect(replay.value).toEqual(first.value);
+  expect(replay.transactionId).toBe(first.transactionId);
+  const row = (
+    await system.database.pool.query(
+      `SELECT r.ownership_state,r.orphaned_at,r.claim_eligible_at,c.state,c.approved_at::text
+     FROM community.realm r JOIN community.realm_claim_request c USING(route,realm_id)
+     WHERE r.route=$1 AND r.realm_id=$2 AND c.request_id=$3`,
+      [routeOf(realm.realmId), realm.realmId, pending.value.requestId],
+    )
+  ).rows[0];
+  expect(row).toEqual({
+    ownership_state: 'owned',
+    orphaned_at: null,
+    claim_eligible_at: null,
+    state: 'approved',
+    approved_at: first.value.approvedAt,
+  });
+  expect(
+    (
+      await system.database.pool.query(
+        `SELECT grant_role FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2
+     AND subject_kind='identity' AND subject_id=$3 AND subject_role=''
+     AND grant_role='community.realm.owner' AND valid @> $4::timestamptz`,
+        [routeOf(realm.realmId), realm.realmId, claimant.actor.accountId, at],
+      )
+    ).rows,
+  ).toEqual([{ grant_role: 'community.realm.owner' }]);
+  const http = await request(
+    'POST',
+    `/v1/realms/${realm.realmId}/claimRequests/${input.requestId}:approve`,
+    undefined,
+    key,
+    approver.bearer,
+  );
+  expect(http.status).toBe(200);
+  expect(await http.json()).toEqual({
+    claim: {
+      ...first.value,
+      orphanedAt: new Date(first.value.orphanedAt).toISOString(),
+      approvedAt: new Date(first.value.approvedAt).toISOString(),
+    },
+  });
+  await system.database.pool.query(
+    `DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_kind='identity'
+     AND subject_id=$3 AND action='realm:approve_claim'`,
+    [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, approver.actor.accountId],
+  );
+  await expect(approveRealmClaim(deps(), approver.actor, input, context(key))).rejects.toMatchObject({
+    name: 'GrantDeniedError',
+  });
+});
+
+test('default committed-erasure succession uses the original root instant and retains the exact orphan episode on retry', async () => {
+  const runtime = accountDeletionRuntime(system);
+  const person = await runtime.person();
+  at = new Date().toISOString();
+  await system.clock.setCommandTime(at);
+  await seedGovernanceAuthority(system.database.pool, PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, person.accountId, [
+    'space:create',
+    'realm:create',
+  ]);
+  const spaceResponse = await request(
+    'POST',
+    '/v1/spaces',
+    { title: 'Erasure succession host' },
+    undefined,
+    person.bearer,
+  );
+  expect(spaceResponse.status).toBe(201);
+  const { space } = await spaceResponse.json();
+  const realmResponse = await request(
+    'POST',
+    '/v1/realms',
+    {
+      spaceId: space.spaceId,
+      title: 'Erasure succession Realm',
+      visibility: 'public',
+      contextId: GLOBAL_CONTEXT,
+    },
+    undefined,
+    person.bearer,
+  );
+  expect(realmResponse.status).toBe(201);
+  const { realm } = await realmResponse.json();
+  const erased = await deletePersona({ pool: system.database.pool, auth: runtime.auth }, person);
+  const read = async () =>
+    (
+      await system.database.pool.query(
+        `SELECT ownership_state,orphaned_at::text,claim_eligible_at::text,
+       orphaned_at=$3::timestamptz AS original_root,
+       claim_eligible_at=orphaned_at + interval '720 hours' AS original_deadline
+     FROM community.realm WHERE route=$1 AND realm_id=$2`,
+        [routeOf(realm.realmId), realm.realmId, erased.at],
+      )
+    ).rows[0];
+  await eraseAccountMembershipsPage({ pool: system.database.pool }, person.accountId, null);
+  const first = await read();
+  expect(first).toMatchObject({ ownership_state: 'orphaned', original_root: true, original_deadline: true });
+  await eraseAccountMembershipsPage({ pool: system.database.pool }, person.accountId, null);
+  expect(await read()).toEqual(first);
+});
+
+test('native erasure segment rolls grants and continuity back together and replays the original orphan episode', async () => {
+  const runtime = accountDeletionRuntime(system);
+  const person = await runtime.person();
+  at = new Date().toISOString();
+  await system.clock.setCommandTime(at);
+  await seedGovernanceAuthority(system.database.pool, PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, person.accountId, [
+    'space:create',
+    'realm:create',
+  ]);
+  const spaceResponse = await request(
+    'POST',
+    '/v1/spaces',
+    { title: 'Native succession host' },
+    undefined,
+    person.bearer,
+  );
+  expect(spaceResponse.status).toBe(201);
+  const { space } = await spaceResponse.json();
+  const realmResponse = await request(
+    'POST',
+    '/v1/realms',
+    {
+      spaceId: space.spaceId,
+      title: 'Native succession Realm',
+      visibility: 'public',
+      contextId: GLOBAL_CONTEXT,
+    },
+    undefined,
+    person.bearer,
+  );
+  expect(realmResponse.status).toBe(201);
+  const { realm } = await realmResponse.json();
+  const erased = await deletePersona({ pool: system.database.pool, auth: runtime.auth }, person);
+  const input = { realmId: realm.realmId, accountId: person.accountId };
+  const nativeDeps = { pool: system.database.pool, access: system.access };
+  const commands = createRealmOwnershipCommands(nativeDeps);
+  const route = routeOf(realm.realmId)!;
+  const read = async () =>
+    (
+      await system.database.pool.query(
+        `SELECT r.ownership_state,r.orphaned_at::text,r.claim_eligible_at::text,
+       r.orphaned_at=$3::timestamptz AS original_root,
+       r.claim_eligible_at=r.orphaned_at + interval '720 hours' AS original_deadline,
+       EXISTS (SELECT 1 FROM access.resource_role_grant g WHERE g.route=r.route AND g.resource_id=r.realm_id
+         AND g.subject_kind='identity' AND g.subject_id=$4 AND g.subject_role=''
+         AND g.grant_role='community.realm.owner' AND upper_inf(g.valid)) AS erased_owner
+       FROM community.realm r WHERE r.route=$1 AND r.realm_id=$2`,
+        [route, realm.realmId, erased.at, person.accountId],
+      )
+    ).rows[0];
+  const before = await read();
+  expect(before).toMatchObject({ ownership_state: 'owned', erased_owner: true });
+  const rollback = new Error('Rollback native succession segment');
+  await expect(
+    runCommand(
+      system.database.pool,
+      {
+        partition: partitionOf(route),
+        deadline: Date.now() + 30_000,
+        authorization: commands.erasureSuccessionAuthorization({
+          resource: { route, id: realm.realmId },
+          accountId: person.accountId,
+        }),
+      },
+      async (tx) => {
+        const applied = await commands.applyErasureSuccession(tx);
+        expect(applied.status).toBe('orphaned');
+        expect(await lockRealmOwnershipSource(tx, realm.realmId)).toMatchObject({ ownershipState: 'orphaned' });
+        throw rollback;
+      },
+    ),
+  ).rejects.toBe(rollback);
+  expect(await read()).toEqual(before);
+  const first = await eraseAccountRealmOwnership(nativeDeps, input, { deadline: Date.now() + 30_000 });
+  if (first.value.status === 'pending') throw new Error(`Native succession remained pending: ${first.value.reason}`);
+  expect(first.value).toMatchObject({ status: 'orphaned', replayed: false, source: { accountId: person.accountId } });
+  const orphaned = await read();
+  expect(orphaned).toMatchObject({
+    ownership_state: 'orphaned',
+    original_root: true,
+    original_deadline: true,
+    erased_owner: false,
+  });
+  const replay = await eraseAccountRealmOwnership(nativeDeps, input, { deadline: Date.now() + 30_000 });
+  expect(replay.value).toEqual({ ...first.value, replayed: true });
+  expect(await read()).toEqual(orphaned);
 });

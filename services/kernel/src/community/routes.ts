@@ -1,5 +1,7 @@
 import { listRealmDiscovery } from './discovery.ts';
 import { exactRealmPresentationImage } from '../content/realm-media.ts';
+import { approveRealmClaim } from '../access/realm-claim.ts';
+import { realmClaimApprovalResponseSchema } from './schemas.ts';
 import { discoveryQuerySchema, discoveryResponseSchema } from './schemas.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -1202,6 +1204,47 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           throw new ProblemError('forbidden');
         }
         set.status = 204;
+      },
+    )
+    .post(
+      customMethod('/v1/realms/:realmId/claimRequests/:requestId', 'approve'),
+      {
+        params: t.Object({ realmId: t.String(), requestId: t.String() }, closed),
+        headers: commandHeaders,
+        response: {
+          200: withHeaders(strict(realmClaimApprovalResponseSchema), sessionHeader),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'realm.approve_claim',
+          'x-exposure': 'public',
+          'x-action': 'realm:approve_claim',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          return await admission.run('normal', job, async () => {
+            const result = await approveRealmClaim(realmDependencies(), actor, params, {
+              deadline: job.deadline,
+              idempotencyKey: key,
+            });
+            session.record(result);
+            return {
+              claim: {
+                ...result.value,
+                orphanedAt: new Date(result.value.orphanedAt).toISOString(),
+                approvedAt: new Date(result.value.approvedAt).toISOString(),
+              },
+            };
+          });
+        } catch (error) {
+          communityProblem(error);
+        }
       },
     )
     .patch(

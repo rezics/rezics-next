@@ -1088,7 +1088,12 @@ CREATE TABLE community.realm_claim_request (
   account_id uuid NOT NULL,
   orphaned_at timestamptz NOT NULL,
   requested_at timestamptz NOT NULL,
-  state text NOT NULL DEFAULT 'pending' CHECK (state = 'pending'),
+  state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'approved')),
+  approved_at timestamptz,
+  CONSTRAINT realm_claim_request_approval_check CHECK (
+    (state = 'pending' AND approved_at IS NULL)
+    OR (state = 'approved' AND approved_at IS NOT NULL AND isfinite(approved_at) AND approved_at >= requested_at)
+  ),
   PRIMARY KEY (route, realm_id, request_id),
   UNIQUE (route, realm_id, orphaned_at, account_id),
   FOREIGN KEY (route, realm_id) REFERENCES community.realm(route, realm_id),

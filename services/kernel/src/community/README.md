@@ -240,6 +240,45 @@ same pending request without another event. The result is always `pending`; neit
 ownership. Approval requires a genuine platform decision establishing a native Access owner. The native command exposes no
 approval operation without that authority.
 
+The approval source is `lockRealmClaimApprovalSource(tx, {realmId, requestId})`. It locks the actual current
+Realm/head and exact routed `realm_claim_request`, retaining the original `orphaned_at`, `claim_eligible_at`,
+`account_id` and `requested_at`. Only an active, pending, same-episode request after the original 720-hour deadline
+qualifies at the native command time. Private object identity binds the frozen source to this exact live transaction;
+copying its fields or carrying it to another command does not carry source custody. Missing rows return null;
+stale, premature or replaced sources conflict. `applyRealmClaimApproval` rechecks those locks and the claimant's
+real native owner role through Access's `resourceRoleHeld`, then clears the Realm orphan fields and marks this
+request `approved` with command-time `approved_at` in that same transaction. It returns the original orphan instant.
+It writes no Access grants and exposes no second approval command.
+
+`POST /v1/realms/{realmId}/claimRequests/{requestId}:approve` delegates to Accounts' sole `approveRealmClaim`
+command and returns `{claim:{realmId,requestId,claimantAccountId,state:'owned',orphanedAt,approvedAt}}`.
+Accounts must check current DIRECT Global `realm:approve_claim` before receipt replay, prepare current claimant
+admission and write the real owner grant. Source locking belongs to the new effect after receipt handling, allowing
+a successful replay after its own state change. Resource-only event payloads do not remove actor, principal or
+claimant custody: the native command owner must declare their actual associations through shared-history facilities.
+The agreed Accounts command currently has an unavailable-only declaration here; mounting this route does not deliver
+approval authorization, grants or history coverage. No role gains approval or restoration actions through this seam.
+
+`lockRealmOwnershipSource(tx, realmId)` locks the existing continuity fields, including a removed Realm for mechanical
+cleanup. `applyRealmOwnershipSuccession(tx, source, erasedAccountId)` itself calls Accounts'
+`readAppliedRealmErasureSuccession(tx,{realmId,accountId})`; no caller decision, timestamp or structural proof is
+accepted. Accounts owns verification of the actual applied erasure root, tombstone, candidate, grant and source
+binding. A missing applied result remains unavailable. The state update preserves an existing orphan episode at
+PostgreSQL timestamp precision and verifies the exact 720-hour relation. A newly orphaned instant comes from the
+original immutable Access erasure root; a genuine successor grant returns owned state with null orphan fields.
+`eraseAccountRealmOwnership` in the existing membership-erasure module consumes the delivered Accounts
+`createRealmOwnershipCommands` constructor. Its native `erasureSuccessionAuthorization` prepares and releases the
+immutable account root before Realm checkout; the body calls `applyErasureSuccession(tx)`, which invokes this
+Content state port before returning in the same writer. The exact native `readAppliedRealmErasureSuccession`
+implementation replaces the provisional reader. Pending results retain the membership producer's owner locator;
+terminal replay returns the original operation without minting a new applied proof or resetting the orphan episode.
+The default Community participant must invoke this segment before retiring that locator. Its membership page
+producer remains unavailable in this checkout: there is no delivered `member_locator` schema or native owner-locator
+reader to bind, so this integration does not invent an enumeration or a second membership engine.
+`account_erasure_progress` is orchestration only; neither role loss nor a final ACK supplies succession authority.
+The existing Community participant remains the sole coordinator and ACK writer. Native default-path and approval
+readiness still require their missing owner implementations; the segment and route alone do not establish it.
+
 Claim requests are held in the Realm home. A request point touches one native identity/head, one full requester
 key and a bounded receipt/event bundle, without enumerating members, requests or grants. The claim-requested
 event extends the existing party locator: it point-reads the full Realm/request key, releases that connection,
@@ -473,6 +512,8 @@ there is no catalogue, grant, membership or descendant scan and no per-card requ
 
 | Operation                                                    | Touches                                                                                                                                                                                                                                                                                                                                                  | Bound                                                                                                                                                                                                          | Growth check                                                                                                                                                                                                                                                                                                             |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Approve Realm claim source/state                             | One current Realm/head lock, one exact routed request lock, one native owner-role point read and two conditional updates in the same Realm command; Accounts separately owns bounded authorization/grant/receipt/history work.                                                                                                                           | Constant rows and statements; indexed seeks in Realm, request and native grant indexes; no requester, member or history enumeration.                                                                           | Focused source identity, rollback, real approval and replay cases in `test/community/realm-orphan-continuity.test.ts`; physical growth proof remains deferred.                                                                                                                                                           |
+| Apply Realm erasure continuity                               | Native constructor preparation on the released account root; one Realm/head lock including removed lifecycle, the Accounts-owned exact applied-result read and one conditional Realm update retaining the original episode.                                                                                                                              | Constant Content rows and statements per Realm; no membership, grant, account-progress or history scan. Accounts owns its bounded candidate/frontier preparation.                                              | Original-root, native segment rollback and stable-orphan retry cases in `test/community/realm-orphan-continuity.test.ts`; default membership producer integration and physical growth proof remain deferred.                                                                                                             |
 | Create Space                                                 | Global admission and authorization; one Space insert, first revision insert, creation receipt and fixed native grant initialization in the Space partition.                                                                                                                                                                                              | Constant rows and statements; logarithmic blocks in partition and Space population.                                                                                                                            | `test/community/growth-space.test.ts`: “Space ${operation} stays bounded at 256, 1024 and 4096 Spaces and their revisions”.                                                                                                                                                                                              |
 | Update Space                                                 | Space authorization and exact head read; one revision insert and head compare-and-set, with receipt in the Space partition.                                                                                                                                                                                                                              | Constant rows and statements; logarithmic blocks in partition and revision population.                                                                                                                         | `test/community/growth-space.test.ts`: “Space ${operation} stays bounded at 256, 1024 and 4096 Spaces and their revisions”.                                                                                                                                                                                              |
 | Read Space with its carried Realm                            | Space read and authorization; exact head read, one carried-Realm slot lookup, and at most one Realm head read with its ordinary read authorization.                                                                                                                                                                                                      | Constant rows and statements; logarithmic blocks in the Space and Realm indexes.                                                                                                                               | `test/community/growth-space.test.ts`: “Space ${operation} stays bounded at 256, 1024 and 4096 Spaces and their revisions”.                                                                                                                                                                                              |
@@ -649,7 +690,8 @@ platform governance/closed Global reach catalogue and matching existing role bin
 Until that producer is integrated, a missing action or role binding remains denied; these routes do not grant it or
 report restoration success. The independent platform check is implemented, without a provisional permission adapter.
 Accounts also remains the sole last-holder/succession producer; this module does not implement an ownership store,
-claim approval, `readRealmOwnershipRoles`, or any succession, grant or transfer producer. Existing orphan claim requests
+the Accounts claim command, `readRealmOwnershipRoles`, or any Access succession, grant or transfer producer. Community
+only owns the locked source/state application ports described above. Existing orphan claim requests
 and their expiry do not confer restoration or acquisition authority.
 
 ## Realm presentation

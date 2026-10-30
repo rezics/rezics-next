@@ -6,12 +6,14 @@ import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   authoritativeTimeValue,
+  currentCommand,
   noEffect,
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
   type CommandAuthorization,
   type CommandTransaction,
+  type CurrentCommand,
 } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
@@ -22,6 +24,9 @@ import read from './realm-continuity-read.sql';
 import lock from './realm-continuity-lock.sql';
 import insertRequest from './realm-continuity-request-insert.sql';
 import readRequest from './realm-continuity-request-read.sql';
+import { readAppliedRealmErasureSuccession } from '../access/realm-ownership.ts';
+import lockSource from './realm-continuity-source-lock.sql';
+import applySuccession from './realm-continuity-apply.sql';
 
 export type RealmContinuity = Readonly<{
   ownershipState: 'owned' | 'orphaned';
@@ -29,6 +34,77 @@ export type RealmContinuity = Readonly<{
   claimEligibleAt: string | null;
   governanceReadOnly: boolean;
 }>;
+
+const lockedOwnership: unique symbol = Symbol('native locked Realm ownership');
+export type LockedRealmOwnershipSource = Readonly<{
+  readonly [lockedOwnership]: true;
+  realmId: string;
+  ownershipState: 'owned' | 'orphaned';
+  orphanedAt: string | null;
+  claimEligibleAt: string | null;
+}>;
+const ownershipSources = new WeakMap<
+  LockedRealmOwnershipSource,
+  {
+    tx: CommandTransaction;
+    command: CurrentCommand;
+    orphanedAt: string | null;
+    claimEligibleAt: string | null;
+  }
+>();
+
+/** Native source data, including removed Realms for mechanical erasure cleanup. */
+export async function lockRealmOwnershipSource(
+  tx: CommandTransaction,
+  realmId: string,
+): Promise<LockedRealmOwnershipSource | null> {
+  const command = currentCommand(tx);
+  const route = routeOf(realmId);
+  if (route === null || command.partition !== partitionOf(route)) throw new RealmInputError();
+  const row = await lockSource.run(tx, { route, realm: realmId, at: authoritativeTimeValue(command.time) });
+  if (!row) return null;
+  const state = realmContinuityView(row);
+  const source = Object.freeze<LockedRealmOwnershipSource>({
+    [lockedOwnership]: true,
+    realmId,
+    ownershipState: state.ownershipState,
+    // Preserve PostgreSQL microseconds; UI normalization is not source identity.
+    orphanedAt: row.orphaned_at,
+    claimEligibleAt: row.claim_eligible_at,
+  });
+  ownershipSources.set(source, { tx, command, orphanedAt: row.orphaned_at, claimEligibleAt: row.claim_eligible_at });
+  return source;
+}
+
+/** Accounts' actually applied native erasure result is the sole decision authority. */
+export async function applyRealmOwnershipSuccession(
+  tx: CommandTransaction,
+  source: LockedRealmOwnershipSource,
+  erasedAccountId: string,
+): Promise<RealmContinuity> {
+  const binding = ownershipSources.get(source);
+  if (!binding || binding.tx !== tx || binding.command !== currentCommand(tx) || routeOf(erasedAccountId) === null)
+    throw new ProblemError('conflict', { detail: 'Realm ownership source is not locked by this command.' });
+  const applied = await readAppliedRealmErasureSuccession(tx, { realmId: source.realmId, accountId: erasedAccountId });
+  if (!applied)
+    throw new ProblemError('dependency_unavailable', { detail: 'Native Realm erasure succession is not applied.' });
+  const route = routeOf(source.realmId);
+  if (route === null) throw new RealmInputError();
+  const [row] = await applySuccession.run(tx, {
+    route,
+    realm: source.realmId,
+    state: applied.state,
+    orphaned: applied.orphanedAt,
+    eligible: applied.claimEligibleAt,
+    original_state: source.ownershipState,
+    original_orphaned: binding.orphanedAt,
+    original_eligible: binding.claimEligibleAt,
+  });
+  if (!row)
+    throw new ProblemError('conflict', { detail: 'Native Realm succession changed its original orphan episode.' });
+  ownershipSources.delete(source);
+  return realmContinuityView(row);
+}
 
 export class RealmReadOnlyError extends ProblemError {
   constructor() {
@@ -183,31 +259,4 @@ export async function requestRealmClaim(deps: RealmDependencies, actor: Actor, r
       };
     },
   );
-}
-
-// Provisional declarations for the Content-owned native implementation. These ports
-// deliberately refuse work until that implementation lands; Access never writes
-// Community state or substitutes structural source evidence.
-declare const lockedOwnership: unique symbol;
-export type LockedRealmOwnershipSource = Readonly<{
-  readonly [lockedOwnership]: true;
-  realmId: string;
-  ownershipState: 'owned' | 'orphaned';
-  orphanedAt: string | null;
-  claimEligibleAt: string | null;
-}>;
-
-export async function lockRealmOwnershipSource(
-  _tx: CommandTransaction,
-  _realmId: string,
-): Promise<LockedRealmOwnershipSource | null> {
-  throw new Error('Native Realm ownership source unavailable: Content implementation has not landed');
-}
-
-export async function applyRealmOwnershipSuccession(
-  _tx: CommandTransaction,
-  _source: LockedRealmOwnershipSource,
-  _erasedAccountId: string,
-): Promise<RealmContinuity> {
-  throw new Error('Native Realm ownership state application unavailable: Content implementation has not landed');
 }

@@ -5,6 +5,23 @@ import { ContentIdSchema, sitemapPageSchema } from '../content/schemas.ts';
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 
+export const realmClaimApprovalResponseSchema = t.Object(
+  {
+    claim: t.Object(
+      {
+        realmId: id,
+        requestId: id,
+        claimantAccountId: id,
+        state: t.Literal('owned'),
+        orphanedAt: t.String({ format: 'date-time' }),
+        approvedAt: t.String({ format: 'date-time' }),
+      },
+      closed,
+    ),
+  },
+  closed,
+);
+
 export const SitemapCanonicalDestinationSchema = t.Union([
   t.Object({ kind: t.Literal('space'), spaceId: ContentIdSchema, address: t.String() }, closed),
   t.Object({ kind: t.Literal('realm'), realmId: ContentIdSchema }, closed),

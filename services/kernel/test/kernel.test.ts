@@ -74,6 +74,7 @@ const typed = [
   'GET /v1/realms/:realmId/lifecycle',
   'POST /v1/realms/:realmId/removal',
   'POST /v1/realms/:realmId/restoration',
+  'POST /v1/realms/:realmId/claimRequests/:requestId/$approve',
   'POST /v1/realms/:realmId/publications/:subjectId/$withdraw',
   'POST /v1/realms/:realmId/publications/:subjectId/$reject',
   'POST /v1/realms/:realmId/publications',
