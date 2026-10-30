@@ -15,6 +15,10 @@ import {
   type NativeProcessIdentity,
   type NativeProcessOwnership,
 } from './lifecycle.ts';
+import { createCommerceWork } from '../../../../services/kernel/src/commerce/enqueue.ts';
+import { readCommerceConfig } from '../../../../services/kernel/src/commerce/config.ts';
+import { createStripePort } from '../../../../services/kernel/src/commerce/stripe.ts';
+import { createWorkClient, type WorkClient } from '../../../../services/kernel/src/work/client.ts';
 
 export type NativeCredentials = { authorization: string; cookie?: string };
 export type NativeKernelRequest = {
@@ -70,6 +74,17 @@ type WebProcess = {
   identity: NativeProcessIdentity;
   stateDirectory: string;
   exited: Promise<void>;
+};
+export type NativeWebStackOptions = {
+  /** Restrict test-only native write-rate changes to an explicitly configured fixture stack. */
+  writeRateOverrides?: string;
+  /** Enable the production Commerce composition against an owned Stripe API fixture. */
+  commerce?: {
+    apiHost: string;
+    webhookSecret: string;
+    successUrl: string;
+    cancelUrl: string;
+  };
 };
 
 const webRoot = resolve(import.meta.dir, '../..');
@@ -291,6 +306,7 @@ async function startStack(): Promise<
   let consentServer: { env: Record<string, string>; close(): Promise<void> } | undefined;
   let closeAuth: (() => Promise<void>) | undefined;
   let closePageWorkflows: (() => Promise<void>) | undefined;
+  let commerceWorkClient: Promise<WorkClient> | undefined;
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let stopped: Promise<void> | undefined;
   let peakMemory = process.memoryUsage().rss;
@@ -353,6 +369,10 @@ async function startStack(): Promise<
       ]);
       await attempt(() => consentServer?.close());
       consentServer = undefined;
+      if (commerceWorkClient)
+        await attempt(async () => {
+          await (await commerceWorkClient!).close();
+        });
       webProcess = undefined;
       kernelServer = undefined;
       durableWorker = undefined;
@@ -511,11 +531,31 @@ async function startStack(): Promise<
     // The semantic harness reads DATABASE_URL during module evaluation.
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
+    const commerce = process.env.NATIVE_WEB_COMMERCE === '1' ? readCommerceConfig(process.env) : null;
     let kernel: ReturnType<typeof createKernel> | undefined;
     reportStackProgress('Native web stack startup: creating native kernel and Auth fixtures');
     driver = await createSemanticDriver(
       (dependencies) => {
-        kernel = createKernel(dependencies);
+        if (!commerce) {
+          kernel = createKernel(dependencies);
+          return kernel;
+        }
+        const databaseUrl = dependencies.pool.options.connectionString;
+        if (typeof databaseUrl !== 'string') throw new Error('Native Commerce needs the owned kernel database URL');
+        commerceWorkClient = createWorkClient(databaseUrl);
+        void commerceWorkClient.catch(() => {});
+        kernel = createKernel({
+          ...dependencies,
+          commerce: {
+            ...commerce,
+            stripe: createStripePort({ ...commerce.stripe, clock: () => new Date() }),
+            work: {
+              async enqueueStripeEvent(ref) {
+                await createCommerceWork(await commerceWorkClient!).enqueueStripeEvent(ref);
+              },
+            },
+          },
+        });
         return kernel;
       },
       {
@@ -855,7 +895,7 @@ function reportOwnedProcessGroup(label: string, child: ChildProcess, stateDirect
   } satisfies HostReply);
 }
 
-export async function startNativeWebStack(options: { writeRateOverrides?: string } = {}): Promise<NativeWebStack> {
+export async function startNativeWebStack(options: NativeWebStackOptions = {}): Promise<NativeWebStack> {
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Native web stack startup requires an active native test lifecycle');
   lifecycle.assertOpen('start native web stack');
@@ -865,7 +905,21 @@ export async function startNativeWebStack(options: { writeRateOverrides?: string
   const stateDirectories = new Set<string>();
   let nativeStack: NativeWebStack | undefined;
   const ownedGroups = new Map<number, NativeProcessOwnership>();
-  const hostEnvironment: NodeJS.ProcessEnv = { ...process.env, NATIVE_WEB_STACK_HOST: '1' };
+  const hostEnvironment: NodeJS.ProcessEnv = {
+    ...process.env,
+    NATIVE_WEB_STACK_HOST: '1',
+    NATIVE_WEB_COMMERCE: options.commerce ? '1' : '0',
+    ...(options.commerce
+      ? {
+          STRIPE_SECRET_KEY: 'sk_test_native_purchases',
+          STRIPE_MANAGED_PAYMENTS: 'false',
+          STRIPE_API_HOST: options.commerce.apiHost,
+          STRIPE_WEBHOOK_SECRETS: options.commerce.webhookSecret,
+          CHECKOUT_SUCCESS_URL: options.commerce.successUrl,
+          CHECKOUT_CANCEL_URL: options.commerce.cancelUrl,
+        }
+      : {}),
+  };
   // Rate changes apply only to this explicitly configured native fixture stack.
   if (options.writeRateOverrides) hostEnvironment.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES = options.writeRateOverrides;
   else delete hostEnvironment.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;

@@ -72,7 +72,9 @@ This transport is for website uploads; imported covers use content's own server-
 
 Viewer credentials come from an explicit `Authorization` header, forwarded unchanged, or from the person's server-side
 session. Access and refresh tokens stay in the Worker; the browser holds an opaque `__Host-rezics_session` cookie.
-Only routes that use the credential resolve tokens, currently `/media` and `/media/…`, `POST /checkout`, and order reads.
+Only routes that use the credential resolve tokens, currently `/media` and `/media/…`, `POST /checkout`, order reads,
+and the signed-in buyer's private `/orders` history. The history page requests one bounded `GET /v1/orders` cursor page
+per visit and links each captured order to its existing known-ID page.
 After hydration, the shell reads session presence, lifetime and CSRF token once through the private browser session query,
 without refreshing tokens or contacting Auth. The root and public home, Space and board renders do not read session or preference cookies. Missing, invalid, expired or unreadable sessions render as signed
 out without changing the cookie. Media requests, checkout start and order reads resolve before calling the kernel, so
@@ -101,7 +103,7 @@ Configure these variables in the environment of `bun run dev`:
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
-  `presentation:activate`; checkout start needs `order:create` and the order return page needs `order:read`; the settings page needs
+  `presentation:activate`; checkout start needs `order:create` and order pages and purchase history need `order:read`; the settings page needs
   `account:read`, `account:update`, `collection:read` and `collection:update` (for the owner Collection list and visibility writes).
   Auth's create-organization and self-deletion pages also need the exact operation scopes `organization:create`,
   `account:manage` and `account:delete`.

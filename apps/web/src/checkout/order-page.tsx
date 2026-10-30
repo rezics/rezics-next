@@ -185,6 +185,16 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
           {m.order_refresh()}
         </Button>
       )}
+      <Exposure operation="order.list">
+        <p>
+          <a
+            href={`/${locale}/orders`}
+            className="inline-flex min-h-10 items-center text-primary underline underline-offset-4"
+          >
+            {m.nav_orders()}
+          </a>
+        </p>
+      </Exposure>
     </article>
   );
 }

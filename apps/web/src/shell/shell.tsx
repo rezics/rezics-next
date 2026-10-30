@@ -35,6 +35,7 @@ import {
   Monitor,
   Moon,
   Search,
+  ReceiptText,
   Settings,
   ShieldCheck,
   Sun,
@@ -73,6 +74,7 @@ const messages = {
   shell_theme_dark: m.shell_theme_dark,
   nav_home: m.nav_home,
   nav_library: m.nav_library,
+  nav_orders: m.nav_orders,
   nav_inbox: m.nav_inbox,
   nav_search: m.nav_search,
   shell_open_navigation: m.shell_open_navigation,
@@ -88,17 +90,23 @@ const messages = {
 const destinations = [
   { to: '/', message: messages.nav_home, icon: House, phone: true },
   { to: '/search', message: messages.nav_search, icon: Search, phone: true },
-  { to: '/library', message: messages.nav_library, icon: Library, phone: true, signedIn: true },
+  { to: '/library', message: messages.nav_library, icon: Library, phone: true, signedIn: 'library' },
+  { to: '/orders', message: messages.nav_orders, icon: ReceiptText, phone: true, signedIn: 'orders' },
 ] as const;
 
 function destinationCurrent(pathname: string, to: (typeof destinations)[number]['to']): boolean {
   if (to === '/library') return pathname === '/library' || pathname.startsWith('/library/');
+  if (to === '/orders') return pathname === '/orders' || pathname.startsWith('/orders/');
   return pathname === to;
 }
 
 function useOfferedDestinations(session: ShellSession) {
-  const admitted = useOperation('library_entry.list');
-  return destinations.filter((item) => !('signedIn' in item) || (session === 'signed-in' && admitted));
+  const libraryAdmitted = useOperation('library_entry.list');
+  const ordersAdmitted = useOperation('order.list');
+  return destinations.filter((item) => {
+    if (!item.signedIn) return true;
+    return session === 'signed-in' && (item.signedIn === 'library' ? libraryAdmitted : ordersAdmitted);
+  });
 }
 const headerControlClass =
   'h-9 rounded-full border border-border/60 focus-visible:border-primary focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background';

@@ -8,7 +8,7 @@ type GuardContext = {
 };
 
 const signedInPaths = [
-  /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders\/[^/]+(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/|$)|moderation\/decisions\/[^/]+(?:\/|$))/,
+  /^\/(?:library(?:\/|$)|settings(?:\/|$)|collections\/new(?:\/|$)|boards\/[^/]+\/new(?:\/|$)|orders(?:\/|$)|curate\/presentation(?:\/|$)|realms(?:\/|$)|moderation\/decisions\/[^/]+(?:\/|$))/,
 ];
 
 /** Whether a localized route pathname belongs to a page protected by `requireSignedIn`. */
