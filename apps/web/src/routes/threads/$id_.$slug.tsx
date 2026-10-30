@@ -393,7 +393,7 @@ function PostSlot({
         anchorId={anchorId}
         itemRef={itemElement}
         menuButton={menuButton}
-        minHeight={removedMinHeight}
+        {...(removedMinHeight === undefined ? {} : { minHeight: removedMinHeight })}
         restoreError={restoreError}
         onCopyLink={copyLink}
         {...(post.availability === 'erased' && post.restorableUntil
