@@ -3,6 +3,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../src/database/pool.ts';
 import { createKernel, type Kernel } from '../src/http/kernel.ts';
 import { openApiDocument } from '../src/http/openapi.ts';
+import { actionCatalogue } from '../src/http/request.ts';
 import { bootstrapRelease } from '../src/semantic/definitions.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -296,6 +297,25 @@ test('semantic editorial listings document their default page size', () => {
   expect(paths['/v1/subjects/{id}/relations']!.get!.parameters).toContainEqual(
     expect.objectContaining({ name: 'limit', in: 'query', schema: expect.objectContaining({ default: 25 }) }),
   );
+});
+
+test('mounted action catalogues contain only their declared actions and never infer account management', () => {
+  const mounted = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
+  expect(mounted.has('account:manage')).toBe(false);
+  for (const action of new Set(['account:update', 'custom:write', 'account:manage', ...mounted.keys()])) {
+    const catalogue = actionCatalogue({
+      routes: [
+        {
+          method: 'PATCH',
+          path: '/custom',
+          hooks: {
+            detail: { operationId: 'custom.write', 'x-action': action, security: [{ bearerAuth: [] }] },
+          },
+        },
+      ],
+    });
+    expect([...catalogue.keys()]).toEqual([action]);
+  }
 });
 
 test('subject HTTP refuses an unlicensed document and any media value before attempting storage', async () => {

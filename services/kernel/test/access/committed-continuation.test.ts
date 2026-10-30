@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
@@ -58,11 +59,7 @@ const routeKey = randomBytes(32);
 const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
 const stagingKey = randomBytes(32);
 const secret = randomBytes(48).toString('base64url');
-const actions = new Map([
-  ...LIFECYCLE_ACTIONS,
-  ...COMMITTED_CONTINUATION_ACTIONS,
-  ...scopes.map((scope) => [scope, { anonymous: false }] as const),
-]);
+const actions = new Map([...LIFECYCLE_ACTIONS, ...COMMITTED_CONTINUATION_ACTIONS, ...actionDeclarations(scopes)]);
 let frozen: Date | null = null;
 let expiryGovernor: Awaited<ReturnType<typeof person>> | undefined;
 const clock = () => frozen ?? new Date();

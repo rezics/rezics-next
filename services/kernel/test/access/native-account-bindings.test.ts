@@ -20,6 +20,16 @@ afterAll(async () => {
   }
 });
 
+test('the native fixture refuses a caller declaration that drops internal delete replay metadata', async () => {
+  await expect(
+    nativeFixture(pool, undefined, {
+      database: f.database,
+      privateKey: f.privateKey,
+      actions: new Map([['account:delete', { anonymous: false }]]),
+    }),
+  ).rejects.toThrow('account:delete: declaration conflicts with internal Access action');
+});
+
 test('ordinary durable registration composes real pending receipt, Auth credentials and activation across host restart', async () => {
   const ref = await f.host.workflows.beginRegistration({ key: 'ordinary-pending', handle: 'ordinary_pending' });
   expect(await f.bindings.trustedAccess.readAccount(ref.accountId)).toBeNull();

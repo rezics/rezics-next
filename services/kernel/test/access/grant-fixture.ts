@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, importJWK, SignJWT, decodeJwt } from 'jose';
 import { createAuthService } from '@rezics/auth';
@@ -75,7 +76,7 @@ export async function grantFixture(extraActions: readonly string[] = []) {
     await reader.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
   }
   const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    actions: actionDeclarations(actions),
     auth: {
       issuer,
       audience,

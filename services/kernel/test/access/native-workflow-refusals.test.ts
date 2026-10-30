@@ -134,6 +134,41 @@ test('other native denials are sanitized while ordinary failures have no status'
   f.bindings.workflowPorts.tombstone = tombstone;
 });
 
+test('workflow approval keeps internal failures and unavailability outside the authorization refusal shape', async () => {
+  for (const kind of ['internal', 'unavailable'] as const) {
+    const key = `native-refusal-boundary-${kind}`;
+    const account = await f.person(key);
+    const operationKey = `${key}-delete`;
+    const input = await approveDelete(operationKey, account.accountId, await bearer(key));
+    const prepare = f.access.prepare!.bind(f.access);
+    let calls = 0;
+    const secret = `private-${kind}-evidence`;
+    f.access.prepare = async (...args) => {
+      // The workflow's entry check passes; the protected tombstone step then
+      // encounters the injected boundary condition.
+      if (++calls === 2) {
+        if (kind === 'unavailable') throw Object.assign(new Error(secret), { status: 503 });
+        throw new Error(secret);
+      }
+      return prepare(...args);
+    };
+    const before = await workflowReceipts();
+    try {
+      const outcome = f.host.workflows.deleteAccount(input);
+      if (kind === 'unavailable') await expect(outcome).rejects.toMatchObject({ status: 503 });
+      else await expect(outcome).rejects.toThrow('Account workflow step failed: authorize-account-operation');
+      const persisted = await stepError(operationKey, 'authorize-account-operation');
+      expect(persisted).not.toContain(secret);
+      if (kind === 'unavailable') expect(persisted).toContain('"status":503');
+      else expect(persisted).not.toContain('"status"');
+      expect((await stateOf(account.accountId))!.state).toBe('active');
+      expect(await workflowReceipts()).toBe(before);
+    } finally {
+      f.access.prepare = prepare;
+    }
+  }
+});
+
 test('the native grant HTTP denial remains forbidden', async () => {
   const key = 'native-refusal-http';
   const account = await f.person(key);

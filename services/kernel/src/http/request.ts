@@ -170,9 +170,6 @@ export function actionCatalogue(app: RouteApp): ActionCatalogue {
       ...(declaredTypes.length ? { 'x-resource-types': declaredTypes } : {}),
     });
   }
-  // Account updates authorize an automated account through management of its operator.
-  if (catalogue.has('account:update') && !catalogue.has('account:manage'))
-    catalogue.set('account:manage', { anonymous: false });
   // Unsealed applications may still mount routes. Cache only the final snapshot.
   if (app instanceof MountedRouteCatalogue) actionCatalogues.set(app, catalogue);
   return catalogue;

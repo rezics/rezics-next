@@ -18,7 +18,12 @@ import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  IdempotencyConflictError,
+  runCommand,
+  type CommandAuthorization,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { readAccount } from './account-data.ts';
@@ -26,6 +31,7 @@ import {
   APPROVAL_REFERENCE_PURPOSE,
   approvalRowDigest,
   readApprovedIdentity,
+  ApprovalIdentityDeniedError,
   ApprovalIdentityUnavailableError,
   verifiedKernelExpiry,
   type ApprovalRow,
@@ -836,7 +842,13 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       throwEvidenceFailure(error);
       if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
         throw error;
-      throw denied();
+      if (error instanceof ApprovalIdentityDeniedError) throw denied();
+      if (error instanceof GrantDeniedError) throw denied();
+      if (error instanceof IdempotencyConflictError) throw denied();
+      // Authorization guards above already emit WorkflowApprovalDeniedError.
+      // Preserve other failures so an internal or infrastructure error cannot
+      // be reclassified as an authorization refusal at this boundary.
+      throw error;
     }
   }
   const native: CredentialWorkflowPorts = {
@@ -987,7 +999,10 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         throwEvidenceFailure(error);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
-        throw denied();
+        if (error instanceof ApprovalIdentityDeniedError) throw denied();
+        if (error instanceof GrantDeniedError) throw denied();
+        if (error instanceof IdempotencyConflictError) throw denied();
+        throw error;
       }
     },
     async resolveForCaller(
@@ -1007,7 +1022,10 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         throwEvidenceFailure(error);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
-        throw denied();
+        if (error instanceof ApprovalIdentityDeniedError) throw denied();
+        if (error instanceof GrantDeniedError) throw denied();
+        if (error instanceof IdempotencyConflictError) throw denied();
+        throw error;
       }
     },
   };

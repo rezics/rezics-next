@@ -1,6 +1,6 @@
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -23,6 +23,13 @@ const password = randomBytes(24).toString('base64url');
 let failRelease = false;
 let failErase = false;
 let failRevoke: string | undefined;
+let failAuthorizationAt: number | undefined;
+let authorizationFailure: Error | undefined;
+let authorizationCalls = 0;
+const workflowId = (key: string) =>
+  `accounts:${createHash('sha256')
+    .update(JSON.stringify(`operation:${key}`))
+    .digest('hex')}`;
 async function result<T>(kind: string, key: string, value: T) {
   calls.push(kind);
   const row = (
@@ -83,6 +90,8 @@ const ports: AccountWorkflowPorts = {
     return outcome;
   },
   async authorizeOperation(_reference, operation) {
+    authorizationCalls += 1;
+    if (failAuthorizationAt === authorizationCalls && authorizationFailure) throw authorizationFailure;
     return {
       actor: { accountId: 'boundary-approved-human' },
       async revokeSessions() {
@@ -565,6 +574,35 @@ test('a refusal is recognized by its status, whatever class the binding gives it
     ports.reserveHandle = reserveHandle;
   }
 }, 15000);
+
+test('DBOS preserves only typed boundary status while sanitizing the original failure', async () => {
+  for (const status of [401, 403, 503] as const) {
+    const key = `boundary-status-${status}`;
+    const secret = `private-boundary-${status}`;
+    const failure = Object.assign(new Error(secret), { status });
+    authorizationFailure = failure;
+    authorizationCalls = 0;
+    failAuthorizationAt = 2;
+    try {
+      await expect(
+        workflows.createOrganization({ key, authorization: 'approved-organization', handle: `boundary-${status}` }),
+      ).rejects.toMatchObject({ status });
+      const row = (
+        await system.query<{ error: unknown }>(
+          `SELECT error FROM dbos.operation_outputs WHERE workflow_uuid=$1 AND function_name='accounts.organization-key'`,
+          [workflowId(key)],
+        )
+      ).rows[0];
+      expect(row).toBeDefined();
+      const persisted = String(row!.error);
+      expect(persisted).toContain(`"status":${status}`);
+      expect(persisted).not.toContain(secret);
+    } finally {
+      failAuthorizationAt = undefined;
+      authorizationFailure = undefined;
+    }
+  }
+});
 
 test('an owner who leaves is released under the committed change and answered from the workflow outcome', async () => {
   const { authorizeOperation, setMembership, releaseMembershipCoordination, actorAccountId } = ports;

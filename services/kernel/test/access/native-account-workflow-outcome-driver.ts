@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { AsyncResource } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
@@ -83,11 +84,7 @@ const routeKey = randomBytes(32);
 const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
 const stagingKey = randomBytes(32);
 const hostSecret = randomBytes(48).toString('base64url');
-const actions = new Map([
-  ...LIFECYCLE_ACTIONS,
-  ...COMMITTED_CONTINUATION_ACTIONS,
-  ...scopes.map((scope) => [scope, { anonymous: false }] as const),
-]);
+const actions = new Map([...LIFECYCLE_ACTIONS, ...COMMITTED_CONTINUATION_ACTIONS, ...actionDeclarations(scopes)]);
 let admin = undefined as unknown as Pool;
 let kernel = undefined as unknown as ReturnType<typeof createPool>;
 let facts = undefined as unknown as Pool;
@@ -150,13 +147,18 @@ DBOS.registerStep = (<This, Args extends unknown[], Return>(
   return originalRegisterStep<This, Args, Return>(wrapped, config);
 }) as typeof DBOS.registerStep;
 const deniedError = (error: unknown) =>
-  typeof error === 'object' && error !== null && 'status' in error && error.status === 403;
+  typeof error === 'object' && error !== null && 'status' in error && (error.status === 401 || error.status === 403);
 const refused = async <T>(work: () => Promise<T>): Promise<T | { outcome: 'denied' }> => {
   try {
     return await work();
   } catch (error) {
-    if (deniedError(error)) return { outcome: 'denied' };
-    throw error;
+    if (
+      deniedError(error) ||
+      (evidenceUnavailable && typeof error === 'object' && error !== null && 'status' in error && error.status === 503)
+    )
+      return { outcome: 'denied' };
+    const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : 'unclassified';
+    throw new Error(`Native workflow boundary returned unclassified status ${String(status)}`);
   }
 };
 const required = <T>(value: T | null | undefined, message: string): T => {
@@ -306,7 +308,7 @@ async function buildHost() {
           await hookContext.runInAsyncScope(() => hook.run());
         }
         if (evidenceUnavailable)
-          throw Object.assign(new Error('Native authority evidence unavailable'), { status: 403 });
+          throw Object.assign(new Error('Native authority evidence unavailable'), { status: 503 });
         return evidence;
       };
       accessPort.prepare = wrappedPrepare;
@@ -1428,7 +1430,7 @@ export async function createNativeAccountWorkflowDriver(): Promise<NativeAccount
         const prepare = required(access.prepare, 'Access has no authoritative evidence reader');
         const failClosed = async (...args: [Actor, string, Resource, AccessContext]) => {
           await prepare(...args);
-          throw Object.assign(new Error('Native authority evidence unavailable'), { status: 403 });
+          throw Object.assign(new Error('Native authority evidence unavailable'), { status: 503 });
         };
         access.prepare = failClosed;
         restoreEvidenceReader = () => {

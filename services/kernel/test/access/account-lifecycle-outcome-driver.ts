@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
@@ -135,11 +136,7 @@ async function openDriver(): Promise<AccountLifecycleDriver> {
   const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
   const stagingKey = randomBytes(32);
   const secret = randomBytes(48).toString('base64url');
-  const actions = new Map([
-    ...LIFECYCLE_ACTIONS,
-    ...COMMITTED_CONTINUATION_ACTIONS,
-    ...scopes.map((scope) => [scope, { anonymous: false }] as const),
-  ]);
+  const actions = new Map([...LIFECYCLE_ACTIONS, ...COMMITTED_CONTINUATION_ACTIONS, ...actionDeclarations(scopes)]);
   const signing = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)) } as JWK;
   signing.kid = `lifecycle-${suffix}`;
 

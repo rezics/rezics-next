@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   createAuthHost,
@@ -27,11 +28,7 @@ const clientId = 'session-revocation-client';
 const password = 'session revocation original password';
 const nextPassword = 'session revocation replacement password';
 const scopes = [...LIFECYCLE_ACTIONS.keys(), 'account:suspend'];
-const actions = new Map([
-  ...LIFECYCLE_ACTIONS,
-  ...WORKFLOW_APPROVAL_ACTIONS,
-  ...scopes.map((scope) => [scope, { anonymous: false }] as const),
-]);
+const actions = new Map([...LIFECYCLE_ACTIONS, ...WORKFLOW_APPROVAL_ACTIONS, ...actionDeclarations(scopes)]);
 const referenceKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(41)]]) };
 const deliveries = new Map<string, ReturnType<typeof Promise.withResolvers<string>>>();
 const database = testDatabase();

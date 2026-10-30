@@ -35,6 +35,11 @@ Composition is additive: an identical mounted declaration keeps its metadata. A 
 resource-type declaration throws an error naming the action. The default kernel validates this at startup even
 though it builds Access lazily. Internal entries do not become HTTP routes or alter the mounted route catalogue.
 
+Test compositions that construct declarations from scope names use the exported internal metadata, including
+`account:delete`'s replay policy. The native account fixture passes the same complete declarations to Access and
+the operator bindings so restoring an opening uses the same resource-role catalogue. Explicit caller declarations
+remain subject to the production conflict check; fixture merging must not conceal a conflicting declaration.
+
 Registration grants no authority. Ordinary grants, account and principal evidence still apply, and a session's
 consented client scopes must include the checked action. This catalogue neither registers clients nor widens their
 scopes. Auth's trusted `registerClient` and `registerWebsiteClient` inputs own registered scopes; website registration
@@ -1137,7 +1142,9 @@ and organization-only `speakersListed`, preserves omitted values, clears nullabl
 requires the account's own available avatar media and existing account or operator management authority, and uses the
 ordinary account-command idempotency and problem responses; unknown fields and malformed values answer 400
 `invalid_request`.
-The mounted action catalogue includes the authenticated `account:manage` operand needed for automated profiles.
+Automated profiles authorize the operator through the internal `account:manage` declaration. Mounting this route
+does not add that scope to the mounted catalogue: the client's Auth composition must explicitly include it, and
+the operator's session must consent to it.
 
 `GET /v1/accounts` accepts exactly one of `ids` (1–100 comma-separated account UUIDs, deduplicated in first-request
 order), `handle` (one handle, normalized to lowercase using the lookup rules), or `agent` (one catalogue subject UUID).

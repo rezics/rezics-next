@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { AsyncResource } from 'node:async_hooks';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
@@ -201,7 +202,7 @@ export async function createAccountAuthorizationDriver(): Promise<AccountAuthori
   const stagingKey = randomBytes(32);
   const hostSecret = randomBytes(48).toString('base64url');
   const routeKey = testRouteKey();
-  const actions = new Map([...LIFECYCLE_ACTIONS, ...scopes.map((scope) => [scope, { anonymous: false }] as const)]);
+  const actions = new Map([...LIFECYCLE_ACTIONS, ...actionDeclarations(scopes)]);
   const signingPair = await generateKeyPair('ES256', { extractable: true });
   const signingKey = { ...(await exportJWK(signingPair.privateKey)), kid: `account-authz-${suffix}` };
   const websitePair = await generateKeyPair('ES256', { extractable: true });

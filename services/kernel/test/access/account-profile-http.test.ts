@@ -13,7 +13,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { testKernel, type TestKernel } from '../support/test-kernel.ts';
-import { issuer, nativeFixture, scopes } from './native-account-bindings-fixture.ts';
+import { cookies, issuer, nativeFixture, password, scopes } from './native-account-bindings-fixture.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
@@ -301,6 +301,34 @@ test("another account and an anonymous request change nothing and are refused as
     expect(result.body).toMatchObject({ code, effect_status: 'not_applied' });
     expect(await profile(owner)).toEqual(before);
   }
+});
+
+test('an operator session without consented account management cannot write its automated profile', async () => {
+  const bot = await auth.automated('profile-http-scope-bot', other);
+  const handle = 'profile_http_scope_bot';
+  const before = await profile({ handle });
+  const signed = await auth.request('/signin', {
+    email: 'profile-http-other@ordinary.test',
+    password,
+    client_id: 'ordinary-test-client',
+    scope: ['account:update'],
+  });
+  expect(signed.status).toBe(200);
+  const token = await auth.request('/token', {}, cookies(signed));
+  expect(token.status).toBe(200);
+  const { access_token: bearer } = (await token.json()) as { access_token: string };
+  const key = Bun.randomUUIDv7();
+  const result = await patch(bot, { displayName: 'Unconsented change' }, bearer, key);
+  expect(result.status).toBe(403);
+  expect(result.body).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
+  expect(await profile({ handle })).toEqual(before);
+  expect(await events(bot.accountId, 'com.rezics.access.account-updated.v1')).toHaveLength(0);
+  const receipt = await db.admin.query(
+    `SELECT transaction_id FROM core.receipt
+     WHERE principal_id=$1 AND command_kind='access.account-updated' AND idempotency_key=$2`,
+    [other.accountId, `${routeOf(bot.accountId)}:${key}`],
+  );
+  expect(receipt.rowCount).toBe(0);
 });
 
 test('speakersListed is accepted only for an organization', async () => {

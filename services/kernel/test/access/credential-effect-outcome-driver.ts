@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { AsyncResource } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
@@ -122,7 +123,7 @@ export async function createNativeCredentialEffectDriver(): Promise<
   const websitePair = await generateKeyPair('ES256', { extractable: true });
   const redirectUri = `${issuer}/website/callback`;
   const signingKey = { ...(await exportJWK(pair.privateKey)), kid: 'native-credential-host' };
-  const actions = new Map([...LIFECYCLE_ACTIONS, ...scopes.map((scope) => [scope, { anonymous: false }] as const)]);
+  const actions = new Map([...LIFECYCLE_ACTIONS, ...actionDeclarations(scopes)]);
   const kernel = () => required(pool, 'Kernel database is closed');
   const auth = () => required(authPool, 'Auth database is closed');
   const currentHost = () => required(host, 'Auth host is stopped');

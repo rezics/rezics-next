@@ -114,14 +114,21 @@ function isUniqueViolation(error: unknown): boolean {
  * the 401/403 status. Recognized by this shape, never by class name, because
  * the binding rewrites the kernel's own error classes. */
 type Refusal = { readonly status: 401 | 403 };
+type WorkflowBoundaryStatus = { readonly status: 401 | 403 | 503 };
 export function isRefusal(error: unknown): error is Refusal {
   return (
     typeof error === 'object' && error !== null && 'status' in error && (error.status === 401 || error.status === 403)
   );
 }
+function isWorkflowBoundaryStatus(error: unknown): error is WorkflowBoundaryStatus {
+  return isRefusal(error) || (typeof error === 'object' && error !== null && 'status' in error && error.status === 503);
+}
 let owner: object | undefined;
 function denied(): never {
   throw new Error('Account workflow denied');
+}
+function refused(): never {
+  throw Object.assign(new Error('Account workflow denied'), { status: 403 as const });
 }
 function executableOperation(input: AccountOperation): ExecutableAccountOperation {
   if (input.kind === 'transfer-acceptance') denied();
@@ -306,9 +313,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       executable.authorization.length === 0 ||
       executable.authorization.length > 4096
     )
-      denied();
+      refused();
     const current = await currentOperation(executable);
-    if (!('authorization' in current)) denied();
+    if (!('authorization' in current)) refused();
     return required(access.authorizeOperation)(current.authorization, current);
   }
   async function currentOperation(input: AccountOperation): Promise<ExecutableAccountOperation> {
@@ -323,7 +330,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       ).rows[0]?.request;
       if (stored) {
         const executable = executableOperation(stored);
-        if (JSON.stringify(businessOperation(executable)) !== JSON.stringify(businessOperation(current))) denied();
+        if (JSON.stringify(businessOperation(executable)) !== JSON.stringify(businessOperation(current))) refused();
         current = executable;
       }
     }
@@ -342,9 +349,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           return await fn(...args);
         } catch (error) {
           const failure = new Error(stepFailureMessage(name));
-          // Persist only the native refusal status, never the command's secret
-          // input, permission context or original error in a durable step.
-          if (isRefusal(error)) throw Object.assign(failure, { status: 403 });
+          // Persist only a refusal or unavailable status, never the command's
+          // secret input, permission context or original error in a durable step.
+          if (isWorkflowBoundaryStatus(error)) throw Object.assign(failure, { status: error.status });
           throw failure;
         }
       },

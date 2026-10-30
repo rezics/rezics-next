@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   createAuthHost,
@@ -39,7 +40,7 @@ const pool = createPool(process.env.DATABASE_URL!);
 const issuer = 'https://client-management.auth.test';
 const audience = 'https://client-management.api.test';
 const scopes = ['account:manage', 'account:read', 'access:grant', ...WORKFLOW_APPROVAL_ACTIONS.keys()].sort();
-const actions = new Map([...LIFECYCLE_ACTIONS, ...scopes.map((scope) => [scope, { anonymous: false }] as const)]);
+const actions = new Map([...LIFECYCLE_ACTIONS, ...actionDeclarations(scopes)]);
 const referenceKeys = { current: 1, keys: new Map([[1, crypto.getRandomValues(new Uint8Array(32))]]) };
 let service: AuthService;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
