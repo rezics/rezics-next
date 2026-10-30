@@ -231,6 +231,7 @@ const typed = [
   'POST /v1/grants/$change',
   'POST /v1/grants/$revoke',
   'POST /v1/roleGrants',
+  'POST /v1/roleGrants/$transferRealmOwner',
   'POST /v1/roleGrants/$change',
   'POST /v1/roleGrants/$revoke',
   'POST /v1/realms/:realmId/boards',
