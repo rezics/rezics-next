@@ -115,6 +115,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
   // peers, native credentials/clients, unrelated AND measured-owner history,
   // recovery bindings and expired verifications together, without planner hints.
   async function grow(database: GrowthDatabase, scale: number, previous: number) {
+    process.env.GROWTH_PROFILE ??= '/dev/stdout';
     const range = [previous * 1024 + 1, scale * 1024];
     await database.admin.query(
       `INSERT INTO "user" (id,name,email,"emailVerified")
@@ -439,11 +440,9 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       expect(row).toContain(`Q=${cost.statements}`);
       expect(row).toContain(`${cost.rows} examined rows`);
     }
-    // R is examined work, not the counter population. L includes every touched
-    // table in the whole-handler capture, not just clients and counter keys.
-    expect(readme).toContain('R counts examined relation rows, B shared-block accesses');
-    expect(readme).toContain('L is the sum of log(2 + cardinality) over touched tables.');
-    expect(row).toContain('R=O(1), B=O(L)');
+    expect(row).toContain('unrelated counter keys C');
+    expect(row).toContain('expired verifications R');
+    expect(row).toContain('R=O(1), B=O(log C + log R)');
     expect(row).toContain('15 atomic consumes (12 native request budgets and three per-account mail cooldown checks)');
     expect(row).toContain('plus 44 other handler statements. Six transaction controls separately.');
     expect(row).toContain('one atomic upsert');
