@@ -22,6 +22,8 @@ export const libraryWorkModule: WorkModule = {
     await registerLibraryPublishedLogRetentionWork(context);
     const { registerCopyRetention } = await import('./copy-retention.ts');
     await registerCopyRetention(context);
+    const { registerCollectionRetention } = await import('./collection-retention.ts');
+    await registerCollectionRetention(context);
     await registerEntryIncarnationCutover(context);
     const { registerLibraryProfileMigrationWork } = await import('./profile-migration-runtime.ts');
     registerLibraryProfileMigrationWork(context);

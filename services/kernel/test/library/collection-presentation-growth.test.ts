@@ -402,6 +402,9 @@ test('ordinary native deletion and the existing restore port retain selected fie
   const row = await f.collection({ presentationKind: type, coverMediaId: cover.mediaId });
   const response = await f.send(f.owner.bearer, 'DELETE', `${path(row.id)}?revision=${row.revision}`);
   expect(response.status).toBe(204);
+  const deletionId = response.headers.get('Library-Collection-Deletion-Id');
+  expect(deletionId).toBeString();
+  if (deletionId === null) throw new Error('Committed deletion lacks its exact episode ID');
   expect((await f.send(f.owner.bearer, 'GET', path(row.id))).status).toBe(404);
   const retained = (
     await f.database.admin.query(
@@ -412,7 +415,7 @@ test('ordinary native deletion and the existing restore port retain selected fie
   expect(retained).toMatchObject({ presentation_kind: type, cover_media_id: cover.mediaId });
   expect(new Date(retained.purge_after).getTime() - new Date(retained.deleted_at).getTime()).toBe(720 * 60 * 60 * 1000);
   // Exercise the existing retention store port, not an invented public restore endpoint.
-  const restored = await restoreCollection(f.database.admin, routeOf(row.id)!, row.id, retained.revision, {
+  const restored = await restoreCollection(f.database.admin, routeOf(row.id)!, row.id, retained.revision, deletionId, {
     transactionId: randomUUID(),
     time: new Date().toISOString(),
   });

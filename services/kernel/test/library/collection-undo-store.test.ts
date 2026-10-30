@@ -10,7 +10,7 @@ const at = '2026-10-27T12:00:00.000Z';
 const tomorrow = '2026-10-28T12:00:00.000Z';
 const due = '2026-11-27T12:00:00.000Z';
 const ctx = (n: number, time = at) => ({ transactionId: id(n), time });
-test('individual Collection tombstones preserve occurrences and restore by revision only within their recorded thirty-day window', async () => {
+test('individual Collection tombstones preserve occurrences and restore by exact episode and revision within their original thirty-day window', async () => {
   const c = await pool.connect();
   try {
     await c.query('BEGIN');
@@ -40,19 +40,29 @@ test('individual Collection tombstones preserve occurrences and restore by revis
     expect(deleted?.state).toBe('deleted');
     expect(deleted).not.toHaveProperty('deletedAt');
     expect(deleted).not.toHaveProperty('purgeAfter');
-    expect(await store.readCollectionDeletion(c, route, id(1))).toEqual({
+    const episode = await store.readCollectionDeletion(c, route, id(1));
+    const native = (await c.query(
+      'SELECT deleted_at::text AS deleted_at,purge_after::text AS purge_after FROM library.collection WHERE route=$1 AND collection_id=$2',
+      [route, id(1)],
+    )).rows[0];
+    expect(episode).toEqual({
       revision: deleted!.revision,
-      deletedAt: tomorrow,
-      purgeAfter: due,
+      deletionId: id(83),
+      deletedAt: native.deleted_at,
+      purgeAfter: native.purge_after,
     });
+    expect(new Date(episode!.deletedAt!).toISOString()).toBe(tomorrow);
+    expect(new Date(episode!.purgeAfter!).toISOString()).toBe(due);
     expect(await store.listMembers(c, route, id(1), { after: null, limit: 100 })).toEqual(before);
-    expect(await store.restoreCollection(c, route, id(1), deleted!.revision - 1, ctx(84, tomorrow))).toBeNull();
-    expect(await store.restoreCollection(c, route + 1, id(1), deleted!.revision, ctx(84, tomorrow))).toBeNull();
+    expect(await store.restoreCollection(c, route, id(1), deleted!.revision - 1, id(83), ctx(84, tomorrow))).toBeNull();
+    expect(await store.restoreCollection(c, route + 1, id(1), deleted!.revision, id(83), ctx(84, tomorrow))).toBeNull();
+    expect(await store.restoreCollection(c, route, id(1), deleted!.revision, id(999), ctx(84, tomorrow))).toBeNull();
     const restored = await store.restoreCollection(
       c,
       route,
       id(1),
       deleted!.revision,
+      id(83),
       ctx(85, '2026-11-26T12:00:00.000Z'),
     );
     expect(restored?.state).toBe('active');
@@ -64,14 +74,15 @@ test('individual Collection tombstones preserve occurrences and restore by revis
     expect(restored?.memberCount).toBe(deleted?.memberCount);
     expect(await store.readCollectionDeletion(c, route, id(1))).toEqual({
       revision: restored!.revision,
+      deletionId: null,
       deletedAt: null,
       purgeAfter: null,
     });
     expect(await store.listMembers(c, route, id(1), { after: null, limit: 100 })).toEqual(before);
-    expect(await store.restoreCollection(c, route, id(1), deleted!.revision, ctx(86, tomorrow))).toBeNull();
+    expect(await store.restoreCollection(c, route, id(1), deleted!.revision, id(83), ctx(86, tomorrow))).toBeNull();
     const again = await store.tombstoneCollection(c, route, id(1), ctx(87, '2026-11-26T12:00:00.000Z'));
     expect(
-      await store.restoreCollection(c, route, id(1), again!.revision, ctx(88, '2026-12-26T12:00:00.000Z')),
+      await store.restoreCollection(c, route, id(1), again!.revision, id(87), ctx(88, '2026-12-26T12:00:00.000Z')),
     ).toBeNull();
     expect(await store.readCollectionDeletion(c, route + 1, id(1))).toBeNull();
     expect(await store.readCollectionDeletion(c, route, id(999))).toBeNull();

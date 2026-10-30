@@ -43,9 +43,7 @@ export async function runOwnedGraphSegment(
     const children =
       phase === 'sessions'
         ? (['units', 'changes', 'sessionDelete'] as const)
-        : cursor.retain
-          ? (['canonicalFacts', 'canonicalState', 'collectionHistory', 'collectionRetain'] as const)
-          : (['members', 'canonicalFacts', 'canonicalState', 'collectionHistory', 'collectionDelete'] as const);
+        : (['collectionLocal'] as const);
     const parentPhase = phase === 'sessions' || phase === 'collections';
     const kind = parentPhase && cursor.parent !== null ? children[cursor.child]! : phase;
     const result = await page({
@@ -58,6 +56,16 @@ export async function runOwnedGraphSegment(
     });
     stats.pages++;
     stats.removed += result.removed;
+    if (kind === 'collectionLocal') {
+      if (result.blocked) cursor.blockedCollection ??= cursor.parent;
+      if (result.blocked || result.collectionDone) {
+        cursor.after = cursor.parent;
+        cursor.parent = null;
+        cursor.child = 0;
+        cursor.retain = false;
+      }
+      continue;
+    }
     if (!parentPhase) {
       if (result.removed < 100) cursor.phase++;
       continue;
@@ -77,7 +85,7 @@ export async function runOwnedGraphSegment(
       }
       continue;
     }
-    const parentDelete = kind === 'sessionDelete' || kind === 'collectionDelete' || kind === 'collectionRetain';
+    const parentDelete = kind === 'sessionDelete';
     if (parentDelete && result.removed !== 1) throw new Error('Graph parent still has undisposed children');
     if (result.removed < 100) cursor.child++;
     if (cursor.child === children.length) {

@@ -68,13 +68,13 @@ test('Collection source fence changes atomically with membership authority delet
     expect(await fence()).toBe(4n);
     expect(await store.tombstoneCollection(c, route, ref, ctx)).toBeNull();
     expect(await fence()).toBe(4n);
-    const restored = await store.restoreCollection(c, route, ref, deleted!.revision, {
+    const restored = await store.restoreCollection(c, route, ref, deleted!.revision, ctx.transactionId, {
       ...ctx,
       time: '2026-10-29T00:00:00.000Z',
     });
     expect(restored).not.toBeNull();
     expect(await fence()).toBe(5n);
-    expect(await store.restoreCollection(c, route, ref, deleted!.revision, ctx)).toBeNull();
+    expect(await store.restoreCollection(c, route, ref, deleted!.revision, ctx.transactionId, ctx)).toBeNull();
     expect(await fence()).toBe(5n);
     expect(await store.deleteMember(c, route, ref, id(10), ctx)).not.toBeNull();
     expect(await fence()).toBe(6n);

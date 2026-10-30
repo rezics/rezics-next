@@ -485,7 +485,18 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: { 204: t.Void(), ...failures },
-        detail: detail('collection.delete', 'collection:delete'),
+        detail: {
+          ...detail('collection.delete', 'collection:delete'),
+          responses: {
+            204: {
+              description: 'Collection deleted',
+              headers: {
+                'Library-Collection-Deletion-Id': { schema: { type: 'string', format: 'uuid' } },
+                'Library-Collection-Deletion-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
+              },
+            },
+          },
+        },
       },
       async ({ params, query, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
@@ -494,7 +505,32 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           mapped(() => write().deleteCollection(actor, params.collectionId, query.revision, key)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        set.headers['Library-Collection-Deletion-Id'] = result.value.deletionId;
+        set.headers['Library-Collection-Deletion-Revision'] = String(result.value.revision);
         set.status = 204;
+      },
+    )
+    .post(
+      customMethod('/v1/collections/:collectionId', 'restore'),
+      {
+        params: collectionParams,
+        headers,
+        body: strict(t.Object({ deletionId: t.String({ format: 'uuid' }), revision }, closed)),
+        response: {
+          200: collectionResponse,
+          ...failures,
+          409: problemSchema('conflict', 'collection_restore_occupied', 'collection_restore_stale', 'collection_restore_expired'),
+        },
+        detail: detail('collection.restore', 'collection:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().restoreCollection(actor, params.collectionId, body, key)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { collection: collectionView(result.value) };
       },
     )
     .get(

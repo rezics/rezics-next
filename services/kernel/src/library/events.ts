@@ -7,6 +7,10 @@ export const LIBRARY_EVENTS = {
   'com.rezics.library.follow-count.applied.v1': Type.Object({ targetId: id }, { additionalProperties: false }),
   'com.rezics.library.follow-count.withdrawn.v1': Type.Object({}, { additionalProperties: false }),
   'com.rezics.library.shelf-maintenance.advanced.v1': Type.Object({ accountId: id }, { additionalProperties: false }),
+  'com.rezics.library.collection.retention-purged.v1': Type.Object(
+    { collectionId: id, deletionId: id, removed: Type.Integer({ minimum: 1, maximum: 64 }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.library.account-graph.purged.v1': Type.Object(
     {
       accountId: id,

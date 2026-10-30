@@ -251,7 +251,8 @@ test('all Collection routes mount once and declare their exposure, actions and c
   const document = openApiDocument(app);
   const expected = {
     '/v1/collections': ['get', 'post'],
-    '/v1/collections/{collectionId}': ['get', 'patch', 'delete'],
+    '/v1/collections/{collectionId}': ['get', 'patch', 'delete', 'post'],
+    '/v1/collections/{collectionId}:restore': ['post'],
     '/v1/collections/{collectionId}/members': ['get', 'post'],
     '/v1/collections/{collectionId}/members/{memberId}': ['patch', 'delete'],
     '/v1/collections/{collectionId}/members/{memberId}:move': ['post'],
@@ -325,6 +326,29 @@ test('curator creates replays updates conflicts and deletes with only the contra
   const deletedProblem = await problem(await request('GET', path(shelf.id)), 404, 'not_found');
   const unknownProblem = await problem(await request('GET', path(unknown)), 404, 'not_found');
   expect(deletedProblem).toEqual(unknownProblem);
+});
+
+test('exact Collection restore uses committed deletion metadata and preserves the retained record', async () => {
+  const shelf = await collection('private');
+  const first = await add(shelf.id, { note: 'first occurrence' });
+  const second = await add(shelf.id, { note: 'second occurrence' });
+  const key = randomUUID();
+  const deleted = await request('DELETE', `${path(shelf.id)}?revision=${shelf.revision}`, undefined, 'owner', key);
+  expect(deleted.status).toBe(204);
+  const deletionId = deleted.headers.get('Library-Collection-Deletion-Id');
+  const revision = Number(deleted.headers.get('Library-Collection-Deletion-Revision'));
+  expect(deletionId).toMatch(/^[0-9a-f-]{36}$/);
+  expect(revision).toBeGreaterThan(shelf.revision);
+  await problem(await request('GET', path(shelf.id), undefined, 'anonymous'), 404, 'not_found');
+  const restored = await json<{ collection: CollectionView }>(
+    await request('POST', `${path(shelf.id)}:restore`, { deletionId, revision }),
+  );
+  expect(restored.collection).toMatchObject({ ...shelf, revision: revision + 1, memberCount: 2 });
+  expect(await all(members(shelf.id), 'members')).toEqual([first, second]);
+  const replay = await request('DELETE', `${path(shelf.id)}?revision=${shelf.revision}`, undefined, 'owner', key);
+  expect(replay.status).toBe(204);
+  expect(replay.headers.get('Library-Collection-Deletion-Id')).toBe(deletionId);
+  expect(await json(await request('GET', path(shelf.id)))).toEqual(restored);
 });
 
 test('members support duplicate subjects first after last moves notes removal and cursor pages', async () => {

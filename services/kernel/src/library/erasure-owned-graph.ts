@@ -16,6 +16,7 @@ import members from './erasure-owned-collection-member.sql';
 import canonicalFacts from './erasure-owned-canonical-source-fact.sql';
 import canonicalState from './erasure-owned-canonical-source-state.sql';
 import collectionHistory from './erasure-owned-collection-history.sql';
+import { purgeTerminalCollectionPage } from './collection-retention.ts';
 
 export const OWNED_PHASES = [
   'published_log',
@@ -57,7 +58,7 @@ const childQueries = {
   collectionDelete,
   collectionRetain,
 };
-type Kind = keyof typeof ownedQueries | keyof typeof childQueries | 'sessions' | 'collections';
+type Kind = keyof typeof ownedQueries | keyof typeof childQueries | 'sessions' | 'collections' | 'collectionLocal';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -72,6 +73,7 @@ export type OwnedGraphPage = {
   parent: string | null;
   retain: boolean;
   blocked: boolean;
+  collectionDone?: boolean;
 };
 type OwnedParent = { id: string; everPublic?: boolean; retain?: boolean };
 
@@ -111,6 +113,17 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
     },
     async (tx): Promise<CommandResult<OwnedGraphPage>> => {
       const args = { route, account_id: accountId };
+      if (kind === 'collectionLocal') {
+        if (parent === null) throw new TypeError('Collection cleanup requires an exact parent');
+        const page = await purgeTerminalCollectionPage(tx, { accountId, collectionId: parent });
+        const value: OwnedGraphPage = {
+          kind, removed: page.removed, parent, retain: false, blocked: page.status === 'retained',
+          collectionDone: page.status === 'purged' || page.status === 'stale',
+        };
+        if (page.removed === 0) return noEffect(value);
+        return { value, events: [{ type: 'com.rezics.library.account-graph.purged.v1',
+          subject: accountId, data: { accountId, kind, removed: page.removed } }] };
+      }
       if (kind === 'sessions' || kind === 'collections') {
         const query = { ...args, after_id: after };
         const row: OwnedParent | null =

@@ -523,6 +523,8 @@ CREATE TABLE library.collection (
     listing_ever_public boolean DEFAULT false NOT NULL,
     deleted_at timestamp with time zone,
     purge_after timestamp with time zone,
+    deletion_id uuid,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
     membership_kind text DEFAULT 'curated'::text NOT NULL,
     builtin_kind text,
     builtin_release_digest text,
@@ -549,6 +551,7 @@ END),
     CONSTRAINT collection_check1 CHECK ((route = ((get_byte(uuid_send(curator_account_id), 10) * 256) + get_byte(uuid_send(curator_account_id), 11)))),
     CONSTRAINT collection_deidentified_public CHECK (((curator_account_id IS NOT NULL) OR ((state = 'active'::text) AND (visibility = 'public'::text)))),
     CONSTRAINT collection_deletion_pair CHECK (((deleted_at IS NULL) = (purge_after IS NULL))),
+    CONSTRAINT collection_deletion_id_state_check CHECK (((state = 'deleted'::text) = (deletion_id IS NOT NULL))),
     CONSTRAINT collection_deletion_window CHECK ((purge_after = (deleted_at + '720:00:00'::interval))),
     CONSTRAINT collection_description_check CHECK (((description IS NULL) OR (char_length(description) <= 2000))),
     CONSTRAINT collection_member_count_check CHECK (((member_count >= 0) AND (member_count <= 5000))),
@@ -1906,6 +1909,8 @@ CREATE INDEX collection_curator_public_page ON library.collection USING btree (r
 --
 
 CREATE INDEX collection_deletion_due ON library.collection USING btree (route, purge_after, collection_id) WHERE ((state = 'deleted'::text) AND (purge_after IS NOT NULL));
+
+CREATE INDEX collection_retention_due ON library.collection USING btree (partition_no, purge_after, route, collection_id) WHERE ((state = 'deleted'::text) AND (purge_after IS NOT NULL));
 
 
 --

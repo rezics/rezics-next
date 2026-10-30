@@ -52,6 +52,7 @@ import {
   restoreMember as restoreMemberRow,
   respaceMembers,
   tombstoneCollection,
+  restoreCollection as restoreCollectionRow,
   updateCollection as updateCollectionRow,
   updateMemberNote as updateMemberNoteRow,
 } from './collection-store.ts';
@@ -59,6 +60,8 @@ import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
 import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createCollectionBatchCommands } from './collection-batch.ts';
 import batchParents from './collection-batch-parents.sql';
+import authorizationCollection from './collection-store-collection-authorization.sql';
+import restoreWindow from './collection-store-collection-restore-window.sql';
 import { resolveSubject } from './subject-anchor.ts';
 import {
   admitCollectionRule,
@@ -285,6 +288,7 @@ export function createCollectionCommands(config: {
     updateCollection,
     updateCollectionRule,
     deleteCollection,
+    restoreCollection,
     addMember,
     moveMember,
     updateMemberNote,
@@ -424,6 +428,7 @@ export function createCollectionCommands(config: {
     prepareMembers?: (time: AuthoritativeTime) => Promise<void>,
     selection?: PresentationSelection,
     rule?: CollectionRule,
+    allowDeleted = false,
   ): Promise<CommandOutcome<T>> {
     const route = collectionRoute(collectionId);
     const owner = accountActor(actor);
@@ -465,7 +470,7 @@ export function createCollectionCommands(config: {
           action,
           anchor: {
             resource: { route, id: collectionId },
-            validate: async (client, time) => !!(await visibleCollection(client, owner, route, collectionId, time)),
+            validate: async (client, time) => !!(await authorizedCollection(client, owner, route, collectionId, time, allowDeleted)),
           },
           context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
         });
@@ -480,25 +485,26 @@ export function createCollectionCommands(config: {
             attempt.time,
             await preparePresentationSelection(config, owner, selection, deadlineFor(WORK_STEP_DEADLINE_MS)),
           );
-        await prepareMembers?.(attempt.time);
-        if (rule) {
-          const admitted = await admitCollectionRule(pool, rule);
-          rules.set(attempt.time, {
-            rule: admitted,
-            checks: await prepareCollectionRuleAuthority(
-              config,
-              owner,
-              admitted.filter,
-              attempt,
-              deadlineFor(WORK_STEP_DEADLINE_MS),
-            ),
-          });
+        try {
+          await prepareMembers?.(attempt.time);
+          if (rule) {
+            const admitted = await admitCollectionRule(pool, rule);
+            rules.set(attempt.time, {
+              rule: admitted,
+              checks: await prepareCollectionRuleAuthority(
+                config, owner, admitted.filter, attempt, deadlineFor(WORK_STEP_DEADLINE_MS),
+              ),
+            });
+          }
+        } catch (error) {
+          if (!(error instanceof ProblemError)) throw error;
+          failures.set(attempt.time, error);
         }
         return proof;
       },
       async authorize(tx, attempt, proof) {
         const mode = await normalAccess.authorize(tx, attempt, proof);
-        const collection = await visibleCollection(tx, owner, route, collectionId, attempt.time);
+        const collection = await authorizedCollection(tx, owner, route, collectionId, attempt.time, allowDeleted);
         if (kind.startsWith('library.collection.member.') && collection.membershipKind === 'dynamic')
           throw new ProblemError('dynamic_membership_immutable');
         if (rule) {
@@ -532,7 +538,7 @@ export function createCollectionCommands(config: {
         authorization,
       },
       async (tx, command) => {
-        const current = await visibleCollection(tx, owner, route, collectionId, command.time);
+        const current = await authorizedCollection(tx, owner, route, collectionId, command.time, allowDeleted);
         if (current.curatorAccountId === null) throw new GrantDeniedError();
         await enterShelfWrite(tx, { route, accountId: current.curatorAccountId });
         const failure = failures.get(command.time);
@@ -648,7 +654,7 @@ export function createCollectionCommands(config: {
     id: string,
     revision: number,
     requestKey: string,
-  ): Promise<CommandOutcome<Collection>> {
+  ): Promise<CommandOutcome<Collection & { deletionId: string }>> {
     const expected = revisionOf(revision);
     return mutate(
       actor,
@@ -662,8 +668,49 @@ export function createCollectionCommands(config: {
         if (current.revision !== expected) throw new ProblemError('conflict');
         const value = await tombstoneCollection(tx, route, id, command);
         if (!value) throw notFound();
-        return { value, events: collectionEvents('deleted', id, listed(current)) };
+        return { value: { ...value, deletionId: command.transactionId }, events: collectionEvents('deleted', id, listed(current)) };
       },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+  }
+
+  async function restoreCollection(
+    actor: Actor,
+    id: string,
+    input: { deletionId: string; revision: number },
+    requestKey: string,
+  ): Promise<CommandOutcome<Collection>> {
+    const expected = revisionOf(input.revision);
+    if (typeof input.deletionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.deletionId))
+      throw invalid();
+    return mutate(
+      actor,
+      id,
+      'collection:update',
+      'library.collection.restore',
+      requestKey,
+      { id, deletionId: input.deletionId, revision: expected },
+      async (tx, command, route) => {
+        const current = await restoreWindow.run(tx, { route, id, time: command.time });
+        if (!current) throw notFound();
+        if (!current.deleted) throw new ProblemError('collection_restore_occupied');
+        if (current.revision !== expected || current.deletionId !== input.deletionId)
+          throw new ProblemError('collection_restore_stale');
+        if (current.expired)
+          throw new ProblemError('collection_restore_expired');
+        const value = await restoreCollectionRow(tx, route, id, expected, input.deletionId, command);
+        if (!value) throw new ProblemError('collection_restore_stale');
+        return { value, events: collectionEvents('updated', id, value.visibility === 'public') };
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
     );
   }
 
@@ -884,16 +931,18 @@ export function createCollectionCommands(config: {
   }
 }
 
-async function visibleCollection(
+async function authorizedCollection(
   client: AccessClient,
   actor: AccountActor,
   route: number,
   collectionId: string,
   time: Parameters<typeof authoritativeTimeValue>[0],
-): Promise<Collection> {
+  allowDeleted: boolean,
+): Promise<{ curatorAccountId: string | null }> {
   authoritativeTimeValue(time);
-  const current = await readCollection(client, route, collectionId);
-  if (!current || current.state === 'deleted') throw notFound();
+  const current = await authorizationCollection.run(client, { route, collection_id: collectionId });
+  if (!current || (!allowDeleted && current.state === 'deleted')) throw notFound();
+  if (allowDeleted && current.visibility === 'private' && actor.accountId !== current.curatorAccountId) throw notFound();
   return current;
 }
 

@@ -165,13 +165,14 @@ export async function readCollectionDeletion(
   client: Client,
   route: number,
   id: string,
-): Promise<{ revision: number; deletedAt: string | null; purgeAfter: string | null } | null> {
+): Promise<{ revision: number; deletionId: string | null; deletedAt: string | null; purgeAfter: string | null } | null> {
   const row = await collectionDeletionRead.run(queryClient(client), { route, id });
   return row
     ? {
         revision: row.revision,
-        deletedAt: row.deletedAt === null ? null : iso(row.deletedAt),
-        purgeAfter: row.purgeAfter === null ? null : iso(row.purgeAfter),
+        deletionId: row.deletionId,
+        deletedAt: row.deletedAt,
+        purgeAfter: row.purgeAfter,
       }
     : null;
 }
@@ -181,12 +182,14 @@ export async function restoreCollection(
   route: number,
   id: string,
   expectedRevision: number,
+  deletionId: string,
   context: WriteContext,
 ): Promise<Collection | null> {
   const [row] = await collectionRestore.run(queryClient(client), {
     route,
     id,
     revision: expectedRevision,
+    deletion_id: deletionId,
     ...write(context),
   });
   return row ? asCollection(row) : null;
