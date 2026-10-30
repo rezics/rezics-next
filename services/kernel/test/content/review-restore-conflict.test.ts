@@ -27,7 +27,8 @@ function status(result: ReviewLifecycleResponse, expected: number) {
 function conflict(result: ReviewLifecycleResponse, existingThreadId?: string) {
   status(result, 409);
   expect(result.response.headers.get('content-type')).toBe('application/problem+json');
-  expect({ ...result.value, request_id: null }).toEqual({
+  const problem: Record<string, unknown> = { ...result.value, request_id: null };
+  expect(problem).toEqual({
     type: 'https://rezics.com/problems/conflict',
     title: 'Conflict',
     status: 409,
