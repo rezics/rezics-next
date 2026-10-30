@@ -166,17 +166,21 @@ export async function createSpaceAddressRecoveryFixture(options: { initialTime?:
       return { response, value: text ? (JSON.parse(text) as Record<string, unknown>) : {} };
     };
 
-    const grantGlobal = (grantor: RecoveryActor, subject: RecoveryActor, grantedActions: readonly string[]) =>
-      request('POST', '/v1/grants', {
-        bearer: grantor.bearer,
-        key: randomUUID(),
-        body: {
-          resource: { route: PLATFORM_RESOURCE.route, id: GLOBAL_CONTEXT },
-          subject: { kind: 'account', id: subject.accountId },
-          actions: [...grantedActions],
-          valid: '(,)',
-        },
-      });
+    const grantGlobal = async (grantor: RecoveryActor, subject: RecoveryActor, grantedActions: readonly string[]) => {
+      const key = randomUUID();
+      const body = {
+        resource: { route: PLATFORM_RESOURCE.route, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: subject.accountId },
+        actions: [...grantedActions],
+        valid: '(,)',
+      };
+      const result = await request('POST', '/v1/grants', { bearer: grantor.bearer, key, body });
+      if (result.response.status !== 201)
+        throw new Error(
+          `POST /v1/grants failed: ${JSON.stringify({ actor: grantor.accountId, key, body, status: result.response.status, response: result.value })}`,
+        );
+      return result;
+    };
 
     const createSpace = async (owner: RecoveryActor, title = 'Recovery Space', key = randomUUID()) => {
       const created = await request('POST', '/v1/spaces', {
