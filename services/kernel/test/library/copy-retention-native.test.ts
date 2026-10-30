@@ -345,6 +345,7 @@ test('strict original expiry and native exact due purge survive parked stale epi
       entryKey(),
     ),
   ).rejects.toBeInstanceOf(Error);
+  const terminalVersion = await readOwnerFactVersion(reader, terminal.actor.accountId);
   const erased = await purgeAccountFactsPage(
     { pool: f.pool, clock },
     { accountId: terminal.actor.accountId, kind: 'copy', after: null, limit: 100, stepKey: entryKey() },
@@ -372,7 +373,7 @@ test('strict original expiry and native exact due purge survive parked stale epi
     }),
   ).toEqual([]);
   // Native fact versions are invalidation only; the whole participant owns their head-last cleanup.
-  expect(await readOwnerFactVersion(reader, terminal.actor.accountId)).not.toBeNull();
+  expect(await readOwnerFactVersion(reader, terminal.actor.accountId)).toBe(terminalVersion! + 1n);
   // The installed real scheduler dispatches the same ordinary default module/queue.
   const scheduledOwner = await f.identity(scopes, 0);
   const scheduled = await made(scheduledOwner);
