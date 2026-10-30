@@ -8,7 +8,14 @@ import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezi
 import { migrate, POSTGRES_IMAGE, run } from '../scripts/database.ts';
 import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 import { newId, routeOf } from '../../kernel/src/route/route.ts';
-import { createAuthHost, createAuthService, type AccountWorkflowPorts, type AuthService, type CredentialAuthorizationInput, type SessionProof } from '../src/index.ts';
+import {
+  createAuthHost,
+  createAuthService,
+  type AccountWorkflowPorts,
+  type AuthService,
+  type CredentialAuthorizationInput,
+  type SessionProof,
+} from '../src/index.ts';
 import { credentialEffectTransport } from '../src/host.ts';
 
 export const issuer = 'https://auth.rezics.com';
@@ -491,50 +498,110 @@ test('default host accepts each exact Auth-page operation profile after native p
     const f = await passkeyFixture({ pool, kernelPool, url: database.url });
     const person = await f.person();
     const registered = await f.register(await f.login(person));
-    const unused = async (): Promise<never> => { throw new Error('Sign-in must not invoke account workflows'); };
-    const access: AccountWorkflowPorts = {
-      registrationTarget: () => { throw new Error('Sign-in must not invoke account workflows'); },
-      reserveHandle: unused, createPending: unused, claimHandle: unused, activate: unused,
-      expireRegistration: unused, releaseExpiredRegistrationHandle: unused,
-      provisioningReference: unused, provisioningEvidence: unused, raiseFence: unused, readAccount: unused,
+    const unused = async (): Promise<never> => {
+      throw new Error('Sign-in must not invoke account workflows');
     };
-    host = await createAuthHost({ ...f.options, systemDatabasePool: systemPool, access, stagingKey: randomBytes(32), maintenanceSchedule: '0 0 0 1 1 *', executorId: 'operation-passkey-test' });
+    const access: AccountWorkflowPorts = {
+      registrationTarget: () => {
+        throw new Error('Sign-in must not invoke account workflows');
+      },
+      reserveHandle: unused,
+      createPending: unused,
+      claimHandle: unused,
+      activate: unused,
+      expireRegistration: unused,
+      releaseExpiredRegistrationHandle: unused,
+      provisioningReference: unused,
+      provisioningEvidence: unused,
+      raiseFence: unused,
+      readAccount: unused,
+    };
+    host = await createAuthHost({
+      ...f.options,
+      systemDatabasePool: systemPool,
+      access,
+      stagingKey: randomBytes(32),
+      maintenanceSchedule: '0 0 0 1 1 *',
+      executorId: 'operation-passkey-test',
+    });
     const auth = host;
-    const call = (path: string, body?: unknown, cookie = '') => auth.handler(new Request(`${issuer}${path}`, {
-      method: body === undefined ? 'GET' : 'POST',
-      headers: { origin: issuer, 'content-type': 'application/json', cookie },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }));
-    const websiteKey = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).publicKey)), kid: 'operation-passkey-website', alg: 'ES256', use: 'sig' as const };
-    await auth.service.internal.registerWebsiteClient({ publicJwks: { keys: [websiteKey] }, redirectUris: ['https://rezics.com/callback'], postLogoutRedirectUris: ['https://rezics.com/'], scopes: ['openid', 'offline_access', 'media:complete', 'organization:create', 'account:delete'] });
+    const call = (path: string, body?: unknown, cookie = '') =>
+      auth.handler(
+        new Request(`${issuer}${path}`, {
+          method: body === undefined ? 'GET' : 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      );
+    const websiteKey = {
+      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).publicKey)),
+      kid: 'operation-passkey-website',
+      alg: 'ES256',
+      use: 'sig' as const,
+    };
+    await auth.service.internal.registerWebsiteClient({
+      publicJwks: { keys: [websiteKey] },
+      redirectUris: ['https://rezics.com/callback'],
+      postLogoutRedirectUris: ['https://rezics.com/'],
+      scopes: ['openid', 'offline_access', 'media:complete', 'organization:create', 'account:delete'],
+    });
     await Promise.all([auth.start(), auth.start()]);
-    expect((await pool.query('SELECT scopes FROM auth_client WHERE client_id=$1', ['login'])).rows).toEqual([{ scopes: ['account:manage'] }]);
+    expect((await pool.query('SELECT scopes FROM auth_client WHERE client_id=$1', ['login'])).rows).toEqual([
+      { scopes: ['account:manage'] },
+    ]);
     const jwks = createLocalJWKSet(await (await call('/.well-known/jwks.json')).json());
     async function signIn(scope: string[], client_id = AUTH_PAGE_OPERATION_CLIENT_ID, uv = true) {
       const challenge = await call('/signin/passkey/options', {});
       expect(challenge.status).toBe(200);
       const options = await challenge.json();
       expect(options.userVerification).toBe('required');
-      return call('/signin/passkey', { response: registered.device.assertion(options, uv), client_id, scope }, cookies(challenge));
+      return call(
+        '/signin/passkey',
+        { response: registered.device.assertion(options, uv), client_id, scope },
+        cookies(challenge),
+      );
     }
     for (const profile of Object.values(AUTH_PAGE_OPERATION_SCOPES)) {
       const response = await signIn([...profile]);
       expect(response.status).toBe(200);
-      const proof = await response.json() as SessionProof;
-      const expected = { account_id: person, client_id: AUTH_PAGE_OPERATION_CLIENT_ID, scope: [...profile], amr: ['pop'] };
+      const proof = (await response.json()) as SessionProof;
+      const expected = {
+        account_id: person,
+        client_id: AUTH_PAGE_OPERATION_CLIENT_ID,
+        scope: [...profile],
+        amr: ['pop'],
+      };
       expect(proof).toMatchObject(expected);
       expect(await (await call('/session', undefined, cookies(response))).json()).toMatchObject(expected);
       const token = await call('/token', {}, cookies(response));
       expect(token.status).toBe(200);
-      expect(decodeJwt((await token.json()).access_token)).toMatchObject({ sub: person, client_id: AUTH_PAGE_OPERATION_CLIENT_ID, scope: profile.join(' '), amr: ['pop'] });
-      await auth.service.internal.withFreshHuman({ headers: new Headers({ cookie: cookies(response) }) }, async (live) => {
-        expect(live).toMatchObject(expected);
-        const bearer = await auth.service.internal.accessTokenForProof(live);
-        expect((await jwtVerify(bearer, jwks, { issuer, audience: f.options.audience, typ: 'at+jwt' })).payload).toMatchObject({ sub: person, client_id: AUTH_PAGE_OPERATION_CLIENT_ID, scope: profile.join(' '), amr: ['pop'], authn_epoch: live.authn_epoch, auth_time: live.auth_time });
+      expect(decodeJwt((await token.json()).access_token)).toMatchObject({
+        sub: person,
+        client_id: AUTH_PAGE_OPERATION_CLIENT_ID,
+        scope: profile.join(' '),
+        amr: ['pop'],
       });
+      await auth.service.internal.withFreshHuman(
+        { headers: new Headers({ cookie: cookies(response) }) },
+        async (live) => {
+          expect(live).toMatchObject(expected);
+          const bearer = await auth.service.internal.accessTokenForProof(live);
+          expect(
+            (await jwtVerify(bearer, jwks, { issuer, audience: f.options.audience, typ: 'at+jwt' })).payload,
+          ).toMatchObject({
+            sub: person,
+            client_id: AUTH_PAGE_OPERATION_CLIENT_ID,
+            scope: profile.join(' '),
+            amr: ['pop'],
+            authn_epoch: live.authn_epoch,
+            auth_time: live.auth_time,
+          });
+        },
+      );
       await expect(auth.service.internal.accessTokenForProof(proof)).rejects.toThrow();
     }
-    const sessions = () => pool.query('SELECT id FROM session WHERE "userId"=$1 ORDER BY id', [person]).then((result) => result.rows);
+    const sessions = () =>
+      pool.query('SELECT id FROM session WHERE "userId"=$1 ORDER BY id', [person]).then((result) => result.rows);
     const before = await sessions();
     for (const scope of [['account:manage'], ['media:complete'], ['openid'], ['account:delete', 'account:manage']]) {
       expect((await signIn(scope)).status).toBeGreaterThanOrEqual(400);
@@ -544,7 +611,8 @@ test('default host accepts each exact Auth-page operation profile after native p
     expect((await signIn(['account:delete'], AUTH_PAGE_OPERATION_CLIENT_ID, false)).status).toBeGreaterThanOrEqual(400);
     expect(await sessions()).toEqual(before);
   } finally {
-    if (host) await host.stop(); else await Promise.all([pool.end(), systemPool.end()]);
+    if (host) await host.stop();
+    else await Promise.all([pool.end(), systemPool.end()]);
     await kernelPool.end();
     database.close();
   }
