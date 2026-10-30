@@ -50,7 +50,7 @@ function assertPlans(raw: Capture, present: number, requested: number) {
     const scans = all.filter((n) => n.Schema === 'library' && n['Relation Name'] === relation);
     expect(scans).toHaveLength(probes === 0 ? 0 : 1);
     for (const scan of scans) {
-      expect(['Index Scan', 'Index Only Scan']).toContain(scan['Node Type']);
+      expect(['Index Scan', 'Index Only Scan']).toContain(String(scan['Node Type']));
       expect(scan['Actual Loops']).toBe(probes);
       expect(Number(scan['Actual Rows']) + Number(scan['Rows Removed by Filter'] ?? 0)).toBeLessThanOrEqual(1);
       for (const key of ['route', 'account_id', 'subject_id']) expect(String(scan['Index Cond'])).toContain(key);
