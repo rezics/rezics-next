@@ -3,6 +3,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { undoToast as UndoToast } from '@rezics/ui/undo-toast';
 import { manageLabel } from './labels-actions';
 import { readLabelsPage } from './labels-read-route';
@@ -13,13 +14,17 @@ import type { LibraryLabelSummary } from './subject-labels';
 /** A catalogue label opens its complete personal shelf. */
 export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
   return (
-    <a
-      data-library-label-link
-      href={shelfHref(locale, { label: label.id })}
-      className="text-primary underline-offset-4 hover:underline"
-    >
-      {label.name}
-    </a>
+    <>
+      <ListRowLink data-library-label-link href={shelfHref(locale, { label: label.id })}>
+        {label.name}
+      </ListRowLink>
+      <span
+        aria-hidden="true"
+        className="text-primary underline-offset-4 group-hover:underline group-focus-within:underline"
+      >
+        {label.name}
+      </span>
+    </>
   );
 }
 
@@ -173,42 +178,46 @@ export function LabelsPageView({ page: initial }: { page: LabelsPage }) {
       {page.labels.length ? (
         <ul className="space-y-3">
           {page.labels.map((label) => (
-            <li key={`${label.id}:${label.renameKey}`} className="space-y-3 rounded-md border p-4">
+            <ListRow key={`${label.id}:${label.renameKey}`} className="space-y-3 py-3">
               <LabelShelfLink label={label} locale={getLocale()} />
               <LabelExposure page={page} operation="rename">
-                <form method="post" action={path} onSubmit={onSubmit} className="space-y-2">
-                  {hidden('rename', label.renameKey, label.id, label.revision)}
-                  <label htmlFor={`label-${label.id}`} className="sr-only">
-                    {m.library_label_name()}
-                  </label>
-                  <input
-                    id={`label-${label.id}`}
-                    name="name"
-                    required
-                    maxLength={1000}
-                    className={fieldClass}
-                    defaultValue={
-                      fieldError('rename', label.id) && feedback?.reason !== 'conflict' ? feedback?.name : label.name
-                    }
-                    aria-invalid={fieldError('rename', label.id) || undefined}
-                    aria-describedby={fieldError('rename', label.id) ? `rename-error-${label.id}` : undefined}
-                  />
-                  {fieldError('rename', label.id) ? error(`rename-error-${label.id}`) : null}
-                  <button disabled={busy} className={buttonVariants({ variant: 'outline' })}>
-                    {m.library_label_rename()}
-                  </button>
-                </form>
+                <ListRowControl>
+                  <form method="post" action={path} onSubmit={onSubmit} className="space-y-2">
+                    {hidden('rename', label.renameKey, label.id, label.revision)}
+                    <label htmlFor={`label-${label.id}`} className="sr-only">
+                      {m.library_label_name()}
+                    </label>
+                    <input
+                      id={`label-${label.id}`}
+                      name="name"
+                      required
+                      maxLength={1000}
+                      className={fieldClass}
+                      defaultValue={
+                        fieldError('rename', label.id) && feedback?.reason !== 'conflict' ? feedback?.name : label.name
+                      }
+                      aria-invalid={fieldError('rename', label.id) || undefined}
+                      aria-describedby={fieldError('rename', label.id) ? `rename-error-${label.id}` : undefined}
+                    />
+                    {fieldError('rename', label.id) ? error(`rename-error-${label.id}`) : null}
+                    <button disabled={busy} className={buttonVariants({ variant: 'outline' })}>
+                      {m.library_label_rename()}
+                    </button>
+                  </form>
+                </ListRowControl>
               </LabelExposure>
               <LabelExposure page={page} operation="delete">
-                <form method="post" action={path} onSubmit={onSubmit}>
-                  {hidden('delete', label.deleteKey, label.id, label.revision)}
-                  <input type="hidden" name="name" value={label.name} />
-                  <button disabled={busy} className={buttonVariants({ variant: 'destructive' })}>
-                    {m.library_label_delete()}
-                  </button>
-                </form>
+                <ListRowControl>
+                  <form method="post" action={path} onSubmit={onSubmit}>
+                    {hidden('delete', label.deleteKey, label.id, label.revision)}
+                    <input type="hidden" name="name" value={label.name} />
+                    <button disabled={busy} className={buttonVariants({ variant: 'destructive' })}>
+                      {m.library_label_delete()}
+                    </button>
+                  </form>
+                </ListRowControl>
               </LabelExposure>
-            </li>
+            </ListRow>
           ))}
         </ul>
       ) : !feedback || feedback.ok || feedback.operation ? (

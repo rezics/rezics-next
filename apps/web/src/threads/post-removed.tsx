@@ -1,5 +1,6 @@
 import { Tombstone } from '@rezics/ui/tombstone';
 import { Withheld } from '@rezics/ui/withheld';
+import { ListRow } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
@@ -50,7 +51,7 @@ export function RemovedPost({
 
   if (post.availability === 'withheld') {
     return (
-      <li {...common}>
+      <ListRow {...common}>
         <div className="mb-3 flex items-start justify-between gap-3">
           <Byline
             author={author}
@@ -69,14 +70,14 @@ export function RemovedPost({
             {m.thread_post_decision_link()}
           </a>
         ) : null}
-      </li>
+      </ListRow>
     );
   }
 
   const reason = deleted ? 'deleted' : 'unavailable';
   const ownedRestorableUntil = owner && deleted ? restorableUntil : undefined;
   return (
-    <li {...common}>
+    <ListRow {...common}>
       <div className="relative">
         <Tombstone
           shape="post"
@@ -109,6 +110,6 @@ export function RemovedPost({
           {restoreError}
         </p>
       ) : null}
-    </li>
+    </ListRow>
   );
 }

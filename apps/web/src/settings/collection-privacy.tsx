@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useOperation } from '../kernel/exposure';
@@ -40,7 +41,7 @@ function explanation(value: CollectionVisibility) {
       : m.settings_privacy_public_text();
 }
 
-function CollectionRow({ collection }: { collection: OwnedCollection }) {
+export function CollectionRow({ collection }: { collection: OwnedCollection }) {
   const { csrfToken } = useSession();
   const [current, setCurrent] = useState(collection);
   const [busy, setBusy] = useState(false);
@@ -77,49 +78,57 @@ function CollectionRow({ collection }: { collection: OwnedCollection }) {
   }
   const href = `/${getLocale()}/collections/${encodeURIComponent(current.id)}`;
   return (
-    <li className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)] sm:items-center">
+    <ListRow className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)] sm:items-center">
       <div className="min-w-0">
-        <a className="break-words font-medium text-primary underline-offset-4 hover:underline" href={href}>
+        <ListRowLink href={href}>{current.title}</ListRowLink>
+        <span
+          aria-hidden="true"
+          className="break-words font-medium text-primary underline-offset-4 group-hover:underline group-focus-within:underline"
+        >
           {current.title}
-        </a>
+        </span>
         <p className="mt-1 text-sm text-muted-foreground">{explanation(current.visibility)}</p>
       </div>
-      <label className="grid gap-1 text-sm font-medium">
-        {m.settings_privacy_visibility_label()}
-        <select
-          className="min-h-10 w-full rounded-md border border-input bg-background px-3 text-foreground"
-          value={current.visibility}
-          disabled={!csrfToken || busy}
-          onChange={(event) => void change(event.target.value as CollectionVisibility)}
-        >
-          {visibilityOptions.map((value) => (
-            <option key={value} value={value}>
-              {label(value)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div aria-live="polite" className="sm:col-span-2">
-        {message === 'saving' ? <p className="text-sm text-muted-foreground">{m.settings_saving()}</p> : null}
-        {message === 'conflict' ? (
-          <Alert>
-            <AlertTitle>{m.settings_privacy_conflict_title()}</AlertTitle>
-            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-              <span>{m.settings_privacy_conflict_text()}</span>
-              <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
-                {m.settings_privacy_reload_row()}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {message === 'failed' ? (
-          <Alert variant="destructive">
-            <AlertTitle>{m.settings_failed_title()}</AlertTitle>
-            <AlertDescription>{m.settings_failed_text()}</AlertDescription>
-          </Alert>
-        ) : null}
-      </div>
-    </li>
+      <ListRowControl>
+        <label className="grid gap-1 text-sm font-medium">
+          {m.settings_privacy_visibility_label()}
+          <select
+            className="min-h-10 w-full rounded-md border border-input bg-background px-3 text-foreground"
+            value={current.visibility}
+            disabled={!csrfToken || busy}
+            onChange={(event) => void change(event.target.value as CollectionVisibility)}
+          >
+            {visibilityOptions.map((value) => (
+              <option key={value} value={value}>
+                {label(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </ListRowControl>
+      <ListRowControl className="sm:col-span-2">
+        <div aria-live="polite">
+          {message === 'saving' ? <p className="text-sm text-muted-foreground">{m.settings_saving()}</p> : null}
+          {message === 'conflict' ? (
+            <Alert>
+              <AlertTitle>{m.settings_privacy_conflict_title()}</AlertTitle>
+              <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                <span>{m.settings_privacy_conflict_text()}</span>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => void reload()}>
+                  {m.settings_privacy_reload_row()}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {message === 'failed' ? (
+            <Alert variant="destructive">
+              <AlertTitle>{m.settings_failed_title()}</AlertTitle>
+              <AlertDescription>{m.settings_failed_text()}</AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+      </ListRowControl>
+    </ListRow>
   );
 }
 

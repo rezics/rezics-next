@@ -1,4 +1,5 @@
 import { documentText } from '@rezics/document';
+import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { Tombstone } from '@rezics/ui/tombstone';
 import { Withheld } from '@rezics/ui/withheld';
 import { useState, type ReactNode } from 'react';
@@ -85,7 +86,7 @@ export function ModerationReportsView({
           {reports.map((report) => {
             const target = targets.find((item) => item.key === `${report.target.kind}:${report.target.id}`);
             return (
-              <li key={report.id} className="space-y-3 rounded-lg border p-4">
+              <ListRow key={report.id} className="space-y-3 py-4">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">{report.target.kind}</p>
                   <blockquote className="border-l-2 pl-3">{moderationTargetContent(target)}</blockquote>
@@ -103,9 +104,11 @@ export function ModerationReportsView({
                     {report.outcome === 'actioned' ? m.moderation_actioned() : m.moderation_dismissed()}
                   </p>
                 ) : (
-                  <ReportActions reportId={report.id} target={report.target} />
+                  <ListRowControl>
+                    <ReportActions reportId={report.id} target={report.target} />
+                  </ListRowControl>
                 )}
-              </li>
+              </ListRow>
             );
           })}
         </ol>

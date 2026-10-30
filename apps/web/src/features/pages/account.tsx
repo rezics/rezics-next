@@ -1,5 +1,6 @@
 import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
+import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { ReactNode } from 'react';
@@ -230,21 +231,24 @@ export function AccountPosts(props: Record<string, unknown>) {
               ? thread.title
               : m.threads_untitled({}, { locale: value.locale as never });
           const when = dateText(post.createdAt, value.locale);
-          const Link = value.link;
+          const href = threadHref(value.locale, { id: post.threadId, title: thread?.title });
           return (
-            <li key={typeof post.id === 'string' ? post.id : index} className="space-y-1">
+            <ListRow key={typeof post.id === 'string' ? post.id : index} className="space-y-1 py-3">
+              <ListRowLink href={href}>{title}</ListRowLink>
               <Quiet>
                 <MetaLine
                   items={[
-                    <span className={`${linkClass} ${linkColor} font-medium`}>
-                      <Link href={threadHref(value.locale, { id: post.threadId, title: thread?.title })}>{title}</Link>
+                    <span aria-hidden="true" className={`${linkClass} ${linkColor} font-medium underline`}>
+                      {title}
                     </span>,
                     when,
                   ]}
                 />
               </Quiet>
-              <Excerpt body={post.body} value={value} />
-            </li>
+              <ListRowControl>
+                <Excerpt body={post.body} value={value} />
+              </ListRowControl>
+            </ListRow>
           );
         },
       }}
@@ -272,17 +276,18 @@ export function AccountThreads(props: Record<string, unknown>) {
               : m.threads_untitled({}, { locale: value.locale as never });
           const first = isRecord(thread.firstPost) ? thread.firstPost : undefined;
           const when = dateText(first?.createdAt, value.locale);
-          const Link = value.link;
+          const href = threadHref(value.locale, { id: thread.id, title: thread.title });
           return (
-            <li key={typeof thread.id === 'string' ? thread.id : index} className="space-y-1">
-              <p className="font-medium">
-                <span className={`${linkClass} ${linkColor}`}>
-                  <Link href={threadHref(value.locale, { id: thread.id, title: thread.title })}>{title}</Link>
-                </span>
+            <ListRow key={typeof thread.id === 'string' ? thread.id : index} className="space-y-1 py-3">
+              <ListRowLink href={href}>{title}</ListRowLink>
+              <p aria-hidden="true" className="font-medium">
+                <span className={`${linkClass} ${linkColor} underline`}>{title}</span>
               </p>
               {when && <Quiet>{when}</Quiet>}
-              <Excerpt body={first?.body} value={value} />
-            </li>
+              <ListRowControl>
+                <Excerpt body={first?.body} value={value} />
+              </ListRowControl>
+            </ListRow>
           );
         },
       }}
@@ -303,27 +308,20 @@ export function AccountCollections(props: Record<string, unknown>) {
         items: (body) => body.collections,
         row: (collection, value, index) => {
           const options = { locale: value.locale as never };
-          const Link = value.link;
           const members = typeof collection.memberCount === 'number' ? collection.memberCount : undefined;
+          const title = typeof collection.title === 'string' && collection.title ? collection.title : value.unlabelled;
+          const href = `/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`;
           return (
-            <li key={typeof collection.id === 'string' ? collection.id : index} className="space-y-1">
+            <ListRow key={typeof collection.id === 'string' ? collection.id : index} className="space-y-1 py-3">
+              {readable ? <ListRowLink href={href}>{title}</ListRowLink> : null}
               <p className="font-medium">
                 <MetaLine
                   items={[
-                    <span className={`${linkClass} ${linkColor} [&_a]:underline!`}>
-                      {readable ? (
-                        <Link
-                          href={`/${encodeURIComponent(value.locale)}/collections/${encodeURIComponent(String(collection.id))}`}
-                        >
-                          {typeof collection.title === 'string' && collection.title
-                            ? collection.title
-                            : value.unlabelled}
-                        </Link>
-                      ) : typeof collection.title === 'string' && collection.title ? (
-                        collection.title
-                      ) : (
-                        value.unlabelled
-                      )}
+                    <span
+                      aria-hidden={readable || undefined}
+                      className={`${linkClass} ${linkColor} ${readable ? 'underline' : ''}`}
+                    >
+                      {title}
                     </span>,
                     members !== undefined ? (
                       <span className="text-sm font-normal text-muted-foreground">
@@ -336,7 +334,7 @@ export function AccountCollections(props: Record<string, unknown>) {
               {typeof collection.description === 'string' && collection.description && (
                 <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{collection.description}</p>
               )}
-            </li>
+            </ListRow>
           );
         },
       }}

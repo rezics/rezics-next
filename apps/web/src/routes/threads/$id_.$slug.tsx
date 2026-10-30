@@ -2,6 +2,7 @@ import { useSession } from '../../session/query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { DocumentBody, type DocumentMentions } from '@rezics/ui/document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
+import { ListRow } from '@rezics/ui/list-row';
 import { undoToast } from '@rezics/ui/undo-toast';
 import type { ReactionKind } from '@rezics/ui/reactions';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
@@ -153,7 +154,7 @@ function ThreadPage() {
           {m.thread_posts_heading()}
         </h2>
         {posts.posts.length ? (
-          <ol id={`thread-${thread.id}`} className="scroll-mt-24 divide-y divide-border/60 border-y border-border/60">
+          <ol id={`thread-${thread.id}`} className="scroll-mt-24">
             {posts.posts.map((post) => {
               const firstPost = post.id === thread.firstPost.id;
               return (
@@ -411,7 +412,7 @@ function PostSlot({
 
   const authorId = 'authorId' in post ? post.authorId : undefined;
   return (
-    <li id={anchorId} ref={itemElement} tabIndex={-1} className="scroll-mt-24 py-5 target:bg-muted/50">
+    <ListRow id={anchorId} ref={itemElement} tabIndex={-1} className="scroll-mt-24 py-5 target:bg-muted/50">
       <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
         <Byline
           author={authorId === undefined ? undefined : authors?.[authorId]}
@@ -491,6 +492,6 @@ function PostSlot({
           {post.revisionId ? <PostHistory postId={post.id} /> : null}
         </>
       )}
-    </li>
+    </ListRow>
   );
 }

@@ -1,8 +1,9 @@
-import type { AnchorHTMLAttributes, HTMLAttributes, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, HTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '../utils.ts';
 
 export interface ListRowProps extends Omit<HTMLAttributes<HTMLLIElement>, 'children'> {
   children: ReactNode;
+  ref?: Ref<HTMLLIElement>;
   /** Show the row overlay in a story or visual regression capture. */
   forceOverlay?: boolean;
 }
@@ -12,9 +13,10 @@ export interface ListRowProps extends Omit<HTMLAttributes<HTMLLIElement>, 'child
  * state. Prefer a larger cover over denser rows. Put ordinary content alongside ListRowLink and wrap controls or
  * secondary links in ListRowControl so they stay above the stretched primary link.
  */
-export function ListRow({ children, forceOverlay = false, className, ...props }: ListRowProps) {
+export function ListRow({ children, forceOverlay = false, className, ref, ...props }: ListRowProps) {
   return (
     <li
+      ref={ref}
       {...props}
       data-slot="list-row"
       data-overlay={forceOverlay ? 'visible' : undefined}
