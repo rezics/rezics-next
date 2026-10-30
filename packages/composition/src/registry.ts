@@ -350,15 +350,10 @@ const readLinks: ComponentRead = (props, page) =>
         limit: props.limit as number,
       };
 
-const readDirected: ComponentRead = (props, page) =>
-  props.direction === 'forward'
-    ? props.paged === true
-      ? (() => {
-          const read = readLinks(props, page);
-          return read?.kind === 'links' ? { ...read, kind: 'relations' } : null;
-        })()
-      : readSubject(props, page)
-    : readLinks(props, page);
+const readDirected: ComponentRead = (props, page) => {
+  const read = readLinks(props, page);
+  return props.direction === 'forward' && read?.kind === 'links' ? { ...read, kind: 'relations' } : read;
+};
 
 export const platformRegistry = defineRegistry({
   root: Type.Object({ appearance: Type.Optional(appearance) }, closed),

@@ -161,7 +161,7 @@ export async function loadSubjectPage(
 /** The properties the page's inverse reads follow, for the definitions that label them. */
 export function pageRelationProperties(page: SubjectPageData): string[] {
   const reads = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads;
-  return [...new Set(Object.values(reads).flatMap((read) => (read.kind === 'links' ? [read.property] : [])))];
+  return [...new Set(Object.values(reads).flatMap((read) => (read.kind === 'links' || read.kind === 'relations' ? [read.property] : [])))];
 }
 
 /** The subject's label, chosen with the same fallback the page heading uses. */

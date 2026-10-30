@@ -139,6 +139,17 @@ export function viewHref(value: OverviewValue, view: string, property?: string):
   return `${href}${href.includes('?') ? '&' : '?'}realm=${encodeURIComponent(value.context.population.id)}`;
 }
 
+/** A native continuation belongs to exactly one configured node/property stream. */
+function StreamLink({ value, view, node, cursor }: { value: OverviewValue; view: string; node: string; cursor?: string }) {
+  const base = viewHref(value, view);
+  if (!base) return null;
+  const query = new URLSearchParams({ node, ...(cursor ? { cursor } : {}) });
+  return <a data-slot={cursor ? 'continue-stream' : 'restart-stream'} className={linkClass}
+    href={`${base}${base.includes('?') ? '&' : '?'}${query}`}>
+    {cursor ? m.subject_relations_more({}, { locale: value.locale as never }) : 'Start again'}
+  </a>;
+}
+
 /** A date in the kernel's partial ISO form, shown at its own precision; any other form is left out. */
 export function dateText(value: unknown, locale: string): string | null {
   if (typeof value !== 'string') return null;
@@ -328,7 +339,7 @@ function statementItems(
                 ? [content]
                 : isRecord(content) && typeof content.text === 'string'
                   ? [content.text]
-                  : [];
+                  : isRecord(content) && typeof content.amount === 'string' ? [content.amount] : [];
             }),
             gated: qualifiers.some(
               (qualifier) =>
@@ -373,11 +384,11 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
   if (!state) return null;
   const { value, section } = state;
   const id = String(props.id);
-  if (!section?.ok) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
+  if (!section?.ok) return <><Failed slot={slot} id={id} title={title} locale={value.locale} />{props.paged === true && <StreamLink value={value} view={view} node={id} />}</>;
   const limit = props.paged === true ? Number.POSITIVE_INFINITY : limitOf(props);
   const found = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit);
   if (!found) return <Failed slot={slot} id={id} title={title} locale={value.locale} />;
-  if (found.items.length === 0) return null;
+  if (found.items.length === 0 && !(props.paged === true && found.more)) return null;
   const listed = forward ? found : { ...found, items: datedItems(found.items, value.locale) };
   const text = pageText(props.title, value.locale);
   return (
@@ -392,6 +403,8 @@ function LinkSection(props: Record<string, unknown>, slot: string, title: string
       locale={value.locale}
     >
       <CoverList items={listed.items} value={value} label={text.text || title} preview={props.paged !== true} />
+      {props.paged === true && section.ok && typeof section.body.next === 'string' &&
+        <StreamLink value={value} view={view} node={id} cursor={section.body.next} />}
     </Preview>
   );
 }
@@ -812,6 +825,7 @@ function FeatureEmpty({
 export function RatingSummary(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
   if (!value?.subject) return null;
+  if (value.context?.population.kind === 'realm') return <Failed slot="rating-summary" id={String(props.id)} title="Ratings" locale={value.locale} />;
   return (
     <RatingsSection
       id={typeof props.id === 'string' ? props.id : 'ratings'}
@@ -827,7 +841,7 @@ export function ThreadList(props: Record<string, unknown>) {
   const { value, section } = state;
   const title = 'Active discussions';
   if (!section?.ok || section.read.kind !== 'subjectThreads' || !Array.isArray(section.body.threads))
-    return <Failed slot="thread-list" id={String(props.id)} title={title} locale={value.locale} />;
+    return <><Failed slot="thread-list" id={String(props.id)} title={title} locale={value.locale} />{props.paged === true && <StreamLink value={value} view="discussion" node={String(props.id)} />}</>;
   const threads = section.body.threads.filter(isRecord);
   const href = viewHref(value, 'discussion');
   return (
@@ -871,12 +885,16 @@ export function ThreadList(props: Record<string, unknown>) {
           })}
         </ol>
       )}
+      {props.paged === true && typeof section.body.next === 'string' &&
+        <StreamLink value={value} view="discussion" node={String(props.id)} cursor={section.body.next} />}
     </Preview>
   );
 }
 
 export function ReviewList(props: Record<string, unknown>) {
-  const locale = (useContext(OverviewContext)?.locale ?? 'en') as never;
+  const value = useContext(OverviewContext);
+  const locale = (value?.locale ?? 'en') as never;
+  if (value?.context?.population.kind === 'realm') return <Failed slot="review-list" id={String(props.id)} title={m.subject_reviews({}, { locale })} locale={locale} />;
   return (
     <FeatureEmpty
       slot="review-list"

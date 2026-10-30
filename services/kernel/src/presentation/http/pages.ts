@@ -225,7 +225,7 @@ function respond(status: number, body: unknown, session: string | null, cache: b
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-export function pageRoutes<App>(
+export function pageRoutes<App extends Parameters<typeof actionCatalogue>[0]>(
   app: App,
   {
     pool,
@@ -387,6 +387,7 @@ export function pageRoutes<App>(
         views = definedViews(active.profile, template);
       }
 
+      probeSession = mergedSession(tokens, scope, probeSession, encodeSession(tokens, scope, requestSession.components));
       return pageAnswer({
         ...(selected
           ? {
@@ -414,7 +415,7 @@ export function pageRoutes<App>(
                 )
                   throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
                 await guardSelectedPage(authority, selected);
-                return current.session;
+                return mergedSession(tokens, scope, current.session, encodeSession(tokens, scope, requestSession.components));
               },
             }
           : {}),
