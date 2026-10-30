@@ -118,6 +118,27 @@ command did supply its SQL compiler database and recorded 911 Reylo analyses;
 that receipt does not substitute for the newly requested local workspace check.
 No new native, database, host or remote check was run on this continuation.
 
+On retry, the same database-free kernel compiler command again exited 1.
+The exact reported `ensure-account-agents.ts(3,32)` SQL-import diagnostic also
+reproduced when compiling an unmodified archive of the supplied base
+`0710aa933993b00c3c3fa63d6d55006447b68fe7`, extracted inside this worktree's
+`.temp`. The local logs are `.temp/community-local-head-types.log` and
+`.temp/community-local-base-types.log`. The archive also lacks some workspace
+dependency links, so this comparison establishes the reported diagnostic on
+base, not equivalence of all compiler diagnostics. No error named the new
+community fixture, example or focused tests in the current compiler output.
+Under the brief's base-failure rule, the reproduced SQL-import diagnostic is
+a pre-existing local-compiler limitation, not a blocker for this slice.
+Conversion workspace typing passed again, now checking 62 files.
+
+The controller has reapplied the slice onto newer repository history. The
+example, native fixture and focused pure tests at `5bbc13c192` have identical
+Git content to the corresponding files at the recorded native-pass revision
+`a23f3991f07b9d1ed3f970c6d1e914067c789ad2`. That records the tested slice
+bytes; it does not claim a native pass for the newer application baseline.
+The latest verification instruction forbids another native or database run;
+acceptance against that integrated baseline belongs to the landing batch.
+
 The pure child names are:
 
 - `<source>: public example rebinds the same normalized export without trusting the source body`
