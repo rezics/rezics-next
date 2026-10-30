@@ -420,27 +420,55 @@ test('retained revalidation refuses fresh absent foreign and altered native hold
   ).toBe(1);
 });
 
-
 test('retirement requires a matching live command T and actual deleted/due or terminal authority, never a capture locator alone', async () => {
-  const { identity } = await make(), { frontier } = await scan(identity);
+  const { identity } = await make(),
+    { frontier } = await scan(identity);
   const completed = await custody.finishCapture({ ...work(), identity, frontier });
   if (completed.status !== 'complete') throw new Error('Missing native capture');
   const input = { ...work(), identity, captureId: completed.capture.captureId, sourceGeneration: identity.generation };
-  const forgedEpisode = { kind: 'deleted' as const, deletionId: entryKey(), revision: 2, purgeAfter: new Date(0).toISOString() };
-  const active = await command(identity, (client, at) => custody.retireCapture({ ...input, client, at, episode: forgedEpisode }));
+  const forgedEpisode = {
+    kind: 'deleted' as const,
+    deletionId: entryKey(),
+    revision: 2,
+    purgeAfter: new Date(0).toISOString(),
+  };
+  const active = await command(identity, (client, at) =>
+    custody.retireCapture({ ...input, client, at, episode: forgedEpisode }),
+  );
   expect(active.value).toMatchObject({ status: 'blocked', reason: 'source' });
   expect(active.value.work.used.statements).toBeGreaterThan(0);
-  const terminal = await command(identity, (client, at) => custody.retireCapture({ ...input, client, at, episode: { kind: 'terminal' } }));
+  const terminal = await command(identity, (client, at) =>
+    custody.retireCapture({ ...input, client, at, episode: { kind: 'terminal' } }),
+  );
   expect(terminal.value.status).toBe('unavailable');
   let staleTime!: AuthoritativeTime;
-  await command(identity, async (_client, at) => { staleTime = at; return true; });
-  const stale = await command(identity, (client) => custody.retireCapture({ ...input, client, at: staleTime, episode: forgedEpisode }));
+  await command(identity, async (_client, at) => {
+    staleTime = at;
+    return true;
+  });
+  const stale = await command(identity, (client) =>
+    custody.retireCapture({ ...input, client, at: staleTime, episode: forgedEpisode }),
+  );
   expect(stale.value.status).toBe('unavailable');
   expect(stale.value.work.used.statements).toBe(0);
   const depleted = work();
-  const refused = await command(identity, (client, at) => custody.retireCapture({ ...input, client, at, episode: forgedEpisode,
-    allowance: { ...depleted.allowance, remaining: { ...depleted.allowance.remaining, nativeRows: 0 } } }));
+  const refused = await command(identity, (client, at) =>
+    custody.retireCapture({
+      ...input,
+      client,
+      at,
+      episode: forgedEpisode,
+      allowance: { ...depleted.allowance, remaining: { ...depleted.allowance.remaining, nativeRows: 0 } },
+    }),
+  );
   expect(refused.value.status).toBe('unavailable');
   expect(refused.value.work.used.statements).toBe(0);
-  expect((await native.pool.query('SELECT 1 FROM library.native_source_capture WHERE route=$1 AND capture_id=$2', [identity.route, input.captureId])).rows).toHaveLength(1);
+  expect(
+    (
+      await native.pool.query('SELECT 1 FROM library.native_source_capture WHERE route=$1 AND capture_id=$2', [
+        identity.route,
+        input.captureId,
+      ])
+    ).rows,
+  ).toHaveLength(1);
 });

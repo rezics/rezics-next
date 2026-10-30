@@ -63,7 +63,13 @@ const childQueries = {
   collectionDelete,
   collectionRetain,
 };
-type Kind = keyof typeof ownedQueries | keyof typeof childQueries | 'native_source_capture' | 'sessions' | 'collections' | 'collectionLocal';
+type Kind =
+  | keyof typeof ownedQueries
+  | keyof typeof childQueries
+  | 'native_source_capture'
+  | 'sessions'
+  | 'collections'
+  | 'collectionLocal';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -93,7 +99,8 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
   const { accountId, kind, parent, after, ordinal, segment } = input;
   const route = requireRoute(accountId);
   if (parent !== null && requireRoute(parent) !== route) throw new TypeError('Foreign graph parent');
-  if (after !== null && kind !== 'native_source_capture' && requireRoute(after) !== route) throw new TypeError('Foreign graph cursor');
+  if (after !== null && kind !== 'native_source_capture' && requireRoute(after) !== route)
+    throw new TypeError('Foreign graph cursor');
   if (!Number.isSafeInteger(ordinal) || ordinal < 0 || !Number.isSafeInteger(segment) || segment < 0)
     throw new TypeError('Invalid graph checkpoint');
   const digest = createHash('sha256').update(JSON.stringify(input)).digest();
@@ -123,18 +130,35 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
       const args = { route, account_id: accountId };
       if (kind === 'native_source_capture') {
         const capture = await nativeCapture.run(tx, { ...args, after_id: after });
-        if (!capture) return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false, nativeDone: true });
+        if (!capture)
+          return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false, nativeDone: true });
         const page = await retireNativeCollectionCapturePage(tx, {
-          accountId, collectionId: capture.collectionId, captureId: capture.id, episode: { kind: 'terminal' },
+          accountId,
+          collectionId: capture.collectionId,
+          captureId: capture.id,
+          episode: { kind: 'terminal' },
         });
         const blocked = page.status === 'blocked' || page.status === 'unavailable';
         const value: OwnedGraphPage = {
-          kind, removed: 'removed' in page ? page.removed : 0, parent: capture.id, retain: false, blocked,
-          nativeDone: page.status !== 'progress', ...(blocked ? { pendingCollection: capture.collectionId } : {}),
+          kind,
+          removed: 'removed' in page ? page.removed : 0,
+          parent: capture.id,
+          retain: false,
+          blocked,
+          nativeDone: page.status !== 'progress',
+          ...(blocked ? { pendingCollection: capture.collectionId } : {}),
         };
         if (value.removed === 0) return noEffect(value);
-        return { value, events: [{ type: 'com.rezics.library.account-graph.purged.v1', subject: accountId,
-          data: { accountId, kind, removed: value.removed } }] };
+        return {
+          value,
+          events: [
+            {
+              type: 'com.rezics.library.account-graph.purged.v1',
+              subject: accountId,
+              data: { accountId, kind, removed: value.removed },
+            },
+          ],
+        };
       }
       if (kind === 'collectionLocal') {
         if (parent === null) throw new TypeError('Collection cleanup requires an exact parent');

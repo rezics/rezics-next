@@ -3,7 +3,11 @@ import { readErasureStatus } from '../../src/access/erasure.ts';
 import { createPersonalLabelCommands } from '../../src/library/label-commands.ts';
 import { libraryErasureWorkflowId } from '../../src/library/erasure-participant.ts';
 import { runCommand } from '../../src/command/command.ts';
-import { createNativeLibrarySourceCustody, type NativeSourceFrontier, type NativeSourceIdentity } from '../../src/library/native-source-custody.ts';
+import {
+  createNativeLibrarySourceCustody,
+  type NativeSourceFrontier,
+  type NativeSourceIdentity,
+} from '../../src/library/native-source-custody.ts';
 import { readNativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
@@ -296,21 +300,41 @@ test('native owned graph crosses its finite segment boundary, commits heads last
   ).toEqual([]);
 }, 90000);
 
-
 test('existing terminal runner retires released native capture children and final writer fences without a participant ACK or late hold recreation', async () => {
   const as = f.people.operator;
-  const row = (await f.json(as, 'POST', '/v1/collections', 201, { title: 'Terminal native source', visibility: 'private' })).collection;
+  const row = (
+    await f.json(as, 'POST', '/v1/collections', 201, { title: 'Terminal native source', visibility: 'private' })
+  ).collection;
   const route = routeOf(row.id)!;
-  const work = () => ({ deadline: Date.now() + 30000, allowance: { reservationId: crypto.randomUUID(), remaining: {
-    candidateKeys: 100, nativeRows: 10000, nativePoints: 256, identityMetadataRows: 0,
-    witnessKeys: 0, statements: 100, bytes: 1024 * 1024, emptySeeks: 100,
-  } } });
+  const work = () => ({
+    deadline: Date.now() + 30000,
+    allowance: {
+      reservationId: crypto.randomUUID(),
+      remaining: {
+        candidateKeys: 100,
+        nativeRows: 10000,
+        nativePoints: 256,
+        identityMetadataRows: 0,
+        witnessKeys: 0,
+        statements: 100,
+        bytes: 1024 * 1024,
+        emptySeeks: 100,
+      },
+    },
+  });
   const metadata = await readNativeCollectionMetadata(f.db.pool, { route, collectionId: row.id }, work());
   if (!metadata.metadata) throw new Error('Missing native source');
   const identity: NativeSourceIdentity = {
-    route, collectionId: row.id, accountId: as.accountId, incarnation: metadata.metadata.incarnation,
-    generation: metadata.metadata.sourceGeneration, scope: 'curated', receivingEpoch: '1', effectKey: crypto.randomUUID(),
-    ownerEpoch: (await f.db.pool.query('SELECT epoch FROM core.partition WHERE partition_no=$1', [partitionOf(route)])).rows[0].epoch,
+    route,
+    collectionId: row.id,
+    accountId: as.accountId,
+    incarnation: metadata.metadata.incarnation,
+    generation: metadata.metadata.sourceGeneration,
+    scope: 'curated',
+    receivingEpoch: '1',
+    effectKey: crypto.randomUUID(),
+    ownerEpoch: (await f.db.pool.query('SELECT epoch FROM core.partition WHERE partition_no=$1', [partitionOf(route)]))
+      .rows[0].epoch,
   };
   const custody = createNativeLibrarySourceCustody({ pool: f.db.pool });
   let frontier: NativeSourceFrontier | null = null;
@@ -323,7 +347,8 @@ test('existing terminal runner retires released native capture children and fina
   if (!frontier || frontier.driver !== 'done') throw new Error('Finite capture did not complete');
   const completed = await custody.finishCapture({ ...work(), identity, frontier });
   if (completed.status !== 'complete') throw new Error('Missing native receipt');
-  const captureId = completed.capture.captureId, holdId = crypto.randomUUID();
+  const captureId = completed.capture.captureId,
+    holdId = crypto.randomUUID();
   for (const operation of ['readAndHold', 'releaseHold'] as const) {
     const result = await runCommand(f.db.pool, { partition: partitionOf(route) }, async (client, { time }) => ({
       value: await custody[operation]({ ...work(), client, at: time, identity, captureId, holdId }),
@@ -334,13 +359,33 @@ test('existing terminal runner retires released native capture children and fina
   await deletePersona(f.options, as);
   await terminal(as.accountId);
   for (const table of ['native_source_capture', 'native_source_receipt', 'native_source_hold'])
-    expect((await f.db.pool.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND capture_id=$2`, [route, captureId])).rows).toEqual([]);
-  expect((await f.db.pool.query('SELECT 1 FROM library.native_source_fence WHERE route=$1 AND account_id=$2', [route, as.accountId])).rows).toEqual([]);
-  expect((await f.db.pool.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2', [route, row.id])).rows).toEqual([]);
+    expect(
+      (await f.db.pool.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND capture_id=$2`, [route, captureId]))
+        .rows,
+    ).toEqual([]);
+  expect(
+    (
+      await f.db.pool.query('SELECT 1 FROM library.native_source_fence WHERE route=$1 AND account_id=$2', [
+        route,
+        as.accountId,
+      ])
+    ).rows,
+  ).toEqual([]);
+  expect(
+    (await f.db.pool.query('SELECT 1 FROM library.collection WHERE route=$1 AND collection_id=$2', [route, row.id]))
+      .rows,
+  ).toEqual([]);
   const late = await runCommand(f.db.pool, { partition: partitionOf(route) }, async (client, { time }) => ({
     value: await custody.readAndHold({ ...work(), client, at: time, identity, captureId, holdId: crypto.randomUUID() }),
     events: [{ type: 'com.rezics.library.collection.updated.v1', data: { collectionId: row.id } }],
   }));
   expect(late.value.status).toBe('unavailable');
-  expect((await f.db.pool.query('SELECT 1 FROM library.native_source_fence WHERE route=$1 AND account_id=$2', [route, as.accountId])).rows).toEqual([]);
+  expect(
+    (
+      await f.db.pool.query('SELECT 1 FROM library.native_source_fence WHERE route=$1 AND account_id=$2', [
+        route,
+        as.accountId,
+      ])
+    ).rows,
+  ).toEqual([]);
 }, 90000);

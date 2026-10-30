@@ -68,9 +68,7 @@ export type NativeSourceCaptureWork = Readonly<{ allowance: WorkAllowance; deadl
 /** Exact current owner episode, independently reread under native locks. Never an allow flag. */
 export type NativeSourceRetirement = Readonly<{
   sourceGeneration: string;
-  episode:
-    | { kind: 'deleted'; deletionId: string; revision: number; purgeAfter: string }
-    | { kind: 'terminal' };
+  episode: { kind: 'deleted'; deletionId: string; revision: number; purgeAfter: string } | { kind: 'terminal' };
 }>;
 export type NativeSourceRetirementResult =
   | Unavailable
@@ -90,12 +88,13 @@ type Unavailable = {
 };
 export interface NativeLibrarySourceCustody {
   retireCapture(
-    input: NativeSourceCaptureWork & NativeSourceRetirement & {
-      client: CommandTransaction;
-      at: AuthoritativeTime;
-      identity: NativeSourceIdentity;
-      captureId: string;
-    },
+    input: NativeSourceCaptureWork &
+      NativeSourceRetirement & {
+        client: CommandTransaction;
+        at: AuthoritativeTime;
+        identity: NativeSourceIdentity;
+        captureId: string;
+      },
   ): Promise<NativeSourceRetirementResult>;
   capturePage(
     input: NativeSourceCaptureWork & {
@@ -135,7 +134,6 @@ export interface NativeLibrarySourceCustody {
     },
   ): Promise<Unavailable | { status: 'released'; work: WorkReceipt }>;
 }
-
 
 import partitionQuery from './native-source-custody-partition.sql';
 import sourceQuery from './native-source-custody-source.sql';
@@ -293,9 +291,15 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
 }
 type Execute = ReturnType<typeof executor>;
 async function terminalOwner(run: Execute, values: Parameters): Promise<boolean> {
-  const [scope] = await run<{ version: number; outcome: string | null }>(terminalScope, {
-    ...values, route: values.account_route,
-  }, 48, 3);
+  const [scope] = await run<{ version: number; outcome: string | null }>(
+    terminalScope,
+    {
+      ...values,
+      route: values.account_route,
+    },
+    48,
+    3,
+  );
   return scope?.version === 1 && scope.outcome === null;
 }
 async function bindOwner(
@@ -315,7 +319,7 @@ async function bindOwner(
   )
     throw new Refused('binding');
   const [account] = await run<{ state: string; fenced: boolean }>(accountQuery, values);
-  if (!account || (account.state !== 'active' || account.fenced)) {
+  if (!account || account.state !== 'active' || account.fenced) {
     if (!retained || account?.state !== 'deleted' || !account.fenced || !(await terminalOwner(run, values)))
       throw new Refused('binding');
   }
@@ -470,22 +474,42 @@ export function createNativeLibrarySourceCustody({
         live(input);
         if (!uuid.test(input.captureId) || !/^(0|[1-9][0-9]{0,18})$/.test(input.sourceGeneration))
           throw new Refused('binding');
-        const run = executor(input.client, work, Math.min(input.deadline, currentCommandResources(input.client).deadline));
+        const run = executor(
+          input.client,
+          work,
+          Math.min(input.deadline, currentCommandResources(input.client).deadline),
+        );
         const episode = input.episode;
         if (
           episode.kind !== 'terminal' &&
-          (episode.kind !== 'deleted' || !uuid.test(episode.deletionId) || !Number.isSafeInteger(episode.revision) ||
-            episode.revision < 2 || !Number.isFinite(Date.parse(episode.purgeAfter)))
-        ) throw new Refused('binding');
+          (episode.kind !== 'deleted' ||
+            !uuid.test(episode.deletionId) ||
+            !Number.isSafeInteger(episode.revision) ||
+            episode.revision < 2 ||
+            !Number.isFinite(Date.parse(episode.purgeAfter)))
+        )
+          throw new Refused('binding');
         const values = {
-          ...parameters(input.identity), capture_id: input.captureId,
+          ...parameters(input.identity),
+          capture_id: input.captureId,
           purge_after: episode.kind === 'deleted' ? episode.purgeAfter : null,
           time: authoritativeTimeValue(input.at),
         };
-        const blocked = (reason: Extract<NativeSourceRetirementResult, { status: 'blocked' }>['reason']) =>
-          ({ status: 'blocked' as const, reason, work: work.receipt() });
-        const [partition] = await run<{ epoch: number; writeState: string; movedTo: string | null }>(partitionQuery, values);
-        if (!partition || partition.epoch !== input.identity.ownerEpoch || partition.writeState !== 'active' || partition.movedTo !== null)
+        const blocked = (reason: Extract<NativeSourceRetirementResult, { status: 'blocked' }>['reason']) => ({
+          status: 'blocked' as const,
+          reason,
+          work: work.receipt(),
+        });
+        const [partition] = await run<{ epoch: number; writeState: string; movedTo: string | null }>(
+          partitionQuery,
+          values,
+        );
+        if (
+          !partition ||
+          partition.epoch !== input.identity.ownerEpoch ||
+          partition.writeState !== 'active' ||
+          partition.movedTo !== null
+        )
           throw new Refused('binding');
         // Same order as adoption/retained release: account, Collection, controls, capture, receipt, holds.
         const [owner] = await run<{ state: string; fenced: boolean }>(accountQuery, values);
@@ -494,17 +518,39 @@ export function createNativeLibrarySourceCustody({
             throw new Refused('binding');
         } else if (owner?.state !== 'active' || owner.fenced) throw new Refused('binding');
         const [source] = await run<{
-          accountId: string | null; incarnation: string; generation: string; state: string; kind: string;
-          builtin: string | null; visibility: string; deletionId: string | null; revision: number;
-          deadlineMatches: boolean | null; due: boolean | null; publicCustody: boolean;
+          accountId: string | null;
+          incarnation: string;
+          generation: string;
+          state: string;
+          kind: string;
+          builtin: string | null;
+          visibility: string;
+          deletionId: string | null;
+          revision: number;
+          deadlineMatches: boolean | null;
+          due: boolean | null;
+          publicCustody: boolean;
         }>(retireSource, values, 32, 2);
-        if (!source || source.accountId !== input.identity.accountId || source.incarnation !== input.identity.incarnation ||
-            source.generation !== input.sourceGeneration ||
-            (input.identity.scope === 'curated' ? source.kind !== 'curated' : source.kind !== 'dynamic' || source.builtin === null || source.visibility !== 'private'))
+        if (
+          !source ||
+          source.accountId !== input.identity.accountId ||
+          source.incarnation !== input.identity.incarnation ||
+          source.generation !== input.sourceGeneration ||
+          (input.identity.scope === 'curated'
+            ? source.kind !== 'curated'
+            : source.kind !== 'dynamic' || source.builtin === null || source.visibility !== 'private')
+        )
           return blocked('source');
         if (source.publicCustody) return blocked('public_custody');
-        if (episode.kind === 'deleted' && (source.state !== 'deleted' || source.deletionId !== episode.deletionId ||
-            source.revision !== episode.revision || !source.deadlineMatches || !source.due)) return blocked('source');
+        if (
+          episode.kind === 'deleted' &&
+          (source.state !== 'deleted' ||
+            source.deletionId !== episode.deletionId ||
+            source.revision !== episode.revision ||
+            !source.deadlineMatches ||
+            !source.due)
+        )
+          return blocked('source');
         const controls = await run(fencesQuery, values, 32, 2);
         if (controls.length !== 2) throw new Refused('binding');
         const [state] = await run<State>(readQuery, values);
@@ -516,13 +562,20 @@ export function createNativeLibrarySourceCustody({
           if (!receipt || !proof || receipt.transactionId !== proof.transactionId) throw new Refused('binding');
         } else if (receipt) throw new Refused('binding');
         if ((await run(retireActive, values, 16, 1, 1)).length) return blocked('live_hold');
-        const children = await run<{ id: string; transactionId: string; released: boolean; committed: boolean }>(retireHolds, values, 16 * 80 + 32, 1, 80);
+        const children = await run<{ id: string; transactionId: string; released: boolean; committed: boolean }>(
+          retireHolds,
+          values,
+          16 * 80 + 32,
+          1,
+          80,
+        );
         if (children.some((child) => !child.released)) return blocked('live_hold');
         if (children.some((child) => child.transactionId !== receipt?.transactionId)) throw new Refused('binding');
         if (children.some((child) => !child.committed)) return blocked('release_uncommitted');
         let removed = 0;
         if (children.length) {
-          removed = (await run(retireChildren, { ...values, hold_ids: children.map((child) => child.id) }, 16 * 80, 80)).length;
+          removed = (await run(retireChildren, { ...values, hold_ids: children.map((child) => child.id) }, 16 * 80, 80))
+            .length;
           if (removed !== children.length) throw new Refused('binding');
         }
         // Leave the two parent keys for another attempt when this raw page is full.
@@ -753,22 +806,40 @@ export async function retireNativeCollectionCapturePage(
   const at = currentCommand(client).time;
   const allowance: WorkAllowance = {
     reservationId: crypto.randomUUID(),
-    remaining: { candidateKeys: 100, nativeRows: 10000, nativePoints: 256, identityMetadataRows: 0,
-      witnessKeys: 0, statements: 32, bytes: 1024 * 1024, emptySeeks: 32 },
+    remaining: {
+      candidateKeys: 100,
+      nativeRows: 10000,
+      nativePoints: 256,
+      identityMetadataRows: 0,
+      witnessKeys: 0,
+      statements: 32,
+      bytes: 1024 * 1024,
+      emptySeeks: 32,
+    },
   };
   const work = new NativeCollectionWork(allowance, deadline);
   const run = executor(client, work, deadline);
   const [capture] = await run<NativeSourceIdentity & { captureId: string; sourceGeneration: string | null }>(
     nextCapture,
     { route: routeOf(input.collectionId), collection_id: input.collectionId, capture_id: input.captureId ?? null },
-    32, 2, 1,
+    32,
+    2,
+    1,
   );
   if (!capture) return { status: 'retired', removed: 0, work: work.receipt() };
   if (capture.accountId !== input.accountId || capture.sourceGeneration === null)
     return { status: 'blocked', reason: 'source', work: work.receipt() };
-  const result = await work.compose((remaining) => createNativeLibrarySourceCustody({ pool }).retireCapture({
-    client, at, identity: capture, captureId: capture.captureId, sourceGeneration: capture.sourceGeneration!,
-    episode: input.episode, allowance: remaining, deadline,
-  }));
+  const result = await work.compose((remaining) =>
+    createNativeLibrarySourceCustody({ pool }).retireCapture({
+      client,
+      at,
+      identity: capture,
+      captureId: capture.captureId,
+      sourceGeneration: capture.sourceGeneration!,
+      episode: input.episode,
+      allowance: remaining,
+      deadline,
+    }),
+  );
   return { ...result, work: work.receipt() };
 }

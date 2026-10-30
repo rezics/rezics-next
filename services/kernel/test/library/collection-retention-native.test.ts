@@ -5,7 +5,11 @@ import {
   type CollectionDeletionKey,
 } from '../../src/library/collection-retention.ts';
 import { runCommand, type CommandTransaction, type AuthoritativeTime } from '../../src/command/command.ts';
-import { createNativeLibrarySourceCustody, type NativeSourceIdentity, type NativeSourceFrontier } from '../../src/library/native-source-custody.ts';
+import {
+  createNativeLibrarySourceCustody,
+  type NativeSourceIdentity,
+  type NativeSourceFrontier,
+} from '../../src/library/native-source-custody.ts';
 import { readNativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
 import erasureProbe from '../../src/library/erasure-probe.sql';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -166,23 +170,37 @@ test('public custody stays explicitly retained until actual Source and destinati
   expect((await f.send('anonymous', 'GET', `/v1/collections/${row.id}`)).status).toBe(404);
 }, 120000);
 
-
 const retirementWork = () => ({
   deadline: Date.now() + 30000,
-  allowance: { reservationId: entryKey(), remaining: {
-    candidateKeys: 100, identityMetadataRows: 0, nativeRows: 10000, nativePoints: 256,
-    witnessKeys: 0, statements: 100, bytes: 1024 * 1024, emptySeeks: 100,
-  } },
+  allowance: {
+    reservationId: entryKey(),
+    remaining: {
+      candidateKeys: 100,
+      identityMetadataRows: 0,
+      nativeRows: 10000,
+      nativePoints: 256,
+      witnessKeys: 0,
+      statements: 100,
+      bytes: 1024 * 1024,
+      emptySeeks: 100,
+    },
+  },
 });
 async function captureForRetirement(collectionId: string) {
   const route = routeOf(collectionId)!;
   const metadata = await readNativeCollectionMetadata(f.pool, { route, collectionId }, retirementWork());
   if (!metadata.metadata) throw new Error('Missing native Collection');
   const identity: NativeSourceIdentity = {
-    route, collectionId, accountId: owner.actor.accountId, incarnation: metadata.metadata.incarnation,
-    generation: metadata.metadata.sourceGeneration, scope: 'curated',
-    ownerEpoch: (await f.pool.query('SELECT epoch FROM core.partition WHERE partition_no=$1', [partitionOf(route)])).rows[0].epoch,
-    receivingEpoch: '1', effectKey: entryKey(),
+    route,
+    collectionId,
+    accountId: owner.actor.accountId,
+    incarnation: metadata.metadata.incarnation,
+    generation: metadata.metadata.sourceGeneration,
+    scope: 'curated',
+    ownerEpoch: (await f.pool.query('SELECT epoch FROM core.partition WHERE partition_no=$1', [partitionOf(route)]))
+      .rows[0].epoch,
+    receivingEpoch: '1',
+    effectKey: entryKey(),
   };
   const custody = createNativeLibrarySourceCustody({ pool: f.pool });
   let frontier: NativeSourceFrontier | null = null;
@@ -198,18 +216,32 @@ async function captureForRetirement(collectionId: string) {
   }
   throw new Error('Finite capture did not finish');
 }
-async function custodyCommand<T>(identity: NativeSourceIdentity, action: (client: CommandTransaction, at: AuthoritativeTime) => Promise<T>) {
-  return runCommand(f.pool, { partition: partitionOf(identity.route), clock, deadline: Date.now() + 30000 }, async (client, context) => ({
-    value: await action(client, context.time),
-    events: [{ type: 'com.rezics.library.collection.updated.v1', data: { collectionId: identity.collectionId } }],
-  }));
+async function custodyCommand<T>(
+  identity: NativeSourceIdentity,
+  action: (client: CommandTransaction, at: AuthoritativeTime) => Promise<T>,
+) {
+  return runCommand(
+    f.pool,
+    { partition: partitionOf(identity.route), clock, deadline: Date.now() + 30000 },
+    async (client, context) => ({
+      value: await action(client, context.time),
+      events: [{ type: 'com.rezics.library.collection.updated.v1', data: { collectionId: identity.collectionId } }],
+    }),
+  );
 }
 async function finishPrivateCleanup(key: CollectionDeletionKey) {
   for (let n = 0; n < 20; n++) {
     const page = await purgeExpiredCollectionPage({ pool: f.pool, clock }, key);
     expect(page.removed).toBeLessThanOrEqual(100);
     if (page.status === 'purged') {
-      expect((await f.pool.query("SELECT 1 FROM library.native_source_fence WHERE route=$1 AND kind='collection' AND owner_id=$2", [key.route, key.collectionId])).rows).toEqual([]);
+      expect(
+        (
+          await f.pool.query(
+            "SELECT 1 FROM library.native_source_fence WHERE route=$1 AND kind='collection' AND owner_id=$2",
+            [key.route, key.collectionId],
+          )
+        ).rows,
+      ).toEqual([]);
       return;
     }
     expect(page.status).toBe('progress');
@@ -220,71 +252,152 @@ async function finishPrivateCleanup(key: CollectionDeletionKey) {
 test('unheld native Source capture retires before default due private Collection cleanup, with stale episodes and provenance refused', async () => {
   const row = await make();
   const captured = await captureForRetirement(row.id);
-  const first = await remove(row.id, row.revision), d1 = await locator(row.id);
+  const first = await remove(row.id, row.revision),
+    d1 = await locator(row.id);
   expect((await f.send(owner.bearer, 'POST', `/v1/collections/${row.id}:restore`, first)).status).toBe(200);
   await remove(row.id, (await current(row.id)).revision);
   const d3 = await locator(row.id);
   now += 720 * 3600 * 1000;
   expect((await purgeExpiredCollectionPage({ pool: f.pool, clock }, d1)).status).toBe('stale');
-  const sourceGeneration = (await f.pool.query('SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2', [d3.route, row.id])).rows[0].generation as string;
-  const attempt = (identity: NativeSourceIdentity, key: CollectionDeletionKey) => custodyCommand(captured.identity, (client, at) => captured.custody.retireCapture({
-    ...retirementWork(), client, at, identity, captureId: captured.captureId, sourceGeneration,
-    episode: { kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter },
-  }));
+  const sourceGeneration = (
+    await f.pool.query(
+      'SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2',
+      [d3.route, row.id],
+    )
+  ).rows[0].generation as string;
+  const attempt = (identity: NativeSourceIdentity, key: CollectionDeletionKey) =>
+    custodyCommand(captured.identity, (client, at) =>
+      captured.custody.retireCapture({
+        ...retirementWork(),
+        client,
+        at,
+        identity,
+        captureId: captured.captureId,
+        sourceGeneration,
+        episode: { kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter },
+      }),
+    );
   expect((await attempt(captured.identity, d1)).value).toMatchObject({ status: 'blocked', reason: 'source' });
   expect((await attempt({ ...captured.identity, effectKey: entryKey() }, d3)).value.status).toBe('unavailable');
-  expect((await attempt({ ...captured.identity, incarnation: captured.identity.incarnation + 'x' }, d3)).value).toMatchObject({ status: 'blocked', reason: 'source' });
+  expect(
+    (await attempt({ ...captured.identity, incarnation: captured.identity.incarnation + 'x' }, d3)).value,
+  ).toMatchObject({ status: 'blocked', reason: 'source' });
   expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, d3)).toEqual({ status: 'progress', removed: 2 });
   await finishPrivateCleanup(d3);
   expect(await snapshot(row.id)).toEqual([]);
-  expect((await custodyCommand(captured.identity, (client, at) => captured.custody.readAndHold({
-    ...retirementWork(), ...captured, client, at, holdId: entryKey(),
-  }))).value.status).toBe('unavailable');
+  expect(
+    (
+      await custodyCommand(captured.identity, (client, at) =>
+        captured.custody.readAndHold({
+          ...retirementWork(),
+          ...captured,
+          client,
+          at,
+          holdId: entryKey(),
+        }),
+      )
+    ).value.status,
+  ).toBe('unavailable');
 }, 120000);
 
 test('live native holds survive generation changes and deletion; only committed release permits bounded child-before-parent retirement', async () => {
-  const row = await make(), captured = await captureForRetirement(row.id);
+  const row = await make(),
+    captured = await captureForRetirement(row.id);
   const holdIds = Array.from({ length: 81 }, () => entryKey());
   await custodyCommand(captured.identity, async (client, at) => {
-    for (const holdId of holdIds) expect((await captured.custody.readAndHold({ ...retirementWork(), ...captured, client, at, holdId })).status).toBe('held');
+    for (const holdId of holdIds)
+      expect(
+        (await captured.custody.readAndHold({ ...retirementWork(), ...captured, client, at, holdId })).status,
+      ).toBe('held');
     return true;
   });
   await remove(row.id, row.revision);
-  const key = await locator(row.id), before = await snapshot(row.id);
+  const key = await locator(row.id),
+    before = await snapshot(row.id);
   now += 720 * 3600 * 1000;
-  expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({ status: 'retained', removed: 0, custody: 'native_source_capture' });
+  expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({
+    status: 'retained',
+    removed: 0,
+    custody: 'native_source_capture',
+  });
   expect(await snapshot(row.id)).toEqual(before);
-  const sourceGeneration = (await f.pool.query('SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2', [key.route, row.id])).rows[0].generation as string;
+  const sourceGeneration = (
+    await f.pool.query(
+      'SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2',
+      [key.route, row.id],
+    )
+  ).rows[0].generation as string;
   const released = await custodyCommand(captured.identity, async (client, at) => {
-    expect((await captured.custody.readAndHold({ ...retirementWork(), ...captured, client, at, holdId: entryKey() })).status).toBe('unavailable');
-    for (const holdId of holdIds) expect((await captured.custody.releaseHold({ ...retirementWork(), ...captured, client, at, holdId })).status).toBe('released');
-    return captured.custody.retireCapture({ ...retirementWork(), ...captured, client, at, sourceGeneration,
-      episode: { kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter } });
+    expect(
+      (await captured.custody.readAndHold({ ...retirementWork(), ...captured, client, at, holdId: entryKey() })).status,
+    ).toBe('unavailable');
+    for (const holdId of holdIds)
+      expect(
+        (await captured.custody.releaseHold({ ...retirementWork(), ...captured, client, at, holdId })).status,
+      ).toBe('released');
+    return captured.custody.retireCapture({
+      ...retirementWork(),
+      ...captured,
+      client,
+      at,
+      sourceGeneration,
+      episode: { kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter },
+    });
   });
   expect(released.value).toMatchObject({ status: 'blocked', reason: 'release_uncommitted' });
   expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({ status: 'progress', removed: 80 });
-  expect((await f.pool.query('SELECT 1 FROM library.native_source_receipt WHERE route=$1 AND capture_id=$2', [key.route, captured.captureId])).rows).toHaveLength(1);
+  expect(
+    (
+      await f.pool.query('SELECT 1 FROM library.native_source_receipt WHERE route=$1 AND capture_id=$2', [
+        key.route,
+        captured.captureId,
+      ])
+    ).rows,
+  ).toHaveLength(1);
   expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({ status: 'progress', removed: 3 });
   await finishPrivateCleanup(key);
   expect(await snapshot(row.id)).toEqual([]);
 }, 120000);
 
-
 test('unheld ever-public native capture stays retained and its whole custody family remains in the terminal probe', async () => {
-  const row = await make('public'), captured = await captureForRetirement(row.id);
+  const row = await make('public'),
+    captured = await captureForRetirement(row.id);
   await remove(row.id, row.revision);
   const key = await locator(row.id);
   now += 720 * 3600 * 1000;
   expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({
-    status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition',
+    status: 'retained',
+    removed: 0,
+    custody: 'collection_source_and_destination_disposition',
   });
-  const sourceGeneration = (await f.pool.query('SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2', [key.route, row.id])).rows[0].generation as string;
-  const result = await custodyCommand(captured.identity, (client, at) => captured.custody.retireCapture({
-    ...retirementWork(), ...captured, client, at, sourceGeneration,
-    episode: { kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter },
-  }));
+  const sourceGeneration = (
+    await f.pool.query(
+      'SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2',
+      [key.route, row.id],
+    )
+  ).rows[0].generation as string;
+  const result = await custodyCommand(captured.identity, (client, at) =>
+    captured.custody.retireCapture({
+      ...retirementWork(),
+      ...captured,
+      client,
+      at,
+      sourceGeneration,
+      episode: { kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter },
+    }),
+  );
   expect(result.value).toMatchObject({ status: 'blocked', reason: 'public_custody' });
-  expect((await f.pool.query('SELECT 1 FROM library.native_source_capture WHERE route=$1 AND capture_id=$2', [key.route, captured.captureId])).rows).toHaveLength(1);
-  const pending = (await erasureProbe.run(f.pool, { route: key.route, account_id: key.accountId })).map((row) => row.store);
-  for (const store of ['native_source_capture', 'native_source_receipt', 'native_source_hold', 'native_source_fence']) expect(pending).toContain(store);
+  expect(
+    (
+      await f.pool.query('SELECT 1 FROM library.native_source_capture WHERE route=$1 AND capture_id=$2', [
+        key.route,
+        captured.captureId,
+      ])
+    ).rows,
+  ).toHaveLength(1);
+  const pending = (await erasureProbe.run(f.pool, { route: key.route, account_id: key.accountId })).map(
+    (row) => row.store,
+  );
+  for (const store of ['native_source_capture', 'native_source_receipt', 'native_source_hold', 'native_source_fence'])
+    expect(pending).toContain(store);
 }, 120000);

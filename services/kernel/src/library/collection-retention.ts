@@ -196,7 +196,10 @@ export async function purgeExpiredCollectionPage(
         return noEffect({ status: 'stale', removed: 0 });
       if (!parent.due) return noEffect({ status: 'not_due', removed: 0 });
       const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent, {
-        kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter,
+        kind: 'deleted',
+        deletionId: key.deletionId,
+        revision: key.revision,
+        purgeAfter: key.purgeAfter,
       });
       if (value.removed === 0) return noEffect(value);
       return {
