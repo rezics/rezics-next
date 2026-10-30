@@ -137,6 +137,7 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
   for (const property of [
     data.definitions.wordCount,
     'wdt:P7937',
+    'schema:author',
     'schema:keywords',
     'schema:suitableForDiet',
     'schema:cookTime',
@@ -234,6 +235,8 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       >,
       descriptions: 'description' in value ? { en: String(value.description) } : undefined,
     }));
+    const personIndex = entries.findIndex(({ key }) => key === 'person');
+    if (personIndex > 0) entries.unshift(entries.splice(personIndex, 1)[0]!);
     for (const view of data.traversal.views) {
       const count = data.traversal.countPerView;
       for (let index = 1; index <= count; index++) {
@@ -311,19 +314,41 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       batches.map(async ({ persona, entries: writerEntries }) => {
         for (let start = 0; start < writerEntries.length; start += fixtureBatchSize) {
           const batch = writerEntries.slice(start, start + fixtureBatchSize);
-          const commands = batch.map(({ key, type, labels, descriptions }) => ({
-            op: 'create',
-            key,
-            source: {
-              source: 'web-publication-fixture',
-              external_id: key,
-              record_revision: '1',
-              digest: '0'.repeat(64),
-              converter_revision: 'web-publication-fixture@1',
-              field_group: 'facts',
-            },
-            subject: { type, labels, ...(descriptions ? { descriptions } : {}) },
-          }));
+          const commands = batch.map(({ key, type, labels, descriptions }) => {
+            const author = key === 'book' ? created.get('person') : undefined;
+            if (key === 'book' && !author) throw new Error('Fixture person must be created before its book');
+            return {
+              op: 'create',
+              key,
+              source: {
+                source: 'web-publication-fixture',
+                external_id: key,
+                record_revision: '1',
+                digest: '0'.repeat(64),
+                converter_revision: 'web-publication-fixture@1',
+                field_group: 'facts',
+              },
+              subject: {
+                type,
+                labels,
+                ...(descriptions ? { descriptions } : {}),
+                ...(author
+                  ? {
+                      statements: {
+                        'schema:author': [
+                          {
+                            property: { id: 'schema:author' },
+                            value: { type: 'value', content: author.id },
+                            qualifiers: [],
+                            references: [],
+                          },
+                        ],
+                      },
+                    }
+                  : {}),
+              },
+            };
+          });
           let response: Response;
           response = await kernel(
             '/v1/subjects:batchWrite',
@@ -358,10 +383,14 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       [...created.keys()].map((key) => [key, urlFor(key)]),
     ) as PublicationFixture['subjects'];
     const views = Object.fromEntries(
-      (['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const).map((name) => [
-        name,
-        new URL(`${subjectPath(created.get('book')!.id, created.get('book')!.label)}/${name}`, publicOrigin).href,
-      ]),
+      (['editions', 'contents', 'cast', 'crew', 'inverse', 'relations'] as const).map((name) => {
+        const inverse = name === 'inverse';
+        const subject = created.get(inverse ? 'person' : 'book')!;
+        return [
+          name,
+          new URL(`${subjectPath(subject.id, subject.label)}/${inverse ? 'relations' : name}`, publicOrigin).href,
+        ];
+      }),
     ) as PublicationFixture['views'];
     const sitemap = Object.fromEntries(
       (['subject', 'collection', 'realm', 'space', 'board', 'thread'] as const).map((kind) => [
@@ -386,7 +415,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       privateCollection: new URL('/en/collections/00000000-0000-4000-8000-000000000000', publicOrigin).href,
       unknownCollection: new URL('/en/collections/00000000-0000-4000-8000-000000000001', publicOrigin).href,
       emptyPublicList: new URL('/en/subjects', publicOrigin).href,
-      preparingView: views.relations,
+      preparingView: views.inverse,
       unavailableView: views.inverse,
       searchZhHans: new URL('/zh-Hans/search?q=%E7%81%AF%E7%AC%BC%E6%A1%A3%E6%A1%88', publicOrigin).href,
       sitemap,
