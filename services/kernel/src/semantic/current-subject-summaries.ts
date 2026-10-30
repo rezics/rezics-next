@@ -53,18 +53,34 @@ export async function readCurrentSubjectSummaries(
     });
     return new Map([...original, ...(await read(client, terminals))]);
   });
-  const keys = [...new Set([...ids, ...ids.flatMap((id) => {
-    const original = observed.get(id);
-    return original?.visibility === 'visible' && original.redirect ? [original.redirect] : [];
-  })])];
+  const keys = [
+    ...new Set([
+      ...ids,
+      ...ids.flatMap((id) => {
+        const original = observed.get(id);
+        return original?.visibility === 'visible' && original.redirect ? [original.redirect] : [];
+      }),
+    ]),
+  ];
   const prepare = async () => {
     const checks = new Map<string, Awaited<ReturnType<typeof accessCheck>>>();
     // Preparation holds no foreign read checkout. The real Actor is preserved by reference.
     for (const id of keys) {
       const route = routeOf(id)!;
-      checks.set(id, await accessCheck(deps.access, deps.actor, 'subject:read', {
-        route, id, eligibility: relatedReadEligibility({ route, id }, keys),
-      }, { pool: deps.pool, deadline: deps.deadline }));
+      checks.set(
+        id,
+        await accessCheck(
+          deps.access,
+          deps.actor,
+          'subject:read',
+          {
+            route,
+            id,
+            eligibility: relatedReadEligibility({ route, id }, keys),
+          },
+          { pool: deps.pool, deadline: deps.deadline },
+        ),
+      );
     }
     return checks;
   };
@@ -76,9 +92,10 @@ export async function readCurrentSubjectSummaries(
       const current = await read(client, keys);
       const allowed = new Set<string>();
       for (const id of keys) {
-        const before = observed.get(id), now = current.get(id);
+        const before = observed.get(id),
+          now = current.get(id);
         if (JSON.stringify(before) !== JSON.stringify(now)) throw new ProblemError('dependency_unavailable');
-        if (now?.visibility === 'visible' && await checks.get(id)!(client)) allowed.add(id);
+        if (now?.visibility === 'visible' && (await checks.get(id)!(client))) allowed.add(id);
       }
       return allowed;
     });

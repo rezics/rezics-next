@@ -407,10 +407,14 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           const { preview, ...options } = query;
           if (preview !== undefined && (query.view !== 'FULL' || (query.limit ?? 20) > 20))
             throw new ProblemError('invalid_request');
-          const page = await read().listCollections(actor, basicQuery(options),
-            preview === undefined ? undefined : { deadline: job.deadline });
+          const page = await read().listCollections(
+            actor,
+            basicQuery(options),
+            preview === undefined ? undefined : { deadline: job.deadline },
+          );
           return fullView(viewDependencies(), actor, query.view, {
-            ...page, collections: page.collections.map(collectionReadView),
+            ...page,
+            collections: page.collections.map(collectionReadView),
           });
         }),
     )

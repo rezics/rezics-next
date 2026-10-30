@@ -32,9 +32,15 @@ export async function readCollectionPreviews(
   prepareUnresolved?: (previews: ReadonlyMap<string, CollectionPreview>) => Promise<void>,
 ): Promise<Map<string, CollectionPreview>> {
   if (parents.length > 20) throw new ProblemError('invalid_request');
-  const result = new Map<string, CollectionPreview>(parents.map(({ id }) => [id, {
-    previewMembers: [], previewStatus: 'pending',
-  }]));
+  const result = new Map<string, CollectionPreview>(
+    parents.map(({ id }) => [
+      id,
+      {
+        previewMembers: [],
+        previewStatus: 'pending',
+      },
+    ]),
+  );
   if (!parents.length) return result;
   const route = routeOf(parents[0]!.id);
   if (route === null || parents.some((parent) => routeOf(parent.id) !== route))
@@ -49,10 +55,15 @@ export async function readCollectionPreviews(
     source_generations: selected.map((parent) => parent.sourceGeneration),
     revisions: selected.map((parent) => parent.revision),
   };
-  const rows = await withReadTransaction(deps.pool, (client) => membersRead.run(deadlineClient(client, deadline), {
-    ...binding, per_parent: quota,
-  }));
-  const originals = [...new Set(rows.flatMap((row) => row.subjectId && row.deletionId === null ? [row.subjectId] : []))];
+  const rows = await withReadTransaction(deps.pool, (client) =>
+    membersRead.run(deadlineClient(client, deadline), {
+      ...binding,
+      per_parent: quota,
+    }),
+  );
+  const originals = [
+    ...new Set(rows.flatMap((row) => (row.subjectId && row.deletionId === null ? [row.subjectId] : []))),
+  ];
   if (originals.length && !deps.routeKey) throw new ProblemError('dependency_unavailable');
   const display = originals.length
     ? await readCurrentSubjectSummaries({ ...deps, actor, routeKey: deps.routeKey!, deadline }, originals)
@@ -77,12 +88,16 @@ export async function readCollectionPreviews(
   await prepareUnresolved?.(result);
   await display.verify();
   const current = await withReadTransaction(deps.pool, (client) =>
-    fencesRead.run(deadlineClient(client, deadline), binding));
+    fencesRead.run(deadlineClient(client, deadline), binding),
+  );
   const generations = new Map(current.map((row) => [row.collectionId, row.nativeGeneration]));
-  if (selected.some((parent) => {
-    const before = rows.find((row) => row.collectionId === parent.id);
-    return !before || generations.get(parent.id) !== before.nativeGeneration;
-  })) throw new ProblemError('dependency_unavailable');
+  if (
+    selected.some((parent) => {
+      const before = rows.find((row) => row.collectionId === parent.id);
+      return !before || generations.get(parent.id) !== before.nativeGeneration;
+    })
+  )
+    throw new ProblemError('dependency_unavailable');
   for (const parent of parents) await authorizeCurrent(parent);
   return result;
 }

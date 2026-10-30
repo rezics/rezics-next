@@ -40,20 +40,21 @@ type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
 type Sink = { seen: boolean; row: StoredCollection | null; failure?: { error: unknown } };
-export type CollectionView = CollectionPresentation & Partial<CollectionPreview> & {
-  // Older internal callers may construct the curated presentation without wire-only fields.
-  membershipKind?: 'curated';
-  orderEpoch?: number;
-  id: string;
-  curatorAccountId: string | null;
-  title: string;
-  description: string | null;
-  visibility: 'private' | 'unlisted' | 'public';
-  revision: number;
-  memberCount: number;
-  createdAt: string;
-  updatedAt: string;
-};
+export type CollectionView = CollectionPresentation &
+  Partial<CollectionPreview> & {
+    // Older internal callers may construct the curated presentation without wire-only fields.
+    membershipKind?: 'curated';
+    orderEpoch?: number;
+    id: string;
+    curatorAccountId: string | null;
+    title: string;
+    description: string | null;
+    visibility: 'private' | 'unlisted' | 'public';
+    revision: number;
+    memberCount: number;
+    createdAt: string;
+    updatedAt: string;
+  };
 
 export type CuratedCollectionView = CollectionView & { membershipKind: 'curated'; orderEpoch: number };
 
@@ -461,14 +462,25 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
     const collections: CollectionResourceView[] = [...shownLogical];
     for (const row of result.collections) collections.push(await present(viewer, row));
     if (preview) {
-      const previews = await readCollectionPreviews(dependencies, viewer, result.collections, preview.deadline, async (parent) => {
-        const current = await loadCollection(viewer, parent.id, preview.deadline);
-        if (!current) throw notFound();
-        if (current.revision !== parent.revision || current.sourceGeneration !== parent.sourceGeneration ||
-            current.membershipKind !== parent.membershipKind) throw new ProblemError('dependency_unavailable');
-      }, (previews) => retainPreview(viewer, result.collections, previews, preview.deadline));
-      for (const collection of collections) Object.assign(collection,
-        previews.get(collection.id) ?? { previewMembers: [], previewStatus: 'pending' });
+      const previews = await readCollectionPreviews(
+        dependencies,
+        viewer,
+        result.collections,
+        preview.deadline,
+        async (parent) => {
+          const current = await loadCollection(viewer, parent.id, preview.deadline);
+          if (!current) throw notFound();
+          if (
+            current.revision !== parent.revision ||
+            current.sourceGeneration !== parent.sourceGeneration ||
+            current.membershipKind !== parent.membershipKind
+          )
+            throw new ProblemError('dependency_unavailable');
+        },
+        (previews) => retainPreview(viewer, result.collections, previews, preview.deadline),
+      );
+      for (const collection of collections)
+        Object.assign(collection, previews.get(collection.id) ?? { previewMembers: [], previewStatus: 'pending' });
     }
     return { ...result, collections };
   }

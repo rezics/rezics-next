@@ -7,8 +7,12 @@ import {
 } from './support/collection-preview-fixture.ts';
 
 let f: CollectionPreviewFixture;
-beforeAll(async () => { f = await createCollectionPreviewFixture(); }, 120_000);
-afterAll(async () => { await f?.close(); });
+beforeAll(async () => {
+  f = await createCollectionPreviewFixture();
+}, 120_000);
+afterAll(async () => {
+  await f?.close();
+});
 
 test('anonymous preview uses current public disclosure without writes or curator authority', async () => {
   const collection = await f.collection('public');
@@ -20,18 +24,32 @@ test('anonymous preview uses current public disclosure without writes or curator
   await f.hide(hidden);
   const statements: string[] = [];
   let reading = false;
-  await observeRetentionQueries(f.pool, ({ sql }) => { if (reading) statements.push(sql); });
+  await observeRetentionQueries(f.pool, ({ sql }) => {
+    if (reading) statements.push(sql);
+  });
   reading = true;
   let page: Awaited<ReturnType<typeof f.page>>;
-  try { page = await f.page('anonymous'); } finally { reading = false; }
-  expectReadyPreview(page.collections.find((row) => row.id === collection.id), [visible]);
+  try {
+    page = await f.page('anonymous');
+  } finally {
+    reading = false;
+  }
+  expectReadyPreview(
+    page.collections.find((row) => row.id === collection.id),
+    [visible],
+  );
   expect(page.collections.some((row) => row.id === privateParent.id)).toBe(false);
   expect(JSON.stringify(page)).not.toContain(hidden);
   expect(JSON.stringify(page)).not.toContain('Private occurrence annotation');
-  expect(statements.some((sql) => /\b(?:INSERT\s+INTO|UPDATE\s+(?:ONLY\s+)?\w+\.|DELETE\s+FROM)\b/i.test(sql))).toBe(false);
+  expect(statements.some((sql) => /\b(?:INSERT\s+INTO|UPDATE\s+(?:ONLY\s+)?\w+\.|DELETE\s+FROM)\b/i.test(sql))).toBe(
+    false,
+  );
   expect(statements.some((sql) => /\bcore\.(?:receipt|operational)|\bdbos\./i.test(sql))).toBe(false);
   await f.hide(visible);
-  expectReadyPreview((await f.page('anonymous')).collections.find((row) => row.id === collection.id), []);
+  expectReadyPreview(
+    (await f.page('anonymous')).collections.find((row) => row.id === collection.id),
+    [],
+  );
 }, 120_000);
 
 test('anonymous exhausted raw allowance is pending without a partial preview or retained preparation', async () => {
@@ -46,7 +64,11 @@ test('anonymous exhausted raw allowance is pending without a partial preview or 
   });
   reading = true;
   let page: Awaited<ReturnType<typeof f.page>>;
-  try { page = await f.page('anonymous'); } finally { reading = false; }
+  try {
+    page = await f.page('anonymous');
+  } finally {
+    reading = false;
+  }
   const row = page.collections.find((candidate) => candidate.id === collection.id)!;
   expect(row.previewStatus).toBe('pending');
   expect(row.previewMembers).toEqual([]);
@@ -68,7 +90,11 @@ test('a changed native source during summary projection returns typed unavailabl
   });
   reading = true;
   let response: Response;
-  try { response = await f.list('anonymous'); } finally { reading = false; }
+  try {
+    response = await f.list('anonymous');
+  } finally {
+    reading = false;
+  }
   expect(changed).toBe(true);
   expect(response.status).toBe(503);
   expect((await response.json()).code).toBe('dependency_unavailable');

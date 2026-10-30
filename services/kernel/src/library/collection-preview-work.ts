@@ -15,10 +15,20 @@ export type PreviewPreparationDependencies = PresentationDependencies & { workCl
  */
 export function createCollectionPreviewPreparation(deps: PreviewPreparationDependencies) {
   let after: string | null = null;
-  return async (actor: Actor, parents: readonly Parent[], previews: ReadonlyMap<string, CollectionPreview>, deadline: number) => {
+  return async (
+    actor: Actor,
+    parents: readonly Parent[],
+    previews: ReadonlyMap<string, CollectionPreview>,
+    deadline: number,
+  ) => {
     if (actor.kind !== 'account' || !deps.workClient) return;
-    const unresolved = parents.filter((parent) => parent.membershipKind === 'curated' &&
-      parent.curatorAccountId === actor.accountId && previews.get(parent.id)?.previewStatus === 'pending')
+    const unresolved = parents
+      .filter(
+        (parent) =>
+          parent.membershipKind === 'curated' &&
+          parent.curatorAccountId === actor.accountId &&
+          previews.get(parent.id)?.previewStatus === 'pending',
+      )
       .sort((a, b) => a.id.localeCompare(b.id));
     const selected = unresolved.find((parent) => after === null || parent.id > after) ?? unresolved[0];
     if (!selected) return;
@@ -35,9 +45,18 @@ export function createCollectionPreviewPreparation(deps: PreviewPreparationDepen
     try {
       const preparation = createMembersPreparation({ ...deps, workClient: await deps.workClient() });
       // One genuine mutation total for this list. No per-parent enqueue or synchronous continuation.
-      await preparation.reserve(actor, selected.id, [{
-        filter, sort: 'ordinal', release: { digest: release.digest, value: release.release },
-      }], { deadline });
+      await preparation.reserve(
+        actor,
+        selected.id,
+        [
+          {
+            filter,
+            sort: 'ordinal',
+            release: { digest: release.digest, value: release.release },
+          },
+        ],
+        { deadline },
+      );
     } catch (error) {
       if (!(error instanceof ProblemError) || error.code !== 'dependency_unavailable') throw error;
       // Explicit producer unavailability leaves the entire preview pending, never partial/ready.
