@@ -13,7 +13,9 @@ export const zoneViewerActionResource: ViewerActionResource = {
     const rows = await read.run(client, { routes: ids.map((id) => routeOf(id)!), ids: [...ids] });
     const ownerIds = [...new Set(rows.flatMap((row) => (row.ownerId ? [row.ownerId] : [])))];
     const accounts = ownerIds.length ? await readAccountActionStates(client, ownerIds) : [];
-    const active = new Set(accounts.filter((account) => account.state === 'active' && !account.fenced).map((a) => a.id));
+    const active = new Set(
+      accounts.filter((account) => account.state === 'active' && !account.fenced).map((a) => a.id),
+    );
     // Retain private heads with a false public floor: an explicit current read
     // grant can admit them. Missing or ineligible heads remain absent even with a grant.
     return Object.fromEntries(
