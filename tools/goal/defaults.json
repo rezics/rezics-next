@@ -54,6 +54,10 @@
       "command": ["bun", "scripts/workspace-imports.ts"]
     },
     {
+      "paths": ["apps/web/**", "packages/ui/**", "packages/document/**"],
+      "command": ["bun", "test", "apps/web/tests/library-page-smoke.test.ts"]
+    },
+    {
       "paths": ["packages/client/src/kernel/**"],
       "command": [
         "sh",
