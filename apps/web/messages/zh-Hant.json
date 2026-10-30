@@ -2391,5 +2391,13 @@
   "condition_text_error": "請檢查搜尋文字與512位元組上限。已保留查詢。",
   "condition_cursor_error": "此續頁標記無效。請使用目前條件重新開始。",
   "condition_language": "結果語言",
-  "condition_language_default": "使用頁面語言"
+  "condition_language_default": "使用頁面語言",
+  "order_reconcile_action": "檢查付款與存取狀態",
+  "order_reconcile_refreshing": "正在請求狀態檢查…",
+  "order_reconcile_retry": "重試狀態檢查",
+  "order_reconcile_queued": "狀態檢查已排入佇列。此次請求不代表付款或存取權限已確認。請重新整理頁面查看目前存取狀態。",
+  "order_reconcile_unavailable": "暫時無法檢查狀態。保留上次驗證的付款與存取狀態。",
+  "order_reconcile_error": "請求結果未知。請重試同一請求。",
+  "order_reconcile_denied": "目前已無權執行此狀態檢查。請重新整理頁面檢查目前權限。",
+  "order_reconcile_hint": "請求重新檢查這筆已記錄的購買，不會發起另一筆付款。"
 }

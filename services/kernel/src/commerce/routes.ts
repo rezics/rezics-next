@@ -9,6 +9,7 @@ import { withConnection } from '../database/pool.ts';
 import type { createApp } from '../http/app.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { customMethod } from '../http/custom-method.ts';
+import { defineRateLimit } from '../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
@@ -16,6 +17,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { checkout } from './checkout.ts';
+import { reconcileOrder } from './order-reconcile.ts';
 import { createCommerceCommands, OfferRevisionConflictError, OfferUnavailableError } from './commands.ts';
 import { StripeUnavailableError, type Entitlement, type Offer, type Order, type StripePort } from './model.ts';
 import * as store from './store.ts';
@@ -630,6 +632,50 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
             },
           };
         });
+      },
+    )
+    .post(
+      customMethod('/v1/orders/:orderId', 'reconcile'),
+      {
+        params: t.Object({ orderId: id }),
+        headers,
+        body: t.Object({}, object),
+        response: {
+          202: t.Object({ orderId: id, reconciliation: t.Literal('queued') }, object),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden', 'platform_closed'),
+          404: problemSchema('not_found'),
+          422: problemSchema('idempotency_conflict'),
+          503: unavailable,
+        },
+        detail: {
+          ...detail('order.reconcile', 'order:reconcile', 'gate:purchases'),
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': ['access.account'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+        },
+      },
+      async ({ params, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        if (!scoped(actor, 'order:reconcile')) throw new ProblemError('forbidden');
+        if (routeOf(params.orderId) === null) throw new ProblemError('not_found');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(
+            () =>
+              reconcileOrder(
+                { pool, access: deps.access(), deadline: job.deadline, repairAvailable: deps.commerce !== undefined },
+                actor,
+                params.orderId,
+                key,
+              ),
+            'not_found',
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        set.status = 202;
+        return result.value;
       },
     )
     .get(

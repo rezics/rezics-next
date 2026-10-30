@@ -248,6 +248,58 @@ an outside-Stripe creator payment.
 
 ## Commands and creation uncertainty
 
+### Explicit buyer repair of a known order
+
+`POST /v1/orders/:orderId:reconcile` (`order.reconcile`) accepts exactly `{}` and the ordinary idempotency header.
+Its exact action and consented client scope are `order:reconcile`, with `gate:purchases`, nonanonymous security,
+normal write rate/admission and the current request deadline. Mounted metadata declares `own-account` authority
+on `access.account`; read/create scopes and first-party registration confer no repair authority.
+
+[The command](order-reconcile.ts) prepares the installed Access formula on the verified actor's native account.
+Every physical attempt locks that account before the exact order, checks active state/fence/current authentication
+floor, evaluates actor and distinct principal authority, then re-reads stored buyer equality before any receipt.
+Wrong, unknown and other same-route buyers receive concealed `not_found`. No buyer selector or provider locator,
+callback, consent flag or token is accepted in the intent. The current authorization also governs exact replay.
+The digest includes the exact order target; changing it with a reused key conflicts.
+
+A fresh command requires a recorded Session and configured repair service. It commits one closed
+`com.rezics.commerce.order.repair_requested.v1` event (`{orderId,name}`) and its queued response together through
+the existing command outbox fence. `name` is the native transaction UUID, independent of order revision and bounded
+to the existing repair-name contract. The default `commerce_repair_order` effect relays through
+`enqueueKnownOrderRepair` to `commerce.repairOrder`, identity `order:<orderId>:repair:<name>`. Native receipt replay
+returns the original `202 {orderId,reconciliation:'queued'}` without another effect, even after a worker changes
+the order. Eligibility is checked only after authorized receipt handling. No database connection spans DBOS,
+provider I/O or a foreign checkout.
+
+Pending and historically paid records can both request this distinct repair trigger. The existing known-order
+resolver, refresh admission, current revision/binding, provider evidence and terminal fences remain authoritative.
+Repair creates no order, Checkout Session, charge, consent, entitlement or bytes. Missing Session/lost creation
+binding returns unavailable and needs legitimate existing correlation recovery; this action never resets a
+creation key. Source unavailability preserves financial truth and last verified entitlement. A queued request
+establishes neither payment nor fulfilment, and Content still performs its exact current buyer and final use checks.
+
+The existing order page exposes **Check payment/access status** only from the current native `viewerActions`
+decision for `order:reconcile`/`order.reconcile` on the actual signed-in account. Its explicit POST server function
+uses the current session, Origin/CSRF protection and private no-store responses. One distinct key survives timeout
+and retry. GET, hydration and polling never request repair. Queued repair uses only the existing status reads and
+does not reset the original sixteen-read budget; current access requires the ordinary page refresh.
+
+The generated client in this checkout does not yet contain `$reconcile`. The controller owns generation;
+`nativeOrderReconcile` in `apps/web/src/checkout/order-reconcile.ts` is the exact typed unavailable adapter until
+that binding lands. Replace it with `client.orders({orderId}).$reconcile.post({}, {headers: {authorization,
+'idempotency-key': JSON.stringify(idempotencyKey)}})`, admitting only the exact 202 queued response and preserving
+denied/conflict/unavailable/uncertain results. There is no cast client or guessed HTTP transport. The default caller
+is `requestOrderReconciliation`; the kernel default effect is already registered. Website registration and renewed
+consent must explicitly include the new scope before visibility is available; existing sessions are not upgraded.
+
+Commerce/Web handoff: operation `order.reconcile`; caller `requestOrderReconciliation`; Storybook IDs
+`pages-commerce-order--reconciliation-queued`, `pages-commerce-order--reconciliation-unavailable`,
+`pages-commerce-order--reconciliation-denied`, `pages-commerce-order--reconciliation-retry`. These signed-in
+component examples retain the recorded pending order and substitute only the operation response. Web owns the
+390/1280 visual review; source and local typing are not native, integrated-journey or promoted-main proof.
+
+### Existing command identities
+
 Use shared native command receipts, scoped by partition, verified principal kind/ID, command kind and key.
 Hash complete semantic intent including path targets. Reauthorize client replay before receipt lookup/disclosure;
 changed tokens do not change principal identity. Revoked/suspended authority cannot replay private results.

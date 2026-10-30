@@ -33,9 +33,9 @@ export const Route = createFileRoute('/orders/$id')({
   component: function OrderRoute() {
     const checkout = Route.useSearch().checkout;
     return checkout ? (
-      <OrderPage order={Route.useLoaderData()} checkout={checkout} />
+      <OrderPage key={Route.useLoaderData().id} order={Route.useLoaderData()} checkout={checkout} />
     ) : (
-      <OrderPage order={Route.useLoaderData()} />
+      <OrderPage key={Route.useLoaderData().id} order={Route.useLoaderData()} />
     );
   },
 });

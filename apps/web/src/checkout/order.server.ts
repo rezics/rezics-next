@@ -4,7 +4,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { prepareSession, viewerCredential } from '../session/request';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
 import { UUID } from './price';
 import { subjectCover } from './subject-cover';
@@ -126,7 +126,30 @@ export async function loadOrderPage(id: string, locale: string): Promise<OrderPa
   const entitlement = credential
     ? await entitlementOnce(request, kernelClient(), credential, id, order.entitlementId)
     : { kind: 'unavailable' as const };
-  return { ...order, entitlement };
+  let canReconcile = false;
+  const accountId = sessionSubject(request);
+  if (credential && accountId && UUID.test(accountId)) {
+    try {
+      const result = await kernelClient().viewerActions.post(
+        { resources: [{ type: 'access.account', id: accountId }] },
+        { headers: { authorization: credential } },
+      );
+      canReconcile =
+        !result.error &&
+        result.data?.resources.some(
+          (resource) =>
+            resource.type === 'access.account' &&
+            resource.id === accountId &&
+            'viewerActions' in resource &&
+            resource.viewerActions.some(
+              (action) => action.action === 'order:reconcile' && action.operations.includes('order.reconcile'),
+            ),
+        ) === true;
+    } catch {
+      // Missing current authority never exposes a write control.
+    }
+  }
+  return { ...order, entitlement, canReconcile };
 }
 
 export async function orderStatusResponse(request: Request, id: string): Promise<Response> {

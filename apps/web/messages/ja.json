@@ -2391,5 +2391,13 @@
   "condition_text_error": "検索語と512バイトの上限を確認してください。クエリは保持されています。",
   "condition_cursor_error": "継続トークンが無効です。現在の条件で再開してください。",
   "condition_language": "結果の言語",
-  "condition_language_default": "ページの言語を使用"
+  "condition_language_default": "ページの言語を使用",
+  "order_reconcile_action": "支払い・アクセス状況を確認",
+  "order_reconcile_refreshing": "確認を依頼しています…",
+  "order_reconcile_retry": "確認を再試行",
+  "order_reconcile_queued": "確認を受け付けました。この依頼では支払いやアクセスは確定しません。現在のアクセス状況はページを再読み込みして確認してください。",
+  "order_reconcile_unavailable": "現在、状況を確認できません。最後に確認された支払いとアクセスの状態は維持されます。",
+  "order_reconcile_error": "依頼の結果は不明です。同じ依頼を再試行してください。",
+  "order_reconcile_denied": "この確認を行う権限がなくなりました。ページを再読み込みして現在の権限を確認してください。",
+  "order_reconcile_hint": "記録済みの購入状況を改めて確認します。新たな支払いは発生しません。"
 }

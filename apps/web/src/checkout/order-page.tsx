@@ -7,6 +7,13 @@ import { getLocale } from '../paraglide/runtime.js';
 import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
 import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
+import { useSession } from '../session/query';
+import {
+  createReconciliationRequest,
+  requestOrderReconciliation,
+  type ReconciliationSender,
+  type ReconciliationPhase,
+} from './order-reconcile';
 
 const recheckMs = 2_000;
 // The first read is the page loader. Fifteen further reads reach the 16-read cap at 30 seconds.
@@ -32,13 +39,43 @@ function entitlementLabel(entitlement: CurrentEntitlement): string {
   return m.order_entitlement_unavailable();
 }
 
-export function OrderPage({ order: initial, checkout }: { order: OrderPageData; checkout?: 'canceled' | 'success' }) {
+export function OrderPage({
+  order: initial,
+  checkout,
+  reconcile,
+}: {
+  order: OrderPageData;
+  checkout?: 'canceled' | 'success';
+  /** Component stories substitute only this operation's contract-shaped response. */
+  reconcile?: ReconciliationSender;
+}) {
   const [order, setOrder] = useState(initial);
   const [gaveUp, setGaveUp] = useState(false);
   const polls = useRef(0);
   const canReadOrder = useOperation('order.get');
+  const { state: session, csrfToken } = useSession();
+  const [reconciliation, setReconciliation] = useState<ReconciliationPhase>('ready');
+  const [refreshQueued, setRefreshQueued] = useState(false);
+  const operation = useRef<ReturnType<typeof createReconciliationRequest> | null>(null);
+  const sender = useRef<ReconciliationSender>(async () => ({ kind: 'unavailable' }));
+  sender.current = (intent) =>
+    reconcile
+      ? reconcile(intent)
+      : requestOrderReconciliation({ data: intent, headers: { 'X-CSRF-Token': csrfToken ?? '' } });
+  async function checkStatus() {
+    if (!initial.canReconcile || session !== 'signed-in' || !csrfToken || reconciliation === 'refreshing') return;
+    operation.current ??= createReconciliationRequest(initial.id, (intent) => sender.current(intent));
+    setReconciliation('refreshing');
+    const result = await operation.current();
+    if (!result) return;
+    setReconciliation(result.kind);
+    if (result.kind === 'queued') {
+      setOrder((current) => ({ ...current, entitlement: { kind: 'refresh' } }));
+      setRefreshQueued(true);
+    }
+  }
   useEffect(() => {
-    if (checkout === 'canceled' || !openSettlement.has(order.settlement)) return;
+    if (!refreshQueued && (checkout === 'canceled' || !openSettlement.has(order.settlement))) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const recheck = () => {
@@ -57,7 +94,7 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
             if (typeof body.settlement === 'string' && typeof body.offerId === 'string') {
               const settlement = normalize(body.settlement);
               setOrder((current) => applyOrderStatus(current, settlement, body.offerId as string));
-              if (!openSettlement.has(settlement) || attempt >= recheckLimit) {
+              if ((!refreshQueued && !openSettlement.has(settlement)) || attempt >= recheckLimit) {
                 if (openSettlement.has(settlement)) setGaveUp(true);
                 return;
               }
@@ -72,7 +109,7 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
       stopped = true;
       clearTimeout(timer);
     };
-  }, [checkout, order.id, order.settlement]);
+  }, [checkout, order.id, order.settlement, refreshQueued]);
 
   const pending = openSettlement.has(order.settlement);
   const canceled = checkout === 'canceled' && order.settlement !== 'paid';
@@ -137,6 +174,34 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
         <dt className="font-medium">{m.order_current_access()}</dt>
         <dd role="status">{entitlementLabel(order.entitlement)}</dd>
       </dl>
+      {initial.canReconcile && session === 'signed-in' && (
+        <section className="space-y-3" aria-label={m.order_reconcile_action()}>
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full sm:w-auto"
+            disabled={!csrfToken || ['refreshing', 'queued', 'denied', 'conflict'].includes(reconciliation)}
+            onClick={() => void checkStatus()}
+          >
+            {reconciliation === 'refreshing'
+              ? m.order_reconcile_refreshing()
+              : reconciliation === 'retry' || reconciliation === 'unavailable'
+                ? m.order_reconcile_retry()
+                : m.order_reconcile_action()}
+          </Button>
+          <p role="status" className="text-sm text-muted-foreground">
+            {reconciliation === 'queued'
+              ? m.order_reconcile_queued()
+              : reconciliation === 'unavailable'
+                ? m.order_reconcile_unavailable()
+                : reconciliation === 'retry'
+                  ? m.order_reconcile_error()
+                  : reconciliation === 'denied' || reconciliation === 'conflict'
+                    ? m.order_reconcile_denied()
+                    : m.order_reconcile_hint()}
+          </p>
+        </section>
+      )}
       {confirming && (
         <Alert role="status">
           <AlertDescription className="text-foreground">{m.order_confirming()}</AlertDescription>

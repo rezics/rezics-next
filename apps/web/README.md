@@ -220,7 +220,7 @@ Configure these variables in the environment of `bun run dev`:
 - `WEBSITE_SCOPES`: exactly the space-separated scopes registered for the website client, including `openid offline_access`, never a wildcard.
   Media routes need `media:create`, `media:read_reservation`, `media:read`, `media:complete` and `media:erase`;
   posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
-  `presentation:activate`; checkout start needs `order:create` and order pages and purchase history need `order:read`; the settings page needs
+  `presentation:activate`; checkout start needs `order:create` and order pages and purchase history need `order:read`; the explicit known-order status check separately needs `order:reconcile`; the settings page needs
   `account:read`, `account:update`, `collection:read` and `collection:update` (for the owner Collection list and visibility writes).
   Auth's create-organization and self-deletion pages also need the exact operation scopes `organization:create`,
   `account:manage` and `account:delete`.
@@ -238,7 +238,7 @@ Configure these variables in the environment of `bun run dev`:
 
 Auth must register the website client's redirect URI `<site origin>/auth/callback`, its post-logout redirect URI
 `<site origin>/`, and the `private_key_jwt` authentication method with the corresponding public key and `kid`.
-Pass exactly the registered scope list, including `openid offline_access`, as `WEBSITE_SCOPES`.
+Pass exactly the registered scope list, including `openid offline_access`, as `WEBSITE_SCOPES`. Register and obtain renewed consent for `order:reconcile` before offering the order status-check action; an existing read/create token or first-party client does not acquire it automatically.
 Auth's discovery `scopes_supported` lists every available scope. The Worker sends `resource=API_RESOURCE` on the
 authorization request, authorization code exchange and every refresh; revocation takes no resource. Client assertions
 keep `AUTH_ISSUER` as their audience, and ID tokens keep the client id as theirs. Discovery supplies all Auth endpoints,
@@ -280,7 +280,7 @@ const websiteScopes = registration.scopes.join(' ');
 
 The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
 `reaction:set`,
-the curation scopes `presentation:publish` and `presentation:activate`, `order:create` and `order:read`, the settings page's `account:read`, `account:update`, `collection:read` and `collection:update`, and Auth's account-operation scopes `organization:create`, `account:manage` and `account:delete`.
+the curation scopes `presentation:publish` and `presentation:activate`, `order:create`, `order:read` and `order:reconcile`, the settings page's `account:read`, `account:update`, `collection:read` and `collection:update`, and Auth's account-operation scopes `organization:create`, `account:manage` and `account:delete`.
 Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
@@ -310,7 +310,7 @@ the same trusted bootstrap with `issuer: 'http://127.0.0.1:4200'`, `audience: 'h
 Auth's own signing key/secret and the trusted Access ports. Serve `auth.handler` on that exact loopback origin.
 Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback`, post-logout URI
 `http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting, presentation curation, checkout, settings and account-operation routes:
-`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read account:read account:update organization:create account:manage account:delete`.
+`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read order:reconcile account:read account:update organization:create account:manage account:delete`.
 From `apps/web`, run:
 
 ```sh
@@ -318,7 +318,7 @@ AUTH_ISSUER=http://127.0.0.1:4200 \
 API_RESOURCE=https://api.rezics.test \
 WEBSITE_CLIENT_ID=rezics-website \
 WEBSITE_CLIENT_KEY="$(cat .temp/website-private.jwk)" \
-WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read account:read account:update organization:create account:manage account:delete' \
+WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read order:reconcile account:read account:update organization:create account:manage account:delete' \
 KERNEL_ORIGIN=http://127.0.0.1:4300 \
 bun run dev --host 127.0.0.1 --port 3000 --strictPort
 ```

@@ -187,6 +187,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.commerce.offer.delisted.v1': personal('creator'),
   'com.rezics.commerce.offer.revised.v1': personal('creator'),
   'com.rezics.commerce.order.created.v1': personal('buyer', 'creator'),
+  'com.rezics.commerce.order.repair_requested.v1': personal('buyer'),
   'com.rezics.commerce.order.updated.v1': personal('buyer', 'creator'),
   'com.rezics.commerce.payout_statement.paid.v1': personal('creator'),
   'com.rezics.commerce.payout_statement.updated.v1': personal('creator'),

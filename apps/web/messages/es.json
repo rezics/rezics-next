@@ -2391,5 +2391,13 @@
   "condition_text_error": "Revisa el texto y su límite de 512 bytes. Se conserva la consulta.",
   "condition_cursor_error": "Esta continuación no es válida. Reinicia con las condiciones actuales.",
   "condition_language": "Idioma de los resultados",
-  "condition_language_default": "Usar el idioma de la página"
+  "condition_language_default": "Usar el idioma de la página",
+  "order_reconcile_action": "Comprobar pago y acceso",
+  "order_reconcile_refreshing": "Solicitando comprobación…",
+  "order_reconcile_retry": "Reintentar comprobación",
+  "order_reconcile_queued": "Comprobación en cola. Esta solicitud no confirma el pago ni el acceso. Actualiza la página para ver el acceso actual.",
+  "order_reconcile_unavailable": "La comprobación no está disponible ahora. Se mantienen el último pago y acceso verificados.",
+  "order_reconcile_error": "Se desconoce el resultado. Reintenta la misma solicitud.",
+  "order_reconcile_denied": "Ya no tienes permiso para esta comprobación. Actualiza la página para consultar los permisos actuales.",
+  "order_reconcile_hint": "Solicita una nueva comprobación de esta compra registrada. No se crea otro pago."
 }

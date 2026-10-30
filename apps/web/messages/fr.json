@@ -2391,5 +2391,13 @@
   "condition_text_error": "Vérifiez le texte et sa limite de 512 octets. Votre requête est conservée.",
   "condition_cursor_error": "Cette continuation est invalide. Recommencez avec les conditions actuelles.",
   "condition_language": "Langue des résultats",
-  "condition_language_default": "Utiliser la langue de la page"
+  "condition_language_default": "Utiliser la langue de la page",
+  "order_reconcile_action": "Vérifier le paiement et l’accès",
+  "order_reconcile_refreshing": "Demande de vérification…",
+  "order_reconcile_retry": "Réessayer la vérification",
+  "order_reconcile_queued": "Vérification en attente. Cette demande ne confirme ni le paiement ni l’accès. Actualisez la page pour connaître l’accès actuel.",
+  "order_reconcile_unavailable": "La vérification est indisponible. Le dernier paiement et le dernier accès vérifiés sont conservés.",
+  "order_reconcile_error": "Le résultat de la demande est inconnu. Réessayez la même demande.",
+  "order_reconcile_denied": "Cette vérification n’est plus autorisée. Actualisez la page pour vérifier les autorisations actuelles.",
+  "order_reconcile_hint": "Demandez une nouvelle vérification de cet achat enregistré. Aucun nouveau paiement ne sera créé."
 }

@@ -46,6 +46,7 @@ const typed = [
   'POST /v1/orders',
   'GET /v1/orders',
   'GET /v1/orders/:orderId',
+  'POST /v1/orders/:orderId/$reconcile',
   'GET /v1/entitlements',
   'GET /v1/entitlements/:entitlementId',
   'POST /v1/progressSessions',
@@ -353,6 +354,20 @@ test('mounted action catalogues contain only their declared actions and never in
     });
     expect([...catalogue.keys()]).toEqual([action]);
   }
+});
+
+test('known-order reconciliation declares its exact own-account action and ordinary write policy', () => {
+  const app = createKernel({ pool, routeKey: new Uint8Array(32) });
+  expect(actionCatalogue(app).get('order:reconcile')).toEqual({ anonymous: false, authority: 'own-account' });
+  expect(openApiDocument(app).paths['/v1/orders/{orderId}:reconcile']?.post).toMatchObject({
+    operationId: 'order.reconcile',
+    'x-action': 'order:reconcile',
+    'x-authority-anchor': 'own-account',
+    'x-authority-resource-types': ['access.account'],
+    'x-exposure': 'gate:purchases',
+    'x-rate-limit': { family: 'write', units: 1 },
+    security: [{ bearerAuth: [] }],
+  });
 });
 
 test('subject HTTP refuses an unlicensed document and any media value before attempting storage', async () => {

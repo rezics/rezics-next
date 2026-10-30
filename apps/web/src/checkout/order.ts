@@ -16,6 +16,8 @@ export type OrderPageData = {
   /** Creation time is present in the order read; it is not a payment-settlement time. */
   createdAt: string;
   subject: SubjectCoverData;
+  /** Exact current native viewer-action decision on the signed-in account. */
+  canReconcile?: boolean;
 };
 
 function validateOrder(input: unknown): { id: string; locale: string } {

@@ -2447,5 +2447,13 @@
   "condition_text_error": "Check the search text and its 512-byte limit. Your query is retained.",
   "condition_cursor_error": "This continuation is invalid. Restart with the current conditions.",
   "condition_language": "Result language",
-  "condition_language_default": "Use page language"
+  "condition_language_default": "Use page language",
+  "order_reconcile_action": "Check payment/access status",
+  "order_reconcile_refreshing": "Requesting status check…",
+  "order_reconcile_retry": "Retry status check",
+  "order_reconcile_queued": "Status check queued. Payment and access are not confirmed by this request. Refresh the page for current access.",
+  "order_reconcile_unavailable": "Status checks are unavailable right now. Your last verified payment and access remain unchanged.",
+  "order_reconcile_error": "The request outcome is unknown. Retry with the same request.",
+  "order_reconcile_denied": "This status check is no longer permitted. Refresh the page to check current permissions.",
+  "order_reconcile_hint": "Request a fresh check of this recorded purchase. This does not create another payment."
 }

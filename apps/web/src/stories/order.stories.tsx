@@ -3,8 +3,20 @@ import { OrderPage } from '../checkout/order-page';
 import type { CurrentEntitlement, OrderPageData } from '../checkout/order';
 import { subjectCover } from '../checkout/subject-cover';
 import paidRecording from '../kernel/recorded/order-paid.json';
+import pendingRecording from '../kernel/recorded/order-pending.json';
+import { expect, userEvent, within } from 'storybook/test';
+import type { ReconciliationSender } from '../checkout/order-reconcile';
 import { getLocale } from '../paraglide/runtime.js';
-import { PageStory, pagePaths, orderCanceledReady, orderFailedReady, orderPaidReady, orderPendingReady } from './page';
+import { m } from '../paraglide/messages.js';
+import {
+  PageStory,
+  PatternStory,
+  pagePaths,
+  orderCanceledReady,
+  orderFailedReady,
+  orderPaidReady,
+  orderPendingReady,
+} from './page';
 
 const meta = {
   title: 'Pages/Commerce/Order',
@@ -62,4 +74,79 @@ export const NoEntitlement: Story = {
 export const AccessRefresh: Story = {
   name: 'Buyer, payment confirmed and current access needs refresh (component)',
   render: () => <OrderPage order={currentOrder({ kind: 'refresh' })} />,
+};
+
+function ReconciliationPreview({ send }: { send: ReconciliationSender }) {
+  const order = pendingRecording.order;
+  return (
+    <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+      <OrderPage
+        order={{
+          ...order,
+          settlement: 'pending',
+          canReconcile: true,
+          entitlement: { kind: 'none' },
+          subject: subjectCover(getLocale(), order.targetSubjectId, order.title, order.subject),
+        }}
+        reconcile={send}
+      />
+    </PatternStory>
+  );
+}
+
+// These operation-shaped component examples preserve the recorded pending order;
+// their queued response establishes neither payment nor benefit authority.
+export const ReconciliationQueued: Story = {
+  name: 'Signed in, explicit status check queued (component)',
+  render: () => (
+    <ReconciliationPreview send={async ({ orderId }) => ({ kind: 'queued', orderId, reconciliation: 'queued' })} />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_action() }));
+    await canvas.findByText(m.order_reconcile_queued());
+    expect(canvas.queryByText(m.order_paid())).toBeNull();
+  },
+};
+export const ReconciliationUnavailable: Story = {
+  name: 'Signed in, status check unavailable (component)',
+  render: () => <ReconciliationPreview send={async () => ({ kind: 'unavailable' })} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_action() }));
+    await canvas.findByText(m.order_reconcile_unavailable());
+  },
+};
+export const ReconciliationDenied: Story = {
+  name: 'Signed in, status check permission changed (component)',
+  render: () => <ReconciliationPreview send={async () => ({ kind: 'denied' })} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_action() }));
+    await canvas.findByText(m.order_reconcile_denied());
+  },
+};
+export const ReconciliationRetry: Story = {
+  name: 'Signed in, lost status-check response and retry (component)',
+  render: () => {
+    let first = true;
+    return (
+      <ReconciliationPreview
+        send={async ({ orderId }) => {
+          if (first) {
+            first = false;
+            throw new Error('Response lost');
+          }
+          return { kind: 'queued', orderId, reconciliation: 'queued' };
+        }}
+      />
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_action() }));
+    await canvas.findByText(m.order_reconcile_error());
+    await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_retry() }));
+    await canvas.findByText(m.order_reconcile_queued());
+  },
 };

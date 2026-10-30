@@ -2392,5 +2392,13 @@
   "condition_text_error": "请检查搜索文字及512字节上限。已保留查询。",
   "condition_cursor_error": "此续页标记无效。请使用当前条件重新开始。",
   "condition_language": "结果语言",
-  "condition_language_default": "使用页面语言"
+  "condition_language_default": "使用页面语言",
+  "order_reconcile_action": "检查付款和访问状态",
+  "order_reconcile_refreshing": "正在请求状态检查…",
+  "order_reconcile_retry": "重试状态检查",
+  "order_reconcile_queued": "状态检查已排队。此次请求不代表付款或访问权限已确认。请刷新页面查看当前访问状态。",
+  "order_reconcile_unavailable": "暂时无法检查状态。保留上次验证的付款和访问状态。",
+  "order_reconcile_error": "请求结果未知。请重试同一请求。",
+  "order_reconcile_denied": "当前已无权执行此状态检查。请刷新页面检查当前权限。",
+  "order_reconcile_hint": "请求重新检查这笔已记录的购买，不会发起另一笔付款。"
 }

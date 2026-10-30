@@ -2391,5 +2391,13 @@
   "condition_text_error": "Suchtext und die Grenze von 512 Byte prüfen. Die Anfrage bleibt erhalten.",
   "condition_cursor_error": "Diese Fortsetzung ist ungültig. Mit den aktuellen Bedingungen neu starten.",
   "condition_language": "Ergebnissprache",
-  "condition_language_default": "Seitensprache verwenden"
+  "condition_language_default": "Seitensprache verwenden",
+  "order_reconcile_action": "Zahlungs- und Zugriffsstatus prüfen",
+  "order_reconcile_refreshing": "Statusprüfung wird angefordert…",
+  "order_reconcile_retry": "Statusprüfung erneut versuchen",
+  "order_reconcile_queued": "Statusprüfung vorgemerkt. Diese Anfrage bestätigt weder Zahlung noch Zugriff. Lade die Seite für den aktuellen Zugriff neu.",
+  "order_reconcile_unavailable": "Statusprüfungen sind derzeit nicht verfügbar. Deine zuletzt bestätigte Zahlung und dein Zugriff bleiben unverändert.",
+  "order_reconcile_error": "Das Ergebnis der Anfrage ist unbekannt. Versuche dieselbe Anfrage erneut.",
+  "order_reconcile_denied": "Diese Statusprüfung ist nicht mehr erlaubt. Lade die Seite neu, um die aktuellen Berechtigungen zu prüfen.",
+  "order_reconcile_hint": "Fordere eine neue Prüfung dieses erfassten Kaufs an. Dadurch entsteht keine weitere Zahlung."
 }

@@ -19,6 +19,7 @@ import {
 } from './model.ts';
 import { readOrder } from './store.ts';
 import { createPayouts } from './payouts.ts';
+import { createCommerceWork as createCommerceEnqueue } from './enqueue.ts';
 import {
   CHECKOUT_SYNC_WORKFLOW,
   checkoutWorkflowId,
@@ -338,6 +339,14 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
       );
       const payouts = createPayouts({ pool, clock: deps.royaltyClock });
       addEffects([
+        {
+          name: 'commerce_repair_order',
+          types: ['com.rezics.commerce.order.repair_requested.v1'],
+          async run(event) {
+            const { orderId, name } = event.data as { orderId: string; name: string };
+            await createCommerceEnqueue(client).enqueueKnownOrderRepair(orderId, name);
+          },
+        },
         {
           name: 'commerce_royalty',
           types: ['com.rezics.commerce.transactions.recorded.v1'],
