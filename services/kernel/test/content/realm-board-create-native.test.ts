@@ -24,6 +24,15 @@ test.serial('Realm board creation proves compact membership while native link pr
   const created = await world.board(world.conceptId, key);
   expect(created.response.status).toBe(201);
   expect(created.value.board).toMatchObject({ realmId: world.realm.realmId });
+  const persisted = await world.db.admin.query(
+    `SELECT b.subject_id, i.resource_type,
+       EXISTS (SELECT 1 FROM access.resource_role_grant g WHERE g.route=b.route AND g.resource_id=b.board_id
+         AND g.subject_id=$3 AND g.grant_role='content.board.owner') AS owner
+     FROM content.board b JOIN access.resource_initialization i ON i.route=b.route AND i.resource_id=b.board_id
+     WHERE b.route=$1 AND b.board_id=$2`,
+    [routeOf(created.value.board.id), created.value.board.id, world.owner.accountId],
+  );
+  expect(persisted.rows).toEqual([{ subject_id: world.conceptId, resource_type: 'content.board', owner: true }]);
   const effects = await world.effects();
   const replay = await world.board(world.conceptId, key);
   expect(replay.response.status).toBe(201);

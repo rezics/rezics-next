@@ -24,7 +24,9 @@ export async function realmBoardWorld() {
       overrides: JSON.stringify({ 'new-account': { write: { maximum: 100000, seconds: 86400 } } }),
     }),
   });
-  const scopes = [...actionCatalogue(kernel).keys()].filter((scope) => scope !== 'media:complete');
+  const scopes = [...new Set([...actionCatalogue(kernel).keys(), 'gate:any', 'gate:subject_identity'])].filter(
+    (scope) => scope !== 'media:complete',
+  );
   const clientId = 'board_reference_' + crypto.randomUUID();
   await registerTestClient(auth.host.service, { clientId, firstParty: true, scopes });
   async function person() {
@@ -69,7 +71,7 @@ export async function realmBoardWorld() {
     const result = await call(method, path, body, options);
     expect({
       status: result.response.status,
-      ...(result.response.status === status ? {} : { path, value: result.value }),
+      ...(result.response.status === status ? {} : { path, body, value: result.value }),
     }).toEqual({ status });
     return result.value;
   }

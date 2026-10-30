@@ -615,7 +615,7 @@ and refuses incomplete or changed observations with native unavailability. It ne
   membership are observations for this command only and never grant board creation rights.
 - Growth check: `test/semantic/growth-concept-scheme-reference.test.ts`, real native Realm board caller captures
   at `[64,512,4096]` for compact, expanded imported and complete mismatched membership. Independent axes grow
-  unrelated catalogue/provenance/fences and the known Concept's candidates/adoption history/irrelevant relations.
+  unrelated catalogue/provenance/fences and the known Concept's unselected candidate history and irrelevant properties/relations.
   The shared harness counts native Access, source, target, identity, fences and Realm work, examined/removed rows,
   blocks, statements, connections and bytes. Native refusal and projection-lag creation are covered by
   `test/content/realm-board-create-native.test.ts`.
