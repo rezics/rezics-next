@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { ModerationAppealsView } from '../moderation/appeals-tab';
 import { ModerationReportsView } from '../moderation/reports-page';
-import type { ReportActionInput } from '../moderation/actions';
+import type { ReportQueueAction } from '../moderation/reports-view-action';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import * as Queue from './patterns/board-report-queue/board-report-queue.stories';
@@ -35,7 +35,7 @@ const meta = {
     ...moderationQueueFixture,
     next: 'cursor-next',
     onNext: fn(),
-    onAction: fn(async (_input: ReportActionInput): Promise<void> => {
+    onAction: fn<ReportQueueAction>(async (_input) => {
       throw new TypeError('Failed to fetch');
     }),
   },

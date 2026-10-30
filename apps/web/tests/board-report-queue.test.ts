@@ -193,7 +193,7 @@ test('real stale conflict requires current-state recovery, keeps the reason and 
     expect(requests).toHaveLength(2);
   }
   expect(reportActionResult(412, { code: 'precondition_failed' })).toEqual({ ok: false, state: 'conflict' });
-  expect(reportActionResult(422, { code: 'too_many_events' })).toEqual({ ok: false, state: 'error' });
+  expect(() => reportActionResult(422, { code: 'too_many_events' })).toThrow();
 });
 
 test('native denied outcomes differ from uncertain transport retry with the exact intent, key and reason preserved', async () => {

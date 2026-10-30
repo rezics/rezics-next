@@ -10,5 +10,5 @@ export function reportActionResult(status: number, error: unknown): ReportAction
   if (status === 403) return { ok: false, state: 'forbidden' };
   if (status === 401) return { ok: false, state: 'sign-in' };
   if (status === 404) return { ok: false, state: 'unavailable' };
-  return { ok: false, state: 'error' };
+  throw new Error('The moderation action could not be completed');
 }

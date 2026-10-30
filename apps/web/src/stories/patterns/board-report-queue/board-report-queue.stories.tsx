@@ -4,9 +4,8 @@ import { useState } from 'react';
 import { createKernelClient } from '@rezics/client';
 import type { ReportActionInput } from '../../../moderation/actions';
 import { sendModerationReportAction } from '../../../moderation/actions';
-import type { ReportActionResult } from '../../../moderation/report-actions';
 import { m } from '../../../paraglide/messages.js';
-import { BoardReportQueue, type ReportQueueProps } from './board-report-queue';
+import { BoardReportQueue, type ReportQueueAction, type ReportQueueProps } from './board-report-queue';
 import {
   moderationQueueFixture,
   resolvedQueueFixture,
@@ -27,7 +26,7 @@ const meta = {
   args: {
     ...moderationQueueFixture,
     reports: [postReport],
-    onAction: fn(async (_input: ReportActionInput): Promise<void> => {
+    onAction: fn<ReportQueueAction>(async (_input) => {
       throw new TypeError('Failed to fetch');
     }),
   },
@@ -66,7 +65,7 @@ export const Empty: Story = {
 };
 
 export const PendingSubmission: Story = {
-  args: { onAction: fn((_input: ReportActionInput) => new Promise<void>(() => {})) },
+  args: { onAction: fn<ReportQueueAction>((_input) => new Promise<void>(() => {})) },
   play: async ({ canvasElement, args }) => {
     const view = await submit(canvasElement);
     await expect(view.getByRole('button', { name: m.moderation_take_down() })).toBeDisabled();
@@ -123,9 +122,12 @@ function RefreshedQueue(args: ReportQueueProps) {
 
 function nativeRefusal(status: number, code: string) {
   const client = createKernelClient('https://kernel.invalid', {
-    fetch: async () => Response.json({ code, status, detail: 'Private native denial detail' }, { status }),
+    fetch: Object.assign(
+      async () => Response.json({ code, status, detail: 'Private native denial detail' }, { status }),
+      { preconnect() {} },
+    ),
   });
-  return fn((input: ReportActionInput) => sendModerationReportAction(client, input, 'Bearer story'));
+  return fn<ReportQueueAction>((input) => sendModerationReportAction(client, input, 'Bearer story'));
 }
 
 async function refused(canvasElement: HTMLElement, args: ReportQueueProps, message: string) {
@@ -180,7 +182,7 @@ export const TargetUnavailable = {
   args: {
     targets: [{ key: `post:${postReport.target.id}`, kind: 'post', value: null }],
     revisions: [{ reportId: postReport.id, value: null }],
-    onAction: fn(async (_input: ReportActionInput) => {
+    onAction: fn<ReportQueueAction>(async (_input) => {
       throw Object.assign(new globalThis.Error('Service unavailable'), { status: 503 });
     }),
   },
@@ -242,7 +244,7 @@ export const RevisionDiffers: Story = {
   },
 };
 export const ConfirmedTakedown: Story = {
-  args: { onAction: fn(async (_input: ReportActionInput) => ({ ok: true as const })) },
+  args: { onAction: fn<ReportQueueAction>(async (_input) => ({ ok: true })) },
   play: async ({ canvasElement, args }) => {
     const view = await submit(canvasElement);
     await expect(await view.findByRole('status')).toHaveTextContent(m.moderation_queue_takedown_confirmed());
@@ -256,7 +258,7 @@ export const ConfirmedTakedown: Story = {
   },
 };
 export const ConfirmedDismissal: Story = {
-  args: { onAction: fn(async (_input: ReportActionInput) => ({ ok: true as const })) },
+  args: { onAction: fn<ReportQueueAction>(async (_input) => ({ ok: true })) },
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.moderation_queue_review() }));
@@ -270,7 +272,7 @@ export const ConfirmedDismissal: Story = {
 };
 export const RetryConfirmed: Story = {
   args: {
-    onAction: fn<(input: ReportActionInput) => Promise<ReportActionResult>>()
+    onAction: fn<ReportQueueAction>()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValue({ ok: true }),
   },
