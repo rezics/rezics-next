@@ -60,7 +60,8 @@ export async function verifiedHandle(client: KernelClient, read: SubjectRead): P
     const result = await client.accounts.get({ query: { agent: subject.id } });
     const accounts = result.data?.accounts;
     if (result.error || !accounts || accounts.length !== 1) return undefined;
-    const handle = accounts[0]?.handle;
+    const account = accounts[0];
+    const handle = account && 'handle' in account ? account.handle : undefined;
     return typeof handle === 'string' && handle.length > 0 ? handle : undefined;
   } catch {
     return undefined;

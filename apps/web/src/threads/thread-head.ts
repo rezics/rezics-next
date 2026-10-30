@@ -76,10 +76,11 @@ function postText(body: unknown): string {
 }
 
 function person(author: PageAuthor | undefined, origin: string, locale: string) {
+  const active = author?.state === 'deleted' ? undefined : author;
   return {
     '@type': 'Person',
-    name: author?.displayName || author?.handle || m.thread_author_unknown(),
-    ...(author?.handle ? { url: `${origin}/${locale}/@${encodeURIComponent(author.handle)}` } : {}),
+    name: active?.displayName || active?.handle || m.thread_author_unknown(),
+    ...(active?.handle ? { url: `${origin}/${locale}/@${encodeURIComponent(active.handle)}` } : {}),
   };
 }
 

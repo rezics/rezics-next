@@ -16,7 +16,10 @@ export async function lookupAccountMention(
   if (signal.aborted || result.error || !result.data) return null;
   const account = result.data.accounts.find(
     (account) =>
-      account.state === 'active' && account.handle !== null && account.handle.toLowerCase() === handle.toLowerCase(),
+      'handle' in account &&
+      account.state === 'active' &&
+      account.handle !== null &&
+      account.handle.toLowerCase() === handle.toLowerCase(),
   );
   return account?.handle
     ? { accountId: account.id, handle: account.handle, ...(account.displayName ? { name: account.displayName } : {}) }
@@ -40,9 +43,14 @@ export async function readDocumentMentions(
     const result = await client.accounts.get({ query: { ids: [...ids].join(',') } });
     if (result.error || !result.data) return {};
     return Object.fromEntries(
-      result.data.accounts
-        .filter((account) => ids.has(account.id) && account.state === 'active' && typeof account.handle === 'string')
-        .map((account) => [account.id, { handle: account.handle! }]),
+      result.data.accounts.flatMap((account) =>
+        'handle' in account &&
+        ids.has(account.id) &&
+        account.state === 'active' &&
+        typeof account.handle === 'string'
+          ? [[account.id, { handle: account.handle }]]
+          : [],
+      ),
     );
   } catch {
     return {};
