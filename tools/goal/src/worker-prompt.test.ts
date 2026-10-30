@@ -173,6 +173,87 @@ test('a resumed prompt supersedes a saved legacy check wait and states the bare 
   }
 });
 
+test('local placement renders the concrete declared argv, overrides saved remote instructions, and keeps wrapper options quoted', async () => {
+  const worktree = mkdtempSync(join(tmpdir(), 'goal-local-check-protocol-'));
+  try {
+    mkdirSync(join(worktree, 'scripts'), { recursive: true });
+    writeFileSync(join(worktree, 'scripts/worker-check.ts'), '');
+    const task = {
+      worktree,
+      branch: 'worker/local',
+      brief: {
+        markdown: 'Old session said `bun scripts/worker-check.ts -- <command...>` and `--wait`.',
+        kind: 'implementation',
+        acceptance: {
+          command: ['bun', 'test', 'apps/web/tests/shell-menus.test.ts', '-t', "filter's phrase"],
+          tests: ['local test'],
+          failing: true,
+          placement: 'local',
+        },
+      },
+    } as unknown as Task;
+    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+    expect(prompt).toContain(
+      "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'filter'\\''s phrase'",
+    );
+    expect(prompt).toContain('overrides any older prompt, saved-session instruction, remote invocation, or `--wait` recipe');
+    expect(prompt.indexOf('registered acceptance placement is local')).toBeGreaterThan(
+      prompt.indexOf('The task contract follows:'),
+    );
+    expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+    expect(prompt).toContain('Do not report an old check as cancelled');
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+  }
+});
+
+test('local placement without a worktree wrapper uses the exact foreground command', async () => {
+  const worktree = mkdtempSync(join(tmpdir(), 'goal-local-foreground-'));
+  try {
+    const command = ['bun', 'test', 'apps/web/tests/shell-menus.test.ts'];
+    const task = {
+      worktree,
+      branch: 'worker/local',
+      brief: {
+        markdown: 'Use the current placement.',
+        kind: 'implementation',
+        acceptance: { command, tests: ['local test'], failing: true, placement: 'local' },
+      },
+    } as unknown as Task;
+    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+    expect(prompt).toContain("Run the exact declared pure local command `'bun' 'test' 'apps/web/tests/shell-menus.test.ts'`");
+    expect(prompt).toContain('in the foreground from the worktree root');
+    expect(prompt).toContain('does not create a detached check id or a waiting result');
+    expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+  }
+});
+
+test('a named absolute wrapper keeps the local route and safely quotes a path with spaces', async () => {
+  const worktree = mkdtempSync(join(tmpdir(), 'goal-local-named-wrapper-'));
+  try {
+    const runner = join(worktree, 'dev tools/scripts/worker-check.ts');
+    mkdirSync(join(worktree, 'dev tools/scripts'), { recursive: true });
+    writeFileSync(runner, '');
+    const command = ['bun', 'test', 'apps/web/tests/shell-menus.test.ts'];
+    const task = {
+      worktree,
+      branch: 'worker/local',
+      brief: {
+        markdown: `Existing wrapper: bun ${JSON.stringify(runner)}\n`,
+        kind: 'implementation',
+        acceptance: { command, tests: ['local test'], failing: true, placement: 'local' },
+      },
+    } as unknown as Task;
+    const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
+    expect(prompt).toContain(`bun '${runner}' --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'`);
+    expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+  }
+});
+
 test('a worker reports persistent tool and infrastructure failures as a tool blocker with the exact error', () => {
   const task = {
     worktree: '/work/trees/t1',

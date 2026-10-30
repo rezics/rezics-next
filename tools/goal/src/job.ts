@@ -409,7 +409,7 @@ export class WorkerJob implements GateOutcomeSink {
         ? [workerPrompt(task, attempt.evidencePath, undefined, [], this.tasks.settings.mainCheckout)]
         : []),
       `The checks you started have finished or could not be found. ${message}`,
-      ...(canResume ? [workerCheckProtocol(task.worktree, task.brief.markdown)] : []),
+      ...(canResume ? [workerCheckProtocol(task.worktree, task.brief)] : []),
       'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
     ].join('\n\n');
     const failureCount = () =>

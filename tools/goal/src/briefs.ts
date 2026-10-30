@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
-import type { Brief, TaskKind } from './types.ts';
+import type { AcceptancePlacement, Brief, TaskKind } from './types.ts';
 
 export type RiskOwnership = { version: number; areas: Record<string, string[]> };
 /** Deliberately small path language: literals, *, ?, and whole-segment **. */
@@ -88,6 +88,99 @@ function boolean(value: unknown, label: string, fallback?: boolean): boolean {
   if (typeof value !== 'boolean') throw new Error(`${label} must be boolean`);
   return value;
 }
+function localTestFile(path: string): boolean {
+  return (
+    /^apps\/web\/tests\/[A-Za-z0-9._/-]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path) &&
+    !path.split('/').some((part) => part === '.' || part === '..') &&
+    !/(?:^|[/.])(?:native|e2e|integration|host|database|db)(?:[/.]|$)/i.test(path)
+  );
+}
+function localBunCommand(argv: readonly string[]): boolean {
+  if (
+    (argv.length === 5 && argv[0] === 'bun' && argv[1] === 'run' && argv[2] === '--cwd' &&
+      argv[3] === 'apps/web' && argv[4] === 'typecheck') ||
+    (argv.length === 4 && argv[0] === 'bun' && argv[1] === 'run' && argv[2] === '--cwd=apps/web' &&
+      argv[3] === 'typecheck')
+  )
+    return true;
+  if (argv[0] !== 'bun' || argv[1] !== 'test') return false;
+  let files = 0;
+  for (let index = 2; index < argv.length; index += 1) {
+    const value = argv[index]!;
+    if (value === '-t' || value === '--test-name-pattern') {
+      if (!argv[index + 1] || argv[index + 1]!.startsWith('-')) return false;
+      index += 1;
+      continue;
+    }
+    if (!localTestFile(value)) return false;
+    files += 1;
+  }
+  return files > 0;
+}
+/** Split only the audited `sh -c 'bun ... && bun ...'` form; shell expansion and other operators stay unsupported. */
+function localShellCommands(script: string): string[][] | undefined {
+  const commands: string[][] = [];
+  let words: string[] = [];
+  let word = '';
+  let hasWord = false;
+  let quote: "'" | '"' | undefined;
+  const finishWord = () => {
+    if (!hasWord) return;
+    words.push(word);
+    word = '';
+    hasWord = false;
+  };
+  const finishCommand = () => {
+    finishWord();
+    if (!words.length) return false;
+    commands.push(words);
+    words = [];
+    return true;
+  };
+  for (let index = 0; index < script.length; index += 1) {
+    const char = script[index]!;
+    if (quote) {
+      if (char === quote) quote = undefined;
+      else if (char === '$' || char === '`' || char === '\\' || char === '\n' || char === '\r') return undefined;
+      else word += char;
+      hasWord = true;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      hasWord = true;
+      continue;
+    }
+    if (script.startsWith('&&', index)) {
+      if (!finishCommand()) return undefined;
+      index += 1;
+      continue;
+    }
+    if (';&|<>$`\\\n\r'.includes(char)) return undefined;
+    if (/\s/.test(char)) {
+      finishWord();
+      continue;
+    }
+    word += char;
+    hasWord = true;
+  }
+  if (quote || !finishCommand()) return undefined;
+  return commands;
+}
+/** Local checks are Web typechecking or explicitly named Web unit/component test files. */
+export function validateLocalAcceptanceCommand(command: readonly string[]): void {
+  const commands =
+    command.length === 3 && command[0] === 'sh' && command[1] === '-c'
+      ? localShellCommands(command[2]!)
+      : [Array.from(command)];
+  if (commands?.length && commands.every(localBunCommand)) return;
+  const text = command.join(' ');
+  if (/\b(?:services\/|DATABASE_URL|postgres|psql|docker|podman|compose|playwright|vitest|jest)\b|(?:^|[/.])(?:native|e2e|integration|host|database|db)(?:[/.]|$)/i.test(text))
+    throw new Error('acceptance.placement local rejects native, database, host, and broad-suite check routes');
+  throw new Error(
+    'acceptance.placement local supports only `bun run --cwd apps/web typecheck` and explicit unit/component test files under `apps/web/tests/`',
+  );
+}
 /** Point an existing brief at the stabilize branch without changing its other front matter. */
 export function withStabilizeTarget(markdown: string): string {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(markdown);
@@ -124,6 +217,9 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   ];
   if (!kinds.includes(raw.kind as TaskKind)) throw new Error('unsupported brief kind');
   const acceptance = object(raw.acceptance, 'acceptance');
+  const placement = acceptance.placement;
+  if (placement !== undefined && placement !== 'local' && placement !== 'default')
+    throw new Error('acceptance.placement must be local or default');
   const estimate = object(raw.estimate, 'estimate');
   for (const key of ['lines', 'files'])
     if (!Number.isSafeInteger(estimate[key]) || (estimate[key] as number) < 1)
@@ -143,6 +239,7 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
       command: list(acceptance.command, 'acceptance.command', true),
       tests: list(acceptance.tests, 'acceptance.tests', true),
       failing: boolean(acceptance.failing, 'acceptance.failing', false),
+      ...(placement === undefined ? {} : { placement: placement as AcceptancePlacement }),
     },
     estimate: { lines: estimate.lines as number, files: estimate.files as number },
     criticalPath: boolean(raw.criticalPath, 'criticalPath'),
@@ -153,6 +250,7 @@ export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
     hostileInput: boolean(raw.hostileInput, 'hostileInput', false),
     markdown,
   };
+  if (brief.acceptance.placement === 'local') validateLocalAcceptanceCommand(brief.acceptance.command);
   brief.paths.forEach(validatePath);
   for (const area of brief.riskAreas)
     if (!Object.hasOwn(ownership.areas, area)) throw new Error(`unknown risk area: ${area}`);

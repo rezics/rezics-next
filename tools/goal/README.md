@@ -387,6 +387,35 @@ acceptance tests and fit within 1,500 lines and 24 files: one complete user-visi
 source citations and hostile input take precedence over cheaper classes. Critical-path classification additionally
 requires waiting tasks and `inseparable`.
 
+### Acceptance placement
+
+`acceptance.placement` is an optional brief field. Omit it, or set it to `default`, to keep the existing remote-capable
+check policy. Set it to `local` only for the audited local command boundary: `bun run --cwd apps/web typecheck` or
+explicit Bun unit/component test files under `apps/web/tests/`. Local Bun tests may use `-t`/`--test-name-pattern`;
+shell composition is limited to these supported commands joined with `&&` through `sh -c`. Globs, broad test runs,
+scripts, host/integration/database tests, native
+routes, shell expansion and other commands are rejected. The Web boundary is typechecking and individually named
+component tests; it does not include the Web host or native check routes.
+
+```yaml
+acceptance:
+  command: [bun, test, apps/web/tests/shell-menus.test.ts, -t, "the signed-out account action opens a sheet on phones and a dropdown on desktop"]
+  tests: [the signed-out account action opens a sheet on phones and a dropdown on desktop]
+  failing: true
+  placement: local
+```
+
+The local placement is persisted with the parsed brief and controls fresh, retry, adopted and wake prompts. If the
+worktree contains `scripts/worker-check.ts`, Goal prints the concrete `bun scripts/worker-check.ts --local -- <argv>`
+invocation. It also recognizes an existing absolute `scripts/worker-check.ts` named by the brief. When neither wrapper
+exists, Goal prints the exact declared command and directs the worker to run it in the foreground. The wrapper's
+`--local` option disables remote placement but retains its ordinary local admission and result recording.
+
+Goal does not have a supported worker-check teardown-intent/receipt API. A retry using local placement is therefore
+quarantined while any earlier registered check lacks a terminal exit record. The error names the unresolved check and
+the missing teardown-intent/receipt API; Goal does not claim the check was cancelled, edit its record, or start a
+replacement. Delivering that lifecycle seam remains separate work.
+
 Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
 are refused. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
 Every intersected risk area must be declared. Extend the ownership data when adding product modules. A `control-plane`

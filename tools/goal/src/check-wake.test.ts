@@ -6,7 +6,7 @@ import { WorkerJob } from './job.ts';
 import { workerPrompt } from './launch.ts';
 import { settle } from './settle.ts';
 import type { Attempt, Task } from './types.ts';
-import { harness } from './test-support.ts';
+import { harness, markdown } from './test-support.ts';
 
 const waitingCli = `#!/usr/bin/env bun
 import { existsSync, writeFileSync } from 'node:fs';
@@ -99,6 +99,76 @@ async function startWaitingAttempt(h: ReturnType<typeof harness>) {
   expect(landings).toHaveLength(0);
   return { task, ref: { taskId: task.id, attempt: 1 } };
 }
+
+test('a waiting session uses the registered local command on wake even when its saved contract names the old remote route', async () => {
+  const h = harness(waitingCli);
+  try {
+    const localMarkdown = markdown
+      .replace('  command: [bun, test]', '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local')
+      .concat('\nA saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.\n');
+    writeFileSync(h.briefFile, localMarkdown);
+    const { task, ref } = await startWaitingAttempt(h);
+    mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
+    writeFileSync(join(task.worktree, 'scripts/worker-check.ts'), '');
+    const results = join(task.worktree, '.temp/goal/checks/results');
+    mkdirSync(results, { recursive: true });
+    for (const id of ['check-a', 'check-b'])
+      writeFileSync(join(results, `${id}.json`), JSON.stringify({ exitStatus: 0, status: 'finished' }));
+
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const recovery = job.recoverOrphans();
+    await waitFor(join(task.worktree, '.temp/goal/resume-started'));
+    const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    const prompt = args.at(-1)!;
+    expect(prompt).toContain(
+      "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'",
+    );
+    expect(prompt).toContain('registered acceptance placement is local and overrides any older prompt');
+    expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
+    expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
+    await recovery;
+    expect(h.store.attempt(ref).state).toBe('exited');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an adopted waiting attempt without a resumable session gets the current local protocol', async () => {
+  const h = harness(waitingCli);
+  try {
+    writeFileSync(
+      h.briefFile,
+      markdown.replace('  command: [bun, test]', '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local'),
+    );
+    const { task, ref } = await startWaitingAttempt(h);
+    h.store.updateAttempt(ref, (attempt) => {
+      attempt.session = null;
+    });
+    mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
+    writeFileSync(join(task.worktree, 'scripts/worker-check.ts'), '');
+    const results = join(task.worktree, '.temp/goal/checks/results');
+    mkdirSync(results, { recursive: true });
+    for (const id of ['check-a', 'check-b'])
+      writeFileSync(join(results, `${id}.json`), JSON.stringify({ exitStatus: 0, status: 'finished' }));
+
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const recovery = job.recoverOrphans();
+    await waitFor(join(task.worktree, '.temp/goal/resume-started'));
+    const args = JSON.parse(readFileSync(join(task.worktree, '.temp/goal/resume-args.json'), 'utf8')) as string[];
+    const prompt = args.at(-1)!;
+    expect(prompt).toContain(
+      "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'",
+    );
+    expect(prompt).toContain('registered acceptance placement is local and overrides any older prompt');
+    expect(prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
+    expect(prompt.indexOf('registered acceptance placement is local')).toBeGreaterThan(
+      prompt.indexOf('The task contract follows:'),
+    );
+    await recovery;
+  } finally {
+    h.dispose();
+  }
+});
 
 test('waiting workers release their cap slot and resume the same session with every completed check result', async () => {
   const h = harness(waitingCli);
