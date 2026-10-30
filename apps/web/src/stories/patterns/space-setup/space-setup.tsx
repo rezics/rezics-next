@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Check, ArrowRight, ArrowLeft, MapPin, Users, LayoutList, MessageSquare } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -14,6 +14,12 @@ import {
   type BoardChoiceSource,
   type BoardConceptSelection,
 } from '../../../community/setup-board-picker';
+import { SetupContextPickerField } from '../../../community/setup-context-picker-field';
+import {
+  createSetupContextPicker,
+  unavailableContextChoiceSource,
+  type ContextChoiceSource,
+} from '../../../community/setup-context-picker';
 import {
   applySetupResult,
   setupAttempt,
@@ -27,6 +33,7 @@ import {
 } from '../../../community/space-setup';
 
 export type SetupTransport = {
+  contexts?: ContextChoiceSource;
   command(command: SetupCommand): Promise<SetupResult>;
   read(spaceId?: string): Promise<SetupSnapshot | SetupFailure>;
   choice(kind: 'context' | 'scheme' | 'concept', id: string): Promise<SetupChoice | SetupFailure>;
@@ -230,8 +237,24 @@ export function SpaceSetupForm({
   const [realmTitle, setRealmTitle] = useState(snapshot.realm?.title ?? '');
   const [realmSummary, setRealmSummary] = useState(snapshot.realm?.summary ?? '');
   const [visibility, setVisibility] = useState<'public' | 'protected'>(snapshot.realm?.visibility ?? 'public');
-  const [contextReference, setContextReference] = useState(snapshot.realm?.contextId ?? '');
-  const [context, setContext] = useState<SetupChoice | null>(null);
+  const contextSource = useMemo(
+    () => transport.contexts ?? unavailableContextChoiceSource((id) => transport.choice('context', id)),
+    [transport],
+  );
+  const contextPicker = useMemo(
+    () => createSetupContextPicker(contextSource, snapshot.realm?.contextId),
+    [contextSource],
+  );
+  const contextState = useSyncExternalStore(
+    contextPicker.subscribe,
+    contextPicker.getSnapshot,
+    contextPicker.getSnapshot,
+  );
+  const context = contextState.selected?.phase === 'ready' ? contextState.selected.choice : null;
+  useEffect(() => () => contextPicker.dispose(), [contextPicker]);
+  useEffect(() => {
+    void contextPicker.current(snapshot.realm?.contextId ?? null, snapshot.realm?.head);
+  }, [contextPicker, snapshot.realm?.contextId, snapshot.realm?.head]);
   const [scheme, setScheme] = useState<SetupChoice | null>(null);
   const [conceptSelection, setConceptSelection] = useState<BoardConceptSelection | null>(null);
   const [conceptCleared, setConceptCleared] = useState(false);
@@ -271,7 +294,7 @@ export function SpaceSetupForm({
           setRealmTitle(current.realm?.title ?? '');
           setRealmSummary(current.realm?.summary ?? '');
           setVisibility(current.realm?.visibility ?? 'public');
-          setContextReference(current.realm?.contextId ?? '');
+          contextPicker.reference(current.realm?.contextId ?? '');
         }
         setSnapshot(current);
         setLoaded(true);
@@ -563,16 +586,7 @@ export function SpaceSetupForm({
                     <p className="text-sm text-muted-foreground">
                       {visibility === 'public' ? m.space_setup_public_hint() : m.space_setup_protected_hint()}
                     </p>
-                    <Choice
-                      kind="context"
-                      reference={contextReference}
-                      onReferenceChange={setContextReference}
-                      label={m.space_setup_context_label()}
-                      value={context}
-                      onChange={setContext}
-                      transport={transport}
-                      disabled={locked}
-                    />
+                    <SetupContextPickerField picker={contextPicker} disabled={locked || !loaded || !canEdit} />
                     <p className="text-sm leading-relaxed text-muted-foreground">{m.space_setup_authority()}</p>
                   </>
                 ) : step === 2 ? (

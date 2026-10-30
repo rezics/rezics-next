@@ -2070,16 +2070,28 @@ Back keeps drafts, and Cancel pauses the editor with Resume on the same page. Un
 selection references, survive those controls but are not persisted across navigation. Saved commands are not undone.
 
 The production transport remains `changeSpaceSetup`, `readSpaceSetup` and `resolveSpaceSetupChoice` in
-`community/space-actions.ts`. Context retains its existing point reader and reference control. Only the scheme/topic
-regions use `community/setup-board-picker-control.tsx`, with shared Input, RadioGroup, Field and Button controls.
-`community/setup-board-picker.ts` owns the consumer-local `BoardChoiceSource` display interface: `schemes({query,
-cursor?})` returns `{schemes: readonly {id,label}[], next: string|null}`, and `concepts({schemeId,query,cursor?})`
-returns the analogous `concepts` page. A supplied native source takes precedence over the isolated typed unavailable
-adapter. The installed generated client currently exports no bounded SKOS scheme/member list reader; the default
-therefore shows unavailable with Retry, never an invented endpoint, catalogue, successful empty page or UUID form.
-The adapter defines no native producer module. Once installed, Semantic's actual source should be passed as
-`SpaceSetupForm.boardChoices`. Choice labels are display data, never permission, publication or membership verdicts.
-It supplies no default Context, Realm, owner, Concept, membership or Global grant.
+`community/space-actions.ts`. The Context region now uses
+`community/setup-context-picker-field.tsx`, backed by the consumer-local `ContextChoiceSource` in
+`community/setup-context-picker.ts`. Its `search({ query, cursor?, signal? })` returns one page of
+`{ contexts: readonly { id, label }[], next: string | null }`; `resolve(id)` returns one current readable choice or
+`null`. These are presentation data, never permission evidence. `SetupTransport.contexts` accepts the original
+Semantic source when delivered. The installed generated `semantic/http/contexts.d.ts` declares creation, point reads,
+definitions and lifecycle, but no current-authorized enumeration/search. The isolated default search therefore
+throws typed unavailable; its resolve uses the existing authenticated `resolveSpaceSetupChoice` point reader.
+There is no guessed endpoint or catalogue fallback. The shared EntityPicker was inspected: it requires subject
+types/covers, hides IDs and has no continuation, so this Context region reuses shared Field/Input/Button controls.
+Known-reference loading remains optional recovery alongside name search.
+
+The scheme/topic regions use `community/setup-board-picker-control.tsx`, with shared Input, RadioGroup, Field and
+Button controls. `community/setup-board-picker.ts` owns the consumer-local `BoardChoiceSource` display interface:
+`schemes({query,cursor?})` returns `{schemes: readonly {id,label}[], next: string|null}`, and
+`concepts({schemeId,query,cursor?})` returns the analogous `concepts` page. A supplied native source takes precedence
+over the isolated typed unavailable adapter. The installed generated client currently exports no bounded SKOS
+scheme/member list reader; the default therefore shows unavailable with Retry, never an invented endpoint,
+catalogue, successful empty page or UUID form. The adapter defines no native producer module. Once installed,
+Semantic's actual source should be passed as `SpaceSetupForm.boardChoices`. Choice labels are display data, never
+permission, publication or membership verdicts. Neither picker supplies a default Context, Realm, owner, Concept,
+membership or Global grant.
 The current server still checks parent creation grants, role authority, scheme membership and current readability.
 The existing Space home and lifecycle/removal controls remain the destination, rather than a second home layout.
 
@@ -2114,19 +2126,42 @@ light/dark through existing Storybook globals; there are no width, locale or the
 
 The page composition ID remains `pages-community-space-setup--new-community`. Plays advance, select, save, retry,
 refresh a conflict/refusal, pause/resume and reach links containing returned native IDs. They use explicit typed
-transport fixtures; production source defaults remain the actual Context point reader and typed unavailable board
-source above. Native acceptance and Web screenshot review follow integration; local typing does not establish those
-outcomes. No screenshots were run for this change.
+transport fixtures; production source defaults remain the actual Context point reader and typed unavailable search
+and board sources above.
+Native acceptance and Web screenshot review follow integration; local typing does not establish those outcomes.
 
-The journey adds no reads to the existing two-resource snapshot and viewer-action batch. Context selection retains
-one current point read. Board search debounces 250 ms; each search or Next requests one bounded producer page and
-replaces the displayed page. It never walks all cursors, refills per row or counts the catalogue. Cancelled awaits
-ignore late source/query/scheme responses; the exact display interface has no I/O abort signal, so cancellation
-cannot promise to stop producer I/O. Native scheme save and board creation still verify the current installed
-release, readability, membership, lifecycle, admission, current actions and CAS. `tests/setup-board-picker.test.ts`
-names the acceptance and covers paging/isolation, unavailable versus empty, changed-scheme invalidation, refusal and
-stable uncertain retry through the existing generated command client. Native proof remains integration work.
-No external reference-project source was needed for these existing controls and command surfaces.
+Focused Context review IDs are `patterns-community-space-setup-context--unavailable`, `--denied` and `--loading`.
+The full AppShell compositions are `pages-community-space-setup-context--unavailable-search` and
+`pages-community-space-setup-context--current-context-denied`. They reuse the existing setup fixture and the exact
+shared form, without successful write fixtures or fabricated result catalogues. The actual route remains
+`pages-community-space-setup--new-community`, through `community/space-setup-page.tsx`. Use ordinary phone390 and
+desktop1280, light/dark globals for Web's later review; there are no width, locale or theme variants. These boundary
+states establish neither native source availability nor visual approval. No external reference source is required
+for this selector surface.
+
+The saved Context is resolved independently of an explicitly chosen replacement; neither search nor failure changes
+the stored pointer. Both readable labels and exact IDs are shown. Selecting a result resolves only that ID before
+enabling Realm save; the ordinary command still verifies current Context disclosure and Realm authority with CSRF,
+head CAS and the original pending intent. Denied or unavailable lookups hide old results and preserve drafts and
+saved creation steps. Back and pause retain the query, reference and choice. Removed Realm reads remain failures,
+never Global fallback. The focused `tests/setup-context-picker.test.ts` records these selection, denial, bounded-page
+and late-response outcomes for later integration execution.
+
+The journey keeps the existing two-resource snapshot and viewer-action batch. A saved Context gets one exact read
+per pointer/head change or explicit recheck. Each chosen Context gets one exact read; no result row is resolved
+until selected. Search waits 250 ms, aborts outstanding requests on query change/selection/disposal and ignores late
+resolutions. Each Next or retry requests exactly one source page and replaces it; an empty page retains its returned
+continuation without refill. The source owns page bounds and cursor validity. No catalogue scan, count, membership
+probe, automatic page walking or new authority store is introduced.
+
+Board search debounces 250 ms; each search or Next requests one bounded producer page and replaces the displayed
+page. It never walks all cursors, refills per row or counts the catalogue. Cancelled awaits ignore late
+source/query/scheme responses; the exact board display interface has no I/O abort signal, so cancellation cannot
+promise to stop producer I/O. Native scheme save and board creation still verify the current installed release,
+readability, membership, lifecycle, admission, current actions and CAS. `tests/setup-board-picker.test.ts` names the
+acceptance and covers paging/isolation, unavailable versus empty, changed-scheme invalidation, refusal and stable
+uncertain retry through the existing generated command client. Native proof remains integration work. No external
+reference-project source was needed for these existing controls and command surfaces.
 
 ## Thread reading
 
