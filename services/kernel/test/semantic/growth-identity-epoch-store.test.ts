@@ -150,10 +150,21 @@ async function seedNativeHistory() {
         basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
       },
       {
-        intent: { kind: 'merge', survivor: originals[offset]!, redirected: originals[offset + 1]!, release: release.digest },
-        receipt: { kind: 'subject.merge', command: {
-          actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key),
-        } },
+        intent: {
+          kind: 'merge',
+          survivor: originals[offset]!,
+          redirected: originals[offset + 1]!,
+          release: release.digest,
+        },
+        receipt: {
+          kind: 'subject.merge',
+          command: {
+            actorAccountId: actor.accountId,
+            kind: 'subject.merge',
+            key,
+            digest: digest(key),
+          },
+        },
       },
     );
     await cancelIdentityEpochAdmission(db.pool, job);

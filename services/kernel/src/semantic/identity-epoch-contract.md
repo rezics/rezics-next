@@ -278,7 +278,7 @@ NOT yet supply complete scoped observations or registration/summary custody:
 | Library `owner-fact-version.ts:readOwnerFactVersion`                         | Indexed account-home mutation version                             | Complete dependency capture/registration and summary custody; broad mutation alarm alone is insufficient                                                              |
 | Search `scope-source.ts`                                                     | Admission scaffolding, unavailable native prepare/prefix/evaluate | Complete native canonical Source and physical namespace/source authorization, including negative/excluded/order population                                            |
 | Search `source.ts:SubjectSource`, Semantic `search-source.ts:subjectSource`  | Subject chunks/snapshots and bounded facet samples/probes         | Complete scoped producer observation and native canonical-index participant, not sampled returned IDs                                                                 |
-| Semantic native STORE/mapping                                                | Native STORE, bootstrap, current-route reads, ordered P=1 custody | Complete mapping maintenance, registration handshake and native committed partition summaries; fixed participant custody still gates publication                         |
+| Semantic native STORE/mapping                                                | Native STORE, bootstrap, current-route reads, ordered P=1 custody | Complete mapping maintenance, registration handshake and native committed partition summaries; fixed participant custody still gates publication                      |
 
 Search's actual `searchWorkModule -> startSearchIndexing -> createSubjectIndexer`, subjectIndexName/subjectAlias,
 per-generation subjectConsumer, 256-ID chunks and `refresh: wait_for` bulk precede ordinary checkpoints. They do
@@ -668,14 +668,14 @@ be counted as `noData` while missing.
 
 ## Independently landable producer boundaries
 
-| Producer                  | Required surface / evidence                                                                                                  | Present |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bounded all-home bootstrap, P=1 fences, native custody | Implemented; full publication still awaits the producers below |
-| Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING |
-| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | MISSING |
-| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | MISSING |
+| Producer                  | Required surface / evidence                                                                                                  | Present                                                                  |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Semantic STORE            | identityEpochStore; cap/index/control records, creation self mapping, bounded all-home bootstrap, P=1 fences, native custody | Implemented; full publication still awaits the producers below           |
+| Semantic native step      | stepIdentityEpochMapping; scoped effect receipts and bounded mapping/redirect/member/link work                               | MISSING                                                                  |
+| Search participant        | version-1 search-canonical-index IdentityEpochStep; actual physical target/incarnation/canonical ACK                         | MISSING                                                                  |
+| Library participant       | version-1 library-private-follow-counts IdentityEpochStep; ALL canonical records/directories, first-apply custody and fences | MISSING                                                                  |
 | Commerce ordering         | same-transaction owner counter and entry.owner_write_seq producers; legacy readiness policy                                  | Allocator/schema present; complete producer integration remains required |
-| Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | MISSING |
+| Final coordinator/callers | resumeIdentityEpochJob, waitIdentityEpochPublished, fixed WorkModule/default composition and unchanged Accounts step binding | MISSING                                                                  |
 
 These are real capability dependencies, not task identifiers. Store/native-step acceptance must not require a fake
 Search or Library completion. It can prove pending and refusal to publish independently. Full successful publication
@@ -1109,158 +1109,158 @@ catalogue/DDL/trigger costs and installation waiting remain visible in their act
 ### Coherent cap, ordered prepare/acquire, admit and cancel
 
 - Touches: double-collected at-most-two current
-headers/source versions, compact binding, local owner/slot/attempt/group claims, immutable refs and native
-receipts/closed-home fences.
+  headers/source versions, compact binding, local owner/slot/attempt/group claims, immutable refs and native
+  receipts/closed-home fences.
 
 - Bound: O(1) rows PER home command and O(log A + log G + log M + log E +
-log(R+L+H)) blocks; statement sums above per command, plus both effects-free collection passes. No full member
-scan or global history walk. Planned homes are a fixed descriptor from inputs, job home included.
+  log(R+L+H)) blocks; statement sums above per command, plus both effects-free collection passes. No full member
+  scan or global history walk. Planned homes are a fixed descriptor from inputs, job home included.
 
 - Growth check: GI `coherent admission and ordered cancellation stay indexed`, pending/control/history independently 1/8/64,
-group sizes 64/512/4096, P=1 cross-home contention, mixed-count/ABA, uncertain RPC and all-table 4097 no-effects.
+  group sizes 64/512/4096, P=1 cross-home contention, mixed-count/ABA, uncertain RPC and all-table 4097 no-effects.
 
 ### Poll, reconcile and publish
 
 - Touches: indexed original receipt/job, current auth/disclosure, actual native
-mapping/two participant receipts, scope frontier and CAS/wakeup.
+  mapping/two participant receipts, scope frontier and CAS/wakeup.
 
 - Bound: O(1) rows per fixed native completion
-point; O(log M + log E + log(R+L+H) + log S) blocks; K+body per table, EACH released custody command separately.
-Growing scope/receipt fanout is a continued operation, not a poll scan.
+  point; O(log M + log E + log(R+L+H) + log S) blocks; K+body per table, EACH released custody command separately.
+  Growing scope/receipt fanout is a continued operation, not a poll scan.
 
 - Growth check: GI `poll and publication
-custody stay indexed`, unrelated groups, E and H independently 1/8/64; native pending/completed/replay/revoked/
-hidden/unknown and out-of-order lower publication/cancel paths.
+  custody stay indexed`, unrelated groups, E and H independently 1/8/64; native pending/completed/replay/revoked/
+  hidden/unknown and out-of-order lower publication/cancel paths.
 
 ### Standalone current mapping
 
 - Touches: source owner and mapping/birth basis, one relevant control owner,
-batched pending-membership probe and coherent current/scoped-revision probe; final source validation when
-cross-backend.
+  batched pending-membership probe and coherent current/scoped-revision probe; final source validation when
+  cross-backend.
 
 - Bound: O(b) rows for b requested originals, O(b(log A+log M+log E)) blocks, plus independently
-charged current privacy/Access. Same backend uses ONE RR: BEGIN, SET, source owner, source basis, control owner,
-TWO probes, COMMIT = **8 statements**. A snapshot is a coherent cut; no extra reread/snapshot without an actual
-counterexample. Cross-backend releases source before control and then revalidates source: source<=10,
-control<=6, **16 total**, or **11** pending before final source visit. A batch keeps TWO probes, not per-ID
-queries.
+  charged current privacy/Access. Same backend uses ONE RR: BEGIN, SET, source owner, source basis, control owner,
+  TWO probes, COMMIT = **8 statements**. A snapshot is a coherent cut; no extra reread/snapshot without an actual
+  counterexample. Cross-backend releases source before control and then revalidates source: source<=10,
+  control<=6, **16 total**, or **11** pending before final source visit. A batch keeps TWO probes, not per-ID
+  queries.
 
 - Growth check: GI `current mapping remains scoped across released snapshots`, M/E/history independently
-1/8/64; all missing/moved paths, pending-after-source, publish-between-reads, newer pending and fresh self.
+  1/8/64; all missing/moved paths, pending-after-source, publish-between-reads, newer pending and fresh self.
 
 ### Filtered page and cursor validation
 
 - Touches: existing shared batched owner/epoch observation plus TWO
-control probes, existing per-candidate source points and complete source observation.
+  control probes, existing per-candidate source points and complete source observation.
 
 - Bound: no separate
-readMapping, extra snapshot/client/control SQL or per-ID loop. Fit direct<=12 statements/backend or composed
-`8+4R_reads` (`R_reads` is the number of DISTINCT ADMITTED READS of the common page, `R_reads <= 16` and total
-output slots `<= 128`), one connection/backend; resource leaves, conditions, dependencies, homes and retained
-`R` minimized obligations do not increase `R_reads`, and `R` has no page-read alias. A mixed `subject.search`
-request is one read with at most 12 statements per backend. The `8+4R_reads` formula applies only to composed
-pages. Existing candidate,
-Access, raw/native plan and physical-query allowances apply. Work is page-derived; no S/D scan.
+  readMapping, extra snapshot/client/control SQL or per-ID loop. Fit direct<=12 statements/backend or composed
+  `8+4R_reads` (`R_reads` is the number of DISTINCT ADMITTED READS of the common page, `R_reads <= 16` and total
+  output slots `<= 128`), one connection/backend; resource leaves, conditions, dependencies, homes and retained
+  `R` minimized obligations do not increase `R_reads`, and `R` has no page-read alias. A mixed `subject.search`
+  request is one read with at most 12 statements per backend. The `8+4R_reads` formula applies only to composed
+  pages. Existing candidate,
+  Access, raw/native plan and physical-query allowances apply. Work is page-derived; no S/D scan.
 
 - Growth check: GI `finite owner pages progress under continuous disjoint identity work`, source size/query support 64/512/4096,
-unrelated A/G/M/E and R/L/H independently 1/8/64, complete excluded/NOT/order changes and cursor start/final/
-current checks. The native Source bindings above are required reds until delivered; samples cannot make it pass.
+  unrelated A/G/M/E and R/L/H independently 1/8/64, complete excluded/NOT/order changes and cursor start/final/
+  current checks. The native Source bindings above are required reds until delivered; samples cannot make it pass.
 
 ### Register, arm, summary finish, revalidate and repair scopes
 
 - Touches: actual source headers/structural
-dependency index, inverse `(original,owner,scope)`, OLD/NEW dirty capture, native claims, committed summary/CAS,
-receipts and source-local repair.
+  dependency index, inverse `(original,owner,scope)`, OLD/NEW dirty capture, native claims, committed summary/CAS,
+  receipts and source-local repair.
 
 - Bound: O(n) examined dependency/effect rows, O(n(log D+log S+log A+
-log(R+L+H))) blocks and K_or_OP+body SQL per native home. Registration scans finite relevant source input in
-retained steps; discovery fanout is continued by original/scope, not a per-page scan. A source with arbitrarily
-many scopes gets in-unit keyset continuation with OLD/NEW custody retained.
+  log(R+L+H))) blocks and K_or_OP+body SQL per native home. Registration scans finite relevant source input in
+  retained steps; discovery fanout is continued by original/scope, not a per-page scan. A source with arbitrarily
+  many scopes gets in-unit keyset continuation with OLD/NEW custody retained.
 
 - Growth check: GI `complete scope
-registration and reordered summaries stay bounded`, D/S/unrelated history 1/8/64, support 64/512/4096,
-registration versus first claim, move/cancel/delayed messages, all-group versus owner-source isolation.
+  registration and reordered summaries stay bounded`, D/S/unrelated history 1/8/64, support 64/512/4096,
+  registration versus first claim, move/cancel/delayed messages, all-group versus owner-source isolation.
 
 ### Mapping, Search and Library canonical effect steps
 
 - Touches: shared immutable affected streams, actual
-source/engine records, structural directory/candidate/extrema, six drivers, OLD/NEW gate/effect/follow/support/
-total and exact native receipts.
+  source/engine records, structural directory/candidate/extrema, six drivers, OLD/NEW gate/effect/follow/support/
+  total and exact native receipts.
 
 - Bound: O(n) examined rows, O(n(log A+log G+log F+log D+log(R+L+H))) blocks;
-each one-home command pays K or ACTUAL OP plus all effect/wakeup SQL, Search pays native engine work/bytes too.
-Structural fanout follows relevant original/scope existence, not number of repeated session facts. No fixed
-per-fact 14-row formula is valid. Divide remaining durable allowance by captured actual elementary-unit cost;
-any original/scope/extrema with unbounded support has IN-UNIT keyset continuation for support/OLD/NEW halves,
-no requirement that the entire original fit once.
+  each one-home command pays K or ACTUAL OP plus all effect/wakeup SQL, Search pays native engine work/bytes too.
+  Structural fanout follows relevant original/scope existence, not number of repeated session facts. No fixed
+  per-fact 14-row formula is valid. Divide remaining durable allowance by captured actual elementary-unit cost;
+  any original/scope/extrema with unbounded support has IN-UNIT keyset continuation for support/OLD/NEW halves,
+  no requirement that the entire original fit once.
 
 - Growth check: GI `canonical effect and first-apply custody
-stay bounded`, originals 64/512/4096, raw boundary 100/101, unrelated owner/support/history 1/8/64, million same-
-scope sessions, first/deep/empty/replay, legitimate first apply in both orders and follow ACK/directory negative.
+  stay bounded`, originals 64/512/4096, raw boundary 100/101, unrelated owner/support/history 1/8/64, million same-
+  scope sessions, first/deep/empty/replay, legitimate first apply in both orders and follow ACK/directory negative.
 
 ### Birth and final writer guard
 
 - Touches: actual revision-1/self mapping, native source fence/claim, OLD/NEW
-capture and same-TX deferred home handoff guard.
+  capture and same-TX deferred home handoff guard.
 
 - Bound: O(1) additional fixed birth/guard rows, O(log A+
-log(R+L+H)) blocks; at most ONE indexed home-handoff-state lookup per guarded write including deferred check,
-actual native command body/receipt/event SQL additive. No Search/control checkout for birth; correct SOURCE
-home. Capture fanout uses continued dirty work.
+  log(R+L+H)) blocks; at most ONE indexed home-handoff-state lookup per guarded write including deferred check,
+  actual native command body/receipt/event SQL additive. No Search/control checkout for birth; correct SOURCE
+  home. Capture fanout uses continued dirty work.
 
 - Growth check: exact Access birth/verify files above plus GI
-`native writer handoff covers old and queued transactions`, fixed-data open-XID 1/8/64 ONLY if mechanism probes
-active transactions; otherwise no invented active-XID axis. Catalogue locking and waits are not a free trigger.
+  `native writer handoff covers old and queued transactions`, fixed-data open-XID 1/8/64 ONLY if mechanism probes
+  active transactions; otherwise no invented active-XID axis. Catalogue locking and waits are not a free trigger.
 
 ### Bootstrap, export, receiving custody and exact-head ACK
 
 - Touches: indexed topology slots, base/member/dirty
-keysets, source export, native control receipt/frontier, released source ACK.
+  keysets, source export, native control receipt/frontier, released source ACK.
 
 - Bound: O(n) examined rows,
-O(n(log A+log G+log(R+L+H))) blocks, EACH actual command's K+body. Each saved page costs THREE distinct native
-transactions: export, custody, ACK. At least ceil(4096/100) topology pages before metadata, with empty homes
-included; actual capacity is smaller after metadata/lookahead. Large page payload/custody subdivides within
-unit, retaining exact source receipt/head across steps.
+  O(n(log A+log G+log(R+L+H))) blocks, EACH actual command's K+body. Each saved page costs THREE distinct native
+  transactions: export, custody, ACK. At least ceil(4096/100) topology pages before metadata, with empty homes
+  included; actual capacity is smaller after metadata/lookahead. Large page payload/custody subdivides within
+  unit, retaining exact source receipt/head across steps.
 
 - Growth check: GI `all-home cutover retains exact dirty
-custody`, 64/512/4096 group/support and 1/8/64 export/history; h+1, lower keys, deletion/move/saved empty,
-crash export->custody->ACK and native failed/control-owner moves. No hidden export full-copy exemption.
+  custody`, 64/512/4096 group/support and 1/8/64 export/history; h+1, lower keys, deletion/move/saved empty,
+  crash export->custody->ACK and native failed/control-owner moves. No hidden export full-copy exemption.
 
 ### Minimize, reference acquire, reclaim and wakeup
 
 - Touches: locked generation/ref/header, actual owner/shared
-minimizers, indexed retired generation and member keyset, frontier/receipt/wakeup.
+  minimizers, indexed retired generation and member keyset, frontier/receipt/wakeup.
 
 - Bound: O(n) examined rows,
-O(n(log A+log G+log(R+L+H))) blocks and native K+body SQL including refusal/empty/wakeup. Reclaim selects and
-deletes each member (k_MAX=2 for that payload); metadata c_MAX explicitly equals the actual plan's owner/fence
-rows + locked header/ref rows + frontier rows + native receipt rows + wakeup/outbox rows + minimizer/custody
-point rows + empty-range sentinel work. These categories ALL count, including executor gate/body FK work.
-Exact maxima for each are a MISSING native plan binding, not c=0. Allocate at most floor((100-c_MAX)/2)
-members ONLY after Performance confirms c_MAX+2<=100. If metadata cannot fit, split minimization/custody into
-prior bounded native units with locked retained state; no zero-progress reclaim loop.
+  O(n(log A+log G+log(R+L+H))) blocks and native K+body SQL including refusal/empty/wakeup. Reclaim selects and
+  deletes each member (k_MAX=2 for that payload); metadata c_MAX explicitly equals the actual plan's owner/fence
+  rows + locked header/ref rows + frontier rows + native receipt rows + wakeup/outbox rows + minimizer/custody
+  point rows + empty-range sentinel work. These categories ALL count, including executor gate/body FK work.
+  Exact maxima for each are a MISSING native plan binding, not c=0. Allocate at most floor((100-c_MAX)/2)
+  members ONLY after Performance confirms c_MAX+2<=100. If metadata cannot fit, split minimization/custody into
+  prior bounded native units with locked retained state; no zero-progress reclaim loop.
 
 - Growth check: GI
-`reclaim and wakeup retain local physical bounds`, retained generations and R/L/H independently 1/8/64,
-memberships 64/512/4096, first/deep/empty/replay/ref refusal/minimizer failure/crash and other-partition progress.
+  `reclaim and wakeup retain local physical bounds`, retained generations and R/L/H independently 1/8/64,
+  memberships 64/512/4096, first/deep/empty/replay/ref refusal/minimizer failure/crash and other-partition progress.
 
 ### Accounts intent, delivery and durable publication probe
 
 - Touches: one account-home intent insert in the
-existing decision/reversal transaction, primary and three role-first indexes, exact source/control custody,
-same-workflow indexed publication state.
+  existing decision/reversal transaction, primary and three role-first indexes, exact source/control custody,
+  same-workflow indexed publication state.
 
 - Bound: one additional intent statement with O(1) examined rows and
-O(log(R+L+H)) blocks, plus actual native command/authorization/receipt work already charged to that owner.
-Delivery commands each pay their actual K+body; each bounded read probe pays K_read plus native owner/job
-points, O(1) rows and O(log E+log H) blocks, never a history scan or request-held wait. Durable sleep adds real
-DBOS shared-history work, captured independently, no command effects.
+  O(log(R+L+H)) blocks, plus actual native command/authorization/receipt work already charged to that owner.
+  Delivery commands each pay their actual K+body; each bounded read probe pays K_read plus native owner/job
+  points, O(1) rows and O(log E+log H) blocks, never a history scan or request-held wait. Durable sleep adds real
+  DBOS shared-history work, captured independently, no command effects.
 
 - Growth check: existing
-`test/access/growth-agent-verification.test.ts` for verify/unverify and the unchanged birth tests named above;
-GI `account intent replay and publication probes stay indexed`, source intent/history and completed jobs
-independently 1/8/64, in-flight verify/reversal, outage/sleep and same-receipt busy/capacity recovery.
+  `test/access/growth-agent-verification.test.ts` for verify/unverify and the unchanged birth tests named above;
+  GI `account intent replay and publication probes stay indexed`, source intent/history and completed jobs
+  independently 1/8/64, in-flight verify/reversal, outage/sleep and same-receipt busy/capacity recovery.
 
 Every other page division `floor((100-c_MAX)/k_MAX)` above requires a captured finite c_MAX+k_MAX fit before
 activation OR in-unit keyset continuation for arbitrarily supported originals. Continuations retain exact
