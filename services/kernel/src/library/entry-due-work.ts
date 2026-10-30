@@ -33,7 +33,7 @@ export async function registerLibraryEntryRetentionWork({ pool, client, clock }:
         if (Date.now() >= deadline - 100) break;
         const partition = result.cursor.partition;
         const read = await withConnection(pool, async (connection) => {
-          await connection.query('BEGIN READ ONLY');
+          await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           try {
             await connection.query(`SET LOCAL statement_timeout = '${Math.max(1, deadline - Date.now())}ms'`);
             if (loaded !== partition) {
