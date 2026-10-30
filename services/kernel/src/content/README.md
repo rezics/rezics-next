@@ -591,6 +591,48 @@ the document licence. Erased authored documents, like missing or undisclosed doc
 `DELETE /v1/documents/{id}` requires an `Idempotency-Key` and the author's `document:erase` permission; a successful
 deletion and authorized replay return 204 with the stored session position.
 
+### Ordinary record physical purge
+
+`purgeAuthoredFieldForDeletedRecord(tx, authority)` is the adopted internal Content port for ordinary deleted
+semantic records. It consumes the same opaque `RecordPurgeAuthority` as shared-history minimization, from
+`semantic/record-purge-authority.ts`. Content itself calls `lockRecordPurgeAuthoritySource` inside the current
+source command. A structural payload, serialized authority, author identity, account deletion time or
+`document:erase` permission cannot authorize this maintenance operation.
+
+Semantic owns issuance and the native lifecycle lock: the real committed deletion, original tuple, generation,
+source version and deletion transaction, its thirty-day deadline, and current hold, takedown and restoration
+state at the current command T. Its source lock and progress must serialize hold, restore and generation
+changes, including refusal of ordinary restoration after expiry or irreversible purge. Takedown alone is not
+ordinary deletion. Content never reads Semantic lifecycle SQL or infers eligibility from an earlier issuance.
+Until Semantic supplies the native issuer, reader and lock, those original-module functions throw unavailable;
+the declarations alone confer no permission and this hook cannot purge through that seam.
+
+After that native lock, Content locks exactly one routed `authored_field` and compares its stored subject,
+candidate and revision. It clears physical `body` bytes and sets `availability = erased`, preserving the original
+digest, licence, language and reference skeleton. `authored_field_purge` records the exact source binding and
+deletion generation in that same transaction, alongside the source owner's progress. A pre-existing author or
+account tombstone also needs that live source validation and binding; its absence of bytes alone is no completion
+evidence. Existing author erasure and account erasure semantics are unchanged.
+
+`null` means ineligible source or no exact binding and authorizes no custody acknowledgement. `already-purged`
+requires the exact native tombstone, physical NULL bytes and the verified source generation; a mismatched stored
+generation or source binding returns no completion. `purged` requires the physical transition and binding in this
+transaction. Rollback loses both Content changes; source exceptions, dependency failures and unknown outcomes
+propagate. This is Content body custody only: shared-history copies, receiving custody and consumer closure belong
+to their owners. Neither return state claims global cleanup. The writer rejects image and media nodes, so this port
+has no attached-media acknowledgement; future media support needs an actual Content custody source.
+
+Cost per operation:
+
+- **Touches:** Semantic's exact native source lock; one exact authored row lock and one exact optional custody
+  binding read; at most one body transition and one binding insert in that source home.
+- **Bound:** Fixed keys, rows and statements; O(log R) indexed work as unrelated records grow. No source-history
+  walk, JSON scan, foreign-home SQL or cross-home transaction.
+- **Growth check:** The existing `test/content/authored-fields.test.ts` “authored document append and read”
+  covers the authored primary-key population. The purge adds one primary-key binding lookup and insert.
+  `test/content/authored-field-retention.test.ts` supplies focused custody controls, not a new growth campaign
+  or proof that the still-unavailable native source lifecycle has landed.
+
 ## Media claims
 
 A post image belongs to the first post that claims it; that post's later revisions may name it again, any other reference is `media_unavailable`, and erasing the post erases it.
