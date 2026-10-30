@@ -119,7 +119,7 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
         current.subject.statements[property] = [structuredClone(candidate.statement)];
       return json(current);
     }
-    if (path === `/v1/definitions/releases/${definitions.digest}`) return json(definitions);
+    if (path === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`) return json(definitions);
     if (path === `/v1/subjects/${id}/candidates`) {
       if (scenario === 'empty') return json({ candidates: [], adoption: null, next: null });
       if (scenario === 'more' && !url.searchParams.has('cursor'))
