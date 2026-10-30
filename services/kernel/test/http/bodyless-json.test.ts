@@ -27,7 +27,7 @@ test('an absent JSON body reaches optional and bodyless routes without default-p
   for (const [method, path] of [
     ['PUT', '/optional'],
     ['DELETE', '/bodyless'],
-  ]) {
+  ] as const) {
     const response = await app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
@@ -48,7 +48,7 @@ test('absence does not satisfy a required body or admit a present body to an opt
     ['PUT', '/optional', '{}'],
     ['PUT', '/optional', 'null'],
     ['PUT', '/optional', ''],
-  ]) {
+  ] as const) {
     const response = await app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
