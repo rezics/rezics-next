@@ -16,6 +16,7 @@ import { ProfileSection } from './profile';
 import { PublicViewsSection } from './public-views';
 import type { NotificationPreferences, ReadingPreferences, SettingsPage, SpoilerLevel } from './preferences';
 import { CollectionPrivacySection } from './collection-privacy';
+import { VerificationSection } from './verification';
 import { useOperation } from '../kernel/exposure';
 
 type Signal = 'idle' | 'saving' | 'saved' | 'conflict' | 'reloading' | 'failed';
@@ -437,6 +438,7 @@ export function SettingsPageView({
             />
           </section>
           <CollectionPrivacySection />
+          <VerificationSection />
           <section id="profile" aria-label={m.settings_profile_heading()} className="scroll-mt-6">
             <ProfileSection />
           </section>

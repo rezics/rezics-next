@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import settingsPreferencesRecording from '../kernel/recorded/settings-preferences.json';
+import { setFakeVerificationState } from '../kernel/fake/verification';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { SignInPrompt } from '../threads/composer';
@@ -52,7 +53,7 @@ function notificationName(kind: string): string {
 }
 
 /** The page shows the recorded level as chosen and the other controls ready to change. */
-async function settingsReady(context: { canvasElement: HTMLElement }) {
+async function settingsReady(context: { canvasElement: HTMLElement }, expectVerification = true) {
   await pageReady(context);
   const view = within(within(context.canvasElement).getByRole('main'));
   await view.findByRole('heading', { level: 1, name: m.settings_heading() });
@@ -90,13 +91,79 @@ async function settingsReady(context: { canvasElement: HTMLElement }) {
   ])
     await view.findByRole('switch', { name: label });
   await expect(view.queryByRole('switch', { name: m.settings_public_speakers() })).toBeNull();
+  if (expectVerification) await view.findByRole('heading', { level: 2, name: m.settings_verification_heading() });
+}
+
+function verificationStory(state: 'none' | 'pending' | 'approved' | 'rejected') {
+  setFakeVerificationState(state);
+  return <PageStory visitor="Signed In" path="/settings" />;
 }
 
 export const SignedIn: Story = {
   name: 'Signed In · 1280',
   parameters: { viewport: { defaultViewport: 'settingsDesktop' } },
   play: settingsReady,
-  render: () => <PageStory visitor="Signed In" path="/settings" />,
+  render: () => verificationStory('none'),
+};
+
+export const VerificationPending: Story = {
+  name: 'Verification Pending',
+  render: () => verificationStory('pending'),
+  play: async (context) => {
+    await settingsReady(context);
+    await within(within(context.canvasElement).getByRole('main')).findByText(
+      m.settings_verification_pending({ subject: 'Haruka Aizawa' }),
+    );
+  },
+};
+
+export const VerificationApproved: Story = {
+  name: 'Verification Approved',
+  render: () => verificationStory('approved'),
+  play: async (context) => {
+    await settingsReady(context);
+    await within(within(context.canvasElement).getByRole('main')).findByRole('link', {
+      name: m.settings_verification_view_agent(),
+    });
+  },
+};
+
+export const VerificationRejected: Story = {
+  name: 'Verification Rejected',
+  render: () => verificationStory('rejected'),
+  play: async (context) => {
+    await settingsReady(context);
+    await within(within(context.canvasElement).getByRole('main')).findByText(
+      m.settings_verification_rejected({ reason: 'The evidence did not establish account ownership.' }),
+    );
+  },
+};
+
+export const VerificationRequestFiveLinks: Story = {
+  name: 'Verification Request with Five Links',
+  render: () => verificationStory('none'),
+  play: async (context) => {
+    await settingsReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    for (let index = 0; index < 4; index += 1)
+      await view.findByRole('button', { name: m.settings_verification_add_link() }).then((button) => button.click());
+    await expect(view.getAllByLabelText(m.settings_verification_link_label())).toHaveLength(5);
+  },
+};
+
+export const VerificationGateClosed: Story = {
+  name: 'Verification Gate Closed',
+  parameters: { admitted: ['collections'] },
+  render: () => verificationStory('none'),
+  play: async (context) => {
+    await settingsReady(context, false);
+    await expect(
+      within(within(context.canvasElement).getByRole('main')).queryByRole('heading', {
+        level: 2,
+        name: m.settings_verification_heading(),
+      }),
+    ).toBeNull();
+  },
 };
 
 export const Phone: Story = {

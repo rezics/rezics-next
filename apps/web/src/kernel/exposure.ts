@@ -5,6 +5,8 @@ import { exposureQuery, useSession } from '../session/query';
 
 /** The site's gated operations. Controls name an operation; OpenAPI owns its group. */
 export const operationGroups = {
+  'agent_verification.request': 'agent_verification',
+  'agent_verification.withdraw': 'agent_verification',
   'account.collections': 'collections',
   'collection.list': 'collections',
   'collection.create': 'collections',
