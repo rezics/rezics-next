@@ -29,6 +29,8 @@ export interface AttemptFence {
 export type LandingRequest = AttemptRef & {
   branch: string;
   worktree: string;
+  /** Source branch HEAD before controller-only retry rebases, frozen when the worker settles. */
+  workerCommit?: string;
   /** Path patterns the brief declared: where the work is expected. A worker may change files outside them. */
   declaredPaths: readonly string[];
   /** Risk-area patterns the brief did not declare; a change outside declaredPaths that matches one is refused. */
@@ -49,12 +51,26 @@ export interface LandingQueue {
 }
 
 export type GateStage = 'setup' | 'rebase' | 'scope' | 'gate' | 'merge';
+export type GateOutcomeRefusal = {
+  kind: 'frozen-acceptance-change';
+  paths: readonly string[];
+};
 
 export type FirstFailure = {
   /** Stable for the same failing assertion across runs; repeats are detected by comparing it. */
   fingerprint: string;
   assertion: string;
   excerpt: string;
+};
+
+/** Git state captured by the train while an unresolved rebase conflict is present. */
+export type RebaseConflictContext = {
+  /** Exact effective target HEAD used by the failed rebase (including earlier members of a batch). */
+  targetHead: string;
+  /** Exact source branch HEAD before the controller rebased or amended the candidate. */
+  workerCommit: string;
+  /** Sorted, unique paths reported by Git as unresolved at the conflict. */
+  paths: readonly string[];
 };
 
 export type GateOutcome = AttemptRef & {
@@ -75,6 +91,10 @@ export type GateOutcome = AttemptRef & {
   nonGeneratedDiffLines?: number;
   /** Paths left unresolved by a rebase-stage failure. */
   conflictedFiles?: readonly string[];
+  /** Typed train refusal for immutable inputs; not a Git rebase conflict. */
+  refusal?: GateOutcomeRefusal;
+  /** Complete Git identity of an actual unresolved rebase conflict; absent on legacy or non-Git failures. */
+  rebaseConflict?: RebaseConflictContext;
   diffLines: number;
   mergedCommit?: string;
 };

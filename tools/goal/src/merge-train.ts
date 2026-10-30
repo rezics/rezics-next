@@ -34,6 +34,7 @@ import {
   type GateResult,
   type GateRunner,
 } from './merge.ts';
+import { canonicalConflictPaths, makeRebaseConflictContext } from './conflict-progress.ts';
 
 import type { AffectedTestCheck, AffectedTestResult } from './types.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
@@ -606,6 +607,14 @@ function refuseNoEffect(
   appendFileSync(logPath, `${reason}\n`);
 }
 
+function refuseFrozenAcceptanceChange(result: GateOutcome, paths: readonly string[], logPath: string): void {
+  const canonical = canonicalConflictPaths(paths);
+  result.stage = 'rebase';
+  result.refusal = { kind: 'frozen-acceptance-change', paths: canonical };
+  result.firstFailure = firstFailure(`Frozen acceptance file changed: ${canonical.join(', ')}`);
+  appendFileSync(logPath, `Frozen acceptance files changed: ${canonical.join(', ')}\n`);
+}
+
 function treeDiffIsEmpty(cwd: string, base: string, candidate: string): boolean {
   const result = spawnSync('git', ['diff', '--quiet', base, candidate, '--'], { cwd });
   if (result.status === null || result.status > 1)
@@ -670,6 +679,37 @@ function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: 
       } catch {
         return true;
       }
+    })
+    .map((file) => file.path);
+}
+
+function frozenFilesModifiedAtCommit(
+  cwd: string,
+  commit: string,
+  frozen: readonly { path: string; hash: string }[],
+): string[] {
+  const verified = spawnSync('git', ['rev-parse', '--verify', `${commit}^{commit}`], {
+    cwd,
+    encoding: 'utf8',
+  });
+  if (verified.error || verified.status !== 0)
+    throw new Error(verified.stderr?.trim() || verified.error?.message || `Cannot read target commit ${commit}`);
+
+  return frozen
+    .filter((file) => {
+      const exists = spawnSync('git', ['cat-file', '-e', `${commit}:${file.path}`], { cwd });
+      if (exists.error) throw new Error(exists.error.message);
+      // A missing frozen path is a worker-only addition for legacy diagnostics, not a target edit.
+      if (exists.status !== 0) return false;
+      const blob = spawnSync('git', ['cat-file', 'blob', `${commit}:${file.path}`], {
+        cwd,
+        encoding: 'buffer',
+      });
+      if (blob.error || blob.status !== 0)
+        throw new Error(
+          blob.stderr?.toString().trim() || blob.error?.message || `Cannot read frozen path ${file.path}`,
+        );
+      return createHash('sha256').update(blob.stdout).digest('hex') !== file.hash;
     })
     .map((file) => file.path);
 }
@@ -1325,12 +1365,23 @@ export class MergeTrain {
           git(trainTree, 'reset', '--hard', tip);
           git(trainTree, 'clean', '-fdx');
           const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
+          const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
+          if (changedFrozenAtSource.length) {
+            const changedFrozenOnTarget = new Set(frozenFilesModifiedAtCommit(trainTree, previous, frozenAtStart));
+            refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+            // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
+            // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
+            const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
+            if (workerOnlyFrozenChanges.length)
+              result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
           const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
-          const worked =
-            changedFrozenFiles(trainTree, frozenAtStart).length > 0 ||
-            git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
-              .split('\n')
-              .some((path) => path && !frozenPaths.has(path));
+          const worked = git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
+            .split('\n')
+            .some((path) => path && !frozenPaths.has(path));
           if (!worked) {
             result.stage = 'rebase';
             result.firstFailure = firstFailure(
@@ -1346,6 +1397,10 @@ export class MergeTrain {
             rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
+            if (conflicts.length) {
+              const context = makeRebaseConflictContext(previous, request.workerCommit ?? tip, conflicts);
+              if (context) result.rebaseConflict = context;
+            }
             if (error instanceof WorkerConflictError) {
               refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
               localOutcomes.set(entry.id, result);
@@ -1366,7 +1421,7 @@ export class MergeTrain {
               deferred.add(entry.id);
             } else if (conflicts.length) {
               result.stage = 'rebase';
-              result.conflictedFiles = conflicts;
+              result.conflictedFiles = canonicalConflictPaths(conflicts);
               result.firstFailure = firstFailure(String(error));
               appendFileSync(logPath, `Rebase conflicts with dev: ${conflicts.join(', ')}\n`);
               localOutcomes.set(entry.id, result);
@@ -1383,16 +1438,7 @@ export class MergeTrain {
           const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
           const changedFrozen = changedFrozenFiles(trainTree, frozen);
           if (changedFrozen.length) {
-            result.stage = 'rebase';
-            result.conflictedFiles = changedFrozen;
-            result.firstFailure = firstFailure(`Frozen acceptance file changed: ${changedFrozen.join(', ')}`);
-            appendFileSync(logPath, `Frozen acceptance files changed: ${changedFrozen.join(', ')}\n`);
-            const mutable = o.fence as AttemptFence & {
-              updateAttempt?: (ref: AttemptRef, update: (attempt: { escalation: string | null }) => void) => unknown;
-            };
-            mutable.updateAttempt?.(request, (attempt) => {
-              attempt.escalation = 'rebase-conflict';
-            });
+            refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
@@ -1949,6 +1995,8 @@ export class MergeTrain {
     let stage: GateStage = 'setup';
     const trainTree = resolve(o.worktreeRoot, `train-${randomUUID()}`);
     let added = false;
+    let workerCommit: string | undefined;
+    let activeTargetHead: string | undefined;
     const runGate = o.runGate ?? gateRunner();
     const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
     const refreshManagerLanding = () => {
@@ -2000,6 +2048,7 @@ export class MergeTrain {
         throw new Error('The main checkout must already have main checked out');
       if (await recoverAlreadyIntegrated()) return finish();
       const tip = git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      workerCommit = request.workerCommit ?? tip;
       if (workspace && sharedStore) {
         sharedSource = tip;
         const task = sharedStore.task(request.taskId);
@@ -2056,20 +2105,40 @@ export class MergeTrain {
         delete result.timedOut;
         delete result.failedCommand;
         const base = target();
+        activeTargetHead = base;
         stage = 'rebase';
         git(trainTree, 'reset', '--hard', tip);
         git(trainTree, 'clean', '-fdx');
         const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
         // A worker that left its work uncommitted would otherwise integrate nothing and release its dependents. The
         // controller commits the frozen acceptance files itself, so they are not the worker's work.
-        const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
+        const frozenAtStart =
+          workspace && sharedStore
+            ? sharedStore
+                .tasks()
+                .filter((task) => task.workspace?.module === recorded.workspace!.module)
+                .flatMap((task) => frozenFilesForTask(o.stateDirectory, task.id))
+            : frozenFilesForTask(o.stateDirectory, request.taskId);
+        const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
+        if (changedFrozenAtSource.length) {
+          const changedFrozenOnTarget = new Set(frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart));
+          refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+          // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
+          // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
+          const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
+          if (workerOnlyFrozenChanges.length) result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
+          if (workspace) {
+            const owners = sharedTasks.filter((task) =>
+              taskChangedPaths(task, tip).some((path) => changedFrozenAtSource.includes(path)),
+            );
+            attributeFailure(result, owners.length ? owners : undefined);
+          }
+          return finish();
+        }
         const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
-        // A changed frozen file is the worker's doing; the frozen check below refuses it with its own reason.
-        const worked =
-          changedFrozenFiles(trainTree, frozenAtStart).length > 0 ||
-          git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
-            .split('\n')
-            .some((path) => path && !frozenPaths.has(path));
+        const worked = git(trainTree, 'diff', '--name-only', originalBase, 'HEAD')
+          .split('\n')
+          .some((path) => path && !frozenPaths.has(path));
         if (!worked)
           throw new Error(
             'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
@@ -2096,22 +2165,13 @@ export class MergeTrain {
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
         if (changedFrozen.length) {
           stage = 'rebase';
-          result.stage = 'rebase';
-          result.conflictedFiles = changedFrozen;
-          result.firstFailure = firstFailure(`Frozen acceptance file changed: ${changedFrozen.join(', ')}`);
-          appendFileSync(logPath, `Frozen acceptance files changed: ${changedFrozen.join(', ')}\n`);
-          const mutable = o.fence as AttemptFence & {
-            updateAttempt?: (ref: AttemptRef, update: (attempt: { escalation: string | null }) => void) => unknown;
-          };
+          refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
           if (workspace) {
             const owners = sharedTasks.filter((task) =>
               taskChangedPaths(task, tip).some((path) => changedFrozen.includes(path)),
             );
             attributeFailure(result, owners.length ? owners : undefined);
-          } else
-            mutable.updateAttempt?.(request, (attempt) => {
-              attempt.escalation = 'rebase-conflict';
-            });
+          }
           return finish();
         }
         stage = 'scope';
@@ -2696,7 +2756,14 @@ export class MergeTrain {
       const message = String(error);
       appendFileSync(logPath, `${message}\n`);
       result.stage = stage;
-      if (stage === 'rebase' && added) result.conflictedFiles = unmergedFiles(trainTree);
+      if (stage === 'rebase' && added) {
+        const conflicts = canonicalConflictPaths(unmergedFiles(trainTree));
+        if (conflicts.length) {
+          result.conflictedFiles = conflicts;
+          const context = makeRebaseConflictContext(activeTargetHead, workerCommit, conflicts);
+          if (context) result.rebaseConflict = context;
+        }
+      }
       result.firstFailure = firstFailure(message);
       return finish();
     } finally {

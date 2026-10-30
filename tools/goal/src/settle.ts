@@ -9,6 +9,7 @@ import { removeAttemptContainers } from './worker-containers.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { WorkerTasks } from './tasks.ts';
 import { git } from './tasks.ts';
+import { completeWorkerSourceBaseline } from './conflict-progress.ts';
 
 /** Await the worker's exit notification. No model, interval, or sleep loop participates in settlement. */
 export async function settle(
@@ -197,6 +198,19 @@ export async function settle(
     });
     if (finished) {
       const task = store.task(ref.taskId);
+      const branchHead = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`]);
+      const sourceBaselineEvent = store
+        .events(ref.taskId, ref.attempt)
+        .findLast((event) => event.kind === 'worker-source-baseline');
+      let workerCommit = branchHead;
+      if (sourceBaselineEvent) {
+        try {
+          const baseline = completeWorkerSourceBaseline(JSON.parse(sourceBaselineEvent.body));
+          if (baseline && branchHead === baseline.controllerHead) workerCommit = baseline.workerCommit;
+        } catch {
+          /* A malformed or legacy source baseline cannot establish historical worker progress. */
+        }
+      }
       store.write(ref, () => {
         evidenceBundle(task, store.attempt(ref));
         store.updateTask(ref, (t) => {
@@ -208,6 +222,7 @@ export async function settle(
             attempt: ref.attempt,
             branch: task.branch,
             worktree: task.worktree,
+            workerCommit,
             declaredPaths: task.brief.paths,
             protectedPaths: tasks.protectedPaths(task.brief),
             gate: task.brief.acceptance.command,
