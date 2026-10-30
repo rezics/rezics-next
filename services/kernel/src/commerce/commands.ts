@@ -712,8 +712,10 @@ export function createCommerceCommands(config: {
             if (!session && settlement === 'failed' && 'creationAttemptId' in outcome) {
               const attempt = await creationRead.run(tx, { route: r, id });
               if (
-                attempt && outcome.creationAttemptId === attempt.firstAttemptId &&
-                !attempt.retried && current.settlement === 'pending'
+                attempt &&
+                outcome.creationAttemptId === attempt.firstAttemptId &&
+                !attempt.retried &&
+                current.settlement === 'pending'
               )
                 await recordAcquisitionDisposition(tx, value, 'no-creation');
             }
