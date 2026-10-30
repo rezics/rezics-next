@@ -28,7 +28,14 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { threadPageQuery, threadPersonalQuery } from '../../threads/thread-queries';
 import { threadPageHead } from '../../threads/thread-head';
-import { rememberThreadSlug, rememberedThreadSlug, sameThreadSlug, slugMatches, threadLocation, threadTitle } from '../../threads/thread-href';
+import {
+  rememberThreadSlug,
+  rememberedThreadSlug,
+  sameThreadSlug,
+  slugMatches,
+  threadLocation,
+  threadTitle,
+} from '../../threads/thread-href';
 import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReading, type ThreadReadingPage } from '../../threads/thread-reading';
@@ -137,15 +144,32 @@ function ThreadPage() {
 
 function SharePost({ onCopyLink }: { onCopyLink: () => Promise<void> }) {
   const [message, setMessage] = useState('');
-  return <div className="flex min-w-0 flex-wrap items-center gap-2">
-    <Button type="button" variant="ghost" size="sm" onClick={async () => {
-      try { await onCopyLink(); setMessage(m.thread_reading_link_copied()); }
-      catch { setMessage(m.thread_reading_share_failed()); }
-    }}><Share2Icon aria-hidden="true" />{m.thread_reading_share()}</Button>
-    {message ? <span role="status" className="text-xs text-muted-foreground">{message}</span> : null}
-  </div>;
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={async () => {
+          try {
+            await onCopyLink();
+            setMessage(m.thread_reading_link_copied());
+          } catch {
+            setMessage(m.thread_reading_share_failed());
+          }
+        }}
+      >
+        <Share2Icon aria-hidden="true" />
+        {m.thread_reading_share()}
+      </Button>
+      {message ? (
+        <span role="status" className="text-xs text-muted-foreground">
+          {message}
+        </span>
+      ) : null}
+    </div>
+  );
 }
-
 
 function fullDateTime(value: string): string {
   const date = new Date(value);
@@ -343,7 +367,12 @@ export function ThreadReadingPost({
 
   const authorId = 'authorId' in post ? post.authorId : undefined;
   return (
-    <ListRow id={anchorId} ref={itemElement} tabIndex={-1} className="min-w-0 scroll-mt-24 rounded-xl bg-card px-4 py-5 target:ring-2 target:ring-ring sm:p-6">
+    <ListRow
+      id={anchorId}
+      ref={itemElement}
+      tabIndex={-1}
+      className="min-w-0 scroll-mt-24 rounded-xl bg-card px-4 py-5 target:ring-2 target:ring-ring sm:p-6"
+    >
       <div className="mb-4 flex min-w-0 flex-wrap items-start justify-between gap-3">
         <Byline
           author={authorId === undefined ? undefined : authors?.[authorId]}
@@ -422,17 +451,19 @@ export function ThreadReadingPost({
             labels={{ revealSpoiler: m.thread_reveal_spoiler() }}
           />
           <div className="mt-4">
-          <RevisionProvenance
-            revision={post}
-            subjects={subjects}
-            currentVote={ownsPost ? (currentVote ?? null) : null}
-            review={review}
-          />
+            <RevisionProvenance
+              revision={post}
+              subjects={subjects}
+              currentVote={ownsPost ? (currentVote ?? null) : null}
+              review={review}
+            />
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             {post.revisionId ? (
               <PostHistory postId={post.id} {...(viewerId ? { viewerId } : {})} review={review} />
-            ) : <span />}
+            ) : (
+              <span />
+            )}
             <div className="flex min-w-0 flex-wrap items-center gap-1">
               <SharePost onCopyLink={copyLink} />
               {signedIn && personalReady ? <ReplyButton disabled={replyPending} onReply={onReply} /> : null}

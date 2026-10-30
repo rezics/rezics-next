@@ -6,10 +6,15 @@ import { ThreadReadingPreview } from './thread-reading-preview';
 const meta = {
   title: 'Patterns/Community/Thread reading',
   component: ThreadReadingPreview,
-  parameters: { layout: 'fullscreen', viewport: { options: {
-    phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-    desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-  } } },
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+  },
 } satisfies Meta<typeof ThreadReadingPreview>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -25,7 +30,11 @@ async function selectParent({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(canvas.getByRole('button', { name: m.thread_reply_cancel_target() })).toBeVisible();
   return { canvas, editor };
 }
-export const SelectedParent: Story = { play: async (context) => { await selectParent(context); } };
+export const SelectedParent: Story = {
+  play: async (context) => {
+    await selectParent(context);
+  },
+};
 export const CancelledParent: Story = {
   play: async (context) => {
     const { canvas, editor } = await selectParent(context);
