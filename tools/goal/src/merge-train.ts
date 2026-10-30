@@ -1039,8 +1039,6 @@ export class MergeTrain {
     handOff: () => Promise<void>,
   ): Promise<void> {
     const o = this.options;
-    const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
-      assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit);
     mkdirSync(o.stateDirectory, { recursive: true });
     const leasePath = join(o.stateDirectory, lane === 'main' ? 'train-main.lease' : 'train.lease');
     let acquired = false;
@@ -1876,6 +1874,8 @@ export class MergeTrain {
 
   private async integrate(entry: LandingEntry): Promise<GateOutcome> {
     const o = this.options;
+    const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
+      assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit);
     const request = entry.request;
     const mainBranch = o.mainBranch ?? 'main';
     const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId);
