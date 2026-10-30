@@ -51,18 +51,49 @@ export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDi
 export type GateResult = { passed: boolean; output: string; timedOut: boolean };
 export type GateRunner = (argv: readonly string[], cwd: string, logPath: string) => Promise<GateResult>;
 
-const activeCommandGroups = new Set<number>();
+const activeCommandGroups = new Map<number, () => Promise<void>>();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  const stopGroups = () => {
-    for (const pid of activeCommandGroups) {
-      try {
-        process.kill(-pid, 'SIGKILL');
-      } catch {}
-    }
+  let stopping = false;
+  const stopGroups = async () => {
+    if (stopping) return;
+    stopping = true;
+    await Promise.allSettled([...activeCommandGroups.values()].map((stop) => stop()));
     process.removeListener(signal, stopGroups);
     process.kill(process.pid, signal);
   };
   process.on(signal, stopGroups);
+}
+
+function compilerContainerCleanup(pid: number): string | undefined {
+  const query = () =>
+    spawnSync('docker', ['ps', '-aq', '--filter', `label=rezics.compiler.pid=${pid}`], {
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+  const describeFailure = (result: ReturnType<typeof query>) =>
+    result.error?.message || result.stderr?.trim() || `docker exited with status ${result.status}`;
+  let listed = query();
+  if (listed.error || listed.status !== 0)
+    return `Compiler database cleanup could not be proven for PID ${pid}: ${describeFailure(listed)}`;
+  let containers = (listed.stdout ?? '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  if (containers.length > 1)
+    return `Compiler database cleanup could not be proven for PID ${pid}: expected one owned container, found ${containers.join(', ')}`;
+  if (containers.length) {
+    const removed = spawnSync('docker', ['rm', '-f', '-v', containers[0]!], { encoding: 'utf8', timeout: 10_000 });
+    if (removed.error || removed.status !== 0)
+      return `Compiler database cleanup failed for PID ${pid}: ${describeFailure(removed)}`;
+    listed = query();
+    if (listed.error || listed.status !== 0)
+      return `Compiler database cleanup could not be proven for PID ${pid}: ${describeFailure(listed)}`;
+    containers = (listed.stdout ?? '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  }
+  return containers.length
+    ? `Compiler database cleanup could not be proven for PID ${pid}: owned containers remain: ${containers.join(', ')}`
+    : undefined;
+}
+
+function isRootTypecheck(argv: readonly string[]): boolean {
+  return argv.some((part) => part === 'scripts/typecheck.ts' || part.endsWith('/scripts/typecheck.ts'));
 }
 
 /** Run a command in an isolated process group and reap the entire group on every exit path. */
@@ -75,22 +106,55 @@ export function processGroupRunner(
   return async (argv, cwd, logPath) => {
     if (!argv.length) throw new Error('A gate command is required');
     return await new Promise<GateResult>((resolve, reject) => {
+      let finishCleanup!: () => void;
+      const cleanupComplete = new Promise<void>((done) => (finishCleanup = done));
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
         env: sanitizeEnvironment ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent)) : parent,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-      if (child.pid !== undefined) activeCommandGroups.add(child.pid);
+      const pid = child.pid;
       let output = '';
       let timedOut = false;
       let settled = false;
-      const killGroup = () => {
-        if (child.pid === undefined) return;
+      let stopPromise: Promise<boolean> | undefined;
+      const signalGroup = (signal: NodeJS.Signals) => {
+        if (pid === undefined) return;
         try {
-          process.kill(-child.pid, 'SIGKILL');
+          process.kill(-pid, signal);
         } catch {}
       };
+      const groupAlive = () => {
+        if (pid === undefined) return false;
+        try {
+          process.kill(-pid, 0);
+          return true;
+        } catch (error) {
+          return (error as NodeJS.ErrnoException).code === 'EPERM';
+        }
+      };
+      const stopGroup = (graceMs = 12_000): Promise<boolean> => {
+        if (stopPromise) return stopPromise;
+        stopPromise = (async () => {
+          if (!groupAlive()) return true;
+          signalGroup('SIGTERM');
+          const deadline = Date.now() + graceMs;
+          while (groupAlive() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+          if (groupAlive()) {
+            signalGroup('SIGKILL');
+            const killDeadline = Date.now() + 1_000;
+            while (groupAlive() && Date.now() < killDeadline) await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          return !groupAlive();
+        })();
+        return stopPromise;
+      };
+      if (pid !== undefined)
+        activeCommandGroups.set(pid, async () => {
+          await stopGroup();
+          await cleanupComplete;
+        });
       const collect = (chunk: Buffer) => {
         const text = chunk.toString();
         output += text;
@@ -103,24 +167,69 @@ export function processGroupRunner(
           ? undefined
           : setTimeout(() => {
               timedOut = true;
-              killGroup();
+              void stopGroup();
             }, timeoutMs);
-      const cleanup = () => {
-        if (timer !== undefined) clearTimeout(timer);
-        if (child.pid !== undefined) activeCommandGroups.delete(child.pid);
-        killGroup();
+      const cleanup = async () => {
+        try {
+          if (timer !== undefined) clearTimeout(timer);
+          const groupStopped = await stopGroup();
+          if (!groupStopped) output += `Command process group cleanup could not be proven for PID ${pid}\n`;
+          if (
+            groupStopped &&
+            pid !== undefined &&
+            isRootTypecheck(argv) &&
+            output.includes('Compiler database owner PID=')
+          ) {
+            const owner = output.match(/^Compiler database owner PID=(\d+)\s*$/m);
+            if (!owner) {
+              output += `Compiler database cleanup could not be proven for PID ${pid}: owner identity was malformed\n`;
+            } else if (Number(owner[1]) !== pid) {
+              output += `Compiler database cleanup could not be proven for PID ${pid}: producer reported owner PID ${owner[1]}\n`;
+            } else {
+              const failure = compilerContainerCleanup(pid);
+              if (failure) output += `${failure}\n`;
+            }
+          }
+        } finally {
+          if (pid !== undefined) activeCommandGroups.delete(pid);
+          finishCleanup();
+        }
       };
       child.once('error', (error) => {
         if (settled) return;
         settled = true;
-        cleanup();
-        reject(error);
+        void cleanup().then(
+          () => reject(error),
+          (cleanupError) =>
+            reject(
+              new Error(
+                `${error instanceof Error ? error.message : String(error)}; command cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+              ),
+            ),
+        );
       });
       child.once('close', (code) => {
         if (settled) return;
         settled = true;
-        cleanup();
-        resolve({ passed: code === 0 && !timedOut, output, timedOut });
+        void cleanup().then(
+          () =>
+            resolve({
+              passed:
+                code === 0 &&
+                !timedOut &&
+                !/Compiler database cleanup (?:could not be proven|failed)|Command process group cleanup could not be proven/.test(
+                  output,
+                ),
+              output,
+              timedOut,
+            }),
+          (error) =>
+            resolve({
+              passed: false,
+              output: `${output}\nCommand cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+              timedOut,
+            }),
+        );
       });
     });
   };

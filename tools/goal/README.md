@@ -43,21 +43,17 @@ does not name another existing wrapper path, the worker runs the command in the 
 does not add a wrapper. Workers do not run the root typecheck, affected checks or other
 regression checks. The task's acceptance command defines when its work is done.
 
-The dev landing train runs regression checks against the combined batch candidate. It runs the root typecheck once,
-each configured affected check whose path patterns match any changed path once, and matching sibling tests once. The
-sibling command prefix is configured by `siblingTests.command` in `defaults.json`; it receives the selected test paths.
-Affected checks come from local settings when configured, otherwise from `defaults.json`, whose tracked list keeps only
-the kernel entry. This lets workspace owners configure their checks locally without making train fixtures run costly
-workspace scripts. If a batch regression fails, no member lands; the train retries members one at a time with each
-member's own checks. A regression found during landing returns to the worker as a retry with the failing log. Promotion
-runs the full gate on the candidate before advancing `main`.
+The dev landing train runs exactly one mandatory root typecheck on each final candidate: once for a combined batch or
+once for an individual landing. It does not run affected, sibling, acceptance, native, import or page-story checks
+before dev advances. Those checks run through the independent verifier after integration. Promotion runs the full
+gate on the candidate before advancing `main`.
 
 Batching avoids repeating the same typecheck and affected checks for every worker in the batch. Historical check counts
 and costs are recorded in [the check cost report](../../docs/research/check-cost.md).
 
-Every landing command runs in its own process group, including acceptance, integration, affected, sibling and derived
-regeneration commands. The train kills the whole group when a command exits, times out, or the train stops, so a command
-cannot leave background children running. Control-plane tests set affected checks explicitly; when omitted, train
+Every landing command runs in its own process group, including the mandatory typecheck, acceptance, integration,
+affected, sibling and derived regeneration commands. The train gives the group a bounded graceful shutdown before
+forcing any remaining processes to exit. Control-plane tests set affected checks explicitly; when omitted, train
 fixtures use no affected or sibling checks and never inherit the repository's live check defaults.
 
 Derived files declare an `integration` or `promotion` stage in `defaults.json`. Rebase conflicts regenerate declared
@@ -138,11 +134,14 @@ stops processes merely because their working directory is shared. Frozen accepta
 protection and controller commits; undeclared risk areas remain closed.
 
 When a worker finishes, the train captures the workspace branch head and merges it with dev in the train's own
-worktree. It runs the usual affected checks and task acceptance on that combined candidate before advancing dev
-with its usual expected-head check. Source commits remain intact. Each task's trailer commits determine which
-changes belong to it and whether all its commits are on dev; those tasks become integrated. A task with no trailer
-commits cannot finish by claiming a peer's work. A failing landing returns to the tasks identified by the failing
-acceptance or changed files. Main promotion retains its existing workflow.
+worktree. Before advancing dev, it runs exactly one direct root typecheck on the final combined candidate, including
+any conflict resolution and formatting. `TYPECHECK_CHANGED` contains the actual paths from the batch base to that
+candidate. This guard is mandatory for single, shared-workspace and batched landings, including when
+`integration.devLandingChecks` is false. A compiler failure leaves dev unchanged and returns its full diagnostic to
+the affected task; unrelated batch members remain queued. A passing check advances dev with the expected-head check.
+Source commits remain intact. Each task's trailer commits determine which changes belong to it and whether all its
+commits are on dev; those tasks become integrated. A task with no trailer commits cannot finish by claiming a peer's
+work. Main promotion retains its existing workflow.
 
 A rebase conflict enters the existing same-profile retry path with its conflict files and evidence. The train
 records the full effective target commit, source worker commit and sorted unresolved path set at the conflict. A
@@ -498,21 +497,18 @@ watchdog does not probe when no hosts file is present and does not include the c
 ## Integration, promotion, culprit isolation and attempt fencing
 
 The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun install --frozen-lockfile` followed by
-`bun run check` from an isolated checkout. Task acceptance commands are saved with the task and run on the merged
-candidate before either dev integration or promotion to `main`, using configured remote check hosts like other train
-checks. A failed dev acceptance refuses that landing and records the command and first failure. The train runs the same
-command on the dev base and marks an identical fingerprint as pre-existing. Batched landings run each entry's
-acceptance against its cumulative candidate; a failed batch acceptance falls back to single landings so the failing
-task is identified and other entries can proceed. Integration rebases onto
-the integration branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+`bun run check` from an isolated checkout. Task acceptance commands are saved with the task. For dev landings, the
+independent verifier runs them after integration; a failure is reported with the command and first failure and does
+not hold the landing train. Main promotion retains its task acceptance gates. Integration rebases onto the integration
+branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
 so `main` receives finished work while other In rows are still open.
-The `integrationChecks` setting lists `{ paths, command }` checks. After
-formatting and scope validation, each check runs in order only when a changed file matches its paths. By default,
-changes under `services/kernel/**`, `packages/**`, `package.json` or `bun.lock` install dependencies and construct the
-kernel. Set it to `[]` to disable the check. Other repositories can override the local `gate` command. Gates and
-dependency installation never run in the main checkout or the worker's checkout.
+The `integrationChecks` setting lists legacy `{ paths, command }` checks. Dev landings no longer run these checks in
+the train. Unmigrated local checks are selected for the independent verifier after integration, except dependency
+installation and root typecheck entries, which remain setup and the mandatory compiler guard respectively. Main and
+stabilize workflows keep their existing gates. Gates and dependency installation never run in the main checkout or
+the worker's checkout.
 
 Task worktrees with the same dependency key share one read-only Bun install under the configured dependency-store root
 (default `<worktree root>/../dependency-stores`). Each tree keeps its own small `node_modules` skeleton and workspace
@@ -522,33 +518,25 @@ and `bunfig.toml`. Store builds use `--backend=copyfile`; the `.bun` tree is mad
 created 69,426 `node_modules` entries per private install (median 4.956 s) versus 27 per shared worktree (median
 0.016 s), after building one shared store.
 
-Workers run only their acceptance command after the last relevant edit. The dev landing batch runs the root typecheck,
-each configured affected check matching any changed path in the batch once, and the matching sibling tests. If a
-regression appears, the batch lands nothing and its members are retried individually with their own checks; the failing
-log returns with the retry. Infrastructure-classified batch failures retry the same batch once before individual
-fallback. Promotion continues to run the full gate. This moves repeated worker and batch regression runs into one
-batch-level check pass, while keeping acceptance as the worker's definition of done.
+Workers run their task acceptance command once after their last relevant edit. Each single, shared-workspace or batch
+dev landing receives one mandatory direct root typecheck on its final candidate. Conflict resolution and formatting
+are included in the checked tree. No affected, sibling, acceptance, native, import, or page-story validation runs
+before the dev ref advances. Infrastructure failures may retry the same compiler command once; compiler errors leave
+dev unchanged and go to their owner. Promotion continues to run the full gate.
 
-The `affectedTests` setting lists `{ paths: string[], command: string[] }` checks and is overridable in local settings
-(use `[]` to disable them). Defaults cover only `services/kernel/**` with its affected test mode. The supermanager adds per-workspace `check`
-commands to local settings when this lands. Configured affected checks run once on the batch candidate with the root
-typecheck and sibling tests.
+`verifierChecks` is the canonical `{ paths: string[], command: string[] }` selection for checks that run after dev
+integration. The defaults cover kernel affected mode, workspace imports, the Personal Library page, Web remote-browser
+regressions and the client page-story/component check. Local `affectedTests` and `integrationChecks` remain compatible
+inputs to this verifier when `verifierChecks` is not explicitly set; `bun install` and old typecheck entries are
+excluded. An explicit `verifierChecks` array replaces those legacy selections. `siblingTests.command` selects sibling
+tests after integration, excluding spec-tree files. These settings cannot disable or add work to the mandatory
+prelanding typecheck.
 
-Each command's status (`passed`, `failed`, or `unverified`), failing test files, duration in milliseconds and output
-are saved on the attempt and carried with its landing request. Completed results survive settlement recovery.
-Kernel's final failed-file summaries, lane errors, Bun reporter failures and `FAIL <test-file>` lines identify
-failing files; passing headings and stack frames do not. A check-host transport failure is retried once; a second
-transport failure is unverified and lands with a note in the landing log. Kernel's database-storage environment failure
-(`SQLSTATE 53100`) is also unverified and carries no failing files. Waiting for a check-host slot has no wall timeout.
-
-Only recorded failures need a train baseline. The train sends only failing files present in the integration base,
-reuses a cached result for that base and command, or runs the command in a separate base worktree, installing
-dependencies there when it has a package manifest. Failing files added by the branch are introduced failures by
-definition; if none of the failing files exist in the base, no baseline runs. The baseline clears
-`KERNEL_CHECK_AFFECTED` to run the full check: a base compared with itself would select no tests. This also makes the
-cached baseline reusable across attempts. A landing is refused only for newly failing test files, named in its gate
-failure; failures shared by the base are allowed. Errors before any test-file result use diagnostic-line comparison.
-An unverified baseline also allows landing with a log note. The train's existing integration checks are unchanged.
+Main and stabilize train checks retain their existing baseline behavior. They compare recorded failing files with the
+integration base, reuse a result for the same base and command, or run a separate base-worktree check. Failing files
+added by the branch are introduced by definition; failures shared with the base are allowed. These checks retain their
+existing transport retries, unverified environment classification and failure logs. Dev verification uses its own
+captured `dev-verified..dev` change set and advances `dev-verified` only after its selected checks pass.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. A control-plane task starts from `main`, the branch it integrates into, even when `dev` has
@@ -591,17 +579,16 @@ rebase. Only `after:` holds a task.
 
 A `stabilize` branch (`stabilizeBranch`, default `stabilize`) is a frozen candidate cut from the integration branch. A
 non-control-plane brief with `target: stabilize` starts and retries from that branch's head, and dispatch is refused
-while the branch does not exist. The train rebases such a task onto the branch, runs the same integration checks, and compare-and-swap advances
-the branch. It then merges that new head into the integration branch with `git merge --no-ff` in a train worktree,
-retrying up to five times if the integration branch moves. A conflict aborts only that merge: the stabilize branch and
-the task stay integrated at the stabilize commit, and the task's manager and the supermanager receive an inbox notice
-naming the task, the commit and the conflicting files. `goal retarget <task> stabilize` sets `target` on a task that is
-not integrated, merged or cancelled when its recorded base is an ancestor of the stabilize head. A running attempt is
-left in place; only later integration uses the branch. Briefs without `target` integrate into the integration branch as
-before. Before compare-and-swap advancing `dev`, the train runs each newly included stabilize task's acceptance command
-against the merged `dev` candidate, using the configured check-host environment. A failed command leaves `dev` unchanged
-and the task integrated on stabilize; the task manager and supermanager receive one notice naming the command, first
-failure and merged candidate. Passing commands allow `dev` to advance as usual.
+while the branch does not exist. The train rebases such a task onto the branch, runs the existing stabilize-lane
+checks, and compare-and-swap advances the branch. It then merges that new head into the integration branch with
+`git merge --no-ff` in a train worktree, retrying up to five times if the integration branch moves. Before compare-
+and-swap advancing dev, the train runs the mandatory root typecheck on the exact merged candidate. A compiler failure
+leaves dev unchanged and reports the diagnostic to the task owner. Task acceptance and other configured verification
+run after integration. A merge conflict aborts only that merge: the stabilize branch and the task stay integrated at
+the stabilize commit, and the task's manager and the supermanager receive an inbox notice naming the task, the commit
+and the conflicting files. `goal retarget <task> stabilize` sets `target` on a task that is not integrated, merged or
+cancelled when its recorded base is an ancestor of the stabilize head. A running attempt is left in place; only later
+integration uses the branch. Briefs without `target` integrate into the integration branch as before.
 
 The train promotes the `dev` head to `main` under a separate lease after the root gate and every task acceptance command
 pass. If a gate fails, the promoter compares its first failure with `main`, then checks task prefixes concurrently up to
@@ -746,12 +733,13 @@ continues to consume its verified input through the existing promotion gate.
 
 ### Development verification
 
-Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head after the
-merge train has landed its batch. It starts from `dev-verified`, runs the root typecheck with `TYPECHECK_CHANGED`,
-the affected checks for changed paths, and each landed task's acceptance command (except specification and research
-tasks). Passing verification advances `dev-verified` with a compare-and-swap. Workers, retries and rebases use that
-verified ref as their base, and promotion cuts stabilize candidates from it. `status` reports the verified commit,
-how many landings `dev` is ahead, and whether verification is pending, running or current.
+Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head independently
+after the merge train has landed its batch; it cannot hold the train lease or block later ready landings. It starts
+from `dev-verified`, runs the root typecheck with the exact `TYPECHECK_CHANGED` closure, matching `verifierChecks`,
+non-spec sibling tests and each landed task's acceptance command (except specification and research tasks). Checks
+use normal remote admission. Passing verification advances `dev-verified` with a compare-and-swap. Workers, retries
+and rebases use that verified ref as their base, and promotion cuts stabilize candidates from it. `status` reports the
+verified commit, how many landings `dev` is ahead, and whether verification is pending, running or current.
 
 When a check fails, the verifier narrows suspects by the failing command's workspace closure and bisects only those
 landings. For an affected-check failure after a conflict resolution, it attributes the failing integrated resolution

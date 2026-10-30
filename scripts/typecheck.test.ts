@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { POSTGRES_IMAGE } from '../services/auth/scripts/database.ts';
@@ -9,6 +18,9 @@ import { affectedWorkspaces, typecheck, type StartedDatabase } from './typecheck
 
 function fixture(): { root: string; remove: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'rezics-typecheck-'));
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: `bun@${Bun.version}` }));
+  mkdirSync(join(root, 'node_modules/.bin'), { recursive: true });
+  symlinkSync(process.execPath, join(root, 'node_modules/.bin/bun'));
   return { root, remove: () => rmSync(root, { recursive: true, force: true }) };
 }
 

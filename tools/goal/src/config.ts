@@ -22,7 +22,7 @@ import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 import { verifyDev } from './dev-verifier.ts';
-import { gateRunner, type GateRunner } from './merge.ts';
+import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
 import { codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
@@ -90,6 +90,47 @@ export function readIntegrationChecks(
       throw new Error(`${label}[${index}].command must be a command array`);
     return { paths: [...check.paths], command: [...check.command] };
   });
+}
+function readSiblingTests(value: unknown = defaults.siblingTests, label = 'siblingTests') {
+  const sibling = object(value, label);
+  keys(sibling, ['command'], label);
+  if (
+    !Array.isArray(sibling.command) ||
+    !sibling.command.length ||
+    sibling.command.some((part) => typeof part !== 'string' || !part)
+  )
+    throw new Error(`${label}.command must be a command array`);
+  return { command: [...sibling.command] as string[] };
+}
+
+function uniqueChecks(checks: readonly IntegrationCheck[]): IntegrationCheck[] {
+  const byCommand = new Map<string, IntegrationCheck>();
+  for (const check of checks) {
+    const key = JSON.stringify(check.command);
+    const existing = byCommand.get(key);
+    if (existing) existing.paths = [...new Set([...existing.paths, ...check.paths])];
+    else byCommand.set(key, { paths: [...check.paths], command: [...check.command] });
+  }
+  return [...byCommand.values()];
+}
+
+function verifierChecksFromLegacy(
+  defaultsChecks: readonly IntegrationCheck[],
+  defaultsAffected: readonly IntegrationCheck[],
+  legacyAffected: readonly IntegrationCheck[],
+  legacyIntegration: readonly IntegrationCheck[] | undefined,
+  affectedWasOverridden: boolean,
+): IntegrationCheck[] {
+  const replacedAffected = new Set(defaultsAffected.map((check) => JSON.stringify(check)));
+  const retainedDefaults = affectedWasOverridden
+    ? defaultsChecks.filter((check) => !replacedAffected.has(JSON.stringify(check)))
+    : [...defaultsChecks];
+  const additional = legacyIntegration?.filter(
+    (check) =>
+      !check.command.some((part) => part === 'install') &&
+      !check.command.some((part) => part.includes('scripts/typecheck.ts')),
+  ) ?? [];
+  return uniqueChecks([...retainedDefaults, ...legacyAffected, ...additional]);
 }
 const packageDerivedFiles = readDerivedFiles();
 
@@ -159,6 +200,8 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
       'formatCommand',
       'integrationChecks',
       'affectedTests',
+      'verifierChecks',
+      'siblingTests',
       'derivedFiles',
       'codex',
       'routingFile',
@@ -205,6 +248,24 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
   const integrationChecks = readIntegrationChecks(
     local.integrationChecks === undefined ? defaults.integrationChecks : local.integrationChecks,
   );
+  const affectedTests = readIntegrationChecks(
+    local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
+    'affectedTests',
+  );
+  const defaultVerifierChecks = readIntegrationChecks(defaults.verifierChecks ?? [], 'verifierChecks');
+  const verifierChecks =
+    local.verifierChecks === undefined
+      ? verifierChecksFromLegacy(
+          defaultVerifierChecks,
+          readIntegrationChecks(defaults.affectedTests),
+          local.affectedTests === undefined ? [] : affectedTests,
+          local.integrationChecks === undefined ? undefined : readIntegrationChecks(local.integrationChecks),
+          local.affectedTests !== undefined,
+        )
+      : readIntegrationChecks(local.verifierChecks, 'verifierChecks');
+  const siblingTests = readSiblingTests(
+    local.siblingTests === undefined ? defaults.siblingTests : local.siblingTests,
+  );
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -241,10 +302,9 @@ export function loadSettings(options: SettingsOptions = {}): ConfiguredSettings 
     gate: gate as string[],
     formatCommand: formatCommand as string[],
     integrationChecks,
-    affectedTests: readIntegrationChecks(
-      local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
-      'affectedTests',
-    ),
+    verifierChecks,
+    siblingTests,
+    affectedTests,
     derivedFiles: readDerivedFiles(local.derivedFiles === undefined ? defaults.derivedFiles : local.derivedFiles),
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
@@ -316,7 +376,12 @@ export type RuntimeOptions = {
   managerServices?: Partial<ManagerServices>;
   train?: Pick<
     TrainOptions,
-    'merge' | 'beforeRelease' | 'beforeIntegrationAdvance' | 'beforePromotionAdvance' | 'promote' | 'derivedFiles'
+    | 'merge'
+    | 'beforeRelease'
+    | 'beforeIntegrationAdvance'
+    | 'beforePromotionAdvance'
+    | 'promote'
+    | 'derivedFiles'
   >;
 };
 
@@ -379,6 +444,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       {},
       checkResultOptions,
     );
+  // The prelanding compiler guard is a direct process group. It never enters remote check-host slot admission.
+  const typecheckGate = processGroupRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, process.env);
   let train!: MergeTrain;
   const pump = () => train.pump();
   const managerContext = () => {
@@ -454,6 +521,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     codeIsCurrent,
     handOff,
     ...options.train,
+    runTypecheck: typecheckGate,
   });
   function promoteNow(): Promise<void> {
     return promote({

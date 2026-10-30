@@ -10,6 +10,32 @@
       "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
     }
   ],
+  "verifierChecks": [
+    {
+      "paths": ["services/kernel/**"],
+      "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
+    },
+    {
+      "paths": ["apps/**", "services/**", "packages/**", "specs/**", "scripts/**", "package.json", "bun.lock", "tsconfig*.json"],
+      "command": ["bun", "scripts/workspace-imports.ts"]
+    },
+    {
+      "paths": ["apps/web/**", "packages/ui/**", "packages/document/**"],
+      "command": ["bun", "test", "apps/web/tests/library-page-smoke.test.ts"]
+    },
+    {
+      "paths": ["apps/web/scripts/**"],
+      "command": ["bun", "test", "apps/web/scripts/remote-browser.test.ts"]
+    },
+    {
+      "paths": ["packages/client/src/kernel/**"],
+      "command": [
+        "sh",
+        "-c",
+        "bun run --cwd apps/web generate && bun apps/web/scripts/isolated.ts bun test apps/web/tests/page-stories.test.ts -t 'each recorded response type-checks'"
+      ]
+    }
+  ],
   "siblingTests": {
     "command": ["bun", "test"]
   },

@@ -6,14 +6,18 @@ import { migrate as migrateKernel, POSTGRES_IMAGE } from '../services/kernel/scr
 import type { StartedDatabase } from './typecheck.ts';
 
 function docker(args: string[]): string {
-  const result = spawnSync('docker', args, { encoding: 'utf8' });
+  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 10_000 });
   if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`docker ${args.join(' ')} failed:\n${result.stderr}`);
+  if (result.status !== 0)
+    throw new Error(
+      `docker ${args.join(' ')} failed with status ${result.status}: ${result.stderr?.trim() || '(no stderr)'}`,
+    );
   return result.stdout.trim();
 }
 
 /** Start a throwaway database and apply the kernel migrations, then the Auth migrations. */
 export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
+  process.stdout.write(`Compiler database owner PID=${process.pid}\n`);
   const container = docker([
     'run',
     '-d',

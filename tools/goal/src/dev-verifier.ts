@@ -1,8 +1,10 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join, parse } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import type { Settings, Task } from './types.ts';
+import { siblingTestCommand } from './affected-tests.ts';
+import { runBoundedInstallProcess } from './install-process.ts';
 import type { WorkerStore } from './store.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import { matchesPath } from './briefs.ts';
@@ -22,6 +24,20 @@ function head(cwd: string, branch: string): string {
 }
 function changedFiles(cwd: string, base: string, target: string): string[] {
   return git(cwd, 'diff', '--name-only', '-z', `${base}..${target}`).split('\0').filter(Boolean);
+}
+function siblingTestFilesAtCommit(changedPaths: readonly string[], cwd: string, commit: string): string[] {
+  const tracked = new Set(git(cwd, 'ls-tree', '-r', '--name-only', commit).split('\n').filter(Boolean));
+  const tests = new Set<string>();
+  for (const source of changedPaths) {
+    if (source.startsWith('services/kernel/') || !/\.(?:[cm]?[jt]sx?)$/i.test(source) || /\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(source))
+      continue;
+    const extension = parse(source).ext;
+    const sameDirectory = join(dirname(source), `${parse(source).name}.test.ts`);
+    const workspaceTest = join('tests', `${basename(source, extension)}.test.ts`);
+    if (tracked.has(sameDirectory)) tests.add(sameDirectory);
+    else if (tracked.has(workspaceTest)) tests.add(workspaceTest);
+  }
+  return [...tests].sort();
 }
 function commits(cwd: string, base: string, target: string): string[] {
   return git(cwd, 'rev-list', '--reverse', `${base}..${target}`).split('\n').filter(Boolean);
@@ -78,7 +94,13 @@ function recordVerified(
       at,
     });
 }
-function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Check[] {
+function createChecks(
+  settings: Settings,
+  store: Pick<WorkerStore, 'tasks'>,
+  base: string,
+  target: string,
+  candidate = target,
+): Check[] {
   const checkout = settings.mainCheckout;
   const files = changedFiles(checkout, base, target);
   if (!files.length) return [];
@@ -86,9 +108,15 @@ function createChecks(settings: Settings, store: Pick<WorkerStore, 'tasks'>, bas
   const checks: Check[] = [
     { command: ['env', `TYPECHECK_CHANGED=${files.join('\n')}`, ...typecheck], closure: ['**'] },
   ];
-  for (const affected of settings.affectedTests ?? []) {
+  for (const affected of settings.verifierChecks ?? settings.affectedTests ?? []) {
     const selected = files.some((file) => matches(file, affected.paths));
     if (selected) checks.push({ command: [...affected.command], closure: [...affected.paths] });
+  }
+  if (settings.siblingTests) {
+    const nonSpecFiles = files.filter((file) => !file.startsWith('spec/') && !file.startsWith('specs/'));
+    const siblingFiles = siblingTestFilesAtCommit(nonSpecFiles, checkout, candidate);
+    const siblingCommand = siblingTestCommand(siblingFiles, settings.siblingTests.command);
+    if (siblingCommand) checks.push({ command: siblingCommand, closure: siblingFiles });
   }
   for (const task of taskLandings(settings, store, base, target))
     checks.push({ command: [...task.brief.acceptance.command], closure: [...task.brief.paths], taskId: task.id });
@@ -107,12 +135,20 @@ function installDependencies(tree: string, stateDirectory: string): boolean {
   if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
   const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
   for (let attempt = 0; attempt < 3; attempt++) {
-    const result = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd: tree, encoding: 'utf8' });
-    appendFileSync(
-      installLog,
-      `$ bun install --frozen-lockfile (attempt ${attempt + 1})\n${result.stdout ?? ''}${result.stderr ?? ''}`,
-    );
-    if (result.status === 0) return true;
+    appendFileSync(installLog, `$ bun install --frozen-lockfile (attempt ${attempt + 1})\n`);
+    try {
+      const result = runBoundedInstallProcess({
+        command: 'bun',
+        args: ['install', '--frozen-lockfile'],
+        cwd: tree,
+        step: 'bun install --frozen-lockfile',
+        purpose: 'preparation',
+      });
+      appendFileSync(installLog, `${result.stdout}${result.stderr}`);
+      return true;
+    } catch (error) {
+      appendFileSync(installLog, `${error instanceof Error ? error.message : String(error)}\n`);
+    }
   }
   return false;
 }
