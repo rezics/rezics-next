@@ -2,12 +2,10 @@
 
 2026-10-30. Desk/web status of every Commerce-owned **In** system in [scope](../scope.md), on the current worker base.
 This is evidence and handoff, not another authority. **Designed**, **implemented**, **exposed**, **native-outcome-proven** and **promoted** are separate; implementation/exposure below means source presence.
-native whole-journey proof and promotion are **not established** for any system here. MINIMAL landings and the
-promotion pause do not establish full-row or main completion. Points and user-saved dynamic queries remain deferred.
+Native whole-journey proof and promotion are **not established** here. MINIMAL landings/promotion pause do not establish full-row/main completion. Points and user-saved dynamic queries remain deferred.
 
 **Primary evidence accessed 2026-10-30.** Documented facts: Stripe's [hosted Checkout lifecycle](https://docs.stripe.com/payments/checkout/how-checkout-works?payment-ui=stripe-hosted)
-creates a Session URL and uses a webhook for fulfillment. [Managed Payments eligibility](https://docs.stripe.com/payments/managed-payments/eligibility)
-requires review, direct sales and distribution rights; it excludes Connect/platform configurations.
+creates a Session URL and uses a webhook for fulfillment. [Managed Payments eligibility](https://docs.stripe.com/payments/managed-payments/eligibility) requires review, direct sales and distribution rights; it excludes Connect/platform configurations.
 Stripe's [Entitlements API guide](https://docs.stripe.com/billing/entitlements?dashboard-or-api=api) assumes subscriptions, Customers and product-feature mapping.
 **Inference:** that guide does not establish compatibility with REZICS's local one-time entitlement model.
 [Zotero](https://www.zotero.org/support/collections_and_tags) documents overlapping collections, independent tags and automatically updated saved searches.
@@ -51,12 +49,12 @@ Web the common editor. **Handoff task:** complete the duplicate-occurrence/note/
 **Progress / sessions.** [Library module](../../services/kernel/src/library/README.md) owns algorithms; [profile consumers](../library-profile-consumers.md)
 own pin consumption. Delivered [abstraction research](library-abstraction.md) distinguishes rereads and sparse units.
 Owner-route sessions/history/units, `/library/progress` and `/v1/progressSessions` implement start/record/complete/abandon;
-publication is explicit. Full cross-profile/structure-change journey is not proven. **Handoff:** how should changed
+publication is explicit. Cross-profile/structure-change journey design coverage is incomplete. **Handoff:** how should changed
 subject structure preserve sparse completed-unit IDs and reread history without inventing completion or rewriting accepted meaning?
 
 **Copies / holdings.** Same module/profile authorities and delivered abstraction study; private owner-route copies,
 `/library/copies` and `/v1/copies` exist, independently of progress/state/payment rights. Profile columns/readers are
-partial delivery, not all-profile acceptance. **Handoff:** which released holding-kind/status transitions and historic-pin display distinguish a digital holding from a consumable purchased benefit?
+partial delivery; the all-kind journey remains incomplete. **Handoff:** which released holding-kind/status transitions and historic-pin display distinguish a digital holding from a consumable purchased benefit?
 
 **Labels.** Sole authority: [independent labels](../library-labels.md); delivered [cap research](library-label-cap-independent-current.md)
 and [second investigation](library-label-cap-independent-deep.md) back same-row reservations/restore semantics.
