@@ -1,5 +1,7 @@
 import { shareAccount } from '../access/account-share.ts';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
+import { fenceOperationalAccount } from '../access/account-share.ts';
+import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { LibraryProfilePin } from './profile.ts';
 import entryPage from './profile-migration-entry.sql';
@@ -11,7 +13,7 @@ import copyPage from './profile-migration-copy.sql';
  * This acquires the native owner deletion fence; it supplies no human authorization.
  */
 export async function pinLegacyFactsPage(
-  tx: CommandTransaction,
+  tx: CommandTransaction | OperationalTransaction,
   input: {
     accountId: string;
     kind: 'entry' | 'session' | 'copy';
@@ -29,9 +31,13 @@ export async function pinLegacyFactsPage(
     throw new TypeError('Invalid legacy pin release digest');
   if (!Number.isInteger(limit) || limit < 1 || limit > 100)
     throw new RangeError('Legacy pin page limit must be an integer from 1 to 100');
-  if (currentCommand(tx).partition !== partitionOf(route))
-    throw new TypeError('Legacy pin owner belongs to another command partition');
-  await shareAccount(tx, accountId);
+  if (hasLiveOperationalTransaction(tx)) {
+    await fenceOperationalAccount(tx, accountId);
+  } else {
+    if (currentCommand(tx).partition !== partitionOf(route))
+      throw new TypeError('Legacy pin owner belongs to another command partition');
+    await shareAccount(tx, accountId);
+  }
 
   const pin: LibraryProfilePin = {
     provenance: 'legacy',

@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { assertPreProfileLibraryRead } from './profile-source.ts';
 import { newId } from '../route/route.ts';
 import copyDelete from './entry-store-copy-delete.sql';
 import copyInsert from './entry-store-copy-insert.sql';
@@ -139,6 +140,10 @@ export async function readEntry(
   subjectId: string,
 ): Promise<Entry | null> {
   const row = await entryRead.run(queryClient(client), { route, account_id: accountId, subject_id: subjectId });
+  if (row && decodeLibraryProfilePin(row.libraryProfilePin) === null) {
+    await assertPreProfileLibraryRead(client, accountId);
+    assertState(row.state);
+  }
   return row ? asEntry(row) : null;
 }
 
@@ -207,6 +212,10 @@ export async function pageEntries(client: Client, route: number, accountId: stri
     has_cursor: page.after !== null,
     limit: Math.min(MAX_LIBRARY_PAGE_SIZE, page.limit),
   });
+  if (rows.some((row) => row.libraryProfilePin === null)) {
+    await assertPreProfileLibraryRead(client, accountId);
+    for (const row of rows) if (row.libraryProfilePin === null) assertState(row.state);
+  }
   return rows.map((row) => asEntry(row));
 }
 
@@ -240,6 +249,10 @@ export async function insertCopy(
 
 export async function readCopy(client: Client, route: number, copyId: string): Promise<Copy | null> {
   const row = await copyRead.run(queryClient(client), { route, copy_id: copyId });
+  if (row && decodeLibraryProfilePin(row.libraryProfilePin) === null) {
+    await assertPreProfileLibraryRead(client, row.accountId);
+    assertStatus(row.status);
+  }
   return row ? asCopy(row) : null;
 }
 
@@ -317,5 +330,9 @@ export async function pageCopies(
     subjectId === null
       ? await copyPage.run(queryClient(client), parameters)
       : await copySubjectPage.run(queryClient(client), { ...parameters, subject_id: subjectId });
+  if (rows.some((row) => row.libraryProfilePin === null)) {
+    await assertPreProfileLibraryRead(client, accountId);
+    for (const row of rows) if (row.libraryProfilePin === null) assertStatus(row.status);
+  }
   return rows.map((row) => asCopy(row));
 }

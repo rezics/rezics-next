@@ -1,3 +1,4 @@
+import { assertPreProfileLibraryRead } from './profile-source.ts';
 import type { PoolClient } from 'pg';
 import type { ProgressMode, ProgressState } from './progress.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
@@ -151,6 +152,10 @@ export async function insertSession(
 
 export async function readSession(client: Client, route: number, sessionId: string): Promise<ProgressSession | null> {
   const row = await sessionRead.run(queryClient(client), { route, session_id: sessionId });
+  if (row && decodeLibraryProfilePin(row.libraryProfilePin) === null) {
+    await assertPreProfileLibraryRead(client, row.accountId);
+    assertUnit(row.unit, false);
+  }
   return row ? asSession(row) : null;
 }
 
@@ -259,6 +264,10 @@ export async function pageSessions(
     has_cursor: page.after !== null,
     limit: Math.min(MAX_PROGRESS_PAGE_SIZE, page.limit),
   });
+  if (rows.some((row) => row.libraryProfilePin === null)) {
+    await assertPreProfileLibraryRead(client, accountId);
+    for (const row of rows) if (row.libraryProfilePin === null) assertUnit(row.unit, false);
+  }
   return rows.map((row) => asSession(row));
 }
 

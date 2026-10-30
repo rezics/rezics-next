@@ -23,7 +23,7 @@ import * as store from './entry-store.ts';
 import entryPage from './entry-store-entry-page.sql';
 import { createFollowCommands } from './follows.ts';
 import { resolveSubject } from './subject-anchor.ts';
-import { readLibraryProfileSource } from './profile-source.ts';
+import { assertPreProfileLibraryRead, readLibraryProfileSource } from './profile-source.ts';
 import { hasEntryState } from './profile.ts';
 import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';
 import stampOwnerSequence from './entry-owner-write-sequence.sql';
@@ -523,6 +523,12 @@ export function createEntryCommands(config: Dependencies) {
           limit: limit + 1,
         },
       );
+      if (rows.some((row) => row.libraryProfilePin === null)) {
+        await assertPreProfileLibraryRead(client, accountOwner.accountId);
+        const legacyStates = ['planned', 'in_progress', 'completed', 'paused', 'dropped'];
+        if (rows.some((row) => row.libraryProfilePin === null && !legacyStates.includes(row.state)))
+          throw new Error('Invalid pre-profile entry state');
+      }
       const pageRows = rows.slice(0, limit).map(asEntry);
       const hasMore = rows.length > limit;
       const last = pageRows.at(-1);

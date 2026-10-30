@@ -40,7 +40,8 @@ Current implementation evidence is narrower than the capability:
 - Pin/kind columns, retained-entry/due storage, labels/reservations, source-head hooks and canonical tables exist.
   `entry-store.ts` accepts private pins for entry insert/update and pin/kind for copy insert/update, with
   `readEntryFact`/`readCopyFact` native readers. `progress-store.ts` accepts session pins and exposes `readSessionFact`.
-  Unpinned compatibility paths still constrain fixed values; DAO delivery is not complete production profile acceptance.
+  NULL-pin readers use the temporary owner-gated fixed contract. Current pinned facts remain readable without a job.
+  The explicit migration runtime below supplies live-fact cutover; native integration proof is still pending.
   Label DAOs provide
   metadata lifecycle and reservation admission, not HTTP commands, complete assignment undo/pages or automatic purge.
 - The native [owner sequence allocator/schema](owner-write-sequence.md) and
@@ -231,6 +232,30 @@ Unresolved producer dependencies are specific:
   acknowledgements, minimal completion outside DBOS history, and exact receipt/outbox/work payload minimization.
   Library and financial Commerce are separate participants; payment retention stays with financial Commerce.
 - **Web:** shared members rendering, preparation/restart UI, Collection navigation and bounded Continue consumption.
+
+
+## Explicit legacy profile migration runtime
+
+The callable owner binding is [Native runtime binding](../../../../docs/library-profile-consumers.md#native-runtime-binding).
+`profile-migration-runtime.ts` exports `createLibraryProfileMigrationRuntime`, the closed
+`LibraryProfileMigrationRuntime` / `LibraryProfileMigrationProgress` / `LibraryProfileMigrationPhase` types,
+`LIBRARY_PROFILE_MIGRATION_WORKFLOW`, and `registerLibraryProfileMigrationWork`. A trusted host calls
+`start({ accountId, releaseDigest })`, `resume({ accountId })`, or `readProgress({ accountId })` on the factory
+result. There is no HTTP start or ordinary-read mutation. The default single Library WorkModule registers
+`library.profileMigration`; it runs only after an explicit start, using existing maintenance intents and retries.
+
+The actual published release lookup precedes owner checkout. A step shares one 100-raw-row allowance across
+entry/session/copy phases, uses exact revision/NULL-pin CAS, and commits pins, the source-head frontier and
+successor work atomically. Entry keys materialize before NULL filtering. Sessions use their pending index;
+live copies use the new retained-excluding pending index. The final source-head lock serializes monotonic
+ready with live writers. Three indexed pending probes distinguish a first current writer from historical
+population without needing a migration job or counting facts. NULL-pin DTO reads use the temporary fixed
+contract only before ready; this supplies no unsupported current writes.
+
+The new source-head control fields are removed by its existing last-phase terminal cleanup. No receipt-history
+scan, new participant, public payload or erasure acknowledgement is added. Native integration/growth evidence
+is pending controller gates. The legacy HTTP-only driver's historical-fact setup requires an acceptance-owner
+amendment to use the existing historical native fixture boundary; current endpoints acquire no legacy defaults.
 
 ## Partitions
 

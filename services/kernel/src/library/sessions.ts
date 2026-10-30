@@ -212,7 +212,7 @@ export function createSessionCommands(config: Dependencies) {
               }
             });
             if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
-            if (fact.pin === null) return { original: null, source: null, pin: null };
+            if (fact.pin === null) throw new ProblemError('unsupported_library_profile');
             const release = await readRelease(pool, fact.pin.releaseDigest, { composed: false });
             const original = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
             if (!original) throw new ProblemError('unsupported_library_profile');

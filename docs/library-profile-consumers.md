@@ -36,8 +36,8 @@ The consumer contract starts from the actual schema and commands in this checkou
 
 The relevant definitions in this checkout are immutable releases validated and published by the existing definitions
 routes. The applied `20261027184414_library_profile_pins.sql` adds nullable pins, shape checks, copy kind and pending
-indexes. Current row adapters do not yet consume those columns; profile-aware writers and the migration worker remain
-implementation work. Structural storage alone proves neither profile admission nor migration completion.
+indexes. Native row adapters and current writers consume the pins. The explicit runtime below supplies the live-fact
+worker and owner cutover; native outcome proof remains a separate integration gate.
 
 ## Pinned fact semantics
 
@@ -272,6 +272,55 @@ but before acknowledgement replays the same stable page; the CAS and same migrat
 Account deletion's authoritative `T` fence wins over a paused or resumed worker: later pages cannot recreate rows,
 receipts, or erased payloads. The final owner-ready transition is monotonic and serialized with normal owner writes;
 no old null-pin write can enter behind the final cursor.
+
+### Native runtime binding
+
+`services/kernel/src/library/profile-migration-runtime.ts` exports
+`createLibraryProfileMigrationRuntime({ pool, client, clock? })`, returning the closed
+`LibraryProfileMigrationRuntime` interface. `client` is the existing `createWorkClient` result;
+this factory never launches DBOS. Its trusted host/operator methods are:
+
+- `start({ accountId, releaseDigest })`: verifies the actual published immutable release through
+  `readRelease(..., { composed: false })`, checks unattached `legacy-fixed-v1`, captures its digest,
+  and atomically queues the first native frontier. Repeating the same destination is idempotent;
+  a different destination is rejected after capture.
+- `resume({ accountId })`: reads the native frontier and executes one bounded transaction, committing
+  the next maintenance intent with its pins. This also recovers a failed or cancelled SDK execution
+  without reviving an obsolete workflow. Calling it before explicit start fails; ready is a no-op.
+- `readProgress({ accountId })`: read-only owner-local observation returning `accountId`, `phase`,
+  `releaseDigest`, and `after`. `phase` is `legacy` before explicit migration, then `entry`, `session`,
+  `copy`, or monotonic `ready`. It returns no invented counts, private fact body or user receipt.
+
+These methods are internal composition exports, not HTTP endpoints. The existing single Library WorkModule
+installs `registerLibraryProfileMigrationWork` and `LIBRARY_PROFILE_MIGRATION_WORKFLOW`
+(`library.profileMigration`) on `maintenance`. There is no schedule or release-activation trigger.
+Each workflow runs one retryable SDK step. The existing owner `fact_source_head` stores only the native
+phase/digest/key checkpoint; its committed frontier serves as the bounded page completion record, and
+`enqueueIntent` persists the successor in the same `OperationalTransaction` as `pinLegacyFactsPage`.
+SDK replay of an obsolete frontier has no source effects. Existing terminal cleanup removes this metadata
+with `fact_source_head` last; this adds no participant or erasure acknowledgement.
+
+The existing native account fence precedes all work. Live writer triggers serialize on that same owner
+source head before changing facts. A first current writer can mark a non-migrating owner ready using three
+indexed pending-existence probes, never an account count. Existing current pins remain readable without
+a job. During a job no new NULL-pin fact may enter, and ready refuses every live NULL-pin write. Retained
+copies stay outside this live migration; restoring a legacy NULL-pin retained fact cannot bypass this
+writer fence. Existing non-NULL accepted restoration pins are unchanged.
+
+`assertPreProfileLibraryRead` gates the temporary fixed-contract entry/session/copy adapters on the native
+owner phase. Ordinary reads create no progress and inspect no current type/profile to interpret legacy
+values. Their NULL-pin branch is retired at ready; pinned DTO reads remain available during migration.
+Fresh session records require original pinned meaning and current capability admission; the temporary
+reader supplies no legacy write authority. The live copy pending index excludes retained episodes, so
+those episodes cannot create uncharged pending-filter work.
+
+The focused `profile-migration-runtime.test.ts` uses existing native profile fixtures and the default worker
+for preservation, restart on both sides of native commit, obsolete checkpoint replay, fresh-writer pin
+preservation and terminal-owner refusal. These cases and the source-page bounds still require the controller's
+native gate; a local typecheck is not their proof. The older profile driver asks an HTTP-only interface to
+create pre-profile historical facts. Current production commands require current pins/copy kinds and cannot
+satisfy that fixture request. Acceptance ownership must amend historical setup to the existing test-only
+pre-profile native command fixture boundary; no production legacy-write endpoint/default is introduced.
 
 ### Legacy command compatibility and retirement
 
