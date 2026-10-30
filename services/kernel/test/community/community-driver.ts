@@ -428,20 +428,21 @@ function bindDriver(base: SharedCommunity, settleTimeoutMs: number): CommunityDr
     // The native bootstrap continuously schedules its next bounded page. Drain
     // the command frontier, then every workflow enqueued through that frontier;
     // waiting for global quiescence would also wait for unrelated future pages.
-    const frontier = (
-      await system.database.pool.query('SELECT partition_no, position::text FROM core.partition')
-    ).rows;
+    const frontier = (await system.database.pool.query('SELECT partition_no, position::text FROM core.partition')).rows;
     const deadline = Date.now() + settleTimeoutMs;
     for (;;) {
       if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
-      const behind = await system.database.pool.query(`
+      const behind = await system.database.pool.query(
+        `
         SELECT frontier.partition_no, frontier.position, consumers.name, checkpoint.position AS checkpoint
           FROM jsonb_to_recordset($1::jsonb) AS frontier(partition_no integer, position bigint)
           CROSS JOIN (VALUES ('effects'::text), ('semantic_links'::text)) AS consumers(name)
           LEFT JOIN core.consumer_checkpoint AS checkpoint
             ON checkpoint.partition_no = frontier.partition_no AND checkpoint.consumer = consumers.name
          WHERE frontier.position > COALESCE(checkpoint.position, 0)
-         LIMIT 1`, [JSON.stringify(frontier)]);
+         LIMIT 1`,
+        [JSON.stringify(frontier)],
+      );
       if (!behind.rowCount) {
         const workflows = (await work.listWorkflows({ limit: 10_000 })).filter(
           (row) => row.status !== 'SUCCESS' && row.status !== 'DELAYED',
