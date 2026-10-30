@@ -327,8 +327,10 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   const priorSubjects: string[] = [];
   for (let index = 0; index < 10; index++)
     priorSubjects.push(await fixture.createSubject(`Native prior source isolation ${index + 1}`));
+  console.info('SOURCE_ISOLATION_PHASE prior-subjects-created');
   for (const priorSubject of priorSubjects)
     for (const voter of fixture.actors.voters) await castVote(priorSubject, voter, 4);
+  console.info('SOURCE_ISOLATION_PHASE prior-votes-committed');
 
   const priorEpoch = await until(
     async () => {
@@ -346,9 +348,11 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     (value) => value?.start_count === '50' && value.m === '2' && value.c === '5',
     'Native Global prior epoch at fifty votes',
   );
+  console.info('SOURCE_ISOLATION_PHASE prior-epoch-published');
   expect(priorEpoch).toEqual({ start_count: '50', m: '2.0000', c: '5' });
 
   for (const voter of fixture.actors.voters) await castVote(subjectId, voter, 20);
+  console.info('SOURCE_ISOLATION_PHASE target-votes-committed');
   const publishedFigure = await until(
     () => figure(subjectId),
     (value) =>
@@ -358,6 +362,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
       value.figure.score === 6,
     'Native figure after five actual votes',
   );
+  console.info('SOURCE_ISOLATION_PHASE target-figure-published');
   expect(publishedFigure.figure).toEqual({
     questionId: STANDARD_QUESTION_ID,
     populationId: GLOBAL_CONTEXT.id,
@@ -373,6 +378,7 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
     (value) => value.figures[0]?.count === 5 && value.figures[0]?.mean === 20,
     'Native Global aggregate after five actual votes',
   );
+  console.info('SOURCE_ISOLATION_PHASE target-aggregate-published');
   expect(nativeAggregate.figures[0]).toMatchObject({
     population: GLOBAL_CONTEXT.id,
     count: 5,
