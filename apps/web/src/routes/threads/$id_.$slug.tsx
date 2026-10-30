@@ -103,19 +103,21 @@ function ThreadPage() {
   const currentPageUnavailable =
     (lastCurrentReader !== undefined && lastCurrentReader !== readerScope) ||
     (loadedPage.viewerId !== undefined && (session !== 'signed-in' || loadedPage.viewerId !== subject));
-  const page = !expiredRead && !currentPageUnavailable && refreshed?.source === loadedPage ? refreshed.page! : loadedPage;
+  const page =
+    !expiredRead && !currentPageUnavailable && refreshed?.source === loadedPage ? refreshed.page! : loadedPage;
   const personalQuery = useQuery({
     ...threadPersonalQuery(id, cursor, postIds),
     enabled: session === 'signed-in',
   });
-  const personal =
-    session === 'signed-in' && personalQuery.data?.viewerId === subject ? personalQuery.data : undefined;
+  const personal = session === 'signed-in' && personalQuery.data?.viewerId === subject ? personalQuery.data : undefined;
   const currentRead = useRef({ scope: readScope, sequence: 0 });
   if (currentRead.current.scope !== readScope) currentRead.current = { scope: readScope, sequence: 0 };
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
   }, []);
   useEffect(() => setPostIds(page.posts.posts.map((post) => post.id)), [page.posts]);
 
@@ -299,7 +301,15 @@ export function ThreadReadingPost({
     read: 0,
   });
   if (intent.current.scope !== scope) {
-    intent.current = { scope, key: undefined, pending: false, applied: false, uncertain: false, deleted: false, read: 0 };
+    intent.current = {
+      scope,
+      key: undefined,
+      pending: false,
+      applied: false,
+      uncertain: false,
+      deleted: false,
+      read: 0,
+    };
     deleteKey.current = undefined;
   }
   const restoreIntent = useRef<((expected: object) => Promise<void>) | undefined>(undefined);
@@ -370,8 +380,10 @@ export function ThreadReadingPost({
     } catch {
       if (mounted.current && intent.current === command && command.read === read) {
         setRestoreError(
-          command.applied ? m.thread_post_restore_read_failure()
-            : command.uncertain ? m.thread_post_restore_unknown()
+          command.applied
+            ? m.thread_post_restore_read_failure()
+            : command.uncertain
+              ? m.thread_post_restore_unknown()
               : m.thread_post_delete_read_failure(),
         );
       }
@@ -381,7 +393,8 @@ export function ThreadReadingPost({
 
   async function restoreRemovedPost(expected = scope) {
     const command = intent.current;
-    if (!mounted.current || command.scope !== expected || command.pending || !signedIn || !personalReady || !viewerId) return;
+    if (!mounted.current || command.scope !== expected || command.pending || !signedIn || !personalReady || !viewerId)
+      return;
     command.pending = true;
     setRestoreError('');
     setExistingReviewId(undefined);

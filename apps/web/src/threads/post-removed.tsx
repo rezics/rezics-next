@@ -122,7 +122,9 @@ export function RemovedPost({
         <div className="mt-3 space-y-2 text-sm text-muted-foreground">
           <p>{m.thread_post_restore_deadline_unknown()}</p>
           {onRestore ? (
-            <Button variant="outline" size="sm" onClick={onRestore}>{m.thread_post_restore()}</Button>
+            <Button variant="outline" size="sm" onClick={onRestore}>
+              {m.thread_post_restore()}
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -131,7 +133,9 @@ export function RemovedPost({
           <p className="text-destructive">{restoreError}</p>
           {existingReviewId ? <ExistingReviewNotice reviewId={existingReviewId} /> : null}
           {onRefresh ? (
-            <Button variant="outline" size="sm" onClick={onRefresh}>{m.thread_post_refresh()}</Button>
+            <Button variant="outline" size="sm" onClick={onRefresh}>
+              {m.thread_post_refresh()}
+            </Button>
           ) : null}
         </div>
       ) : null}

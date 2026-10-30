@@ -73,11 +73,18 @@ function Connected({ state }: { state: ReadingState }) {
             ...loaded.posts,
             posts: loaded.posts.posts.map((post, index): ThreadPost => {
               if (index !== 1 || post.availability !== 'available') return post;
-              if (state === 'restorable') return {
-                id: post.id, threadId: post.threadId, route: post.route, parentId: post.parentId,
-                availability: 'erased', removed: true, body: null, sha256: null,
-                restorableUntil: '2099-11-23T03:04:05.000Z',
-              };
+              if (state === 'restorable')
+                return {
+                  id: post.id,
+                  threadId: post.threadId,
+                  route: post.route,
+                  parentId: post.parentId,
+                  availability: 'erased',
+                  removed: true,
+                  body: null,
+                  sha256: null,
+                  restorableUntil: '2099-11-23T03:04:05.000Z',
+                };
               return state === 'deleted'
                 ? { ...post, body: null, sha256: null, removed: true, availability: 'erased' }
                 : { ...post, body: null, sha256: null, removed: true, availability: 'withheld' };
@@ -100,7 +107,11 @@ function Connected({ state }: { state: ReadingState }) {
         await queryClient.invalidateQueries();
       }}
       onPageRefresh={async () => {
-        const next = await queryClient.fetchQuery({ ...threadPageQuery(id, undefined, session === 'signed-in' ? 'session' : 'anonymous'), staleTime: 0, retry: false });
+        const next = await queryClient.fetchQuery({
+          ...threadPageQuery(id, undefined, session === 'signed-in' ? 'session' : 'anonymous'),
+          staleTime: 0,
+          retry: false,
+        });
         return 'redirect' in next ? undefined : next;
       }}
     />

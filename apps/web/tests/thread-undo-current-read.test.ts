@@ -89,10 +89,15 @@ async function controls(refresh: () => Promise<ThreadReadingPage | undefined>) {
   const route = createRootRoute({ component: () => region });
   const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await router.load();
-  renderToStaticMarkup(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(RouterProvider, { router })));
+  renderToStaticMarkup(
+    createElement(QueryClientProvider, { client: new QueryClient() }, createElement(RouterProvider, { router })),
+  );
   return {
     changes,
-    delete: async () => { expect(remove).toBeDefined(); await remove!(); },
+    delete: async () => {
+      expect(remove).toBeDefined();
+      await remove!();
+    },
     undo: async () => {
       expect(undo).toBeDefined();
       undo!();
@@ -103,17 +108,19 @@ async function controls(refresh: () => Promise<ThreadReadingPage | undefined>) {
 }
 
 function removedMarkup(post: ThreadPost, extra: Partial<ComponentProps<typeof RemovedPost>> = {}) {
-  return renderToStaticMarkup(createElement(RemovedPost, {
-    post,
-    authors: null,
-    now: '2026-10-24T00:00:00.000Z',
-    viewerId: owned.thread.authorId,
-    anchorId: `post-${post.id}`,
-    itemRef: null,
-    menuButton: null,
-    onCopyLink: () => {},
-    ...extra,
-  }));
+  return renderToStaticMarkup(
+    createElement(RemovedPost, {
+      post,
+      authors: null,
+      now: '2026-10-24T00:00:00.000Z',
+      viewerId: owned.thread.authorId,
+      anchorId: `post-${post.id}`,
+      itemRef: null,
+      menuButton: null,
+      onCopyLink: () => {},
+      ...extra,
+    }),
+  );
 }
 
 test('Undo uses current native body and deadline, never a stale local snapshot as disclosure permission', async () => {
@@ -126,10 +133,18 @@ test('Undo uses current native body and deadline, never a stale local snapshot a
       reads++;
       if (reads === 1) return currentPage(tombstone);
       if (outcome === 'denied' || outcome === 'source-unavailable') throw new Error(outcome);
-      if (outcome === 'missing') return { ...currentPage(tombstone), posts: { ...currentPage(tombstone).posts, posts: [] } };
-      disclosed = outcome === 'erased' ? tombstone : {
-        ...original, availability: 'withheld', removed: true, body: null, sha256: null,
-      };
+      if (outcome === 'missing')
+        return { ...currentPage(tombstone), posts: { ...currentPage(tombstone).posts, posts: [] } };
+      disclosed =
+        outcome === 'erased'
+          ? tombstone
+          : {
+              ...original,
+              availability: 'withheld',
+              removed: true,
+              body: null,
+              sha256: null,
+            };
       return currentPage(disclosed);
     });
     await ui.delete();
@@ -152,7 +167,10 @@ test('delete 204 keeps a byte-free tombstone and reads the native deadline despi
   spyOn(Date, 'now').mockReturnValue(Date.parse('2035-01-01T00:00:00Z'));
   spyOn(actions, 'erasePost').mockResolvedValue({ ok: true });
   let reads = 0;
-  const ui = await controls(async () => { reads++; return currentPage(tombstone); });
+  const ui = await controls(async () => {
+    reads++;
+    return currentPage(tombstone);
+  });
   await ui.delete();
   expect(reads).toBe(1);
   expect(ui.changes[0]).not.toHaveProperty('restorableUntil');
@@ -194,7 +212,10 @@ test('an uncertain restore checks current eligibility and reuses its original ke
     .mockResolvedValueOnce({ ok: false, reason: 'unavailable' })
     .mockResolvedValueOnce({ ok: true });
   let reads = 0;
-  const ui = await controls(async () => { reads++; return currentPage(tombstone); });
+  const ui = await controls(async () => {
+    reads++;
+    return currentPage(tombstone);
+  });
   await ui.delete();
   await ui.undo();
   await ui.undo();
@@ -205,10 +226,17 @@ test('an uncertain restore checks current eligibility and reuses its original ke
 });
 
 test('only a real optional native review hint produces the ordinary existing-review link', () => {
-  for (const problem of [{}, { existingReviewId: owned.thread.id }, { existingThreadId: 'unknown' }, { existingThreadId: owned.thread.id }]) {
+  for (const problem of [
+    {},
+    { existingReviewId: owned.thread.id },
+    { existingThreadId: 'unknown' },
+    { existingThreadId: owned.thread.id },
+  ]) {
     const existingReviewId = findExistingReview(problem);
     const html = removedMarkup(tombstone, { restoreError: m.thread_post_restore_conflict(), existingReviewId });
-    expect(html.includes(`/threads/${owned.thread.id}`)).toBe('existingThreadId' in problem && problem.existingThreadId === owned.thread.id);
+    expect(html.includes(`/threads/${owned.thread.id}`)).toBe(
+      'existingThreadId' in problem && problem.existingThreadId === owned.thread.id,
+    );
     expect(html).not.toContain('A newer review took this slot');
   }
 });

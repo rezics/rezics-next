@@ -56,7 +56,15 @@ export function ThreadReading({
   const page = reading.source === sourcePage ? reading.page : sourcePage;
   if (reading.source !== sourcePage) setReading({ source: sourcePage, page: sourcePage });
   const {
-    thread, realm, posts, authors, provenanceSubjects, verification, mentions: currentMentions, now, documentMedia,
+    thread,
+    realm,
+    posts,
+    authors,
+    provenanceSubjects,
+    verification,
+    mentions: currentMentions,
+    now,
+    documentMedia,
   } = page;
   const displayTitle = thread.title;
   function setPosts(update: (posts: ThreadReadingPage['posts']) => ThreadReadingPage['posts']) {
@@ -79,7 +87,9 @@ export function ThreadReading({
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
   }, []);
   // A private query can temporarily have no data when its post IDs change. Keep the local draft and intent mounted,
   // but expose no participation controls until current personal data is available again.
@@ -163,7 +173,8 @@ export function ThreadReading({
                       onOpeningPostChange={(restored) => {
                         const title = restored ? thread.title : null;
                         setReading((current) => ({
-                          ...current, page: { ...current.page, thread: { ...current.page.thread, title } },
+                          ...current,
+                          page: { ...current.page, thread: { ...current.page.thread, title } },
                         }));
                         rememberThreadSlug(thread.id, title);
                       }}
