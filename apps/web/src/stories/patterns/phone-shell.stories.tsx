@@ -429,7 +429,7 @@ async function creationSheet({ canvasElement }: { canvasElement: HTMLElement }) 
 }
 async function creationOrder(sheet: ReturnType<typeof within>, fragments: string[]) {
   await waitFor(() =>
-    expect(sheet.queryAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(
+    expect(sheet.queryAllByRole('link').map((link: HTMLElement) => link.getAttribute('href'))).toEqual(
       ['', ...fragments].map((fragment) => `/${getLocale()}/collections/new${fragment}`),
     ),
   );
@@ -465,7 +465,7 @@ export const CreationSessionTransition: Story = {
     await creationOrder(await creationSheet(context), ['#first', '#shared', '#second']);
     await userEvent.keyboard('{Escape}');
     for (const state of ['Sign out', 'Session unavailable']) {
-      await userEvent.click(canvas.getByRole('button', { name: state, exact: true }));
+      await userEvent.click(canvas.getByRole('button', { name: state }));
       const sheet = await creationSheet(context);
       await waitFor(() => expect(sheet.queryAllByRole('link')).toHaveLength(0));
       await expect(sheet.getByText(m.shell_creation_unavailable())).toBeVisible();
@@ -473,7 +473,7 @@ export const CreationSessionTransition: Story = {
     }
     await userEvent.click(canvas.getByRole('button', { name: 'Update first owner' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Unmount second owner' }));
-    await userEvent.click(canvas.getByRole('button', { name: 'Sign in', exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Sign in' }));
     await creationOrder(await creationSheet(context), ['#first-updated', '#shared']);
   },
 };

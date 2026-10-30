@@ -13,10 +13,8 @@ type Session = SessionState | 'unknown';
 /** A vertical supplies only actions it can currently offer, with its native route rechecking authority. */
 export type PhoneCreationAction = { id: string; label: string; href: string };
 type CreationRegistration = { owner: object; actions: readonly PhoneCreationAction[] };
-const CreationContext = createContext<{
-  actions: readonly PhoneCreationAction[];
-  register(registration: CreationRegistration): () => void;
-} | null>(null);
+const CreationContext = createContext<readonly PhoneCreationAction[]>([]);
+const CreationRegistrationContext = createContext<((registration: CreationRegistration) => () => void) | null>(null);
 export function PhoneCreationProvider({ children }: { children: ReactNode }) {
   const [owners, setOwners] = useState(() => new Map<object, CreationRegistration & { order: number }>());
   const [register] = useState(() => {
@@ -37,10 +35,14 @@ export function PhoneCreationProvider({ children }: { children: ReactNode }) {
     };
   });
   const actions = [...owners.values()].sort((a, b) => a.order - b.order).flatMap((owner) => owner.actions);
-  return <CreationContext value={{ actions, register }}>{children}</CreationContext>;
+  return (
+    <CreationRegistrationContext value={register}>
+      <CreationContext value={actions}>{children}</CreationContext>
+    </CreationRegistrationContext>
+  );
 }
 export function useRegisterPhoneCreationActions(actions: readonly PhoneCreationAction[]) {
-  const register = useContext(CreationContext)?.register;
+  const register = useContext(CreationRegistrationContext);
   const owner = useRef({});
   useEffect(() => register?.({ owner: owner.current, actions }), [register, actions]);
 }
@@ -191,7 +193,7 @@ export function PhoneNavigation({
 }) {
   const library = useOperation('library_entry.list');
   const collection = useOperation('collection.create');
-  const context = useContext(CreationContext);
+  const contextualActions = useContext(CreationContext);
   const unread = usePhoneUnread(session);
   const actions: PhoneCreationAction[] = [];
   if (session === 'signed-in') {
@@ -202,7 +204,7 @@ export function PhoneNavigation({
       ...(collection
         ? [{ id: 'collection', label: m.library_collection_new(), href: `/${getLocale()}/collections/new` }]
         : []),
-      ...(context?.actions ?? []),
+      ...contextualActions,
     ]) {
       if (!action.href.startsWith('/') || action.href.startsWith('//') || /[\\\r\n]/.test(action.href)) continue;
       if (ids.has(action.id) || destinations.has(action.href)) continue;
