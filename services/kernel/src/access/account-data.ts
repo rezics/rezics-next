@@ -41,10 +41,6 @@ export type DeletedPublicIdentity = {
   id: string;
   kind: 'actor' | 'organization';
   state: 'deleted';
-  handle?: never;
-  displayName?: never;
-  automated?: never;
-  operatorId?: never;
 };
 export type PublicIdentity = PublicIdentityFields | DeletedPublicIdentity;
 export type PublicIdentityFields = {
@@ -52,7 +48,7 @@ export type PublicIdentityFields = {
   kind: 'actor' | 'organization';
   handle: string | null;
   displayName: string | null;
-  state: 'active' | 'deleted';
+  state: 'active';
   automated: boolean;
   operatorId: string | null;
 };
@@ -114,8 +110,7 @@ async function publicIdentityForAccount(
   row: NonNullable<Awaited<ReturnType<typeof publicRead.run>>>,
   movedTo?: string,
 ): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]> {
-  if (row.state === 'deleted' && row.kind === 'organization')
-    return [{ id: row.accountId, kind: 'organization', state: 'deleted' }];
+  if (row.state === 'deleted') return [{ id: row.accountId, kind: row.kind, state: 'deleted' }];
   const identity: PublicIdentityFields & { movedTo?: string } = {
     id: row.accountId,
     kind: row.kind === 'organization' ? 'organization' : 'actor',
@@ -202,12 +197,12 @@ export async function readPublicIdentities(
     for (const row of rows)
       found.set(
         `${route}:${row.id}`,
-        row.state === 'deleted' && row.kind === 'organization'
-          ? { id: row.id, kind: 'organization', state: 'deleted' }
+        row.state === 'deleted'
+          ? { id: row.id, kind: row.kind, state: 'deleted' }
           : {
               ...row,
               kind: row.kind === 'organization' ? 'organization' : 'actor',
-              state: row.state === 'deleted' ? 'deleted' : 'active',
+              state: 'active',
             },
       );
   }

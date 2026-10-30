@@ -1824,10 +1824,9 @@ is backfilled from accounts already verified when the migration runs. Reversal o
 - Returns per live visible account: `id`, `kind` (`actor` or `organization`), `handle`, `displayName`, `state`
   (`active`), `automated` and `operatorId`. An account with an operator is `automated: true` and names its operator;
   every other live account is `automated: false` with `operatorId: null`. A deleted identity's contract is exactly
-  `{ id, state, kind }`, without an automation label. The wider null/false actor projection still present in source
-  is an implementation gap, as recorded in [Accounts](../../../../docs/accounts.md#public-identity) and the
-  [profiles research](../../../../docs/research/accounts-design-agents-profiles.md). Pending accounts are absent
-  and no private field is selected.
+  `{ id, kind, state: 'deleted' }` for both actors and organizations, without profile fields or an automation label.
+  Deleted rows return before Subject, avatar or operator hydration. Pending accounts are absent and no private
+  field is selected.
 - Touches: one statement (`public-identity-page.sql`); at most 100 `account_pkey(route, account_id)` probes on `access.account`.
 - Bound: the sum of at most k independently indexed `account_pkey` probes, O(k log N) for k <= 100 requested ids and N accounts, with discrete index-depth transitions; constant statements; rows at most k.
 - Growth check: `growth-public-identity-read.test.ts` with `checkGrowth` at [1, 8, 64], growing unrelated accounts with
@@ -2764,7 +2763,6 @@ not claim that existing payloads are already minimized or that shared-history ha
 - Access has no takedown of a single profile field (display name, avatar, biography or links) in [lifecycle.ts](lifecycle.ts); under the [policy](../../../../docs/deletion.md), a takedown would withhold only the field the notice covers and keep the data.
 - `access.account` residual relationship, verification and operation fields have no complete deletion minimization rule or deadline.
 - Handle-based reads of retired and deleted handles return the same empty list as unknown handles; ids reads retain the exact three-field deletion identity.
-- The deleted handle projection in [account-data.ts](account-data.ts) still returns extra null/false fields, including `automated`; convergence to the policy's exact three-field identity is separate implementation work.
 - Former-handle allocation records intentionally remain after their 30-day forwarding period to prevent impersonation; historical handle operation/effect/registration-expiry rows have no scrub or purge deadline.
 - Membership history, terminal slots/proofs and principal assignments have no erasure schedule; live inverse/coordination cleanup depends on workflow completion without a deadline.
 - Grants/role grants, denials, resource initialization/standing records and governance provenance have no account-deletion retention schedule; retained denial reasons also need minimization.

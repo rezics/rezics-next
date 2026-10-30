@@ -1,10 +1,11 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { readPublicAccount, readPublicIdentities, type PublicIdentity } from '../../src/access/account-data.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -16,6 +17,7 @@ const identity = {
   second: newId(route),
   pending: newId(route),
   deleted: newId(route),
+  deletedOrganization: newId(route),
   suspended: newId(route),
   organization: newId(route),
   automation: newId(route),
@@ -42,16 +44,7 @@ const access: Access = {
 };
 const kernel = createKernel({ pool, access, routeKey: new Uint8Array(32).fill(13) });
 
-type Identity = {
-  id: string;
-  kind: 'actor' | 'organization';
-  handle: string | null;
-  displayName: string | null;
-  state: 'active' | 'deleted';
-  automated: boolean;
-  operatorId: string | null;
-};
-type Body = { accounts: Identity[]; code?: string };
+type Body = { accounts: PublicIdentity[]; code?: string };
 
 async function seed(): Promise<void> {
   const rows = [
@@ -84,6 +77,14 @@ async function seed(): Promise<void> {
       kind: 'actor',
       handle: 'deleted',
       displayName: 'Deleted Person',
+      state: 'active',
+      operator: null,
+    },
+    {
+      id: identity.deletedOrganization,
+      kind: 'organization',
+      handle: 'deleted_group',
+      displayName: 'Deleted Group',
       state: 'active',
       operator: null,
     },
@@ -156,8 +157,8 @@ async function seed(): Promise<void> {
   await suspendAccount(admin, identity.suspended);
   await admin.query(
     `UPDATE access.account SET state = 'deleted', handle = NULL, display_name = NULL
-     WHERE route = $1 AND account_id = $2`,
-    [route, identity.deleted],
+     WHERE route = $1 AND account_id = ANY($2::uuid[])`,
+    [route, [identity.deleted, identity.deletedOrganization]],
   );
 }
 
@@ -186,6 +187,7 @@ test('the public batch returns visible identities in first-request order and hid
   const requested = [
     identity.second,
     identity.deleted,
+    identity.deletedOrganization,
     identity.pending,
     newId(route),
     identity.first,
@@ -209,11 +211,12 @@ test('the public batch returns visible identities in first-request order and hid
     {
       id: identity.deleted,
       kind: 'actor',
-      handle: null,
-      displayName: null,
       state: 'deleted',
-      automated: false,
-      operatorId: null,
+    },
+    {
+      id: identity.deletedOrganization,
+      kind: 'organization',
+      state: 'deleted',
     },
     {
       id: identity.first,
@@ -258,18 +261,14 @@ test('the public batch returns visible identities in first-request order and hid
 
 test('the public identity names no private field for any kind and hides the operator of a deleted account', async () => {
   const { body } = await request(
-    identities([identity.first, identity.organization, identity.automation, identity.deleted]),
+    identities([identity.first, identity.organization, identity.automation, identity.deleted, identity.deletedOrganization]),
   );
   for (const account of body.accounts)
-    expect(Object.keys(account).sort()).toEqual([
-      'automated',
-      'displayName',
-      'handle',
-      'id',
-      'kind',
-      'operatorId',
-      'state',
-    ]);
+    expect(Object.keys(account).sort()).toEqual(
+      account.state === 'deleted'
+        ? ['id', 'kind', 'state']
+        : ['automated', 'displayName', 'handle', 'id', 'kind', 'operatorId', 'state'],
+    );
 
   const operated = newId(route);
   await admin.query(
@@ -287,13 +286,29 @@ test('the public identity names no private field for any kind and hides the oper
     {
       id: operated,
       kind: 'actor',
-      handle: null,
-      displayName: null,
       state: 'deleted',
-      automated: false,
-      operatorId: null,
     },
   ]);
+});
+
+test('deleted actor and organization point and batch reads stop at the account row', async () => {
+  const expected = [
+    { id: identity.deletedOrganization, kind: 'organization', state: 'deleted' },
+    { id: identity.deleted, kind: 'actor', state: 'deleted' },
+  ];
+  const query = spyOn(pool, 'query');
+  try {
+    for (const { id, kind } of expected) {
+      query.mockClear();
+      expect(await readPublicAccount(pool, route, id)).toEqual({ accountId: id, kind, state: 'deleted' });
+      expect(query).toHaveBeenCalledTimes(1);
+    }
+    query.mockClear();
+    expect(await readPublicIdentities(pool, [route, route], expected.map(({ id }) => id))).toEqual(expected);
+    expect(query).toHaveBeenCalledTimes(1);
+  } finally {
+    query.mockRestore();
+  }
 });
 
 test('anonymous and authenticated callers receive the same public identity', async () => {
