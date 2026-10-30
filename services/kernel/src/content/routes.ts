@@ -400,10 +400,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ query, admission, job, session }) =>
         contentOperation(() =>
           admission.run('normal', job, async () => {
-            const page = await listGlobalBoards(dependencies, { deadline: job.deadline }, {
-              ...query,
-              ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
-            });
+            const page = await listGlobalBoards(
+              dependencies,
+              { deadline: job.deadline },
+              {
+                ...(query.purpose === undefined ? {} : { purpose: query.purpose }),
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              },
+            );
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             return { boards: page.boards, next: page.next };
           }),
