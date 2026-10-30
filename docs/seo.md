@@ -92,14 +92,58 @@ Every indexed page sets, per locale:
   link previews, or a generated card with the cover placeholder when there is no image;
 - `<html lang>` matching the URL's locale.
 
-Subject sharing currently uses the largest supplied anonymous-readable cover variant, with its actual aspect
-ratio and the page's localized title as its text alternative. Withheld, withdrawn and missing covers use the
-existing 1200 × 630 `/cards/default.png`, whose text alternative is “REZICS”; they never put a subject title or
-slug into a fallback image. This static card remains an interim fallback, not the required generated placeholder.
-The Web owner must select the raster renderer and public card route for the existing `Cover` typographic
-placeholder before generated cards replace it. The selected route must read current anonymous page data, conceal
-unavailable targets, and obey the public-cache owner's withdrawal policy; the HTML/CSS cover primitives alone do
-not provide a sharing-image renderer.
+Subject sharing keeps the largest supplied anonymous-readable cover variant, its actual aspect ratio and the
+page's localized title as its text alternative. The existing Subject head still uses the static 1200 × 630
+`/cards/default.png` (“REZICS”) for withheld, withdrawn and missing covers. It remains the fallback for integrations
+without a current anonymous page projection; a caller's title or slug never qualifies that integration.
+
+### Generated placeholder cards
+
+`/{locale}/cards/{subjectId}.png` accepts GET and HEAD for the eight site locales and a subject UUID. It reads the
+actual anonymous `pages.read` overview once through `loadSubjectPage`; `readShareCardPage` projects only the planned
+subject's current display label, id, type and public cover summary. It uses the page's existing localized/original
+language fallback, with no canonical resolver, session, Realm, account lookup or per-row read. The URL carries no
+title, slug or asset URL. Query text, cookies, Authorization and conditional headers never enter the native read.
+
+Missing, denied and withdrawn pages, including concealed embedded subject reads, answer the same generic 404.
+An unavailable native source, incomplete planned read, unbound alias/account redirect, missing `KERNEL_ORIGIN`,
+renderer failure or absent projection answers genuine 503. No development fake fills a missing binding. Both
+statuses omit page text. HEAD rechecks the same current disclosure without rasterizing or returning a body.
+
+All card responses use `private, no-store`, without ETags, Last-Modified, 304, stale responses or retained title/PNG
+caches. This is the conservative card application of [public withdrawal policy](#public-html-cache): every request
+rechecks current anonymous eligibility. Immutable font/WASM modules alone may be retained. An older publicly cached
+response elsewhere cannot be purged by this policy; a sharing service's independent captured preview is not a live
+authorization decision.
+
+The Worker renderer uses [Satori's standalone entry](https://github.com/vercel/satori#runtime-and-wasm) for SVG and
+[`@resvg/resvg-wasm`](https://github.com/thx/resvg-js#webassembly) for PNG, with compiled local WASM modules.
+The published entry code was inspected: Satori 0.32.0 accepts the supplied `yoga.wasm` module; resvg 2.6.2 exports
+`index_bg.wasm`, requires `initWasm` once and exposes `free` on both raster objects. Satori 0.32.0 is pinned because
+newer releases' standalone entry also starts HarfBuzz through dynamic WASM loading; adopting those needs an upstream
+compiled-module binding. No Node-native addon, browser rasterizer, remote font, arbitrary image fetch or new service
+is used. Bundled Source Serif 4 WOFF title faces match `Cover`; local Noto Serif SC/TC/JP/KR WOFF subsets supply CJK
+fallbacks selected by current title script and locale. No system font or network glyph fallback is used.
+
+The shared `ShareCardView` adapts `Cover`'s id-derived colour and light serif title, inset and ruled footer to
+1200 × 630. Titles are bounded to 240 Unicode code points (including any ellipsis), after a 1,024-code-unit input
+slice, and use at most four lines; unbroken words reduce the type size. The renderer admits at most six font inputs
+and 16 MiB of font bytes, one fixed raster and at most 4 MiB of PNG output. Raster allocations are freed after copying
+the result. It never enumerates relations, reads creator labels or fetches cover bytes.
+
+Search owns the Subject head and its title/description formula. At its next safe current-page source boundary it may
+consume `projectShareCardPage(loaded, {id, locale})`, then pass `shareCardImage(projection)` from
+[`shell/share-card.ts`](../apps/web/src/shell/share-card.ts) to the existing `pageHead` image option. The helper takes
+an optional `ShareCardProjection`, preserves a genuine public cover first, selects the generated URL only for a
+`ready` current anonymous page, and otherwise returns the static REZICS card. It fetches nothing and introduces no
+second Subject head renderer. Other public page kinds keep their existing genuine covers/static fallback until
+their owners bind their real current anonymous projection.
+
+The focused `apps/web/tests/share-card.test.ts` cases cover real PNG dimensions, fixed page-read count, current rename,
+withdrawal/denial, conditional requests, unavailable boundaries and optional head selection. The shared preview is
+`patterns-media-share-card--current`, using the existing PatternStory and width, locale and theme globals. These are
+source fixtures: native authorization, physical cost, Worker build/deployment, browser rendering and visual approval
+remain deferred until integration. Neither a static fallback nor source typing establishes those proofs.
 
 ## Structured data
 
@@ -284,7 +328,7 @@ live HTML disclosure. This policy does not purge public responses already held b
 | Subject publication and eligible families | [Subject pages](subject-pages.md) and the [semantic publication design](../services/kernel/src/semantic/subject-pages-design.md) own positive public evidence, meaningful-change clocks and bounded repair. The canonical reader and family workers own view/profile families, sparse-language agreement and verified agent destinations. Registration or a proposed record is not native delivery.                                      |
 | Collection source and export              | [Collection source](collection-source.md), [dynamic Collections](dynamic-collections.md) and [Collection presentation](collection-presentation.md) own completed source generations, complete current dependency authorization and canonical export readiness. SSR consumes only delivered contracts; a public header or preview does not prove source completeness.                                                                     |
 | Community families                        | Community owns each Realm's `canonicalDestination`: `{kind: 'space', spaceId, address}` for a carried Realm, otherwise `{kind: 'realm', realmId}`. The Realm feed owns carried families; the Space feed contains standalone Spaces only. Consumers retain native source ids, cursors and pages. Current head/newest-board clocks do not cover all shown changes; omit sitemap times until meaningful public-change coverage is supplied. |
-| Metadata projections                      | Subject/profile metadata workers own typed creator, identity, image and edition joins through actual public projections. The generated placeholder card requirement remains; a static default card does not prove it. No native fields or permissions are invented to fill a missing producer.                                                                                                                                           |
+| Metadata projections                      | Subject/profile metadata workers own typed creator, identity, image and edition joins through actual public projections. The current public Subject page adapter and generated placeholder route are source-delivered; optional Subject head integration and native/cost/visual proof remain. Other missing projections retain the static fallback. No native fields or permissions are invented to fill a missing producer.             |
 | Withdrawal and restoration                | Web requires a current public render before mutable HTML/304 reuse; a source-owner fence that could safely skip it remains an outstanding binding. Mutable aliases resolve afresh. The daily offline exporter is discovery infrastructure, never live authorization.                                                                                                                                                                     |
 
 Reuse the current keyset exporter, immutable shards and atomic index publication. A native feed that is preparing
