@@ -27,12 +27,16 @@ type Sort = 'relevance' | 'name' | 'id' | 'collections' | 'rating';
 type SortValue = string | number | null;
 type KeysetPlan = { sort: Sort; after?: readonly SortValue[] };
 
+function nameKey(value: unknown): boolean {
+  return value === null || (typeof value === 'string' && value.isWellFormed());
+}
+
 function sortTuple(value: unknown, sort: Sort): value is SortValue[] {
   if (!Array.isArray(value) || !uuid(value.at(-1))) return false;
   if (sort === 'id') return value.length === 1;
-  if (sort === 'name') return value.length === 2 && (value[0] === null || typeof value[0] === 'string');
+  if (sort === 'name') return value.length === 2 && nameKey(value[0]);
   if (sort === 'collections')
-    return value.length === 3 && safeCount(value[0]) && (value[1] === null || typeof value[1] === 'string');
+    return value.length === 3 && safeCount(value[0]) && nameKey(value[1]);
   if (sort === 'relevance') return value.length === 2 && typeof value[0] === 'number' && Number.isFinite(value[0]);
   return false;
 }

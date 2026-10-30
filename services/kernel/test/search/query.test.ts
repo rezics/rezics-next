@@ -411,7 +411,7 @@ test('malformed direct ordinary after tuples reject before engine I/O', () => {
   };
   const invalid: Record<(typeof ordinarySorts)[number], unknown[]> = {
     id: [null, [], [id(101), id(102)], [id(101) + '\n'], [null], [1]],
-    name: [null, [], [id(101)], [7, id(101)], ['a', id(101), id(102)], ['a', id(101) + '\n']],
+    name: [null, [], [id(101)], [7, id(101)], ['\ud800', id(101)], ['a', id(101), id(102)], ['a', id(101) + '\n']],
     collections: [
       null,
       [],
@@ -420,6 +420,7 @@ test('malformed direct ordinary after tuples reject before engine I/O', () => {
       [0.5, 'a', id(101)],
       [Number.MAX_SAFE_INTEGER + 1, null, id(101)],
       [0, 2, id(101)],
+      [0, '\udfff', id(101)],
     ],
     relevance: [null, [], [id(101)], [NaN, id(101)], [Infinity, id(101)], [null, id(101)], ['1', id(101)]],
   };
