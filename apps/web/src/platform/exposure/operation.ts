@@ -1,4 +1,4 @@
-import type { Intent, Outcome } from './data';
+import { parseIntent, type Intent, type Outcome } from './data';
 
 /** In-memory exclusion and recovery for one immutable public effect. No automatic writes. */
 export class ExposureOperation {
@@ -9,7 +9,7 @@ export class ExposureOperation {
 
   review(intent: Intent): boolean {
     if (this.busy || this.intent) return false;
-    this.intent = intent;
+    this.intent = parseIntent(intent);
     this.outcome = null;
     return true;
   }

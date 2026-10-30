@@ -10,14 +10,20 @@ import { pageHeadContext } from '../../shell/head-context';
 export const Route = createFileRoute('/platform/exposure')({
   beforeLoad: requireSignedIn,
   loader: () => readPlatformExposure(),
-  head: ({ match }) => pageHead({ title: m.exposure_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
+  head: ({ match }) =>
+    pageHead({ title: m.exposure_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ExposureRoute,
 });
 function ExposureRoute() {
   const initial = Route.useLoaderData();
   const { csrfToken } = useSession();
-  return <PlatformExposurePage initial={initial} io={{
-    read: () => readPlatformExposure(),
-    change: (data) => changePlatformExposure({ data, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
-  }} />;
+  return (
+    <PlatformExposurePage
+      initial={initial}
+      io={{
+        read: () => readPlatformExposure(),
+        change: (data) => changePlatformExposure({ data, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
+      }}
+    />
+  );
 }

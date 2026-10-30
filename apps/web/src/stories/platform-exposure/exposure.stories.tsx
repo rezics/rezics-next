@@ -10,10 +10,13 @@ const meta = {
   title: 'Pages/Platform exposure/Closed native dependency',
   component: PlatformExposurePage,
   parameters: { layout: 'padded' },
-  args: { initial: unavailable, io: {
-    read: async () => unavailable,
-    change: async () => ({ status: 'not-sent' as const, current: unavailable }),
-  } },
+  args: {
+    initial: unavailable,
+    io: {
+      read: async () => unavailable,
+      change: async () => ({ status: 'not-sent' as const, current: unavailable }),
+    },
+  },
 } satisfies Meta<typeof PlatformExposurePage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
