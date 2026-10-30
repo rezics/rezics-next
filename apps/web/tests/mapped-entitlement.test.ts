@@ -64,6 +64,7 @@ test('A buyer reviews the actual captured fixed edition and reaches its real gua
           revision: 7,
           currency: 'usd',
           unitAmountMinor: 1299,
+          moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
           state: 'active',
           contentEdition: purchaseTerms,
         },

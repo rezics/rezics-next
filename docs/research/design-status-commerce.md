@@ -74,10 +74,11 @@ Web/Content handoff: actual routes `/creator/offers/new` and `/creator/offers`, 
 and exact 390/1280 stories `pages-commerce-creator-offer-editor--{price-intent,actual-route}-{390,1280}`.
 Price stories supply explicit adopted example rules, not native permission or publication. Actual route stories keep
 unavailable outcomes when their data source is unavailable. Current visual, native combined-journey and promoted-main
-proof remain pending. Local `bun run --cwd apps/web typecheck` passes with no errors in 1,037 files; no other
-checks ran in this retry. Earlier buyer fixture proof above predates this adoption:
-the existing mapped-entitlement fixture still expects `$12.99` without unit metadata, while the adopted policy requires
-unknown. That fixture is preserved for its owner's reconciliation; no historical unit is invented to satisfy it.
+proof remain pending. The positive current mapped-offer fixture now supplies its declared
+`{system:'stripe-api',exponent:2,factsVersion:'stripe-money-v1'}` unit, retaining the raw `1299` amount and exact
+`$12.99` assertion. Its omitted tax convention remains unknown, preserving the no-before-tax assertion and all
+existing mapped/revoked, reader-denial, bounded-read and credential assertions. Historical recordings remain
+unchanged. Earlier buyer fixture proof above predates this reconciliation; current local typing is pending.
 
 **Library / exclusive state.** Sole capability authority: [Library and Collections](../library-and-collections.md), with
 [module implementation inventory](../../services/kernel/src/library/README.md); Commerce owns private account-partition facts,
