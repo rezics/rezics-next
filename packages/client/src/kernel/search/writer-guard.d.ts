@@ -3,8 +3,29 @@ import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-
 import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable } from './public-filter-consumer-contract.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { type IndexAction, type SubjectDocument } from './document.ts';
-import type { OpenSearch } from './opensearch.ts';
+import { type OpenSearch } from './opensearch.ts';
 import { type SubjectListingSource, type SubjectSource } from './source.ts';
+/** Durable native evidence retained by the existing writer, never supplied by Source callers. */
+export type SearchRepairWriterReceipt = Readonly<{
+    locator: string;
+    subject: string;
+    partition: number;
+    epoch: number;
+    incarnation: string;
+    writeAlias: string;
+    consumer: string;
+    action: IndexAction;
+    enrollment: IdentityNativeReceipt;
+    completion: IdentityNativeReceipt;
+    native: unknown;
+}>;
+export declare const decodeSearchRepairWriterReceipt: (value: string) => SearchRepairWriterReceipt;
+/** Search-visible keyed readback; absence alone never recovers an uncertain delete. */
+export declare function readSearchRepairWinner(search: OpenSearch, index: string, action: IndexAction): Promise<unknown>;
+/** Validate only a native record loaded by custody; this is not a settlement producer. */
+export declare function validateSearchRepairWriterEvidence(index: string, receipt: SearchRepairWriterReceipt): void;
+/** Recheck retained evidence and lock the actual existing writer through the reader boundary. */
+export declare function verifySearchRepairWriterReceipt(db: Pick<Pool, 'query'>, search: OpenSearch, index: string, receipt: SearchRepairWriterReceipt): Promise<void>;
 export declare const SEARCH_IDENTITY_WRITER_CHUNK = 100;
 /** A locator only. All adoption reads retained native rows under the current home owner. */
 export type SearchWriterBarrierLocator = Readonly<{
@@ -37,6 +58,8 @@ export type SearchWriterGuard = Readonly<{
     write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
 }>;
 export type SearchWriterNativeCustody = SearchWriterGuard & Readonly<{
+    /** Retained native repair, using the ordinary Source, serializer and writer enrollment. */
+    repair(subject: string, obligation: bigint, locator: string, context: PublicFilterConsumerContext): Promise<SearchRepairWriterReceipt>;
     /** No caller body/version or saved positive can be submitted. */
     write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
     fenceOriginal(job: IdentityJobRef, original: string): Promise<SearchIdentityWriterFence>;
