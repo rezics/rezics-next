@@ -411,3 +411,76 @@ test('the Worker answers the sitemap and robots paths itself, with an empty buck
 
   expect(kernelRequests).toEqual([]);
 }, 300_000);
+
+test('HEAD errors have the same status and headers as GET, with no body and at most one bucket get', async () => {
+  const valid = `/sitemap-subjects-${digest}.xml.gz`;
+  for (const path of ['/sitemap.xml', valid, '/sitemap-malformed.xml.gz']) {
+    for (const mode of ['missing', 'unbound', 'failed'] as const) {
+      let gets = 0;
+      const bucket = {
+        get: async () => {
+          gets += 1;
+          if (mode === 'failed') throw new Error('unavailable');
+          return null;
+        },
+      };
+      const binding = mode === 'unbound' ? {} : { SITEMAPS: bucket as unknown as R2Bucket };
+      const get = (await sitemapResponse(new Request(`${origin}${path}`), binding))!;
+      const head = (await sitemapResponse(new Request(`${origin}${path}`, { method: 'HEAD' }), binding))!;
+      expect(head.status).toBe(get.status);
+      expect([...head.headers]).toEqual([...get.headers]);
+      expect(head.body).toBeNull();
+      expect(await head.text()).toBe('');
+      expect(get.status).toBe(
+        path.includes('malformed') ? 404 : mode !== 'missing' || path === '/sitemap.xml' ? 503 : 404,
+      );
+      expect(gets).toBe(mode === 'unbound' || path.includes('malformed') ? 0 : 2);
+      await get.arrayBuffer();
+    }
+  }
+});
+
+test('native bodyless preconditions preserve 412 versus 304 and ignore superseded date validators', async () => {
+  const uploaded = new Date('2026-10-20T03:00:00Z');
+  const older = new Date(uploaded.valueOf() - 1_000).toUTCString();
+  const later = new Date(uploaded.valueOf() + 1_000).toUTCString();
+  const cases: { headers: Record<string, string>; status: number }[] = [
+    { headers: { 'if-match': '"other"' }, status: 412 },
+    { headers: { 'if-match': 'W/"etag"' }, status: 412 },
+    { headers: { 'if-match': '"other"', 'if-none-match': '"etag"' }, status: 412 },
+    { headers: { 'if-unmodified-since': older }, status: 412 },
+    { headers: { 'if-none-match': 'W/"etag"' }, status: 304 },
+    { headers: { 'if-none-match': '*' }, status: 304 },
+    { headers: { 'if-modified-since': uploaded.toUTCString() }, status: 304 },
+    { headers: { 'if-modified-since': later }, status: 304 },
+    { headers: { 'if-match': '*', 'if-unmodified-since': older }, status: 200 },
+    { headers: { 'if-none-match': '"other"', 'if-modified-since': later }, status: 200 },
+  ];
+  for (const path of ['/sitemap.xml', `/sitemap-subjects-${digest}.xml.gz`]) {
+    for (const { headers, status } of cases) {
+      for (const method of ['GET', 'HEAD']) {
+        let gets = 0;
+        const bucket = {
+          async get(_key: string, { onlyIf }: { onlyIf: Headers }) {
+            gets += 1;
+            if ('if-match' in headers) expect(onlyIf.has('if-unmodified-since')).toBe(false);
+            if ('if-none-match' in headers) expect(onlyIf.has('if-modified-since')).toBe(false);
+            const meta = { key: _key, etag: 'etag', httpEtag: '"etag"', uploaded, size: 4 };
+            // R2 supplies metadata alone when a native precondition fails.
+            return status === 200 ? { ...meta, body: new Response('file').body! } : meta;
+          },
+        };
+        const response = (await sitemapResponse(new Request(`${origin}${path}`, { method, headers }), {
+          SITEMAPS: bucket as unknown as R2Bucket,
+        }))!;
+        expect(response.status).toBe(status);
+        expect(response.headers.get('etag')).toBe('"etag"');
+        expect(response.headers.get('cache-control')).toBe(
+          path === '/sitemap.xml' ? 'public, max-age=300' : 'public, max-age=86400, immutable',
+        );
+        expect(await response.text()).toBe(status === 200 && method === 'GET' ? 'file' : '');
+        expect(gets).toBe(1);
+      }
+    }
+  }
+});

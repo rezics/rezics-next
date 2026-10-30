@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { gunzipSync } from 'node:zlib';
 import {
   exportSitemaps,
+  publishSitemapExport,
+  sitemapR2Store,
   startDailySitemapExport,
   type SitemapExportFeed,
   type SitemapExportOptions,
@@ -11,6 +13,8 @@ import {
   type SitemapWriteCondition,
 } from '../src/sitemap/export.ts';
 import type { SitemapFamily } from '../src/sitemap/pack.ts';
+import { cleanupSitemapExportSegment } from '../src/sitemap/workflow.ts';
+import { sitemapResponse } from '../src/sitemap/serve.ts';
 
 const origin = 'https://public.example';
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
@@ -51,11 +55,20 @@ class MemoryStore implements SitemapStore {
     return { etag, uploaded };
   }
 
-  async list(prefix: string): Promise<SitemapObject[]> {
+  async list(prefix: string, cursor: string | null = null) {
     this.counts.list += 1;
-    return [...this.objects]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([key, object]) => ({ key, etag: object.etag, uploaded: object.uploaded }));
+    const keys = [...this.objects.keys()]
+      .filter((key) => key.startsWith(prefix) && (cursor === null || key > cursor))
+      .sort();
+    const page = keys.slice(0, 1_000);
+    return {
+      objects: page.map((key) => ({
+        key,
+        etag: this.objects.get(key)!.etag,
+        uploaded: this.objects.get(key)!.uploaded,
+      })),
+      cursor: keys.length > page.length ? page.at(-1)! : null,
+    };
   }
 
   async delete(key: string): Promise<void> {
@@ -434,4 +447,189 @@ test('feed reads, R2 operations and bounded step batches grow linearly through 3
   const secondR2Growth = metrics[2]!.r2 - metrics[1]!.r2;
   expect(secondR2Growth / firstR2Growth).toBeGreaterThanOrEqual(7);
   expect(secondR2Growth / firstR2Growth).toBeLessThanOrEqual(12);
+});
+
+test('cleanup streams bounded R2 listing pages and HEAD errors remain bodyless while failed export preserves old inventory', async () => {
+  const store = new MemoryStore();
+  const old = `shards/subjects-${'1'.repeat(24)}.xml.gz`;
+  const recent = `shards/subjects-${'2'.repeat(24)}.xml.gz`;
+  const current = `shards/subjects-${'3'.repeat(24)}.xml.gz`;
+  const ancient = store.time - 10 * 24 * 60 * 60 * 1_000;
+  store.time = ancient;
+  for (const key of [old, recent, current]) await store.put(key, 'shard');
+  await store.put(
+    'runs/expired/subjects.json',
+    JSON.stringify([{ key: old, uploaded: new Date(ancient).toISOString() }]),
+  );
+  await store.put(
+    'runs/expired/published.json',
+    JSON.stringify({ publishedAt: new Date(ancient).toISOString(), types: ['subjects'] }),
+  );
+  // These objects put retained markers beyond the first native history page, in an unfinished old run.
+  for (let index = 0; index < 1_001; index += 1)
+    await store.put(`runs/partial/parts/${String(index).padStart(4, '0')}`, 'part');
+  store.time = startTime;
+  await store.put(
+    'runs/recent/subjects.json',
+    JSON.stringify([{ key: recent, uploaded: new Date(ancient).toISOString() }]),
+  );
+  await store.put(
+    'runs/recent/published.json',
+    JSON.stringify({ publishedAt: new Date(store.time - 1_000).toISOString(), types: ['subjects'] }),
+  );
+  await store.put(
+    'runs/current/subjects.json',
+    JSON.stringify([{ key: current, uploaded: new Date(ancient).toISOString() }]),
+  );
+  await publishSitemapExport({
+    runId: 'current',
+    origin,
+    store,
+    indexSnapshot: null,
+    filesByFeed: new Map([['subjects', [{ key: current, uploaded: new Date(ancient).toISOString() }]]]),
+    now: new Date(store.time),
+  });
+  const index = store.text('index.xml');
+  const listings: { prefix: string; cursor?: string; limit: number }[] = [];
+  const bucket = {
+    async list(input: { prefix: string; cursor?: string; limit: number }) {
+      listings.push(input);
+      const page = await store.list(input.prefix, input.cursor);
+      return {
+        objects: page.objects.map((object) => ({
+          ...object,
+          httpEtag: object.etag,
+          uploaded: new Date(object.uploaded),
+        })),
+        truncated: page.cursor !== null,
+        ...(page.cursor === null ? {} : { cursor: page.cursor }),
+      };
+    },
+  } as unknown as R2Bucket;
+  const native = sitemapR2Store(bucket);
+  const paged: SitemapStore = {
+    head: (key) => store.head(key),
+    get: (key) => store.get(key),
+    put: (key, value, condition) => store.put(key, value, condition),
+    delete: (key) => store.delete(key),
+    list: (prefix, cursor) => native.list(prefix, cursor),
+  };
+  const steps: SitemapStepRunner = {
+    async do(_name, run) {
+      const before = { lists: listings.length, deletes: store.counts.delete, puts: store.counts.put };
+      const value = await run();
+      expect(listings.length - before.lists).toBeLessThanOrEqual(1);
+      expect(store.counts.delete - before.deletes).toBeLessThanOrEqual(100);
+      expect(store.counts.put - before.puts).toBeLessThanOrEqual(100);
+      return value;
+    },
+  };
+  let segment = 0;
+  while (!(await cleanupSitemapExportSegment(paged, steps, 'current', new Date(store.time), segment, 7))) segment += 1;
+  expect(segment).toBeGreaterThan(0);
+  expect(listings.every((page) => page.limit === 1_000)).toBe(true);
+  expect(listings.some((page) => page.prefix === 'runs/' && page.cursor !== undefined)).toBe(true);
+  expect(store.objects.has(old)).toBe(false);
+  expect(store.objects.has(recent)).toBe(true);
+  expect(store.objects.has(current)).toBe(true);
+  expect([...store.objects.keys()].some((key) => key.startsWith('runs/partial/'))).toBe(false);
+  expect(store.text('index.xml')).toBe(index);
+  expect(store.objects.has('runs/recent/published.json')).toBe(true);
+  expect([...store.objects.keys()].some((key) => key.startsWith('runs/current/cleanup/'))).toBe(false);
+  const beforeFailure = [...store.objects].map(([key, object]) => [key, new Uint8Array(object.body)] as const);
+  await expect(
+    exportSitemaps(
+      options(
+        store,
+        new MemorySteps(),
+        [
+          {
+            type: 'subjects',
+            read: async () => {
+              throw new Error('feed failed');
+            },
+            family,
+          },
+        ],
+        { runId: 'failed' },
+      ),
+    ),
+  ).rejects.toThrow('feed failed');
+  for (const [key, body] of beforeFailure) expect(store.objects.get(key)?.body).toEqual(body);
+  const missingBucket = { get: async () => null } as unknown as R2Bucket;
+  for (const path of ['/sitemap.xml', `/sitemap-subjects-${'4'.repeat(24)}.xml.gz`, '/sitemap-malformed.xml.gz']) {
+    const response = (await sitemapResponse(new Request(`${origin}${path}`, { method: 'HEAD' }), {
+      SITEMAPS: missingBucket,
+    }))!;
+    expect(response.status).toBe(path === '/sitemap.xml' ? 503 : 404);
+    expect(response.body).toBeNull();
+  }
+});
+
+test('cleanup keeps an unfinished run with a newer object on a later page and stops before sweeping a newer index', async () => {
+  const store = new MemoryStore();
+  store.time -= 10 * 24 * 60 * 60 * 1_000;
+  for (let index = 0; index < 1_001; index += 1)
+    await store.put(`runs/pending/${String(index).padStart(4, '0')}`, 'part');
+  const shard = `shards/subjects-${'5'.repeat(24)}.xml.gz`;
+  await store.put(shard, 'old shard');
+  store.time = startTime;
+  await store.put('runs/pending/z-new', 'new part');
+  await store.put('index.xml', 'first index');
+  const runner: SitemapStepRunner = { do: (_name, run) => run() };
+  let segment = 0;
+  while (!(await cleanupSitemapExportSegment(store, runner, 'cleanup', new Date(store.time), segment, 5))) segment += 1;
+  expect([...store.objects.keys()].filter((key) => key.startsWith('runs/pending/'))).toHaveLength(1_002);
+  store.time -= 10 * 24 * 60 * 60 * 1_000;
+  await store.put(shard, 'still old shard');
+  store.time = startTime;
+  let changed = false;
+  const newer: SitemapStepRunner = {
+    async do(_name, run) {
+      const result = await run();
+      if (!changed && typeof result === 'object' && result !== null && 'phase' in result && result.phase === 'shards') {
+        changed = true;
+        await store.put('index.xml', 'newer index');
+      }
+      return result;
+    },
+  };
+  await cleanupSitemapExportSegment(store, newer, 'next-cleanup', new Date(store.time), 0);
+  expect(changed).toBe(true);
+  expect(store.objects.has(shard)).toBe(true);
+  expect(store.text('index.xml')).toBe('newer index');
+});
+
+test('publication recovers its staged run after an uncertain conditional index write', async () => {
+  const store = new MemoryStore();
+  const key = `shards/subjects-${'6'.repeat(24)}.xml.gz`;
+  await store.put(key, 'shard');
+  const files = [{ key, uploaded: new Date(store.time).toISOString() }];
+  await store.put('runs/recovered/subjects.json', JSON.stringify(files));
+  const put = store.put.bind(store);
+  store.put = async (key, value, condition) => {
+    const result = await put(key, value, condition);
+    if (key === 'index.xml' && result) throw new Error('response lost after publication');
+    return result;
+  };
+  await publishSitemapExport({
+    runId: 'recovered',
+    origin,
+    store,
+    indexSnapshot: null,
+    filesByFeed: new Map([['subjects', files]]),
+    now: new Date(store.time),
+  });
+  expect(store.objects.has('runs/recovered/published.json')).toBe(true);
+  expect(listedPaths(store.text('index.xml'))).toEqual([`${origin}/sitemap-subjects-${'6'.repeat(24)}.xml.gz`]);
+  // Replaying a successful publication with its original snapshot recovers by the stored index contents.
+  await publishSitemapExport({
+    runId: 'recovered',
+    origin,
+    store,
+    indexSnapshot: null,
+    filesByFeed: new Map([['subjects', files]]),
+    now: new Date(store.time),
+  });
+  expect(store.objects.has(key)).toBe(true);
 });

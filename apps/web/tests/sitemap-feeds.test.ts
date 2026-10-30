@@ -89,10 +89,15 @@ class MemoryStore implements SitemapStore {
     return { key, etag: 'etag', uploaded: '2026-10-20T00:00:00.000Z' };
   }
 
-  async list(prefix: string): Promise<SitemapObject[]> {
-    return [...this.objects.keys()]
-      .filter((key) => key.startsWith(prefix))
-      .map((key) => ({ key, etag: 'etag', uploaded: '2026-10-20T00:00:00.000Z' }));
+  async list(prefix: string, cursor: string | null = null) {
+    const keys = [...this.objects.keys()]
+      .filter((key) => key.startsWith(prefix) && (cursor === null || key > cursor))
+      .sort();
+    const page = keys.slice(0, 1_000);
+    return {
+      objects: page.map((key) => ({ key, etag: 'etag', uploaded: '2026-10-20T00:00:00.000Z' })),
+      cursor: keys.length > page.length ? page.at(-1)! : null,
+    };
   }
 
   async delete(key: string): Promise<void> {

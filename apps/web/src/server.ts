@@ -17,6 +17,7 @@ import { problem, problemResponse } from './media/kernel.ts';
 import { mediaRequest, type MediaEnv } from './media/index.ts';
 import { sitemapResponse, type SitemapEnv } from './sitemap/serve.ts';
 import { sitemapFeeds } from './sitemap/feeds.ts';
+import { cleanupSitemapExportSegment } from './sitemap/workflow.ts';
 import {
   exportSitemapFeedSegment,
   publishSitemapExport,
@@ -63,7 +64,7 @@ type SitemapWorkflowEnv = SitemapEnv & {
   SITEMAP_EXPORT: SitemapWorkflowBinding;
 };
 
-type SitemapWorkflowParams = { runId?: string; feedType?: string; segment?: number };
+type SitemapWorkflowParams = { runId?: string; feedType?: string; segment?: number; cleanupSegment?: number };
 
 class WorkflowSitemapSteps implements SitemapStepRunner {
   constructor(private readonly step: WorkflowStep) {}
@@ -108,6 +109,28 @@ export class SitemapExport extends WorkflowEntrypoint<SitemapWorkflowEnv, Sitema
       const runId = params.runId ?? event.instanceId;
       const store = sitemapR2Store(this.env.SITEMAPS);
       const runner = new WorkflowSitemapSteps(step);
+      if (params.cleanupSegment !== undefined) {
+        const completed = await cleanupSitemapExportSegment(
+          store,
+          runner,
+          runId,
+          event.timestamp,
+          params.cleanupSegment,
+        );
+        if (!completed) {
+          const cleanupSegment = params.cleanupSegment + 1;
+          await runner.do(
+            `start-cleanup-${cleanupSegment}`,
+            () =>
+              startSitemapWorkflow(this.env.SITEMAP_EXPORT, `${runId}-cleanup-${cleanupSegment}`, {
+                runId,
+                cleanupSegment,
+              }),
+            sitemapStepRetryPolicy(),
+          );
+        }
+        return;
+      }
       const feeds = sitemapFeeds();
       if (params.feedType) {
         const feed = feeds.find((candidate) => candidate.type === params.feedType);
@@ -200,6 +223,11 @@ export class SitemapExport extends WorkflowEntrypoint<SitemapWorkflowEnv, Sitema
           });
           return true;
         },
+        sitemapStepRetryPolicy(),
+      );
+      await runner.do(
+        'start-cleanup',
+        () => startSitemapWorkflow(this.env.SITEMAP_EXPORT, `${runId}-cleanup`, { runId, cleanupSegment: 0 }),
         sitemapStepRetryPolicy(),
       );
     } catch (error) {

@@ -1,3 +1,4 @@
+import { cleanupSitemapExportSegment } from './workflow.ts';
 import { packShards, sitemapIndexXml, type SitemapFamily, type SitemapShard } from './pack.ts';
 
 export type SitemapExportFeed<Item> = {
@@ -8,13 +9,15 @@ export type SitemapExportFeed<Item> = {
 };
 
 export type SitemapObject = { key?: string; etag: string; uploaded: string };
+export type SitemapObjectPage = { objects: SitemapObject[]; cursor: string | null };
 export type SitemapWriteCondition = { ifMatch?: string; ifNoneMatch?: boolean };
 
 export interface SitemapStore {
   head(key: string): Promise<SitemapObject | null>;
   get(key: string): Promise<Uint8Array | null>;
   put(key: string, value: string | Uint8Array, condition?: SitemapWriteCondition): Promise<SitemapObject | null>;
-  list(prefix: string): Promise<SitemapObject[]>;
+  /** One lexicographically ordered native page, at most 1,000 objects; null ends the listing. */
+  list(prefix: string, cursor?: string | null): Promise<SitemapObjectPage>;
   delete(key: string): Promise<void>;
 }
 
@@ -53,20 +56,26 @@ export function sitemapR2Store(bucket: R2Bucket): SitemapStore {
       });
       return stored ? object(key, stored.httpEtag, stored.uploaded) : null;
     },
-    async list(prefix) {
-      const items: SitemapObject[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await bucket.list({ prefix, limit: 1_000, ...(cursor ? { cursor } : {}) });
-        items.push(...page.objects.map((value) => object(value.key, value.httpEtag, value.uploaded)));
-        cursor = page.truncated ? page.cursor : undefined;
-      } while (cursor);
-      return items;
+    async list(prefix, cursor) {
+      const page = await bucket.list({ prefix, limit: 1_000, ...(cursor ? { cursor } : {}) });
+      return {
+        objects: page.objects.map((value) => object(value.key, value.httpEtag, value.uploaded)),
+        cursor: page.truncated ? page.cursor : null,
+      };
     },
     async delete(key) {
       await bucket.delete(key);
     },
   };
+}
+
+async function* listedObjects(store: SitemapStore, prefix: string): AsyncGenerator<SitemapObject> {
+  let cursor: string | null = null;
+  do {
+    const page = await store.list(prefix, cursor);
+    yield* page.objects;
+    cursor = page.cursor;
+  } while (cursor !== null);
 }
 
 export type SitemapRetryPolicy = {
@@ -114,7 +123,6 @@ const batchFamilyLimit = 2_000;
 const batchRequestLimit = 20;
 const retryLimit = 5;
 const retryBaseMs = 10_000;
-const retentionMs = 7 * 24 * 60 * 60 * 1000;
 const fileName = /^shards\/([a-z]+)-([0-9a-f]{24})\.xml\.gz$/;
 
 class NoProgressError extends Error {
@@ -382,7 +390,7 @@ export async function exportSitemapFeedSegment<Item>(
       lastKey = undefined;
       previousIds = [];
       files.clear();
-      for (const part of await options.store.list(partPrefix)) await options.store.delete(part.key!);
+      for await (const part of listedObjects(options.store, partPrefix)) await options.store.delete(part.key!);
       continue;
     }
     for (const file of result.files) files.set(file.key, file);
@@ -391,7 +399,7 @@ export async function exportSitemapFeedSegment<Item>(
     previousIds = result.previousIds;
     if (cursor === null) {
       const completed = new Map<string, ExportFile>();
-      for (const part of await options.store.list(partPrefix)) {
+      for await (const part of listedObjects(options.store, partPrefix)) {
         const values = jsonValue<ExportFile[]>(await options.store.get(part.key!), part.key!);
         for (const file of values) completed.set(file.key, file);
       }
@@ -399,7 +407,7 @@ export async function exportSitemapFeedSegment<Item>(
       const keptFiles = [...completed.values()];
       await options.store.put(`runs/${runId}/${feed.type}.json`, JSON.stringify(keptFiles));
       await options.store.delete(stateKey).catch(() => undefined);
-      for (const part of await options.store.list(partPrefix)) await options.store.delete(part.key!);
+      for await (const part of listedObjects(options.store, partPrefix)) await options.store.delete(part.key!);
       return true;
     }
   }
@@ -441,63 +449,6 @@ function jsonValue<T>(bytes: Uint8Array | null, key: string): T {
 
 type PublishedRun = { publishedAt: string; types: string[] };
 
-async function cleanup(
-  store: SitemapStore,
-  now: Date,
-  currentFiles: readonly ExportFile[],
-  shards: readonly SitemapObject[],
-  runObjects: readonly SitemapObject[],
-): Promise<void> {
-  const cutoff = now.valueOf() - retentionMs;
-  const markers = runObjects.filter((object) => object.key?.endsWith('/published.json'));
-  const recent = new Set(currentFiles.map((file) => file.key));
-  const lastListed = new Map<string, number>();
-  const runTimes = new Map<string, number>();
-
-  for (const marker of markers) {
-    const key = marker.key!;
-    const runId = key.slice('runs/'.length, -'/published.json'.length);
-    const body = await store.get(key);
-    const published = jsonValue<PublishedRun>(body, key);
-    const publishedAt = Date.parse(published.publishedAt);
-    if (!Number.isFinite(publishedAt)) throw new Error(`Sitemap run ${runId} has an invalid publication time`);
-    runTimes.set(runId, publishedAt);
-    for (const type of published.types) {
-      const listKey = `runs/${runId}/${type}.json`;
-      const listBody = await store.get(listKey);
-      const files = jsonValue<ExportFile[]>(listBody, listKey);
-      for (const file of files) {
-        lastListed.set(file.key, Math.max(publishedAt, lastListed.get(file.key) ?? -Infinity));
-        if (publishedAt > cutoff) recent.add(file.key);
-      }
-    }
-  }
-
-  for (const shard of shards) {
-    const key = shard.key!;
-    if (recent.has(key)) continue;
-    const last = lastListed.get(key) ?? Date.parse(shard.uploaded);
-    if (Number.isFinite(last) && now.valueOf() - last >= retentionMs) await store.delete(key);
-  }
-
-  const runIds = new Set(runObjects.map((object) => /^runs\/([^/]+)\//.exec(object.key ?? '')?.[1]).filter(Boolean));
-  for (const runId of runIds) {
-    const time =
-      runTimes.get(runId!) ??
-      Math.max(
-        ...runObjects
-          .filter((object) => object.key?.startsWith(`runs/${runId}/`))
-          .map((object) => Date.parse(object.uploaded))
-          .filter(Number.isFinite),
-      );
-    if (Number.isFinite(time) && now.valueOf() - time >= retentionMs) {
-      for (const object of runObjects) {
-        if (object.key?.startsWith(`runs/${runId}/`)) await store.delete(object.key);
-      }
-    }
-  }
-}
-
 export type SitemapPublicationOptions = {
   runId: string;
   origin: string;
@@ -523,10 +474,8 @@ export async function publishSitemapExport(options: SitemapPublicationOptions): 
       lastmod: parseUploaded(file.uploaded, file.key),
     }));
     const xml = sitemapIndexXml(options.origin, entries);
-    const shards = await options.store.list('shards/');
-    const existing = new Set(shards.map((shard) => shard.key));
     for (const file of uniqueFiles) {
-      if (!existing.has(file.key)) throw new Error(`Listed sitemap shard ${file.key} does not exist`);
+      if (!(await options.store.head(file.key))) throw new Error(`Listed sitemap shard ${file.key} does not exist`);
     }
     // Stage the run marker before publication. A lost conditional write removes it best-effort; at worst, a stale
     // marker retains extra shards until the next cleanup pass.
@@ -534,7 +483,6 @@ export async function publishSitemapExport(options: SitemapPublicationOptions): 
       `runs/${options.runId}/published.json`,
       JSON.stringify({ publishedAt: options.now.toISOString(), types: feedKeys } satisfies PublishedRun),
     );
-    const runObjects = await options.store.list('runs/');
     let published = false;
     try {
       const result = await options.store.put(
@@ -559,11 +507,6 @@ export async function publishSitemapExport(options: SitemapPublicationOptions): 
         // A stale marker only delays garbage collection; it cannot affect the public index or its shards.
       }
       throw new StaleIndexError();
-    }
-    try {
-      await cleanup(options.store, options.now, uniqueFiles, shards, runObjects);
-    } catch (error) {
-      options.log?.({ message: 'sitemap export failed', feed: 'publication', step: 'cleanup', error });
     }
   } catch (error) {
     options.log?.({ message: 'sitemap export failed', feed: 'publication', step: 'publish-index', error });
@@ -593,6 +536,14 @@ export async function exportSitemaps<Item>(options: SitemapExportOptions<Item>):
     now,
     log: options.log,
   });
+  try {
+    // The standalone entry point uses the same cleanup state machine without adding feed-runner steps.
+    const runner: SitemapStepRunner = { do: (_name, run) => run() };
+    let segment = 0;
+    while (!(await cleanupSitemapExportSegment(options.store, runner, options.runId, now, segment))) segment += 1;
+  } catch (error) {
+    options.log?.({ message: 'sitemap export failed', feed: 'publication', step: 'cleanup', error });
+  }
 }
 
 /** Starts the one daily instance named by its UTC calendar day; a duplicate id means the day already started. */
