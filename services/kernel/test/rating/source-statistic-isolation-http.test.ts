@@ -270,7 +270,10 @@ test('Ratings and reviews: imported statistics stay labelled, independently auth
   const unknownRead = await fixture.request('GET', `/v1/subjects/${unknownSubjectId}/source-statistics`, {
     actor: fixture.actors.secondImporter,
   });
-  expect(hiddenProblem).toEqual(await readProblem(unknownRead, 404));
+  const unknownProblem = await readProblem(unknownRead, 404);
+  const withoutRequestId = (problem: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(problem).filter(([field]) => field !== 'request_id'));
+  expect(withoutRequestId(hiddenProblem)).toEqual(withoutRequestId(unknownProblem));
   expect(JSON.stringify(hiddenProblem)).not.toContain('private-attribution-sentinel-record');
   expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel licence');
   expect(JSON.stringify(hiddenProblem)).not.toContain('Private attribution sentinel attribution.');

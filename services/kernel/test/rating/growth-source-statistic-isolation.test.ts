@@ -154,9 +154,9 @@ async function seedUnrelatedHistory(
           AND recorded_transaction_id = subject_id) AS subjects_hot,
        (SELECT count(*)::integer FROM rating.source_statistic WHERE source_record_id LIKE '${historyPrefix}%') AS statistics,
        (SELECT count(*)::integer FROM rating.source_statistic WHERE route = $1 AND source_record_id LIKE '${historyPrefix}%') AS statistics_hot,
-       (SELECT count(*)::integer FROM rating.vote WHERE question_id = $4 AND units = 20
+       (SELECT count(*)::integer FROM rating.vote WHERE question_id = $2 AND units = 20
           AND changed_at = '2026-10-01T00:00:00Z') AS votes,
-       (SELECT count(*)::integer FROM rating.vote WHERE route = $1 AND question_id = $4 AND units = 20
+       (SELECT count(*)::integer FROM rating.vote WHERE route = $1 AND question_id = $2 AND units = 20
           AND changed_at = '2026-10-01T00:00:00Z') AS votes_hot,
        (SELECT count(*)::integer FROM core.receipt WHERE command_kind = 'rating.source_statistic.write'
           AND idempotency_key LIKE '${historyPrefix}receipt-%') AS receipts,
@@ -169,7 +169,7 @@ async function seedUnrelatedHistory(
        (SELECT count(*)::integer FROM editorial.write_basis WHERE client_id = 'rating-source-statistic-isolation-growth') AS basis,
        (SELECT count(*)::integer FROM editorial.write_basis WHERE partition_no = $3
           AND client_id = 'rating-source-statistic-isolation-growth') AS basis_hot`,
-    [hotRoute, scale, hotPartition, STANDARD_QUESTION_ID],
+    [hotRoute, STANDARD_QUESTION_ID, hotPartition],
   );
   const actual = counts.rows[0]!;
   const hotRouteRows = scale / 2;
