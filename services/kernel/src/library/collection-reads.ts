@@ -348,6 +348,7 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
       );
       editor = await withConnection(pool, (client) => check(deadlineClient(client, deadline)));
     }
+    const kind = await readKind(viewer, row, deadline);
     if (row.coverMediaId !== null || row.presentationKind === null) {
       const final = await loadCollection(viewer, row.id, deadline);
       if (!final) throw notFound();
@@ -359,7 +360,6 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
       )
         throw new ProblemError('dependency_unavailable');
     }
-    const kind = await readKind(viewer, row, deadline);
     return {
       ...collectionView(row),
       ...collectionPresentation(row, cover),
