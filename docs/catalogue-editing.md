@@ -106,6 +106,10 @@ freshness. Rows retain native stream order; neither a first page nor its array i
 composition. Contents, volumes, episodes and tracks use only existing emitted canonical relations. A missing
 relation profile or qualified assertion stays unavailable for editing.
 
+The entry retains the current native Context and Realm address. Current relation contribution APIs admit Global
+only, so another Context or a Realm shows the existing unsupported-context explanation without reading or writing
+a substitute Global composition.
+
 Inverse rows belong to the individual part, not the displayed parent. Corrections keep that exact holder,
 property, target or external address, and optional native slot key. The existing relation editor supplies target
 discovery, citations, native validation, exact-slot competition and explicit decision/selection controls. Only an
