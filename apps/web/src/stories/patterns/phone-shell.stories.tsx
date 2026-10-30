@@ -214,7 +214,8 @@ export const SearchEmpty: Story = {
     const { canvas } = await search(context);
     await expect(canvas.getByText(m.header_search_recent_empty())).toBeVisible();
     await realmState(context, 'ready');
-    await expect(emptyRealms).toHaveBeenCalledExactlyOnceWith({ locale: getLocale(), sort: 'trending', limit: 20 });
+    await expect(emptyRealms).toHaveBeenCalledTimes(1);
+    await expect(emptyRealms).toHaveBeenLastCalledWith({ locale: getLocale(), sort: 'trending', limit: 20 });
   },
 };
 export const SearchRecent: Story = {
@@ -233,7 +234,8 @@ export const SearchTrending: Story = {
     const { canvas } = await search(context);
     await expect(canvas.getByRole('heading', { name: m.header_search_trending_searches() })).toBeVisible();
     const region = await realmState(context, 'ready');
-    await expect(readyRealms).toHaveBeenCalledExactlyOnceWith({ locale: getLocale(), sort: 'trending', limit: 20 });
+    await expect(readyRealms).toHaveBeenCalledTimes(1);
+    await expect(readyRealms).toHaveBeenLastCalledWith({ locale: getLocale(), sort: 'trending', limit: 20 });
     // Until Content's module is delivered, the composed boundary must report unavailable, even for this fake.
     if (region.querySelector('[data-realm-discovery-producer="unavailable"]')) {
       await expect(within(region).getByText(m.realm_shelf_unavailable())).toBeVisible();

@@ -76,7 +76,7 @@ export type SearchRealmDiscoveryRequest = Readonly<{
 export type SearchRealmDiscoveryLoader = (input: SearchRealmDiscoveryRequest) => Promise<Page>;
 
 const readSearchRealmDiscovery = createServerFn({ method: 'GET' })
-  .inputValidator((data: SearchRealmDiscoveryRequest) => ({
+  .validator((data: SearchRealmDiscoveryRequest) => ({
     locale: data.locale,
     ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
   }))
