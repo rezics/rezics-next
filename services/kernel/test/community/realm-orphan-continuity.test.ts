@@ -389,16 +389,28 @@ test('native platform claim approval installs a real owner, replays after its st
     ['realm:approve_claim'],
   );
   const first = await approveRealmClaim(deps(), approver.actor, input, context(key));
-  expect(first.value).toMatchObject({
+  expect(first).toMatchObject({
     ...input,
     claimantAccountId: claimant.actor.accountId,
     state: 'owned',
     orphanedAt: pending.value.orphanedAt,
   });
+  const receipts = async () =>
+    (
+      await system.database.pool.query(
+        `SELECT transaction_id::text,epoch,position::text,response FROM core.receipt
+         WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+           AND command_kind='access.realm.claim.approve' AND response->>'realmId'=$3
+           AND response->>'requestId'=$4 ORDER BY transaction_id`,
+        [partitionOf(routeOf(realm.realmId)!), approver.actor.accountId, realm.realmId, input.requestId],
+      )
+    ).rows;
+  const originalReceipt = await receipts();
+  expect(originalReceipt).toHaveLength(1);
+  expect(originalReceipt[0].response).toEqual(first);
   const replay = await approveRealmClaim(deps(), approver.actor, input, context(key));
-  expect(replay.replayed).toBe(true);
-  expect(replay.value).toEqual(first.value);
-  expect(replay.transactionId).toBe(first.transactionId);
+  expect(replay).toEqual(first);
+  expect(await receipts()).toEqual(originalReceipt);
   const row = (
     await system.database.pool.query(
       `SELECT r.ownership_state,r.orphaned_at,r.claim_eligible_at,c.state,c.approved_at::text
@@ -412,7 +424,7 @@ test('native platform claim approval installs a real owner, replays after its st
     orphaned_at: null,
     claim_eligible_at: null,
     state: 'approved',
-    approved_at: first.value.approvedAt,
+    approved_at: first.approvedAt,
   });
   expect(
     (
@@ -434,11 +446,12 @@ test('native platform claim approval installs a real owner, replays after its st
   expect(http.status).toBe(200);
   expect(await http.json()).toEqual({
     claim: {
-      ...first.value,
-      orphanedAt: new Date(first.value.orphanedAt).toISOString(),
-      approvedAt: new Date(first.value.approvedAt).toISOString(),
+      ...first,
+      orphanedAt: new Date(first.orphanedAt).toISOString(),
+      approvedAt: new Date(first.approvedAt).toISOString(),
     },
   });
+  expect(await receipts()).toEqual(originalReceipt);
   await system.database.pool.query(
     `DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_kind='identity'
      AND subject_id=$3 AND action='realm:approve_claim'`,

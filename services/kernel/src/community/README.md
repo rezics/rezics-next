@@ -252,12 +252,12 @@ It writes no Access grants and exposes no second approval command.
 
 `POST /v1/realms/{realmId}/claimRequests/{requestId}:approve` delegates to Accounts' sole `approveRealmClaim`
 command and returns `{claim:{realmId,requestId,claimantAccountId,state:'owned',orphanedAt,approvedAt}}`.
-Accounts must check current DIRECT Global `realm:approve_claim` before receipt replay, prepare current claimant
-admission and write the real owner grant. Source locking belongs to the new effect after receipt handling, allowing
+The delivered Accounts command checks current DIRECT Global `realm:approve_claim` before receipt replay, prepares
+current claimant admission and writes the real owner grant. Source locking belongs to the new effect after receipt handling, allowing
 a successful replay after its own state change. Resource-only event payloads do not remove actor, principal or
 claimant custody: the native command owner must declare their actual associations through shared-history facilities.
-The agreed Accounts command currently has an unavailable-only declaration here; mounting this route does not deliver
-approval authorization, grants or history coverage. No role gains approval or restoration actions through this seam.
+The route consumes its exact public approval result directly; it does not invent command metadata or a second
+approval operation. No role gains approval or restoration actions through this seam.
 
 `lockRealmOwnershipSource(tx, realmId)` locks the existing continuity fields, including a removed Realm for mechanical
 cleanup. `applyRealmOwnershipSuccession(tx, source, erasedAccountId)` itself calls Accounts'
@@ -276,8 +276,8 @@ The default Community participant must invoke this segment before retiring that 
 producer remains unavailable in this checkout: there is no delivered `member_locator` schema or native owner-locator
 reader to bind, so this integration does not invent an enumeration or a second membership engine.
 `account_erasure_progress` is orchestration only; neither role loss nor a final ACK supplies succession authority.
-The existing Community participant remains the sole coordinator and ACK writer. Native default-path and approval
-readiness still require their missing owner implementations; the segment and route alone do not establish it.
+The existing Community participant remains the sole coordinator and ACK writer. Native default-path readiness still
+requires the missing membership page producer; the segment and route alone do not establish it.
 
 Claim requests are held in the Realm home. A request point touches one native identity/head, one full requester
 key and a bounded receipt/event bundle, without enumerating members, requests or grants. The claim-requested

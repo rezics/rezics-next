@@ -1224,7 +1224,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           security: writeSecurity,
         },
       },
-      async ({ params, headers, actor, admission, job, session }) => {
+      async ({ params, headers, actor, admission, job }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
@@ -1233,12 +1233,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               deadline: job.deadline,
               idempotencyKey: key,
             });
-            session.record(result);
             return {
               claim: {
-                ...result.value,
-                orphanedAt: new Date(result.value.orphanedAt).toISOString(),
-                approvedAt: new Date(result.value.approvedAt).toISOString(),
+                ...result,
+                orphanedAt: new Date(result.orphanedAt).toISOString(),
+                approvedAt: new Date(result.approvedAt).toISOString(),
               },
             };
           });
