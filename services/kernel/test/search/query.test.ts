@@ -426,8 +426,8 @@ test('malformed direct ordinary after tuples reject before engine I/O', () => {
   };
   for (const sort of ordinarySorts)
     for (const after of invalid[sort])
-      expect(() => searchSubjects(client, keyset, { sort, size: 2, after: after as SearchPlan['after'] })).toThrow(
-        RangeError,
-      );
+      expect(() =>
+        searchSubjects(client, keyset, { sort, size: 2, after: after as NonNullable<SearchPlan['after']> }),
+      ).toThrow(RangeError);
   expect(calls).toBe(0);
 });
