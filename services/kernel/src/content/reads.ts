@@ -48,7 +48,10 @@ import read from './read-chain.sql';
 import pageCounts from './reaction-count-page.sql';
 import viewerReactions from './reaction-viewer.sql';
 import pageSubjectReactionCounts from './subject-reaction-count-page.sql';
+import readBoardBatch from './read-board-batch.sql';
 import readChainBatch from './read-chain-batch.sql';
+import readPostBatch from './read-post-batch.sql';
+import readRevisionBatch from './read-revision-batch.sql';
 import readRealmBatch from './read-realm-batch.sql';
 import banCurrentManyBatch from './ban-current-many-batch.sql';
 import matchThreadTextBatch from './match-thread-text-batch.sql';
@@ -239,15 +242,20 @@ async function batchRows(
   query = '',
 ): Promise<Row[]> {
   if (keys.length === 0) return [];
+  const statement = {
+    board: readBoardBatch,
+    thread: readChainBatch,
+    post: readPostBatch,
+    revision: readRevisionBatch,
+  }[kind];
   const parameters = {
     keys: JSON.stringify(keys),
-    kind,
     include_body: includeBody,
     query,
   };
   const result = await client.query<Row>(
-    readChainBatch.sql,
-    readChainBatch.params.map((name) => parameters[name as keyof typeof parameters]),
+    statement.sql,
+    statement.params.map((name) => parameters[name as keyof typeof parameters]),
   );
   return result.rows;
 }
@@ -451,6 +459,12 @@ const fingerprint = (value: Chain | null) =>
   value &&
   JSON.stringify([signature(value.thread), ...value.posts.map(signature), value.revision && signature(value.revision)]);
 
+/** A withheld placeholder is authorized only by the current committed
+ * moderation decision joined for this row's security revision. */
+function isCommittedWithheldReference(row: Row): boolean {
+  return row.kind === 'post' && row.visibility === 'taken_down' && row.decision_id !== null;
+}
+
 function admissible(row: Row, actor: Actor, tombstone: boolean): boolean {
   if (row.visibility === 'draft' && (actor.kind !== 'account' || row.author_id !== actor.accountId)) return false;
   if (row.visibility === 'taken_down' || row.availability === 'erased') return tombstone;
@@ -503,7 +517,8 @@ function readResource(
         // Erased public slots still require the requested scope from account tokens.
         if (placeholder && actor.kind === 'account' && !actor.scopes.includes(action)) return false;
         return (
-          (current.visibility === 'published' || (withheldReference && current.visibility === 'taken_down')) &&
+          (current.visibility === 'published' ||
+            (withheldReference && isCommittedWithheldReference(current) && current.visibility === 'taken_down')) &&
           ((!tombstone && current.availability === 'available') || placeholder)
         );
       },
@@ -737,7 +752,8 @@ export async function readBoardPageCandidateSnapshot<T>(
 
 function contentFloor(row: Row, tombstone: boolean, placeholder: boolean, withheldReference = false): boolean {
   return (
-    (row.visibility === 'published' || (withheldReference && row.visibility === 'taken_down')) &&
+    (row.visibility === 'published' ||
+      (withheldReference && isCommittedWithheldReference(row) && row.visibility === 'taken_down')) &&
     ((!tombstone && row.availability === 'available') || placeholder)
   );
 }
@@ -785,7 +801,7 @@ export async function selectBoardThreadCandidates(
       const post = postByThread.get(threadId);
       const revision = post ? revisionByPost.get(post.id) : undefined;
       const erased = !!post && (post.availability === 'erased' || revision?.availability === 'erased');
-      const isWithheld = !!post && !erased && post.visibility === 'taken_down';
+      const isWithheld = !!post && !erased && isCommittedWithheldReference(post);
       tombstones.set(threadId, erased);
       if (post) {
         tombstones.set(post.id, erased || isWithheld || post.availability === 'erased');
@@ -911,7 +927,7 @@ export async function discloseBoardPageThreads(
     for (const [id, post] of postByThread) {
       const revision = revisionByPost.get(post.id);
       const erased = post.availability === 'erased' || revision?.availability === 'erased';
-      const withheld = !erased && post.visibility === 'taken_down';
+      const withheld = !erased && isCommittedWithheldReference(post);
       threadTombstone.set(id, erased);
       postTombstone.set(post.id, erased || withheld || post.availability === 'erased');
       postPlaceholder.set(post.id, post.availability === 'erased' || withheld);
@@ -1088,10 +1104,10 @@ async function disclose(
   const rows = initial ? [initial.thread, ...initial.posts] : [];
   const checks: AccessCheck[] = [];
   const erasedProof = erased ? { explicit: false } : undefined;
-  const withheld = threadReference && !erased && initial?.posts[0]?.visibility === 'taken_down';
+  const withheld = threadReference && !erased && !!initial?.posts[0] && isCommittedWithheldReference(initial.posts[0]);
   if (board?.value) {
     for (const row of rows) {
-      const withheldReference = threadReference && row.kind === 'post' && row.visibility === 'taken_down';
+      const withheldReference = threadReference && isCommittedWithheldReference(row);
       const erasureRead =
         withheldReference ||
         row.availability === 'erased' ||
@@ -1136,7 +1152,7 @@ async function disclose(
           context.actor,
           erased ||
             rows[index]!.availability === 'erased' ||
-            (threadReference && rows[index]!.kind === 'post' && rows[index]!.visibility === 'taken_down'),
+            (threadReference && isCommittedWithheldReference(rows[index]!)),
         ) ||
         !(await checks[index]!(client))
       )
@@ -1154,7 +1170,7 @@ async function disclose(
       !erasedProof.explicit &&
       ((revisionId && !replayAuthorizes) ||
         [current.thread, ...current.posts].some(
-          (row) => row.visibility === 'taken_down' && !(threadReference && row.kind === 'post'),
+          (row) => row.visibility === 'taken_down' && !(threadReference && isCommittedWithheldReference(row)),
         ))
     )
       return null;
