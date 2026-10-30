@@ -39,7 +39,7 @@ export async function runKernelTypecheck(
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
   if (env.DATABASE_URL) return runCommands(env);
 
-  // An unset receipt-check host setting selects the local compiler database;
+  // An unset check-host setting selects the local compiler database;
   // the shared explicit placement opt-out also remains authoritative here.
   const placed =
     env.REZICS_STACK_REMOTE === 'off' || !env.KERNEL_CHECK_REMOTE
