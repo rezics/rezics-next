@@ -1347,8 +1347,10 @@ export class MergeTrain {
             rebaseOnto(trainTree, previous, originalBase, logPath, derivedFiles, request.declaredPaths);
           } catch (error) {
             const conflicts = unmergedFiles(trainTree);
-            if (conflicts.length)
-              result.rebaseConflict = makeRebaseConflictContext(previous, tip, conflicts);
+            if (conflicts.length) {
+              const context = makeRebaseConflictContext(previous, tip, conflicts);
+              if (context) result.rebaseConflict = context;
+            }
             if (error instanceof WorkerConflictError) {
               refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
               localOutcomes.set(entry.id, result);
@@ -2707,7 +2709,8 @@ export class MergeTrain {
         const conflicts = canonicalConflictPaths(unmergedFiles(trainTree));
         if (conflicts.length) {
           result.conflictedFiles = conflicts;
-          result.rebaseConflict = makeRebaseConflictContext(activeTargetHead, workerCommit, conflicts);
+          const context = makeRebaseConflictContext(activeTargetHead, workerCommit, conflicts);
+          if (context) result.rebaseConflict = context;
         }
       }
       result.firstFailure = firstFailure(message);
