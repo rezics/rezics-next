@@ -32,6 +32,10 @@ Type, so clients do not traverse ancestors. Unknown fields, image ratios, unknow
 duplicate keys fail compilation and release validation. Older releases without the object remain valid.
 Existing `coverRatio`, stored media dimensions, cover metadata and accepted personal profile semantics stay intact.
 
+keyFacts may select ONLY effective properties representable by the EXISTING Fact projection: wikibase-item, time, quantity, or an existing admitted patterned-code string.
+Document/media/free-text properties are rejected at authoring/compilation; they never silently become fake code or
+complete-empty facts. No new Fact variant, engine or endpoint is introduced.
+
 Until actual generated handoff, Web treats new fields as additive/optional and uses an explicit exact-Type
 fallback: `schema:Book`, `bf:Instance`, `schema:ComicSeries` and `schema:PublicationVolume` use portrait 3:4;
 `schema:Movie`, `schema:TVSeries`, `schema:TVSeason`, `schema:Episode`, `rezics:AnimeRelease` and `schema:Recipe`
