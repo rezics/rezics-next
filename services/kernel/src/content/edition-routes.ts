@@ -75,8 +75,10 @@ function expected(request: Request): string {
 export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: EditionCommandDependencies) {
   app.wrap((handle) => async (request) => {
     const response = await handle(request);
-    if (new URL(request.url).pathname.startsWith('/v1/contentEditions') ||
-      /^\/v1\/accounts\/[^/]+\/editions$/.test(new URL(request.url).pathname))
+    if (
+      new URL(request.url).pathname.startsWith('/v1/contentEditions') ||
+      /^\/v1\/accounts\/[^/]+\/editions$/.test(new URL(request.url).pathname)
+    )
       response.headers.set('cache-control', 'private, no-store');
     return response;
   });
@@ -85,15 +87,24 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
       '/v1/accounts/:accountId/editions',
       {
         params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
-        query: t.Object({
-          cursor: t.Optional(t.String({ maxLength: 4096 })),
-          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
-        }, { additionalProperties: false }),
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
+          },
+          { additionalProperties: false },
+        ),
         response: {
-          200: withHeaders(t.Object({
-            editions: t.Array(strictContentSchema(ContentEditionSchema), { maxItems: 20 }),
-            next: t.Union([t.String(), t.Null()]),
-          }, { additionalProperties: false }), { 'cache-control': t.String() }),
+          200: withHeaders(
+            t.Object(
+              {
+                editions: t.Array(strictContentSchema(ContentEditionSchema), { maxItems: 20 }),
+                next: t.Union([t.String(), t.Null()]),
+              },
+              { additionalProperties: false },
+            ),
+            { 'cache-control': t.String() },
+          ),
           ...failures,
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
@@ -107,9 +118,12 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
       async ({ actor, params: { accountId }, query, admission, job, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         set.headers['cache-control'] = 'private, no-store';
-        return operation(() => admission.run('normal', job, () =>
-          readCreatorEditions(deps, actor, { accountId, ...query }, { deadline: job.deadline }),
-        ));
+        return operation(() =>
+          admission.run('normal', job, async () => {
+            const result = await readCreatorEditions(deps, actor, { accountId, ...query }, { deadline: job.deadline });
+            return { editions: [...result.editions], next: result.next };
+          }),
+        );
       },
     )
     .post(

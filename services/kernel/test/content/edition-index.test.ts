@@ -7,7 +7,11 @@ import { createKernel, type Kernel } from '../../src/http/kernel.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
 import type { ContentEditionView } from '../../src/content/edition-model.ts';
-import { createCreatorEditionIndexEffect, readCreatorEditions, type CreatorEditionPage } from '../../src/content/edition-index.ts';
+import {
+  createCreatorEditionIndexEffect,
+  readCreatorEditions,
+  type CreatorEditionPage,
+} from '../../src/content/edition-index.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { partitionOf } from '../../src/route/route.ts';
 import { CommandUnavailableError } from '../../src/command/command.ts';
@@ -167,14 +171,23 @@ async function project(f: Awaited<ReturnType<typeof fixture>>, editionId: string
     [partitionOf(f.route), f.route, editionId],
   );
   const committed = await f.native.database.pool.query<{
-    id: string; type: string; subject: string; data: unknown;
-  }>(`SELECT id,type,subject,data FROM core.outbox WHERE partition_no=$1 AND position=$2
+    id: string;
+    type: string;
+    subject: string;
+    data: unknown;
+  }>(
+    `SELECT id,type,subject,data FROM core.outbox WHERE partition_no=$1 AND position=$2
        AND type='com.rezics.content.edition.created.v1' AND subject=$3`,
-    [partitionOf(f.route), basis.rows[0]!.position, editionId]);
+    [partitionOf(f.route), basis.rows[0]!.position, editionId],
+  );
   const row = committed.rows[0]!;
   const event: CloudEvent = {
-    specversion: '1.0', datacontenttype: 'application/json',
-    id: row.id, type: row.type, subject: row.subject, data: row.data,
+    specversion: '1.0',
+    datacontenttype: 'application/json',
+    id: row.id,
+    type: row.type,
+    subject: row.subject,
+    data: row.data,
     time: new Date().toISOString(),
     source: `urn:rezics:log:${partitionOf(f.route)}.${basis.rows[0]!.epoch}`,
     sequence: String(basis.rows[0]!.position).padStart(19, '0'),
@@ -196,7 +209,14 @@ test('Native creator edition inventory for returning to genuine draft and publis
     next: null,
   });
   expect(Object.keys(initial.editions[0]!).sort()).toEqual([
-    'creatorAccountId', 'editionId', 'editionRevision', 'licence', 'revisionId', 'sha256', 'state', 'targetSubjectId',
+    'creatorAccountId',
+    'editionId',
+    'editionRevision',
+    'licence',
+    'revisionId',
+    'sha256',
+    'state',
+    'targetSubjectId',
   ]);
   expect((await wire(f.buyer.bearer, path)).status).toBe(404);
   expect((await wire(f.token, `/v1/accounts/${f.buyer.actor.accountId}/editions`)).status).toBe(404);
@@ -206,9 +226,14 @@ test('Native creator edition inventory for returning to genuine draft and publis
 
   // Creation remains the sole authority: the projector accepts a committed event,
   // never client source/rights and never an order or entitlement record.
-  const second = await value<{ editionId: string; editionRevision: string }>(wire(f.token, '/v1/contentEditions', 'POST', {
-    postId: f.post.id, revisionId: f.post.revisionId, targetSubjectId: f.targetSubjectId,
-  }), 201);
+  const second = await value<{ editionId: string; editionRevision: string }>(
+    wire(f.token, '/v1/contentEditions', 'POST', {
+      postId: f.post.id,
+      revisionId: f.post.revisionId,
+      targetSubjectId: f.targetSubjectId,
+    }),
+    201,
+  );
   await project(f, second.editionId);
   await value(wire(f.token, `/v1/contentEditions/${second.editionId}:publish`, 'POST', {}, '1'), 200);
   const both = await value<CreatorEditionPage>(wire(f.token, path), 200);
@@ -222,7 +247,10 @@ test('Native creator edition inventory for returning to genuine draft and publis
   const secondPage = await value<CreatorEditionPage>(wire(f.token, `${path}?limit=1&cursor=${continuation}`), 200);
   expect(secondPage.editions.map((edition) => edition.editionId)).toEqual([second.editionId]);
   expect((await wire(f.token, `${path}?limit=2&cursor=${continuation}`)).status).toBe(400);
-  expect((await wire(f.buyer.bearer, `/v1/accounts/${f.buyer.actor.accountId}/editions?limit=1&cursor=${continuation}`)).status).toBe(400);
+  expect(
+    (await wire(f.buyer.bearer, `/v1/accounts/${f.buyer.actor.accountId}/editions?limit=1&cursor=${continuation}`))
+      .status,
+  ).toBe(400);
   expect((await wire(f.token, `${path}?cursor=forged`)).status).toBe(400);
 
   // A denied first candidate consumes the examined budget. A full hidden page
@@ -233,7 +261,9 @@ test('Native creator edition inventory for returning to genuine draft and publis
   expect(hidden.next).toBeString();
   await value(wire(f.token, `/v1/contentEditions/${second.editionId}:unpublish`, 'POST', {}, '2'), 200);
   const withdrawn = await value<CreatorEditionPage>(wire(f.token, path), 200);
-  expect(withdrawn.editions.map((edition) => [edition.editionId, edition.state])).toEqual([[second.editionId, 'withdrawn']]);
+  expect(withdrawn.editions.map((edition) => [edition.editionId, edition.state])).toEqual([
+    [second.editionId, 'withdrawn'],
+  ]);
 
   // Refusals introduced between page preparation and final metadata cannot leak.
   let reads = 0;
@@ -246,8 +276,12 @@ test('Native creator edition inventory for returning to genuine draft and publis
     },
     authorize: (...args) => f.native.access.authorize(...args),
   };
-  const raced = await readCreatorEditions({ pool: f.native.database.pool, access }, f.author.actor,
-    { accountId }, { deadline: Date.now() + 10000 });
+  const raced = await readCreatorEditions(
+    { pool: f.native.database.pool, access },
+    f.author.actor,
+    { accountId },
+    { deadline: Date.now() + 10000 },
+  );
   expect(reads).toBe(2);
   expect(raced.editions).toEqual([]);
 }, 60000);
@@ -259,9 +293,16 @@ test('creator inventory preserves current source denial and retryable partition 
   const path = `/v1/accounts/${accountId}/editions`;
   await seedResourceDenial(f.native.database.pool, f.route, f.post.id, accountId, ['post:read']);
   expect(await value<CreatorEditionPage>(wire(f.token, path), 200)).toEqual({ editions: [], next: null });
-  await f.native.database.pool.query("UPDATE core.partition SET write_state='moved',moved_to='other' WHERE partition_no=$1",
-    [partitionOf(f.route)]);
-  await expect(readCreatorEditions({ pool: f.native.database.pool, access: f.native.access }, f.author.actor,
-    { accountId }, { deadline: Date.now() + 10000 })).rejects.toBeInstanceOf(CommandUnavailableError);
+  await f.native.database.pool.query(
+    "UPDATE core.partition SET write_state='moved',moved_to='other' WHERE partition_no=$1",
+    [partitionOf(f.route)],
+  );
+  await expect(
+    readCreatorEditions(
+      { pool: f.native.database.pool, access: f.native.access },
+      f.author.actor,
+      { accountId },
+      { deadline: Date.now() + 10000 },
+    ),
+  ).rejects.toBeInstanceOf(CommandUnavailableError);
 }, 60000);
-

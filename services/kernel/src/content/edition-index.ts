@@ -45,10 +45,12 @@ export async function readCreatorEditions(
   const native = receiptKeysFor(deps.pool);
   const ring = {
     current: native.current,
-    keys: new Map([...native.keys].map(([version, key]) => [
-      version,
-      createHmac('sha256', key).update('content.creator-editions.list-cursor.v1').digest(),
-    ])),
+    keys: new Map(
+      [...native.keys].map(([version, key]) => [
+        version,
+        createHmac('sha256', key).update('content.creator-editions.list-cursor.v1').digest(),
+      ]),
+    ),
   };
   const binding = {
     route: 'GET /v1/accounts/{accountId}/editions',
@@ -56,8 +58,13 @@ export async function readCreatorEditions(
     query: { accountId: input.accountId, limit },
   };
   const decoded = input.cursor === undefined ? null : await decodeListCursor(ring, binding, input.cursor, now);
-  if (decoded && (!decoded.ok || decoded.after.length !== 1 ||
-    typeof decoded.after[0] !== 'string' || routeOf(decoded.after[0]) === null))
+  if (
+    decoded &&
+    (!decoded.ok ||
+      decoded.after.length !== 1 ||
+      typeof decoded.after[0] !== 'string' ||
+      routeOf(decoded.after[0]) === null)
+  )
     throw new InvalidCreatorEditionCursorError('Invalid edition cursor');
   const candidates = await editionSnapshot(deps, input.accountId, context, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
@@ -66,7 +73,7 @@ export async function readCreatorEditions(
     return page.run(client, {
       route,
       creator_account_id: input.accountId,
-      after: decoded?.ok ? decoded.after[0] as string : '00000000-0000-0000-0000-000000000000',
+      after: decoded?.ok ? (decoded.after[0] as string) : '00000000-0000-0000-0000-000000000000',
       limit,
     });
   });
@@ -93,9 +100,10 @@ export async function readCreatorEditions(
   const last = candidates.value.at(-1);
   return {
     editions,
-    next: last && candidates.value.length === limit
-      ? await encodeListCursor(ring, binding, { epoch: candidates.anchor.epoch, after: [last.edition_id] }, now)
-      : null,
+    next:
+      last && candidates.value.length === limit
+        ? await encodeListCursor(ring, binding, { epoch: candidates.anchor.epoch, after: [last.edition_id] }, now)
+        : null,
   };
 }
 
@@ -113,41 +121,72 @@ export function createCreatorEditionIndexEffect(pool: Pool): Effect {
       const source = /^urn:rezics:log:(0|[1-9][0-9]*)\.([1-9][0-9]*)$/.exec(event.source);
       const epoch = Number(source?.[2]);
       const position = /^\d{19}$/.test(event.sequence) ? BigInt(event.sequence) : 0n;
-      if (route === null || !source || Number(source[1]) !== partitionOf(route) ||
-        !Number.isSafeInteger(epoch) || epoch > 2147483647 || position <= 0n ||
-        position > 9223372036854775807n || event.subject !== data.editionId || data.editionRevision !== '1')
+      if (
+        route === null ||
+        !source ||
+        Number(source[1]) !== partitionOf(route) ||
+        !Number.isSafeInteger(epoch) ||
+        epoch > 2147483647 ||
+        position <= 0n ||
+        position > 9223372036854775807n ||
+        event.subject !== data.editionId ||
+        data.editionRevision !== '1'
+      )
         throw new TypeError('Invalid creator edition event envelope');
-      const original = await editionSnapshot({ pool }, data.editionId, { deadline: Date.now() + 3000 }, async (client) => {
-        const partition = await readPartition(client, partitionOf(route));
-        if (!partition || epoch > partition.epoch || (epoch === partition.epoch && position > partition.position))
-          throw new Error('Edition source partition unavailable');
-        const row = await editionRow(client, data.editionId);
-        if (!row) throw new Error('Edition source missing');
-        // Verify this exact committed creation, including its transaction, rather
-        // than trusting a caller-supplied creator or an edition-shaped reference.
-        const committed = await client.query(
-          `SELECT id FROM core.outbox WHERE partition_no=$1 AND epoch=$2 AND position=$3
+      const original = await editionSnapshot(
+        { pool },
+        data.editionId,
+        { deadline: Date.now() + 3000 },
+        async (client) => {
+          const partition = await readPartition(client, partitionOf(route));
+          if (!partition || epoch > partition.epoch || (epoch === partition.epoch && position > partition.position))
+            throw new Error('Edition source partition unavailable');
+          const row = await editionRow(client, data.editionId);
+          if (!row) throw new Error('Edition source missing');
+          // Verify this exact committed creation, including its transaction, rather
+          // than trusting a caller-supplied creator or an edition-shaped reference.
+          const committed = await client.query(
+            `SELECT id FROM core.outbox WHERE partition_no=$1 AND epoch=$2 AND position=$3
              AND id=$4 AND type=$5 AND subject=$6 AND data=$7::jsonb
              AND EXISTS (SELECT 1 FROM editorial.write_basis w
                WHERE w.partition_no=$1 AND w.transaction_id=$8 AND w.epoch=$2 AND w.position=$3
                  AND w.principal_kind='account' AND w.principal_id=$9)`,
-          [partitionOf(route), epoch, position.toString(), event.id, created,
-            data.editionId, JSON.stringify(data), row.recorded_transaction_id, row.creator_account_id],
-        );
-        if (committed.rowCount !== 1) throw new TypeError('Edition creation provenance mismatch');
-        return row;
-      });
+            [
+              partitionOf(route),
+              epoch,
+              position.toString(),
+              event.id,
+              created,
+              data.editionId,
+              JSON.stringify(data),
+              row.recorded_transaction_id,
+              row.creator_account_id,
+            ],
+          );
+          if (committed.rowCount !== 1) throw new TypeError('Edition creation provenance mismatch');
+          return row;
+        },
+      );
       const creator = original.value.creator_account_id;
       const home = routeOf(creator);
       if (home === null) throw new TypeError('Invalid edition creator');
       await runCommand(pool, { partition: partitionOf(home) }, async (tx) => {
         if (await lockErasureFence(tx, creator)) return noEffect(null);
-        const added = await insert.run(tx, { route: home, creator_account_id: creator, edition_id: data.editionId });
-        if (!added) return noEffect(null);
+        const parameters = { route: home, creator_account_id: creator, edition_id: data.editionId };
+        const added = await tx.query(
+          insert.sql,
+          insert.params.map((name) => parameters[name]),
+        );
+        if (added.rowCount === 0) return noEffect(null);
         return {
           value: null,
-          events: [{ type: 'com.rezics.content.edition.creator-indexed.v1', subject: data.editionId,
-            data: { editionId: data.editionId, creatorAccountId: creator } }],
+          events: [
+            {
+              type: 'com.rezics.content.edition.creator-indexed.v1',
+              subject: data.editionId,
+              data: { editionId: data.editionId, creatorAccountId: creator },
+            },
+          ],
         };
       });
     },

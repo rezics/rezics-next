@@ -44,7 +44,14 @@ async function readEditionMetadata(deps: Dependencies, id: string, context: Read
       throw new ContentNotFoundError();
     const accessContext = { pool: deps.pool, deadline: context.deadline, time };
     const source = sourceOf(row);
-    const guard = await prepareEditionSource(deps, source, context, time, accessContext, creator || row.state !== 'published');
+    const guard = await prepareEditionSource(
+      deps,
+      source,
+      context,
+      time,
+      accessContext,
+      creator || row.state !== 'published',
+    );
     if (!guard || !(await guard.final())) throw new ContentNotFoundError();
     const resource = {
       route: row.route,
