@@ -171,6 +171,16 @@ async function seedNativeHistory() {
     await stepIdentityEpochAdmission(db.pool, job);
     expect((await stepIdentityEpochAdmission(db.pool, job)).state).toBe('cancelled');
   }
+  // Retain actual source exports and receiving custody at independent homes. The
+  // bootstrap trials must start with indexed metadata and redirect history too,
+  // rather than measuring a growing tiny-table sequential scan between trials.
+  for (let partition = 0x100; partition < 0x500; partition++) {
+    const original = await createNative(partition * 16);
+    await seedLegacyGroup({ admin: db.admin }, original, 1);
+    const progress = await stepIdentityEpochBootstrap(db.pool, partition);
+    expect(progress.work.rows).toBe(2);
+    expect(progress.native.transactionId).toBeString();
+  }
   await settle(db, { analyze: true });
 }
 
