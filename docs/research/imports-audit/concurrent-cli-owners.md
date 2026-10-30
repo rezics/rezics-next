@@ -19,7 +19,9 @@ Decisions: cancellation recovery is the required ordinary operator journey. A pr
 for it; this caller makes no new process-birth recovery claim. Bibliographic inputs retain native work revision 7
 and edition revision 11, with A's controlled refresh at revision 8. Covers and unknown-licensed prose are omitted
 from the supplied input. Converter revision is read from the actual Open Library export (`open-library@3`).
-No production defect is presumed from the missing caller, and no production policy changes are needed to bind it.
+The local connected acquisition proof reached an existing cancellation defect: the staging catch classified an
+AbortSignal read interruption as invalid input (CLI code 2). It now recognizes the actual aborted signal as
+interrupted (CLI code 130), preserving invalid-input classification for non-cancellation failures.
 
 The raw native log emits `concurrent CLI native evidence`, including each invocation's actual result,
 input SHA-256, consumed bytes, EOF/return observations, Auth paths, exact public request/response bytes,

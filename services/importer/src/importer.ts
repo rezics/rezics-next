@@ -1026,7 +1026,7 @@ export class Importer {
         } catch (error) {
           store.seal(run, { complete: false, reason: 'malformed' });
           return finish(
-            error instanceof Interrupted ? 'interrupted' : 'invalid-dump',
+            signal.aborted || error instanceof Interrupted ? 'interrupted' : 'invalid-dump',
             'Input is incomplete or invalid',
           );
         }
