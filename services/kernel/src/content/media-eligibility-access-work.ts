@@ -72,8 +72,8 @@ type ParentReads = Readonly<{
 function parentWork(plan: ParentPlan): AccessWork {
   const input =
     plan.kind === 'board'
-      ? { route: plan.route, id: plan.id }
-      : { route: plan.route, id: plan.id, kind: plan.kind };
+      ? [plan.route, plan.id]
+      : [plan.route, plan.id, plan.kind];
   return {
     keys: plan.kind === 'container' ? 3 : plan.kind === 'post' ? 2 : 1,
     points: plan.kind === 'container' ? 3 : plan.kind === 'post' ? 2 : 1,
@@ -89,7 +89,7 @@ function authorWork(plan: ParentPlan): AccessWork {
     points: 1,
     witnesses: 0,
     rows: 1,
-    bytes: bytes({ route: plan.route, id: plan.id }) + bytes({ author_account_id: uuid }),
+    bytes: bytes([plan.route, plan.id]) + bytes([{ author_account_id: uuid }]),
     emptySeeks: 1,
   };
 }
@@ -260,11 +260,13 @@ export function mediaEligibilityCallbacks<E>(options: Readonly<{
         return result;
       };
       const parentInput = plan && (plan.kind === 'board'
-        ? { route: plan.route, id: plan.id }
-        : { route: plan.route, id: plan.id, kind: plan.kind });
+        ? [plan.route, plan.id]
+        : [plan.route, plan.id, plan.kind]);
+      const wireRows = (value: unknown) =>
+        value === null || value === undefined ? [] : Array.isArray(value) ? value : [value];
       const result = await options.verify(context, {
-        parent: (dispatch) => read('parent', parent, parentInput, dispatch),
-        author: (dispatch) => read('author', author, plan && { route: plan.route, id: plan.id }, dispatch),
+        parent: (dispatch) => read('parent', parent, parentInput, dispatch, wireRows),
+        author: (dispatch) => read('author', author, plan && [plan.route, plan.id], dispatch, wireRows),
         media: (dispatch) => read(
           'media', media, mediaPlan && mediaParameters(mediaPlan), () => dispatch(bounded),
           (value) => value === null ? [] : [value],
@@ -281,7 +283,7 @@ export function mediaEligibilityCallbacks<E>(options: Readonly<{
           // The unchanged native walker still validates kind, routes and cycles.
           if (bounded && (!node || (input.route !== node.input.route || input.id !== node.input.id || input.kind !== node.input.kind)))
             throw new TypeError('Media eligibility ancestry changed before dispatch');
-          return read(`ancestor:${ancestorIndex++}`, node?.work, input, dispatch);
+          return read(`ancestor:${ancestorIndex++}`, node?.work, [input.route, input.id, input.kind], dispatch, wireRows);
         },
       });
       if (bounded && ((plan && !dispatched.has('parent')) || (mediaPlan && !dispatched.has('media'))))

@@ -263,6 +263,7 @@ test('bounded image misses, failures and exhausted admission preserve native cha
 });
 
 test('post image receipts charge the actual bounded chain and refuse changed ancestry before extra IO', async () => {
+  const threadId = '01900000-0000-7000-8000-000100000002';
   for (const changed of [false, true]) {
     const { work, admitted } = accounting();
     let parentDispatches = 0;
@@ -270,7 +271,7 @@ test('post image receipts charge the actual bounded chain and refuse changed anc
       evidence: row,
       media: {
         kind: 'download', route: 1, id, format: 'webp', width: 320,
-        ancestors: [{ id, kind: 'post' }, { id, kind: 'thread' }],
+        ancestors: [{ id, kind: 'post' }, { id: threadId, kind: 'thread' }],
       },
       async verify(_input, reads) {
         await reads.media(async () => ({ variant_key: `m/${id}/webp-320` }));
@@ -278,9 +279,9 @@ test('post image receipts charge the actual bounded chain and refuse changed anc
           parentDispatches++;
           return [row];
         });
-        await reads.ancestor({ route: 1, id, kind: changed ? 'post' : 'thread' }, async () => {
+        await reads.ancestor({ route: 1, id: threadId, kind: changed ? 'post' : 'thread' }, async () => {
           parentDispatches++;
-          return [{ ...row, kind: 'thread' }];
+          return [{ ...row, id: threadId, thread_id: threadId, kind: 'thread' }];
         });
         return true;
       },
