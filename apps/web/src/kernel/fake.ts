@@ -838,7 +838,8 @@ function searchHit(fixtures: Fixtures, subject: FixtureSubject) {
 function searchRead(fixtures: Fixtures, read: Extract<PageRead, { kind: 'search' }>) {
   const filter = read.body.filter;
   // This fixture has no native evaluator or cursor producer for configured FilterDocuments.
-  if (read.cursor || (!('type' in filter) && !('statement' in filter && 'in' in filter.statement))) return undefined;
+  if (('cursor' in read && read.cursor) || (!('type' in filter) && !('statement' in filter && 'in' in filter.statement)))
+    return undefined;
   if (fixtures.searchWithoutTotal) {
     const named = 'statement' in filter && 'in' in filter.statement ? filter.statement : undefined;
     const ids = new Set(named?.in ?? []);
