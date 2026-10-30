@@ -144,8 +144,8 @@ export const OrphanReadable: Story = {
     const view = within(canvasElement);
     await expect(await view.findByRole('heading', { name: available.title, level: 2 })).toBeVisible();
     await expect(await view.findByText(m.board_community_members_unknown())).toBeVisible();
-    await expect(view.queryByRole('button', { name: m.realm_join(), exact: true })).not.toBeInTheDocument();
-    await expect(view.queryByRole('link', { name: m.realm_join(), exact: true })).not.toBeInTheDocument();
+    await expect(view.queryByRole('button', { name: m.realm_join() })).not.toBeInTheDocument();
+    await expect(view.queryByRole('link', { name: m.realm_join() })).not.toBeInTheDocument();
     await expect(view.queryByText(m.space_setup_entry())).not.toBeInTheDocument();
     await expect(view.queryByText(m.realm_appearance_heading())).not.toBeInTheDocument();
   },
