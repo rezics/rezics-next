@@ -1,11 +1,20 @@
 import type { Pool } from 'pg';
 import {
-  lockRealmOwnershipSource, applyRealmOwnershipSuccession, type LockedRealmOwnershipSource,
+  lockRealmOwnershipSource,
+  applyRealmOwnershipSuccession,
+  type LockedRealmOwnershipSource,
 } from '../community/realm-continuity.ts';
 import { resourceRoleHeld } from './resource-role-held.ts';
 import {
-  authoritativeTimeValue, commandAttemptDeadline, commandTime, currentCommand, hasLiveCommandTransaction,
-  type AuthoritativeTime, type CommandAttempt, type CommandAuthorization, type CommandTransaction,
+  authoritativeTimeValue,
+  commandAttemptDeadline,
+  commandTime,
+  currentCommand,
+  hasLiveCommandTransaction,
+  type AuthoritativeTime,
+  type CommandAttempt,
+  type CommandAuthorization,
+  type CommandTransaction,
 } from '../command/command.ts';
 import type { Access, AccessClient, Resource } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -14,8 +23,11 @@ import { deadlineClient, within } from './authenticate.ts';
 import { shareAccount } from './account-share.ts';
 import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import {
-  readCurrentResourceRolePage, verifyCurrentResourceRoleFrontier,
-  type CurrentResourceRoleAfter, type CurrentResourceRoleFrontier, type CurrentResourceRoleKey,
+  readCurrentResourceRolePage,
+  verifyCurrentResourceRoleFrontier,
+  type CurrentResourceRoleAfter,
+  type CurrentResourceRoleFrontier,
+  type CurrentResourceRoleKey,
 } from './current-resource-roles.ts';
 import { requireResourceCommand, ResourceAccessWriteDeniedError } from './resource-denials.ts';
 import catalogue from './resource-roles.json';
@@ -157,11 +169,20 @@ export async function readAppliedRealmErasureSuccession(
   input: Readonly<{ realmId: string; accountId: string }>,
 ): Promise<AppliedRealmErasureSuccession | null> {
   const binding = appliedBindings.get(tx);
-  if (!binding || !hasLiveCommandTransaction(tx) || binding.realmId !== input.realmId ||
-      binding.accountId !== input.accountId) return null;
+  if (
+    !binding ||
+    !hasLiveCommandTransaction(tx) ||
+    binding.realmId !== input.realmId ||
+    binding.accountId !== input.accountId
+  )
+    return null;
   const command = currentCommand(tx);
-  if (binding.time !== command.time || currentCommand(tx).transactionId !== binding.operationId ||
-      command.authorization?.action !== successionAction || binding.ownerSource.realmId !== input.realmId)
+  if (
+    binding.time !== command.time ||
+    currentCommand(tx).transactionId !== binding.operationId ||
+    command.authorization?.action !== successionAction ||
+    binding.ownerSource.realmId !== input.realmId
+  )
     return null;
   const resource = { route: routeOf(input.realmId)!, id: input.realmId };
   const decision = await tx.query<{ valid: boolean }>(
@@ -176,18 +197,44 @@ export async function readAppliedRealmErasureSuccession(
       AND (SELECT version::text FROM access.current_resource_role_frontier
         WHERE route=$1 AND resource_id=$2)=$15 AS valid
      FROM access.realm_erasure_succession WHERE route=$1 AND resource_id=$2 AND account_id=$3`,
-    [resource.route, resource.id, input.accountId, binding.source.route, binding.source.version,
-      binding.source.at, binding.operationId, binding.result.state, binding.candidateAccountId,
-      binding.result.orphanedAt, binding.result.claimEligibleAt, binding.ownerSource.ownershipState,
-      binding.ownerSource.orphanedAt, binding.ownerSource.claimEligibleAt, binding.frontierVersion],
+    [
+      resource.route,
+      resource.id,
+      input.accountId,
+      binding.source.route,
+      binding.source.version,
+      binding.source.at,
+      binding.operationId,
+      binding.result.state,
+      binding.candidateAccountId,
+      binding.result.orphanedAt,
+      binding.result.claimEligibleAt,
+      binding.ownerSource.ownershipState,
+      binding.ownerSource.orphanedAt,
+      binding.ownerSource.claimEligibleAt,
+      binding.frontierVersion,
+    ],
   );
   if (!decision.rows[0]?.valid) return null;
-  if (binding.candidateAccountId && !(await resourceRoleHeld(tx, {
-    resource, role: REALM_OWNER_ROLE, accountId: binding.candidateAccountId, at: command.time,
-  }))) return null;
-  if (await resourceRoleHeld(tx, {
-    resource, role: REALM_OWNER_ROLE, accountId: input.accountId, at: command.time,
-  })) return null;
+  if (
+    binding.candidateAccountId &&
+    !(await resourceRoleHeld(tx, {
+      resource,
+      role: REALM_OWNER_ROLE,
+      accountId: binding.candidateAccountId,
+      at: command.time,
+    }))
+  )
+    return null;
+  if (
+    await resourceRoleHeld(tx, {
+      resource,
+      role: REALM_OWNER_ROLE,
+      accountId: input.accountId,
+      at: command.time,
+    })
+  )
+    return null;
   appliedReaders.add(tx);
   return binding.result;
 }
@@ -217,7 +264,8 @@ type SuccessionProgress = {
 };
 const successionAction = 'internal.realm-erasure-succession';
 const pending = (reason: 'more' | 'role-source' | 'account-source'): RealmErasureSuccessionResult => ({
-  status: 'pending', reason,
+  status: 'pending',
+  reason,
 });
 
 /** Trusted native composition only. No Actor, Global action, approval or participant ACK.
@@ -245,11 +293,14 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
     parameters({ ...input, at: attempt.time });
     if (attempt.partition !== partitionOf(input.resource.route)) throw new ResourceAccessWriteDeniedError();
     const bound = Object.freeze({ resource: Object.freeze({ ...input.resource }), accountId: input.accountId });
-    const source = await within(deadline, () => withConnection(config.pool, (client) =>
-      erasureSource.run(deadlineClient(client, deadline), {
-        route: routeOf(bound.accountId)!, account_id: bound.accountId,
-      }),
-    ));
+    const source = await within(deadline, () =>
+      withConnection(config.pool, (client) =>
+        erasureSource.run(deadlineClient(client, deadline), {
+          route: routeOf(bound.accountId)!,
+          account_id: bound.accountId,
+        }),
+      ),
+    );
     if (!source) throw new ResourceAccessWriteDeniedError();
     commandAttemptDeadline(attempt);
     // The symbol is deliberately absent at runtime: only the private WeakMap is authority.
@@ -266,13 +317,24 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
       prepare: (attempt) => prepareErasureSuccession(attempt, bound),
       async authorize(tx, attempt, proof) {
         const prepared = evidence.get(proof as PreparedRealmErasureSuccession);
-        if (!prepared || prepared.attempt !== attempt || commandTime(tx) !== attempt.time ||
+        if (
+          !prepared ||
+          prepared.attempt !== attempt ||
+          commandTime(tx) !== attempt.time ||
           prepared.deadline !== commandAttemptDeadline(attempt) ||
-          prepared.input.resource.route !== bound.resource.route || prepared.input.resource.id !== bound.resource.id ||
-          prepared.input.accountId !== bound.accountId || admitted.has(tx)) throw new ResourceAccessWriteDeniedError();
-        if (!(await lock.run(tx, {
-          route: bound.resource.route, resource_id: bound.resource.id,
-        }))) throw new ResourceAccessWriteDeniedError();
+          prepared.input.resource.route !== bound.resource.route ||
+          prepared.input.resource.id !== bound.resource.id ||
+          prepared.input.accountId !== bound.accountId ||
+          admitted.has(tx)
+        )
+          throw new ResourceAccessWriteDeniedError();
+        if (
+          !(await lock.run(tx, {
+            route: bound.resource.route,
+            resource_id: bound.resource.id,
+          }))
+        )
+          throw new ResourceAccessWriteDeniedError();
         // Bind the root to an actual direct owner interval, not an erased stranger.
         // A durable decision can replay after native grant cleanup.
         const target = await tx.query<{ valid: boolean }>(
@@ -302,9 +364,15 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
   ): Promise<RealmErasureSuccessionResult> {
     const prepared = proof && evidence.get(proof);
     const command = currentCommand(tx);
-    if (!prepared || admitted.get(tx) !== proof || consumed.has(tx) ||
-      command.time !== prepared.attempt.time || command.authorization?.action !== successionAction ||
-      command.partition !== prepared.attempt.partition || commandAttemptDeadline(prepared.attempt) !== prepared.deadline)
+    if (
+      !prepared ||
+      admitted.get(tx) !== proof ||
+      consumed.has(tx) ||
+      command.time !== prepared.attempt.time ||
+      command.authorization?.action !== successionAction ||
+      command.partition !== prepared.attempt.partition ||
+      commandAttemptDeadline(prepared.attempt) !== prepared.deadline
+    )
       throw new ResourceAccessWriteDeniedError();
     const { resource, accountId } = prepared.input;
     const source = prepared.source;
@@ -322,8 +390,15 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
        (route,resource_id,account_id,source_route,source_version,source_at,
         source_ownership_state,source_orphaned_at,source_claim_eligible_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
-      [...key, source.route, source.version, source.at, ownerSource.ownershipState,
-        ownerSource.orphanedAt, ownerSource.claimEligibleAt],
+      [
+        ...key,
+        source.route,
+        source.version,
+        source.at,
+        ownerSource.ownershipState,
+        ownerSource.orphanedAt,
+        ownerSource.claimEligibleAt,
+      ],
     );
     const stored = await tx.query<SuccessionProgress>(
       `SELECT source_route,source_version,source_at::text,frontier,cursor_role,cursor_kind,cursor_subject_id::text,
@@ -337,19 +412,39 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
       [...key, ownerSource.ownershipState, ownerSource.orphanedAt, ownerSource.claimEligibleAt],
     );
     const row = stored.rows[0];
-    if (!row || row.source_route !== source.route || row.source_version !== source.version || row.source_at !== source.at)
+    if (
+      !row ||
+      row.source_route !== source.route ||
+      row.source_version !== source.version ||
+      row.source_at !== source.at
+    )
       throw new ResourceAccessWriteDeniedError();
-    const result = (state: 'owned' | 'orphaned', best: Candidate | null, operationId: string,
-      decidedAt: string, replayed: boolean): RealmErasureSuccessionResult => {
+    const result = (
+      state: 'owned' | 'orphaned',
+      best: Candidate | null,
+      operationId: string,
+      decidedAt: string,
+      replayed: boolean,
+    ): RealmErasureSuccessionResult => {
       const basis = { resource, source, operationId, decidedAt, replayed };
       if (state === 'orphaned') return { ...basis, status: 'orphaned' };
       if (!best) throw new ResourceAccessWriteDeniedError();
-      return { ...basis, status: 'owned', accountId: best.accountId,
-        disposition: best.role === REALM_OWNER_ROLE ? 'retained' : 'selected' };
+      return {
+        ...basis,
+        status: 'owned',
+        accountId: best.accountId,
+        disposition: best.role === REALM_OWNER_ROLE ? 'retained' : 'selected',
+      };
     };
-    let best: Candidate | null = row.best_account_id && row.best_role && row.best_valid && row.best_interval_key
-      ? { accountId: row.best_account_id, role: row.best_role, valid: row.best_valid, intervalKey: row.best_interval_key }
-      : null;
+    let best: Candidate | null =
+      row.best_account_id && row.best_role && row.best_valid && row.best_interval_key
+        ? {
+            accountId: row.best_account_id,
+            role: row.best_role,
+            valid: row.best_valid,
+            intervalKey: row.best_interval_key,
+          }
+        : null;
     if (!row.source_bound) return pause('role-source');
     if (row.decision_state && row.decision_operation_id && row.decided_at) {
       completed.add(tx);
@@ -359,31 +454,53 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
     const installed = resourceRoleCatalogue(config.access);
     if (!installed?.roles.has(REALM_OWNER_ROLE)) return pause('role-source');
     const eligibleRoles = roles.filter((role) => installed.roles.has(role));
-    const after: CurrentResourceRoleAfter | null = row.frontier && row.cursor_role && row.cursor_kind &&
-      row.cursor_subject_id && row.cursor_subject_role !== null && row.cursor_interval_key
-      ? { frontier: row.frontier, key: {
-          grantRole: row.cursor_role, subjectKind: row.cursor_kind, subjectId: row.cursor_subject_id,
-          subjectRole: row.cursor_subject_role, intervalKey: row.cursor_interval_key,
-        } }
-      : null;
+    const after: CurrentResourceRoleAfter | null =
+      row.frontier &&
+      row.cursor_role &&
+      row.cursor_kind &&
+      row.cursor_subject_id &&
+      row.cursor_subject_role !== null &&
+      row.cursor_interval_key
+        ? {
+            frontier: row.frontier,
+            key: {
+              grantRole: row.cursor_role,
+              subjectKind: row.cursor_kind,
+              subjectId: row.cursor_subject_id,
+              subjectRole: row.cursor_subject_role,
+              intervalKey: row.cursor_interval_key,
+            },
+          }
+        : null;
     async function reset() {
-      await tx.query(`UPDATE access.realm_erasure_succession SET frontier=NULL,cursor_role=NULL,cursor_kind=NULL,
+      await tx.query(
+        `UPDATE access.realm_erasure_succession SET frontier=NULL,cursor_role=NULL,cursor_kind=NULL,
         cursor_subject_id=NULL,cursor_subject_role=NULL,cursor_interval_key=NULL,
         best_account_id=NULL,best_role=NULL,best_valid=NULL,best_interval_key=NULL
-        WHERE route=$1 AND resource_id=$2 AND account_id=$3`, key);
+        WHERE route=$1 AND resource_id=$2 AND account_id=$3`,
+        key,
+      );
       return pause('role-source');
     }
     const page = await readCurrentResourceRolePage(tx, {
-      resource, roles: eligibleRoles, at: command.time, after, limit: 99,
+      resource,
+      roles: eligibleRoles,
+      at: command.time,
+      after,
+      limit: 99,
     });
     if (page.status !== 'ready') return after ? reset() : pause('role-source');
-    if ((await verifyCurrentResourceRoleFrontier(tx, { resource, frontier: page.frontier, at: command.time })).status !== 'ready')
+    if (
+      (await verifyCurrentResourceRoleFrontier(tx, { resource, frontier: page.frontier, at: command.time })).status !==
+      'ready'
+    )
       return reset();
     // Released observations of active accounts never prove exclusion. An active losing
     // candidate cannot outrank best later; excluded deleted identities need a permanent
     // genuine erasure root. Suspension, missing coverage and temporary fences stay pending.
     for (const candidate of page.rows) {
-      if (candidate.subjectKind !== 'identity' || candidate.subjectRole !== '' || candidate.subjectId === accountId) continue;
+      if (candidate.subjectKind !== 'identity' || candidate.subjectRole !== '' || candidate.subjectId === accountId)
+        continue;
       const account = await tx.query<{ state: string; fenced: boolean }>(
         'SELECT state,authn_fenced AS fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE',
         [routeOf(candidate.subjectId), candidate.subjectId],
@@ -396,10 +513,20 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
       }
       if (!identity || identity.state !== 'active' || identity.fenced) return pause('account-source');
       await shareAccount(tx, candidate.subjectId);
-      const next: Candidate = { accountId: candidate.subjectId, role: candidate.grantRole,
-        valid: candidate.valid, intervalKey: candidate.intervalKey };
-      const rank = (role: string) => role === REALM_OWNER_ROLE ? 4 :
-        role === 'community.realm.administrator' ? 3 : role === 'community.realm.moderator' ? 2 : 1;
+      const next: Candidate = {
+        accountId: candidate.subjectId,
+        role: candidate.grantRole,
+        valid: candidate.valid,
+        intervalKey: candidate.intervalKey,
+      };
+      const rank = (role: string) =>
+        role === REALM_OWNER_ROLE
+          ? 4
+          : role === 'community.realm.administrator'
+            ? 3
+            : role === 'community.realm.moderator'
+              ? 2
+              : 1;
       let better = !best || rank(next.role) > rank(best.role);
       if (best && rank(best.role) === rank(next.role)) {
         // PostgreSQL orders the actual native interval bounds at full precision, including
@@ -417,18 +544,31 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
     }
     if (page.after) {
       const cursor = page.after.key;
-      await tx.query(`UPDATE access.realm_erasure_succession SET frontier=$4,cursor_role=$5,cursor_kind=$6,
+      await tx.query(
+        `UPDATE access.realm_erasure_succession SET frontier=$4,cursor_role=$5,cursor_kind=$6,
         cursor_subject_id=$7,cursor_subject_role=$8,cursor_interval_key=$9,
         best_account_id=$10,best_role=$11,best_valid=$12,best_interval_key=$13
         WHERE route=$1 AND resource_id=$2 AND account_id=$3`,
-        [...key, JSON.stringify(page.frontier), cursor.grantRole, cursor.subjectKind, cursor.subjectId,
-          cursor.subjectRole, cursor.intervalKey, best?.accountId ?? null, best?.role ?? null,
-          best?.valid ?? null, best?.intervalKey ?? null]);
+        [
+          ...key,
+          JSON.stringify(page.frontier),
+          cursor.grantRole,
+          cursor.subjectKind,
+          cursor.subjectId,
+          cursor.subjectRole,
+          cursor.intervalKey,
+          best?.accountId ?? null,
+          best?.role ?? null,
+          best?.valid ?? null,
+          best?.intervalKey ?? null,
+        ],
+      );
       return pause('more');
     }
     if (best) {
-      try { await shareAccount(tx, best.accountId); }
-      catch (error) {
+      try {
+        await shareAccount(tx, best.accountId);
+      } catch (error) {
         if (error instanceof LifecycleDeniedError) return reset();
         throw error;
       }
@@ -440,17 +580,28 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
     await tx.query("SELECT set_config('access.role_native_transaction',$1,true)", [operationId]);
     if (best && best.role !== REALM_OWNER_ROLE) {
       const changed = await roleMutation.run(tx, {
-        route: resource.route, resource_id: resource.id, subject_kind: 'identity', subject_id: best.accountId,
-        subject_role: '', grant_role: REALM_OWNER_ROLE, valid: `[${at},)`, operation: 'create',
-        previous_role: REALM_OWNER_ROLE, previous_valid: '(,)', transaction_id: operationId,
+        route: resource.route,
+        resource_id: resource.id,
+        subject_kind: 'identity',
+        subject_id: best.accountId,
+        subject_role: '',
+        grant_role: REALM_OWNER_ROLE,
+        valid: `[${at},)`,
+        operation: 'create',
+        previous_role: REALM_OWNER_ROLE,
+        previous_valid: '(,)',
+        transaction_id: operationId,
       });
       if (changed.length !== 1) throw new ResourceAccessWriteDeniedError();
     }
     // This exact immutable root is the sole mechanical exception to the ordinary
     // last-holder guard, which remains unchanged for all human grant administration.
-    await tx.query(`DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2
+    await tx.query(
+      `DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2
       AND subject_kind='identity' AND subject_id=$3 AND subject_role='' AND grant_role=$4
-      AND valid @> $5::timestamptz`, [...key, REALM_OWNER_ROLE, at]);
+      AND valid @> $5::timestamptz`,
+      [...key, REALM_OWNER_ROLE, at],
+    );
     const state = best ? 'owned' : 'orphaned';
     const saved = await tx.query<{ orphanedAt: string | null; claimEligibleAt: string | null }>(
       `UPDATE access.realm_erasure_succession SET frontier=NULL,cursor_role=NULL,cursor_kind=NULL,
@@ -464,8 +615,17 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
       WHERE route=$1 AND resource_id=$2 AND account_id=$3
       RETURNING result_orphaned_at::text AS "orphanedAt",
         result_claim_eligible_at::text AS "claimEligibleAt"`,
-      [...key, best?.accountId ?? null, best?.role ?? null, best?.valid ?? null, best?.intervalKey ?? null,
-        state, operationId, at]);
+      [
+        ...key,
+        best?.accountId ?? null,
+        best?.role ?? null,
+        best?.valid ?? null,
+        best?.intervalKey ?? null,
+        state,
+        operationId,
+        at,
+      ],
+    );
     const savedResult = saved.rows[0];
     if (!savedResult) throw new ResourceAccessWriteDeniedError();
     const frontier = await tx.query<{ version: string }>(
@@ -474,14 +634,28 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
     );
     if (!frontier.rows[0]) throw new ResourceAccessWriteDeniedError();
     const applied = Object.freeze({ state, ...savedResult });
-    appliedBindings.set(tx, Object.freeze({ realmId: resource.id, accountId, time: command.time, source,
-      ownerSource, operationId, candidateAccountId: best?.accountId ?? null,
-      frontierVersion: frontier.rows[0].version, result: applied }));
+    appliedBindings.set(
+      tx,
+      Object.freeze({
+        realmId: resource.id,
+        accountId,
+        time: command.time,
+        source,
+        ownerSource,
+        operationId,
+        candidateAccountId: best?.accountId ?? null,
+        frontierVersion: frontier.rows[0].version,
+        result: applied,
+      }),
+    );
     // The Content source owner consumes the actual native result before control
     // returns to the caller. Any source/state failure rolls back grants and progress.
     const continuity = await applyRealmOwnershipSuccession(tx, ownerSource, accountId);
-    if (!appliedReaders.has(tx) || continuity.ownershipState !== state ||
-        continuity.governanceReadOnly !== (state === 'orphaned'))
+    if (
+      !appliedReaders.has(tx) ||
+      continuity.ownershipState !== state ||
+      continuity.governanceReadOnly !== (state === 'orphaned')
+    )
       throw new ResourceAccessWriteDeniedError();
     completed.add(tx);
     return result(state, best, operationId, at, false);
