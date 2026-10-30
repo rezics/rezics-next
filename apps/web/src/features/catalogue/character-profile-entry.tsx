@@ -14,10 +14,7 @@ export function CharacterProfileEntry({
 }) {
   const entry = catalogueEntries.character({ id, label, work, locale });
   return (
-    <a
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}
-      href={entry.href}
-    >
+    <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={entry.href}>
       {entry.label}
     </a>
   );
