@@ -105,6 +105,7 @@ function readPaths(context: string, subject: string) {
 }
 
 async function configuredContext() {
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'gate:definition_publication');
   for (const action of ['definitions:publish', 'definitions:activate', 'definitions:read'])
     await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', action);
   const active = await call('GET', '/v1/definitions/active', 'owner');

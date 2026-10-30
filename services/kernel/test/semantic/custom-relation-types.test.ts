@@ -228,6 +228,7 @@ beforeAll(async () => {
     editor,
   ]);
   for (const action of actions) await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:definition_publication');
   expect((await send('POST', '/v1/definitions/releases', { release: base })).status).toBe(201);
   await call('POST', `/v1/definitions/releases/${baseDigest}:activate`, { expected_head: null });
   realm = (await call('POST', '/v1/contexts', { labels: { en: 'Realm' } })).context.id;
