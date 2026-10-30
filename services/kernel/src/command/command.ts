@@ -200,6 +200,7 @@ export type CurrentCommand = CommandAttempt &
 type CommandContext = { transactionId: string; time: AuthoritativeTime };
 const times = new WeakMap<AuthoritativeTime, string>();
 const attempts = new WeakMap<CommandTransaction, CommandAttempt>();
+const attemptDeadlines = new WeakMap<CommandAttempt, number>();
 const commands = new WeakMap<CommandTransaction, CurrentCommand>();
 // Exact executor object only: copying a query or callback capability conveys no receipt authority.
 const receiptOwners = new WeakMap<
@@ -256,6 +257,14 @@ export function currentCommand(tx: CommandTransaction): CurrentCommand {
 /** Allows existing Access checks in a mutation to reuse the same attempt time. */
 export function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined {
   return attempts.get(tx)?.time;
+}
+
+/** Executor-owned budget for source preparation; copied attempts have no budget. */
+export function commandAttemptDeadline(attempt: CommandAttempt): number {
+  authoritativeTimeValue(attempt.time);
+  const deadline = attemptDeadlines.get(attempt);
+  if (deadline === undefined || Date.now() >= deadline) throw new TypeError('No live command attempt budget');
+  return deadline;
 }
 
 /** Executor internals: lend Access an attempt time without granting command authority.
@@ -534,6 +543,7 @@ async function executeCommand<T>(
           withConnection(pool, (client) => boundedRead(client, deadline, () => mintTime(client, options.clock))),
         );
         attempt = Object.freeze({ partition, basis, time });
+        attemptDeadlines.set(attempt, deadline);
         evidence = await measureCommandPhase('access_prepare', () => authorization.prepare!(attempt!));
       }
       const gate = await measureCommandPhase('gate_wait', () => enterCommandGate(pool, partition, deadline));
@@ -551,6 +561,7 @@ async function executeCommand<T>(
           await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
           time ??= await measureCommandPhase('time_mint', () => mintTime(client, options.clock));
           attempt ??= Object.freeze({ partition, basis, time });
+          attemptDeadlines.set(attempt, deadline);
           attempts.set(tx, attempt);
           const mode = authorization ? await authorization.authorize(tx, attempt, evidence) : 'execute';
           if (mode !== 'execute' && mode !== 'receipt-only') throw new TypeError('Invalid command authorization');

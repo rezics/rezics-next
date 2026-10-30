@@ -2863,3 +2863,93 @@ CREATE TRIGGER resource_role_provenance_new AFTER INSERT ON access.resource_role
 -- Delivery observes the command's actual committed envelope position, after its fence writes.
 CREATE CONSTRAINT TRIGGER resource_role_provenance_deliver AFTER INSERT ON access.resource_role_provenance
  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION access.deliver_resource_role_provenance();
+
+-- Native work locators and decisions, never a second grant/owner authority.
+CREATE TABLE access.realm_erasure_succession (
+  route integer NOT NULL,
+  resource_id uuid NOT NULL,
+  account_id uuid NOT NULL,
+  source_route integer NOT NULL,
+  source_version integer NOT NULL CHECK (source_version > 0),
+  source_at timestamptz NOT NULL,
+  frontier jsonb,
+  cursor_role text,
+  cursor_kind text,
+  cursor_subject_id uuid,
+  cursor_subject_role text,
+  cursor_interval_key bigint,
+  best_account_id uuid,
+  best_role text,
+  best_valid tstzrange,
+  best_interval_key bigint,
+  decision_state text CHECK (decision_state IN ('owned', 'orphaned')),
+  decision_operation_id uuid,
+  decided_at timestamptz,
+  PRIMARY KEY (route, resource_id, account_id),
+  CHECK (route = (get_byte(uuid_send(resource_id),10)*256+get_byte(uuid_send(resource_id),11))),
+  CHECK (source_route = (get_byte(uuid_send(account_id),10)*256+get_byte(uuid_send(account_id),11))),
+  CHECK ((decision_state IS NULL) = (decision_operation_id IS NULL)),
+  CHECK ((decision_state IS NULL) = (decided_at IS NULL)),
+  CHECK (decision_state IS DISTINCT FROM 'owned' OR best_account_id IS NOT NULL),
+  CHECK (decision_state IS DISTINCT FROM 'orphaned' OR best_account_id IS NULL)
+);
+CREATE INDEX realm_erasure_succession_account ON access.realm_erasure_succession(account_id,route,resource_id);
+CREATE INDEX realm_erasure_succession_candidate ON access.realm_erasure_succession(best_account_id,route,resource_id,account_id)
+  WHERE best_account_id IS NOT NULL;
+CREATE INDEX realm_erasure_succession_cursor ON access.realm_erasure_succession(cursor_subject_id,route,resource_id,account_id)
+  WHERE cursor_subject_id IS NOT NULL;
+
+CREATE FUNCTION access.guard_realm_erasure_succession() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Realm succession source custody has no consumer closure' USING ERRCODE = '23514';
+  END IF;
+  IF ROW(NEW.route,NEW.resource_id,NEW.account_id,NEW.source_route,NEW.source_version,NEW.source_at)
+       IS DISTINCT FROM ROW(OLD.route,OLD.resource_id,OLD.account_id,OLD.source_route,OLD.source_version,OLD.source_at)
+     OR (OLD.decision_state IS NOT NULL AND NEW IS DISTINCT FROM OLD) THEN
+    RAISE EXCEPTION 'Realm succession source and terminal decision are immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END; $$;
+CREATE TRIGGER realm_erasure_succession_custody BEFORE UPDATE OR DELETE ON access.realm_erasure_succession
+  FOR EACH ROW EXECUTE FUNCTION access.guard_realm_erasure_succession();
+
+-- Retain the exact Content-owned source episode with the native decision.
+-- Null source fields identify older, unbound work; they never prove application.
+ALTER TABLE access.realm_erasure_succession
+  ADD COLUMN source_ownership_state text CHECK (source_ownership_state IN ('owned','orphaned')),
+  ADD COLUMN source_orphaned_at timestamptz,
+  ADD COLUMN source_claim_eligible_at timestamptz,
+  ADD COLUMN result_orphaned_at timestamptz,
+  ADD COLUMN result_claim_eligible_at timestamptz,
+  ADD CONSTRAINT realm_erasure_succession_source_episode CHECK (
+    source_ownership_state IS NULL OR
+    (source_ownership_state='owned' AND source_orphaned_at IS NULL AND source_claim_eligible_at IS NULL) OR
+    (source_ownership_state='orphaned' AND source_orphaned_at IS NOT NULL AND
+      source_claim_eligible_at IS NOT NULL AND
+      source_claim_eligible_at=source_orphaned_at+interval '720 hours')
+  ),
+  ADD CONSTRAINT realm_erasure_succession_result_episode CHECK (
+    source_ownership_state IS NULL OR
+    (decision_state IS DISTINCT FROM 'orphaned' AND
+      result_orphaned_at IS NULL AND result_claim_eligible_at IS NULL) OR
+    (decision_state='orphaned' AND result_orphaned_at IS NOT NULL AND
+      result_claim_eligible_at IS NOT NULL AND
+      result_orphaned_at=COALESCE(source_orphaned_at,source_at) AND
+      result_claim_eligible_at=result_orphaned_at+interval '720 hours')
+  );
+
+CREATE OR REPLACE FUNCTION access.guard_realm_erasure_succession() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Realm succession source custody has no consumer closure' USING ERRCODE = '23514';
+  END IF;
+  IF ROW(NEW.route,NEW.resource_id,NEW.account_id,NEW.source_route,NEW.source_version,NEW.source_at,
+         NEW.source_ownership_state,NEW.source_orphaned_at,NEW.source_claim_eligible_at)
+       IS DISTINCT FROM ROW(OLD.route,OLD.resource_id,OLD.account_id,OLD.source_route,OLD.source_version,OLD.source_at,
+         OLD.source_ownership_state,OLD.source_orphaned_at,OLD.source_claim_eligible_at)
+     OR (OLD.decision_state IS NOT NULL AND NEW IS DISTINCT FROM OLD) THEN
+    RAISE EXCEPTION 'Realm succession source and terminal decision are immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END; $$;

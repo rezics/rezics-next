@@ -40,6 +40,9 @@ export const ERASURE_DISCOVERY_ROLES: readonly (readonly [string, string, Routin
   ['credential_floor_receipt', 'account_id', 'owner', 'route:int,account_id:uuid,opening_receipt_id:uuid', ''],
   ['erasure', 'account_id', 'owner', 'route:int,account_id:uuid', ''],
   ['erasure_acknowledgement', 'account_id', 'owner', 'route:int,account_id:uuid,participant:text', ''],
+  ['realm_erasure_succession', 'account_id', 'partitions', 'route:int,resource_id:uuid,account_id:uuid', ''],
+  ['realm_erasure_succession', 'best_account_id', 'partitions', 'route:int,resource_id:uuid,account_id:uuid', ''],
+  ['realm_erasure_succession', 'cursor_subject_id', 'partitions', 'route:int,resource_id:uuid,account_id:uuid', ''],
   ['governance_bootstrap', 'account_id', 'zero', 'route:int,resource_id:uuid', ''],
   [
     'governance_reach',

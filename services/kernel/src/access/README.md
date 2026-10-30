@@ -692,25 +692,67 @@ It retains ordinary scopes, grantor anti-amplification,
 principal admission and authorization before receipt replay. The native command result contains
 `{resource, subject: {kind: 'account', id}, role, valid}` and the ordinary command outcome version fields.
 
-Content must integrate the leave guard in its existing native membership writer. Erasure succession requires a
-separate real native preparation/application helper: original committed account erasure/version and cause,
-target/generation/deadline binding, independently released current candidate account evidence, deterministic
-longest-serving administrator then moderator selection, and same-Realm transaction grant application returning
-the actual successor/version or stable `orphanedAt`/`claimAfter`. That helper and its bounded resumable candidate
-work are not delivered by the guard or by creation-only `initializeResourceGrants`. There is no succession
-constructor/result exported yet. Content owns resource state, freeze/readability, claim requests and native
-removal/restore records; Access must not store a parallel orphan owner or issue a foreign acknowledgement.
-No approved platform claim application authority is delivered. The 30-day deadline alone confers no grant power.
+Content integrates the leave guard in its existing native membership writer. The separate native
+`createRealmOwnershipCommands({pool,access,clock?})` constructor exposes:
 
-The native current-role frontier is supplied by `readCurrentResourceRolePage` and
-`verifyCurrentResourceRoleFrontier`; positive account admission is supplied by `shareAccount` on the live
-command transaction. Those primitives do not themselves bind an account's immutable
-`(route, account_id, version, at)` erasure obligation to a resumable Realm candidate traversal and its final
-same-transaction application. The existing erasure discovery cursor enumerates stored rows for cleanup,
-including history, and is not a candidate-work checkpoint. A released candidate page alone cannot certify the
-exhausted frontier at application time. The remaining seam is a durable continuation contract from Content's
-erasure progress to the verified Realm writer transaction, preserving the source obligation and frontier while
-resuming bounded pages after a crash. The membership transition writer remains its sole producer.
+```ts
+prepareErasureSuccession(attempt: CommandAttempt, input: RealmErasureSuccessionInput): Promise<PreparedRealmErasureSuccession>;
+erasureSuccessionAuthorization(input: RealmErasureSuccessionInput): RealmErasureSuccessionAuthorization;
+applyErasureSuccession(tx: CommandTransaction, prepared?: PreparedRealmErasureSuccession): Promise<RealmErasureSuccessionResult>;
+readAppliedRealmErasureSuccession(tx: CommandTransaction, input: {realmId: string; accountId: string}): Promise<AppliedRealmErasureSuccession | null>;
+```
+
+The input is only `{resource,accountId}`. Pass the constructor's authorization to the existing `runCommand`
+executor, with the Realm partition, fixed request deadline and service clock; its `prepare` runs before Realm
+checkout. The body calls `applyErasureSuccession(tx)` on that same command. No initiating actor, platform account,
+current human permission, Community progress or participant ACK supplies authority. Preparation reads the exact
+immutable native `access.erasure` `(route,account_id,version,at)` and genuine account tombstone, releases that
+checkout and privately binds evidence to the executor attempt, T, deadline and exact target. Copies, other attempts
+and second applications in one transaction refuse. The internal authorization checks the actual direct erased
+owner source (or its durable decision); it conveys no person or Global action.
+
+Each application examines 99 current native role keys plus one lookahead, retaining a durable cursor, finite native
+frontier/horizon and best interval locator. The installed order is owner, moderator, then member/standing at equal
+rank; an administrator participates before moderator only when independently installed by the trusted catalogue.
+Within a rank, actual native interval start then identity key decide. Groups and membership graphs are never
+expanded. Existing explicit owners retain their actual grants; selection creates ownership only when none remains.
+Current pages use `readCurrentResourceRolePage` and final same-writer
+`verifyCurrentResourceRoleFrontier`; any changed source restarts the traversal. Account observations occur under
+native Account share locks. Exclusion requires the genuine terminal erasure root and tombstone: missing,
+suspended or temporarily fenced accounts stay pending. Across segments, earlier active losers cannot outrank a
+still-active best interval; permanently erased exclusions cannot reactivate. The selected identity must pass
+`shareAccount(tx,id)` again in the final writer, or the traversal restarts. No-candidate requires a complete,
+unchanged native frontier and only permanent exclusions. Neither filtered EOF nor a released active snapshot
+proves absence.
+
+The Content-owned `lockRealmOwnershipSource` locks the actual Realm, including removed containers, and original
+orphan episode on this same transaction. Access persists that source episode and immutable decision identity,
+writes the native grant changes, then calls Content's `applyRealmOwnershipSuccession` before returning. Content
+must consume `readAppliedRealmErasureSuccession` on that exact transaction: it reports only the privately bound,
+actually written native result with verified root, candidate grant and original source tuple. Another transaction
+or a historical decision cannot obtain an applied proof. A newly orphaned result uses immutable erasure `at` plus
+720 hours; an existing orphan episode retains its original timestamps. Native grants, Content state and progress
+commit or roll back together. Executor finalization also refuses a caught partial-application failure.
+Replay returns the original operation and source with `replayed:true`, without
+minting a new applied proof, electing again or resetting an episode.
+
+The two Content source/state exports currently have the adopted provisional declarations and refuse execution
+until their Content implementation lands. Content's existing default erasure consumer must invoke this
+constructor, resume `pending` segments and retain its owner locator until native result consumption; Access adds
+no second worker, coordinator, membership writer or ACK. The current membership erasure consumer is also
+provisional. This source delivery is therefore not native integration or full lifecycle proof. Access's native
+inventory already includes source, best-candidate and cursor account locators; custody forbids deleting source
+or terminal decision before a native consumer closure is provided. Older work lacking the bound Content episode
+stays unavailable rather than being relabelled as applied. Shared history currently declares all non-preference
+command and work producers undelivered; this constructor adds no receipt, event or work producer of its own.
+
+Cost per segment: one released exact account-home source read, one Realm source and progress key, at most 100 raw
+current role keys including lookahead, bounded exact account/tombstone/interval comparisons, and final candidate,
+grant, Content state and result keys on one live Realm writer. Directory work is O(R*100*log D + 100*log N) for
+installed role count R, current directory D and native grant source N; expired role history and membership size
+are not request traversal inputs. Progress and private evidence are locators and source custody, never another
+owner registry. The existing guard and ordinary transfer remain independently delivered; claim approval is a
+separate authority and the 30-day deadline alone confers no grant power.
 
 ## Resource denials
 

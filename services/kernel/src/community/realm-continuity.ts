@@ -11,6 +11,7 @@ import {
   runCommand,
   type AuthoritativeTime,
   type CommandAuthorization,
+  type CommandTransaction,
 } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
@@ -182,4 +183,31 @@ export async function requestRealmClaim(deps: RealmDependencies, actor: Actor, r
       };
     },
   );
+}
+
+// Provisional declarations for the Content-owned native implementation. These ports
+// deliberately refuse work until that implementation lands; Access never writes
+// Community state or substitutes structural source evidence.
+declare const lockedOwnership: unique symbol;
+export type LockedRealmOwnershipSource = Readonly<{
+  readonly [lockedOwnership]: true;
+  realmId: string;
+  ownershipState: 'owned' | 'orphaned';
+  orphanedAt: string | null;
+  claimEligibleAt: string | null;
+}>;
+
+export async function lockRealmOwnershipSource(
+  _tx: CommandTransaction,
+  _realmId: string,
+): Promise<LockedRealmOwnershipSource | null> {
+  throw new Error('Native Realm ownership source unavailable: Content implementation has not landed');
+}
+
+export async function applyRealmOwnershipSuccession(
+  _tx: CommandTransaction,
+  _source: LockedRealmOwnershipSource,
+  _erasedAccountId: string,
+): Promise<RealmContinuity> {
+  throw new Error('Native Realm ownership state application unavailable: Content implementation has not landed');
 }
