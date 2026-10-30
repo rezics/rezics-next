@@ -520,7 +520,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         response: {
           200: collectionResponse,
           ...failures,
-          409: problemSchema('conflict', 'collection_restore_occupied', 'collection_restore_stale', 'collection_restore_expired'),
+          409: problemSchema(
+            'conflict',
+            'collection_restore_occupied',
+            'collection_restore_stale',
+            'collection_restore_expired',
+          ),
         },
         detail: detail('collection.restore', 'collection:update'),
       },

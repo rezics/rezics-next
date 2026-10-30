@@ -15,10 +15,13 @@ test('Collection due partition seek stays bounded as unrelated owner, Collection
       name: 'Collection due partition seek',
       scales: [1, 8, 64],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      grow: (database, scale, previous) => seedCollectionGrowthPopulation(database, scale, previous, f.owner.actor.accountId, subjectId),
+      grow: (database, scale, previous) =>
+        seedCollectionGrowthPopulation(database, scale, previous, f.owner.actor.accountId, subjectId),
       operation: async () => {
         const page = await pageDueCollectionDeletions(db.pool, {
-          partition: partitionOf(routeOf(f.owner.actor.accountId)!), cutoff: new Date().toISOString(), after: null,
+          partition: partitionOf(routeOf(f.owner.actor.accountId)!),
+          cutoff: new Date().toISOString(),
+          after: null,
         });
         expect(page.length).toBeLessThanOrEqual(8);
         expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(4096);

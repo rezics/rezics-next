@@ -41,10 +41,12 @@ test('individual Collection tombstones preserve occurrences and restore by exact
     expect(deleted).not.toHaveProperty('deletedAt');
     expect(deleted).not.toHaveProperty('purgeAfter');
     const episode = await store.readCollectionDeletion(c, route, id(1));
-    const native = (await c.query(
-      'SELECT deleted_at::text AS deleted_at,purge_after::text AS purge_after FROM library.collection WHERE route=$1 AND collection_id=$2',
-      [route, id(1)],
-    )).rows[0];
+    const native = (
+      await c.query(
+        'SELECT deleted_at::text AS deleted_at,purge_after::text AS purge_after FROM library.collection WHERE route=$1 AND collection_id=$2',
+        [route, id(1)],
+      )
+    ).rows[0];
     expect(episode).toEqual({
       revision: deleted!.revision,
       deletionId: id(83),

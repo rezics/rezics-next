@@ -470,7 +470,8 @@ export function createCollectionCommands(config: {
           action,
           anchor: {
             resource: { route, id: collectionId },
-            validate: async (client, time) => !!(await authorizedCollection(client, owner, route, collectionId, time, allowDeleted)),
+            validate: async (client, time) =>
+              !!(await authorizedCollection(client, owner, route, collectionId, time, allowDeleted)),
           },
           context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
         });
@@ -492,7 +493,11 @@ export function createCollectionCommands(config: {
             rules.set(attempt.time, {
               rule: admitted,
               checks: await prepareCollectionRuleAuthority(
-                config, owner, admitted.filter, attempt, deadlineFor(WORK_STEP_DEADLINE_MS),
+                config,
+                owner,
+                admitted.filter,
+                attempt,
+                deadlineFor(WORK_STEP_DEADLINE_MS),
               ),
             });
           }
@@ -668,7 +673,10 @@ export function createCollectionCommands(config: {
         if (current.revision !== expected) throw new ProblemError('conflict');
         const value = await tombstoneCollection(tx, route, id, command);
         if (!value) throw notFound();
-        return { value: { ...value, deletionId: command.transactionId }, events: collectionEvents('deleted', id, listed(current)) };
+        return {
+          value: { ...value, deletionId: command.transactionId },
+          events: collectionEvents('deleted', id, listed(current)),
+        };
       },
       undefined,
       undefined,
@@ -685,7 +693,10 @@ export function createCollectionCommands(config: {
     requestKey: string,
   ): Promise<CommandOutcome<Collection>> {
     const expected = revisionOf(input.revision);
-    if (typeof input.deletionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.deletionId))
+    if (
+      typeof input.deletionId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.deletionId)
+    )
       throw invalid();
     return mutate(
       actor,
@@ -700,8 +711,7 @@ export function createCollectionCommands(config: {
         if (!current.deleted) throw new ProblemError('collection_restore_occupied');
         if (current.revision !== expected || current.deletionId !== input.deletionId)
           throw new ProblemError('collection_restore_stale');
-        if (current.expired)
-          throw new ProblemError('collection_restore_expired');
+        if (current.expired) throw new ProblemError('collection_restore_expired');
         const value = await restoreCollectionRow(tx, route, id, expected, input.deletionId, command);
         if (!value) throw new ProblemError('collection_restore_stale');
         return { value, events: collectionEvents('updated', id, value.visibility === 'public') };
@@ -942,7 +952,8 @@ async function authorizedCollection(
   authoritativeTimeValue(time);
   const current = await authorizationCollection.run(client, { route, collection_id: collectionId });
   if (!current || (!allowDeleted && current.state === 'deleted')) throw notFound();
-  if (allowDeleted && current.visibility === 'private' && actor.accountId !== current.curatorAccountId) throw notFound();
+  if (allowDeleted && current.visibility === 'private' && actor.accountId !== current.curatorAccountId)
+    throw notFound();
   return current;
 }
 

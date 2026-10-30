@@ -4,7 +4,11 @@ import { shareAccount } from '../access/account-share.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import type { KernelClock } from '../clock.ts';
 import {
-  authoritativeTimeValue, currentCommand, noEffect, runCommand, type CommandTransaction,
+  authoritativeTimeValue,
+  currentCommand,
+  noEffect,
+  runCommand,
+  type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -26,10 +30,21 @@ export const COLLECTION_RETENTION_WORKFLOW = 'library.collectionRetention';
 export const COLLECTION_RETENTION_SCHEDULE = 'library.collectionRetention.every-10-minutes';
 const SEGMENT_WORKFLOW = 'library.collectionRetention.segment';
 export type CollectionDeletionKey = Readonly<{
-  route: number; collectionId: string; accountId: string; deletionId: string; revision: number; purgeAfter: string;
+  route: number;
+  collectionId: string;
+  accountId: string;
+  deletionId: string;
+  revision: number;
+  purgeAfter: string;
 }>;
 type Cursor = { partition: number; after: { purgeAfter: string; route: number; collectionId: string } | null };
-type Segment = { root: string; sequence: number; cutoff: string; cursor: Cursor; current: CollectionDeletionKey | null };
+type Segment = {
+  root: string;
+  sequence: number;
+  cutoff: string;
+  cursor: Cursor;
+  current: CollectionDeletionKey | null;
+};
 export type CollectionCleanupPage = Readonly<{
   status: 'progress' | 'purged' | 'stale' | 'not_due' | 'retained';
   removed: number;
@@ -43,11 +58,16 @@ function bounded<T>(value: T): T {
 }
 
 function validateKey(key: CollectionDeletionKey): void {
-  if (requireRoute(key.collectionId) !== key.route || requireRoute(key.accountId) !== key.route ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(key.deletionId) ||
-      !Number.isSafeInteger(key.revision) || key.revision < 2 ||
-      !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)$/.test(key.purgeAfter) ||
-      !Number.isFinite(Date.parse(key.purgeAfter))) throw new TypeError('Invalid exact Collection deletion key');
+  if (
+    requireRoute(key.collectionId) !== key.route ||
+    requireRoute(key.accountId) !== key.route ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(key.deletionId) ||
+    !Number.isSafeInteger(key.revision) ||
+    key.revision < 2 ||
+    !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)$/.test(key.purgeAfter) ||
+    !Number.isFinite(Date.parse(key.purgeAfter))
+  )
+    throw new TypeError('Invalid exact Collection deletion key');
   bounded(key);
 }
 
@@ -60,8 +80,11 @@ export async function pageDueCollectionDeletions(
   if (input.after && partitionOf(input.after.route) !== input.partition)
     throw new RangeError('Foreign Collection retention cursor');
   const rows = await due.run(connection, {
-    partition_no: input.partition, cutoff: input.cutoff, after_time: input.after?.purgeAfter ?? null,
-    after_route: input.after?.route ?? null, after_id: input.after?.collectionId ?? null,
+    partition_no: input.partition,
+    cutoff: input.cutoff,
+    after_time: input.after?.purgeAfter ?? null,
+    after_route: input.after?.route ?? null,
+    after_id: input.after?.collectionId ?? null,
   });
   const keys = rows.map((row) => {
     if (row.accountId === null || row.deletionId === null || row.purgeAfter === null)
@@ -78,9 +101,14 @@ export async function pageDueCollectionDeletions(
  * Public source evidence stays intact until the real Source/disposition producer is installed.
  */
 async function removeLocalPage(
-  tx: CommandTransaction, route: number, collectionId: string, accountId: string, parent: LockedCollection,
+  tx: CommandTransaction,
+  route: number,
+  collectionId: string,
+  accountId: string,
+  parent: LockedCollection,
 ): Promise<CollectionCleanupPage> {
-  if (parent.publicCustody) return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
+  if (parent.publicCustody)
+    return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
   // Capture/hold/release are native source evidence, not an ordinary retirement authority.
   // Preserve the exact source graph even for private captures until that authority disposes it.
   if (parent.sourceCustody) return { status: 'retained', removed: 0, custody: 'native_source_capture' };
@@ -96,7 +124,10 @@ async function removeLocalPage(
   const removed = (await metadata.run(tx, { ...args, account_id: accountId })).length;
   if (removed > 0) return { status: 'progress', removed };
   const [result] = await head.run(tx, {
-    ...args, account_id: accountId, revision: parent.revision, source_generation: parent.sourceGeneration,
+    ...args,
+    account_id: accountId,
+    revision: parent.revision,
+    source_generation: parent.sourceGeneration,
   });
   if (!result) throw new Error('Locked Collection head still has undisposed local children');
   return { status: 'purged', removed: 1 };
@@ -112,37 +143,63 @@ export async function purgeExpiredCollectionPage(
   validateKey(key);
   let parent: LockedCollection | null = null;
   let accountLive = false;
-  const outcome = await runCommand<CollectionCleanupPage>(pool, {
-    partition: partitionOf(key.route), deadline, clock,
-    authorization: {
-      action: 'library:collection-retention-maintenance', resource: { route: key.route, id: key.collectionId },
-      denied: () => new Error('Collection retention account fence unavailable'),
-      async authorize(tx, attempt) {
-        accountLive = false;
-        parent = null;
-        // Native account anchor first; a terminal account belongs to the single terminal participant.
-        try { await shareAccount(tx, key.accountId); accountLive = true; }
-        catch (error) { if (!(error instanceof LifecycleDeniedError)) throw error; }
-        if (accountLive) parent = await lock.run(tx, {
-          route: key.route, collection_id: key.collectionId, purge_after: key.purgeAfter,
-          time: authoritativeTimeValue(attempt.time),
-        });
-        return 'execute';
+  const outcome = await runCommand<CollectionCleanupPage>(
+    pool,
+    {
+      partition: partitionOf(key.route),
+      deadline,
+      clock,
+      authorization: {
+        action: 'library:collection-retention-maintenance',
+        resource: { route: key.route, id: key.collectionId },
+        denied: () => new Error('Collection retention account fence unavailable'),
+        async authorize(tx, attempt) {
+          accountLive = false;
+          parent = null;
+          // Native account anchor first; a terminal account belongs to the single terminal participant.
+          try {
+            await shareAccount(tx, key.accountId);
+            accountLive = true;
+          } catch (error) {
+            if (!(error instanceof LifecycleDeniedError)) throw error;
+          }
+          if (accountLive)
+            parent = await lock.run(tx, {
+              route: key.route,
+              collection_id: key.collectionId,
+              purge_after: key.purgeAfter,
+              time: authoritativeTimeValue(attempt.time),
+            });
+          return 'execute';
+        },
       },
     },
-  }, async (tx) => {
-    if (!accountLive) return noEffect({ status: 'retained', removed: 0, custody: 'account_fence' });
-    if (!parent || parent.accountId !== key.accountId || parent.state !== 'deleted' ||
-        parent.deletionId !== key.deletionId || parent.revision !== key.revision || !parent.deadlineMatches)
-      return noEffect({ status: 'stale', removed: 0 });
-    if (!parent.due) return noEffect({ status: 'not_due', removed: 0 });
-    const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent);
-    if (value.removed === 0) return noEffect(value);
-    return { value, events: [{
-      type: 'com.rezics.library.collection.retention-purged.v1', subject: key.collectionId,
-      data: { collectionId: key.collectionId, deletionId: key.deletionId, removed: value.removed },
-    }] };
-  });
+    async (tx) => {
+      if (!accountLive) return noEffect({ status: 'retained', removed: 0, custody: 'account_fence' });
+      if (
+        !parent ||
+        parent.accountId !== key.accountId ||
+        parent.state !== 'deleted' ||
+        parent.deletionId !== key.deletionId ||
+        parent.revision !== key.revision ||
+        !parent.deadlineMatches
+      )
+        return noEffect({ status: 'stale', removed: 0 });
+      if (!parent.due) return noEffect({ status: 'not_due', removed: 0 });
+      const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent);
+      if (value.removed === 0) return noEffect(value);
+      return {
+        value,
+        events: [
+          {
+            type: 'com.rezics.library.collection.retention-purged.v1',
+            subject: key.collectionId,
+            data: { collectionId: key.collectionId, deletionId: key.deletionId, removed: value.removed },
+          },
+        ],
+      };
+    },
+  );
   return bounded(outcome.value);
 }
 
@@ -150,7 +207,8 @@ export async function purgeExpiredCollectionPage(
  * This never returns an Access ACK, source disposition, or global erasure certificate.
  */
 export async function purgeTerminalCollectionPage(
-  tx: CommandTransaction, input: { accountId: string; collectionId: string },
+  tx: CommandTransaction,
+  input: { accountId: string; collectionId: string },
 ): Promise<CollectionCleanupPage> {
   const time = authoritativeTimeValue(currentCommand(tx).time);
   const route = requireRoute(input.accountId);
@@ -166,30 +224,50 @@ export async function purgeTerminalCollectionPage(
 /** Installs on the one default Library runtime and existing bounded maintenance queue. */
 export async function registerCollectionRetention({ pool, client, clock }: WorkContext): Promise<void> {
   const cutoff = DBOS.registerStep(async () => clock().toISOString(), { name: 'library.collectionRetention.cutoff' });
-  const discover = DBOS.registerStep(async (until: string, cursor: Cursor) => {
-    bounded(cursor);
-    return withConnection(pool, async (connection) => {
-      await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        await connection.query("SET LOCAL statement_timeout = '5000ms'");
-        const partition = await readPartition(connection, cursor.partition);
-        const page = partition?.writeState === 'active'
-          ? { kind: 'available' as const, keys: await pageDueCollectionDeletions(connection, { ...cursor, cutoff: until }) }
-          : { kind: 'pending' as const };
-        await connection.query('COMMIT');
-        return page;
-      } catch (error) { await connection.query('ROLLBACK'); throw error; }
-    });
-  }, { name: 'library.collectionRetention.discover', ...COMMAND_STEP_RETRIES });
+  const discover = DBOS.registerStep(
+    async (until: string, cursor: Cursor) => {
+      bounded(cursor);
+      return withConnection(pool, async (connection) => {
+        await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        try {
+          await connection.query("SET LOCAL statement_timeout = '5000ms'");
+          const partition = await readPartition(connection, cursor.partition);
+          const page =
+            partition?.writeState === 'active'
+              ? {
+                  kind: 'available' as const,
+                  keys: await pageDueCollectionDeletions(connection, { ...cursor, cutoff: until }),
+                }
+              : { kind: 'pending' as const };
+          await connection.query('COMMIT');
+          return page;
+        } catch (error) {
+          await connection.query('ROLLBACK');
+          throw error;
+        }
+      });
+    },
+    { name: 'library.collectionRetention.discover', ...COMMAND_STEP_RETRIES },
+  );
   const remove = DBOS.registerStep(
     async (key: CollectionDeletionKey) => purgeExpiredCollectionPage({ pool, clock }, key),
     { name: 'library.collectionRetention.remove', ...COMMAND_STEP_RETRIES },
   );
-  const continueSweep = DBOS.registerStep(async (next: Segment) => {
-    bounded(next);
-    await client.enqueue({ workflowName: SEGMENT_WORKFLOW, queueName: 'maintenance',
-      workflowID: `library.collectionRetention:${next.root}:${next.sequence}`, workflowIDReusePolicy: 'return-existing' }, next);
-  }, { name: 'library.collectionRetention.continue', ...COMMAND_STEP_RETRIES });
+  const continueSweep = DBOS.registerStep(
+    async (next: Segment) => {
+      bounded(next);
+      await client.enqueue(
+        {
+          workflowName: SEGMENT_WORKFLOW,
+          queueName: 'maintenance',
+          workflowID: `library.collectionRetention:${next.root}:${next.sequence}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        next,
+      );
+    },
+    { name: 'library.collectionRetention.continue', ...COMMAND_STEP_RETRIES },
+  );
   const segment = async (input: Segment) => {
     bounded(input);
     let { cursor, current } = input;
@@ -198,9 +276,14 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
       if (current) {
         const result = await remove(current);
         if (result.status === 'progress') continue;
-        cursor = { partition: cursor.partition, after: {
-          purgeAfter: current.purgeAfter, route: current.route, collectionId: current.collectionId,
-        } };
+        cursor = {
+          partition: cursor.partition,
+          after: {
+            purgeAfter: current.purgeAfter,
+            route: current.route,
+            collectionId: current.collectionId,
+          },
+        };
         current = null;
       } else {
         const page = await discover(input.cutoff, cursor);
@@ -217,8 +300,25 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
     if (cursor.partition < PARTITIONS) await continueSweep({ ...input, sequence: input.sequence + 1, cursor, current });
   };
   DBOS.registerWorkflow(segment, { name: SEGMENT_WORKFLOW });
-  DBOS.registerWorkflow(async () => segment({ root: DBOS.workflowID!, sequence: 0,
-    cutoff: await cutoff(), cursor: { partition: 0, after: null }, current: null }), { name: COLLECTION_RETENTION_WORKFLOW });
-  await client.applySchedules([{ scheduleName: COLLECTION_RETENTION_SCHEDULE, workflowName: COLLECTION_RETENTION_WORKFLOW,
-    schedule: '*/10 * * * *', queueName: 'maintenance', cronTimezone: 'UTC', automaticBackfill: false }]);
+  DBOS.registerWorkflow(
+    async () =>
+      segment({
+        root: DBOS.workflowID!,
+        sequence: 0,
+        cutoff: await cutoff(),
+        cursor: { partition: 0, after: null },
+        current: null,
+      }),
+    { name: COLLECTION_RETENTION_WORKFLOW },
+  );
+  await client.applySchedules([
+    {
+      scheduleName: COLLECTION_RETENTION_SCHEDULE,
+      workflowName: COLLECTION_RETENTION_WORKFLOW,
+      schedule: '*/10 * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+  ]);
 }

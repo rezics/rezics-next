@@ -41,9 +41,7 @@ export async function runOwnedGraphSegment(
       continue;
     }
     const children =
-      phase === 'sessions'
-        ? (['units', 'changes', 'sessionDelete'] as const)
-        : (['collectionLocal'] as const);
+      phase === 'sessions' ? (['units', 'changes', 'sessionDelete'] as const) : (['collectionLocal'] as const);
     const parentPhase = phase === 'sessions' || phase === 'collections';
     const kind = parentPhase && cursor.parent !== null ? children[cursor.child]! : phase;
     const result = await page({

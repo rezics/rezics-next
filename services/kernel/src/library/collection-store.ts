@@ -165,7 +165,12 @@ export async function readCollectionDeletion(
   client: Client,
   route: number,
   id: string,
-): Promise<{ revision: number; deletionId: string | null; deletedAt: string | null; purgeAfter: string | null } | null> {
+): Promise<{
+  revision: number;
+  deletionId: string | null;
+  deletedAt: string | null;
+  purgeAfter: string | null;
+} | null> {
   const row = await collectionDeletionRead.run(queryClient(client), { route, id });
   return row
     ? {
