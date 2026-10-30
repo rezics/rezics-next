@@ -448,9 +448,7 @@ test('the unprofiled story creates a generic label on its actual subject and kee
     );
     expect(created.ok).toBe(true);
     const after = await loadSubjectLibrarySlot(client, request(), env, unprofiledSubjectId);
-    expect(after.labels).toEqual([
-      expect.objectContaining({ name: 'For later', id: expect.any(String), revision: 1 }),
-    ]);
+    expect(after.labels).toEqual([expect.objectContaining({ name: 'For later', id: expect.any(String), revision: 1 })]);
     expect(after.entry).toBeNull();
     expect(after.stateOptions).toEqual([]);
     const full = await client.libraryLabelAssignments.get({
