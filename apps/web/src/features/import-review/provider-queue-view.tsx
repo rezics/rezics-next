@@ -351,7 +351,7 @@ export function ProviderQueueView({
     }
   }
   return (
-    <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-8">
+    <article className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-8">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold sm:text-3xl">{m.provider_title({}, o)}</h1>
         <p className="text-muted-foreground">{m.provider_intro({}, o)}</p>
@@ -380,6 +380,6 @@ export function ProviderQueueView({
         onRefresh={onRead}
         concealRows={!current.ok && (current.reason === 'denied' || current.reason === 'missing')}
       />
-    </main>
+    </article>
   );
 }

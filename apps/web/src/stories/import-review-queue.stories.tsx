@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ProviderQueue } from '../features/import-review/provider-queue-view';
 import { providerQueueFixture, type ProviderQueueScenario } from '../kernel/fake/provider-review-queue';
 import { m } from '../paraglide/messages.js';
@@ -77,6 +77,10 @@ export const Decision: Story = {
     await userEvent.click(canvas.getByRole('checkbox'));
     await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
     const dialog = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
+    await waitFor(async () => {
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveAttribute('data-open');
+    });
     await userEvent.click(within(dialog).getByRole('button', { name: m.provider_confirm_accept() }));
     expect(await canvas.findByText(m.provider_accepted())).toBeTruthy();
   },

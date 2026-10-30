@@ -4,7 +4,8 @@ import { expect, userEvent, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
 import { RelationEditor } from '../features/catalogue/relation-editor';
 import { relationFixture, relationProperty, type RelationScenario } from '../kernel/fake/catalogue-relations';
-import { PatternStory } from './page';
+import { pagePaths, PatternStory } from './page';
+import { AppShell } from '../shell/shell';
 import { SubjectFrame } from '../features/pages/subject-frame';
 import { subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { SubjectPage, type SubjectPageData } from '../features/pages/subject';
@@ -19,50 +20,52 @@ function RelationStory({ scenario = 'ready' }: { scenario?: RelationScenario }) 
   const labels = fixture.publicRead.subject.labels;
   const title = pickText(labels, locale);
   return (
-    <PatternStory visitor="Signed In">
-      <article className="mx-auto w-full max-w-4xl space-y-8 p-4 sm:p-8">
-        <SubjectFrame
-          frame={{
-            id: fixture.id,
-            type: fixture.publicRead.subject.type,
-            title: { text: title.text, ...(title.lang ? { lang: title.lang } : {}) },
-            summary: null,
-          }}
-          locale={locale}
-          unlabelled={m.subject_value_unlabelled()}
-          tabs={[]}
-          tabLabels={viewTabLabels()}
-          view="overview"
-        />
-        <RelationEditor
-          key={`${scenario}:${locale}`}
-          id={fixture.id}
-          locale={locale}
-          transport={fixture.transport}
-          search={async (text) =>
-            Object.entries(fixture.publicRead.related).flatMap(([id, related]) => {
-              const title = pickText(related.labels, locale).text;
-              return title.toLocaleLowerCase().includes(text.toLocaleLowerCase())
-                ? [{ id, title, types: related.type ? [related.type] : [], typeLabel: '', cover: null }]
-                : [];
-            })
-          }
-          onSelected={async () => {
-            const read = await fixture.client.subjects({ id: fixture.id }).get();
-            if (!read.data || read.status !== 200) return;
-            const page = structuredClone(recording) as unknown as SubjectPageData;
-            for (const value of Object.values(page.reads)) {
-              if (value.body && typeof value.body === 'object' && 'subject' in value.body) value.body = read.data;
+    <PatternStory visitor="Signed In" path={pagePaths.subject}>
+      <AppShell>
+        <article className="mx-auto w-full max-w-4xl space-y-8 p-4 sm:p-8">
+          <SubjectFrame
+            frame={{
+              id: fixture.id,
+              type: fixture.publicRead.subject.type,
+              title: { text: title.text, ...(title.lang ? { lang: title.lang } : {}) },
+              summary: null,
+            }}
+            locale={locale}
+            unlabelled={m.subject_value_unlabelled()}
+            tabs={[]}
+            tabLabels={viewTabLabels()}
+            view="overview"
+          />
+          <RelationEditor
+            key={`${scenario}:${locale}`}
+            id={fixture.id}
+            locale={locale}
+            transport={fixture.transport}
+            search={async (text) =>
+              Object.entries(fixture.publicRead.related).flatMap(([id, related]) => {
+                const title = pickText(related.labels, locale).text;
+                return title.toLocaleLowerCase().includes(text.toLocaleLowerCase())
+                  ? [{ id, title, types: related.type ? [related.type] : [], typeLabel: '', cover: null }]
+                  : [];
+              })
             }
-            setReader(page);
-          }}
-        />
-        {reader && (
-          <section aria-label={m.candidate_view_public()} className="space-y-4 border-t border-border pt-6">
-            <SubjectPage page={reader} locale={locale} messages={subjectPageMessages()} renderJsonLd={false} />
-          </section>
-        )}
-      </article>
+            onSelected={async () => {
+              const read = await fixture.client.subjects({ id: fixture.id }).get();
+              if (!read.data || read.status !== 200) return;
+              const page = structuredClone(recording) as unknown as SubjectPageData;
+              for (const value of Object.values(page.reads)) {
+                if (value.body && typeof value.body === 'object' && 'subject' in value.body) value.body = read.data;
+              }
+              setReader(page);
+            }}
+          />
+          {reader && (
+            <section aria-label={m.candidate_view_public()} className="space-y-4 border-t border-border pt-6">
+              <SubjectPage page={reader} locale={locale} messages={subjectPageMessages()} renderJsonLd={false} />
+            </section>
+          )}
+        </article>
+      </AppShell>
     </PatternStory>
   );
 }

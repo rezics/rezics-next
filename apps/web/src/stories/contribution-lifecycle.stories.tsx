@@ -10,6 +10,8 @@ import { subjectTabs } from '../features/pages/views';
 import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import recording from '../kernel/recorded/subject-page.json';
+import { AppShell } from '../shell/shell';
+import { pagePaths, PatternStory } from './page';
 
 function ContributionStory({ scenario = 'ready' }: { scenario?: ContributionScenario }) {
   const locale = getLocale();
@@ -56,6 +58,15 @@ function ContributionStory({ scenario = 'ready' }: { scenario?: ContributionScen
 const meta = {
   title: 'Pages/Catalogue/Contribution lifecycle',
   component: ContributionStory,
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path={pagePaths.subject}>
+        <AppShell>
+          <Story />
+        </AppShell>
+      </PatternStory>
+    ),
+  ],
   parameters: {
     layout: 'fullscreen',
     docs: {

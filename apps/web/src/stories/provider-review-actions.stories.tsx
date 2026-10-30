@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ProviderQueueView } from '../features/import-review/provider-queue-view';
 import type { ProviderQueueRead } from '../features/import-review/provider-queue';
@@ -88,10 +88,18 @@ async function select(canvasElement: HTMLElement) {
   for (const checkbox of await canvas.findAllByRole('checkbox')) await userEvent.click(checkbox);
   return canvas;
 }
-async function confirm(canvasElement: HTMLElement, reject = false) {
+async function openConfirmation(canvasElement: HTMLElement, reject = false) {
   const canvas = await select(canvasElement);
   await userEvent.click(canvas.getByRole('button', { name: reject ? m.candidate_reject() : m.candidate_accept() }));
   const dialog = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
+  await waitFor(async () => {
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute('data-open');
+  });
+  return { canvas, dialog };
+}
+async function confirm(canvasElement: HTMLElement, reject = false) {
+  const { canvas, dialog } = await openConfirmation(canvasElement, reject);
   await userEvent.click(
     within(dialog).getByRole('button', { name: reject ? m.provider_confirm_reject() : m.provider_confirm_accept() }),
   );
@@ -106,9 +114,7 @@ export const Selection: Story = {
 };
 export const Confirmation: Story = {
   play: async ({ canvasElement }) => {
-    const canvas = await select(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.candidate_accept() }));
-    expect(await within(canvasElement.ownerDocument.body).findByRole('alertdialog')).toBeVisible();
+    await openConfirmation(canvasElement);
   },
 };
 export const PartialResults: Story = {

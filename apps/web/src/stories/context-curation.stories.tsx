@@ -2,10 +2,21 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { ContextCurationStory } from '../features/catalogue/context-curation-story';
 import { m } from '../paraglide/messages.js';
+import { AppShell } from '../shell/shell';
+import { pagePaths, PatternStory } from './page';
 
 const meta = {
   title: 'Pages/Catalogue/Context review',
   component: ContextCurationStory,
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path={pagePaths.subject}>
+        <AppShell>
+          <Story />
+        </AppShell>
+      </PatternStory>
+    ),
+  ],
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof ContextCurationStory>;
 export default meta;

@@ -3,11 +3,22 @@ import { expect, userEvent, within } from 'storybook/test';
 import { CandidateStory } from '../subject/candidate-story';
 import { m } from '../paraglide/messages.js';
 import { candidateProperty } from '../kernel/fake/subject-candidates';
+import { AppShell } from '../shell/shell';
+import { pagePaths, PatternStory } from './page';
 
 const meta = {
   title: 'Pages/Subjects/Candidate Review',
   component: CandidateStory,
   args: { page: true },
+  decorators: [
+    (Story) => (
+      <PatternStory visitor="Signed In" path={pagePaths.subject}>
+        <AppShell>
+          <Story />
+        </AppShell>
+      </PatternStory>
+    ),
+  ],
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof CandidateStory>;
 export default meta;
