@@ -1780,7 +1780,8 @@ The focused integration acceptance is `tests/thread-media-recovery.test.ts`. Rev
 `pages-community-thread--reply-media-unknown` and existing `pages-community-thread--reply-media-unavailable`.
 The existing target lifetime Patterns remain `patterns-community-thread-replies--selected`, `--cancelled` and `--retry`.
 Web owns ordinary phone390/desktop1280 light/dark review and screenshots through the existing globals. This delivery
-runs local Web typing only; acceptance, native, browser and visual evidence remain deferred to integration.
+runs local Web typing only: `bun run --cwd apps/web typecheck` passed with no type errors. Acceptance, native, browser
+and visual evidence remain deferred to integration.
 Source read: the existing native media claim contract, Web reservation/state/upload boundaries, Editor upload manager,
 reply intent/target composer, current document image contract and thread recordings/stories. No reference project is
 named for this recovery surface, and none was needed.
