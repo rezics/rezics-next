@@ -1651,8 +1651,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           fields(body, ['session_id']);
           const sessionId = text(body.session_id);
           const human = await humanProof(request.headers);
-          // The native session identity is immutable. Include its owner in the
-          // delete too, so a foreign or unknown id cannot mutate any session.
+          // Preserve unknown/foreign concealment before attempting the mutation.
           const target = (
             await database.query<{ userId: string }>('SELECT "userId" FROM session WHERE id=$1', [sessionId])
           ).rows[0];
@@ -1663,7 +1662,15 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             for (const cookie of [authCookies.sessionToken, authCookies.sessionData, authCookies.dontRememberToken])
               cookies.push(serializeCookie(cookie.name, '', { ...cookie.attributes, maxAge: 0 }));
           }
-          await database.query('DELETE FROM session WHERE id=$1 AND "userId"=$2', [sessionId, human.account_id]);
+          // Both mutation and ownership proof address only the exact key. An
+          // ordinary owner predicate here lets the planner scan owner history.
+          // Recheck ownership in this statement's snapshot, including key reuse
+          // since the read above. Native (id,userId) immutability also preserves
+          // that guard if DELETE must recheck a concurrently updated tuple.
+          await database.query('DELETE FROM session WHERE id=$1 AND (SELECT "userId" FROM session WHERE id=$1)=$2', [
+            sessionId,
+            human.account_id,
+          ]);
           return json({}, 200, cookies);
         }
         if (url.pathname === '/recovery/start') {
