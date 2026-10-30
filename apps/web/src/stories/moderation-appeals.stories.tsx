@@ -60,9 +60,9 @@ export const PendingEnglishLightPhone: Story = {
   ...makeStory('pending', 'en', 'light', 'phone390'),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const reports = canvas.getByRole('link', { name: 'Reports', exact: true });
-    const statement = canvas.getByRole('textbox', { name: 'Statement', exact: true });
-    const uphold = canvas.getByRole('button', { name: 'Uphold', exact: true });
+    const reports = canvas.getByRole('link', { name: /^Reports$/ });
+    const statement = canvas.getByRole('textbox', { name: /^Statement$/ });
+    const uphold = canvas.getByRole('button', { name: /^Uphold$/ });
     await userEvent.tab();
     await expect(reports).toHaveFocus();
     await userEvent.tab();

@@ -134,3 +134,31 @@ test('decision presentation shows reasons, target and times, with appeal UI only
   );
   expect(otherReader).not.toContain('appeal-statement');
 });
+
+test('a private decision remains readable when its target is withheld, including after its appeal deadline', async () => {
+  const calls: string[] = [];
+  const page = await loadDecisionPage(decision.id, {
+    decision: async (id) => {
+      calls.push(`decision:${id}`);
+      return decision;
+    },
+    post: async (id) => {
+      calls.push(`post:${id}`);
+      return null;
+    },
+    thread: async () => {
+      throw new Error('A post decision must not read a thread');
+    },
+  });
+  expect(calls).toEqual(['decision:decision-1', 'post:post-1']);
+  expect(page?.target).toBeNull();
+  if (!page) throw new Error('The authorized decision must remain readable');
+  for (const now of [Date.parse(decidedAt), Date.parse(decision.appealDeadline) + 1]) {
+    const markup = renderToStaticMarkup(
+      createElement(DecisionPageView, { page: { ...page, viewerId: 'author-1' }, now }),
+    );
+    expect(markup).toContain(decision.statement);
+    expect(markup).toContain('data-slot="withheld"');
+    expect(markup.includes('appeal-statement')).toBe(now <= Date.parse(decision.appealDeadline));
+  }
+});

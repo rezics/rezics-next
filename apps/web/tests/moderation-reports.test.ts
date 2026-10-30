@@ -272,3 +272,70 @@ test('the board actions menu exposes moderation only to signed-in viewers', asyn
   expect(boardRoute).toContain("session === 'signed-in' ? (");
   expect(boardRoute).toContain('href={`/${locale}/boards/${id}/moderation`}');
 });
+
+test('a known post queue reads only that post scope and preserves its cursor', async () => {
+  const calls: string[] = [];
+  const page = await readModerationReports(
+    {
+      boardReports: async () => {
+        throw new Error('A post queue must not enumerate its board');
+      },
+      threadReports: async () => {
+        throw new Error('A post queue must not enumerate its thread');
+      },
+      postReports: async (postId, cursor) => {
+        calls.push(`post:${postId}:${cursor}`);
+        return { reports: [report(1, { kind: 'post', id: postId })], next: 'post-next' };
+      },
+    },
+    { boardId: id(1), threadId: id(2), postId: id(50), cursor: 'post/current==' },
+  );
+  expect(calls).toEqual([`post:${id(50)}:post/current==`]);
+  expect(page.next).toBe('post-next');
+  expect(JSON.stringify(page)).not.toContain('private-reporter');
+});
+
+test('appeal context remains readable while missing or denied current authority hides resolution controls', async () => {
+  const { ModerationAppealsView } = await import('../src/moderation/appeals-tab');
+  for (const canResolve of [true, false, undefined]) {
+    const markup = renderToStaticMarkup(
+      createElement(ModerationAppealsView, {
+        appeals: [
+          {
+            id: id(1),
+            decisionId: id(2),
+            appellantId: 'private-appellant',
+            statement: 'Please review this decision.',
+            createdAt: '2026-01-01T12:00:00.000Z',
+            decision: { statement: 'Moderator reason.', target: { kind: 'post', id: id(50) } },
+            ...(canResolve === undefined ? {} : { canResolve }),
+          },
+        ],
+        targets: [],
+        next: null,
+        postId: id(50),
+      }),
+    );
+    expect(markup).toContain('Moderator reason.');
+    expect(markup).toContain('Please review this decision.');
+    expect(markup).toContain(id(50));
+    expect(markup).toContain(`href="?post=${id(50)}"`);
+    expect(markup).not.toContain('private-appellant');
+    expect(markup.includes('>Uphold</button>')).toBe(canResolve === true);
+    expect(markup.includes('>Reverse</button>')).toBe(canResolve === true);
+  }
+});
+
+test('a duplicate appeal resolution crosses the server boundary as a conflict rather than another success', async () => {
+  const { submitModerationAppealResolution } = await import('../src/moderation/actions');
+  let commands = 0;
+  const result = await submitModerationAppealResolution(
+    async () => {
+      commands += 1;
+      throw Object.assign(new Error('Already resolved'), { status: 409 });
+    },
+    { id: id(1), outcome: 'reverse', statement: 'Independent review.' },
+  );
+  expect(result).toEqual({ state: 'conflict' });
+  expect(commands).toBe(1);
+});

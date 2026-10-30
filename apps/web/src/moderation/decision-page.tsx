@@ -148,7 +148,7 @@ export function DecisionPageView({ page, now = Date.now() }: { page: DecisionPag
               {saving ? m.decision_appeal_sending() : m.decision_appeal_submit()}
             </Button>
           </form>
-        ) : page.viewerId === page.target.authorId && clockNow > Date.parse(decision.appealDeadline) ? (
+        ) : page.viewerId === page.target?.authorId && clockNow > Date.parse(decision.appealDeadline) ? (
           <p className="mt-4 text-sm text-muted-foreground">{m.decision_appeal_expired()}</p>
         ) : null}
       </section>
