@@ -1,3 +1,4 @@
+export type * from './auth-erasure-obligations.ts';
 export * from './management';
 
 /** Nonsecret first-party identity for the two Auth-page self-operation profiles. */
