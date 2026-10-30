@@ -1,5 +1,6 @@
 import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { createServerFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
 import type { KernelClient } from '@rezics/client';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -23,6 +24,8 @@ import { fieldLabel } from '../features/pages/shared';
 import { localizedLabel, ResultList, type Fact, type ResultHit } from './results.tsx';
 import { SearchSort } from './sort.tsx';
 import { readSearchPage } from './search-request.ts';
+import { readDiscovery, type DiscoveryState } from './discovery';
+import { DiscoveryResults } from './discovery-results';
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 type SearchBody = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
   descriptions?: boolean;
@@ -54,6 +57,7 @@ type SearchParams = {
 };
 type SearchPageData = {
   result?: SearchResult;
+  discovery?: DiscoveryState;
   type?: string;
   typeLabels?: Record<string, string>;
   hitTypes: Record<string, Record<string, string>>;
@@ -202,6 +206,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     };
   })
   .handler(async ({ data }): Promise<SearchPageData> => {
+    const signal = getRequest().signal;
     let release: Release | undefined;
     try {
       release = await readRelease();
@@ -217,7 +222,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const years = release ? yearProperties(release, type) : [];
     const properties = release ? [...new Set([...(type ? factProperties(release, type) : []), ...years])] : [];
     let staleCursorRestarted = false;
-    const searchPromise: Promise<SearchResult | undefined> = hasSearch
+    const searchPromise: Promise<{ result?: SearchResult; discovery?: DiscoveryState }> = hasSearch
       ? (async () => {
           const body: SearchBody = {
             ...(data.query ? { text: data.query } : {}),
@@ -229,14 +234,21 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             ...(data.sort ? { sort: data.sort } : {}),
             ...(filter ? { filter } : {}),
           };
+          if (!type) {
+            const mixed = await readDiscovery({ ...body, representation: 'discovery-v1', languages }, (request) =>
+              kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal } }),
+            );
+            staleCursorRestarted = mixed.restarted;
+            return { discovery: mixed.discovery };
+          }
           const { response, restarted } = await readSearchPage(body, (request) =>
-            kernelClient(data.locale).subjects.$search.post(request),
+            kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal } }),
           );
           staleCursorRestarted = restarted;
           if (response.error) throw new Error('Search failed');
-          return response.data as SearchResult;
+          return { result: response.data as SearchResult };
         })()
-      : Promise.resolve(undefined);
+      : Promise.resolve({});
 
     const facetPropertiesForType = release && type ? facetProperties(release, [type]).slice(0, 8) : [];
     const facetBody: FacetBody = {
@@ -249,7 +261,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const facetsPromise: Promise<FacetResult | null | undefined> =
       release && type && facetPropertiesForType.length > 0
         ? kernelClient(data.locale)
-            .subjects.$facets.post(facetBody)
+            .subjects.$facets.post(facetBody, { fetch: { signal } })
             .then((response) => {
               if (response.error) {
                 facetIndexNotReady = problemCode(response.error) === 'index_not_ready';
@@ -260,35 +272,14 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             .catch(() => null)
         : Promise.resolve(undefined);
 
-    const typeChoicesAvailable = release
-      ? Object.values(release.types).some(
-          (definition) => isRecord(definition) && Array.isArray(definition.facets) && definition.facets.length > 0,
-        )
-      : false;
-    const typeChoicesRequested = Boolean(release && !type && data.query && typeChoicesAvailable);
-    const typeBody: FacetBody = { text: data.query, languages, facets: [{ property: 'type', size: 20 }] };
-    const typeChoicesPromise: Promise<{ id: string; labels: Record<string, string> }[] | null> = typeChoicesRequested
-      ? kernelClient(data.locale)
-          .subjects.$facets.post(typeBody)
-          .then((response) => {
-            if (response.error) {
-              facetIndexNotReady ||= problemCode(response.error) === 'index_not_ready';
-              return null;
-            }
-            const values = (response.data as FacetResult).facets.find((facet) => facet.property === 'type')?.values;
-            return (values ?? []).map(({ value, labels }) => ({
-              id: value,
-              labels: Object.keys(labels).length > 0 ? labels : (release!.types[value]?.labels ?? {}),
-            }));
-          })
-          .catch(() => null)
-      : Promise.resolve(null);
-    const [result, facetResult, typeChoicesResult] = await Promise.all([
-      searchPromise,
-      facetsPromise,
-      typeChoicesPromise,
-    ]);
-    const typeChoices = typeChoicesResult ?? [];
+    const [{ result, discovery }, facetResult] = await Promise.all([searchPromise, facetsPromise]);
+    // Mixed kind metadata belongs to the single result response. Do not probe global Subject counts.
+    const typeChoices =
+      discovery?.status === 'ready' && release
+        ? discovery.page.kinds.values
+            .filter((kind) => allowedType(release, kind.id))
+            .map((kind) => ({ id: kind.id, labels: kind.labels }))
+        : [];
     const facetsAvailable = !release || !type || facetResult !== null;
     const valuesByProperty = new Map((facetResult?.facets ?? []).map((facet) => [facet.property, facet.values]));
     const groups =
@@ -312,6 +303,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
     return {
       ...(result ? { result } : {}),
+      ...(discovery ? { discovery } : {}),
       ...(type ? { type } : {}),
       ...(type && release ? { typeLabels: release.types[type]?.labels ?? {} } : {}),
       hitTypes,
@@ -326,7 +318,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ]),
       ),
       facetsAvailable: release !== undefined && facetsAvailable,
-      facetRetry: facetResult === null || (typeChoicesRequested && typeChoicesResult === null),
+      facetRetry: facetResult === null,
       facetIndexNotReady,
       staleCursorRestarted,
       sort: data.sort ?? 'relevance',
@@ -373,6 +365,7 @@ export function SearchPage({
   const locale = getLocale();
   const type = data?.type;
   const result = data?.result;
+  const discovery = data?.discovery;
   const selectedFacets = data?.selectedFacets ?? {};
   const number = new Intl.NumberFormat(locale);
   const activeFilterCount =
@@ -397,7 +390,10 @@ export function SearchPage({
     ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
     : undefined;
   const hasFilterPanel = Boolean(
-    query && result?.subjects.length && data?.facetsAvailable && (data.typeChoices.length || type),
+    query &&
+    (result?.subjects.length || (discovery?.status === 'ready' && discovery.page.hits.length)) &&
+    data?.facetsAvailable &&
+    (data.typeChoices.length || type),
   );
   const filterRegion = useMemo(
     () => ({ activeCount: activeFilterCount, open: openFilters }),
@@ -607,7 +603,8 @@ function renderResults(
   selectedFacets: Record<string, string[]>,
   data: SearchPageData | undefined,
 ) {
-  if (!result) return null;
+  if (!result && !data?.discovery) return null;
+  const next = data?.discovery?.status === 'ready' ? data.discovery.page.next : result?.next;
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -643,7 +640,9 @@ function renderResults(
           </a>
         </p>
       )}
-      {result.subjects.length === 0 ? (
+      {data?.discovery ? (
+        <DiscoveryResults state={data.discovery} locale={locale} />
+      ) : result?.subjects.length === 0 ? (
         <Empty className="border">
           <EmptyHeader>
             <EmptyTitle className="text-base font-normal">{m.search_no_results()}</EmptyTitle>
@@ -652,27 +651,20 @@ function renderResults(
       ) : (
         <>
           <ResultList
-            hits={result.subjects}
+            hits={result?.subjects ?? []}
             locale={locale}
             hitTypes={data?.hitTypes ?? {}}
             yearProperties={data?.yearProperties ?? []}
           />
-          {result.next && (
-            <a
-              href={searchHref(
-                locale,
-                query,
-                type,
-                selectedFacets,
-                result.next,
-                data?.sort === 'rating' ? 'rating' : undefined,
-              )}
-              className={buttonVariants({ variant: 'outline' })}
-            >
-              {m.search_more()}
-            </a>
-          )}
         </>
+      )}
+      {next && (
+        <a
+          href={searchHref(locale, query, type, selectedFacets, next, data?.sort === 'rating' ? 'rating' : undefined)}
+          className={buttonVariants({ variant: 'outline' })}
+        >
+          {m.search_more()}
+        </a>
       )}
     </>
   );
@@ -682,11 +674,13 @@ function renderResults(
 function readSearch({
   data,
   locale = getLocale(),
+  signal,
 }: {
   data: Omit<SearchParams, 'locale'>;
   locale?: string;
+  signal?: AbortSignal;
 }): Promise<SearchPageData> {
-  return readSearchWithLocale({ data: { ...data, locale } });
+  return readSearchWithLocale({ data: { ...data, locale }, ...(signal ? { signal } : {}) });
 }
 
 export { readSearch };

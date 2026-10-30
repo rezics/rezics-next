@@ -6,10 +6,11 @@ import type { SearchLoaderDeps } from './search-params';
 export function searchQueryOptions(locale: string, params: SearchLoaderDeps) {
   return queryOptions({
     ...publicRead,
-    queryKey: ['search', locale, params],
-    queryFn: () =>
+    queryKey: ['search', 'discovery-v1', locale, params],
+    queryFn: ({ signal }) =>
       readSearch({
         locale,
+        signal,
         data: {
           query: params.query,
           ...(params.type ? { type: params.type } : {}),

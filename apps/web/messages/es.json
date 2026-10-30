@@ -996,5 +996,9 @@
   "settings_notifications_save_draft": "Guardar las opciones revisadas",
   "settings_notifications_use_current": "Usar los valores actuales",
   "inbox_unread_unavailable": "Recuento de no leídas no disponible",
-  "inbox_seen_unavailable": "Se abrió tu bandeja de entrada, pero no se pudo confirmar que las notificaciones se marcaran como vistas."
+  "inbox_seen_unavailable": "Se abrió tu bandeja de entrada, pero no se pudo confirmar que las notificaciones se marcaran como vistas.",
+  "discovery_loading": "Cargando resultados…",
+  "discovery_not_ready": "La búsqueda se está preparando. Inténtalo de nuevo en un momento.",
+  "discovery_unnamed_account": "Cuenta sin nombre",
+  "discovery_verified_as": "Identidad verificada: {name}"
 }

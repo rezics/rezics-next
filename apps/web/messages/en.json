@@ -997,5 +997,9 @@
   "settings_notifications_save_draft": "Save reviewed choices",
   "settings_notifications_use_current": "Use current values",
   "inbox_unread_unavailable": "Unread count unavailable",
-  "inbox_seen_unavailable": "Your Inbox opened, but marking notifications as seen could not be confirmed."
+  "inbox_seen_unavailable": "Your Inbox opened, but marking notifications as seen could not be confirmed.",
+  "discovery_loading": "Loading results…",
+  "discovery_not_ready": "Search is getting ready. Try again in a moment.",
+  "discovery_unnamed_account": "Unnamed account",
+  "discovery_verified_as": "Verified as {name}"
 }

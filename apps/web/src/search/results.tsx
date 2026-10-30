@@ -83,83 +83,87 @@ export function listRatio(hits: readonly SubjectHit[]): CoverRatio {
   return sharedRatio(hits.map((hit) => coverSubject(hit.id, '', hit.summary, hit.type)));
 }
 
-export function ResultList({
-  hits,
-  locale,
-  hitTypes,
-  yearProperties,
-  listPresentationFor,
-}: {
-  hits: readonly ResultHit[];
+type ResultPresentation = {
   locale: string;
   hitTypes: Record<string, Record<string, string>>;
   yearProperties: readonly string[];
   /** Optional adapter for an already available release presentation; it performs no reads. */
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
-}) {
+};
+
+export function ResultRow({
+  hit,
+  locale,
+  hitTypes,
+  yearProperties,
+  listPresentationFor,
+}: ResultPresentation & { hit: ResultHit }) {
+  const label = localizedLabel(hit.labels, locale);
+  const subjectLink = subjectHref({ id: hit.id, label: label.text }, locale);
+  const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
+  const description = localizedLabel(hit.descriptions ?? {}, locale);
+  const year = hitYear(hit.facts, yearProperties);
+  const subject = coverSubject(hit.id, label.text, hit.summary, hit.type);
+  const releasedPresentation =
+    parseListPresentation(hit.listPresentation) ?? parseListPresentation(listPresentationFor?.(subject.types));
+  const listPresentation = releasedPresentation ?? fallbackListPresentation(subject.types);
+  const factProperties = releasedPresentation?.keyFacts ?? fallbackListFactProperties(subject.types);
+  const facts = listKeyFacts(hit.facts, factProperties, yearProperties, locale);
+  const badgeProperties = fallbackListFactProperties(subject.types) ?? [];
+  const score = hit.publicRating?.score;
+  return (
+    <MemberListRow
+      href={subjectLink.href}
+      subject={subject}
+      cover={coverOf(hit.summary)}
+      src={coverSrc}
+      title={label.text}
+      {...(label.lang ? { titleLang: label.lang } : {})}
+      {...(listPresentation ? { listPresentation } : {})}
+      {...(hit.storyOverlay ? { storyOverlay: true } : {})}
+      trailing={
+        score !== undefined && score !== null && Number.isFinite(score) ? (
+          <div className="shrink-0 text-right text-sm" data-slot="public-rating-figure">
+            <span className="block text-xs text-muted-foreground">{m.search_global_score()}</span>
+            <strong className="tabular-nums">
+              {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(score)}
+            </strong>
+          </div>
+        ) : undefined
+      }
+    >
+      <SubjectMeta type={typeName} year={year} locale={locale} className="text-sm text-muted-foreground" />
+      {facts.length > 0 && (
+        <p data-slot="member-list-row-facts" className="text-sm">
+          <MetaLine
+            items={facts.map((fact, index) => (
+              <span
+                key={index}
+                lang={fact.lang}
+                data-property={fact.property}
+                className={
+                  badgeProperties.includes(fact.property)
+                    ? 'rounded-sm bg-muted px-1.5 py-0.5 text-xs tabular-nums'
+                    : undefined
+                }
+              >
+                {fact.text}
+              </span>
+            ))}
+          />
+        </p>
+      )}
+      {description.text && <ItemDescription lang={description.lang}>{description.text}</ItemDescription>}
+    </MemberListRow>
+  );
+}
+
+export function ResultList({ hits, ...presentation }: ResultPresentation & { hits: readonly ResultHit[] }) {
   return (
     <ul role="list" className="space-y-2">
-      {hits.map((hit) => {
-        const label = localizedLabel(hit.labels, locale);
-        const subjectLink = subjectHref({ id: hit.id, label: label.text }, locale);
-        const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
-        const description = localizedLabel(hit.descriptions ?? {}, locale);
-        const year = hitYear(hit.facts, yearProperties);
-        const subject = coverSubject(hit.id, label.text, hit.summary, hit.type);
-        const releasedPresentation =
-          parseListPresentation(hit.listPresentation) ?? parseListPresentation(listPresentationFor?.(subject.types));
-        const listPresentation = releasedPresentation ?? fallbackListPresentation(subject.types);
-        const factProperties = releasedPresentation?.keyFacts ?? fallbackListFactProperties(subject.types);
-        const facts = listKeyFacts(hit.facts, factProperties, yearProperties, locale);
-        const badgeProperties = fallbackListFactProperties(subject.types) ?? [];
-        const score = hit.publicRating?.score;
-        return (
-          <MemberListRow
-            key={hit.id}
-            href={subjectLink.href}
-            subject={subject}
-            cover={coverOf(hit.summary)}
-            src={coverSrc}
-            title={label.text}
-            {...(label.lang ? { titleLang: label.lang } : {})}
-            {...(listPresentation ? { listPresentation } : {})}
-            {...(hit.storyOverlay ? { storyOverlay: true } : {})}
-            trailing={
-              score !== undefined && score !== null && Number.isFinite(score) ? (
-                <div className="shrink-0 text-right text-sm" data-slot="public-rating-figure">
-                  <span className="block text-xs text-muted-foreground">{m.search_global_score()}</span>
-                  <strong className="tabular-nums">
-                    {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(score)}
-                  </strong>
-                </div>
-              ) : undefined
-            }
-          >
-            <SubjectMeta type={typeName} year={year} locale={locale} className="text-sm text-muted-foreground" />
-            {facts.length > 0 && (
-              <p data-slot="member-list-row-facts" className="text-sm">
-                <MetaLine
-                  items={facts.map((fact, index) => (
-                    <span
-                      key={index}
-                      lang={fact.lang}
-                      data-property={fact.property}
-                      className={
-                        badgeProperties.includes(fact.property)
-                          ? 'rounded-sm bg-muted px-1.5 py-0.5 text-xs tabular-nums'
-                          : undefined
-                      }
-                    >
-                      {fact.text}
-                    </span>
-                  ))}
-                />
-              </p>
-            )}
-            {description.text && <ItemDescription lang={description.lang}>{description.text}</ItemDescription>}
-          </MemberListRow>
-        );
-      })}
+      {hits.map((hit) => (
+        <ResultRow key={`${hit.type}:${hit.id}`} hit={hit} {...presentation} />
+      ))}
     </ul>
   );
 }

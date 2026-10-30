@@ -997,5 +997,9 @@
   "settings_notifications_save_draft": "保存已核对的选择",
   "settings_notifications_use_current": "使用当前值",
   "inbox_unread_unavailable": "未读数量暂不可用",
-  "inbox_seen_unavailable": "收件箱已打开，但无法确认是否已将通知标记为已看。"
+  "inbox_seen_unavailable": "收件箱已打开，但无法确认是否已将通知标记为已看。",
+  "discovery_loading": "正在加载结果…",
+  "discovery_not_ready": "搜索正在准备中。请稍后重试。",
+  "discovery_unnamed_account": "未命名帐号",
+  "discovery_verified_as": "已认证为 {name}"
 }

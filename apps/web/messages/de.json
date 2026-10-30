@@ -996,5 +996,9 @@
   "settings_notifications_save_draft": "Geprüfte Auswahl speichern",
   "settings_notifications_use_current": "Aktuelle Werte übernehmen",
   "inbox_unread_unavailable": "Anzahl ungelesener Benachrichtigungen nicht verfügbar",
-  "inbox_seen_unavailable": "Dein Posteingang wurde geöffnet. Ob die Benachrichtigungen als gesehen markiert wurden, konnte nicht bestätigt werden."
+  "inbox_seen_unavailable": "Dein Posteingang wurde geöffnet. Ob die Benachrichtigungen als gesehen markiert wurden, konnte nicht bestätigt werden.",
+  "discovery_loading": "Ergebnisse werden geladen…",
+  "discovery_not_ready": "Die Suche wird vorbereitet. Versuche es gleich noch einmal.",
+  "discovery_unnamed_account": "Unbenanntes Konto",
+  "discovery_verified_as": "Verifiziert als {name}"
 }

@@ -996,5 +996,9 @@
   "settings_notifications_save_draft": "검토한 선택 저장",
   "settings_notifications_use_current": "현재 값 사용",
   "inbox_unread_unavailable": "읽지 않은 알림 수를 불러올 수 없습니다",
-  "inbox_seen_unavailable": "받은 편지함을 열었지만 알림을 확인한 것으로 표시했는지는 확인할 수 없습니다."
+  "inbox_seen_unavailable": "받은 편지함을 열었지만 알림을 확인한 것으로 표시했는지는 확인할 수 없습니다.",
+  "discovery_loading": "검색 결과 불러오는 중…",
+  "discovery_not_ready": "검색을 준비하고 있습니다. 잠시 후 다시 시도해 주세요.",
+  "discovery_unnamed_account": "이름 없는 계정",
+  "discovery_verified_as": "{name}(으)로 인증됨"
 }

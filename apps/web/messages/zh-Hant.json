@@ -996,5 +996,9 @@
   "settings_notifications_save_draft": "儲存已核對的選擇",
   "settings_notifications_use_current": "使用目前值",
   "inbox_unread_unavailable": "未讀數量暫時無法取得",
-  "inbox_seen_unavailable": "收件匣已開啟，但無法確認是否已將通知標記為已看。"
+  "inbox_seen_unavailable": "收件匣已開啟，但無法確認是否已將通知標記為已看。",
+  "discovery_loading": "正在載入結果…",
+  "discovery_not_ready": "搜尋正在準備中，請稍後再試。",
+  "discovery_unnamed_account": "未命名帳號",
+  "discovery_verified_as": "已認證為 {name}"
 }

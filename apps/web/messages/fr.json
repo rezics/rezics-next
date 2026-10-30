@@ -996,5 +996,9 @@
   "settings_notifications_save_draft": "Enregistrer les choix vérifiés",
   "settings_notifications_use_current": "Utiliser les valeurs actuelles",
   "inbox_unread_unavailable": "Nombre de notifications non lues indisponible",
-  "inbox_seen_unavailable": "Votre boîte de réception est ouverte, mais le marquage des notifications comme vues n’a pas pu être confirmé."
+  "inbox_seen_unavailable": "Votre boîte de réception est ouverte, mais le marquage des notifications comme vues n’a pas pu être confirmé.",
+  "discovery_loading": "Chargement des résultats…",
+  "discovery_not_ready": "La recherche se prépare. Réessayez dans un instant.",
+  "discovery_unnamed_account": "Compte sans nom",
+  "discovery_verified_as": "Identité vérifiée : {name}"
 }
