@@ -117,11 +117,21 @@ export async function publishErasureProofs(database: Pool, ports: TrustedAccessP
   // An older ordinal/copy completion is not evidence of the added native roles.
   // Recovered obligations revisit the same native engine and any exact local
   // copy roles before their existing immutable completion can be published.
-  const historyCovered = row.copies_completed_at && !row.copies_published_at &&
-    row.native_role_version === 1 && row.native_completed_at && row.consent_completed_at &&
-    row.source_discharged_at && (await database.query(`SELECT 1 FROM auth_copy_coverage
+  const historyCovered =
+    row.copies_completed_at &&
+    !row.copies_published_at &&
+    row.native_role_version === 1 &&
+    row.native_completed_at &&
+    row.consent_completed_at &&
+    row.source_discharged_at &&
+    (
+      await database.query(
+        `SELECT 1 FROM auth_copy_coverage
       WHERE singleton AND version=1 AND covered AND native_covered
-      AND NOT EXISTS(SELECT 1 FROM auth_copy_role WHERE account_id=$1 LIMIT 1)`, [row.account_id])).rowCount;
+      AND NOT EXISTS(SELECT 1 FROM auth_copy_role WHERE account_id=$1 LIMIT 1)`,
+        [row.account_id],
+      )
+    ).rowCount;
   if (historyCovered) {
     if (!ports.recordAuthHistoryCompletion) throw unavailable();
     await ports.recordAuthHistoryCompletion(root);

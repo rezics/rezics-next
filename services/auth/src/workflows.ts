@@ -246,7 +246,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       return ids[0] ?? null;
     };
     return {
-      human: one('human'), initiator: one('initiator'), delegate: one('delegate'),
+      human: one('human'),
+      initiator: one('initiator'),
+      delegate: one('delegate'),
       // Historical/foreign hosts without the real projection remain usable but
       // cannot manufacture complete role coverage from an actor-only callback.
       version: actors === undefined || (context === undefined && !selfRegistration) ? 0 : 1,
