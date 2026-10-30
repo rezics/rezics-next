@@ -1,14 +1,19 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import {
   currentCommand,
+  currentCommandResources,
   noEffect,
   registerCommandCallback,
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
+import {
+  createNativeLibrarySourceCustody,
+  type NativeSourceCustody,
+  type NativeSourceIdentity,
+} from '../library/native-source-custody.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
@@ -26,7 +31,9 @@ import type {
   IdentityReceivingEffect,
   IdentityReceivingRecord,
   IdentityReceivingSelection,
-  IdentityReceivingSourceProducer,
+  IdentityReceivingCaptureInput,
+  IdentityReceivingCaptureResult,
+  IdentityReceivingSource,
   IdentityReceivingProgress,
 } from './identity-receiving-effects-types.ts';
 import receivingJob from './identity-epoch-store-receiving-job.sql';
@@ -41,23 +48,95 @@ const stale = () =>
     'Missing or stale exact native receiving source, plan, owner or gate',
   );
 const unavailable = (detail: string) => new IdentityEpochStoreError('identity_epoch_unavailable', detail);
-const sourcePath = new URL('../library/identity-receiving-source.ts', import.meta.url);
-/** Provisional UNAVAILABLE adapter only. The fixed Source owner is not a user-supplied callback or registry. */
-async function sourceProducer(): Promise<IdentityReceivingSourceProducer> {
-  if (!existsSync(sourcePath))
-    throw unavailable(
-      'Missing library/identity-receiving-source.ts: readIdentityReceivingSource, holdIdentityReceivingSource, lockIdentityReceivingSource, acknowledgeIdentityReceivingSource',
-    );
-  const producer = (await import(sourcePath.href)) as IdentityReceivingSourceProducer;
-  for (const name of [
-    'readIdentityReceivingSource',
-    'holdIdentityReceivingSource',
-    'lockIdentityReceivingSource',
-    'acknowledgeIdentityReceivingSource',
-  ] as const)
-    if (typeof producer[name] !== 'function')
-      throw unavailable(`Missing library/identity-receiving-source.ts export ${name}`);
-  return producer;
+/** Identity keys are hints until the selected Source owner validates its native capture and hold. */
+function sourceEffectKey(selection: IdentityReceivingSelection, scopeDigest: string, identity: NativeSourceIdentity) {
+  const { effectKey: _effectKey, ...source } = identity;
+  return createHash('sha256')
+    .update(
+      canonicalize(
+        JSON.parse(
+          json({
+            job: selection.job,
+            original: selection.original,
+            effectKey: selection.effectKey,
+            owner: selection.owner,
+            scope: selection.scope,
+            disposition: selection.disposition,
+            step,
+            version: 1,
+            scopeDigest,
+            source,
+          }),
+        ),
+      )!,
+    )
+    .digest('hex');
+}
+function sourceIdentity(selection: IdentityReceivingSelection, scopeDigest: string, identity: NativeSourceIdentity) {
+  if (
+    identity.collectionId !== selection.sourceId ||
+    selection.owner !== identity.collectionId ||
+    partitionOf(identity.route) !== partitionOf(routeOf(selection.owner)!) ||
+    identity.receivingEpoch !== selection.job.epoch.toString()
+  )
+    throw stale();
+  return { ...identity, effectKey: sourceEffectKey(selection, scopeDigest, identity) };
+}
+/** One bounded owner call per continuation; never loop over an unbounded Source in preparation. */
+export async function captureIdentityReceivingSource(
+  pool: Pool,
+  selection: IdentityReceivingSelection,
+  input: IdentityReceivingCaptureInput,
+): Promise<IdentityReceivingCaptureResult> {
+  selected(selection);
+  const identity = sourceIdentity(selection, await jobBasis(pool, selection), input.identity);
+  const owner = createNativeLibrarySourceCustody({ pool });
+  return input.frontier?.driver === 'done'
+    ? owner.finishCapture({ ...input, identity, frontier: input.frontier })
+    : owner.capturePage({ ...input, identity });
+}
+/** Per-call local Source plan ceiling. Native owner work remains bounded and charged on every attempt. */
+function sourceAllowance(reservationId: string) {
+  return {
+    reservationId,
+    remaining: {
+      candidateKeys: 0,
+      identityMetadataRows: 0,
+      nativeRows: 512,
+      nativePoints: 32,
+      witnessKeys: 0,
+      statements: 16,
+      bytes: 262144,
+      emptySeeks: 0,
+    },
+  };
+}
+function sourceWork(tx: CommandTransaction, holdId: string) {
+  return { allowance: sourceAllowance(holdId), deadline: currentCommandResources(tx).deadline };
+}
+async function holdSource(
+  tx: CommandTransaction,
+  source: IdentityReceivingSource,
+  operation: 'readAndHold' | 'revalidateHold',
+): Promise<NativeSourceCustody> {
+  const { identity, captureId, holdId } = source.native;
+  const result = await createNativeLibrarySourceCustody(currentCommandResources(tx))[operation]({
+    client: tx,
+    at: currentCommand(tx).time,
+    identity,
+    captureId,
+    holdId,
+    ...sourceWork(tx, holdId),
+  });
+  if (result.status !== 'held') throw unavailable(`Native Source ${operation}: ${result.reason}`);
+  // The owner resolved the actual committed capture and retained hold on THIS client; brands are not authority.
+  if (
+    result.custody.transactionId !== source.provenance.transactionId ||
+    result.custody.captureId !== captureId ||
+    result.custody.holdId !== holdId
+  )
+    throw stale();
+  return result.custody;
 }
 const digest = (binding: IdentityReceivingBinding) =>
   createHash('sha256')
@@ -102,7 +181,30 @@ function decodeReceipt(value: unknown): IdentityNativeReceipt {
 }
 function decodeBinding(value: unknown): IdentityReceivingBinding {
   const b = value as IdentityReceivingBinding;
-  if (!b || b.step !== step || b.version !== 1 || !b.source || !b.job) throw stale();
+  if (!b || b.step !== step || b.version !== 1 || !b.source?.native || !b.job) throw stale();
+  const identity = sourceIdentity(
+    {
+      ...b,
+      sourceId: b.source.id,
+      scope: b.source.scope,
+      disposition: b.source.disposition,
+      job: { ...b.job, epoch: BigInt(b.job.epoch) },
+    },
+    b.scopeDigest,
+    b.source.native.identity,
+  );
+  if (
+    identity.effectKey !== b.source.native.identity.effectKey ||
+    b.source.home !== partitionOf(identity.route) ||
+    b.source.receivingHome !== b.source.home ||
+    b.source.receivingEpoch !== identity.ownerEpoch ||
+    b.source.incarnation !== identity.incarnation ||
+    b.source.generation !== identity.generation ||
+    b.source.original !== b.original ||
+    b.source.effectKey !== b.effectKey ||
+    b.source.owner !== b.owner
+  )
+    throw stale();
   return {
     ...b,
     job: { ...b.job, epoch: BigInt(b.job.epoch) },
@@ -181,23 +283,84 @@ export async function prepareIdentityReceivingEffect(
 ): Promise<IdentityReceivingEffect> {
   selected(selection);
   const scopeDigest = await jobBasis(pool, selection);
-  const producer = await sourceProducer();
-  const source = await producer.readIdentityReceivingSource(pool, selection);
-  if (
-    !source ||
-    source.id !== selection.sourceId ||
-    source.owner !== selection.owner ||
-    source.original !== selection.original ||
-    source.scope !== selection.scope ||
-    source.effectKey !== selection.effectKey ||
-    source.disposition !== selection.disposition ||
-    source.receivingHome !== partitionOf(routeOf(source.owner)!) ||
-    source.home !== source.provenance.partition ||
-    !source.incarnation ||
-    !source.generation ||
-    !Number.isInteger(source.receivingEpoch)
-  )
-    throw stale();
+  const hint = selection.capture;
+  if (!hint) throw unavailable('Receiving preparation requires the selected Source native capture frontier');
+  const identity = sourceIdentity(selection, scopeDigest, hint.identity);
+  if (identity.effectKey !== hint.identity.effectKey) throw stale();
+  // A committed accepted record retains native custody even when the business Source later changes.
+  // Replay that exact record before asking the owner to finish a still-current capture again.
+  const replay = await runCommand(pool, { partition: partitionOf(identity.route) }, async (tx) => {
+    const prior = (
+      await tx.query(
+        `SELECT c.transaction_id,c.epoch,c.position FROM semantic.identity_epoch_receiving_record r
+       JOIN semantic.identity_epoch_native_commit c
+         ON (c.partition_no,c.transaction_id)=(r.partition_no,r.transaction_id)
+       WHERE r.partition_no=$1 AND r.job_id=$2 AND r.job_epoch=$3 AND r.effect_key=$4 AND r.original=$5`,
+        [
+          partitionOf(identity.route),
+          selection.job.jobId,
+          selection.job.epoch.toString(),
+          selection.effectKey,
+          selection.original,
+        ],
+      )
+    ).rows[0];
+    if (!prior) return noEffect(null);
+    const effect: IdentityReceivingEffect = {
+      kind: 'receiving',
+      job: selection.job,
+      original: selection.original,
+      effectKey: selection.effectKey,
+      receipt: receipt(partitionOf(identity.route), prior.transaction_id, prior.epoch, prior.position),
+    };
+    const saved = await lookupIdentityReceivingEffect(tx, effect);
+    if (
+      !saved ||
+      saved.scopeDigest !== scopeDigest ||
+      saved.owner !== selection.owner ||
+      saved.source.id !== selection.sourceId ||
+      saved.source.scope !== selection.scope ||
+      saved.source.disposition !== selection.disposition ||
+      saved.source.native.captureId !== hint.frontier.captureId ||
+      canonicalize(saved.source.native.identity) !== canonicalize(identity)
+    )
+      throw stale();
+    return noEffect(effect);
+  });
+  if (replay.value) return replay.value;
+  const completed = await createNativeLibrarySourceCustody({ pool }).finishCapture({
+    identity,
+    frontier: hint.frontier,
+    allowance: sourceAllowance(hint.frontier.captureId),
+    deadline: Date.now() + 5000,
+  });
+  if (completed.status !== 'complete') throw unavailable(`Native Source finishCapture: ${completed.reason}`);
+  const capture = completed.capture;
+  const homeOfSource = partitionOf(identity.route);
+  const holdDigest = createHash('sha256')
+    .update(json([identity.effectKey, capture.captureId]))
+    .digest('hex');
+  const holdId = `${holdDigest.slice(0, 8)}-${holdDigest.slice(8, 12)}-${holdDigest.slice(12, 16)}-${holdDigest.slice(16, 20)}-${holdDigest.slice(20, 32)}`;
+  const source: IdentityReceivingSource = {
+    id: identity.collectionId,
+    incarnation: identity.incarnation,
+    generation: identity.generation,
+    scope: selection.scope,
+    owner: selection.owner,
+    home: homeOfSource,
+    receivingHome: homeOfSource,
+    receivingEpoch: identity.ownerEpoch,
+    original: selection.original,
+    effectKey: selection.effectKey,
+    disposition: selection.disposition,
+    provenance: decodeReceipt({
+      partition: homeOfSource,
+      epoch: identity.ownerEpoch,
+      transactionId: capture.transactionId,
+      position: capture.position,
+    }),
+    native: { identity, captureId: capture.captureId, holdId },
+  };
   const binding: IdentityReceivingBinding = {
     job: selection.job,
     original: selection.original,
@@ -259,8 +422,6 @@ export async function prepareIdentityReceivingEffect(
     return { value: null, events: [wake(binding)] };
   });
   const plan = await planAtHome(pool, binding);
-  const sourceHold = decodeReceipt(await producer.holdIdentityReceivingSource(pool, binding));
-  if (sourceHold.partition !== source.home || sourceHold.epoch !== source.provenance.epoch) throw stale();
   const accepted = await runCommand<IdentityNativeReceipt | null>(
     pool,
     { partition: source.receivingHome },
@@ -306,13 +467,18 @@ export async function prepareIdentityReceivingEffect(
         ],
       );
       if (gate.rowCount !== 1) throw stale();
+      await holdSource(tx, source, 'readAndHold');
       bindSemanticProducerRoles(tx, roles);
       recordIdentityEpochNativeCommit(tx, 'identity-receiving-record');
       registerCommandCallback(tx, async (id) => {
         await tx.query(
           `INSERT INTO semantic.identity_epoch_receiving_record
         (partition_no,job_id,job_epoch,effect_key,owner_id,original,owner_epoch,binding,binding_digest,plan,source_hold,transaction_id)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+          jsonb_build_object('partition',c.partition_no,'transactionId',c.transaction_id,
+            'epoch',c.epoch,'position',c.position::text),$11
+        FROM semantic.identity_epoch_native_commit c
+        WHERE c.partition_no=$1 AND c.transaction_id=$11 AND c.purpose='identity-receiving-record'`,
           [
             source.receivingHome,
             binding.job.jobId,
@@ -324,7 +490,6 @@ export async function prepareIdentityReceivingEffect(
             json(binding),
             bindingDigest,
             json(plan),
-            json(sourceHold),
             id,
           ],
         );
@@ -334,7 +499,7 @@ export async function prepareIdentityReceivingEffect(
   );
   const native =
     accepted.value ?? receipt(accepted.partition, accepted.transactionId, accepted.epoch, accepted.position);
-  return effectOf({ ...binding, plan, sourceHold, receipt: native, applied: null });
+  return effectOf({ ...binding, plan, sourceHold: native, receipt: native, applied: null });
 }
 
 async function localRecord(tx: CommandTransaction, effect: IdentityReceivingEffect) {
@@ -364,10 +529,12 @@ async function localRecord(tx: CommandTransaction, effect: IdentityReceivingEffe
     binding.source.receivingEpoch !== row.owner_epoch
   )
     throw stale();
+  const sourceHold = decodeReceipt(row.source_hold);
+  if (json(sourceHold) !== json(effect.receipt)) throw stale();
   const record: IdentityReceivingRecord = {
     ...binding,
     plan: decodeReceipt(row.plan),
-    sourceHold: decodeReceipt(row.source_hold),
+    sourceHold,
     receipt: effect.receipt,
     applied:
       row.effect_transaction_id && row.effect_epoch !== null && row.effect_position !== null
@@ -402,7 +569,8 @@ export async function lookupIdentityReceivingEffect(
   if (row.effect_transaction_id && row.effect_epoch === null) throw stale();
   return record;
 }
-/** Used by the existing Store. Only the fixed Source-owned local validator can retain the live source hold. */
+const admittedSources = new WeakMap<CommandTransaction, Map<string, NativeSourceCustody>>();
+/** Used by the existing Store. The actual Source owner retains custody on the receiving client and T. */
 export async function admitIdentityReceivingEffect(
   tx: CommandTransaction,
   effect: IdentityReceivingEffect,
@@ -410,7 +578,16 @@ export async function admitIdentityReceivingEffect(
   if (currentCommand(tx).basis !== null) throw stale();
   const record = await lookupIdentityReceivingEffect(tx, effect);
   if (!record || record.applied) throw stale();
-  await (await sourceProducer()).lockIdentityReceivingSource(tx, record);
+  let held = admittedSources.get(tx);
+  if (!held) {
+    held = new Map();
+    admittedSources.set(tx, held);
+  }
+  const key = json([effect.job.jobId, effect.job.epoch, effect.effectKey, effect.receipt.transactionId]);
+  if (held.has(key)) return;
+  // An accepted record already retained this exact native hold. Revalidation does not acquire a fresh
+  // read or require the live business generation to remain equal to the captured generation.
+  held.set(key, await holdSource(tx, record.source, 'revalidateHold'));
   // Validate after the owner's ordinary callbacks have persisted the effect/frontier/native record.
   // A caller that admits and mutates but forgets its scope receipt cannot commit that mutation.
   registerCommandCallback(tx, () => {
@@ -418,9 +595,20 @@ export async function admitIdentityReceivingEffect(
       const saved = await tx.query(
         `SELECT 1 FROM semantic.identity_epoch_receiving_effect e
         JOIN semantic.identity_epoch_native_commit c ON (c.partition_no,c.transaction_id)=(e.partition_no,e.transaction_id)
+        JOIN semantic.identity_epoch_step s ON (s.partition_no,s.transaction_id)=(e.partition_no,e.transaction_id)
         WHERE e.partition_no=$1 AND e.job_id=$2 AND e.effect_key=$3 AND e.transaction_id=$4
-        AND c.purpose=$5 AND c.xmin=e.xmin`,
-        [effect.receipt.partition, effect.job.jobId, effect.effectKey, id, step],
+        AND c.purpose=$5 AND c.xmin=e.xmin AND s.xmin=c.xmin
+        AND s.job_id=e.job_id AND s.job_epoch=$6 AND s.step=$5 AND s.version=1
+        AND s.scope_digest=$7 AND s.frontier=e.frontier AND s.native_epoch=c.epoch AND s.native_position=c.position`,
+        [
+          effect.receipt.partition,
+          effect.job.jobId,
+          effect.effectKey,
+          id,
+          step,
+          effect.job.epoch.toString(),
+          record.scopeDigest,
+        ],
       );
       if (saved.rowCount !== 1) throw stale();
     });
@@ -498,7 +686,7 @@ export async function reconcileIdentityReceivingEffect(
         await tx.query(
           `SELECT c.transaction_id,c.epoch,c.position FROM semantic.identity_epoch_native_commit c
         JOIN semantic.identity_epoch_receiving_custody a ON (a.partition_no,a.transaction_id)=(c.partition_no,c.transaction_id)
-        WHERE a.partition_no=$1 AND a.job_id=$2 AND a.effect_key=$3 AND c.purpose='identity-receiving-custody'`,
+        WHERE a.partition_no=$1 AND a.job_id=$2 AND a.effect_key=$3 AND c.purpose='identity-receiving-custody' AND c.xmin=a.xmin`,
           [home, effect.job.jobId, effect.effectKey],
         )
       ).rows[0];
@@ -533,7 +721,30 @@ export async function reconcileIdentityReceivingEffect(
   const custody =
     acknowledged.value ??
     receipt(acknowledged.partition, acknowledged.transactionId, acknowledged.epoch, acknowledged.position);
-  await (await sourceProducer()).acknowledgeIdentityReceivingSource(pool, record, custody);
+  // The released control transaction above verified the exact native effect, plan and immutable binding.
+  // Re-read that SAME effect at its own home before the owner's native release; no job-wide ACK substitutes.
+  await runCommand(pool, { partition: record.source.home }, async (tx) => {
+    const { record: local } = await localRecord(tx, effect);
+    if (
+      !local?.applied ||
+      json(local.applied.receipt) !== json(native) ||
+      digest(local) !== digest(record) ||
+      custody.partition !== home
+    )
+      throw stale();
+    const { identity, captureId, holdId } = local.source.native;
+    const released = await createNativeLibrarySourceCustody({ pool }).releaseHold({
+      client: tx,
+      at: currentCommand(tx).time,
+      identity,
+      captureId,
+      holdId,
+      ...sourceWork(tx, holdId),
+    });
+    if (released.status !== 'released') throw unavailable(`Native Source releaseHold: ${released.reason}`);
+    bindSemanticProducerRoles(tx, roles);
+    return { value: null, events: [wake(local)] };
+  });
   // Keep the gate until all SAME-job scopes at this owner/original have durable custody. Individual
   // scope reconciliation cannot clear it while a sibling OLD/NEW/first-apply obligation is outstanding.
   return native;

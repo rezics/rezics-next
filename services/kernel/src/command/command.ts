@@ -202,6 +202,7 @@ const times = new WeakMap<AuthoritativeTime, string>();
 const attempts = new WeakMap<CommandTransaction, CommandAttempt>();
 const attemptDeadlines = new WeakMap<CommandAttempt, number>();
 const commands = new WeakMap<CommandTransaction, CurrentCommand>();
+const commandResources = new WeakMap<CommandTransaction, Readonly<{ pool: Pool; deadline: number }>>();
 // Exact executor object only: copying a query or callback capability conveys no receipt authority.
 const receiptOwners = new WeakMap<
   CommandTransaction,
@@ -253,6 +254,13 @@ export function currentCommand(tx: CommandTransaction): CurrentCommand {
   const context = commands.get(tx);
   if (!context) throw new TypeError('No authorized live command transaction');
   return context;
+}
+/** Trusted owner factories reuse the live executor resources; this grants no second checkout. */
+export function currentCommandResources(tx: CommandTransaction): Readonly<{ pool: Pool; deadline: number }> {
+  currentCommand(tx);
+  const resources = commandResources.get(tx);
+  if (!resources) throw new TypeError('No live command resources');
+  return resources;
 }
 /** Allows existing Access checks in a mutation to reuse the same attempt time. */
 export function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined {
@@ -575,6 +583,7 @@ async function executeCommand<T>(
             : null;
           const transactionId = Bun.randomUUIDv7();
           commands.set(tx, Object.freeze({ ...attempt, transactionId, authorization: capability }));
+          commandResources.set(tx, Object.freeze({ pool, deadline }));
           if (capability && mode === 'execute' && options.principal)
             receiptOwners.set(
               tx,
@@ -679,6 +688,7 @@ async function executeCommand<T>(
             }
             attempts.delete(tx);
             commands.delete(tx);
+            commandResources.delete(tx);
             times.delete(time);
             const state = await boundedRead(client, deadline, () => readPartition(client, partition));
             if (state?.writeState === 'moved') throw new CommandUnavailableError('moved', partition, state.movedTo);
@@ -729,6 +739,7 @@ async function executeCommand<T>(
           callbackState.callbacks.length = 0;
           attempts.delete(tx);
           commands.delete(tx);
+          commandResources.delete(tx);
           if (time) times.delete(time);
         }
       }).finally(() => {

@@ -321,3 +321,213 @@ test('a crash after the physical receiving effect and before control custody nev
   expect(await store.reconcileStepReceipt(f.pool, progress.receipt)).toEqual(progress);
   expect(await input.members()).toEqual(before);
 });
+
+test('Independent Library owner effects bind the actual native Source capture and held receiving provenance without invented Source callbacks', async () => {
+  const input = await admittedReceivingJob(f);
+  const progress = await completeReceivingParticipant(f, input.job);
+  await store.reconcileStepReceipt(f.pool, progress.receipt);
+  const effects = (
+    await f.admin.query(
+      `SELECT r.binding,r.plan,r.source_hold,r.transaction_id AS accepted_transaction,
+        c.epoch AS accepted_epoch,c.position AS accepted_position,
+        e.transaction_id AS effect_transaction,s.frontier,s.scope_digest
+      FROM semantic.identity_epoch_receiving_record r
+      JOIN semantic.identity_epoch_native_commit c
+        ON (c.partition_no,c.transaction_id)=(r.partition_no,r.transaction_id) AND c.xmin=r.xmin
+      JOIN semantic.identity_epoch_receiving_effect e
+        ON (e.partition_no,e.job_id,e.effect_key)=(r.partition_no,r.job_id,r.effect_key)
+      JOIN semantic.identity_epoch_step s
+        ON (s.partition_no,s.transaction_id)=(e.partition_no,e.transaction_id) AND s.xmin=e.xmin
+      WHERE r.partition_no=$1 AND r.job_id=$2 AND r.job_epoch=$3`,
+      [home(input.library.collection.id), input.job.jobId, input.job.epoch.toString()],
+    )
+  ).rows;
+  expect(effects.length).toBeGreaterThan(0);
+  for (const effect of effects) {
+    const binding = effect.binding;
+    expect(binding.job).toEqual({ jobId: input.job.jobId, epoch: input.job.epoch.toString() });
+    expect(binding.step).toBe('library-private-follow-counts');
+    expect(binding.version).toBe(1);
+    expect(binding.scopeDigest).toBe(effect.scope_digest);
+    expect(effect.source_hold).toEqual({
+      partition: home(binding.owner),
+      transactionId: effect.accepted_transaction,
+      epoch: effect.accepted_epoch,
+      position: effect.accepted_position,
+    });
+    const { identity, captureId, holdId } = binding.source.native;
+    const native = (
+      await f.admin.query(
+        `SELECT c.collection_id,c.account_id,c.incarnation,c.generation::text,c.scope,
+          c.owner_epoch,c.receiving_epoch::text,c.effect_key,c.complete,
+          r.transaction_id,r.position::text,h.released,
+          jsonb_build_object('captureId',c.capture_id,'driver',c.driver,'after',c.after_key,
+            'tie',c.tie,'sessionId',c.session_id,'scanned',c.scanned::text,'version',c.version) AS frontier
+        FROM library.native_source_capture c
+        JOIN library.native_source_receipt r ON (r.route,r.capture_id)=(c.route,c.capture_id) AND r.xmin=c.xmin
+        JOIN library.native_source_hold h ON (h.route,h.capture_id,h.transaction_id)=(c.route,c.capture_id,r.transaction_id)
+        WHERE c.route=$1 AND c.capture_id=$2 AND h.hold_id=$3`,
+        [identity.route, captureId, holdId],
+      )
+    ).rows;
+    expect(native).toHaveLength(1);
+    const { frontier, ...custody } = native[0]!;
+    expect(custody).toEqual({
+      collection_id: identity.collectionId,
+      account_id: identity.accountId,
+      incarnation: identity.incarnation,
+      generation: identity.generation,
+      scope: identity.scope,
+      owner_epoch: identity.ownerEpoch,
+      receiving_epoch: input.job.epoch.toString(),
+      effect_key: identity.effectKey,
+      complete: true,
+      transaction_id: binding.source.provenance.transactionId,
+      position: binding.source.provenance.position,
+      released: true,
+    });
+    expect(identity.effectKey).toMatch(/^[0-9a-f]{64}$/);
+    expect(identity.effectKey).not.toBe(binding.effectKey);
+    const { prepareIdentityReceivingEffect } = await import('../../src/semantic/identity-receiving-effects.ts');
+    const selection = {
+      job: input.job,
+      original: binding.original,
+      owner: binding.owner,
+      sourceId: binding.source.id,
+      scope: binding.source.scope,
+      disposition: binding.source.disposition,
+      effectKey: binding.effectKey,
+      capture: { identity, frontier },
+    };
+    const replayed = await prepareIdentityReceivingEffect(f.pool, selection);
+    expect(replayed.receipt).toEqual({ ...effect.source_hold, position: BigInt(effect.source_hold.position) });
+    for (const changed of [
+      { ...selection, effectKey: `${selection.effectKey}-different` },
+      { ...selection, disposition: selection.disposition === 'OLD' ? ('NEW' as const) : ('OLD' as const) },
+    ])
+      await expect(prepareIdentityReceivingEffect(f.pool, changed)).rejects.toMatchObject({
+        code: 'identity_effect_stale',
+      });
+  }
+});
+
+test('receiving admission revalidates a retained native hold after live Source generation changes while fresh holds stay strict', async () => {
+  const { captureIdentityReceivingSource, prepareIdentityReceivingEffect, lookupIdentityReceivingEffect } =
+    await import('../../src/semantic/identity-receiving-effects.ts');
+  const { createNativeLibrarySourceCustody } = await import('../../src/library/native-source-custody.ts');
+  const { currentCommand } = await import('../../src/command/command.ts');
+  const { routeOf } = await import('../../src/route/route.ts');
+  const input = await admittedReceivingJob(f);
+  const route = routeOf(input.library.collection.id)!;
+  // These are lookup hints only; the real Source capture and receiving preparation validate them.
+  const source = (
+    await f.admin.query(
+      `SELECT curator_account_id::text AS "accountId",
+        collection_id::text || ':' || extract(epoch FROM created_at)::text AS incarnation,
+        source_generation::text AS generation
+      FROM library.collection WHERE route=$1 AND collection_id=$2`,
+      [route, input.library.collection.id],
+    )
+  ).rows[0]!;
+  const partition = (
+    await f.admin.query('SELECT epoch FROM core.partition WHERE partition_no=$1', [home(input.library.collection.id)])
+  ).rows[0]!;
+  const selection = {
+    job: input.job,
+    original: input.original,
+    owner: input.library.collection.id,
+    sourceId: input.library.collection.id,
+    scope: input.original,
+    effectKey: 'retained-native-generation',
+    disposition: 'NEW' as const,
+  };
+  const work = () => ({
+    allowance: {
+      reservationId: randomUUID(),
+      remaining: {
+        candidateKeys: 100,
+        identityMetadataRows: 0,
+        nativeRows: 4096,
+        nativePoints: 64,
+        witnessKeys: 0,
+        statements: 32,
+        bytes: 1048576,
+        emptySeeks: 4,
+      },
+    },
+    deadline: Date.now() + 5000,
+  });
+  const identity = {
+    route,
+    collectionId: input.library.collection.id,
+    ...source,
+    scope: 'curated' as const,
+    ownerEpoch: partition.epoch,
+    receivingEpoch: input.job.epoch.toString(),
+    effectKey: '',
+  };
+  let capture = await captureIdentityReceivingSource(f.pool, selection, {
+    identity,
+    frontier: null,
+    limit: 100,
+    ...work(),
+  });
+  for (let page = 0; capture.status === 'pending' && page < 32; page++) {
+    // The adapter derives the same fixed native identity key on every continuation.
+    capture = await captureIdentityReceivingSource(f.pool, selection, {
+      identity,
+      frontier: capture.frontier,
+      limit: 100,
+      ...work(),
+    });
+  }
+  expect(capture.status).toBe('complete');
+  if (capture.status !== 'complete') throw new Error('Finite native Source capture did not complete');
+  const frontier = (
+    await f.admin.query(
+      `SELECT capture_id AS "captureId",driver,after_key AS after,tie,session_id AS "sessionId",
+        scanned::text,version FROM library.native_source_capture WHERE route=$1 AND capture_id=$2`,
+      [route, capture.capture.captureId],
+    )
+  ).rows[0]!;
+  const effect = await prepareIdentityReceivingEffect(f.pool, {
+    ...selection,
+    capture: { identity: capture.capture.identity, frontier },
+  });
+  const accepted = await runCommand(f.pool, { partition: effect.receipt.partition }, async (tx) =>
+    noEffect(await lookupIdentityReceivingEffect(tx, effect)),
+  );
+  const record = accepted.value!;
+  // Perturb only the business generation, never a capture, receipt, hold or receiving grant.
+  await f.admin.query(
+    'UPDATE library.collection SET source_generation=source_generation+1 WHERE route=$1 AND collection_id=$2',
+    [route, input.library.collection.id],
+  );
+  const fresh = await runCommand(f.pool, { partition: effect.receipt.partition }, async (tx) =>
+    noEffect(
+      await createNativeLibrarySourceCustody({ pool: f.pool }).readAndHold({
+        client: tx,
+        at: currentCommand(tx).time,
+        ...record.source.native,
+        ...work(),
+      }),
+    ),
+  );
+  expect(fresh.value).toMatchObject({ status: 'unavailable', reason: 'binding' });
+  const rollback = new Error('retained receiving admission reached; roll back before any effect');
+  await expect(
+    runCommand(f.pool, { partition: effect.receipt.partition }, async (tx) => {
+      await store.admitHomeEffect(tx, effect);
+      throw rollback;
+    }),
+  ).rejects.toBe(rollback);
+  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+  expect(
+    (
+      await f.admin.query(
+        'SELECT released FROM library.native_source_hold WHERE route=$1 AND capture_id=$2 AND hold_id=$3',
+        [route, record.source.native.captureId, record.source.native.holdId],
+      )
+    ).rows,
+  ).toEqual([{ released: false }]);
+});

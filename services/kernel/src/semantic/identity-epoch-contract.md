@@ -489,13 +489,12 @@ identity epoch bookkeeping alone proves current source-account eligibility acros
 follow alternatives retain their original-home and published-destination semantics. A matching pending gate
 can advance only its admitted job through the receiving alternative; ordinary follow calls acquire no new power.
 
-`identity-receiving-effects-types.ts` owns the closed selection, Source provenance, binding, record and producer
-shapes. `identity-receiving-effects.ts` exports:
+`identity-receiving-effects-types.ts` owns the closed selection, Source provenance, binding, record shapes. `identity-receiving-effects.ts` exports:
 
 - `prepareIdentityReceivingEffect(pool, selection)` verifies a real pending native job, its immutable input
   original at each input's own released home, and the sole Source owner's committed provenance. It registers
   the exact binding and expected effect at control BEFORE taking the Source hold and committing an accepted
-  receiving record/gate. Repeated identical preparation returns the same locator. Conflicting scope, incarnation,
+  receiving record/gate atomically. `sourceHold` names that real accepted native command component. Repeated identical preparation returns the same locator. Conflicting scope, incarnation,
   generation, owner, disposition or effect rejects. New scopes cannot register after the Library complete ACK.
 - `lookupIdentityReceivingEffect(tx, effect)` resolves the exact committed local record by job, epoch, effect
   key, original, transaction ID AND native component. It checks the current native owner epoch and locks the
@@ -503,12 +502,13 @@ shapes. `identity-receiving-effects.ts` exports:
   incarnation, generation, scope and OLD/NEW/first-apply/handoff disposition. `applied` is the exact persisted
   effect receipt/frontier or null. It is a scope receipt, never participant completeness or Access.
 - The existing `identityEpochStore.admitHomeEffect(tx, effect)` receiving branch additionally invokes the
-  fixed Source owner's native local hold/currentness validator. It rejects an already applied effect; consumers
+  selected Source owner's `readAndHold` operation on the same command client and T. It rejects an already applied effect; consumers
   recover its persisted `applied` receipt before attempting another mutation. Admission installs a fixed native
   callback check: a successful command cannot commit without its SAME-transaction scope effect receipt.
 - `recordIdentityReceivingEffect(tx, effect, {frontier})` commits the scope effect/frontier with the owner's
   actual mutation and Source hold. It uses the fixed Library native commit, shared with the participant's native
-  step record; repeated registration of that same native commit is coalesced on the live transaction. A different
+  step record. The callback and subsequent lookup require that exact native consumer step, full scope and
+  frontier in the same transaction; repeated native commit registration is coalesced on the live transaction. A different
   purpose in that transaction rejects. There is no caller complete flag or second participant.
 - `reconcileIdentityReceivingEffect(pool, effect)` resolves the actual receiving effect commit, releases it,
   and takes exact control custody under the persisted job/plan/scope before acknowledging the Source hold.
@@ -538,9 +538,12 @@ Original-home gates, P=1 reservations, group cap 4096, raw-key limits and ordina
 - Bound: partition-leading full keys on every local query/FK; no history walk, foreign join, source-wide scan,
   permission mirror, extra engine or fanout. Each preparation/receipt operation selects one effect; descriptors
   are at most 3072 serialized bytes (4096 stored JSON bytes), effect keys/scopes at most 256 bytes, frontiers at
-  most eight scalar keys and 2048 bytes. Source-owned read/hold/lock/ACK, native fences, callbacks, erasure
+  most eight scalar keys and 2048 bytes. Source-owned capture/hold/release, native fences, callbacks, erasure
   locator writes and failed/replayed attempts are charged under the existing shared SQL/row/point/byte/deadline
-  allowances. These APIs do not grant another allowance or certify their owner's work as free.
+  allowances. Capture carries the caller's allowance and absolute deadline. Local hold/release calls have a fixed
+  per-operation ceiling of 512 native rows, 32 points, 16 statements and 262144 bytes, with no candidate
+  scan, under the original command deadline. Each retry charges its own dispatched owner work. Preparation
+  rechecks finishCapture under the same ceiling and a five-second deadline; no Source work is free.
 - Growth check: retain the existing native64/512/4096 receiving-custody companion and changed-neighborhood,
   original-store/key/RLS/cap/privacy/replay controls. Run after integration; minimal delivery uses only the
   changed workspace's local compiler database typecheck. No native/growth result is claimed here.
@@ -1525,27 +1528,38 @@ This changes scheduling overhead, not closure meaning or Community's default 30s
 full participant/output-generation, all-nine Cost, Content consumer acceptance and main/root promotion remain
 separate obligations.
 
-### Receiving effect interface and missing Source validation seam
+### Receiving effect interface and native Source custody
 
-The closed native producer/lookup and Store correction are implemented in
-`identity-receiving-effects.ts`; the [receiving protocol](#receiving-effects-and-local-custody) owns their use.
-The sole Source-owned runtime expected at `library/identity-receiving-source.ts` is absent in this checkout.
-Its exact exports are `readIdentityReceivingSource`, `holdIdentityReceivingSource`,
-`lockIdentityReceivingSource` and `acknowledgeIdentityReceivingSource`, with declarations in
-`identity-receiving-effects-types.ts:IdentityReceivingSourceProducer`. This provisional adapter throws
-`identity_epoch_unavailable` when the module/export is absent. It returns no successful record, ready state or ACK.
+The selected Source owner is `library/native-source-custody.ts:createNativeLibrarySourceCustody({pool,clock?})`.
+Its closed `NativeSourceIdentity`, frontier, capture, custody and work unions are authoritative. Receiving uses
+`capturePage`, `finishCapture`, `readAndHold`, `revalidateHold` and `releaseHold`; it defines no Source callbacks
+or Source SQL. The actual owner implementation supplies these operations. Availability alone proves no
+receiving completion.
 
-The reader must select an actual committed Source manifest entry, reject arbitrary effect keys/caller JSON,
-and return its native identity/incarnation/generation/scope/current owner and receiving epoch/disposition.
-The hold must be idempotent for that full immutable binding, verify its real committed provenance, and retain
-its obligation across source mutation/move until the exact receiving effect AND control custody exist.
-The local validator must lock/revalidate the actual receiving owner/scope, first-apply fence and held native
-source obligation inside the effect transaction, attaching native Source erasure roles there. It cannot open a
-foreign home or infer authority from an ordinary metadata read. The ACK must independently resolve actual
-control custody for that exact binding before releasing the hold; a job-wide ACK is insufficient.
+The additive receiving declaration correction is `IdentityReceivingSelection.capture?: {identity: NativeSourceIdentity, frontier: NativeSourceFrontier}` and
+`IdentityReceivingSource.native: {identity: NativeSourceIdentity, captureId: string, holdId: string}`. Existing
+preparation, lookup, record, reconciliation and admission signatures and their native records remain. Preparation
+without a native capture frontier is unavailable. Preparation resolves that completed frontier through the actual
+owner finishCapture operation before trusting its transaction/component. Serialized brands, raw metadata and caller keys establish no provenance.
+`IdentityReceivingCaptureInput` carries the owner's identity/frontier/work/deadline and a raw limit;
+`IdentityReceivingCaptureResult` is exactly the union of the owner's capturePage/finishCapture results.
+`captureIdentityReceivingSource(pool, selection, input)` makes one bounded call, returning a resumable frontier
+or the completed native capture. It binds the owner's effect key to job/epoch, participant/version, full scope,
+original/effect/disposition and native identity. Capture dependency rows remain the Source owner's truth and
+are not ordinary destination-disposition authority.
 
-`library/collection-source-native.ts` provides metadata/raw ranges/probes; `library/canonical-source-store.ts`
-provides unavailable canonical operations. Neither is that Source read/hold producer. The sole specified
-`library/identity-epoch-participant.ts:stepLibraryIdentityEpoch` is also absent. Source, follow and output
-producers remain with their existing owners; Semantic does not clone their business truth or make registration
-stand in for native receiving readiness. The native receiving regressions remain required after integration.
+Receiving preparation takes the fresh Source hold with strict `readAndHold`. Admission uses `revalidateHold`
+on the same native command client and authoritative time as the local receiving lock and mutation.
+Reconciliation releases the effect home before control custody, then releases
+control before the Source hold. It must prove the exact native effect/frontier and control custody before release;
+a job-wide participant receipt cannot replace these records. Native physical/privacy/cost proof remains required
+after integration, including OLD/NEW/first-apply/handoff outcomes. No unavailable result counts as coverage.
+
+The selected owner's additive `revalidateHold` has the identical input/result to `readAndHold`.
+`identity-receiving-effects.ts:holdSource`, invoked by `admitIdentityReceivingEffect`, resolves the already
+retained `(identity,captureId,holdId)` and validates its exact native receipt through that operation, including
+the applicable current owner/account fences even when the live generation changed. Unavailable stays unavailable;
+there is no fallback to fresh `readAndHold`, raw metadata or serialized custody. Retained custody grants no
+new read, complete observation, ordinary destination-disposition or general admission authority. Only the exact
+accepted receiving record and its local gate admit this effect; native effect/frontier and control custody are
+still required before release.

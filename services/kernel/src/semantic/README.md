@@ -177,14 +177,18 @@ authorization still checks the current native snapshot within the original reque
 ## Identity epoch status
 
 The adopted receiving `IdentityEffect` alternative is implemented by the existing Store through
-[the native receiving producer](identity-receiving-effects.ts). Its closed records and Source-owner operations
+[the native receiving producer](identity-receiving-effects.ts). Its closed receiving records
 are declared in [identity-receiving-effects-types.ts](identity-receiving-effects-types.ts).
 [Receiving custody](identity-epoch-contract.md#receiving-effects-and-local-custody) binds the exact admitted
 job/step/version/scope, Source incarnation/generation, owner epoch and OLD/NEW/first-apply/handoff effect.
 Original structural and ordinary follow branches retain their semantics. The
-[Source validation seam](identity-epoch-contract.md#receiving-effect-interface-and-missing-source-validation-seam)
-still requires the real `library/identity-receiving-source.ts` operations; the absent-module adapter is explicitly
-unavailable. Native acceptance and growth run after integration; declarations alone are not admission readiness.
+[native Source seam](identity-epoch-contract.md#receiving-effect-interface-and-native-source-custody)
+uses only the actual `library/native-source-custody.ts:createNativeLibrarySourceCustody` implementation and
+its closed owner declarations. Capture is resumable; preparation re-resolves the completed native frontier and
+takes a strict fresh hold. Admission revalidates that retained native hold on the actual receiving transaction,
+including current owner/account fences, even if the live Source generation changed. Retained custody grants no
+new Source observation or ordinary destination-disposition authority.
+Effect/control/consumer records precede native hold release. Native acceptance and growth run after integration; declarations alone are not admission readiness.
 
 `identityEpochStore.readMapping` is bound to the Library subject resolver. Revision-1 births store a self mapping in
 their source command, including unnamed account-agent births. `stepIdentityEpochBootstrap(pool, partition)` exports
