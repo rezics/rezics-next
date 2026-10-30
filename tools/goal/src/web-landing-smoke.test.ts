@@ -13,12 +13,7 @@ const storyCheckCommand = [
   '-c',
   "bun run --cwd apps/web generate && bun apps/web/scripts/isolated.ts bun test apps/web/tests/page-stories.test.ts -t 'each recorded response type-checks'",
 ];
-const existingCommands = [
-  installCommand,
-  typecheckCommand,
-  workspaceImportsCommand,
-  storyCheckCommand,
-];
+const existingCommands = [installCommand, typecheckCommand, workspaceImportsCommand, storyCheckCommand];
 
 test('the Personal Library rendered smoke is selected for each Web workspace and no non-Web workspace', () => {
   const smoke = checks.find((check) => JSON.stringify(check.command) === JSON.stringify(smokeCommand));
