@@ -758,6 +758,20 @@ published-digest point, followed by ordinary fresh command authorization before 
 uses new-publication caps. Pattern aggregate HTTP refusal and its reached-defect/same-pattern-excess tie remain
 pending in the parent CPU contract; these shape limits do not supply that producer.
 
+The [remaining composition plan](../../../../packages/definitions/src/publication-construction-contract.md#remaining-publication-composition)
+owns the residual valid-body algorithm, live graph accounting and exact source handoffs. Semantic binds one
+immutable snapshot to both existing digest domains, historical same-pool existence and the native command.
+Definitions supplies cheap-check/pattern planning and bounded diagnostics; Core/Performance supply the existing
+execution, ingress and physical-disposal lifecycle. The bounded HTTP reader/parser stays shared. A response or
+logical worker finish does not free retained input, retired execution or native parameter custody. No additional
+publication pool, parser, cache authority or numeric resource allowance is adopted here.
+
+After integration, `test/semantic/definition-publication-resources.test.ts` and
+`test/semantic/historical-construction-publication.test.ts` retain the native cold/hostile/refusal/replay and
+historical compatibility obligations. The resource suite includes intentionally red aggregate-work outcomes;
+neither package parity nor these source additions claim native peak, disposal or CPU closure. Physical lifecycle,
+receiving custody and unrelated/history growth still require the actual shared owner harness.
+
 - Touches: `publishRelease`: validate/hash one body, insert 0/1 `semantic.definition_release` through `definition_release_pkey(route, digest)`, conflict does nothing; receipted command emits 1 event even on existing digest. Grow D and H; fix body size and authorization evidence.
 - Bound: Rows O(1), blocks O(log D + C), one body statement, nine including command; capped historical submissions add one same-pool indexed existence statement; no scan of prior releases.
 - Growth check: `test/semantic/growth-definitions.test.ts`: `Definition publish stays within its bound as D grows`, scales `[1, 4, 16]`.

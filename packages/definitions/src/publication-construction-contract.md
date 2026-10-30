@@ -201,19 +201,139 @@ No external reference project or external research was required.
 - Growth check: original fourteen native outcomes, default/opt-in capability witnesses, historical pin and unchanged
   public-slice exposure tests preserve authority, effects and replay. Pure construction counter receipts are reused.
 
-## Remaining parent boundaries
+## Remaining publication composition
 
-The parent [publication CPU contract](../../../services/kernel/src/semantic/definition-publication-contract.md) and
-its original `definition-publication-work.test.ts` remain open. Reached defect 400 must precede same-pattern
-excess 422 `definition_work_exceeded` without effects, using the exact retained sorted checkpoint schedules.
-Native observed outcomes remain safe/7 for `^A$`, vulnerable automaton/156 for `^(a+)+$`, checkpoint refusal/8193
-for `^[ab]{32}a[ab]*$`, and guarded refusal/457 for `^[ab]*a[ab]{32}$`; the package schedules reach totals
-16383/16384/16385. These do not prove mounted HTTP precedence. No production callable aggregate work-admission
-producer currently exists in the mounted publication path, so its exact HTTP tie remains an explicit unclosed
-integration obligation before parent freeze. Amax 16384 and K/c remain candidates.
+This section owns the residual algorithm and handoff plan for an already byte-admitted HTTP release. The parent
+[CPU contract](../../../services/kernel/src/semantic/definition-publication-contract.md) retains its proposed
+checkpoint policy and native execution schedules; the [heap observations](../../../services/kernel/src/semantic/definition-publication-heap-contract.md)
+remain observations. This specification does not deliver their runtime or certify resource closure. Existing HTTP
+ingress belongs to Performance: retain `http/body.ts` and `http/app.ts`'s bounded reader, UTF-8/JSON parsing,
+route limits and reservation admission. Compose with that owner; add no publication reader, parser, limiter,
+semaphore or worker pool. In particular, do not transfer/detach the Request's retained body buffer behind its owner.
 
-No worker pool, new pattern policy, test-injected production work limit, ingress/digest binding, idle-host margin,
-heap bound, all-pools history cost, result/DB binding byte bound or physical cancellation/disposal/readiness/shutdown
-proof is supplied here. Parent ingress reservations must last until physical disposal (or charge retired inputs).
-The original excess HTTP case returned 201 and added release/receipt/outbox/write-basis rows; this construction
-delivery does not claim that separate CPU refusal has become green, nor main promotion or full Goal closure.
+### Actual work and live representations
+
+Let W be admitted transport bytes, B be release JSON bytes, N/E be the submitted tree's value nodes/edges, and L
+its key/string bytes. W is bounded by `MAX_BODY_LIMIT` (4,259,840), B by `RELEASE_LIMITS.bytes` (4,194,304).
+These are distinct checks: JSON whitespace/escapes and number spelling make wire length unsuitable as the
+canonical-byte counter. Every parsed value consumes a token and every edge syntax, so N/E/L are bounded by
+the admitted representation; they are not independent unbounded work hidden behind the property count.
+This observation does not bound arbitrary pre-admission direct-caller graphs or Proxy traps.
+
+The current successful path pays for ingress chunk retention and a contiguous owned buffer; decoded text and
+parsed envelope; the request-envelope JCS/hash in the mounted handler; `releaseAdmission`'s descriptor/size walk;
+another admission and JCS in `validateRelease`; schema Check; library/semantic validation and expected-value JCS;
+one Filter snapshot/index lifetime; release-digest JCS/hash; and native JSONB serialization/binding. A cap-exceeding
+submission additionally clones the body before its digest/existence await. Invalid schema diagnostics can retain
+the original tree plus `diagnosticView`'s clone, per-array hooks, native error context and duplicate hashes/indices.
+The final 64 errors do not bound all intermediate violations or full pointer strings. `readRelease` separately
+retains validated, frozen graphs in its current process Map; a successful same-pool existence point does not bound
+that Map's cumulative memory or establish policy-version identity.
+
+The output is not just B bytes: it includes selected facet Sets, the untyped union, qualifier/unit Sets, pattern
+sources/proofs, saved-filter normalized nodes and diagnostics. Count actual insertions and emitted entries. If Eb
+is the submitted base-reference count, direct base expansion visits at most 16 Eb facets; each type's own list
+contributes at most 16 more. Historical bases and mappings remain bounded by B, without the new-publication
+shape caps. Unknown base IRIs do not recurse. Qualifier/unit indexing follows declaration entries; typed leaf
+admission probes selected type Sets and qualifier membership without rebuilding their unions. LinkML induction
+is a producer-time compiler operation, not part of HTTP publication. Effective Type list hints are already emitted
+inert metadata and add at most four references per hinted Type; they confer no resource or publication proof.
+
+Charge schema-selected member hashing by actual traversed nodes/bytes, including malformed objects, and key
+sorting by actual comparisons/compared bytes. Distinct-source sorting likewise compares source bytes. A generic
+linear validator claim omits these costs, the native checker, pointer construction and VM/native allocation.
+The existing 72 malformed comparisons, 119 parity rows, original source identities and pattern controls remain
+mandatory; the plan must preserve their unchanged outcomes except the explicitly adopted HTTP work precedence.
+
+### Smallest repair sequence and source ownership
+
+1. **Semantic composition:** in `services/kernel/src/semantic/{definitions.ts,http/definitions.ts}`, establish one
+   descriptor-owned release snapshot before either digest and any mutable-body await. Freeze every retained node,
+   not just the root. HTTP consumes the existing parsed envelope; direct `publishRelease` callers use the same
+   ownership boundary. Keep the parent's immutable snapshot through native writing, and send a structured clone
+   of that snapshot to the existing Core execution owner. The worker receives only JSON and the bounded digest
+   context, never Actor, Access, SQL, authoritative T or a callback. Both copies count until their roots are released.
+   No reparse or returned copy of the release graph is needed: return only bound digests or bounded diagnostics.
+2. **Definitions planning:** in `packages/definitions/src/{index.ts,publication-construction.ts,pattern-safety.ts}`,
+   separate cheap descriptor/collection/size/JCS/schema checks from semantic pattern analysis while retaining the
+   public validator's existing behavior. Keep the compiled schema and linear native diagnostic adapter. Build
+   the distinct exact source list with occurrence pointers once, sort sources, and invoke the unchanged checker.
+   Keep per-call proof deduplication and unconditional value-pattern walks, including invalid expected-schema
+   equality. Only exact finite module-owned sources actually proved under the same flags/checker/policy may reuse
+   initialization proofs. No caller allow flag, untrusted global proof cache or planner setting is introduced.
+3. **Definitions diagnostics:** retain first code per pointer and the lexically smallest 64 pointers in a bounded
+   ordered collector. Track whether any violation occurred separately from the retained set. Once discarded for
+   exceeding the current greatest retained pointer, a pointer cannot later enter as that threshold only decreases;
+   retained entries therefore keep their first code. Keep TypeBox's original eight-node applicability/order budget.
+   Traverse with explicit frames and materialize candidate pointers from path segments as needed; do not retain
+   a full prefix string at every pending tree node. Charge candidate pointer bytes and comparison work even when
+   discarded. Bound the diagnostic view and duplicate-index storage by the actual submitted graph/member counts.
+4. **Definitions checkpoint producer:** report/reserve actual in-analysis checkpoints to Core's existing execution
+   owner. Cheap 400 checks run first. A reached unsafe/unknown/checkpoint-exhausted source retains 400 unless the
+   aggregate first exceeds its adopted allowance while analyzing that source; first excess returns nonretryable
+   422 `definition_work_exceeded`, exactly `/release` / `out_of_range`, without Retry-After or effects. Preserve
+   the proposed schedules 16383/16384/16385; do not make 16384 a new production setting by shipping this spec.
+   The retained observations are safe/7 (`^A$`), vulnerable/156 (`^(a+)+$`), refusal/8193
+   (`^[ab]{32}a[ab]*$`) and guarded refusal/457 (`^[ab]*a[ab]{32}$`). Unknown never supplies safety.
+5. **Semantic digest/command binding:** canonicalize the owned release and its receipt envelope in their existing
+   distinct domains before `runCommand`. Share their strings within that job rather than calling digest helpers
+   that serialize the same domain again. The pure framing/hash extraction belongs to `http/request.ts`'s owner;
+   preserve `requestDigest('definitions.publish', actor, {params: {}, body: {release}})` exactly. Refactor the
+   publication caller so a receipt digest cannot describe the pre-snapshot mutable body. Preserve one same-pool
+   indexed published-existence point for historical cap exemptions, then fresh native authorization before receipt
+   disclosure. No composed release, warm cache or preparation result supplies current authority.
+6. **Semantic stored reads:** use the same historical-compatible validator and exact digest check on cold rows.
+   The minimal memory repair may remove the process `releases` Map and its `activeRelease` shortcut, avoiding a
+   new cache policy. Keep immutable returned bodies, historical validity and stored-body integrity failures. Any
+   retained cache instead needs its owner's finite entry/byte/lifetime/policy contract before adoption; this plan
+   supplies no numeric cache limit or second cache. Cold work uses the same Core execution owner.
+
+Filter's existing `createFilterConstruction` already supplies the required one-call owned snapshot and indexes.
+Reuse that lifetime for all saved filters and qualifier checks; no Filter rewrite or mutable identity cache is
+required. Keep its snapshot in the live-graph accounting rather than pretending that index reuse removes it.
+No schema, catalogue, historical fixture, Type-hint producer, authorization or other risk-area code is changed by
+this specification. Core/Performance own execution, admission and disposal; Semantic owns their publication binding.
+
+### Peak, retirement and receiving custody
+
+For each phase account for simultaneously reachable representations, not their sum across time: ingress chunks
+and contiguous W; decoded text and parsed graph; parent immutable snapshot; worker clone; schema diagnostic view;
+Filter snapshot/indexes; proof/checker working state; canonical release/envelope strings and hash buffers; bounded
+reply; parent JSONB serialization, driver/native parameter buffers and returned row/result objects. An owned
+byte string, a JS string, a JS object graph and a native parameter allocation are separate charges. No allocation
+coefficient c, heap multiplier, K or idle margin follows from B alone or from the existing eighteen heap samples.
+
+The receiving command must retain custody of the exact immutable snapshot until native parameter/result use
+ends. A worker completion drops its clone, diagnostic view, construction and checker job roots before reporting
+disposal; a timeout/abort/error only stops waiting. Core keeps active or retired slots and byte reservations charged
+until its actual disposal/physical-exit proof, including late results and failed replacement/startup. Parent ingress
+reservation release after response must compose with that surviving charge, with no accounting gap or double
+release. Shutdown drains/retires publication work before pool closure. Reuse requires the execution owner's proof
+that old roots/results cannot attach to a new job; logical finish, detached buffers and GC samples alone do not
+prove physical reclamation. Semantic must not implement a second semaphore or independently replenish a slot.
+
+Current source exports are `validateRelease`, `releaseAdmission`, `publicationLimits`, `releaseDigest` and
+`analyzePattern`/`safePattern`; none is an aggregate preparation/checkpoint or physical-disposal capability.
+`Admission.run` is request admission, not evidence of CPU retirement. Until Core delivers its actual execution
+interface, bind no guessed port or success-shaped stub. No new kernel-wide policy value is indispensable to this
+algorithm plan; numerical admission/margin approval remains with the existing parent owners after real evidence.
+
+### Retained native obligations
+
+`test/semantic/definition-publication-resources.test.ts` uses real Kernel/Auth, explicit native gate/resource grants,
+the ordinary mounted publication route and complete effect snapshots. It freezes valid cold publish/GET/ETag,
+replay/new-key/conflict/current denial, three independently refused hostile checker outcomes, cheap-limit/schema
+precedence, dense invalid and duplicate-heavy inputs, and the exact same-pattern reached-defect/excess ties. It
+also retains a schema-valid excess body whose native result must be 422 rather than the recorded erroneous 201.
+The companion `historical-construction-publication.test.ts` runs the unchanged existing native historical suite,
+including its original creator, fresh-process reads, 4097 bases/257 mappings and unpublished-cap no-effect refusal.
+Neither file changes the existing acceptance or injects a runtime work allowance.
+
+After integration, the shared owner harness must additionally exercise cold maximum valid/invalid admitted bytes,
+independent node/string/base/filter/qualifier/output density, native result/JSONB peak, concurrent ordinary requests,
+deadline/abort/error/late-result cycles, readiness/reuse/shutdown and physical receiving custody. Retain native
+64/512/4096 unrelated/history and changed-neighborhood schedules, partition-leading keys, P1/raw-key/row/point/
+byte/SQL/deadline/engine caps, current source/owner/privacy/rollback/replay outcomes and all-pools capture. No
+history scan, permission mirror, new engine or uncharged callback is permitted. Attach those assertions to actual
+owner trace/custody exports when delivered; status-only HTTP tests cannot prove them. This specification records
+no new native/resource experiment, numeric resource closure, green aggregate acceptance or promotion claim.
