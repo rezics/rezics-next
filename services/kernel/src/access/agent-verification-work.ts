@@ -121,11 +121,25 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     { name: `${reversalWorkflow}.unmerge`, retriesAllowed: true, maxAttempts: 10 },
   );
   const removePage = DBOS.registerStep(
-    (decision: AgentVerificationReversal) => removeAgentVerificationPage(context.pool, decision),
+    async (decision: AgentVerificationReversal) => {
+      await deliverAccountIdentity(context.pool, {
+        kind: 'account-agent.unverify',
+        account: decision.accountId,
+        receipt: decision.receiptId,
+      });
+      return removeAgentVerificationPage(context.pool, decision);
+    },
     { name: `${reversalWorkflow}.remove-page`, retriesAllowed: true, maxAttempts: 10 },
   );
   const finishReversal = DBOS.registerStep(
-    (decision: AgentVerificationReversal) => finishAgentVerificationReversal(context.pool, decision, context.clock),
+    async (decision: AgentVerificationReversal) => {
+      await deliverAccountIdentity(context.pool, {
+        kind: 'account-agent.unverify',
+        account: decision.accountId,
+        receipt: decision.receiptId,
+      });
+      return finishAgentVerificationReversal(context.pool, decision, context.clock);
+    },
     { name: `${reversalWorkflow}.finish`, retriesAllowed: true, maxAttempts: 10 },
   );
   const synchronizeAgent = DBOS.registerStep(
@@ -215,6 +229,12 @@ export function registerAgentVerificationWork(context: WorkContext): void {
   const writePage = DBOS.registerStep(
     async (request: AgentVerificationWorkflowRequest, receiptId: string): Promise<WorkResult> => {
       try {
+        // Same registered step/position also covers an original merge whose result was already journalled.
+        await deliverAccountIdentity(context.pool, {
+          kind: 'account-agent.verify',
+          account: request.accountId,
+          receipt: receiptId,
+        });
         await writeAgentVerificationPage(context.pool, { ...request, receiptId });
         return { ok: true };
       } catch (error) {
@@ -228,8 +248,14 @@ export function registerAgentVerificationWork(context: WorkContext): void {
   );
 
   const complete = DBOS.registerStep(
-    (request: AgentVerificationWorkflowRequest, receiptId: string) =>
-      completeAgentVerification(context.pool, { ...request, receiptId }, context.clock),
+    async (request: AgentVerificationWorkflowRequest, receiptId: string) => {
+      await deliverAccountIdentity(context.pool, {
+        kind: 'account-agent.verify',
+        account: request.accountId,
+        receipt: receiptId,
+      });
+      return completeAgentVerification(context.pool, { ...request, receiptId }, context.clock);
+    },
     { name: 'accounts.agent-verification.complete', retriesAllowed: true, maxAttempts: 10 },
   );
   const clear = DBOS.registerStep(
@@ -238,8 +264,14 @@ export function registerAgentVerificationWork(context: WorkContext): void {
     { name: 'accounts.agent-verification.clear-pending', retriesAllowed: true, maxAttempts: 10 },
   );
   const finish = DBOS.registerStep(
-    (request: AgentVerificationWorkflowRequest, receiptId: string) =>
-      finishAgentVerification(context.pool, { ...request, receiptId }, context.clock),
+    async (request: AgentVerificationWorkflowRequest, receiptId: string) => {
+      await deliverAccountIdentity(context.pool, {
+        kind: 'account-agent.verify',
+        account: request.accountId,
+        receipt: receiptId,
+      });
+      return finishAgentVerification(context.pool, { ...request, receiptId }, context.clock);
+    },
     { name: 'accounts.agent-verification.finish', retriesAllowed: true, maxAttempts: 10 },
   );
   const fail = DBOS.registerStep(

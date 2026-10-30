@@ -26,11 +26,18 @@ import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lif
 import { authenticateAccount } from '../support/admitted-access.ts';
 import { newId } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
+import { actionCatalogue, IDEMPOTENCY_HEADER, requestDigest } from '../../src/http/request.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { migrate } from '../../scripts/database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { accountToken, admittedAccess } from '../support/admitted-access.ts';
+import { runCommand, noEffect } from '../../src/command/command.ts';
+import {
+  loadAccountIdentitySource,
+  deliverAccountIdentity,
+  probeAccountIdentityPublication,
+  assertAccountIdentitySource,
+} from '../../src/access/agent-verification-identity.ts';
 
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -546,4 +553,163 @@ test('old reversal deliveries cannot undo a newer reviewed verification', async 
     subject: { id: subject },
   });
   expect(await pointer(subject)).toHaveLength(1);
+});
+
+/** Original native pre-intent-table reversal body; no trigger disabling or fabricated historical receipt. */
+async function originalReversal(account: Seeded, withBasis = true) {
+  const actor = await authenticateAccount(
+    access,
+    { pool, deadline: Date.now() + 10_000 },
+    {
+      accountId: account.id,
+      clientId: 'original-reversal',
+      scopes: ['account:update'],
+    },
+  );
+  return runCommand(
+    pool,
+    {
+      partition: accountRoute >>> 4,
+      ...(withBasis
+        ? { basis: { actorAccountId: account.id, clientId: actor.clientId, requestedBy: actor.requestedBy } }
+        : {}),
+      receipt: {
+        actorAccountId: account.id,
+        kind: 'access.agent-verification.released',
+        key: key(),
+        digest: requestDigest('account.reverse_agent_verification', actor, {
+          accountId: account.id,
+          kind: 'released',
+          reason: null,
+        }),
+      },
+    },
+    async (tx, { transactionId }) => {
+      const previous = (
+        await tx.query<{ catalogue: string; verification: string }>(
+          `
+      WITH previous AS MATERIALIZED (
+        SELECT * FROM access.account WHERE route=$1 AND account_id=$2 AND agent_verified FOR UPDATE
+      ) UPDATE access.account a SET agent_verified=false,agent_subject_id=NULL,agent_verification_receipt_id=NULL,
+        pending_agent_subject_id=p.agent_subject_id,pending_agent_receipt_id=$3,transaction_id=$3
+      FROM previous p WHERE a.route=p.route AND a.account_id=p.account_id
+      RETURNING p.agent_subject_id AS catalogue,p.agent_verification_receipt_id AS verification`,
+          [accountRoute, account.id, transactionId],
+        )
+      ).rows[0]!;
+      const value: AgentVerificationReversal = {
+        accountId: account.id,
+        receiptId: transactionId,
+        requestedBy: account.id,
+        kind: 'released',
+        reason: null,
+        catalogueSubjectId: previous.catalogue,
+        verificationReceiptId: previous.verification,
+      };
+      return {
+        value,
+        events: [{ type: 'com.rezics.access.agent-verification.reversing.v1', subject: account.id, data: value }],
+      };
+    },
+  );
+}
+
+test('original in-flight reversal recovers real original custody with a distinct recovery transaction before publication and success', async () => {
+  const { account, subject } = await verified();
+  const original = await originalReversal(account);
+  const receipt = { kind: 'account-agent.unverify' as const, account: account.id, receipt: original.transactionId };
+  const source = await loadAccountIdentitySource(pool, receipt);
+  // A serialized recovery association or a copied source object conveys no native admission proof.
+  expect(() => assertAccountIdentitySource({ ...source }, receipt)).toThrow('actual released native source custody');
+  expect(source.transactionId).toBe(original.transactionId);
+  expect(source.epoch).toBe(original.epoch);
+  expect(source.position).toBe(original.position);
+  expect(source.input.intent).toMatchObject({
+    kind: 'unmerge',
+    verificationReceipt: original.value.verificationReceiptId,
+    release: bundledDigest,
+  });
+  expect(source.workflowId).toBe(`accounts.agent-verification-reversal:${account.id}:${original.transactionId}`);
+  const association = (
+    await pool.query(
+      `SELECT * FROM access.agent_identity_recovery
+    WHERE route=$1 AND account_id=$2 AND direction=$3 AND receipt_id=$4`,
+      [accountRoute, account.id, receipt.kind, receipt.receipt],
+    )
+  ).rows[0];
+  expect(association.source_transaction_id).toBe(original.transactionId);
+  expect(association.recovery_transaction_id).not.toBe(original.transactionId);
+  const recoveredNative = (
+    await pool.query(
+      `SELECT transaction_id,epoch,position FROM core.receipt
+    WHERE partition_no=$1 AND principal_id=$2 AND command_kind='access.agent-identity.recover'`,
+      [accountRoute >>> 4, account.id],
+    )
+  ).rows;
+  expect(recoveredNative).toEqual([
+    {
+      transaction_id: association.recovery_transaction_id,
+      epoch: association.recovery_epoch,
+      position: association.recovery_position,
+    },
+  ]);
+  // Recovering source data has not published or cleared the original account marker/page.
+  await expect(probeAccountIdentityPublication(pool, receipt)).rejects.toThrow();
+  expect(await pointer(subject)).toHaveLength(1);
+  expect((await accountState(account.id)).pending_agent_receipt_id).toBe(original.transactionId);
+  const job = await deliverAccountIdentity(pool, receipt);
+  const { identityEpochStore, identityJobPartition } = await import('../../src/semantic/identity-epoch-store.ts');
+  const published = (
+    await runCommand(pool, { partition: identityJobPartition(job) }, async (tx) =>
+      noEffect(await identityEpochStore.readJob(tx, job)),
+    )
+  ).value;
+  expect(published).toMatchObject({
+    state: 'published',
+    mapping: { state: 'complete' },
+    participants: {
+      'search-canonical-index': { state: 'complete' },
+      'library-private-follow-counts': { state: 'complete' },
+    },
+  });
+  await finish(original.value);
+  expect(await pointer(subject)).toEqual([]);
+  expect((await accountState(account.id)).pending_agent_receipt_id).toBeNull();
+  expect((await loadAccountIdentitySource(pool, receipt)).digest).toBe(source.digest);
+  expect(await deliverAccountIdentity(pool, receipt)).toEqual(job);
+  expect(
+    (
+      await pool.query(
+        `SELECT transaction_id FROM core.receipt WHERE partition_no=$1 AND principal_id=$2
+    AND command_kind='access.agent-identity.recover'`,
+        [accountRoute >>> 4, account.id],
+      )
+    ).rows,
+  ).toEqual([{ transaction_id: association.recovery_transaction_id }]);
+  await expect(
+    pool.query(
+      `UPDATE access.agent_identity_recovery SET intent_digest=repeat('0',64)
+    WHERE route=$1 AND account_id=$2`,
+      [accountRoute, account.id],
+    ),
+  ).rejects.toThrow('Immutable account identity source');
+});
+
+test('a retained reversal payload without the original native write basis cannot recover from mutable account state', async () => {
+  const { account, subject } = await verified();
+  const original = await originalReversal(account, false);
+  const receipt = { kind: 'account-agent.unverify' as const, account: account.id, receipt: original.transactionId };
+  await expect(loadAccountIdentitySource(pool, receipt)).rejects.toThrow(
+    'original native reversal receipt/write_basis',
+  );
+  expect(
+    (
+      await pool.query('SELECT * FROM access.agent_identity_recovery WHERE route=$1 AND account_id=$2', [
+        accountRoute,
+        account.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  expect(await pointer(subject)).toHaveLength(1);
+  expect((await accountState(account.id)).pending_agent_receipt_id).toBe(original.transactionId);
 });

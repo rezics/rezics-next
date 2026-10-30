@@ -26,6 +26,9 @@ import { EVENT_TYPES } from '../../src/events/log.ts';
 import { migrate } from '../../scripts/database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { runCommand } from '../../src/command/command.ts';
+import { loadAccountIdentitySource } from '../../src/access/agent-verification-identity.ts';
+import { ORIGINAL_IDENTITY_SOURCE_REQUIRED } from '../../src/access/agent-verification-identity-recovery.ts';
 
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -542,4 +545,84 @@ test('verification workflow event payloads remain registered and every required 
     expect(seen.has(type)).toBe(true);
   }
   for (const row of rows) expect(Value.Check(EVENT_TYPES[row.type]!, row.data)).toBe(true);
+});
+
+test('original in-flight verification requires its retained pending receipt and original accepted release without fabricating either', async () => {
+  const account = await seedAccount(`original_${randomUUID().slice(0, 8)}`);
+  const subject = await catalogueSubject('schema:Person', 'Original verification');
+  const applied = await request(account, subject, await bearer(account));
+  expect(applied.response.status).toBe(201);
+  const requestId = applied.body.verificationRequest.id as string;
+  const approved = await post(`/v1/verification-requests/${requestId}:approve`, await bearer(staff), {});
+  expect(approved.response.status).toBe(200);
+  const decision = (await readAgentVerificationWorkflowRequest(pool, requestId))!;
+  const receipt = { kind: 'account-agent.verify' as const, account: account.id, receipt: decision.decisionReceiptId! };
+  // A mutable pending marker is insufficient: the exact original native command has not committed yet.
+  await expect(loadAccountIdentitySource(pool, receipt)).rejects.toThrow('Accounts pending source required');
+  // Execute the original pre-intent-table pending body through the real executor, retaining its real receipt.
+  const original = await runCommand(
+    pool,
+    {
+      partition: accountRoute >>> 4,
+      receipt: {
+        actorAccountId: account.id,
+        kind: 'access.agent-verification.pending',
+        key: `${requestId}:pending`,
+        digest: createHash('sha256')
+          .update(JSON.stringify([requestId, account.id, 'actor', subject, receipt.receipt]))
+          .digest(),
+      },
+    },
+    async (tx, { transactionId }) => {
+      await tx.query(
+        `UPDATE access.account SET pending_agent_subject_id=$3,pending_agent_receipt_id=$4,transaction_id=$5
+      WHERE route=$1 AND account_id=$2`,
+        [accountRoute, account.id, subject, receipt.receipt, transactionId],
+      );
+      return {
+        value: { requestId, accountId: account.id },
+        events: [
+          { type: 'com.rezics.access.account-updated.v1', subject: account.id, data: { accountId: account.id } },
+        ],
+      };
+    },
+  );
+  for (let attempt = 0; attempt < 2; attempt++)
+    await expect(loadAccountIdentitySource(pool, receipt)).rejects.toThrow(ORIGINAL_IDENTITY_SOURCE_REQUIRED);
+  expect(await accountState(account.id)).toMatchObject({
+    pending_agent_receipt_id: receipt.receipt,
+    agent_verified: false,
+  });
+  expect(
+    (
+      await pool.query('SELECT * FROM access.agent_identity_intent WHERE route=$1 AND account_id=$2', [
+        accountRoute,
+        account.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  expect(
+    (
+      await pool.query('SELECT * FROM access.agent_identity_recovery WHERE route=$1 AND account_id=$2', [
+        accountRoute,
+        account.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  expect(
+    (
+      await pool.query(
+        `SELECT transaction_id FROM core.receipt WHERE partition_no=$1 AND principal_id=$2
+    AND command_kind='access.agent-verification.pending'`,
+        [accountRoute >>> 4, account.id],
+      )
+    ).rows,
+  ).toEqual([{ transaction_id: original.transactionId }]);
+  // Purged native receipt data stays pending under the precise Accounts source owner, never today's release.
+  await pool.query(
+    `UPDATE core.receipt SET payload_state='minimized',response='null'::jsonb
+    WHERE partition_no=$1 AND principal_id=$2 AND command_kind='access.agent-verification.pending'`,
+    [accountRoute >>> 4, account.id],
+  );
+  await expect(loadAccountIdentitySource(pool, receipt)).rejects.toThrow('Accounts pending source required');
 });

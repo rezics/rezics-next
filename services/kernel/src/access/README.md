@@ -510,8 +510,33 @@ returning success. Missing historical source custody reports its original locato
 Original DBOS step positions remain unchanged; the extra final publication step verifies recovery even when the
 old merge/unmerge and subsequent stages were already journalled. Uncached original stages probe before acting.
 
-The existing erasure inventory includes the source account, requester and decider with role-first indexes and typed
-primary keys. Receiving Semantic claims/jobs bind these same roles. Consumer-aware source minimization and shared
+The missing-source branch now uses `agent-verification-identity-recovery.ts`. A retained original reversal receipt
+is recoverable when its exact native command/write basis and complete prior immutable verification source and
+published undo remain available. The lookup uses account home plus original reversal transaction through a unique
+partial native receipt index; the account, actor, disposition, reason, catalogue and verification receipt must match
+the original executor result and digest. The released native undo reader supplies the original accepted release
+and actual first-bound published job. No current verified/pending mapping or active release supplies a missing field.
+Each home is released before the next is acquired, and the account/source owner fences are checked again on write.
+The original intent keeps its original transaction, epoch, position, receipt key, digest and workflow identity.
+`agent_identity_recovery` separately records the actual new recovery transaction and component. Its deferred native
+constraint verifies both receipts, their exact source association and the retained prior source; metadata alone
+cannot admit identity work. Existing immutable keys win over concurrent recovery. Uncached success steps in the
+same original workflow redrive delivery before their publication probe, including a journalled merge/unmerge.
+
+Original verification pending receipts retain only request/account IDs, not the accepted release or native consumer
+intent. Recovery validates the exact Global decision/write basis and pending receipt, then stays retryable with this
+missing Source declaration: `semantic/account-agent-identity-recovery.ts`, export
+`readOriginalAccountAgentIdentity(pool, {account, direction, receipt})`, supplying released native original accepted
+release, intent digest and consumer custody, including the original published undo locator for legacy reversal.
+This is a required producer declaration, not an implemented callback port. Verification without that source and
+legacy reversal without its original verification source remain pending; the independent retained reversal path
+continues through the existing coordinator. Purged native payloads, absent write bases and moved source epochs
+report the exact Accounts owner source requirement. Neither a receipt, past transaction nor release is fabricated.
+
+The existing erasure inventory includes the source and recovery account, requester and decider with role-first
+indexes and typed primary keys. Receiving Semantic claims/jobs bind these same subject/actor/editor roles from
+the recovered source. Recovery metadata retains its receiving obligation alongside the original source; its guard
+does not permit early removal. Consumer-aware source minimization and shared
 receipt/outbox/DBOS transfer remain unfinished: the new inventory is no erasure ACK, and original proof cannot be
 purged while delivery still needs it. Native workflow, cutover, erasure and physical growth acceptance remains due.
 

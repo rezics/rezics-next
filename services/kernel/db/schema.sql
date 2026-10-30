@@ -1137,3 +1137,8 @@ BEGIN
  END IF;
  RETURN NEW;
 END; $$;
+
+-- Exact retained Access reversal receipt locator.
+CREATE UNIQUE INDEX agent_identity_reversal_original ON core.receipt(partition_no,transaction_id)
+WHERE principal_kind='account' AND command_kind IN
+ ('access.agent-verification.released','access.agent-verification.revoked','access.agent-verification.deleted');

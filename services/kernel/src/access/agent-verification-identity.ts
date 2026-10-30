@@ -23,6 +23,7 @@ import type {
 import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
 import insert from './agent-verification-identity-insert.sql';
 import read from './agent-verification-identity-read.sql';
+import { recoverMissingAccountIdentitySource } from './agent-verification-identity-recovery.ts';
 
 type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 type Source = {
@@ -283,11 +284,18 @@ export function assertAccountIdentitySource(
 }
 
 export async function loadAccountIdentitySource(pool: Pool, receipt: AccountReceipt): Promise<AccountIdentitySource> {
-  return (
-    await runCommand(pool, { partition: partitionOf(accountRoute(receipt)) }, async (tx) =>
-      noEffect(await readAccountIdentitySource(tx, receipt)),
-    )
-  ).value;
+  const load = async () =>
+    (
+      await runCommand(pool, { partition: partitionOf(accountRoute(receipt)) }, async (tx) =>
+        noEffect(await readAccountIdentitySource(tx, receipt)),
+      )
+    ).value;
+  try {
+    return await load();
+  } catch (error) {
+    if (!(await recoverMissingAccountIdentitySource(pool, receipt, error))) throw error;
+    return load();
+  }
 }
 
 /** Typed adapter for the delivered coordinator ABI. Absence is durable retryable unavailability. */
