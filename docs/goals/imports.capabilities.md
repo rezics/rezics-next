@@ -32,6 +32,14 @@ production code, a pass requires actual named-revision execution with all exact 
 and promotion requires separate integration evidence. Helper, converter and SQLite tests support these jobs;
 they never substitute for native HTTP closure. Historical report/README observations are not current passing runs.
 
+The ordinary provider row also has the frozen
+[`cli-source-reappearance.test.ts`](../../services/kernel/test/imports/cli-source-reappearance.test.ts) caller:
+one native world runs five synthetic metadata records per launch source through 5 → 4 → 5 → 4 → 5 membership,
+changed-title return, immutable tuple/bootstrap receipts, independent editor selection, exact facts fencing while
+absent and unchanged reopen. The source and execution status are recorded in
+[its audit](../research/imports-audit/cli-source-reappearance.md). Registration alone does not close that outcome;
+this slice adds no sourceRecords migration, discovery surface, media/summary matrix or new growth series.
+
 ## Released definitions and fixture delivery
 
 The actual bundled definitions are [release/rezics.json](../../packages/definitions/release/rezics.json),

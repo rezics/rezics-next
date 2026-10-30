@@ -99,6 +99,18 @@ acceptance/adoption. It observes exact durable baseline anchors, native removal 
 authorized byte-identical replay and revoked-grant denial. It covers one controlled source reduction, with no
 external assets, provider matrix or new throughput claim.
 
+The [bounded reappearance journey](../kernel/test/imports/cli-source-reappearance.test.ts) binds the ordinary
+account-key CLI to the native application for all four launch sources in one Auth/Access/worker world. Each feed
+has five synthetic metadata records: removing one reaches the default 20% boundary, and returning its changed
+title must reuse the original exact tuple claim and bootstrap receipt while appending proposals with the changed
+revision/digest. A second removal followed by a public facts fence must suppress both the next return and old
+receipt/candidate disclosure. Independent editor selections and every other source's claims and receipts survive;
+unchanged reopen sends no public writes. VNDB uses a tar archive of native COPY tables, not scalar JSON.
+Run `bun run --cwd services/kernel check test/imports/cli-source-reappearance.test.ts` through the managed worker
+check. [Evidence and limits](../../docs/research/imports-audit/cli-source-reappearance.md) distinguish binding,
+local protocol proof and native execution. This adds no sourceRecords migration, asset, summary, discovery or
+new PostgreSQL growth claim.
+
 Limits follow the exports in `src/dumps-bytes.ts`, `src/vndb-tables.ts`, `src/import-fetch.ts`, and `src/import-client.ts`: dump chunks default to 256 KiB (1 MiB maximum), records default to 256 KiB (1 MiB maximum), VNDB archives default to 16 GiB and 512 entries (64 GiB and 2,048 entries maximum), and VNDB source pages contain at most 16 records. HTTP request bodies are capped at 2 MiB, public batch bodies at 64 KiB, responses at 1 MiB, and scheduled HTTP retry waits at 30 seconds per attempt and 60 seconds total with a 120-second request deadline. Each HTTP transport invocation defaults to three counted attempts and permits at most five, plus its existing one-time 401 renewal. Alongside ordinary GET/HEAD and eligible POST retries, the exact `/v1/subjects/{UUID}/source-statistics/vndb` PUT retries only with a valid quoted structured-field `Idempotency-Key`. Other PUT routes and missing or malformed keys remain ineligible. Retried requests preserve their original bytes, headers and bearer except for the existing explicit 401 renewal rule; all attempt, wait, body and deadline ceilings remain unchanged. Cover resolution handles at most 64 assets per record, with one POST and one status GET per invocation and no inline polling wait.
 
 Record write width starts at `recordConcurrency` (default 16). After a final transport `429` or a `503` problem with `retryable: true`, an admitted continuation halves the width, rounding down to at least one. The failed write goes to the front of the queue with the same envelope and command keys; its record resumes at that write, preserving completed planning, bootstrap and cover resolution. Nothing new starts while active records meet or exceed the width. Each successful write adds one slot up to the configured concurrency. A write started alone at width one that still overloads fails as before; older requests from a wider cohort can requeue while it drains. Other failures retain their existing behaviour. Width persists across pages and phases within a run and resets for the next run.
