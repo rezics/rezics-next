@@ -1,5 +1,8 @@
 import type { Pool } from 'pg';
+import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable } from './public-filter-consumer-contract.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
+import { type IndexAction, type SubjectDocument } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { type SubjectListingSource, type SubjectSource } from './source.ts';
 export declare const SEARCH_IDENTITY_WRITER_CHUNK = 100;
@@ -31,6 +34,9 @@ export type SearchRetainedCopy = Readonly<{
     state: 'enrolled' | 'dispatched' | 'settled' | 'cancelled';
 }>;
 export type SearchWriterGuard = Readonly<{
+    write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
+}>;
+export type SearchWriterNativeCustody = SearchWriterGuard & Readonly<{
     /** No caller body/version or saved positive can be submitted. */
     write(partition: number, ids: readonly string[], obligation: bigint): Promise<void>;
     fenceOriginal(job: IdentityJobRef, original: string): Promise<SearchIdentityWriterFence>;
@@ -50,6 +56,40 @@ export type SearchWriterGuard = Readonly<{
         next: string | null;
     }>>;
 }>;
+export type SearchWriterPublicationFence = Readonly<{
+    consumer: PublicFilterConsumer;
+    job: string;
+    fence: string;
+}>;
+export type SearchWriterPublicationGuard = SearchWriterGuard & Readonly<{
+    fencePublication(request: Readonly<{
+        consumer: PublicFilterConsumer;
+        job: string;
+    }>, context: PublicFilterConsumerContext): Promise<{
+        status: 'fenced';
+        fence: SearchWriterPublicationFence;
+        cost: PublicFilterCost;
+    } | PublicFilterConsumerUnavailable>;
+    drainPublication(fence: SearchWriterPublicationFence, context: PublicFilterConsumerContext): Promise<{
+        status: 'draining' | 'drained';
+        fence: SearchWriterPublicationFence;
+        cost: PublicFilterCost;
+    } | PublicFilterConsumerUnavailable>;
+    adoptPublication(fence: SearchWriterPublicationFence, context: PublicFilterConsumerContext): Promise<{
+        status: 'held';
+        fence: SearchWriterPublicationFence;
+        cost: PublicFilterCost;
+    } | PublicFilterConsumerUnavailable>;
+    releasePublication(fence: SearchWriterPublicationFence, context: PublicFilterConsumerContext): Promise<{
+        status: 'released';
+        cost: PublicFilterCost;
+    } | PublicFilterConsumerUnavailable>;
+}>;
+/** Read current native projection bodies with the external versions actually settled by this writer.
+ * A later writer-custody command advances the home head without changing those external versions.
+ * Missing/uncertain custody returns null and cannot certify a generation.
+ */
+export declare function readSearchWriterGenerationActions(guard: SearchWriterGuard, partition: number, ids: readonly string[], obligation: bigint): Promise<readonly IndexAction<SubjectDocument>[] | null>;
 /** Ordinary writer custody, independent of the fixed participant and privacy-reduction continuation.
  * A submitted request with uncertain outcome retains its enrollment indefinitely until native reconciliation.
  * Time, retries, a refreshed 409 or a later physical UUID cannot release that request.
@@ -61,7 +101,7 @@ export declare function createSearchWriterGuard(options: {
     consumer: string;
     source: SubjectSource;
     listing: SubjectListingSource;
-}): SearchWriterGuard;
+}): SearchWriterNativeCustody & SearchWriterPublicationGuard;
 export type SearchIdentityWriterFence = Readonly<{
     state: 'draining' | 'closed';
     gate: IdentityNativeReceipt;
@@ -79,3 +119,4 @@ export declare function fenceSearchIdentityWriter(pool: Pool, options: Readonly<
     index: string;
     search: OpenSearch;
 }>): Promise<SearchIdentityWriterFence>;
+export declare const unavailableSearchWriterPublication: Omit<SearchWriterPublicationGuard, 'write'>;

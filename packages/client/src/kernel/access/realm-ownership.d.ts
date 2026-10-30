@@ -1,4 +1,5 @@
-import { type AuthoritativeTime } from '../command/command.ts';
+import type { Pool } from 'pg';
+import { type AuthoritativeTime, type CommandAttempt, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import type { Access, AccessClient, Resource } from '../request/access.ts';
 export declare const REALM_OWNER_ROLE = "community.realm.owner";
 type Input = {
@@ -32,4 +33,66 @@ export declare function lockRealmOwnership(client: AccessClient, input: Input): 
  * SERIALIZABLE retries recheck the predicates after concurrent grant changes.
  */
 export declare function assertRealmOwnerMayLeave(client: AccessClient, input: Input): Promise<void>;
+export type RealmErasureSuccessionInput = Readonly<{
+    resource: Resource;
+    accountId: string;
+}>;
+export type RealmErasureSuccessionSource = Readonly<{
+    route: number;
+    accountId: string;
+    version: number;
+    at: string;
+}>;
+declare const preparedRealmErasure: unique symbol;
+/** Opaque, constructor-local evidence from one genuine executor attempt. */
+export type PreparedRealmErasureSuccession = Readonly<{
+    [preparedRealmErasure]: true;
+}>;
+type DecisionBasis = Readonly<{
+    /** Historical replay is durable output, never a new current-tx applied proof. */
+    replayed: boolean;
+    resource: Resource;
+    source: RealmErasureSuccessionSource;
+    operationId: string;
+    decidedAt: string;
+}>;
+/** Content consumes a terminal decision inside the SAME Realm transaction, before commit.
+ * Orphan generation and claim deadline are Content-owned, not fields invented by Access.
+ */
+export type RealmErasureSuccessionResult = (DecisionBasis & Readonly<{
+    status: 'owned';
+    accountId: string;
+    disposition: 'retained' | 'selected';
+}>) | (DecisionBasis & Readonly<{
+    status: 'orphaned';
+}>) | Readonly<{
+    status: 'pending';
+    reason: 'more' | 'role-source' | 'account-source';
+}>;
+export type RealmErasureSuccessionAuthorization = CommandAuthorization & {
+    prepare(attempt: CommandAttempt): Promise<PreparedRealmErasureSuccession>;
+};
+export type AppliedRealmErasureSuccession = Readonly<{
+    state: 'owned' | 'orphaned';
+    orphanedAt: string | null;
+    claimEligibleAt: string | null;
+}>;
+export declare function readAppliedRealmErasureSuccession(tx: CommandTransaction, input: Readonly<{
+    realmId: string;
+    accountId: string;
+}>): Promise<AppliedRealmErasureSuccession | null>;
+/** Trusted native composition only. No Actor, Global action, approval or participant ACK.
+ * The constructor's authorization uses the installed executor's prepare/authorize/finalize
+ * lifecycle; it neither forges completed authorization branding nor holds a source checkout
+ * while acquiring the Realm writer. Content remains the sole lifecycle consumer.
+ */
+export declare function createRealmOwnershipCommands(config: {
+    pool: Pool;
+    access: Access;
+    clock?: () => Date;
+}): {
+    prepareErasureSuccession: (attempt: CommandAttempt, input: RealmErasureSuccessionInput) => Promise<PreparedRealmErasureSuccession>;
+    applyErasureSuccession: (tx: CommandTransaction, proof?: PreparedRealmErasureSuccession) => Promise<RealmErasureSuccessionResult>;
+    erasureSuccessionAuthorization: (input: RealmErasureSuccessionInput) => RealmErasureSuccessionAuthorization;
+};
 export {};

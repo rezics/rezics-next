@@ -22,6 +22,7 @@ export type BoundPublicRequest = Readonly<{
 }>;
 export type DefaultPublicFilterRuntime = Readonly<{
     publication: SearchGenerationPublication;
+    preparePublication(generation: number, context: PublicFilterConsumerContext): ReturnType<SearchGenerationPublication['prepare']>;
     bindRequest(request: Readonly<{
         plan: PublicFilterConsumerCaptureInput;
         snapshot: 'pit' | 'prepared';

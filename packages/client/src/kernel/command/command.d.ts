@@ -167,6 +167,8 @@ export declare function authoritativeTimeValue(time: AuthoritativeTime): string;
 export declare function currentCommand(tx: CommandTransaction): CurrentCommand;
 /** Allows existing Access checks in a mutation to reuse the same attempt time. */
 export declare function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined;
+/** Executor-owned budget for source preparation; copied attempts have no budget. */
+export declare function commandAttemptDeadline(attempt: CommandAttempt): number;
 /** Executor internals: lend Access an attempt time without granting command authority.
  * Operational attempts never enter commands, receiptOwners or the callback registry.
  */

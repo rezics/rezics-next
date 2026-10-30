@@ -45,7 +45,8 @@ export { resourceAuthorization, resourceAuthorizationPage, type AuthorizationAnc
 export { creationDeclares, parentCreationAuthorization, type ParentAnchor, type ParentCreationContext, type ResourceCreationPort, } from './parent-creation.ts';
 export { initializeResourceGrants } from './resource-initialization.ts';
 export { resourceRoleHeld } from './resource-role-held.ts';
-export { readRealmOwnershipRoles, assertRealmOwnerMayLeave } from './realm-ownership.ts';
+export { readRealmOwnershipRoles, assertRealmOwnerMayLeave, createRealmOwnershipCommands, readAppliedRealmErasureSuccession, type AppliedRealmErasureSuccession, type RealmErasureSuccessionInput, type RealmErasureSuccessionSource, type PreparedRealmErasureSuccession, type RealmErasureSuccessionResult, type RealmErasureSuccessionAuthorization, } from './realm-ownership.ts';
+export { approveRealmClaim, type ApproveRealmClaimInput, type ApproveRealmClaimContext, type RealmClaimApproval, } from './realm-claim.ts';
 export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
 export { grantGroupRole } from './resource-group-grant.ts';
 export { installStandingParentGrant } from './standing-parent.ts';

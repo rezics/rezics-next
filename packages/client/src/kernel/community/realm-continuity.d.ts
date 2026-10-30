@@ -1,4 +1,4 @@
-import { type CommandAuthorization } from '../command/command.ts';
+import { type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { type Actor, type Resource } from '../request/access.ts';
 import { type RealmDependencies, type RealmContext } from './realm.ts';
@@ -40,3 +40,14 @@ export declare function requestRealmClaim(deps: RealmDependencies, actor: Actor,
     claimEligibleAt: string;
     requestedAt: string;
 }>>>;
+declare const lockedOwnership: unique symbol;
+export type LockedRealmOwnershipSource = Readonly<{
+    readonly [lockedOwnership]: true;
+    realmId: string;
+    ownershipState: 'owned' | 'orphaned';
+    orphanedAt: string | null;
+    claimEligibleAt: string | null;
+}>;
+export declare function lockRealmOwnershipSource(_tx: CommandTransaction, _realmId: string): Promise<LockedRealmOwnershipSource | null>;
+export declare function applyRealmOwnershipSuccession(_tx: CommandTransaction, _source: LockedRealmOwnershipSource, _erasedAccountId: string): Promise<RealmContinuity>;
+export {};

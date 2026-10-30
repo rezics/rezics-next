@@ -1,39 +1,48 @@
-import type { PublicFilterCost, PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
-import type { PublicFilterConsumerContext, PublicFilterConsumerOperationsFactory, PublicFilterConsumerUnavailable } from './public-filter-consumer-contract.ts';
-import type { SubjectApplyGuard } from './indexer.ts';
-export type SearchGenerationPublicationLocator = Readonly<{
-    publication: string;
+import type { Pool } from 'pg';
+import type { KernelClock } from '../clock.ts';
+import type { PublicFilterConsumer, PublicFilterCost, PublicFilterProjectionMeaning, PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import type { SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
+import type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable } from './public-filter-consumer-contract.ts';
+import type { SearchWriterPublicationGuard } from './writer-guard.ts';
+import type { DiscoveryRegistry } from './discovery.ts';
+import { type OpenSearch } from './opensearch.ts';
+export type GenerationPublicationJob = Readonly<{
+    consumer: PublicFilterConsumer;
+    job: string;
 }>;
-/** Closed owner port. Only the producer can supply reconciled publication and its apply admission hook.
- * Locator/state/diagnostic counts supplied by a consumer never authorize activation.
- */
-export interface SearchGenerationPublication {
-    prepare(request: Readonly<{
-        generation: number;
-    }>, context: PublicFilterConsumerContext): Promise<Readonly<{
-        status: 'prepared';
-        locator: SearchGenerationPublicationLocator;
-        writer: SubjectApplyGuard;
+export type SearchGenerationPublication = Readonly<{
+    prepare(consumer: PublicFilterConsumer, context: PublicFilterConsumerContext): Promise<{
+        status: 'preparing';
+        job: GenerationPublicationJob;
         cost: PublicFilterCost;
-    }> | PublicFilterConsumerUnavailable>;
-    step(locator: SearchGenerationPublicationLocator, context: PublicFilterConsumerContext): Promise<Readonly<{
+    } | PublicFilterConsumerUnavailable>;
+    step(job: GenerationPublicationJob, context: PublicFilterConsumerContext): Promise<{
         status: 'progress' | 'reconciled';
+        job: GenerationPublicationJob;
         cost: PublicFilterCost;
-    }> | PublicFilterConsumerUnavailable>;
-    activate(locator: SearchGenerationPublicationLocator, context: PublicFilterConsumerContext): Promise<Readonly<{
-        status: 'active';
-        generation: number;
-        previous: number | null;
+    } | PublicFilterConsumerUnavailable>;
+    activate(job: GenerationPublicationJob, context: PublicFilterConsumerContext): Promise<{
+        status: 'activated';
+        consumer: PublicFilterConsumer;
         cost: PublicFilterCost;
-    }> | PublicFilterConsumerUnavailable>;
+    } | {
+        status: 'preparing';
+        job: GenerationPublicationJob;
+        cost: PublicFilterCost;
+    } | PublicFilterConsumerUnavailable>;
     close(): Promise<void>;
-}
-export type SearchGenerationPublicationConfig = Omit<Parameters<PublicFilterConsumerOperationsFactory>[0], 'context' | 'physicalTarget' | 'meaning' | 'source'> & Readonly<{
-    prefix: string;
-    source: PublicFilterSource;
 }>;
-/** PROVISIONAL producer adapter, selected while the publication module is absent.
- * Replace with the publication owner's actual implementation on integration, preserving this handoff.
- * No reconciliation, alias write, ordinary-writer guard or native completion is implemented here.
- */
-export declare function createSearchGenerationPublication(_config: SearchGenerationPublicationConfig): SearchGenerationPublication;
+export type SearchGenerationPublicationConfig = Readonly<{
+    pool: Pool;
+    search: OpenSearch;
+    source: PublicFilterSource;
+    sourceKeys: SubjectSourceKeyPages;
+    binding: PublicFilterSourceBinding;
+    clock: KernelClock;
+    meaning: PublicFilterProjectionMeaning;
+    writerGuard: SearchWriterPublicationGuard;
+    registry?: DiscoveryRegistry;
+}>;
+/** A single native publication port for worker and CLI composition. It owns no supplied resources. */
+export declare function createSearchGenerationPublication(config: SearchGenerationPublicationConfig): SearchGenerationPublication;
