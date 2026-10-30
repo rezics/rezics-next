@@ -35,3 +35,21 @@ export type {
   IdentitySourceSupportReader,
   IdentitySourceSupportReaderFactory,
 } from './identity-source-support-contract.ts';
+export { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
+export type {
+  NativePublicSource,
+  PublicFilterSourceCaptureInput,
+  PublicFilterSourceDefinition,
+  PublicFilterBindingFailure,
+  PublicFilterSourceBinding,
+  PublicFilterSourceBootstrapBinding,
+  PublicSourceBootstrap,
+  PublicSourceBootstrapResult,
+  PublicSourceBootstrapRecovery,
+  NativeSourceRepairReceipt,
+  PublicSourceRepair,
+  PublicSourceRepairPage,
+} from './public-filter-source-binding.ts';
+export { createSubjectSourceKeyPages } from './subject-source-key-pages.ts';
+export type { SubjectSourceKeyCursor, SubjectSourceKeyPage, SubjectSourceKeyPages } from './subject-source-key-pages.ts';
+export { publicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';

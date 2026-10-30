@@ -4,6 +4,8 @@ import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerQuery } from
 export type { DiscoveryFilterDocument } from '@rezics/filter';
 export { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import type { Release } from '@rezics/definitions';
+import type { FilterDocument } from '@rezics/filter';
+import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-contract.ts';
 import type { AvatarSummary } from '../content/avatar.ts';
 import type { SubjectSummary, SummaryReaderDependencies } from '../semantic/summaries.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -11,6 +13,22 @@ import type { SubjectDocument } from './document.ts';
 import type { SearchRequest } from './service.ts';
 import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+
+/** Provisional agreed declarations until the Search mixed compiler/consumer is delivered.
+ * DiscoveryCondition is not an admitted filter and cannot be substituted for this tree.
+ */
+export type DiscoveryFilterDocument =
+  | { and: readonly DiscoveryFilterDocument[] }
+  | { or: readonly DiscoveryFilterDocument[] }
+  | { not: DiscoveryFilterDocument }
+  | Exclude<FilterDocument, { and: unknown } | { or: unknown } | { not: unknown }>
+  | { kind: { in: readonly string[] } };
+export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInput, 'filterDocument'> &
+  Readonly<{
+    representation: 'discovery-v1';
+    filterDocument: DiscoveryFilterDocument | undefined;
+    comparator: 'mixed-public-v1';
+  }>;
 
 /** This format is opt-in; legacy Subject IDs and generation receipts retain their meaning. */
 export const DISCOVERY_DOCUMENT_FORMAT = 1;
