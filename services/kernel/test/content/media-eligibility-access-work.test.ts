@@ -1,11 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { ResourceEligibilityVerifyContext } from '../../src/access/eligibility.ts';
-import {
-  AccessWorkAccounting,
-  EMPTY_ACCESS_WORK,
-  accessOwnerWork,
-  type AccessWork,
-} from '../../src/access/work.ts';
+import { AccessWorkAccounting, EMPTY_ACCESS_WORK, accessOwnerWork, type AccessWork } from '../../src/access/work.ts';
 import {
   COVER_MEDIA_WORK_DEPENDENCY,
   MEDIA_DOWNLOAD_WORK_DEPENDENCY,
@@ -30,7 +25,11 @@ function context(): ResourceEligibilityVerifyContext<typeof row> {
   return {
     // Unit cases exercise only the callback's explicit native dispatch seams.
     // No fake query client is used as evidence of native SQL behavior.
-    client: { query: async () => { throw new Error('Unexpected query'); } },
+    client: {
+      query: async () => {
+        throw new Error('Unexpected query');
+      },
+    },
     actor: { kind: 'anonymous' },
     action: 'post:read',
     resource: { route: 1, id },
@@ -42,13 +41,20 @@ function context(): ResourceEligibilityVerifyContext<typeof row> {
 function accounting(refuse = false) {
   const admitted: AccessWork[] = [];
   const settled: AccessWork[] = [];
-  const work = new AccessWorkAccounting({
-    reserve(_operation, bound) {
-      if (refuse) return null;
-      admitted.push(bound);
-      return { settle(actual) { settled.push(actual); } };
+  const work = new AccessWorkAccounting(
+    {
+      reserve(_operation, bound) {
+        if (refuse) return null;
+        admitted.push(bound);
+        return {
+          settle(actual) {
+            settled.push(actual);
+          },
+        };
+      },
     },
-  }, Date.now() + 10_000);
+    Date.now() + 10_000,
+  );
   return { work, admitted, settled };
 }
 
@@ -71,9 +77,9 @@ test('Native media public eligibility work receipts retain independent image and
       },
     });
     const input = context();
-    const result = await work.capture(() => accessOwnerWork(
-      work, 'parent', callbacks.work!.verify, input, () => callbacks.verify(input),
-    ));
+    const result = await work.capture(() =>
+      accessOwnerWork(work, 'parent', callbacks.work!.verify, input, () => callbacks.verify(input)),
+    );
     expect(result.state).toBe('complete');
     if (result.state === 'complete') expect(result.value).toBe(containerVisible);
     expect(result.usage).toEqual(settled[0]!);
@@ -84,7 +90,12 @@ test('Native media public eligibility work receipts retain independent image and
 });
 
 test('captured initial evidence is pure preparation with exact invocation and result identity', async () => {
-  const callbacks = mediaEligibilityCallbacks({ evidence: row, async verify() { return true; } });
+  const callbacks = mediaEligibilityCallbacks({
+    evidence: row,
+    async verify() {
+      return true;
+    },
+  });
   const input = context();
   const prepareInput = {
     actor: input.actor,
@@ -110,13 +121,13 @@ test('empty parent seeks retain native plan rows and do not manufacture a public
     evidence: row,
     parent: { kind: 'thread', route: 1, id, author: false },
     async verify(_input, reads) {
-      return (await reads.parent(async () => [] as typeof row[])).length > 0;
+      return (await reads.parent(async () => [] as (typeof row)[])).length > 0;
     },
   });
   const input = context();
-  const result = await work.capture(() => accessOwnerWork(
-    work, 'parent', callbacks.work!.verify, input, () => callbacks.verify(input),
-  ));
+  const result = await work.capture(() =>
+    accessOwnerWork(work, 'parent', callbacks.work!.verify, input, () => callbacks.verify(input)),
+  );
   expect(result.state).toBe('complete');
   if (result.state === 'complete') expect(result.value).toBe(false);
   expect(result.usage).toMatchObject({ keys: 1, points: 1, rows: 4, emptySeeks: 1 });
@@ -138,9 +149,9 @@ test('draft author work is charged only when dispatched and failed work retains 
       },
     });
     const input = context();
-    const result = await work.capture(() => accessOwnerWork(
-      work, 'parent', callbacks.work!.verify, input, () => callbacks.verify(input),
-    ));
+    const result = await work.capture(() =>
+      accessOwnerWork(work, 'parent', callbacks.work!.verify, input, () => callbacks.verify(input)),
+    );
     expect(result.state).toBe(failure ? 'failed' : 'complete');
     expect(result.usage.rows).toBe(7);
     expect(result.usage).toEqual(settled[0]!);
@@ -158,12 +169,15 @@ test('unproved media projections and nested subject authority refuse before thei
     const callbacks = mediaEligibilityCallbacks({
       evidence: row,
       dependency,
-      async verify() { called = true; return true; },
+      async verify() {
+        called = true;
+        return true;
+      },
     });
     const input = context();
-    const result = await work.capture(() => accessOwnerWork(
-      work, 'media', callbacks.work!.verify, input, () => callbacks.verify(input),
-    ));
+    const result = await work.capture(() =>
+      accessOwnerWork(work, 'media', callbacks.work!.verify, input, () => callbacks.verify(input)),
+    );
     expect(result).toEqual({ state: 'unavailable', dependency, usage: EMPTY_ACCESS_WORK });
     expect(called).toBe(false);
     expect(admitted).toHaveLength(0);
@@ -177,14 +191,21 @@ test('unproved media projections and nested subject authority refuse before thei
     evidence: row,
     parent: { kind: 'board', route: 1, id, author: false },
     async verify(_input, reads) {
-      await reads.parent(async () => { called = true; return row; });
+      await reads.parent(async () => {
+        called = true;
+        return row;
+      });
       return true;
     },
   });
   const input = context();
-  expect((await work.capture(() => accessOwnerWork(
-    work, 'parent', callbacks.work!.verify, input, () => callbacks.verify(input),
-  ))).state).toBe('unavailable');
+  expect(
+    (
+      await work.capture(() =>
+        accessOwnerWork(work, 'parent', callbacks.work!.verify, input, () => callbacks.verify(input)),
+      )
+    ).state,
+  ).toBe('unavailable');
   expect(called).toBe(false);
   expect(work.usage()).toEqual(EMPTY_ACCESS_WORK);
 });
@@ -210,9 +231,9 @@ test('bounded avatar and Realm points admit before dispatch and retain independe
         },
       });
       const input = { ...context(), evidence: image, action: 'media:read' };
-      const result = await work.capture(() => accessOwnerWork(
-        work, 'media', callbacks.work!.verify, input, () => callbacks.verify(input),
-      ));
+      const result = await work.capture(() =>
+        accessOwnerWork(work, 'media', callbacks.work!.verify, input, () => callbacks.verify(input)),
+      );
       expect(result.state).toBe('complete');
       if (result.state !== 'complete') throw new Error('Expected point receipt');
       // The same positive image receipt never overrides an independently
@@ -245,9 +266,9 @@ test('bounded image misses, failures and exhausted admission preserve native cha
       },
     });
     const input = context();
-    const result = await work.capture(() => accessOwnerWork(
-      work, 'media', callbacks.work!.verify, input, () => callbacks.verify(input),
-    ));
+    const result = await work.capture(() =>
+      accessOwnerWork(work, 'media', callbacks.work!.verify, input, () => callbacks.verify(input)),
+    );
     expect(dispatched).toBe(outcome !== 'refused');
     expect(result.state).toBe(outcome === 'refused' ? 'unavailable' : outcome === 'failed' ? 'failed' : 'complete');
     if (outcome === 'refused') expect(result.usage).toEqual(EMPTY_ACCESS_WORK);
@@ -270,8 +291,15 @@ test('post image receipts charge the actual bounded chain and refuse changed anc
     const callbacks = mediaEligibilityCallbacks({
       evidence: row,
       media: {
-        kind: 'download', route: 1, id, format: 'webp', width: 320,
-        ancestors: [{ id, kind: 'post' }, { id: threadId, kind: 'thread' }],
+        kind: 'download',
+        route: 1,
+        id,
+        format: 'webp',
+        width: 320,
+        ancestors: [
+          { id, kind: 'post' },
+          { id: threadId, kind: 'thread' },
+        ],
       },
       async verify(_input, reads) {
         await reads.media(async () => ({ variant_key: `m/${id}/webp-320` }));
@@ -287,9 +315,9 @@ test('post image receipts charge the actual bounded chain and refuse changed anc
       },
     });
     const input = context();
-    const result = await work.capture(() => accessOwnerWork(
-      work, 'post image', callbacks.work!.verify, input, () => callbacks.verify(input),
-    ));
+    const result = await work.capture(() =>
+      accessOwnerWork(work, 'post image', callbacks.work!.verify, input, () => callbacks.verify(input)),
+    );
     expect(parentDispatches).toBe(changed ? 1 : 2);
     expect(result.state).toBe(changed ? 'failed' : 'complete');
     expect(result.usage.rows).toBe(6 + 10 + 4);
@@ -314,7 +342,9 @@ test('same-window media receipts require their exact invocation and leave ordina
   const first = context();
   const second = { ...first };
   for (const input of [first, second]) {
-    expect(await accessOwnerWork(work, 'image', callbacks.work!.verify, input, () => callbacks.verify(input))).toBe(false);
+    expect(await accessOwnerWork(work, 'image', callbacks.work!.verify, input, () => callbacks.verify(input))).toBe(
+      false,
+    );
   }
   expect(work.usage().rows).toBe(12);
   expect(work.usage().emptySeeks).toBe(2);

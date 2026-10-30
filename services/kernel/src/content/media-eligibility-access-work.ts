@@ -1,13 +1,5 @@
-import type {
-  ResourceEligibilityOptions,
-  ResourceEligibilityVerifyContext,
-} from '../access/eligibility.ts';
-import {
-  ACCESS_WORK_AXES,
-  EMPTY_ACCESS_WORK,
-  AccessWorkUnavailableError,
-  type AccessWork,
-} from '../access/work.ts';
+import type { ResourceEligibilityOptions, ResourceEligibilityVerifyContext } from '../access/eligibility.ts';
+import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkUnavailableError, type AccessWork } from '../access/work.ts';
 
 const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value) ?? 'null');
 const uuid = 'x'.repeat(36);
@@ -28,8 +20,7 @@ const sum = (left: AccessWork, right: AccessWork): AccessWork =>
 
 export const MEDIA_DOWNLOAD_WORK_DEPENDENCY =
   'Content read-download-media bounded thumbhash/average_color and post-image credit/provenance projection';
-export const REALM_MEDIA_WORK_DEPENDENCY =
-  'Content realm-media-read bounded thumbhash/average_color projection';
+export const REALM_MEDIA_WORK_DEPENDENCY = 'Content realm-media-read bounded thumbhash/average_color projection';
 export const COVER_MEDIA_WORK_DEPENDENCY =
   'Semantic subject:read current subject/Context AccessCheck work producer inside Content cover eligibility.verify';
 
@@ -70,10 +61,7 @@ type ParentReads = Readonly<{
  * No body, title, timestamp, account callback or Context read is included.
  */
 function parentWork(plan: ParentPlan): AccessWork {
-  const input =
-    plan.kind === 'board'
-      ? [plan.route, plan.id]
-      : [plan.route, plan.id, plan.kind];
+  const input = plan.kind === 'board' ? [plan.route, plan.id] : [plan.route, plan.id, plan.kind];
   return {
     keys: plan.kind === 'container' ? 3 : plan.kind === 'post' ? 2 : 1,
     points: plan.kind === 'container' ? 3 : plan.kind === 'post' ? 2 : 1,
@@ -103,22 +91,42 @@ function authorWork(plan: ParentPlan): AccessWork {
 // string escaping needs <=6). This bounds parsed JSON without assuming that
 // JSON.stringify reproduces PostgreSQL's numeric representation.
 const mediaProjection = {
-  media_id: uuid, container_id: uuid, uploader_id: uuid, purpose: 'realm-banner',
-  state: 'available', claimed_at: 'x'.repeat(64), erased: false,
-  collection_pending: false, taken_down: false, security_revision: '9'.repeat(19),
-  sha256: 'f'.repeat(64), thumbhash: 'x'.repeat(44), average_color: '#ffffff',
-  focal_x: 'x'.repeat(32), focal_y: 'x'.repeat(32),
+  media_id: uuid,
+  container_id: uuid,
+  uploader_id: uuid,
+  purpose: 'realm-banner',
+  state: 'available',
+  claimed_at: 'x'.repeat(64),
+  erased: false,
+  collection_pending: false,
+  taken_down: false,
+  security_revision: '9'.repeat(19),
+  sha256: 'f'.repeat(64),
+  thumbhash: 'x'.repeat(44),
+  average_color: '#ffffff',
+  focal_x: 'x'.repeat(32),
+  focal_y: 'x'.repeat(32),
 };
 const variantProjection = {
-  format: 'webp', width: 2560, height: 2147483647,
-  key: `m/${uuid}/webp-2560`, sha256: 'f'.repeat(64),
-  mediaType: 'image/webp', byteCount: '9'.repeat(19),
+  format: 'webp',
+  width: 2560,
+  height: 2147483647,
+  key: `m/${uuid}/webp-2560`,
+  sha256: 'f'.repeat(64),
+  mediaType: 'image/webp',
+  byteCount: '9'.repeat(19),
 };
 function mediaParameters(plan: MediaPlan): readonly unknown[] {
   return plan.kind === 'realm'
     ? [plan.route, plan.id]
-    : [plan.route, plan.id, plan.format, plan.width,
-        plan.credit === false ? 0 : 8192, plan.provenance === false ? 0 : 65536];
+    : [
+        plan.route,
+        plan.id,
+        plan.format,
+        plan.width,
+        plan.credit === false ? 0 : 8192,
+        plan.provenance === false ? 0 : 65536,
+      ];
 }
 /** Explicit work-only SQL plans, including finite intermediate tuples:
  * download: input + media/slot unique tuples + two joins + output = 6.
@@ -138,25 +146,39 @@ function mediaWork(plan: MediaPlan): AccessWork {
     // schema-closed ASCII. The outer JSON encoding also escapes its quotes.
     const variant = JSON.stringify(variantProjection).replace(/([,:])/g, '$1 ');
     projection = {
-      ...mediaProjection, claimed_realm_id: uuid,
+      ...mediaProjection,
+      claimed_realm_id: uuid,
       variants_json: `[${Array(12).fill(variant).join(', ')}]`,
     };
   } else {
     projection = {
-      ...mediaProjection, key: `m/${uuid}/original`, media_type: 'image/jpeg',
-      actual_byte_count: '9'.repeat(19), width: '-2147483648', height: '-2147483648',
-      credit: null, provenance: null,
-      variant_key: variantProjection.key, variant_sha256: variantProjection.sha256,
-      variant_media_type: variantProjection.mediaType, variant_byte_count: variantProjection.byteCount,
-      variant_format: 'webp', variant_width: 2560, variant_height: 2147483647,
+      ...mediaProjection,
+      key: `m/${uuid}/original`,
+      media_type: 'image/jpeg',
+      actual_byte_count: '9'.repeat(19),
+      width: '-2147483648',
+      height: '-2147483648',
+      credit: null,
+      provenance: null,
+      variant_key: variantProjection.key,
+      variant_sha256: variantProjection.sha256,
+      variant_media_type: variantProjection.mediaType,
+      variant_byte_count: variantProjection.byteCount,
+      variant_format: 'webp',
+      variant_width: 2560,
+      variant_height: 2147483647,
     };
   }
   return {
-    keys: plan.kind === 'realm' ? 13 : 2, points: 2, witnesses: 0,
+    keys: plan.kind === 'realm' ? 13 : 2,
+    points: 2,
+    witnesses: 0,
     rows: plan.kind === 'realm' ? 29 : 6,
     // Replace null only for an admitted nonnull envelope. A zero SQL limit
     // requires null; it never clips a changed rights/provenance object.
-    bytes: bytes(mediaParameters(plan)) + bytes([projection]) +
+    bytes:
+      bytes(mediaParameters(plan)) +
+      bytes([projection]) +
       (plan.kind === 'download'
         ? (plan.credit === false ? 0 : 32 * 8192 - bytes(null)) +
           (plan.provenance === false ? 0 : 32 * 65536 - bytes(null))
@@ -171,29 +193,36 @@ function mediaWork(plan: MediaPlan): AccessWork {
  * A thrown/unknown/timed-out callback never publishes an actual receipt, so
  * Access retains the full envelope. This neither admits work nor checks access.
  */
-export function mediaEligibilityCallbacks<E>(options: Readonly<{
-  evidence: E;
-  parent?: ParentPlan;
-  media?: MediaPlan;
-  dependency?: string;
-  verify(context: ResourceEligibilityVerifyContext<E>, reads: ParentReads): Promise<boolean>;
-}>): Pick<ResourceEligibilityOptions<E>, 'prepare' | 'verify' | 'work'> {
+export function mediaEligibilityCallbacks<E>(
+  options: Readonly<{
+    evidence: E;
+    parent?: ParentPlan;
+    media?: MediaPlan;
+    dependency?: string;
+    verify(context: ResourceEligibilityVerifyContext<E>, reads: ParentReads): Promise<boolean>;
+  }>,
+): Pick<ResourceEligibilityOptions<E>, 'prepare' | 'verify' | 'work'> {
   const prepared = new WeakMap<object, E>();
   const verified = new WeakMap<object, { result: boolean; work: AccessWork }>();
   const plan = options.parent && Object.freeze({ ...options.parent });
   const parent = plan && parentWork(plan);
   const author = plan?.author ? authorWork(plan) : undefined;
-  const mediaPlan = options.media && Object.freeze({
-    ...options.media,
-    ...(options.media.ancestors === undefined ? {} : {
-      ancestors: options.media.ancestors.map((node) => Object.freeze({ ...node })),
-    }),
-  });
+  const mediaPlan =
+    options.media &&
+    Object.freeze({
+      ...options.media,
+      ...(options.media.ancestors === undefined
+        ? {}
+        : {
+            ancestors: options.media.ancestors.map((node) => Object.freeze({ ...node })),
+          }),
+    });
   const media = mediaPlan && mediaWork(mediaPlan);
-  const ancestors = mediaPlan?.ancestors?.map((node, index) => {
-    const input = { route: mediaPlan.route, id: node.id, kind: index === 0 ? 'container' as const : node.kind };
-    return { input, work: parentWork({ ...input, author: false }) };
-  }) ?? [];
+  const ancestors =
+    mediaPlan?.ancestors?.map((node, index) => {
+      const input = { route: mediaPlan.route, id: node.id, kind: index === 0 ? ('container' as const) : node.kind };
+      return { input, work: parentWork({ ...input, author: false }) };
+    }) ?? [];
   if (ancestors.length > 34 || (plan && mediaPlan)) throw new TypeError('Invalid media eligibility plan');
   let bound = parent ? sum(parent, author ?? EMPTY_ACCESS_WORK) : media;
   if (bound) for (const node of ancestors) bound = sum(bound, node.work);
@@ -214,8 +243,7 @@ export function mediaEligibilityCallbacks<E>(options: Readonly<{
         bound(context) {
           verified.delete(context);
           if (context.evidence !== options.evidence) return undefined;
-          if (!bound)
-            throw new AccessWorkUnavailableError(options.dependency ?? MEDIA_DOWNLOAD_WORK_DEPENDENCY);
+          if (!bound) throw new AccessWorkUnavailableError(options.dependency ?? MEDIA_DOWNLOAD_WORK_DEPENDENCY);
           metered.add(context);
           return bound;
         },
@@ -251,7 +279,8 @@ export function mediaEligibilityCallbacks<E>(options: Readonly<{
         spent = sum(spent, declaration);
         const result = await dispatch();
         const actualBytes = bytes(input) + bytes(wire(result));
-        if (actualBytes > declaration.bytes) throw new TypeError('Media eligibility native projection exceeds declaration');
+        if (actualBytes > declaration.bytes)
+          throw new TypeError('Media eligibility native projection exceeds declaration');
         spent = {
           ...spent,
           bytes: spent.bytes - declaration.bytes + actualBytes,
@@ -259,31 +288,42 @@ export function mediaEligibilityCallbacks<E>(options: Readonly<{
         };
         return result;
       };
-      const parentInput = plan && (plan.kind === 'board'
-        ? [plan.route, plan.id]
-        : [plan.route, plan.id, plan.kind]);
+      const parentInput = plan && (plan.kind === 'board' ? [plan.route, plan.id] : [plan.route, plan.id, plan.kind]);
       const wireRows = (value: unknown) =>
         value === null || value === undefined ? [] : Array.isArray(value) ? value : [value];
       const result = await options.verify(context, {
         parent: (dispatch) => read('parent', parent, parentInput, dispatch, wireRows),
         author: (dispatch) => read('author', author, plan && [plan.route, plan.id], dispatch, wireRows),
-        media: (dispatch) => read(
-          'media', media, mediaPlan && mediaParameters(mediaPlan), () => dispatch(bounded),
-          (value) => value === null ? [] : [value],
-          (value) => {
-            if (value === null) return 1;
-            if (mediaPlan?.kind === 'realm')
-              return (value as { variants_json: string }).variants_json === '[]' ? 1 : 0;
-            return (value as { variant_key: string | null }).variant_key === null ? 1 : 0;
-          },
-        ),
+        media: (dispatch) =>
+          read(
+            'media',
+            media,
+            mediaPlan && mediaParameters(mediaPlan),
+            () => dispatch(bounded),
+            (value) => (value === null ? [] : [value]),
+            (value) => {
+              if (value === null) return 1;
+              if (mediaPlan?.kind === 'realm')
+                return (value as { variants_json: string }).variants_json === '[]' ? 1 : 0;
+              return (value as { variant_key: string | null }).variant_key === null ? 1 : 0;
+            },
+          ),
         ancestor: (input, dispatch) => {
           const node = ancestors[ancestorIndex];
           // Changed ancestry cannot expand this invocation into unadmitted IO.
           // The unchanged native walker still validates kind, routes and cycles.
-          if (bounded && (!node || (input.route !== node.input.route || input.id !== node.input.id || input.kind !== node.input.kind)))
+          if (
+            bounded &&
+            (!node || input.route !== node.input.route || input.id !== node.input.id || input.kind !== node.input.kind)
+          )
             throw new TypeError('Media eligibility ancestry changed before dispatch');
-          return read(`ancestor:${ancestorIndex++}`, node?.work, [input.route, input.id, input.kind], dispatch, wireRows);
+          return read(
+            `ancestor:${ancestorIndex++}`,
+            node?.work,
+            [input.route, input.id, input.kind],
+            dispatch,
+            wireRows,
+          );
         },
       });
       if (bounded && ((plan && !dispatched.has('parent')) || (mediaPlan && !dispatched.has('media'))))

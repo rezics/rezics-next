@@ -19,10 +19,7 @@ import type { DownloadDecision, DownloadVariant, MediaDependencies } from './med
 import read from './read-download-media.sql';
 import readWork from './read-download-media-work.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
-import {
-  COVER_MEDIA_WORK_DEPENDENCY,
-  mediaEligibilityCallbacks,
-} from './media-eligibility-access-work.ts';
+import { COVER_MEDIA_WORK_DEPENDENCY, mediaEligibilityCallbacks } from './media-eligibility-access-work.ts';
 
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 type RealmHeadRow = NonNullable<Awaited<ReturnType<typeof realmHead.run>>>;
@@ -46,12 +43,19 @@ function selection(variant: string) {
   return { format: match[1]!, width };
 }
 async function point(
-  client: AccessClient, id: string, slot: { format: string; width: number }, bounded = false,
-  credit = true, provenance = true,
+  client: AccessClient,
+  id: string,
+  slot: { format: string; width: number },
+  bounded = false,
+  credit = true,
+  provenance = true,
 ): Promise<Row | null> {
   const input = {
-    route: route(id), media_id: id, ...slot,
-    credit_bytes: credit ? 8192 : 0, provenance_bytes: provenance ? 65536 : 0,
+    route: route(id),
+    media_id: id,
+    ...slot,
+    credit_bytes: credit ? 8192 : 0,
+    provenance_bytes: provenance ? 65536 : 0,
   };
   const statement = bounded ? readWork : read;
   const result = await client.query<Row>(
@@ -191,7 +195,9 @@ async function authorizeDownload(
               evidence: initial,
               media: { kind: 'download', route: r, id: mediaId, ...slot, credit: false, provenance: false },
               async verify({ client }, reads) {
-                const current = await reads.media((bounded) => point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null));
+                const current = await reads.media((bounded) =>
+                  point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null),
+                );
                 if (!current || !usable(current) || signature(current) !== signature(initial))
                   throw new GrantDeniedError();
                 return true;
@@ -288,7 +294,8 @@ async function authorizeDownload(
                 if (!(await subject(client))) throw new GrantDeniedError();
                 // Anonymous viewing and public visibility use the same prepared
                 // check on this snapshot; evaluate that formula only once.
-                publiclyVisible = publicSubject !== null && (publicSubject === subject || (await publicSubject(client)));
+                publiclyVisible =
+                  publicSubject !== null && (publicSubject === subject || (await publicSubject(client)));
                 return publiclyVisible;
               },
             }),
@@ -401,16 +408,23 @@ async function authorizeDownload(
           ...mediaEligibilityCallbacks({
             evidence: initial,
             media: {
-              kind: 'download', route: r, id: mediaId, ...slot,
+              kind: 'download',
+              route: r,
+              id: mediaId,
+              ...slot,
               ancestors: chain.map(({ id, kind }) => {
                 if (kind === 'board') throw new GrantDeniedError();
                 return { id, kind };
               }),
-              credit: initial.credit !== null, provenance: initial.provenance !== null,
+              credit: initial.credit !== null,
+              provenance: initial.provenance !== null,
             },
             async verify({ client }, reads) {
-              const current = await reads.media((bounded) => point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null));
-              if (!current || !usable(current) || signature(current) !== signature(initial)) throw new GrantDeniedError();
+              const current = await reads.media((bounded) =>
+                point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null),
+              );
+              if (!current || !usable(current) || signature(current) !== signature(initial))
+                throw new GrantDeniedError();
               const currentChain = await mediaParentChain(client, current.container_id, (input) =>
                 reads.ancestor(input, () => parent.run(client, input)),
               );
