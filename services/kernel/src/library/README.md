@@ -17,6 +17,14 @@ Missing/incomplete evidence returns typed retryable
 `dependency_unavailable`, including for an apparently empty owner. It never becomes ready zero counts. No native
 readiness, source-currentness, full shelf outcome or growth proof is claimed by these callable readers or source typing.
 
+Native shelf maintenance is exported by `shelf-maintenance-ops-contract.ts` and installed by the existing
+Library WorkModule. Its default initialization, operator request, page/CAS, complete-generation swap and bounded
+recovery are implemented in `shelf-maintenance-runtime.ts`. The derived allocator guard accepts only that runner's
+same live transaction/run/epoch/build capability. Nonempty type repair remains pending when the real allocator or
+scoped identity-only source adapters are absent. Shelf purge verifies native tombstone envelopes and observes the
+existing Library erasure participant's local disposition; it does not add a participant or acknowledge shared custody.
+See [the operational contract](shelf-maintenance-ops-contract.md).
+
 ## Scope and implementation boundary
 
 [Library and Collections](../../../../docs/library-and-collections.md) owns the capability. This README adopts its
@@ -979,12 +987,38 @@ is used. The fixed empty probes plus one nonempty 64-key page stay below 100 raw
 erasure scope; `erasure-owned-graph.ts` calls it through its existing receipted workflow. It rechecks the exact
 current owner/head and erases independent local work without a second participant or account runtime. Its local
 result never acknowledges Access erasure. Public/previously-public source evidence stays retained in both paths.
-An existing `native_source_capture` also retains its exact private graph. The Collection-leading capture index
-provides one bounded existence probe under the locked head, and the account-leading index feeds the existing
-terminal erasure probe. Captures, native receipts, holds and writer fences remain with their producer. The actual
-`createNativeLibrarySourceCustody` factory exposes capture/finish/hold/revalidate/release operations; none supplies
-ordinary source retirement or destination disposition. A released hold, absent hold or incomplete capture cannot
-authorize physical source erasure. These guards create no capture, permission evidence or second Source engine.
+The native factory now exposes the closed [`retireCapture` owner operation](../../../../docs/collection-source.md#native-capture-retirement).
+Ordinary never-public private/unlisted due cleanup calls it before its capture guard. The operation rereads the
+exact capture identity, current owner/incarnation/partition and current source generation under the same live
+Core command and native T. Ordinary eligibility requires the original deletion ID, revision and strict 720-hour
+deadline; terminal eligibility requires the actual deleted/fenced account and current Library erasure obligation.
+Active-source repair is refused. Restore/redelete and captured Undo semantics remain unchanged.
+
+An unreleased hold blocks retirement even after source/writer generations advance. Retained revalidation and
+release can use the exact deleted source or real terminal account scope without granting fresh reads or holds.
+Only committed native releases with the receipt's transaction binding can be retired; a release written in this
+command remains pending until a later command. One attempt examines at most 80 raw hold keys and the fixed native
+account/partition/source/control/capture/receipt points (at most 100 raw keys including default discovery), deletes
+released children first, then the native receipt, then the capture. A full child page leaves parents for the next
+attempt. Every operation reserves actual plan bounds and returns its consumed work receipt; discovery composes
+with that same fixed local allowance and absolute command deadline. Neither a locator nor an opaque capture brand
+supplies authority. Non-cascading FKs and parent/control locks serialize late holding against retirement.
+
+The existing owned-graph runner also pages the account-leading capture index, invokes the same owner operation,
+and checkpoints bounded release progress through its original receipted pages and finite continuations. Blocked
+captures/graphs remain pending. After the last source-writer hook and fact-source-head barrier it removes bounded
+provably owned writer controls, repeating full control pages. Future Collection writes preserve the actual native
+curator locator on the fence, including parent deletion; capture initialization supplies the same native owner.
+Account controls derive ownership from their exact native account key. Collection controls with no surviving
+native provenance remain unattributed pending, never guessed from a route or globally searched/backfilled. Public,
+foreign or still-referenced controls remain retained. The erasure probe inventories the capture/receipt/hold FK
+family and known fence locators; capture absence proves local child absence by FK, never shared custody closure.
+A capture-family pending entry does not assert a receipt or hold row exists for every unfinished capture.
+
+There is no delivered release-to-terminal reinspection/wakeup or foreign Source/destination disposition custody
+port. The existing terminal pending/recovery boundary names that gap; ordinary scheduled sweeps retry released
+private due captures. No new participant, scheduler, ACK or inferred destination erasure is introduced. These
+guards create no capture, permission evidence or second Source engine.
 `createCollectionSource` and canonical publication functions are still unavailable implementations in this tree;
 there is no ordinary destination-disposition export to bind. Current metadata/raw readers, listing stamps, DBOS
 success and an empty destination page cannot replace that authority. No public skeleton or completed public purge
@@ -1912,10 +1946,3 @@ rows, statements, blocks and bytes remain independent inclusive bounds; no nativ
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
 64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
 
-Native shelf maintenance is exported by `shelf-maintenance-ops-contract.ts` and installed by the existing
-Library WorkModule. Its default initialization, operator request, page/CAS, complete-generation swap and bounded
-recovery are implemented in `shelf-maintenance-runtime.ts`. The derived allocator guard accepts only that runner's
-same live transaction/run/epoch/build capability. Nonempty type repair remains pending when the real allocator or
-scoped identity-only source adapters are absent. Shelf purge verifies native tombstone envelopes and observes the
-existing Library erasure participant's local disposition; it does not add a participant or acknowledge shared custody.
-See [the operational contract](shelf-maintenance-ops-contract.md).

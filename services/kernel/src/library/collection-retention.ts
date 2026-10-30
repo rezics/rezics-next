@@ -25,6 +25,7 @@ import references from './collection-retention-references.sql';
 import metadata from './collection-retention-metadata.sql';
 import head from './collection-retention-head.sql';
 import terminalScope from './erasure-scope.sql';
+import { retireNativeCollectionCapturePage, type NativeSourceRetirement } from './native-source-custody.ts';
 
 export const COLLECTION_RETENTION_WORKFLOW = 'library.collectionRetention';
 export const COLLECTION_RETENTION_SCHEDULE = 'library.collectionRetention.every-10-minutes';
@@ -106,12 +107,16 @@ async function removeLocalPage(
   collectionId: string,
   accountId: string,
   parent: LockedCollection,
+  episode: NativeSourceRetirement['episode'],
 ): Promise<CollectionCleanupPage> {
   if (parent.publicCustody)
     return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
-  // Capture/hold/release are native source evidence, not an ordinary retirement authority.
-  // Preserve the exact source graph even for private captures until that authority disposes it.
-  if (parent.sourceCustody) return { status: 'retained', removed: 0, custody: 'native_source_capture' };
+  if (parent.sourceCustody) {
+    const retirement = await retireNativeCollectionCapturePage(tx, { accountId, collectionId, episode });
+    if (retirement.status === 'progress' || retirement.status === 'retired') {
+      if (retirement.removed > 0) return { status: 'progress', removed: retirement.removed };
+    } else return { status: 'retained', removed: 0, custody: 'native_source_capture' };
+  }
   const args = { route, collection_id: collectionId };
   // At most one nonempty child page per transaction; empty seeks are a fixed bound.
   for (const query of [members, facts]) {
@@ -186,7 +191,9 @@ export async function purgeExpiredCollectionPage(
       )
         return noEffect({ status: 'stale', removed: 0 });
       if (!parent.due) return noEffect({ status: 'not_due', removed: 0 });
-      const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent);
+      const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent, {
+        kind: 'deleted', deletionId: key.deletionId, revision: key.revision, purgeAfter: key.purgeAfter,
+      });
       if (value.removed === 0) return noEffect(value);
       return {
         value,
@@ -218,7 +225,7 @@ export async function purgeTerminalCollectionPage(
   const parent = await lock.run(tx, { route, collection_id: input.collectionId, purge_after: null, time });
   if (!parent) return { status: 'stale', removed: 0 };
   if (parent.accountId !== input.accountId) throw new Error('Foreign terminal Collection owner');
-  return removeLocalPage(tx, route, input.collectionId, input.accountId, parent);
+  return removeLocalPage(tx, route, input.collectionId, input.accountId, parent, { kind: 'terminal' });
 }
 
 /** Installs on the one default Library runtime and existing bounded maintenance queue. */

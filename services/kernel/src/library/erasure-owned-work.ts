@@ -54,6 +54,14 @@ export async function runOwnedGraphSegment(
     });
     stats.pages++;
     stats.removed += result.removed;
+    if (kind === 'native_source_capture') {
+      if (result.blocked) cursor.blockedCollection ??= result.pendingCollection ?? null;
+      if (result.parent === null) {
+        cursor.phase++;
+        cursor.after = null;
+      } else if (result.nativeDone) cursor.after = result.parent;
+      continue;
+    }
     if (kind === 'collectionLocal') {
       if (result.blocked) cursor.blockedCollection ??= cursor.parent;
       if (result.blocked || result.collectionDone) {
@@ -65,7 +73,7 @@ export async function runOwnedGraphSegment(
       continue;
     }
     if (!parentPhase) {
-      if (result.removed < 100) cursor.phase++;
+      if (result.removed < 100 && !result.hasMore) cursor.phase++;
       continue;
     }
     if (cursor.parent === null) {

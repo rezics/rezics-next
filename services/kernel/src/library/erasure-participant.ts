@@ -22,6 +22,8 @@ const WORKFLOW = 'library.accountErasure';
 // These gaps apply even when every indexed native root is absent. Never turn a
 // missing producer/locator/minimizer into an attestation that no data applies.
 const BLOCKERS = Object.freeze([
+  'native_source_fence: historical unattributed Collection controls have no provable owner after parent/capture removal; no global scan or guessed backfill',
+  'native_source_hold: release-to-terminal reinspection/wakeup and foreign Source/destination disposition custody are not delivered',
   'identity_epoch_participant_work/identity_epoch_source_basis/owner_identity_scope: exact Source/receiving/control closure and minimizer custody remain pending',
   'bulk_effect: target-home effects have no account-home producer locator or late-disposition fence',
   'collection_listing_history: no curator locator after parent removal',

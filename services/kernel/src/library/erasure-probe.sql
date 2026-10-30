@@ -1,10 +1,15 @@
 -- Positive evidence only: empty indexed roots do not prove all-role/custody closure.
 -- One typed input feeds one fixed projection of owner-prefix existence probes.
+-- Capture presence keeps the whole FK-owned receipt/hold family pending, even for an unfinished capture.
+-- These family obligations are not independent positive child-row observations; capture absence plus the
+-- non-cascading FKs proves their local absence. The owner operation rereads actual children before disposition.
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id
 ),
 probe AS (
   SELECT
+    EXISTS (SELECT 1 FROM library.native_source_fence WHERE route = input.route AND account_id = input.account_id)
+      OR EXISTS (SELECT 1 FROM library.native_source_fence WHERE route = input.route AND kind = 'account' AND owner_id = input.account_id) AS native_source_fence,
     EXISTS (SELECT 1 FROM library.native_source_capture WHERE route = input.route AND account_id = input.account_id) AS native_source_capture,
     EXISTS (SELECT 1 FROM library.identity_epoch_participant_work WHERE partition_no = (input.route >> 4) AND owner_id = input.account_id) AS identity_epoch_participant_work,
     EXISTS (SELECT 1 FROM library.identity_epoch_source_basis WHERE partition_no = (input.route >> 4) AND owner_id = input.account_id) AS identity_epoch_source_basis,
@@ -38,6 +43,9 @@ SELECT stores.store
 FROM probe
 CROSS JOIN LATERAL (VALUES
   (native_source_capture, 'native_source_capture'::text),
+  (native_source_capture, 'native_source_receipt'::text),
+  (native_source_capture, 'native_source_hold'::text),
+  (native_source_fence, 'native_source_fence'::text),
   (identity_epoch_participant_work, 'identity_epoch_participant_work'::text),
   (identity_epoch_source_basis, 'identity_epoch_source_basis'::text),
   (owner_identity_scope, 'owner_identity_scope'::text),

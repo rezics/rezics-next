@@ -2692,8 +2692,10 @@ CREATE TABLE library.native_source_fence (
   kind text NOT NULL CHECK (kind IN ('collection','account')),
   owner_id uuid NOT NULL,
   generation bigint NOT NULL DEFAULT 0 CHECK (generation >= 0),
+  account_id uuid, -- Native writer provenance, retained after the Collection curator disappears.
   PRIMARY KEY (route,kind,owner_id)
 );
+CREATE INDEX native_source_fence_account ON library.native_source_fence (route,account_id,kind,owner_id);
 CREATE TABLE library.native_source_capture (
   route integer NOT NULL,
   capture_id uuid NOT NULL,
@@ -2737,12 +2739,13 @@ CREATE TABLE library.native_source_hold (
   PRIMARY KEY (route,capture_id,hold_id),
   FOREIGN KEY (route,capture_id) REFERENCES library.native_source_receipt(route,capture_id)
 );
+CREATE INDEX native_source_hold_active ON library.native_source_hold (route,capture_id,hold_id) WHERE NOT released;
 -- Raw ranges include retained/excluded rows. Predicates never define scan exhaustion.
 CREATE INDEX native_source_member_raw ON library.collection_member(route,collection_id,ordinal_key,member_id);
 CREATE INDEX native_source_output_raw ON library.published_log(route,account_id,log_id);
 
 CREATE FUNCTION library.advance_native_source_fence() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE item record; step integer; owner uuid; r integer; k text;
+DECLARE item record; step integer; owner uuid; attributed uuid; r integer; k text;
 BEGIN
   -- Both old and new anchors are fenced. Only native key columns enter control metadata.
   -- Conservatively fence even a no-op UPDATE, without converting business payload to JSON.
@@ -2755,8 +2758,12 @@ BEGIN
       item := NEW;
     END IF;
     r := item.route;
+    attributed := NULL;
     IF TG_TABLE_NAME IN ('collection','collection_member') THEN
       k := 'collection'; owner := item.collection_id;
+      IF TG_TABLE_NAME='collection' THEN
+        attributed := item.curator_account_id;
+      END IF;
     ELSIF TG_TABLE_NAME IN ('progress_unit','progress_change') THEN
       k := 'account';
       SELECT account_id INTO owner FROM library.progress_session
@@ -2765,10 +2772,12 @@ BEGIN
     ELSE
       k := 'account'; owner := item.account_id;
     END IF;
+    IF k='account' THEN attributed := owner; END IF;
     IF owner IS NOT NULL THEN
-      INSERT INTO library.native_source_fence(route,kind,owner_id,generation) VALUES(r,k,owner,1)
+      INSERT INTO library.native_source_fence(route,kind,owner_id,generation,account_id) VALUES(r,k,owner,1,attributed)
       ON CONFLICT (route,kind,owner_id) DO UPDATE
-        SET generation=library.native_source_fence.generation+1;
+        SET generation=library.native_source_fence.generation+1,
+            account_id=COALESCE(library.native_source_fence.account_id,EXCLUDED.account_id);
     END IF;
   END LOOP;
   RETURN NULL;
@@ -2799,12 +2808,12 @@ CREATE TRIGGER native_source_writer AFTER INSERT OR UPDATE OR DELETE ON library.
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 
--- Immutable committed provenance: only the native finalization statement creates this receipt.
+-- Immutable retained provenance: only native finalization creates it; child-free retirement may delete it.
 CREATE FUNCTION library.guard_native_source_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION 'native_source_receipt_immutable';
 END; $$;
-CREATE TRIGGER native_source_receipt_immutable BEFORE UPDATE OR DELETE ON library.native_source_receipt
+CREATE TRIGGER native_source_receipt_immutable BEFORE UPDATE ON library.native_source_receipt
   FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
 
 

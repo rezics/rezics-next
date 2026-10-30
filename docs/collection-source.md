@@ -110,12 +110,14 @@ establishes durable proof. The hold locator references only that committed nativ
 only hold metadata, preserving facts, shared history and receipt provenance. An intervening native fact change
 invalidates fresh capture/holding; it does not give this seam authority to withdraw or purge a public destination, or
 acknowledge destination disposition. Releasing an existing hold tolerates later fact/source generations while
-requiring its original capture binding, source incarnation/ownership and current owner/account fences.
+requiring its original capture binding, source incarnation/ownership and current owner/account fences, including the exact deleted source and actual terminal erasure scope.
 
 `revalidateHold` rereads that exact capture, its committed same-transaction receipt and the already committed,
 unreleased hold on the live receiving command client. It never inserts, recreates or updates custody. All original
 identity, scope, generation, owner/receiving epoch and effect keys must still match the retained capture; current
-source incarnation, ownership, partition and active unfenced account must still apply. Source generation and
+source incarnation, ownership and partition must still apply. The account must be active and unfenced, or have
+the actual terminal erasure obligation; the exact source may already be deleted. This retained-only exception
+allows revalidation/release, never fresh reading or holding. Source generation and
 Collection/account writer counters may have advanced. An absent, altered, released or differently controlled hold
 is unavailable, as is a hold newly written by the consuming command. The returned opaque custody retains the old
 binding: it grants no fresh Source read, complete/current observation, publication, permission, byte access, new
@@ -130,6 +132,24 @@ Source remain separate authorities. Export presence and local compilation do not
 full-row payload, acceptance, integration or main readiness; those proofs are deferred to controller checks.
 
 ## Authority and source selection
+
+### Native capture retirement
+
+`createNativeLibrarySourceCustody().retireCapture` takes the existing `allowance` and absolute `deadline`, a live
+Core `CommandTransaction` as `client` and its matching `AuthoritativeTime` as `at`, exact `identity` and `captureId`,
+and the current `sourceGeneration`. Its closed `episode` is either
+`{kind:'deleted', deletionId, revision, purgeAfter}` or `{kind:'terminal'}`. The latter requires the actual current
+native account erasure obligation; the former requires the exact deleted Collection episode and its original
+720-hour deadline at command T. Values are lookup hints, never authority. Active-source repair is refused.
+
+The result is `retired` or `progress` with `removed`, `blocked` with `live_hold`, `release_uncommitted`, `source`
+or `public_custody`, or the existing typed `unavailable`; every result carries the actual `WorkReceipt`. None
+means readable, permitted, ready or erased at a destination. Unreleased holds survive generation changes. Only
+native releases committed before this command can be removed. Retirement deletes bounded released holds, then
+the receipt and capture, under current partition/account/Collection/control locks. Never-public private/unlisted
+due cleanup and the existing terminal owned-graph runner consume this operation before deleting local children.
+Ever-public history and public output remain retained pending actual Source and ordinary destination disposition.
+There is no new public endpoint, scheduler, shared custody wakeup or participant acknowledgement.
 
 One Library owner selects the same native truth:
 

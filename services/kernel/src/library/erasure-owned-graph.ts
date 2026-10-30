@@ -17,6 +17,9 @@ import canonicalFacts from './erasure-owned-canonical-source-fact.sql';
 import canonicalState from './erasure-owned-canonical-source-state.sql';
 import collectionHistory from './erasure-owned-collection-history.sql';
 import { purgeTerminalCollectionPage } from './collection-retention.ts';
+import { retireNativeCollectionCapturePage } from './native-source-custody.ts';
+import nativeCapture from './erasure-owned-native-source-capture.sql';
+import nativeFences from './erasure-owned-native-source-fence.sql';
 
 export const OWNED_PHASES = [
   'published_log',
@@ -46,6 +49,7 @@ export const OWNED_PHASES = [
   'owner_member_index',
   'owner_index_pin',
   'owner_index_control',
+  'native_source_capture',
   'fact_source_head',
 ] as const;
 const childQueries = {
@@ -59,7 +63,7 @@ const childQueries = {
   collectionDelete,
   collectionRetain,
 };
-type Kind = keyof typeof ownedQueries | keyof typeof childQueries | 'sessions' | 'collections' | 'collectionLocal';
+type Kind = keyof typeof ownedQueries | keyof typeof childQueries | 'native_source_capture' | 'sessions' | 'collections' | 'collectionLocal';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -75,6 +79,9 @@ export type OwnedGraphPage = {
   retain: boolean;
   blocked: boolean;
   collectionDone?: boolean;
+  nativeDone?: boolean;
+  pendingCollection?: string;
+  hasMore?: boolean;
 };
 type OwnedParent = { id: string; everPublic?: boolean; retain?: boolean };
 
@@ -86,7 +93,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
   const { accountId, kind, parent, after, ordinal, segment } = input;
   const route = requireRoute(accountId);
   if (parent !== null && requireRoute(parent) !== route) throw new TypeError('Foreign graph parent');
-  if (after !== null && requireRoute(after) !== route) throw new TypeError('Foreign graph cursor');
+  if (after !== null && kind !== 'native_source_capture' && requireRoute(after) !== route) throw new TypeError('Foreign graph cursor');
   if (!Number.isSafeInteger(ordinal) || ordinal < 0 || !Number.isSafeInteger(segment) || segment < 0)
     throw new TypeError('Invalid graph checkpoint');
   const digest = createHash('sha256').update(JSON.stringify(input)).digest();
@@ -114,6 +121,21 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
     },
     async (tx): Promise<CommandResult<OwnedGraphPage>> => {
       const args = { route, account_id: accountId };
+      if (kind === 'native_source_capture') {
+        const capture = await nativeCapture.run(tx, { ...args, after_id: after });
+        if (!capture) return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false, nativeDone: true });
+        const page = await retireNativeCollectionCapturePage(tx, {
+          accountId, collectionId: capture.collectionId, captureId: capture.id, episode: { kind: 'terminal' },
+        });
+        const blocked = page.status === 'blocked' || page.status === 'unavailable';
+        const value: OwnedGraphPage = {
+          kind, removed: 'removed' in page ? page.removed : 0, parent: capture.id, retain: false, blocked,
+          nativeDone: page.status !== 'progress', ...(blocked ? { pendingCollection: capture.collectionId } : {}),
+        };
+        if (value.removed === 0) return noEffect(value);
+        return { value, events: [{ type: 'com.rezics.library.account-graph.purged.v1', subject: accountId,
+          data: { accountId, kind, removed: value.removed } }] };
+      }
       if (kind === 'collectionLocal') {
         if (parent === null) throw new TypeError('Collection cleanup requires an exact parent');
         const page = await purgeTerminalCollectionPage(tx, { accountId, collectionId: parent });
@@ -152,6 +174,7 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         });
       }
       let removed: number;
+      let hasMore = false;
       if (kind in childQueries) {
         if (parent === null) throw new TypeError('Graph child requires an exact parent');
         // Fixed dispatch, never runtime SQL construction or a table-name query API.
@@ -191,8 +214,14 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         if (!(kind in ownedQueries)) throw new TypeError('Invalid graph namespace');
         // All fixed owner statements have exactly the same typed integer/uuid input.
         removed = (await ownedQueries[kind as keyof typeof ownedQueries].run(tx, args)).length;
+        // The final writer barrier itself advances the native account fence. Dispose controls AFTER it.
+        if (kind === 'fact_source_head') {
+          const controls = (await nativeFences.run(tx, args)).length;
+          removed += controls;
+          hasMore = controls >= 98;
+        }
       }
-      const value = { kind, removed, parent: null, retain: false, blocked: false };
+      const value = { kind, removed, parent: null, retain: false, blocked: false, ...(hasMore ? { hasMore } : {}) };
       return {
         value,
         events: [
