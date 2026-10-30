@@ -64,7 +64,7 @@ function privateScans(raw: Capture) {
     );
 }
 
-test('FULL HTTP keeps current parents and empty headings while real source concealment and retired profiles preserve independent private tiles', async () => {
+test('An owner opens a label shelf with current label headings and bounded profiled entry/progress tiles through the FULL HTTP caller', async () => {
   const owner = await f.identity(scopes),
     other = await f.identity(scopes);
   const l = await label(owner.bearer, 'Current full heading');
@@ -95,6 +95,11 @@ test('FULL HTTP keeps current parents and empty headings while real source conce
   expect(bySubject.assignments[0].label).toEqual({ name: 'Renamed full heading' });
   expect(bySubject).not.toHaveProperty('label');
   let full = await json(owner.bearer, 'GET', path + '&view=FULL', 200);
+  expect(full.label).toEqual({ id: l.id, name: 'Renamed full heading', revision: 2 });
+  expect(full.assignments.find((r: { subjectId: string }) => r.subjectId === subject)).toMatchObject({
+    subject: { id: subject },
+    libraryEntry: { state: 'listening', activeProgressSession: active },
+  });
   expect(full.assignments.find((r: { subjectId: string }) => r.subjectId === unprofiled)).toMatchObject({
     subject: { id: unprofiled },
     libraryEntry: null,
