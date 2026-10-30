@@ -77,6 +77,8 @@ export function projectSubjectOffer(pool: Pool, offerId: string, deadline: numbe
     if (!final || final.revision !== source.revision || identity?.state !== 'mapped' ||
         identity.terminal !== mapping.terminal || identity.epoch !== mapping.epoch) {
       await runCommand(pool, { partition: partitionOf(key.route), basis, deadline }, async (tx) => {
+        if ((await available(tx, partitionOf(key.route))).epoch !== observed.ownerEpoch)
+          throw new CommandUnavailableError('fenced', partitionOf(key.route));
         await remove.run(tx, { ...key, version: installed.version });
         return noEffect(null);
       });
@@ -186,7 +188,7 @@ export function registerSubjectOfferWork(context: WorkContext): void {
         // Admission also emits this event. Only the producer's published event can start moves.
         if (native?.state !== 'published') return;
         const handle = await context.client.enqueue({ workflowName: 'commerce.subjectOffers.identity',
-          workflowID: `commerce:subject-offers:identity:${jobId}:${epoch}`, workflowIDReusePolicy: 'return-existing', queueName: 'effects' }, jobId, epoch);
+          workflowID: `commerce:subject-offers:identity:${jobId}:${epoch}`, workflowIDReusePolicy: 'return-existing', queueName: 'workflows' }, jobId, epoch);
         await handle.getResult();
       },
     },
