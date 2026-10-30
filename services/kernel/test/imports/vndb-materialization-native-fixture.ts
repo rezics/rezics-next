@@ -147,11 +147,18 @@ export async function createVndbTablesDriver(
               value: (...values: unknown[]) => {
                 executedSql.push(String(args[0]));
                 if (measuring) statements++;
-                const result = Reflect.apply(execute, statement, values);
-                if (measuring && operation === 'get' && result != null) returnedRows++;
-                if (measuring && (operation === 'all' || operation === 'values'))
-                  returnedRows += (result as unknown[]).length;
-                return result;
+                try {
+                  const result = Reflect.apply(execute, statement, values);
+                  if (measuring && operation === 'get' && result != null) returnedRows++;
+                  if (measuring && (operation === 'all' || operation === 'values'))
+                    returnedRows += (result as unknown[]).length;
+                  return result;
+                } finally {
+                  // Bun 1.4's EXPLAIN for an empty INSERT can leave its VM active
+                  // after .all(); finalize the observed plan before publication
+                  // starts a transaction on this same real importer connection.
+                  if (/^EXPLAIN QUERY PLAN\b/i.test(String(args[0]))) statement.finalize();
+                }
               },
             });
           }
