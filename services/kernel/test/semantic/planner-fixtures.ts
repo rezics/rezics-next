@@ -256,12 +256,7 @@ function sequentialScans(raw: Capture): readonly Record<string, unknown>[] {
   return scans;
 }
 
-export function assertUnforcedIndexes(
-  name: string,
-  scale: number,
-  raw: Capture,
-  required: IndexRequirement,
-): void {
+export function assertUnforcedIndexes(name: string, scale: number, raw: Capture, required: IndexRequirement): void {
   const plannerSettings = [...raw.statements, ...(raw.backgroundStatements ?? [])].filter((statement) =>
     /\benable_[a-z_]+\b|\bset_config\s*\(/i.test(statement),
   );
