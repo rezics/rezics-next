@@ -766,3 +766,23 @@ open. The six-cell matrix above retains catalogue, curated, Everything without s
 configured TypeList duties, including persona and disclosure controls; setup and registration do not close them.
 No additional product suite, root typecheck, whole-kernel check or root gate follows from this manifest prose.
 Its documentation check is the scoped formatter named above; the named Bangumi implementation acceptance is separate.
+No product suite, root typecheck, whole-kernel check or root gate is part of this documentation acceptance. Its
+sole check is the scoped formatter named above.
+
+## Ordinary CLI mid-run bulk authority recovery
+
+The Provider imports and bridges In row includes the frozen [ordinary CLI journey](../../services/kernel/test/imports/cli-midrun-authority-resume.test.ts)
+and its [connected caller](../../services/kernel/test/imports/cli-midrun-authority-resume-fixture.ts): seventeen
+changed Bangumi records after a metadata-only baseline, a native successful changed envelope, pre-forward held
+requests released after real Global bulk revocation, exact 403 responses and exit 4 with closed handles. Restoring
+only the same grant permits original sealed bytes/keys to drain before the next invocation admits a distinct
+successor. Original receipts/media and an independent editor selection remain observed anchors.
+
+The [scenario/evidence notes](../research/imports-audit/cli-midrun-authority-resume.md) name the command, observation
+sources and limits. The historical missing-caller red remains qualified; this binding is registered and exposed,
+with native execution and promotion pending the managed receipt. Compiler/local protocol proof is not a native
+pass. This slice adds no growth series and preserves the existing rights, deferred surface and Cost boundaries.
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-midrun-authority-resume.test.ts
+```

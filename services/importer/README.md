@@ -670,3 +670,24 @@ adds no growth series and does not close general source metadata or discovery wo
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-sealed-source-resume.test.ts
 ```
+
+## Mid-run bulk authority loss
+
+The ordinary CLI retains its completed baseline and original sealed generation when native bulk authority is
+revoked between writes. It exits 4 after authorization denial and closes its handles. Restore the existing grant
+and reopen the same state to drain pending prepared bytes and keys; a distinct supplied successor is acquired on
+the following invocation. Earlier authorized transactions remain committed. Receipt replay checks current Access
+before revealing stored success, including replay with the original bearer.
+
+The frozen [native journey](../kernel/test/imports/cli-midrun-authority-resume.test.ts) binds seventeen changed
+Bangumi records after a metadata-only baseline, real account-key Auth, native Access/public writes, the media worker
+and an independent community selection. It schedules actual outgoing requests before forwarding to Access and
+retains exact native denial bodies. See [scenario, evidence and limits](../../docs/research/imports-audit/cli-midrun-authority-resume.md).
+Binding and the importer-local protocol proof do not establish native success; the managed receipt owns that claim.
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-midrun-authority-resume.test.ts
+```
+
+This connected outcome reuses existing input, envelope and retry bounds and adds no growth series. Original native
+receipts, bootstrap/proposal/media journals and acquired objects remain independently observed recovery anchors.
