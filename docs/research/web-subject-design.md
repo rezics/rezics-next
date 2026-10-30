@@ -22,9 +22,9 @@ mechanisms already present.
 | --- | --- |
 | Public page information architecture | [Subject pages](../subject-pages.md), [Web Goal](../goals/web.md), [Web](../../apps/web/README.md); Web owns routes and rendering. [Composition](../../packages/composition/README.md) owns component/read planning. |
 | Identity, released types, relations and selected facts | [Semantic](../../services/kernel/src/semantic/README.md), [catalogue](../../packages/definitions/README.md). Definitions describe relations and presentation; Semantic selects and discloses facts. Web does not infer facts from type names or external markup. |
-| Account versus catalogue agent | [Accounts](../accounts.md), [agent verification](../agent-verification.md). Verification links two identities; self-authored account presentation does not become sourced catalogue truth. |
+| Account versus catalogue agent | [Accounts](../accounts.md), with [supporting verification research](agent-verification.md). Verification links two identities; self-authored account presentation does not become sourced catalogue truth. |
 | Current authority and personal actions | [Viewer actions](../viewer-actions.md), [Auth/session assembly](../../apps/web/README.md). Native Access decides; BFF sessions convey the real credential. A visible action, catalogue relation or paid order is not a grant. |
-| Cover, authored/imported text, rights, ratings and communities | [Content](../../services/kernel/src/content/README.md), [cover UI](../../apps/web/src/media/README.md), [ratings](../ratings.md). Semantic stores assertions/references; Content owns payload availability and rights. A rating population is not a Semantic Context. |
+| Cover, authored/imported text, rights, ratings and communities | [Content](../../services/kernel/src/content/README.md), [cover UI](../../packages/ui/README.md#cover). Semantic stores assertions/references; Content owns payload availability and rights. A rating population is not a Semantic Context. |
 | Original source attribution | [Source-record attribution contract](../../services/kernel/src/semantic/source-record-attribution-contract.md), with Imports supplying admitted trusted metadata. It specifies missing producer ports; its existence does not establish their delivery. |
 
 Existing research was read before the external comparison. “Primary-backed”
@@ -91,8 +91,9 @@ the Accounts contract; do not expose suspension via an attribution lookup.
 redirects together, preserving the requested supported view. There are separate
 canonical paths in [subject.tsx](../../apps/web/src/features/pages/subject.tsx),
 `load-subject.ts` and agent routes; the former emits a 308 account redirect while
-the Web subject canonical contract uses 301. The `load-subject.ts`
-`subjectUrlForView` helper drops a view when the destination is an account URL.
+the Web subject canonical contract uses 301. The duplicated `subjectUrlForView`
+helpers in `load-subject.ts` and `subject-queries.ts` drop a view when the
+destination is an account URL.
 Reconcile these under the existing identity contracts, including the documented
 former-handle forwarding window, rather than creating a second identity resolver.
 
@@ -192,7 +193,9 @@ Cover credit is not the licence for catalogue facts or prose.
 
 **Current text path needs a connection check:** Semantic document values identify
 Content documents; `content.imported_field`/`authored_field` retain bodies and
-rights. [Document reads](../../services/kernel/src/content/document-read.ts)
+rights. `GET /v1/documents/{id}` in the
+[document routes](../../services/kernel/src/content/document-routes.ts) and
+[document reader](../../services/kernel/src/content/document-read.ts)
 perform exact subject/candidate/source disclosure and current erasure checks.
 Web's `data.tsx` instead expects a renderable embedded `content.document` body.
 The inspected page-read descriptors do not include a document read. Thus a
@@ -342,6 +345,9 @@ consent, command and isolation outcomes. Checkout's
 and validates the current entitlement against its order; neither the subject
 page nor this research needs a benefit engine. Header search, Collections,
 type-presentation, Auth assembly and personal outcomes keep their current
-writers. Each slice's later served-page proof must include keyboard, no-JS,
+writers. [Type presentation](../../apps/web/src/media/type-presentation.mdx)
+already shares real Search/cover-list inputs; its supplied film-runtime fact is
+explicitly a fixture, not another delivered fact producer. Each slice's later
+served-page proof must include keyboard, no-JS,
 phone/desktop and long-locale states where it changes navigation. This report
 does not substitute for that proof or for owner adoption of the open decisions.
