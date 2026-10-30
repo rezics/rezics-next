@@ -18,6 +18,7 @@ import { PageStory, PatternStory } from './page';
 
 const board: DirectoryBoard = {
   ...recording.board,
+  community: null,
   purpose: 'discussion',
   visibility: 'published',
   availability: 'available',

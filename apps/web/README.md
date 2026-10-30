@@ -813,18 +813,23 @@ leaves drafts alone. Previous remembers one predecessor reached through a return
 invent no predecessor. Loading, terminal empty, sparse empty with continuation, unavailable/Retry and native
 closed/denied remain distinct. Pending and refused reads hide previous rows and all hidden metadata.
 
-`src/threads/board-directory.ts` derives rows from native BoardView. The source contract is
+`src/threads/board-directory.ts` derives rows from the generated native collection's BoardView. The source contract is
 `GET /v1/boards?purpose=discussion|reviews&cursor&limit` → `{ boards, next }`, limit 1–100, default 20.
-`unavailableBoardDirectoryAdapter` is the isolated runtime default until the native API/client lands: zero requests,
-explicitly unavailable, never synthetic empty. Producer delivery must replace/deduplicate this default through
-`board-directory-read.ts`, carrying the current credential and existing request deadline context. No generated
-method is guessed. Navigation/review owners can link to `/boards?purpose=reviews` or `/boards?purpose=discussion`.
+The served loader and explicit retries use `createNativeBoardDirectoryAdapter` with the actual `client.boards.get`.
+The server-only default resolves the current first-party session credential on each action and forwards the incoming
+request's abort signal. Session or native failures never retry anonymously or become an empty directory. Native
+anonymous FINAL disclosure owns the public Global result for every caller, including authenticated callers. The
+defensive client filter retains only available, published boards with native `realmId: null` and the requested
+purpose. Global `community: null` supplies no description or Realm membership. Navigation/review owners can link
+to `/boards?purpose=reviews` or `/boards?purpose=discussion`.
 
 - **Touches/bound:** One page per load, retry or explicit continuation; zero per-board requests or automatic refill.
   Client work/storage O(limit), one predecessor. The producer owns the signed range/current disclosure neighborhood:
   ≤4 × limit candidates, O(limit × log R), R = N + U × t + M. No second search or permission authority.
 - **Focused outcomes:** `tests/board-directory.test.ts` covers purpose/cursor to the actual recorded board destination
-  and unavailable/sparse/current refusal. Existing native bound/privacy suites remain later integration proof.
+  and unavailable/sparse/current refusal, plus generated-client transport, credential/signal forwarding, one-call
+  continuations and fresh retry refusal. These source/adapter checks do not establish native acceptance; existing
+  native bound/privacy suites remain later integration proof.
 - **Stories:** `patterns-community-board-directory--current`, `--select-purpose`, `--continue`, `--open`, `--retry`,
   `--loading`, `--empty`, `--sparse`, `--unavailable`, `--denied`, `--closed`; the same suffixes under
   `pages-community-board-directory` reuse the region in AppShell. Use phone390/desktop1280 and locale/theme globals.

@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { boardDirectoryRequest, loadBoardDirectory } from './board-directory';
 
-/** The only runtime adapter wiring. Native delivery replaces loadBoardDirectory's unavailable default. */
+/** The route and retries use the current native collection through loadBoardDirectory's server-only default. */
 export const readBoardDirectory = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (!input || typeof input !== 'object' || Array.isArray(input))

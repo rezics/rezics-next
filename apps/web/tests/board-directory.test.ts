@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import recording from '../src/kernel/recorded/board.json';
@@ -9,6 +10,7 @@ import {
   boardDirectoryHref,
   boardDirectoryPrevious,
   boardDirectoryRequest,
+  createNativeBoardDirectoryAdapter,
   loadBoardDirectory,
   type BoardDirectoryRequest,
   type BoardDirectoryState,
@@ -71,6 +73,112 @@ test('purpose and an exact returned cursor reach the real Global board in one bo
   }
   expect(boardDirectoryRequest({}).limit).toBe(20);
   for (const limit of [0, 101, 1.5]) expect(() => boardDirectoryRequest({ limit })).toThrow();
+});
+
+test('the assigned real current-authorized journey binds its native source while privacy retry and request bounds remain meaningful', async () => {
+  setLocale('en', { reload: false });
+  const cursor = 'signed:native/+cursor=';
+  for (const limit of [1, 20, 100]) {
+    for (const purpose of ['discussion', 'reviews'] as const) {
+      for (const authorization of [null, 'Bearer current-viewer']) {
+        const calls: Request[] = [];
+        const controller = new AbortController();
+        const current: DirectoryBoard = { ...board, community: null, purpose };
+        let phase: 'failure' | 'sparse' | 'visible' | 'withdrawn' = 'failure';
+        const client = createKernelClient('https://kernel.test', {
+          fetch: async (input, init) => {
+            const request = new Request(input, init);
+            calls.push(request);
+            expect(init?.signal).toBe(controller.signal);
+            if (phase === 'failure') return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+            return Response.json({
+              boards: phase === 'visible' ? [current] : [],
+              next: phase === 'sparse' || phase === 'withdrawn' ? cursor : null,
+            });
+          },
+        });
+        const adapter = createNativeBoardDirectoryAdapter(client, { authorization, signal: controller.signal });
+        const request = boardDirectoryRequest({ purpose, limit });
+        expect(await loadBoardDirectory(request, adapter)).toEqual({ state: 'unavailable' });
+        expect(calls).toHaveLength(1);
+
+        phase = 'sparse';
+        const sparse = await loadBoardDirectory(request, adapter);
+        expect(sparse).toEqual({ state: 'ready', boards: [], next: cursor });
+        const html = render(request, sparse);
+        expect(html).toContain(m.board_directory_sparse());
+        expect(html).not.toContain(m.board_directory_empty());
+        expect(calls).toHaveLength(2);
+        const destination = boardDirectoryRequest({ purpose, cursor, limit });
+        expect(boardDirectoryPrevious(request, sparse, destination)).toEqual({ request, target: cursor });
+
+        phase = 'visible';
+        const visible = await loadBoardDirectory(destination, adapter);
+        expect(visible).toEqual({ state: 'ready', boards: [current], next: null });
+        expect(render(destination, visible)).toContain(`href="/en/boards/${current.id}"`);
+        expect(calls).toHaveLength(3);
+
+        // Retry/previous reads current disclosure rather than retaining a previously returned card.
+        phase = 'withdrawn';
+        const withdrawn = await loadBoardDirectory(request, adapter);
+        expect(withdrawn).toEqual({ state: 'ready', boards: [], next: cursor });
+        expect(render(request, withdrawn)).not.toContain(current.id);
+        expect(render(request, withdrawn)).not.toContain(current.title!);
+        expect(calls).toHaveLength(4);
+        for (const [index, call] of calls.entries()) {
+          const url = new URL(call.url);
+          expect(call.method).toBe('GET');
+          expect(url.pathname).toBe('/v1/boards');
+          expect(Object.fromEntries(url.searchParams)).toEqual({
+            purpose,
+            limit: String(limit),
+            ...(index === 2 ? { cursor } : {}),
+          });
+          expect(call.headers.get('authorization')).toBe(authorization);
+        }
+        controller.abort();
+        expect(await loadBoardDirectory(request, adapter)).toEqual({ state: 'unavailable' });
+        expect(calls).toHaveLength(4);
+      }
+    }
+  }
+});
+
+test('native directory errors and invalid page bounds stay distinct from terminal empty', async () => {
+  const request = boardDirectoryRequest({ purpose: 'discussion', cursor: 'retain-on-retry', limit: 1 });
+  const global: DirectoryBoard = { ...board, community: null };
+  const responses = [
+    { status: 400, body: { code: 'invalid_cursor' }, state: 'unavailable' },
+    { status: 401, body: { code: 'invalid_credentials' }, state: 'denied' },
+    { status: 403, body: { code: 'forbidden' }, state: 'denied' },
+    { status: 403, body: { code: 'platform_closed' }, state: 'closed' },
+    { status: 503, body: { code: 'deadline_exceeded' }, state: 'unavailable' },
+    { status: 200, body: { boards: [global, global], next: null }, state: 'unavailable' },
+    { status: 200, body: { boards: [], next: request.cursor }, state: 'unavailable' },
+    { status: 200, body: { boards: [], next: '' }, state: 'unavailable' },
+  ];
+  for (const response of responses) {
+    let calls = 0;
+    const client = createKernelClient('https://kernel.test', {
+      fetch: async () => {
+        calls++;
+        return Response.json(response.body, { status: response.status });
+      },
+    });
+    const result = await loadBoardDirectory(request, createNativeBoardDirectoryAdapter(client));
+    expect(result).toEqual({ state: response.state });
+    expect(render(request, result)).not.toContain(m.board_directory_empty());
+    expect(calls).toBe(1);
+    expect(request.cursor).toBe('retain-on-retry');
+  }
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async () => Response.json({ boards: [{ ...global, visibility: 'protected' }], next: 'keep-going' }),
+  });
+  expect(await loadBoardDirectory(request, createNativeBoardDirectoryAdapter(client))).toEqual({
+    state: 'ready',
+    boards: [],
+    next: 'keep-going',
+  });
 });
 
 test('unavailable, sparse and current refusal never become false empty or disclose hidden board metadata', async () => {
