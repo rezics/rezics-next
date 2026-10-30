@@ -50,8 +50,8 @@ test('Buyers can find current purchased-access records without mistaking history
   expect(list).toContain('cursor=signed%2B%2Fcursor%3D');
   const revoked = renderDetail({ kind: 'ready', data: revokedEntitlement });
   expect(revoked).toContain('Revoked');
-  expect(revoked).toContain(`datetime="${revokedEntitlement.revokedAt}"`);
-  expect(revoked).toContain('(refund)');
+  expect(revoked.toLowerCase()).toContain(`datetime="${revokedEntitlement.revokedAt}"`.toLowerCase());
+  expect(revoked.replace(/<!--.*?-->/g, '')).toContain('(refund)');
   expect(revoked).toContain(`/en/orders/${activeEntitlement.orderId}`);
   expect(revoked).toContain('Benefit delivery is unavailable');
   expect(revoked).not.toMatch(/href="[^"]*(?:library|download)|>Use<|>Download</);

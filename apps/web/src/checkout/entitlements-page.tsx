@@ -2,7 +2,7 @@ import { Cover } from '@rezics/ui/cover';
 import { ListRow, ListRowLink } from '@rezics/ui/list-row';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Badge } from '@rezics/ui/shadcn/badge';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
@@ -48,9 +48,9 @@ export function EntitlementsState({
       <AlertDescription className="space-y-4">
         <p>{message}</p>
         {kind === 'cursor-error' ? (
-          <Button render={<a href={`/${locale}/entitlements`} />} variant="outline" className="min-h-11">
+          <a href={`/${locale}/entitlements`} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>
             {m.entitlements_restart()}
-          </Button>
+          </a>
         ) : kind !== 'denied' ? (
           <Button variant="outline" className="min-h-11" onClick={retry ?? (() => window.location.reload())}>
             {m.entitlements_retry()}
@@ -75,9 +75,9 @@ export function EntitlementsPage({
       <header className="space-y-3">
         <PageHeading id="entitlements-heading">{m.entitlements_heading()}</PageHeading>
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.entitlements_intro()}</p>
-        <Button render={<a href={`/${locale}/orders`} />} variant="link" className="min-h-11 px-0">
+        <a href={`/${locale}/orders`} className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}>
           {m.entitlements_orders()}
-        </Button>
+        </a>
       </header>
       {page.kind !== 'ready' ? (
         <EntitlementsState kind={page.kind} locale={locale} {...(retry ? { retry } : {})} />
@@ -124,13 +124,12 @@ export function EntitlementsPage({
       )}
       {page.kind === 'ready' && page.data.next ? (
         <nav aria-label={m.entitlements_pagination()}>
-          <Button
-            render={<a href={`/${locale}/entitlements?cursor=${encodeURIComponent(page.data.next)}`} />}
-            variant="outline"
-            className="min-h-11"
+          <a
+            href={`/${locale}/entitlements?cursor=${encodeURIComponent(page.data.next)}`}
+            className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}
           >
             {m.entitlements_next()}
-          </Button>
+          </a>
         </nav>
       ) : null}
     </section>

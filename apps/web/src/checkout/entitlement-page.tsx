@@ -1,5 +1,5 @@
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
-import { Button } from '@rezics/ui/shadcn/button';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { BuyerEntitlementPage } from './entitlements';
@@ -21,9 +21,9 @@ export function EntitlementPage({
     : null;
   return (
     <article className="max-w-4xl min-w-0 space-y-6" aria-labelledby="entitlement-heading">
-      <Button render={<a href={`/${locale}/entitlements`} />} variant="link" className="min-h-11 px-0">
+      <a href={`/${locale}/entitlements`} className={buttonVariants({ variant: 'link', className: 'min-h-11 px-0' })}>
         {m.entitlements_heading()}
-      </Button>
+      </a>
       <PageHeading id="entitlement-heading">{m.entitlements_detail_heading()}</PageHeading>
       {page.kind !== 'ready' ? (
         <EntitlementsState kind={page.kind} locale={locale} {...(retry ? { retry } : {})} />
