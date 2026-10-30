@@ -238,12 +238,6 @@ export const SearchTrending: Story = {
     const region = await realmState(context, 'ready');
     await expect(readyRealms).toHaveBeenCalledTimes(1);
     await expect(readyRealms).toHaveBeenLastCalledWith({ locale: getLocale(), sort: 'trending', limit: 20 });
-    // Until Content's module is delivered, the composed boundary must report unavailable, even for this fake.
-    if (region.querySelector('[data-realm-discovery-producer="unavailable"]')) {
-      await expect(within(region).getByText(m.realm_shelf_unavailable())).toBeVisible();
-      await expect(within(region).queryByRole('link')).toBeNull();
-      return;
-    }
     await expect(within(region).getByRole('link', { name: new RegExp(realmRecording.realm.title) })).toHaveAttribute(
       'href',
       `/${getLocale()}/realms/${realmRecording.realm.realmId}`,
@@ -303,7 +297,7 @@ export const SearchClosed: Story = {
     closedRealms.mockClear();
     await search(context);
     const region = await realmState(context, 'closed');
-    await expect(within(region).getByText(m.platform_closed_message())).toBeVisible();
+    await expect(within(region).getByText(m.realm_discovery_closed({}, { locale: getLocale() }))).toBeVisible();
     await expect(within(region).queryByRole('button')).toBeNull();
     await expect(closedRealms).toHaveBeenCalledTimes(1);
   },

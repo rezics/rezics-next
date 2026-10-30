@@ -354,6 +354,32 @@ test('recent history round-trips native query text without trimming its meaning'
   expect(rememberRecent([], '   ')).toEqual([]);
 });
 
+test('the sole phone discovery placement uses the real original RealmDiscovery component and one shared native adapter instead of its provisional unavailable boundary while preserving lifecycle and request bounds', async () => {
+  const { RealmDiscoverySection } = await import('../src/community/realm-discovery');
+  const source = await Bun.file(new URL('../src/search/realm-discovery-section.tsx', import.meta.url)).text();
+  expect(source).toContain("from '../community/realm-discovery'");
+  expect(source.match(/\bloadRealmDiscovery\(/gu) ?? []).toHaveLength(1);
+  expect(source).toMatch(/return\s+loadRealmDiscovery\(kernelClient\(data\.locale\),\s*\{/u);
+  expect(source).not.toContain('.realms.discovery.get');
+  expect(source).not.toContain('realmDiscoveryProducer');
+
+  let calls = 0;
+  const markup = present(reduceHeaderSearchState(initialHeaderSearchState(), { type: 'open-phone' }), {
+    locale: 'zh-Hant',
+    loadRealmDiscovery: async () => {
+      calls++;
+      return { kind: 'unavailable' };
+    },
+  });
+  const original = renderToStaticMarkup(
+    createElement(RealmDiscoverySection, { sort: 'trending', state: { kind: 'loading' }, locale: 'zh-Hant' }),
+  );
+  expect(markup).toContain(original);
+  expect(markup.match(/data-slot="realm-discovery"/gu) ?? []).toHaveLength(1);
+  expect(markup).not.toContain('data-realm-discovery-producer');
+  expect(calls).toBe(0);
+});
+
 test('the existing global empty-query phone search surface composes the sole native Realm discovery section with one explicit bounded shared-loader request per page while preserving scope Recent filters focus and navigation', async () => {
   const { createSearchRealmDiscoveryPage } = await import('../src/search/realm-discovery-section');
   type State = import('../src/search/realm-discovery-section').RealmDiscoveryState;
