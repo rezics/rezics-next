@@ -65,15 +65,16 @@ export type LeafRequest = Readonly<{
   budget: LeafWork;
 }>;
 
+type LeafWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
+  ? Readonly<{ actor?: never; nativeT?: never; work: W }>
+  : never;
+
 export type LeafOptions = Readonly<{
   access: Access;
   routeKey: Uint8Array;
   deadline: number;
 }> &
-  (
-    | Readonly<{ actor: Actor; nativeT?: AuthoritativeTime; work?: never }>
-    | Readonly<{ actor?: never; nativeT?: never; work: ScopeWorkContext }>
-  );
+  (Readonly<{ actor: Actor; nativeT?: AuthoritativeTime; work?: never }> | LeafWorkContext);
 
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
 
