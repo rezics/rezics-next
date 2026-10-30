@@ -81,7 +81,7 @@ async function inventories(f: AccountErasureFixture, accountId: string) {
       after = [last.store, last.record_key, last.role, last.delivery_position];
     }
     let type = '';
-    let locator = Buffer.alloc(0);
+    let locator: Buffer = Buffer.alloc(0);
     for (;;) {
       const page = await f.db.admin.query<LocatorRow>(
         `SELECT artifact_type,locator FROM core.history_locator
