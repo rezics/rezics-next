@@ -42,20 +42,32 @@ export async function startSearchIndexing(options: {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let discovery = Promise.resolve();
+  let pauseDrain = Promise.resolve();
+  let resumeAfter: Promise<void> | undefined;
+  let closing: Promise<void> | undefined;
+  const clearSchedule = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
 
   const discover = async () => {
     if (stopped) return;
     try {
       let state = await subjectGenerations(options.search, options.prefix);
+      if (stopped) return;
       if (state.generations.length === 0) {
         await createSubjectIndex(options.search, options.prefix, 1);
+        if (stopped) return;
         const format = await readSubjectSortFormat(options.search, options.prefix, 1);
+        if (stopped) return;
         await options.search.request('PUT', `/${subjectIndexName(options.prefix, 1)}/_mapping`, {
           _meta: { ...(format === null ? {} : { name_sort_format: format }), activated_at: new Date().toISOString() },
         });
+        if (stopped) return;
         await options.search.request('POST', '/_aliases', {
           actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
         });
+        if (stopped) return;
         state = { generations: [1], active: 1 };
       }
 
@@ -65,6 +77,7 @@ export async function startSearchIndexing(options: {
         const { body } = await options.search.request<
           Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>
         >('GET', `/${index}/_mapping`);
+        if (stopped) return;
         const value = body[index]?.mappings?._meta?.activated_at;
         if (typeof value === 'string') {
           const parsed = Date.parse(value);
@@ -86,12 +99,16 @@ export async function startSearchIndexing(options: {
       if (!currentGenerations || liveGenerations.join(',') !== currentGenerations.join(',')) {
         // Strict mappings on generations created before public rating fields need the two
         // compatible additions before any relay can bulk a rating-bearing document.
-        for (const generation of liveGenerations)
+        for (const generation of liveGenerations) {
+          if (stopped) return;
           await ensureSubjectRatingMapping(options.search, options.prefix, generation);
+        }
+        if (stopped) return;
         const previous = current;
         current = undefined;
         currentGenerations = undefined;
         if (previous) await previous.stop();
+        if (stopped) return;
         const relays = liveGenerations.map((generation) =>
           createSubjectIndexer({
             pool: options.pool,
@@ -103,15 +120,17 @@ export async function startSearchIndexing(options: {
           }),
         );
         const next = startRelays(options.pool, relays, {
+          // A replacement must inherit intent before its first partition scan can run.
+          paused,
           ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
           ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
         });
         current = next;
         currentGenerations = liveGenerations;
-        if (paused) await next.pause();
       }
 
       for (const generation of pendingRetirements) {
+        if (stopped) return;
         try {
           try {
             await options.search.request('DELETE', `/${subjectIndexName(options.prefix, generation)}`);
@@ -129,36 +148,68 @@ export async function startSearchIndexing(options: {
     }
   };
 
-  const refresh = async () => {
+  const refresh = () => {
+    if (stopped) return Promise.resolve();
     const next = discovery.then(discover, discover);
     discovery = next;
-    await next;
+    return next;
   };
   await refresh();
   const schedule = () => {
-    if (stopped) return;
+    if (stopped || paused || timer !== undefined) return;
     timer = setTimeout(() => {
-      void refresh().finally(schedule);
+      timer = undefined;
+      if (stopped || paused) return;
+      void refresh().then(schedule, schedule);
     }, discoverMs);
   };
   schedule();
 
   return {
-    async pause() {
+    pause() {
       paused = true;
-      await current?.pause();
+      resumeAfter = undefined;
+      clearSchedule();
+      const projection = current?.pause();
+      // Discovery owns any relay set being replaced. Its successor is born paused;
+      // drain both that admitted chain and the current projection before resuming.
+      pauseDrain = Promise.all([discovery, projection]).then(async () => {
+        await current?.pause();
+      });
+      return pauseDrain;
     },
     resume() {
-      if (!paused || stopped) return;
-      paused = false;
-      current?.resume();
+      if (!paused || stopped || resumeAfter) return;
+      const after = pauseDrain;
+      resumeAfter = after;
+      void after.then(
+        () => {
+          if (stopped || resumeAfter !== after) return;
+          resumeAfter = undefined;
+          paused = false;
+          current?.resume();
+          schedule();
+        },
+        (error) => {
+          if (resumeAfter === after) resumeAfter = undefined;
+          console.error(`Search runner resume failed for ${options.prefix}`, error);
+        },
+      );
     },
-    async stop() {
+    stop() {
+      if (closing) return closing;
       stopped = true;
-      if (timer) clearTimeout(timer);
-      await discovery;
-      await current?.stop();
-      current = undefined;
+      paused = true;
+      resumeAfter = undefined;
+      clearSchedule();
+      const previous = current;
+      const projection = previous?.stop();
+      closing = Promise.all([discovery, projection]).then(async () => {
+        if (current && current !== previous) await current.stop();
+        current = undefined;
+        currentGenerations = undefined;
+      });
+      return closing;
     },
     refresh,
   };

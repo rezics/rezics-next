@@ -7,6 +7,7 @@ export type Relay = {
 export declare function startRelays(pool: Pool, relays: Relay[], options?: {
     intervalMs?: number;
     concurrency?: number;
+    paused?: boolean;
 }): {
     pause(): Promise<void>;
     resume(): void;

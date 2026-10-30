@@ -730,6 +730,23 @@ population completeness, or expand the existing preview's disclosure guarantees.
   generation, feeds every generation and follows pause and new generations”; no new SQL check for metadata-only
   requests.
 
+Runner pause marks intent immediately, suspends automatic discovery and relay schedules, and drains the already
+admitted discovery chain and projection before settling. Explicit `refresh()` remains legal while paused: it may
+read discovery metadata, ensure mappings and replace the live generation set, but replacements start paused before
+their first partition scan. Resume waits for the pause drain and resumes the actual current set once; a later pause
+cancels a queued resume. Stop seals admission immediately and shares one drain promise across repeated calls,
+including when a native response fails. It waits for admitted discovery, replacement and projection; later refresh
+or resume cannot create work. These controls do not close the supplied pool, Source or engine.
+
+The [native lifecycle controls](../../test/search/runner-discovery-lifecycle.test.ts) hold actually executed discovery,
+bulk and conflict-refresh responses before delivery, and hold controlled Source reads. Real PostgreSQL outbox and
+checkpoints plus engine visibility establish drain order and external-version replay. At 64, 512 and 4,096 unrelated
+history envelopes, two explicit paused refreshes make exactly four metadata requests and no projection scans or
+checkpoints; one resumed envelope across two generations makes two partition scans, Source reads, bulk requests and
+checkpoint updates. Controls add no per-subject native request, population count or polling while paused, and drain
+only the existing serialized discovery chain and bounded relay work over at most three generations. The controlled
+Source isolates lifecycle behavior; this is not Semantic Source, permission or privacy proof.
+
 Native metadata admission requires HTTP 200 and complete object/collection shapes. Resolve accepts at most three
 unique exact `subjects-g<positive safe integer>` physical names, at most one exact `subjects` alias with one target
 in that observed set, and no data streams. Physical attributes must describe an open index, optionally hidden;

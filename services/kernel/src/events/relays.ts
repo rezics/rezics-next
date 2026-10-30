@@ -6,14 +6,18 @@ import type { BatchResult } from './log.ts';
 
 export type Relay = { consumer: string; run(partition: number): Promise<BatchResult> };
 
-export function startRelays(pool: Pool, relays: Relay[], options: { intervalMs?: number; concurrency?: number } = {}) {
+export function startRelays(
+  pool: Pool,
+  relays: Relay[],
+  options: { intervalMs?: number; concurrency?: number; paused?: boolean } = {},
+) {
   const intervalMs = options.intervalMs ?? 100;
   const concurrency = options.concurrency ?? 4;
   if (!Number.isInteger(intervalMs) || intervalMs < 1) throw new RangeError('intervalMs must be a positive integer');
   if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency >= pool.options.max!) {
     throw new RangeError('concurrency must be a positive integer below the pool size');
   }
-  let paused = false;
+  let paused = options.paused ?? false;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let active = 0;
@@ -91,7 +95,7 @@ export function startRelays(pool: Pool, relays: Relay[], options: { intervalMs?:
     } finally {
       ticking = false;
       notifyIdle();
-      if (!stopped) timer = setTimeout(() => void tick(), intervalMs);
+      if (!stopped && !paused) timer = setTimeout(() => void tick(), intervalMs);
     }
   };
   void tick();
@@ -99,7 +103,8 @@ export function startRelays(pool: Pool, relays: Relay[], options: { intervalMs?:
   return {
     async pause(): Promise<void> {
       paused = true;
-      if (timer) clearTimeout(timer);
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
       await idle();
     },
     resume(): void {
@@ -109,7 +114,8 @@ export function startRelays(pool: Pool, relays: Relay[], options: { intervalMs?:
     },
     async stop(): Promise<void> {
       stopped = true;
-      if (timer) clearTimeout(timer);
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
       await idle();
     },
   };
