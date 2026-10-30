@@ -1,7 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { useQueryClient } from '@tanstack/react-query';
+import { expect, userEvent, within } from 'storybook/test';
+import { InboxPageView } from '../inbox/inbox-page';
 import { m } from '../paraglide/messages.js';
-import { PageStory } from './page';
+import { sessionQuery } from '../session/query';
+import { AppShell } from '../shell/shell';
+import { PageStory, PatternStory } from './page';
 
 const meta = { title: 'Pages/Account/Inbox', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -87,5 +91,45 @@ export const ReporterUnavailable: Story = {
     const list = within(await within(canvasElement).findByRole('list'));
     await expect(list.getByRole('link', { name: m.moderation_dismissed() })).toHaveAttribute('href', reportHref);
     await expect(list.queryByText(m.inbox_unavailable_item())).toBeNull();
+  },
+};
+
+function SessionTransitionPage() {
+  const client = useQueryClient();
+  const sessionKey: readonly unknown[] = sessionQuery.queryKey;
+  return (
+    <>
+      <div className="p-2 text-sm">
+        <button
+          type="button"
+          onClick={() => client.setQueryData(sessionKey, { state: 'unknown', subject: null, csrfToken: null })}
+        >
+          Session becomes unknown
+        </button>
+      </div>
+      <AppShell>
+        <InboxPageView />
+      </AppShell>
+    </>
+  );
+}
+
+export const ViewerBecomesUnknown: Story = {
+  name: 'Signed-in viewer becomes unknown',
+  render: () => (
+    <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
+      <SessionTransitionPage />
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const main = within(await view.findByRole('main'));
+    const rows = await main.findByRole('list');
+    const ids = [...rows.querySelectorAll('[data-notice-id]')].map((row) => row.getAttribute('data-notice-id'));
+    await userEvent.click(view.getByRole('button', { name: 'Session becomes unknown' }));
+    await main.findByText(m.inbox_loading());
+    await expect(main.queryByRole('list')).toBeNull();
+    for (const id of ids) await expect(canvasElement.querySelector(`[data-notice-id="${id}"]`)).toBeNull();
+    await expect(main.queryByText(m.inbox_seen_unavailable())).toBeNull();
   },
 };

@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { unreadCountQuery } from './inbox-query';
-import { personalRead } from '../kernel/query';
+import { unreadCountQueryFor } from './inbox-query';
 import type { UnreadCount } from './inbox-read';
-import { useSession } from '../session/query';
+import { useInboxViewer } from './inbox-viewer';
 import { m } from '../paraglide/messages.js';
 
 export function unreadBadgeLabel(count: { count: number; capped: boolean }): string | null {
@@ -32,8 +31,13 @@ export function UnreadBadgeView({ data, failed = false }: { data?: UnreadCount |
   ) : null;
 }
 
+export function useInboxUnreadCount() {
+  const { viewer } = useInboxViewer();
+  const query = useQuery(unreadCountQueryFor(viewer));
+  return { ...query, data: viewer ? query.data : undefined, viewer };
+}
+
 export function UnreadBadge() {
-  const { state } = useSession();
-  const query = useQuery({ ...unreadCountQuery, enabled: personalRead.enabled && state === 'signed-in' });
-  return state === 'signed-in' ? <UnreadBadgeView data={query.data} failed={query.isError} /> : null;
+  const { viewer, data, isError } = useInboxUnreadCount();
+  return viewer ? <UnreadBadgeView data={data} failed={isError} /> : null;
 }

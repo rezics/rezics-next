@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient } from '@tanstack/react-query';
 import { ReporterStatusView } from '../src/moderation/reporter-status-view';
 import type { ReporterStatus } from '../src/moderation/reporter-status-model';
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -281,4 +282,146 @@ test('an uncertain native seen command retries the original quoted key and marke
   );
   status = 202;
   await expect(markInboxThrough(client, 'reporter-1', 'Bearer reporter', attempt)).rejects.toThrow();
+});
+
+const { inboxViewerStore, forInboxViewer } = await import('../src/inbox/inbox-viewer');
+const { inboxPageQuery, inboxViewerQueryKey, unreadCountQuery, unreadCountQueryFor, markInboxViewerSeen } =
+  await import('../src/inbox/inbox-query');
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+test('Changing or losing the signed-in viewer immediately removes prior inbox rows and pending seen attempts, and late old-viewer completions cannot change the next viewer badge or mark requests', async () => {
+  const client = new QueryClient();
+  const store = inboxViewerStore(client);
+  const unsubscribe = store.subscribe(() => {});
+  const session = (state: string, subject: string | null) =>
+    client.setQueryData(['session'], { state, subject, csrfToken: 'shared-token' });
+  try {
+    session('signed-in', 'alice');
+    const alice = store.snapshot()!;
+    const firstKey = inboxPageQuery(alice).queryKey;
+    const olderKey = inboxPageQuery(alice, 'alice-older').queryKey;
+    client.setQueryData(firstKey, {
+      signedIn: true,
+      state: 'ready',
+      items: [{ ...notice(), text: 'Alice reply', unavailable: false }],
+      next: 'alice-older',
+    });
+    client.setQueryData(olderKey, {
+      signedIn: true,
+      state: 'ready',
+      items: [{ ...notice({ id: 'alice-old' }), text: 'Older Alice reply', unavailable: false }],
+      next: null,
+    });
+    client.setQueryData(unreadCountQueryFor(alice).queryKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+    const latePage = deferred<string>();
+    const lateCount = deferred<number>();
+    const page = forInboxViewer(alice, () => latePage.promise).catch((error: Error) => error.name);
+    const count = forInboxViewer(alice, () => lateCount.promise).catch((error: Error) => error.name);
+
+    // A token refresh within the same immutable subject keeps its retry ownership.
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'refreshed-token' });
+    expect(store.snapshot()).toBe(alice);
+    session('signed-in', 'bob');
+    const bob = store.snapshot()!;
+    expect(client.getQueryData(inboxPageQuery(bob).queryKey)).toBeUndefined();
+    expect(client.getQueryData(unreadCountQueryFor(bob).queryKey)).toBeUndefined();
+    latePage.resolve('alice rows');
+    lateCount.resolve(7);
+    expect(await page).toBe('AbortError');
+    expect(await count).toBe('AbortError');
+    let obsoleteRequests = 0;
+    await expect(forInboxViewer(alice, async () => ++obsoleteRequests)).rejects.toThrow('Inbox viewer changed');
+    expect(obsoleteRequests).toBe(0);
+
+    for (const lostState of ['unknown', 'signed-out', 'unavailable']) {
+      session(lostState, null);
+      expect(store.snapshot()).toBeNull();
+      expect(unreadCountQueryFor(store.snapshot()).enabled).toBe(false);
+      session('signed-in', 'bob');
+      expect(store.snapshot()).not.toBe(bob);
+    }
+    // Loss and recovery may be batched without an intermediate component render.
+    const beforeLoss = store.snapshot()!;
+    session('unknown', null);
+    session('signed-in', 'bob');
+    expect(beforeLoss.isCurrent()).toBe(false);
+    session('signed-in', 'alice');
+    expect(inboxPageQuery(store.snapshot()!).queryKey).not.toEqual(firstKey);
+    expect(client.getQueryData(inboxPageQuery(store.snapshot()!).queryKey)).toBeUndefined();
+    session('signed-in', null);
+    expect(store.snapshot()).toBeNull();
+  } finally {
+    unsubscribe();
+    client.clear();
+  }
+});
+
+test('stale seen outcomes cannot invalidate the next viewer badge or dispatch an old marker, while a current viewer retries its original intent', async () => {
+  for (const outcome of ['confirmed', 'failed'] as const) {
+    const client = new QueryClient();
+    const store = inboxViewerStore(client);
+    const unsubscribe = store.subscribe(() => {});
+    const commands: { through: string; idempotencyKey: string; token: string | null }[] = [];
+    const aliceAttempt = { through: 'alice-newest', idempotencyKey: crypto.randomUUID() };
+    const bobAttempt = { through: 'bob-newest', idempotencyKey: crypto.randomUUID() };
+    try {
+      client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'same-token' });
+      const alice = store.snapshot()!;
+      const pending = deferred<{ signedIn: boolean }>();
+      const oldMark = markInboxViewerSeen(client, alice, aliceAttempt, 'same-token', async ({ data, headers }) => {
+        commands.push({ ...data, token: new Headers(headers).get('X-CSRF-Token') });
+        return pending.promise;
+      }).catch((error: Error) => error.name);
+      client.setQueryData(['session'], { state: 'unknown', subject: null, csrfToken: null });
+      client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'same-token' });
+      const bob = store.snapshot()!;
+      const bobCountKey = unreadCountQueryFor(bob).queryKey;
+      const bobPageKey = inboxPageQuery(bob).queryKey;
+      const aliceCountKey = unreadCountQueryFor(alice).queryKey;
+      client.setQueryData(bobCountKey, { signedIn: true, state: 'ready', count: 2, capped: false });
+      client.setQueryData(bobPageKey, { signedIn: true, state: 'ready', items: [], next: null });
+      client.setQueryData(aliceCountKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+      if (outcome === 'confirmed') pending.resolve({ signedIn: true });
+      else pending.reject(new Error('Response lost'));
+      await oldMark;
+      expect(client.getQueryState(bobCountKey)?.isInvalidated).toBe(false);
+      expect(client.getQueryState(bobPageKey)?.isInvalidated).toBe(false);
+      expect(client.getQueryState(aliceCountKey)?.isInvalidated).toBe(false);
+      expect(client.getQueryData(bobCountKey)).toMatchObject({ count: 2 });
+
+      const retry = async ({ data, headers }: { data: typeof bobAttempt; headers: HeadersInit }) => {
+        commands.push({ ...data, token: new Headers(headers).get('X-CSRF-Token') });
+        if (commands.length === 2) throw new Error('Response lost');
+        return { signedIn: true };
+      };
+      await expect(markInboxViewerSeen(client, alice, aliceAttempt, 'bob-token', retry)).rejects.toThrow('Inbox viewer changed');
+      await expect(markInboxViewerSeen(client, bob, bobAttempt, 'same-token', retry)).rejects.toThrow('Response lost');
+      client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'bob-refreshed-token' });
+      await markInboxViewerSeen(client, bob, bobAttempt, 'bob-refreshed-token', retry);
+      expect(commands).toEqual([
+        { ...aliceAttempt, token: 'same-token' },
+        { ...bobAttempt, token: 'same-token' },
+        { ...bobAttempt, token: 'bob-refreshed-token' },
+      ]);
+      expect(client.getQueryState(bobCountKey)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(bobPageKey)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(aliceCountKey)?.isInvalidated).toBe(false);
+      expect(inboxViewerQueryKey(bob)).not.toEqual(inboxViewerQueryKey(alice));
+      // Fixed badge-prefix invalidation remains compatible with viewer-qualified keys.
+      await client.invalidateQueries({ queryKey: unreadCountQuery.queryKey });
+      expect(client.getQueryState(aliceCountKey)?.isInvalidated).toBe(true);
+    } finally {
+      unsubscribe();
+      client.clear();
+    }
+  }
 });

@@ -1,11 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { House, Inbox, Library, Plus } from 'lucide-react';
 import { Menu } from '@rezics/ui/menu';
-import { UnreadBadgeView } from '../inbox/unread-badge';
-import { unreadCountQuery } from '../inbox/inbox-query';
+import { UnreadBadgeView, useInboxUnreadCount } from '../inbox/unread-badge';
 import type { UnreadCount } from '../inbox/inbox-read';
-import { personalRead } from '../kernel/query';
 import { useOperation } from '../kernel/exposure';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -34,7 +31,8 @@ export function useRegisterPhoneCreationActions(actions: readonly PhoneCreationA
   useEffect(() => register?.({ owner: owner.current, actions }), [register, actions]);
 }
 function usePhoneUnread(session: Session) {
-  return useQuery({ ...unreadCountQuery, enabled: personalRead.enabled && session === 'signed-in' });
+  const query = useInboxUnreadCount();
+  return { ...query, data: session === 'signed-in' ? query.data : undefined };
 }
 export function PhoneUnreadDotView({ data, failed = false }: { data?: UnreadCount | undefined; failed?: boolean }) {
   return !failed && data?.signedIn && data.state === 'ready' && (data.count > 0 || data.capped) ? (

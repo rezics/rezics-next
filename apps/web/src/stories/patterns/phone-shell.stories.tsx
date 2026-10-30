@@ -11,7 +11,8 @@ import { searchQueryOptions } from '../../search/search-queries';
 import { searchLoaderDeps } from '../../search/search-params';
 import { searchFacetStoryPaths } from '../../kernel/fake/search-facets';
 import type { UnreadCount } from '../../inbox/inbox-read';
-import { unreadCountQuery } from '../../inbox/inbox-query';
+import { unreadCountQueryFor } from '../../inbox/inbox-query';
+import { currentInboxViewer } from '../../inbox/inbox-viewer';
 import { sessionQuery } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -75,7 +76,7 @@ function Connected({ state, loadRealms = emptyRealms }: { state: State; loadReal
       state === 'unavailable'
         ? { signedIn: true, state: 'unavailable', failure: { status: 503 } }
         : { signedIn: true, state: 'ready', count: state === 'unread' ? 3 : 0, capped: false };
-    client.setQueryData<UnreadCount>(unreadCountQuery.queryKey, () => unread);
+    client.setQueryData<UnreadCount>(unreadCountQueryFor(currentInboxViewer(client)).queryKey, () => unread);
     return state === 'recent'
       ? rememberRecent(rememberRecent([], recording.query), '', {
           kind: 'Realm',

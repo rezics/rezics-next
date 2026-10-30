@@ -5,28 +5,18 @@ import { ListRow, ListRowLink } from '@rezics/ui/list-row';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
-import { personalRead, readQueryKey } from '../kernel/query';
-import { useSession } from '../session/query';
-import { csrfHeaders } from '../threads/composer';
-import { unreadCountQuery } from './inbox-query';
+import { inboxPageQuery, markInboxViewerSeen, type InboxPageLoader } from './inbox-query';
+import { useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
 import { emptyInboxPagination, nextInboxPage, readableInboxPage, receiveInboxPage } from './inbox-pagination';
-import {
-  markInboxSeen,
-  readInboxPage,
-  type InboxPage,
-  type InboxSeenAttempt,
-  type ResolvedInboxPage,
-} from './inbox-read';
+import type { InboxSeenAttempt, ResolvedInboxPage } from './inbox-read';
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
   if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
   return item.kind === 'mention' ? m.inbox_kind_mention() : m.inbox_kind_reply();
 }
-
-const queryKey = readQueryKey(['notifications', 'inbox'], 'session');
 
 export function InboxRows({
   page,
@@ -111,27 +101,47 @@ export function InboxRows({
   );
 }
 
-async function readPage(cursor?: string): Promise<InboxPage> {
-  return readInboxPage({ data: cursor ? { cursor } : {} }) as Promise<InboxPage>;
+export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {}) {
+  const { state, csrfToken, viewer } = useInboxViewer();
+  if (viewer)
+    return (
+      <ViewerInboxPage
+        key={JSON.stringify([viewer.subject, viewer.epoch])}
+        viewer={viewer}
+        csrfToken={csrfToken}
+        loadPage={loadPage}
+      />
+    );
+  return (
+    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
+      <p className="mt-6 text-muted-foreground">
+        {state === 'signed-out' ? m.inbox_sign_in() : state === 'unknown' ? m.inbox_loading() : m.inbox_unavailable()}
+      </p>
+    </main>
+  );
 }
 
-export function InboxPageView({ loadPage = readPage }: { loadPage?: typeof readPage } = {}) {
-  const { state, csrfToken } = useSession();
+/** Pagination owns its accumulated pages inside this immutable viewer boundary. */
+export function ViewerInboxPage({
+  viewer,
+  csrfToken,
+  loadPage,
+}: {
+  viewer: InboxViewer;
+  csrfToken: string | null;
+  loadPage?: InboxPageLoader | undefined;
+}) {
   const queryClient = useQueryClient();
   const [pagination, setPagination] = useState(emptyInboxPagination);
   const { cursor } = pagination;
   const marked = useRef<string | null>(null);
   const seenAttempt = useRef<InboxSeenAttempt | null>(null);
   const marking = useRef(false);
+  const active = useRef(false);
   const [seenFailed, setSeenFailed] = useState(false);
   const [seenRetry, setSeenRetry] = useState(0);
-  const pageQuery = useQuery({
-    queryKey: [...queryKey, cursor ?? null],
-    queryFn: () => loadPage(cursor),
-    ...personalRead,
-    enabled: personalRead.enabled && state === 'signed-in',
-    retry: false,
-  });
+  const pageQuery = useQuery(inboxPageQuery(viewer, cursor, loadPage));
   const received = receiveInboxPage(pagination, pageQuery.data, pageQuery.isError);
   // Reconcile in this render so a native denial cannot commit even one frame of retained rows.
   if (received !== pagination) setPagination(received);
@@ -141,7 +151,15 @@ export function InboxPageView({ loadPage = readPage }: { loadPage?: typeof readP
   const pageSignedOut = pageQuery.data !== undefined && !pageQuery.data.signedIn;
 
   useEffect(() => {
-    if (cursor !== undefined || !csrfToken || marking.current || marked.current || seenFailed) return;
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!viewer.isCurrent() || cursor !== undefined || !csrfToken || marking.current || marked.current || seenFailed)
+      return;
     const newest = page?.items[0];
     if (!seenAttempt.current) {
       if (!newest?.unread) return;
@@ -149,21 +167,19 @@ export function InboxPageView({ loadPage = readPage }: { loadPage?: typeof readP
     }
     const attempt = seenAttempt.current;
     marking.current = true;
-    void markInboxSeen({ data: attempt, headers: csrfHeaders() })
-      .then((result) => {
-        if (!result.signedIn) throw new Error('Signed out');
+    void markInboxViewerSeen(queryClient, viewer, attempt, csrfToken)
+      .then(() => {
+        if (!active.current || !viewer.isCurrent()) return;
         marked.current = attempt.through;
         seenAttempt.current = null;
-        return Promise.all([
-          queryClient.invalidateQueries({ queryKey: unreadCountQuery.queryKey }),
-          queryClient.invalidateQueries({ queryKey }),
-        ]);
       })
-      .catch(() => setSeenFailed(true))
+      .catch(() => {
+        if (active.current && viewer.isCurrent()) setSeenFailed(true);
+      })
       .finally(() => {
-        marking.current = false;
+        if (active.current && viewer.isCurrent()) marking.current = false;
       });
-  }, [cursor, page?.items, queryClient, csrfToken, seenRetry, seenFailed]);
+  }, [cursor, page?.items, queryClient, viewer, csrfToken, seenRetry, seenFailed]);
 
   const loadMore = () => {
     if (pageQuery.isFetching || !page?.next) return;
@@ -217,7 +233,7 @@ export function InboxPageView({ loadPage = readPage }: { loadPage?: typeof readP
           </Button>
         </section>
       ) : null}
-      {state !== 'signed-in' || pageSignedOut ? (
+      {pageSignedOut ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_sign_in()}</p>
       ) : pageQuery.isPending && !readable ? (
         <p className="mt-6 text-muted-foreground">{m.inbox_loading()}</p>
