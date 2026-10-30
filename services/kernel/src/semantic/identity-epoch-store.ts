@@ -388,23 +388,53 @@ export const identityEpochStore: IdentityEpochStore = {
         scope,
         transactionId,
       ]);
-      await tx.query(admissionInsertBases.sql, [command.partition,job.jobId,json(sources)]);
-      await tx.query(admissionHandoff.sql, [command.partition,job.jobId,job.epoch.toString(),scope,
-        command.partition,transactionId,json(inputs.map(g => ({ terminal:g.terminal,generation:g.generation,
-          basis_version:g.version,owner_epoch:g.owner_epoch })))]);
-      await tx.query(admissionPrepare.sql, [command.partition,job.jobId,job.epoch.toString(),scope]);
-      await tx.query(admissionRecord.sql, [command.partition,transactionId,job.jobId,'prepared']);
-      await recordPreparedIdentityPrearm(tx,job,scope,transactionId);
-      const prepared = (await tx.query(admissionReceipt.sql, [command.partition,job.jobId,job.epoch.toString(),'prepared'])).rows[0];
-      await tx.query(admissionCustodyPrepare.sql, [job.jobId,command.partition,prepared.transaction_id,
-        prepared.native_epoch,prepared.native_position,command.partition]);
-      await sealColocatedEmptyIdentityPrearm(tx,job,transactionId);
-      await tx.query(admissionAcquire.sql, [command.partition,job.jobId,job.epoch.toString(),scope]);
-      await tx.query(admissionRecord.sql, [command.partition,transactionId,job.jobId,'acquired']);
-      const claimed = (await tx.query(admissionReceipt.sql, [command.partition,job.jobId,job.epoch.toString(),'acquired'])).rows[0];
-      await tx.query(admissionCustodyAcquire.sql, [job.jobId,command.partition,claimed.transaction_id,
-        claimed.native_epoch,claimed.native_position,command.partition]);
-      if ((await tx.query(admissionPromote.sql, [job.jobId,job.epoch.toString(),command.partition])).rowCount !== 1) throw stale();
+      await tx.query(admissionInsertBases.sql, [command.partition, job.jobId, json(sources)]);
+      await tx.query(admissionHandoff.sql, [
+        command.partition,
+        job.jobId,
+        job.epoch.toString(),
+        scope,
+        command.partition,
+        transactionId,
+        json(
+          inputs.map((g) => ({
+            terminal: g.terminal,
+            generation: g.generation,
+            basis_version: g.version,
+            owner_epoch: g.owner_epoch,
+          })),
+        ),
+      ]);
+      await tx.query(admissionPrepare.sql, [command.partition, job.jobId, job.epoch.toString(), scope]);
+      await tx.query(admissionRecord.sql, [command.partition, transactionId, job.jobId, 'prepared']);
+      await recordPreparedIdentityPrearm(tx, job, scope, transactionId);
+      const prepared = (
+        await tx.query(admissionReceipt.sql, [command.partition, job.jobId, job.epoch.toString(), 'prepared'])
+      ).rows[0];
+      await tx.query(admissionCustodyPrepare.sql, [
+        job.jobId,
+        command.partition,
+        prepared.transaction_id,
+        prepared.native_epoch,
+        prepared.native_position,
+        command.partition,
+      ]);
+      await sealColocatedEmptyIdentityPrearm(tx, job, transactionId);
+      await tx.query(admissionAcquire.sql, [command.partition, job.jobId, job.epoch.toString(), scope]);
+      await tx.query(admissionRecord.sql, [command.partition, transactionId, job.jobId, 'acquired']);
+      const claimed = (
+        await tx.query(admissionReceipt.sql, [command.partition, job.jobId, job.epoch.toString(), 'acquired'])
+      ).rows[0];
+      await tx.query(admissionCustodyAcquire.sql, [
+        job.jobId,
+        command.partition,
+        claimed.transaction_id,
+        claimed.native_epoch,
+        claimed.native_position,
+        command.partition,
+      ]);
+      if ((await tx.query(admissionPromote.sql, [job.jobId, job.epoch.toString(), command.partition])).rowCount !== 1)
+        throw stale();
     });
     return {
       value: job,

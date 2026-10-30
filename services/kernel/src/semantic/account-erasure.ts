@@ -480,16 +480,22 @@ async function minimizePayload(
   } else if (store.startsWith('identity_epoch_prearm_')) {
     // Private Source locators cannot be minimized while an exported/unknown delivery can still resolve them.
     if (store === 'identity_epoch_prearm_page' || store === 'identity_epoch_prearm_inverse') {
-      const held = await tx.query(store === 'identity_epoch_prearm_page'
-        ? `SELECT 1 FROM semantic.identity_epoch_prearm_page p
+      const held = await tx.query(
+        store === 'identity_epoch_prearm_page'
+          ? `SELECT 1 FROM semantic.identity_epoch_prearm_page p
            JOIN semantic.identity_epoch_prearm_directory d USING(partition_no,job_id,generation)
            WHERE p.partition_no=$1 AND p.erasure_key=$2 AND NOT d.released`
-        : `SELECT 1 FROM semantic.identity_epoch_prearm_inverse i
+          : `SELECT 1 FROM semantic.identity_epoch_prearm_inverse i
            JOIN semantic.identity_epoch_prearm_bridge b USING(partition_no,generation)
-           WHERE i.partition_no=$1 AND i.erasure_key=$2 AND b.job_id IS NOT NULL`, [partition,key]);
-      if (held.rowCount) return { defer: true,rawKeys: held.rowCount,bytes: 0 };
-      await tx.query(`UPDATE semantic.${store} SET scope='{}',capture_id=''
-        WHERE partition_no=$1 AND erasure_key=$2 AND scope IS NOT NULL`, [partition,key]);
+           WHERE i.partition_no=$1 AND i.erasure_key=$2 AND b.job_id IS NOT NULL`,
+        [partition, key],
+      );
+      if (held.rowCount) return { defer: true, rawKeys: held.rowCount, bytes: 0 };
+      await tx.query(
+        `UPDATE semantic.${store} SET scope='{}',capture_id=''
+        WHERE partition_no=$1 AND erasure_key=$2 AND scope IS NOT NULL`,
+        [partition, key],
+      );
     }
   } else if (store === 'identity_epoch_job') {
     await tx.query(

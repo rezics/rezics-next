@@ -1,6 +1,10 @@
 import {
-  recordPreparedIdentityPrearm, sealColocatedEmptyIdentityPrearm, stepIdentityEpochPrearm,
-  receiveIdentityPrearmClaim, recordIdentityPrearmCancellation, stepIdentityPrearmCancellation,
+  recordPreparedIdentityPrearm,
+  sealColocatedEmptyIdentityPrearm,
+  stepIdentityEpochPrearm,
+  receiveIdentityPrearmClaim,
+  recordIdentityPrearmCancellation,
+  stepIdentityPrearmCancellation,
   releaseIdentityPrearmHome,
 } from './identity-epoch-prearm.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -279,9 +283,13 @@ async function closeUnreservedBinding(
     const existingJob = (await tx.query(job.sql, [data.home, data.job.jobId, data.job.epoch.toString()])).rows[0];
     if (existingJob) {
       if (existingJob.state !== 'cancelled') return noEffect(false);
-      const unresolved = (await tx.query(`SELECT resource_home FROM semantic.identity_epoch_admission_plan
+      const unresolved = (
+        await tx.query(
+          `SELECT resource_home FROM semantic.identity_epoch_admission_plan
         WHERE partition_no=$1 AND job_id=$2 AND (closed_transaction_id IS NULL OR NOT released) LIMIT 1`,
-        [data.home,data.job.jobId])).rows[0];
+          [data.home, data.job.jobId],
+        )
+      ).rows[0];
       if (unresolved) throw unavailable();
       return noEffect(true);
     }
@@ -420,7 +428,10 @@ export async function admitBoundIdentityEpoch(
     )
   )
     throw stale();
-  if (immediate && (!groups.every(g => g.partition_no === home) || !data.sources.every(s => s.source_route >> 4 === home)))
+  if (
+    immediate &&
+    (!groups.every((g) => g.partition_no === home) || !data.sources.every((s) => s.source_route >> 4 === home))
+  )
     throw unavailable();
   const roles = identityBindingAccountRoles(input.binding);
   if (roles.length) bindSemanticProducerRoles(tx, roles);
@@ -463,8 +474,16 @@ export async function admitBoundIdentityEpoch(
       groups.every((g) => g.partition_no === home) &&
       data.sources.every((s) => s.source_route >> 4 === home)
     ) {
-      const prepared = (await tx.query(receipt.sql, [home, data.job.jobId, data.job.epoch.toString(), 'prepared'])).rows[0];
-      await tx.query(custodyPrepare.sql, [data.job.jobId,home,prepared.transaction_id,prepared.native_epoch,prepared.native_position,home]);
+      const prepared = (await tx.query(receipt.sql, [home, data.job.jobId, data.job.epoch.toString(), 'prepared']))
+        .rows[0];
+      await tx.query(custodyPrepare.sql, [
+        data.job.jobId,
+        home,
+        prepared.transaction_id,
+        prepared.native_epoch,
+        prepared.native_position,
+        home,
+      ]);
       await sealColocatedEmptyIdentityPrearm(tx, data.job, transactionId);
       await tx.query(acquire.sql, [home, data.job.jobId, data.job.epoch.toString(), data.scope]);
       await tx.query(record.sql, [home, transactionId, data.job.jobId, 'acquired']);
@@ -500,11 +519,14 @@ async function prepareIdentityEpochAdmissionWithinDeadline(
 }
 
 export function prepareIdentityEpochAdmission(
-  pool: Pool, authority: IdentityAdmissionAuthority, input: IdentityAdmissionInput,
+  pool: Pool,
+  authority: IdentityAdmissionAuthority,
+  input: IdentityAdmissionInput,
 ): Promise<IdentityJobRef> {
   const deadline = Math.min(Date.now() + 5000, deadlineFor(5000), authority.deadline ?? Infinity);
   return withRequestDeadline(deadline, () =>
-    prepareIdentityEpochAdmissionWithinDeadline(pool, { ...authority, deadline }, input));
+    prepareIdentityEpochAdmissionWithinDeadline(pool, { ...authority, deadline }, input),
+  );
 }
 
 async function load(pool: Pool, ref: IdentityJobRef, measured?: Work) {
@@ -610,7 +632,12 @@ async function deliverHome(
       await measuredQuery(tx, selectControl.sql, [home], measured);
       // Acquire always checks the irreversible local fence, even after an earlier successful receipt.
       if (stage !== 'closed')
-        await measuredQuery(tx, (stage === 'prepared' ? prepare : acquire).sql, [home, ref.jobId, ref.epoch.toString(), scope], measured);
+        await measuredQuery(
+          tx,
+          (stage === 'prepared' ? prepare : acquire).sql,
+          [home, ref.jobId, ref.epoch.toString(), scope],
+          measured,
+        );
       const duplicate = (await measuredQuery(tx, receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage], measured))
         .rows[0];
       if (duplicate) return noEffect(null);
@@ -804,24 +831,30 @@ async function releaseSourceHolds(pool: Pool, ref: IdentityJobRef, bases: readon
 }
 
 /** One planned home per call. Uncertain delivery is reconciled from its immutable real native receipt. */
-async function stepIdentityEpochAdmissionWithinDeadline(pool: Pool, ref: IdentityJobRef): Promise<IdentityAdmissionProgress> {
+async function stepIdentityEpochAdmissionWithinDeadline(
+  pool: Pool,
+  ref: IdentityJobRef,
+): Promise<IdentityAdmissionProgress> {
   const measured = work();
   const query = (tx: CommandTransaction, sql: string, values: unknown[]) => measuredQuery(tx, sql, values, measured);
   const { saved, planned, bases } = await load(pool, ref, measured);
   if (saved.state === 'published') {
     await releaseSourceHolds(pool, ref, bases);
-    const next = planned.find(p => !p.released);
+    const next = planned.find((p) => !p.released);
     if (next) await releaseIdentityPrearmHome(pool, ref, next.resource_home, measured);
     return { job: ref, state: saved.state, work: measured };
   }
   if (!['preparing', 'cancelling'].includes(saved.state)) return { job: ref, state: saved.state, work: measured };
   const closing = saved.state === 'cancelling';
-  const preparing = !closing && planned.some(p => !p.prepared_transaction_id);
+  const preparing = !closing && planned.some((p) => !p.prepared_transaction_id);
   const stage = closing ? 'closed' : preparing ? 'prepared' : 'acquired';
   // PREPARE all ordered homes, validate/hold original Sources, then establish native scope custody.
   if (!closing && !preparing && saved.prearm_phase === 'prearm-open') {
-    const retained = await withReadTransaction(pool, async tx =>
-      (await measuredQuery(tx, validBases.sql, [ref.jobId, identityJobPartition(ref)], measured)).rows.length);
+    const retained = await withReadTransaction(
+      pool,
+      async (tx) =>
+        (await measuredQuery(tx, validBases.sql, [ref.jobId, identityJobPartition(ref)], measured)).rows.length,
+    );
     if (retained !== bases.length) {
       if (!(await validateSources(pool, ref, saved, bases, measured))) {
         await cancelIdentityEpochAdmission(pool, ref);
@@ -839,7 +872,9 @@ async function stepIdentityEpochAdmissionWithinDeadline(pool: Pool, ref: Identit
     }
     return { job: ref, state: saved.state, work: measured };
   }
-  const next = planned.find(p => closing ? !p.closed_transaction_id : preparing ? !p.prepared_transaction_id : !p.acquired_transaction_id);
+  const next = planned.find((p) =>
+    closing ? !p.closed_transaction_id : preparing ? !p.prepared_transaction_id : !p.acquired_transaction_id,
+  );
   if (next) {
     let received = await receivingReceipt(pool, ref, next.resource_home, stage, measured);
     if (!received) {
@@ -848,43 +883,64 @@ async function stepIdentityEpochAdmissionWithinDeadline(pool: Pool, ref: Identit
       received = await receivingReceipt(pool, ref, next.resource_home, stage, measured);
     }
     if (!received || received.scope_digest !== saved.scope_digest) throw stale();
-    await runCommand(pool, { partition: identityJobPartition(ref) }, async tx => {
-      const current = (await query(tx, lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()])).rows[0];
+    await runCommand(pool, { partition: identityJobPartition(ref) }, async (tx) => {
+      const current = (await query(tx, lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()]))
+        .rows[0];
       if (!current || current.state !== saved.state || current.scope_digest !== received.scope_digest) throw stale();
-      const recorded = await query(tx, (closing ? custodyClose : preparing ? custodyPrepare : custodyAcquire).sql,
-        [ref.jobId, next.resource_home, received.transaction_id, received.native_epoch, received.native_position, identityJobPartition(ref)]);
+      const recorded = await query(tx, (closing ? custodyClose : preparing ? custodyPrepare : custodyAcquire).sql, [
+        ref.jobId,
+        next.resource_home,
+        received.transaction_id,
+        received.native_epoch,
+        received.native_position,
+        identityJobPartition(ref),
+      ]);
       if (recorded.rowCount !== 1) throw stale();
-      if (stage === 'acquired') await query(tx, `UPDATE semantic.identity_epoch_job SET prearm_phase='claiming'
-        WHERE partition_no=$1 AND job_id=$2 AND state='preparing' AND prearm_phase='prearm-sealed'`, [identityJobPartition(ref),ref.jobId]);
+      if (stage === 'acquired')
+        await query(
+          tx,
+          `UPDATE semantic.identity_epoch_job SET prearm_phase='claiming'
+        WHERE partition_no=$1 AND job_id=$2 AND state='preparing' AND prearm_phase='prearm-sealed'`,
+          [identityJobPartition(ref), ref.jobId],
+        );
       return { value: null, events: [wake(ref)] };
     });
     return { job: ref, state: saved.state, work: measured };
   }
   if (closing) {
-    if (await stepIdentityPrearmCancellation(pool, ref, measured) !== 'closed')
+    if ((await stepIdentityPrearmCancellation(pool, ref, measured)) !== 'closed')
       return { job: ref, state: saved.state, work: measured };
     await releaseSourceHolds(pool, ref, bases);
-    const releasing = planned.find(p => !p.released);
+    const releasing = planned.find((p) => !p.released);
     if (releasing) {
       await releaseIdentityPrearmHome(pool, ref, releasing.resource_home, measured);
       return { job: ref, state: saved.state, work: measured };
     }
   }
-  const finalized = await runCommand<IdentityAdmissionProgress['state']>(pool, { partition: identityJobPartition(ref) }, async tx => {
-    const current = (await query(tx, lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()])).rows[0];
-    if (!current) throw unavailable();
-    if (current.state !== saved.state) return noEffect(current.state);
-    const changed = await query(tx, (closing ? finishClose : promote).sql,
-      [ref.jobId, ref.epoch.toString(), identityJobPartition(ref)]);
-    if (changed.rowCount !== 1) throw stale();
-    return { value: closing ? 'cancelled' : 'pending', events: [wake(ref)] };
-  });
+  const finalized = await runCommand<IdentityAdmissionProgress['state']>(
+    pool,
+    { partition: identityJobPartition(ref) },
+    async (tx) => {
+      const current = (await query(tx, lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()]))
+        .rows[0];
+      if (!current) throw unavailable();
+      if (current.state !== saved.state) return noEffect(current.state);
+      const changed = await query(tx, (closing ? finishClose : promote).sql, [
+        ref.jobId,
+        ref.epoch.toString(),
+        identityJobPartition(ref),
+      ]);
+      if (changed.rowCount !== 1) throw stale();
+      return { value: closing ? 'cancelled' : 'pending', events: [wake(ref)] };
+    },
+  );
   return { job: ref, state: finalized.value, work: measured };
 }
 
 export function stepIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef): Promise<IdentityAdmissionProgress> {
   return withRequestDeadline(Math.min(Date.now() + 5000, deadlineFor(5000)), () =>
-    stepIdentityEpochAdmissionWithinDeadline(pool, ref));
+    stepIdentityEpochAdmissionWithinDeadline(pool, ref),
+  );
 }
 
 export function identityHomeAvailable(partition: number, after = '00000000-0000-0000-0000-000000000000') {
