@@ -2,12 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
-import {
-  type Browser,
-  type BrowserContext,
-  type Page,
-  type Response as PlaywrightResponse,
-} from 'playwright';
+import { type Browser, type BrowserContext, type Page, type Response as PlaywrightResponse } from 'playwright';
 import type { NativeWebStack } from './stack.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
 import {

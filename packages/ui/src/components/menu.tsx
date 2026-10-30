@@ -324,8 +324,8 @@ export function Menu({
   return (
     <TriggerContext.Provider value={slot}>
       {children}
-      {!triggerSlot && (
-        customContent ? (
+      {!triggerSlot &&
+        (customContent ? (
           <>
             {customContentTrigger}
             {open && form === 'dropdown' && customContentPosition
@@ -363,8 +363,7 @@ export function Menu({
               </D.DropdownMenuContent>
             )}
           </D.DropdownMenu>
-        )
-      )}
+        ))}
       {form === 'sheet' && (
         <BottomSheet
           open={open}
