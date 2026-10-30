@@ -2765,5 +2765,21 @@
   "search_recovery_session": "无法验证你的会话。请重新登录以继续搜索。",
   "search_recovery_source": "目录数据源尚未就绪。搜索条件已保留，请稍后重试。",
   "search_recovery_wait": "请稍候再重试。",
-  "search_recovery_edit": "请修改搜索文字、条件或排序，然后应用更改。"
+  "search_recovery_edit": "请修改搜索文字、条件或排序，然后应用更改。",
+  "subject_purchase_heading": "此主题的方案",
+  "subject_purchase_discovery": "方案列表可能尚未更新。请查看各方案目前是否可购买及其条款。",
+  "subject_purchase_pending": "正在加载方案…",
+  "subject_purchase_preparing": "正在准备方案列表。您可以查看已显示的方案。",
+  "subject_purchase_denied": "您目前的访问权限无法查看这些方案。",
+  "subject_purchase_unavailable": "目前无法获取方案列表。",
+  "subject_purchase_cursor_error": "此分页已无法继续。请从第一页重新开始。",
+  "subject_purchase_empty": "此页未列出任何方案。",
+  "subject_purchase_price_unknown": "无法获取价格",
+  "subject_purchase_review": "查看方案",
+  "subject_purchase_review_offer": "查看方案：{title}",
+  "subject_purchase_next": "下一页方案",
+  "subject_purchase_restart": "返回第一页",
+  "subject_purchase_retry": "重新查看方案列表",
+  "subject_purchase_records": "您的购买与访问记录",
+  "subject_purchase_records_hint": "请查看您自己的记录以确认已购买的权益。收藏库条目不代表访问权限。"
 }

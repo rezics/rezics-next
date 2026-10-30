@@ -51,7 +51,7 @@ API/storage behavior plus reviewed pages; an interim fake or an entitlement row 
 
 | Person's step                      | Existing surface and remaining work                                                                                                                                                                                                                                                                                                                                   | Native authority                                                                                                                                                                                            |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Find a benefit on a subject        | Subject page needs a bounded subject-to-active-offer discovery port and entry. Its signature/producer are pending shared adoption below. Public descriptions and private ownership use separate responses/cache keys.                                                                                                                                                 | Semantic owns subject identity/disclosure; creator homes confirm exact active offer/benefit keys. No all-creator or buyer scan.                                                                             |
+| Find a benefit on a subject        | The declared subject-offer page and shared public/private entry are described below. The generated producer binding is unavailable in this base. Public descriptions and private ownership use separate responses/cache keys.                                                                                                                                         | Semantic owns subject identity/disclosure; creator homes confirm exact active offer/benefit keys. No all-creator or buyer scan.                                                                             |
 | Review the offer                   | `GET /v1/offers/:offerId`, existing `/offers/$id` page. Add the captured benefit/version, delivery promise and terms display using the adopted native target.                                                                                                                                                                                                         | Creator home; `offer:read`, `gate:purchases`, subject disclosure separately. Delisted public reads match unknown `404`, even for the seller, before subject-summary reads.                                  |
 | Accept and pay                     | `POST /v1/orders` requires `{offerId, expectedOfferRevision}` and the idempotency header. The positive integer revision comes from the displayed public offer read. Changed terms require explicit reload/review and new consent; unresolved retries retain their original intent. No fresh Checkout is available while the Content authority adapter is unavailable. | `order:create` on the offer, `gate:purchases`, verified active buyer; buyer-home order/receipt before provider I/O. Selling/target authority is confirmed through owner ports, never a cross-home SQL join. |
 | Return and find the purchase later | Existing `/orders/$id`, `/orders`, `GET /v1/orders/:orderId`, `GET /v1/orders`. Display captured terms, pending/unknown honestly and link current entitlement. Redirects have no fulfilment power.                                                                                                                                                                    | Buyer home; actor equality and `order:read`. No arbitrary buyer selector, including accounts sharing a route.                                                                                               |
@@ -68,6 +68,37 @@ They cannot authorize use or establish complete provider settlement. Existing st
 `GET /v1/payoutStatements`, `GET /v1/payoutStatements/:statementId`,
 `GET /v1/payoutStatements/:statementId/lines` and `POST /v1/payoutStatements/:statementId:markPaid`, with the existing
 `payout_statement:list/read/mark_paid` checks. A statement read grants no arbitrary buyer-order access.
+
+### Subject offer entry
+
+The selected discovery interface is `GET /v1/subjects/:id/offers`, with an opaque `cursor`, default limit 10 and
+maximum 20. Its closed response is `{offers,next,projectionState:'ready'|'preparing'}`. Each public offer contains
+`id,targetSubjectId,title,currency,unitAmountMinor,moneyUnit,taxBehavior,revision,contentEdition`, where the final
+field is the existing sanitized fixed-edition terms DTO, nullable for unknown historical mapping. Recorded money
+and tax metadata remain nullable. Discovery is eventual positive evidence, never a count or completeness promise.
+Current native disclosure, exact offer confirmation and creation target authority remain the source authorities.
+
+Web's `checkout/subject-offers.ts` exports `SubjectOffersApi`, the closed reader and the typed unavailable
+`nativeSubjectOffersApi`: this base has no subject-offer module/generated caller. The producer replaces that one
+adapter with its real binding; a missing body never becomes ready/empty. The BFF preserves the actual request
+credential and named native refusal, uses private no-store, and reads one bounded page without per-card lookups.
+The served offer review now also carries current credentials and preserves named denials; it retains the existing
+observed revision, consent and uncertain-creation retry path.
+
+`checkout/subject-purchase.ts` exports `SubjectOffersRegion`, `SubjectOwnedBenefitsRegion` and the immutable
+`subjectPurchaseRegions` configuration. Root passes it through `AppShell.subjectPurchase` and the existing shared
+`ComponentType<{subjectId,subjectType,locale}>` seam. Public discovery waits for hydration/session preparation;
+actor/session-bound browser queries cancel and discard old responses on session change. No personal query or opaque
+entitlement fact enters shared SSR data. Native denial/unavailability/preparation and a successful page with no
+listed offers remain separate. Exact known recorded prices, fixed-version/quantity-one terms and known exclusive
+tax wording lead to the actual `/offers/{id}` review; no slot interaction creates a charge.
+
+The private region mounts through the shared signed-in seam and links to the existing own `/entitlements` records.
+There is no declared bounded native owned-benefit batch in this base, so it fetches no ownership list, makes no
+owned/absent claim and never infers entitlement from Library. The existing entitlement detail alone links mapped
+active benefits to `/editions/{benefit.resource.id}`; Content's guarded reader remains responsible for final use.
+Constructed public-wire stories and interface acceptance source cover these states. Native whole-journey, privacy,
+protected-use, visual and promoted-main proof remain pending.
 
 ### Private creator offer history
 
@@ -217,7 +248,8 @@ The selected benefit is Content's immutable `content.edition`, action `edition:r
 The capture producer's `content_edition` JSONB is immutable across offer, order and entitlement; SQL NULL
 means UNKNOWN historical mapping and never supplies an edition fact. Current sale authority and final source
 availability remain Content's independent responsibility; their actual native producer and full paid-use proof
-are pending. Subject discovery remains a separate pending producer. Public/free authority is unchanged.
+are pending. Subject discovery's generated producer binding remains pending as described above. Public/free
+authority is unchanged.
 
 `createContentEditionBuyerFactReader({pool,clock?})` in `content-edition-buyer-fact.ts` is the sole native current
 Commerce reader. The kernel resolver constructs it once with its existing pool/clock and supplies it to the same
@@ -581,9 +613,6 @@ or earnings because tax/fees may remain. Do not fabricate tax credits, zero fees
 Further commercial/shared adoption is required before runtime bodies for provider allocation versus reserves,
 release conditions, same-currency negative carry and positive evidence-complete payable rules; and richer external
 attestation with actual date/method/amount/currency/reference. These are the provider
-Further commercial/shared adoption is required for provider allocation versus reserves, release conditions,
-same-currency negative carry and positive evidence-complete payable
-rules; and richer external attestation with actual date/method/amount/currency/reference. These are the provider
 report's recommendations, not hidden adopted economics. Reserve duration, clawback, thresholds, partial external
 payment, correction states and FX netting remain unchosen. Existing mark-paid records an authorized external reference
 on a statement; it sends no Stripe transfer and does not prove payability or external finality.

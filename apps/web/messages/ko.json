@@ -2764,5 +2764,21 @@
   "search_recovery_session": "세션을 확인할 수 없습니다. 검색을 계속하려면 다시 로그인하세요.",
   "search_recovery_source": "카탈로그 데이터 소스가 아직 준비되지 않았습니다. 검색 조건은 유지됩니다. 나중에 다시 시도하세요.",
   "search_recovery_wait": "잠시 기다린 후 다시 시도하세요.",
-  "search_recovery_edit": "검색어, 조건 또는 정렬을 수정한 후 변경 사항을 적용하세요."
+  "search_recovery_edit": "검색어, 조건 또는 정렬을 수정한 후 변경 사항을 적용하세요.",
+  "subject_purchase_heading": "이 항목의 구매 제안",
+  "subject_purchase_discovery": "목록에 반영되기까지 시간이 걸릴 수 있습니다. 현재 구매 가능 여부와 조건은 개별 제안에서 확인하세요.",
+  "subject_purchase_pending": "구매 제안을 불러오는 중…",
+  "subject_purchase_preparing": "구매 제안 목록을 준비 중입니다. 이미 표시된 제안은 확인할 수 있습니다.",
+  "subject_purchase_denied": "현재 접근 권한으로는 이 구매 제안을 볼 수 없습니다.",
+  "subject_purchase_unavailable": "현재 구매 제안 목록을 이용할 수 없습니다.",
+  "subject_purchase_cursor_error": "이어서 볼 수 없는 목록입니다. 첫 페이지부터 다시 시작하세요.",
+  "subject_purchase_empty": "이 페이지에 표시된 구매 제안이 없습니다.",
+  "subject_purchase_price_unknown": "가격을 확인할 수 없음",
+  "subject_purchase_review": "구매 제안 검토",
+  "subject_purchase_review_offer": "구매 제안 검토: {title}",
+  "subject_purchase_next": "다음 구매 제안",
+  "subject_purchase_restart": "첫 페이지로 돌아가기",
+  "subject_purchase_retry": "목록 다시 확인",
+  "subject_purchase_records": "내 구매 및 접근 기록",
+  "subject_purchase_records_hint": "구매한 혜택은 본인 기록에서 확인하세요. 라이브러리 항목은 접근 권한을 증명하지 않습니다."
 }

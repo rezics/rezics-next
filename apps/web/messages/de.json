@@ -2764,5 +2764,21 @@
   "search_recovery_session": "Deine Sitzung konnte nicht bestätigt werden. Melde dich erneut an, um die Suche fortzusetzen.",
   "search_recovery_source": "Die Katalogquelle ist noch nicht bereit. Deine Suche bleibt erhalten. Versuche es später erneut.",
   "search_recovery_wait": "Warte einen Moment, bevor du es erneut versuchst.",
-  "search_recovery_edit": "Bearbeite den Suchtext, die Bedingungen oder die Sortierung und wende die Änderungen an."
+  "search_recovery_edit": "Bearbeite den Suchtext, die Bedingungen oder die Sortierung und wende die Änderungen an.",
+  "subject_purchase_heading": "Angebote zu diesem Eintrag",
+  "subject_purchase_discovery": "Die Liste kann zeitverzögert sein. Prüfe im Angebot die aktuelle Verfügbarkeit und die Bedingungen.",
+  "subject_purchase_pending": "Angebote werden geladen…",
+  "subject_purchase_preparing": "Die Angebotsliste wird vorbereitet. Bereits angezeigte Angebote kannst du prüfen.",
+  "subject_purchase_denied": "Mit deinen aktuellen Zugriffsrechten kannst du diese Angebote nicht sehen.",
+  "subject_purchase_unavailable": "Die Angebotsliste ist derzeit nicht verfügbar.",
+  "subject_purchase_cursor_error": "Diese Fortsetzung ist nicht mehr verfügbar. Beginne auf der ersten Seite.",
+  "subject_purchase_empty": "Auf dieser Seite sind keine Angebote aufgeführt.",
+  "subject_purchase_price_unknown": "Preis nicht verfügbar",
+  "subject_purchase_review": "Angebot prüfen",
+  "subject_purchase_review_offer": "Angebot prüfen: {title}",
+  "subject_purchase_next": "Weitere Angebote",
+  "subject_purchase_restart": "Zur ersten Seite",
+  "subject_purchase_retry": "Liste erneut prüfen",
+  "subject_purchase_records": "Deine Kauf- und Zugriffsbelege",
+  "subject_purchase_records_hint": "Prüfe erworbene Leistungen in deinen eigenen Belegen. Bibliothekseinträge belegen kein Zugriffsrecht."
 }

@@ -2764,5 +2764,21 @@
   "search_recovery_session": "Votre session n’a pas pu être vérifiée. Reconnectez-vous pour poursuivre cette recherche.",
   "search_recovery_source": "La source du catalogue n’est pas prête. Votre recherche est conservée. Réessayez plus tard.",
   "search_recovery_wait": "Patientez un instant avant de réessayer.",
-  "search_recovery_edit": "Modifiez le texte, les conditions ou le tri, puis appliquez vos modifications."
+  "search_recovery_edit": "Modifiez le texte, les conditions ou le tri, puis appliquez vos modifications.",
+  "subject_purchase_heading": "Offres pour cette fiche",
+  "subject_purchase_discovery": "La liste peut avoir du retard. Consultez chaque offre pour connaître sa disponibilité et ses conditions actuelles.",
+  "subject_purchase_pending": "Chargement des offres…",
+  "subject_purchase_preparing": "La liste des offres est en préparation. Vous pouvez consulter les offres déjà affichées.",
+  "subject_purchase_denied": "Vos droits actuels ne permettent pas de consulter ces offres.",
+  "subject_purchase_unavailable": "La liste des offres est indisponible pour le moment.",
+  "subject_purchase_cursor_error": "Cette suite de résultats n’est plus disponible. Reprenez à la première page.",
+  "subject_purchase_empty": "Aucune offre n’est affichée sur cette page.",
+  "subject_purchase_price_unknown": "Prix indisponible",
+  "subject_purchase_review": "Consulter l’offre",
+  "subject_purchase_review_offer": "Consulter l’offre : {title}",
+  "subject_purchase_next": "Offres suivantes",
+  "subject_purchase_restart": "Retour à la première page",
+  "subject_purchase_retry": "Vérifier à nouveau la liste",
+  "subject_purchase_records": "Vos achats et droits d’accès",
+  "subject_purchase_records_hint": "Consultez vos propres justificatifs pour retrouver les avantages achetés. Les entrées de bibliothèque ne prouvent pas un droit d’accès."
 }

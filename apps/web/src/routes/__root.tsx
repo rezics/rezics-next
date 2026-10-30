@@ -28,6 +28,7 @@ import { isSignedInPath } from '../session/guard';
 import { createNavigation } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 import { Tags } from 'lucide-react';
+import { subjectPurchaseRegions } from '../checkout/subject-purchase';
 
 export const commerceNavigation = createNavigation([
   {
@@ -149,7 +150,9 @@ function Root({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <AppShell navigation={commerceNavigation}>{platformClosed ? <ClosedPage /> : children}</AppShell>
+        <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+          {platformClosed ? <ClosedPage /> : children}
+        </AppShell>
         <Scripts />
       </body>
     </html>

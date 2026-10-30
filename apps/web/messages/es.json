@@ -2764,5 +2764,21 @@
   "search_recovery_session": "No se pudo verificar tu sesión. Inicia sesión de nuevo para continuar la búsqueda.",
   "search_recovery_source": "La fuente del catálogo aún no está lista. Se conserva tu búsqueda; inténtalo más tarde.",
   "search_recovery_wait": "Espera un momento antes de volver a intentarlo.",
-  "search_recovery_edit": "Edita el texto, las condiciones o el orden y aplica los cambios."
+  "search_recovery_edit": "Edita el texto, las condiciones o el orden y aplica los cambios.",
+  "subject_purchase_heading": "Ofertas para esta ficha",
+  "subject_purchase_discovery": "La lista puede tardar en actualizarse. Consulta cada oferta para ver su disponibilidad y condiciones actuales.",
+  "subject_purchase_pending": "Cargando ofertas…",
+  "subject_purchase_preparing": "Se está preparando la lista de ofertas. Puedes consultar las ofertas que ya se muestran.",
+  "subject_purchase_denied": "Tus permisos actuales no permiten ver estas ofertas.",
+  "subject_purchase_unavailable": "La lista de ofertas no está disponible en este momento.",
+  "subject_purchase_cursor_error": "Esta continuación ya no está disponible. Vuelve a la primera página.",
+  "subject_purchase_empty": "No hay ofertas publicadas en esta página.",
+  "subject_purchase_price_unknown": "Precio no disponible",
+  "subject_purchase_review": "Revisar oferta",
+  "subject_purchase_review_offer": "Revisar oferta: {title}",
+  "subject_purchase_next": "Siguientes ofertas",
+  "subject_purchase_restart": "Volver a la primera página",
+  "subject_purchase_retry": "Consultar la lista de nuevo",
+  "subject_purchase_records": "Tus compras y registros de acceso",
+  "subject_purchase_records_hint": "Consulta tus propios registros para encontrar los beneficios adquiridos. Las entradas de la biblioteca no demuestran derechos de acceso."
 }

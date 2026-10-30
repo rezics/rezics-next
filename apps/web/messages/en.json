@@ -3067,5 +3067,21 @@
   "search_recovery_session": "Your session could not be verified. Sign in again to continue this search.",
   "search_recovery_source": "The catalogue source is not ready. Your search is retained; try again later.",
   "search_recovery_wait": "Wait a moment before trying again.",
-  "search_recovery_edit": "Edit the search text, conditions or sort, then apply your changes."
+  "search_recovery_edit": "Edit the search text, conditions or sort, then apply your changes.",
+  "subject_purchase_heading": "Offers for this subject",
+  "subject_purchase_discovery": "Listings may still be catching up. Review an offer for its current availability and terms.",
+  "subject_purchase_pending": "Loading offers…",
+  "subject_purchase_preparing": "Offer listings are being prepared. You can review any offers already shown.",
+  "subject_purchase_denied": "These offers cannot be viewed with your current access.",
+  "subject_purchase_unavailable": "Offer listings are unavailable right now.",
+  "subject_purchase_cursor_error": "This continuation is no longer available. Start again from the first page.",
+  "subject_purchase_empty": "No offers are listed on this page.",
+  "subject_purchase_price_unknown": "Price unavailable",
+  "subject_purchase_review": "Review offer",
+  "subject_purchase_review_offer": "Review offer: {title}",
+  "subject_purchase_next": "Next offers",
+  "subject_purchase_restart": "Back to first page",
+  "subject_purchase_retry": "Check listings again",
+  "subject_purchase_records": "Your purchase and access records",
+  "subject_purchase_records_hint": "Check your own records for purchased benefits. Library entries do not establish access."
 }

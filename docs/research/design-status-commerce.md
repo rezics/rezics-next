@@ -15,6 +15,26 @@ Stripe's [Entitlements API guide](https://docs.stripe.com/billing/entitlements?d
 [Commerce](../goals/commerce.md) owns this journey and [Library](../goals/library.md) retains the personal-space scope.
 The adopted [ownership/benefits](commerce-ownership-entitlements-benefits.md) and
 [payment evidence/settlement](commerce-payment-evidence-settlement.md) reports remain design evidence.
+Subject pages now receive Commerce's exact public/private region exports through the shared `AppShell` seam.
+The closed subject-offer BFF consumes the selected cursor/default-10/max-20 page contract and keeps current native
+denial, preparing, unavailable and successful sparse pages distinct. The subject-offer module/generated caller is
+absent in this base: `nativeSubjectOffersApi` remains typed unavailable, including the development transport.
+Constructed presentation examples never supply runtime discovery or ownership facts. Public reads start only after
+hydration/session preparation, bind query keys to the actor/session, cancel old reads and use private no-store.
+Current offer-review credentials and named denials are preserved as well; no anonymous retry substitutes for refusal.
+One explicit next-page action reads one page. There are no automatic mutations, polling or per-card lookups.
+The shared private region links to existing own `/entitlements` records without an owned/absent claim; this base
+declares no bounded owned-benefit batch. The existing review/Checkout/record/reader journey keeps its sole authorities.
+
+Web handoff modules are `checkout/subject-purchase.ts` (`subjectPurchaseRegions`, `SubjectOffersRegion`,
+`SubjectOwnedBenefitsRegion`) and `checkout/subject-offers-region.tsx` (`SubjectOffersView`). New stories are
+`pages-commerce-subject-purchase--{signed-out,signed-in}-{390,1280}` plus `pending`, `empty`, `preparing`,
+`partial-preparing`, `denied-signed-in`, `unavailable`, `cursor-error`, `long-title`, `mapped-price-unknown`,
+`unknown-mapping` and `actual-adapter-unavailable` under that same prefix. All eight locales use current shared rows
+and the signed-in mount seam. The ordinary Web 390/1280 review remains pending. The added
+`apps/web/tests/subject-purchase.test.ts` is focused interface acceptance source, not an executed native campaign.
+Actual native producer binding, whole-journey, privacy/protected-use and promoted-main proof remain pending.
+
 Known-ID `/offers/$id` now presents the actual sanitized `contentEdition` capture: one fixed version, quantity one,
 one-time account binding, native creator identity when its public name is available, and the captured licence.
 Its price uses the recorded unit exponent, with explicit before-tax wording only for captured exclusive tax terms;
@@ -169,7 +189,7 @@ Accounts owns management evaluation, account-agent resolution/state and effects 
 Semantic identity/kernel health are prerequisites. Proposed `/v1/followCounts/:targetType/:targetId`, aggregate/readiness, lifecycle and native driver remain pending.
 **Handoff:** where should eligible managers see private ready/unready counts with current grants and suspension/erasure updates, without another person's outgoing list or a public total?
 
-**Shared handoff.** Deliver the adopted exact Content-edition producer and pending discovery through existing
+**Shared handoff.** Deliver the adopted exact Content-edition producer and subject discovery's actual native binding through existing
 Access; do not introduce a second permission engine or label research sketches as delivered signatures. Library
 journeys continue under their existing sole behavior authorities and the separate owner brief. These ownership
 changes preserve the commerce manager scope and every original native/interface/main obligation.

@@ -2764,5 +2764,21 @@
   "search_recovery_session": "無法驗證你的工作階段。請重新登入以繼續搜尋。",
   "search_recovery_source": "目錄資料來源尚未就緒。搜尋條件已保留，請稍後重試。",
   "search_recovery_wait": "請稍候再重試。",
-  "search_recovery_edit": "請修改搜尋文字、條件或排序，然後套用變更。"
+  "search_recovery_edit": "請修改搜尋文字、條件或排序，然後套用變更。",
+  "subject_purchase_heading": "此主題的方案",
+  "subject_purchase_discovery": "方案列表可能尚未更新。請查看個別方案目前是否可購買及其條款。",
+  "subject_purchase_pending": "正在載入方案…",
+  "subject_purchase_preparing": "正在準備方案列表。您可以查看已顯示的方案。",
+  "subject_purchase_denied": "您目前的存取權限無法查看這些方案。",
+  "subject_purchase_unavailable": "目前無法取得方案列表。",
+  "subject_purchase_cursor_error": "此分頁已無法繼續。請從第一頁重新開始。",
+  "subject_purchase_empty": "此頁未列出任何方案。",
+  "subject_purchase_price_unknown": "無法取得價格",
+  "subject_purchase_review": "查看方案",
+  "subject_purchase_review_offer": "查看方案：{title}",
+  "subject_purchase_next": "下一頁方案",
+  "subject_purchase_restart": "返回第一頁",
+  "subject_purchase_retry": "重新查看方案列表",
+  "subject_purchase_records": "您的購買與存取紀錄",
+  "subject_purchase_records_hint": "請查看您自己的紀錄以確認已購買的權益。收藏庫項目不代表存取權限。"
 }

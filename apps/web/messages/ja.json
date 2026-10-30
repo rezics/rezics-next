@@ -2764,5 +2764,21 @@
   "search_recovery_session": "セッションを確認できませんでした。再度ログインして検索を続けてください。",
   "search_recovery_source": "カタログのデータソースはまだ準備できていません。検索条件は保持されています。後でもう一度お試しください。",
   "search_recovery_wait": "しばらく待ってからもう一度お試しください。",
-  "search_recovery_edit": "検索語、条件、並び順を編集してから変更を適用してください。"
+  "search_recovery_edit": "検索語、条件、並び順を編集してから変更を適用してください。",
+  "subject_purchase_heading": "この項目の販売オファー",
+  "subject_purchase_discovery": "一覧への反映が遅れている場合があります。現在の販売状況と条件は各オファーで確認してください。",
+  "subject_purchase_pending": "オファーを読み込み中…",
+  "subject_purchase_preparing": "オファー一覧を準備しています。表示済みのオファーは確認できます。",
+  "subject_purchase_denied": "現在のアクセス権ではこれらのオファーを表示できません。",
+  "subject_purchase_unavailable": "現在、オファー一覧を利用できません。",
+  "subject_purchase_cursor_error": "この続きは表示できなくなりました。最初のページからやり直してください。",
+  "subject_purchase_empty": "このページに掲載されているオファーはありません。",
+  "subject_purchase_price_unknown": "価格を取得できません",
+  "subject_purchase_review": "オファーを確認",
+  "subject_purchase_review_offer": "オファーを確認：{title}",
+  "subject_purchase_next": "次のオファー",
+  "subject_purchase_restart": "最初のページに戻る",
+  "subject_purchase_retry": "一覧を再確認",
+  "subject_purchase_records": "購入とアクセスの記録",
+  "subject_purchase_records_hint": "購入した特典はご自身の記録で確認してください。ライブラリへの登録はアクセス権を示すものではありません。"
 }
