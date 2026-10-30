@@ -36,6 +36,43 @@ export function readSearchConfig(env: { readonly [name: string]: string | undefi
 export const searchWorkModule: WorkModule = {
   name: 'search',
   async register(context) {
+    const trends = trendingSearchStore(context.pool, context.clock);
+    type Withdrawal = { kind: 'account' | 'source'; identity: string; sequence: number };
+    const withdraw = DBOS.registerStep(
+      async (kind: Withdrawal['kind'], identity: string) => (await trends.withdraw(kind, identity)).value,
+      { name: 'search.withdrawTrending', ...COMMAND_STEP_RETRIES },
+    );
+    const acknowledge = DBOS.registerStep(
+      async (accountId: string) =>
+        acknowledgeErasure({ pool: context.pool }, { accountId, participant: 'search', outcome: 'erased' }),
+      { name: 'search.acknowledgeErasure', ...COMMAND_STEP_RETRIES },
+    );
+    const enqueueWithdrawal = async (input: Withdrawal) => {
+      await context.client.enqueue(
+        {
+          workflowName: 'search.trendingWithdrawal',
+          workflowID: `search:trending:${input.kind}:${input.identity}:${input.sequence}`,
+          workflowIDReusePolicy: 'return-existing',
+          queueName: 'maintenance',
+        },
+        input,
+      );
+    };
+    const continueWithdrawal = DBOS.registerStep(
+      enqueueWithdrawal,
+      { name: 'search.continueTrendingWithdrawal', ...COMMAND_STEP_RETRIES },
+    );
+    const withdrawSegment = async (input: Withdrawal) => {
+      // Bound both each command and its durable workflow history; ACK follows the final committed page.
+      for (let page = 0; page < 100; page++) {
+        if ((await withdraw(input.kind, input.identity)) === 'complete') {
+          if (input.kind === 'account') await acknowledge(input.identity);
+          return;
+        }
+      }
+      await continueWithdrawal({ ...input, sequence: input.sequence + 1 });
+    };
+    DBOS.registerWorkflow(withdrawSegment, { name: 'search.trendingWithdrawal' });
     // Personal PostgreSQL custody is installed even when public indexing is disabled.
     const erase = DBOS.registerStep(
       async (accountId: string) => {
@@ -57,11 +94,16 @@ export const searchWorkModule: WorkModule = {
           );
           return noEffect(null);
         });
-        await acknowledgeErasure({ pool: context.pool }, { accountId, participant: 'search', outcome: 'erased' });
       },
       { name: 'search.eraseRecent', ...COMMAND_STEP_RETRIES },
     );
-    DBOS.registerWorkflow(async (accountId: string) => erase(accountId), { name: 'search.eraseAccount' });
+    DBOS.registerWorkflow(
+      async (accountId: string) => {
+        await erase(accountId);
+        await withdrawSegment({ kind: 'account', identity: accountId, sequence: 0 });
+      },
+      { name: 'search.eraseAccount' },
+    );
     context.addEffects([
       {
         name: 'search_account_erasure',
@@ -138,33 +180,29 @@ export const searchWorkModule: WorkModule = {
         automaticBackfill: false,
       },
     ]);
-    const trends = trendingSearchStore(context.pool, context.clock);
     context.addEffects([
       {
         name: 'search_trending_withdrawal',
-        types: ['com.rezics.access.account-tombstoned.v1', 'com.rezics.subject.visibility_changed.v1'],
+        types: ['com.rezics.subject.visibility_changed.v1'],
         async run(event) {
-          const data = event.data as { accountId?: string; id?: string; visibility?: string };
-          if (data.accountId) {
-            while ((await trends.withdraw('account', data.accountId)).value === 'progress') {
-              /* bounded committed pages */
-            }
-          } else if (data.id && data.visibility !== 'visible') {
-            while ((await trends.withdraw('source', data.id)).value === 'progress') {
-              /* bounded committed pages */
-            }
-          }
+          const data = event.data as { id: string; visibility: string };
+          if (data.visibility !== 'visible')
+            await enqueueWithdrawal({ kind: 'source', identity: data.id, sequence: 0 });
         },
       },
     ]);
     context.addService(() => {
       let stopped = false;
-      let running: Promise<unknown> = Promise.resolve();
+      let running: Promise<unknown> | undefined;
       const timer = setInterval(() => {
-        running = running
-          .then(() => (stopped ? undefined : trends.expire()))
+        if (stopped || running) return;
+        running = trends
+          .expire()
           .catch(() => {
             /* retry next bounded tick */
+          })
+          .finally(() => {
+            running = undefined;
           });
       }, 60_000);
       return {
