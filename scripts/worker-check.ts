@@ -1113,7 +1113,7 @@ export async function runWorkerCheck(
         false,
         file,
         leaseWaitRepeatMs,
-        logicalCheckId,
+        logicalCheckId ?? cancellation.id,
         rerunNumber + 1,
         recordedCheckId,
         false,

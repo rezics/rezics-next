@@ -339,7 +339,7 @@ function getPinnedBun(): { version: string; revision: string } {
   const version = repositoryPackage.packageManager?.startsWith('bun@') ? repositoryPackage.packageManager.slice(4) : '';
   const binary = join(import.meta.dir, '../node_modules/.bin/bun');
   if (!existsSync(binary)) throw new Error('Could not read pinned Bun revision; run bun install first');
-  const result = Bun.spawnSync([binary, '--eval', 'console.log(Bun.revision)']);
+  const result = Bun.spawnSync([binary, '--eval', 'console.log(Bun.revision)'], { timeout: 5_000 });
   if (result.exitCode !== 0) throw new Error('Could not read pinned Bun revision; run bun install first');
   pinnedBun = { version, revision: result.stdout.toString().trim() };
   return pinnedBun;
@@ -4098,6 +4098,8 @@ async function runLeased(
 
 export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<number> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
+  assertExecutionAllowed(options, signal);
+  getPinnedBun(); // Local runtime verification precedes placement/upload/admission, never a held host slot.
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
     runWithTransportRetries(options, options.hosts, files, ownedSignal, false),
@@ -4227,6 +4229,8 @@ async function runWithTransportRetries(
 /** The first unresponsive-host round may hand local work to its caller; later loss keeps waiting. */
 export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal: AbortSignal): Promise<number | null> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
+  assertExecutionAllowed(options, signal);
+  getPinnedBun();
   const files = workspaceFiles(options.workspace);
   return await withExecutionCancellation(options, signal, (ownedSignal) =>
     runWithTransportRetries(options, options.hosts, files, ownedSignal, true, options.answered),
@@ -4240,6 +4244,8 @@ export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal):
 
 async function tryRemoteCheckOwned(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
+  assertExecutionAllowed(options, signal);
+  getPinnedBun();
   validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
