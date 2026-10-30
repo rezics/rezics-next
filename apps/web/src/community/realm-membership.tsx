@@ -38,19 +38,15 @@ export function RealmMembership({ realm, returnTo }: { realm: RealmHome; returnT
         </div>
       </section>
     );
-  return <PersonalMembership realm={realm} csrfToken={csrfToken} returnTo={returnTo} />;
+  return <PersonalMembership realm={realm} csrfToken={csrfToken} />;
 }
 
-function PersonalMembership({
-  realm,
-  csrfToken,
-  returnTo,
-}: {
-  realm: RealmHome;
-  csrfToken: string | null;
-  returnTo: string;
-}) {
-  const { data: viewer, isPending } = useQuery({
+function PersonalMembership({ realm, csrfToken }: { realm: RealmHome; csrfToken: string | null }) {
+  const {
+    data: viewer,
+    isError,
+    isPending,
+  } = useQuery({
     ...realmMembershipQuery(realm.id),
     enabled: personalRead.enabled,
   });
@@ -86,18 +82,13 @@ function PersonalMembership({
 
   if (isPending) return <section aria-label={m.realm_membership_label()} aria-busy="true" />;
 
-  if (!viewer)
+  if (isError || !viewer)
     return (
       <section aria-label={m.realm_membership_label()}>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            size="lg"
-            className="h-11 px-6 text-base"
-            render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
-          >
-            {m.realm_join()}
-          </Button>
-        </div>
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.realm_membership_unavailable()}
+        </p>
+        {protectedNote}
       </section>
     );
 

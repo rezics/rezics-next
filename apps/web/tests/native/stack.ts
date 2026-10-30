@@ -36,6 +36,8 @@ export type NativeWebStack = {
   kernel(path: string, init?: RequestInit, persona?: string): Promise<Response>;
   request(url: string, persona?: string, headers?: Record<string, string>): Promise<Response>;
   credentials(persona: string): Promise<NativeCredentials>;
+  /** Flushes kernel requests made by the production Worker into this observer. */
+  refreshKernelRequests(): Promise<void>;
   kernelRequests(): readonly NativeKernelRequest[];
   peakMemoryBytes(): number;
   restartWeb(options: { publicOrigin: string; authIssuer?: string }): Promise<void>;
@@ -1015,6 +1017,9 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
         // Keep the HTTP Response itself: observing never reads its body, replaces
         // its headers, changes its status, or follows a Worker redirect.
         return observe(await fetch(target, { headers, redirect: 'manual' }));
+      },
+      async refreshKernelRequests() {
+        await call('observe');
       },
       async restartWeb(options) {
         lifecycle.assertOpen('restart native web Worker');

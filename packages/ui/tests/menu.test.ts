@@ -16,6 +16,8 @@ test('package menus share the responsive menu implementation', () => {
   expect(menu).toContain('(pointer: coarse)');
   expect(menu).toContain('history.pushState');
   expect(menu).toContain('popstate');
+  expect(menu).toContain('closeOnNavigation');
+  expect(menu).toContain('onClickCapture={closeAfterNavigation}');
   expect(menu).toContain('focus');
   expect(menu).toMatch(/type: 'link'/);
   expect(menu).toContain("'destructive'");

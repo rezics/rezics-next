@@ -432,6 +432,7 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
     return (
       <Menu
         title={m.account_menu()}
+        closeOnNavigation
         trigger={
           <Button
             id="account-menu-button"
@@ -465,6 +466,10 @@ export function AccountMenu({ session, csrfToken }: { session: ShellSession; csr
                 {m.library_nav_following()}
               </a>
             ) : null}
+            <Link to="/realms" className={accountMenuLinkClass}>
+              <Globe aria-hidden="true" className="size-4" />
+              {m.realms_heading()}
+            </Link>
             <a href={`/${locale}/settings`} className={accountMenuLinkClass}>
               <Settings aria-hidden="true" className="size-4" />
               {m.settings_heading()}

@@ -30,6 +30,8 @@ menu opens as a bottom sheet with a title and touch rows at least 44px high. On 
 a dropdown anchored to its trigger. Menu labels, including the title and Back control, come from the caller's native
 locale messages. A submenu becomes a sheet page; browser Back returns to the previous page and then closes the sheet.
 Selecting a radio value closes the menu once. Escape closes either form, and focus returns to the trigger.
+Custom menu content with client-side links can set `closeOnNavigation` so following a link closes the menu without
+adding a sheet-history entry.
 
 Callers use `Menu` or a component built on it; they never import shadcn's dropdown primitive to implement a
 menu. `editor-selection-menu.tsx` is a floating formatting toolbar over a text selection, not a menu. `cover.tsx`'s

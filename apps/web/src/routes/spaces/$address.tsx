@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import { personalRead } from '../../kernel/query';
+import { useSession } from '../../session/query';
 import { spaceQuery } from '../../community/space-queries';
 import { getLocale } from '../../paraglide/runtime.js';
 import { SpacePage } from '../../community/space-page';
@@ -17,6 +19,13 @@ export const Route = createFileRoute('/spaces/$address')({
 
 function SpaceRoute() {
   const { address } = Route.useParams();
-  const { data } = useSuspenseQuery(spaceQuery(address, getLocale(), 'anonymous'));
-  return <SpacePage page={data} />;
+  const { state: session } = useSession();
+  const publicPage = Route.useLoaderData();
+  const sessionPage = useQuery({
+    ...spaceQuery(address, getLocale(), 'session'),
+    enabled: personalRead.enabled && session === 'signed-in' && publicPage.realm === null,
+    retry: false,
+  });
+  const page = sessionPage.isSuccess && !sessionPage.isFetching && !sessionPage.isError ? sessionPage.data : publicPage;
+  return <SpacePage page={page} />;
 }

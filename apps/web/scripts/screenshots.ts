@@ -19,11 +19,11 @@ type Options = {
   stories: string[];
   locales: string[];
   themes: Theme[];
-  width: number;
+  widths: number[];
   out: string;
   help: boolean;
 };
-type Job = { id: string; locale: string; theme: string };
+type Job = { id: string; locale: string; theme: string; width?: number; widthSuffix?: boolean };
 type CaptureFailure = { job: Job; error: string };
 type CaptureResult = { files: string[]; failures: CaptureFailure[] };
 type StoryPreview = {
@@ -55,7 +55,7 @@ export function createProgressReporter(
 }
 
 function usage(): string {
-  return 'Usage: bun run screenshots [--story <id or glob>] [--locale <code>]... [--theme light|dark]... [--width <px>] [--out <dir>]';
+  return 'Usage: bun run screenshots [--story <id or glob>] [--locale <code>]... [--theme light|dark]... [--width <px>]... [--out <dir>]';
 }
 
 function unique<T>(values: readonly T[]): T[] {
@@ -78,12 +78,12 @@ function storyMatches(id: string, pattern: string): boolean {
   return new RegExp(expression).test(id);
 }
 
-function parse(argv: readonly string[]): Options {
+export function parseOptions(argv: readonly string[]): Options {
   const options: Options = {
     stories: [],
     locales: [],
     themes: [],
-    width: 1280,
+    widths: [],
     out: resolve(root, '.temp/screenshots'),
     help: false,
   };
@@ -124,7 +124,7 @@ function parse(argv: readonly string[]): Options {
       const width = Number(take(flag, index));
       index += 1;
       if (!Number.isInteger(width) || width <= 0) throw new Error(`${usage()}\nWidth must be a positive integer.`);
-      options.width = width;
+      options.widths.push(width);
       continue;
     }
     if (flag === '--out') {
@@ -141,6 +141,7 @@ function parse(argv: readonly string[]): Options {
   options.stories = unique(options.stories);
   options.locales = unique(options.locales);
   options.themes = unique(options.themes);
+  options.widths = unique(options.widths.length === 0 ? [1280] : options.widths);
   return options;
 }
 
@@ -156,6 +157,11 @@ function safePath(directory: string, pathname: string): string | undefined {
   const target = resolve(directory, relativePath);
   if (target !== directory && !target.startsWith(`${directory}/`)) return undefined;
   return target;
+}
+
+export function screenshotFilename(job: Job): string {
+  const width = job.widthSuffix && job.width !== undefined ? `.${job.width}px` : '';
+  return `${job.id}.${job.locale}.${job.theme}${width}.png`;
 }
 
 function serve(directory: string) {
@@ -283,7 +289,7 @@ async function captureOne(page: Page, origin: string, job: Job, out: string): Pr
     await navigateStory(page, job.id, url);
     await settle(page, job.id, pageErrors);
     await prepareFullPageCapture(page);
-    const file = join(out, `${job.id}.${job.locale}.${job.theme}.png`);
+    const file = join(out, screenshotFilename(job));
     await page.screenshot({ path: file, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
     return file;
   } finally {
@@ -333,8 +339,10 @@ async function captureJobs(
 function reportCaptureResults(files: string[], failures: CaptureFailure[], write: (text: string) => void): number {
   for (const file of files) write(`${file}\n`);
   write(`${files.length}\n`);
-  for (const { job, error } of failures)
-    write(`${job.id} ${job.locale} ${job.theme}: ${error.replace(/\s+/g, ' ').trim()}\n`);
+  for (const { job, error } of failures) {
+    const width = job.widthSuffix && job.width !== undefined ? ` ${job.width}px` : '';
+    write(`${job.id} ${job.locale} ${job.theme}${width}: ${error.replace(/\s+/g, ' ').trim()}\n`);
+  }
   return failures.length === 0 ? 0 : 1;
 }
 
@@ -343,29 +351,42 @@ async function capture(
   origin: string,
   jobs: readonly Job[],
   out: string,
-  width: number,
   progress: ProgressReporter,
 ): Promise<CaptureResult> {
-  const pages: Page[] = [];
-  for (let index = 0; index < Math.min(captureLimit, jobs.length); index += 1) {
-    const context = await browser.newContext({
-      viewport: { width, height: viewportHeight },
-      deviceScaleFactor: 1,
-      reducedMotion: 'reduce',
-    });
-    pages.push(await context.newPage());
-  }
   let completed = 0;
-  return captureJobs(
-    jobs,
-    async (job, worker) => {
-      const file = await captureOne(pages[worker]!, origin, job, out);
-      completed += 1;
-      progress.captured(completed, jobs.length, file);
-      return file;
-    },
-    pages.length,
-  );
+  const files: string[] = [];
+  const failures: CaptureFailure[] = [];
+  const widths = [...new Set(jobs.map((job) => job.width ?? 1280))];
+  for (const width of widths) {
+    const widthJobs = jobs.filter((job) => (job.width ?? 1280) === width);
+    const contexts = await Promise.all(
+      Array.from({ length: Math.min(captureLimit, widthJobs.length) }, () =>
+        browser.newContext({
+          viewport: { width, height: viewportHeight },
+          deviceScaleFactor: 1,
+          reducedMotion: 'reduce',
+        }),
+      ),
+    );
+    const pages = await Promise.all(contexts.map((context) => context.newPage()));
+    try {
+      const result = await captureJobs(
+        widthJobs,
+        async (job, worker) => {
+          const file = await captureOne(pages[worker]!, origin, job, out);
+          completed += 1;
+          progress.captured(completed, jobs.length, file);
+          return file;
+        },
+        pages.length,
+      );
+      files.push(...result.files);
+      failures.push(...result.failures);
+    } finally {
+      await Promise.all(contexts.map((context) => context.close()));
+    }
+  }
+  return { files, failures };
 }
 
 function workspaceRelative(path: string): string | undefined {
@@ -427,9 +448,19 @@ async function captureScreenshots(options: Options): Promise<number> {
     const origin = `http://127.0.0.1:${server.port}`;
     browser = await chromium.launch();
     const jobs = stories.flatMap((id) =>
-      options.locales.flatMap((locale) => options.themes.map((theme) => ({ id, locale, theme }))),
+      options.locales.flatMap((locale) =>
+        options.themes.flatMap((theme) =>
+          options.widths.map((width) => ({
+            id,
+            locale,
+            theme,
+            width,
+            widthSuffix: options.widths.length > 1,
+          })),
+        ),
+      ),
     );
-    const { files, failures } = await capture(browser, origin, jobs, options.out, options.width, progress);
+    const { files, failures } = await capture(browser, origin, jobs, options.out, progress);
     return reportCaptureResults(files, failures, (text) => process.stdout.write(text));
   } finally {
     await stop();
@@ -438,7 +469,7 @@ async function captureScreenshots(options: Options): Promise<number> {
 
 /** Hands the capture to a check host. An output outside the workspace stays local, because nothing can copy it back. */
 export async function runScreenshots(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
-  const options = parse(argv);
+  const options = parseOptions(argv);
   if (options.help) {
     process.stdout.write(`${usage()}\n`);
     return 0;

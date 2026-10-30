@@ -37,7 +37,11 @@ export type RealmHome = {
   summary?: string;
   visibility: 'public' | 'protected';
   boards: RealmBoard[];
+  /** Boards the native page reports as unavailable, rather than the genuinely empty list. */
+  unavailableBoards?: number;
   published: PublishedSubject[];
+  /** Published IDs among this page's twelve-row cover window whose public subject read was hidden or missing. */
+  unavailablePublished?: number;
   /** Null when signed out. */
   viewer: { state: MemberState; idempotencyKey: string } | null;
 };
@@ -148,7 +152,10 @@ async function readViewer(
     client.realms({ realmId }).participation.get(auth),
   ]);
   const state = membership?.state ?? 'none';
-  const denied = statusOf(participation) === 403 && !isPlatformClosedProblem(403, participation.error?.value);
+  const participationStatus = statusOf(participation);
+  const denied = participationStatus === 403 && !isPlatformClosedProblem(403, participation.error?.value);
+  if (participation.error && !denied) throw new Error('Kernel Realm participation read failed');
+  if (participationStatus !== 204 && !denied) throw new Error('Kernel Realm participation read failed');
   return { state: state === 'none' && denied ? 'banned' : state, idempotencyKey: crypto.randomUUID() };
 }
 
@@ -160,19 +167,21 @@ async function readHome(
 ): Promise<RealmHome> {
   const realmId = realm.realmId;
   const [boards, publications] = await Promise.all([
-    readOptional(client.realms({ realmId }).boards.get({ query: { limit: BOARD_ROW_LIMIT }, ...auth })),
-    readOptional(client.realms({ realmId }).publications.get({ query: { limit: COVER_ROW_LIMIT }, ...auth })),
+    client.realms({ realmId }).boards.get({ query: { limit: BOARD_ROW_LIMIT }, ...auth }),
+    client.realms({ realmId }).publications.get({ query: { limit: COVER_ROW_LIMIT }, ...auth }),
   ]);
-  const published = await readPublished(
-    client,
-    (publications?.items ?? []).slice(0, COVER_ROW_LIMIT).map((item) => item.subjectId),
-    auth,
-  );
+  const boardItems = readCommunity(boards).items;
+  const publicationItems = readCommunity(publications).items;
+  const unavailableBoards = boardItems.filter(
+    (board) => board.availability !== 'available' && board.visibility !== 'taken_down',
+  ).length;
+  const publishedIds = publicationItems.slice(0, COVER_ROW_LIMIT).map((item) => item.subjectId);
+  const published = await readPublished(client, publishedIds, auth);
   return {
     id: realmId,
     title: realm.title ?? '',
     visibility: realm.visibility,
-    boards: (boards?.items ?? [])
+    boards: boardItems
       .filter((board) => board.availability === 'available' && board.visibility !== 'taken_down')
       .map((board) => ({
         id: board.id,
@@ -181,7 +190,9 @@ async function readHome(
         purpose: board.purpose,
         visibility: board.visibility,
       })),
+    unavailableBoards,
     published,
+    unavailablePublished: publishedIds.length - published.length,
     viewer: null,
   };
 }
@@ -214,11 +225,9 @@ export async function loadSpacePage(
   };
   if (!space.realmId) return { space: base, realm: null };
   const realmId = space.realmId;
-  const [realm, home] = await Promise.all([
-    readOptional(client.realms({ realmId }).get(auth)),
-    readHome(client, { realmId, visibility: 'public' }, auth),
-  ]);
+  const realm = await readOptional(client.realms({ realmId }).get(auth));
   if (!realm) return { space: base, realm: null };
+  const home = await readHome(client, realm.realm, auth);
   return {
     space: base,
     realm: { ...home, title: realm.realm.title, summary: realm.realm.summary, visibility: realm.realm.visibility },
@@ -295,7 +304,7 @@ export async function changeMembership(
   const realm = client.realms({ realmId: input.realmId });
   const headers = {
     ...(auth as { headers: { authorization: string } }).headers,
-    'idempotency-key': input.idempotencyKey,
+    'idempotency-key': JSON.stringify(input.idempotencyKey),
   };
   const result =
     input.action === 'join'

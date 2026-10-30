@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ReactElement,
+  type MouseEvent,
   type ReactNode,
 } from 'react';
 import * as D from '../shadcn/dropdown-menu.tsx';
@@ -40,6 +41,8 @@ export interface MenuProps {
   trigger: ReactElement;
   title: string;
   backLabel?: string;
+  /** Close after an in-app link is followed from custom menu content. */
+  closeOnNavigation?: boolean;
   children?: ReactNode;
   triggerSlot?: boolean;
 }
@@ -152,6 +155,7 @@ export function Menu({
   trigger,
   title,
   backLabel,
+  closeOnNavigation = false,
   children,
   triggerSlot = false,
 }: MenuProps) {
@@ -187,7 +191,7 @@ export function Menu({
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     setForm(sheet ? 'sheet' : 'dropdown');
     setOpen(true);
-    if (sheet && historyDepth.current === 0) {
+    if (sheet && historyDepth.current === 0 && !closeOnNavigation) {
       window.history.pushState({ rezicsMenu: true }, '', window.location.href);
       historyDepth.current = 1;
     }
@@ -216,6 +220,9 @@ export function Menu({
       entry.onSelect();
     }
     if (entry.type === 'link') close();
+  };
+  const closeAfterNavigation = (event: MouseEvent<HTMLElement>) => {
+    if (closeOnNavigation && event.target instanceof Element && event.target.closest('a')) close();
   };
   const triggerNode = (
     <span
@@ -258,7 +265,7 @@ export function Menu({
             }}
           />
           {form === 'dropdown' && (
-            <D.DropdownMenuContent>
+            <D.DropdownMenuContent onClickCapture={closeAfterNavigation}>
               {content ?? <DropdownEntries entries={entries} select={select} close={() => close()} />}
             </D.DropdownMenuContent>
           )}
@@ -277,7 +284,7 @@ export function Menu({
             ) : undefined
           }
         >
-          <div className="mt-2 flex flex-col">
+          <div className="mt-2 flex flex-col" onClickCapture={closeAfterNavigation}>
             {content && entries.length === 0 && !page
               ? content
               : (page?.entries ?? entries).map((entry, index) => {

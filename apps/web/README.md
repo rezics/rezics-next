@@ -277,7 +277,7 @@ Renamed handles redirect 302 to the current handle for 30 days; afterwards, like
 
 The home route reads its page through the public `homePageQuery`. Its server render reads no session; after hydration, a signed-in visitor starts the personal Continue query, which reserves its section height while it loads. Signed-out visitors see no Continue section or personal read.
 
-Space and Realm pages render from anonymous public reads on the server. A signed-in visitor loads Realm membership and participation in the browser after hydration; these routes do not reread the page with a session.
+Space and Realm pages start from anonymous reads on the server. A signed-in visitor loads membership and participation in the browser. When the anonymous Space response does not expose a carried Realm, the browser makes one bounded session read of that Space page; protected Realm boards and publications are requested only if the session can read the Realm. A denied or unavailable response never becomes a false empty list. The Realm id route resolves its native Realm and Space, then redirects to the Space's address when one exists.
 
 **Search params**: Every route that reads search params declares a Valibot schema in `validateSearch`, with defaults for missing or invalid values. A loader that depends on them declares `loaderDeps`.
 
@@ -695,10 +695,14 @@ language through the client's `accept-language`.
   when its `realmId` is non-null it reads the Realm, one boards page (`limit` 20), one publications page (`limit` 12),
   and one `GET /v1/subjects/<id>` per published subject shown, started together. `/realms/<id>` reads the Realm and
   Space instead and redirects when the Space has an address. After hydration, a signed-in reader gets one personal
-  query that reads `members/me` and `participation` together.
-- **Bound:** 3 K anonymous without a Realm, 5 K anonymous with a Realm, plus one K per published subject shown (at most
-  12). A signed-in browser adds at most 2 K membership reads. No server session read and no D, R or A. Boards and
-  publications are single pages, never walked.
+  membership query (`members/me` and `participation` together). If the anonymous payload hides its Realm, that same
+  browser query rereads the bounded Space page using the session and requests boards, publications and subjects only
+  after the native Realm read admits the reader. A denied read keeps the protected page hidden; a failed page read
+  renders the route error rather than a false empty list.
+- **Bound:** 2 K anonymous without a Realm, 5 K anonymous with a Realm, plus one K per published subject shown (at
+  most 12). Membership adds 2 K and 1 D. If the anonymous page has no readable Realm, a signed-in session read adds
+  one page set: 2 K without a readable Realm, or 5 K plus at most 12 subject reads when the Realm is readable; it
+  also adds 1 D. Boards and publications are single pages, never walked.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `the Realm page reads its fixed set once, however many boards, publications and memberships there are` at 1, 10 and 100
 
 ### Community page head
@@ -716,6 +720,14 @@ language through the client's `accept-language`.
   `POST` or `DELETE /v1/realms/<id>/membership` with an idempotency key.
 - **Bound:** 1 K and 1 D for the page, and 1 K and 1 D for a join or leave; 0 R and 0 A. No per-Realm reads.
 - **Growth check:** `tests/realm-pages-cost.test.ts`: `my Realms is one page read, however many Realms the person has joined` at 1, 10 and 100
+
+The signed-in Account menu links to My Realms. The page remains private and `noindex, nofollow`; it renders only the
+current account's native membership page and links each Realm by its native id. `space.stories.tsx#Unavailable` uses
+the recorded Space and board responses plus named failure responses for membership and a deleted published subject;
+`space.stories.tsx#BoardsUnavailable` injects a native-shaped 503 to verify the route does not present an empty board
+list. `realms.stories.tsx#AccountMenuNavigation` uses the recorded My Realms response and exercises the menu link by
+keyboard. The native browser receipt additionally covers a real empty My Realms response and the real zero-board
+Space response at 390 and 1280 pixels.
 
 ### Collection editing
 

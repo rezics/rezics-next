@@ -408,43 +408,46 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 
 ## apps/web/src/routes/realms/$id.tsx
 
-| Route                              | State                   | Viewer    | Desktop                                           | Phone   |
-| ---------------------------------- | ----------------------- | --------- | ------------------------------------------------- | ------- |
-| apps/web/src/routes/realms/$id.tsx | populated               | anonymous | apps/web/src/stories/realms.stories.tsx#SignedOut | missing |
-| apps/web/src/routes/realms/$id.tsx | populated               | member    | apps/web/src/stories/realms.stories.tsx#SignedIn  | missing |
-| apps/web/src/routes/realms/$id.tsx | populated               | suspended | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | empty                   | anonymous | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | empty                   | member    | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | empty                   | suspended | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | long content            | anonymous | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | long content            | member    | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | long content            | suspended | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | preparing / unavailable | anonymous | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | preparing / unavailable | member    | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | preparing / unavailable | suspended | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | error                   | anonymous | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | error                   | member    | missing                                           | missing |
-| apps/web/src/routes/realms/$id.tsx | error                   | suspended | missing                                           | missing |
+This alias resolves a native Realm and redirects to its carrying Space when that Space has an address. The page
+snapshots therefore use the Space stories below.
+
+| Route                              | State                   | Viewer    | Desktop                                          | Phone                                            |
+| ---------------------------------- | ----------------------- | --------- | ------------------------------------------------ | ------------------------------------------------ |
+| apps/web/src/routes/realms/$id.tsx | populated               | anonymous | apps/web/src/stories/space.stories.tsx#SignedOut | apps/web/src/stories/space.stories.tsx#SignedOut |
+| apps/web/src/routes/realms/$id.tsx | populated               | member    | apps/web/src/stories/space.stories.tsx#Member    | apps/web/src/stories/space.stories.tsx#Member    |
+| apps/web/src/routes/realms/$id.tsx | populated               | suspended | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | empty                   | anonymous | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | empty                   | member    | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | empty                   | suspended | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | long content            | anonymous | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | long content            | member    | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | long content            | suspended | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | preparing / unavailable | anonymous | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | preparing / unavailable | member    | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | preparing / unavailable | suspended | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | error                   | anonymous | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | error                   | member    | missing                                          | missing                                          |
+| apps/web/src/routes/realms/$id.tsx | error                   | suspended | missing                                          | missing                                          |
 
 ## apps/web/src/routes/realms/index.tsx
 
-| Route                                | State                   | Viewer    | Desktop                                           | Phone   |
-| ------------------------------------ | ----------------------- | --------- | ------------------------------------------------- | ------- |
-| apps/web/src/routes/realms/index.tsx | populated               | anonymous | apps/web/src/stories/realms.stories.tsx#SignedOut | missing |
-| apps/web/src/routes/realms/index.tsx | populated               | member    | apps/web/src/stories/realms.stories.tsx#SignedIn  | missing |
-| apps/web/src/routes/realms/index.tsx | populated               | suspended | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | empty                   | anonymous | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | empty                   | member    | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | empty                   | suspended | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | long content            | anonymous | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | long content            | member    | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | long content            | suspended | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | preparing / unavailable | anonymous | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | preparing / unavailable | member    | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | preparing / unavailable | suspended | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | error                   | anonymous | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | error                   | member    | missing                                           | missing |
-| apps/web/src/routes/realms/index.tsx | error                   | suspended | missing                                           | missing |
+| Route                                | State                   | Viewer    | Desktop                                          | Phone                                                         |
+| ------------------------------------ | ----------------------- | --------- | ------------------------------------------------ | ------------------------------------------------------------- |
+| apps/web/src/routes/realms/index.tsx | populated               | anonymous | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | populated               | member    | apps/web/src/stories/realms.stories.tsx#SignedIn | apps/web/src/stories/realms.stories.tsx#AccountMenuNavigation |
+| apps/web/src/routes/realms/index.tsx | populated               | suspended | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | empty                   | anonymous | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | empty                   | member    | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | empty                   | suspended | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | long content            | anonymous | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | long content            | member    | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | long content            | suspended | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | preparing / unavailable | anonymous | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | preparing / unavailable | member    | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | preparing / unavailable | suspended | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | error                   | anonymous | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | error                   | member    | missing                                          | missing                                                       |
+| apps/web/src/routes/realms/index.tsx | error                   | suspended | missing                                          | missing                                                       |
 
 ## apps/web/src/routes/search.tsx
 
@@ -495,29 +498,31 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 
 ## apps/web/src/routes/spaces/$address.tsx
 
-| Route                                   | State                        | Viewer                          | Desktop                                          | Phone   |
-| --------------------------------------- | ---------------------------- | ------------------------------- | ------------------------------------------------ | ------- |
-| apps/web/src/routes/spaces/$address.tsx | populated                    | anonymous                       | apps/web/src/stories/space.stories.tsx#SignedOut | missing |
-| apps/web/src/routes/spaces/$address.tsx | populated                    | member                          | apps/web/src/stories/space.stories.tsx#SignedIn  | missing |
-| apps/web/src/routes/spaces/$address.tsx | populated                    | suspended                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | empty                        | anonymous                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | empty                        | member                          | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | empty                        | suspended                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | long content                 | anonymous                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | long content                 | member                          | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | long content                 | suspended                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable      | anonymous                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable      | member                          | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable      | suspended                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | error                        | anonymous                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | error                        | member                          | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | error                        | suspended                       | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | Zone home                    | member or visitor as applicable | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | subject inside a Zone        | member or visitor as applicable | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | preparing (202 continuation) | member or visitor as applicable | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | unavailable (503)            | member or visitor as applicable | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | member                       | member or visitor as applicable | missing                                          | missing |
-| apps/web/src/routes/spaces/$address.tsx | visitor                      | member or visitor as applicable | missing                                          | missing |
+| Route                                   | State                                        | Viewer                          | Desktop                                                  | Phone                                                    |
+| --------------------------------------- | -------------------------------------------- | ------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
+| apps/web/src/routes/spaces/$address.tsx | populated                                    | anonymous                       | apps/web/src/stories/space.stories.tsx#SignedOut         | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | populated                                    | member                          | apps/web/src/stories/space.stories.tsx#SignedIn          | apps/web/src/stories/space.stories.tsx#SignedIn          |
+| apps/web/src/routes/spaces/$address.tsx | populated                                    | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | empty                                        | anonymous                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | empty                                        | member                          | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | empty                                        | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | long content                                 | anonymous                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | long content                                 | member                          | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | long content                                 | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable                      | anonymous                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable                      | member                          | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | preparing / unavailable                      | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | error                                        | anonymous                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | error                                        | member                          | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | error                                        | suspended                       | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | unavailable membership and published subject | member                          | apps/web/src/stories/space.stories.tsx#Unavailable       | apps/web/src/stories/space.stories.tsx#Unavailable       |
+| apps/web/src/routes/spaces/$address.tsx | unavailable board-list read                  | anonymous                       | apps/web/src/stories/space.stories.tsx#BoardsUnavailable | apps/web/src/stories/space.stories.tsx#BoardsUnavailable |
+| apps/web/src/routes/spaces/$address.tsx | Zone home                                    | member or visitor as applicable | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | subject inside a Zone                        | member or visitor as applicable | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | preparing (202 continuation)                 | member or visitor as applicable | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | unavailable (503)                            | member or visitor as applicable | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | member                                       | member or visitor as applicable | missing                                                  | missing                                                  |
+| apps/web/src/routes/spaces/$address.tsx | visitor                                      | member or visitor as applicable | missing                                                  | missing                                                  |
 
 ## apps/web/src/routes/subjects/$id.tsx
 

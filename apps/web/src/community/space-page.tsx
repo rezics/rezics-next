@@ -24,7 +24,7 @@ function purposeLabel(purpose: RealmBoard['purpose']): string {
   return purpose === 'reviews' ? m.realm_board_purpose_reviews() : m.realm_board_purpose_discussion();
 }
 
-function Boards({ boards }: { boards: RealmBoard[] }) {
+function Boards({ boards, unavailable }: { boards: RealmBoard[]; unavailable: number }) {
   return (
     <section className="space-y-4" aria-labelledby="realm-boards-heading">
       <h2 id="realm-boards-heading" className="text-xl font-semibold">
@@ -57,9 +57,10 @@ function Boards({ boards }: { boards: RealmBoard[] }) {
             </ListRow>
           ))}
         </ul>
-      ) : (
+      ) : unavailable === 0 ? (
         <p className="text-muted-foreground">{m.realm_boards_empty()}</p>
-      )}
+      ) : null}
+      {unavailable > 0 ? <p className="text-muted-foreground">{m.realm_boards_unavailable()}</p> : null}
     </section>
   );
 }
@@ -90,9 +91,9 @@ function CarriedRealm({ realm }: { realm: RealmHome }) {
   );
 }
 
-function Published({ subjects }: { subjects: PublishedSubject[] }) {
+function Published({ realm }: { realm: RealmHome }) {
   const locale = getLocale();
-  const titled: { subject: PublishedSubject; cover: CoverSubject }[] = subjects.map((subject) => ({
+  const titled: { subject: PublishedSubject; cover: CoverSubject }[] = realm.published.map((subject) => ({
     subject,
     cover: { id: subject.id, title: subjectTitle(subject, locale), types: subject.types },
   }));
@@ -114,19 +115,22 @@ function Published({ subjects }: { subjects: PublishedSubject[] }) {
             />
           ))}
         </CoverRow>
-      ) : (
+      ) : null}
+      {(realm.unavailablePublished ?? 0) > 0 ? (
+        <p className="text-muted-foreground">{m.realm_published_unavailable()}</p>
+      ) : !titled.length ? (
         <p className="text-muted-foreground">{m.realm_published_empty()}</p>
-      )}
+      ) : null}
     </section>
   );
 }
 
-function Home({ realm, returnTo }: { realm: RealmHome; returnTo: string }) {
+function Home({ realm }: { realm: RealmHome }) {
   return (
     <>
       <CarriedRealm realm={realm} />
-      <Boards boards={realm.boards} />
-      <Published subjects={realm.published} />
+      <Boards boards={realm.boards} unavailable={realm.unavailableBoards ?? 0} />
+      <Published realm={realm} />
     </>
   );
 }
@@ -177,7 +181,7 @@ export function SpacePage({ page }: { page: SpacePageData }) {
           <p className="relative z-10 max-w-2xl text-lg/relaxed whitespace-pre-wrap">{page.space.summary}</p>
         ) : null}
       </header>
-      {page.realm ? <Home realm={page.realm} returnTo={location.publicHref.split(/[?#]/, 1)[0]!} /> : null}
+      {page.realm ? <Home realm={page.realm} /> : null}
     </article>
   );
 }
