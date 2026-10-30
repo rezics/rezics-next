@@ -74,8 +74,8 @@ type Story = StoryObj<typeof meta>;
 const render: NonNullable<Story['render']> = (args) => <BoardChoiceExample {...args} />;
 async function chooseTopic(canvasElement: HTMLElement) {
   const view = within(canvasElement);
-  await userEvent.click(view.getByRole('button', { name: m.space_setup_board(), exact: true }));
-  await userEvent.type(view.getByRole('textbox', { name: m.space_setup_title(), exact: true }), 'Start here');
+  await userEvent.click(view.getByRole('button', { name: m.space_setup_board() }));
+  await userEvent.type(view.getByRole('textbox', { name: m.space_setup_title() }), 'Start here');
   await userEvent.click(await view.findByRole('radio', { name: concept.label }));
   return view;
 }
@@ -83,7 +83,7 @@ export const Selection: Story = {
   render,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
-    await userEvent.click(view.getByRole('button', { name: m.space_setup_scheme(), exact: true }));
+    await userEvent.click(view.getByRole('button', { name: m.space_setup_scheme() }));
     await userEvent.type(view.getByRole('searchbox', { name: m.space_setup_scheme_label() }), 'Reading');
     await userEvent.click(await view.findByRole('radio', { name: scheme.label }));
     await expect(view.getByRole('button', { name: m.space_setup_save_scheme() })).toBeEnabled();
@@ -97,7 +97,7 @@ export const StaleScheme: Story = {
     await userEvent.click(view.getByRole('button', { name: m.space_setup_create_board() }));
     await userEvent.click(await view.findByRole('button', { name: m.space_setup_refresh() }));
     await view.findByText(m.space_setup_board_choice_scheme_changed());
-    await expect(view.getByRole('textbox', { name: m.space_setup_title(), exact: true })).toHaveValue('Start here');
+    await expect(view.getByRole('textbox', { name: m.space_setup_title() })).toHaveValue('Start here');
     await expect(view.getByRole('button', { name: m.space_setup_create_board() })).toBeDisabled();
   },
 };
@@ -107,7 +107,7 @@ export const Denied: Story = {
     const view = await chooseTopic(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.space_setup_create_board() }));
     await view.findByText(m.space_setup_denied());
-    await expect(view.getByRole('textbox', { name: m.space_setup_title(), exact: true })).toHaveValue('Start here');
+    await expect(view.getByRole('textbox', { name: m.space_setup_title() })).toHaveValue('Start here');
     await expect(view.queryByText(m.space_setup_complete())).toBeNull();
   },
 };
@@ -117,7 +117,7 @@ export const UncertainRetry: Story = {
     const view = await chooseTopic(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.space_setup_create_board() }));
     await userEvent.click(await view.findByRole('button', { name: m.space_setup_retry() }));
-    await expect(view.getByRole('textbox', { name: m.space_setup_title(), exact: true })).toBeDisabled();
+    await expect(view.getByRole('textbox', { name: m.space_setup_title() })).toBeDisabled();
     await expect(view.queryByRole('link', { name: m.space_setup_open_board() })).toBeNull();
   },
 };
