@@ -224,12 +224,14 @@ function readEligibility(identity: Resource, observe?: (row: RealmRow | null) =>
         // second fixed identity, never an expansion of grants or memberships.
         const principal = actor.requestedBy?.split(':')[3];
         const accountIds = [...new Set([actor.accountId, ...(principal ? [principal] : [])])];
-        if (await currentReadBan.run(client, {
-          route: resource.route,
-          realm_id: resource.id,
-          account_ids: accountIds,
-          at,
-        }))
+        if (
+          await currentReadBan.run(client, {
+            route: resource.route,
+            realm_id: resource.id,
+            account_ids: accountIds,
+            at,
+          })
+        )
           // A false floor alone would leave independent grants available.
           throw new RealmReadDeniedError();
       }

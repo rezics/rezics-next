@@ -626,9 +626,13 @@ test.serial(
           // The same protected-read statement checks both identities, regardless
           // of which one is banned, without a query per grant or board.
           for (const account_ids of [[accountId], [accountId, absentId], [absentId, accountId]]) {
-            expect(await currentReadBan.run(client, { route, realm_id: realmId, account_ids, at })).toEqual({ banned: true });
+            expect(await currentReadBan.run(client, { route, realm_id: realmId, account_ids, at })).toEqual({
+              banned: true,
+            });
           }
-          expect(await currentReadBan.run(client, { route, realm_id: realmId, account_ids: [absentId, newId(route)], at })).toBeNull();
+          expect(
+            await currentReadBan.run(client, { route, realm_id: realmId, account_ids: [absentId, newId(route)], at }),
+          ).toBeNull();
         });
       },
     });

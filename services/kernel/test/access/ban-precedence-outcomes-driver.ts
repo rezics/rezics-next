@@ -161,11 +161,13 @@ export async function createBanPrecedenceDriver(): Promise<BanPrecedenceDriver> 
       subjectAccountId: people.software.accountId,
       authorization: 'request',
     };
-    const approval = await native.approval().approve(
-      operatorToken.access_token,
-      { operationKey: openingKey, operation: opening },
-      { pool: database, deadline: Date.now() + 30_000 },
-    );
+    const approval = await native
+      .approval()
+      .approve(
+        operatorToken.access_token,
+        { operationKey: openingKey, operation: opening },
+        { pool: database, deadline: Date.now() + 30_000 },
+      );
     const opened = await checked(
       await native.host.workflows.openOperatorSession({
         ...opening,
@@ -177,7 +179,9 @@ export async function createBanPrecedenceDriver(): Promise<BanPrecedenceDriver> 
     );
     const delegationContext = { pool: database, deadline: Date.now() + 30_000 };
     const assignment = await createDelegationCommands({
-      pool: database, access: native.access, action: 'account:manage',
+      pool: database,
+      access: native.access,
+      action: 'account:manage',
     }).create(
       { ...delegationContext, actor: await native.access.authenticate(member.credential, delegationContext) },
       {
@@ -276,7 +280,13 @@ export async function createBanPrecedenceDriver(): Promise<BanPrecedenceDriver> 
           'Create scheme',
         );
         await checked(
-          await command(owner, 'PUT', `/v1/realms/${realm.realmId}/boardScheme`, { schemeId: scheme.id }, realm.headRevisionId),
+          await command(
+            owner,
+            'PUT',
+            `/v1/realms/${realm.realmId}/boardScheme`,
+            { schemeId: scheme.id },
+            realm.headRevisionId,
+          ),
           'Set board scheme',
         );
         await startWorker();
@@ -322,7 +332,8 @@ export async function createBanPrecedenceDriver(): Promise<BanPrecedenceDriver> 
             'Create member contribution',
           );
           await checked(await grant(board.id, account(member), ['board:read'], true), 'End author setup read grant');
-          if (visibility === 'protected') await checked(await grant(board.id, account(reader), ['board:read']), 'Reader grant');
+          if (visibility === 'protected')
+            await checked(await grant(board.id, account(reader), ['board:read']), 'Reader grant');
           return {
             board: { path: `/v1/boards/${board.id}`, marker: board.id },
             thread: { path: `/v1/threads/${thread.id}`, marker: thread.id },
@@ -334,7 +345,13 @@ export async function createBanPrecedenceDriver(): Promise<BanPrecedenceDriver> 
         const privateReads = await surface('protected');
         const publicReads = await surface('published');
         const fixture: BanPrecedenceFixture = {
-          realmId: realm.realmId, member, delegate, reader, outsider, privateReads, publicReads,
+          realmId: realm.realmId,
+          member,
+          delegate,
+          reader,
+          outsider,
+          privateReads,
+          publicReads,
           pastPosts: { public: publicReads.post, private: privateReads.post },
         };
         boards.set(fixture, privateReads.board.marker);
@@ -344,14 +361,20 @@ export async function createBanPrecedenceDriver(): Promise<BanPrecedenceDriver> 
         const boardId = boards.get(fixture);
         if (!boardId) throw new Error('Fixture does not belong to this driver');
         if (kind === 'organization')
-          return grant(boardId, { kind: 'organization', id: people.organization.accountId, role: 'owner' }, ['board:read']);
+          return grant(boardId, { kind: 'organization', id: people.organization.accountId, role: 'owner' }, [
+            'board:read',
+          ]);
         if (kind === 'delegation') {
-          await checked(await grant(boardId, account(fixture.member), ['board:read']), 'Delegating principal read grant');
+          await checked(
+            await grant(boardId, account(fixture.member), ['board:read']),
+            'Delegating principal read grant',
+          );
           return grant(boardId, account(fixture.delegate), ['board:read']);
         }
         return grant(boardId, account(fixture.member), ['board:read']);
       },
-      ban: (fixture, reason) => command(owner, 'PUT', `/v1/realms/${fixture.realmId}/bans/${fixture.member.accountId}`, { reason }),
+      ban: (fixture, reason) =>
+        command(owner, 'PUT', `/v1/realms/${fixture.realmId}/bans/${fixture.member.accountId}`, { reason }),
       lift: (fixture) => command(owner, 'DELETE', `/v1/realms/${fixture.realmId}/bans/${fixture.member.accountId}`),
       request: (credential, path) => transport(credential, path),
       close,
