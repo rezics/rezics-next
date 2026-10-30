@@ -377,6 +377,30 @@ request freezes its exact payload and key for retry. Confirmed writes re-read th
 a failed reread remains unconfirmed. A local adoption never claims whole-Context publication. A separate link
 opens the ordinary public canonical subject. Candidate data never enters public SSR or its dehydrated cache.
 
+### Named editorial Context lifecycle
+
+The Context review workspace links to `/{locale}/contexts/new`, retaining the exact subject and canonical slug
+for its review link. `/{locale}/contexts/{id}` opens the same private lifecycle workspace. Both routes are
+noindex; Context content loads only after session preparation through the private no-store BFF. A named Context
+uses generated `POST /v1/contexts` with its data-language label and existing native creation authority. Success
+retains the returned identity and rereads `GET /v1/contexts/{id}` before offering the existing subject review link.
+Creating a Context does not publish a catalogue or website or change the Realm reader's selected Context.
+
+A readable community Context offers an explicit deletion request and confirmation; it does not assert ownership.
+Global is communal and offers no deletion. Generated `DELETE /v1/contexts/{id}` and
+`POST /v1/contexts/{id}:restore` recheck native current resource-owner grants, independently of creation history.
+Only this workspace's successful native deletion response supplies a known tombstone and restoration attempt.
+An unknown or nonvisible 404 supplies neither. No owner flag or browser deadline decides restoration eligibility.
+Denial, revoked or transferred authority, conflicts and expired native restoration remain refused outcomes.
+
+Confirmed deletion unmounts private candidate comparisons and drops cached Context labels before rereading the
+actual native state. A concealed or unavailable reread displays no old private payload. Confirmed restoration is
+separate from successful current reading. Ordinary subjects, contributions and Global selections remain independent;
+no page claims cascade deletion or completed cleanup. A failed request keeps its draft, exact action and key.
+An uncertain request remains sealed for exact retry; a definite refusal allows explicit review of a new request.
+All actions preserve current session identity, CSRF, native response/session headers and current authority through
+the existing BFF. The generated lifecycle response supplies no restoration deadline.
+
 ## Relation contributions
 
 The canonical Global overview links to `/{locale}/subjects/{id}/{slug}/relation-edit`. The route keeps the

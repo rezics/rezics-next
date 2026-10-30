@@ -4,6 +4,7 @@ import { SubjectFrame, subjectFrame } from '../../features/pages/subject-frame';
 import { SubjectLink, viewTabLabels } from '../../features/pages/route-support';
 import { loadSubjectPage } from '../../features/pages/subject';
 import { subjectTabs } from '../../features/pages/views';
+import { editorialCreateHref } from '../../features/catalogue/editorial-context-route';
 import { ContextCurationSession } from '../../features/catalogue/context-curation-session';
 import type { CandidateSlot } from '../../subject/candidates';
 import { getLocale } from '../../paraglide/runtime';
@@ -88,6 +89,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/context-review')({
 function ContextReviewRoute() {
   const { page, frame } = Route.useLoaderData();
   const { context, property, slot } = Route.useSearch();
+  const { slug } = Route.useParams();
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8">
       <SubjectFrame
@@ -107,6 +109,7 @@ function ContextReviewRoute() {
         property={property}
         slot={slot}
         locale={getLocale()}
+        createHref={editorialCreateHref(getLocale(), frame.id, slug)}
       />
     </article>
   );

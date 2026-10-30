@@ -1,0 +1,163 @@
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { pickText } from '@rezics/composition';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Tombstone } from '@rezics/ui/tombstone';
+import { Input } from '@rezics/ui/shadcn/input';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { locales } from '../../paraglide/runtime';
+import { m } from '../../paraglide/messages.js';
+import { editorialCommand, type EditorialCommand, type EditorialFailure, type EditorialRead, type EditorialTransport } from './editorial-context';
+
+/** Private, short-lived reading. A known tombstone exists only after this workspace's native delete response. */
+export function EditorialContextWorkspace({ id, locale, transport, reviewHref, createHref, children }: {
+  id?: string;
+  locale: string;
+  transport: EditorialTransport;
+  reviewHref?: (id: string) => string;
+  createHref?: string;
+  children?: (id: string) => ReactNode;
+}) {
+  const o = { locale: locale as never };
+  const fieldId = useId();
+  const [currentId, setCurrentId] = useState(id);
+  const [reading, setReading] = useState<EditorialRead>();
+  const [name, setName] = useState('');
+  const [language, setLanguage] = useState(locale);
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<EditorialCommand>();
+  const [failure, setFailure] = useState<EditorialFailure>();
+  const [confirmation, setConfirmation] = useState<'delete' | 'restore'>();
+  const [notice, setNotice] = useState<EditorialCommand['operation']>();
+  const [knownDeleted, setKnownDeleted] = useState(false);
+  const [restoreBlocked, setRestoreBlocked] = useState(false);
+  const running = useRef(false);
+  const session = useRef<string | undefined>(undefined);
+  const mounted = useRef(true);
+  const languageNames = new Intl.DisplayNames([locale], { type: 'language' });
+
+  async function refresh(target = currentId) {
+    if (!target || running.current) return;
+    running.current = true;
+    setBusy(true);
+    // Do not retain private labels or review payloads across a failed current read.
+    setReading(undefined);
+    setConfirmation(undefined);
+    try {
+      const next = await transport.read({ id: target, ...(session.current ? { session: session.current } : {}) });
+      if (!mounted.current) return;
+      session.current = next.session ?? session.current;
+      setReading(next);
+      if (next.ok) { setKnownDeleted(false); setRestoreBlocked(false); }
+    } catch { if (mounted.current) setReading({ ok: false, reason: 'unavailable' }); }
+    finally { running.current = false; if (mounted.current) setBusy(false); }
+  }
+  useEffect(() => {
+    mounted.current = true;
+    if (id) void refresh(id);
+    return () => { mounted.current = false; };
+    // Route/session identity remounts this private workspace. Mutations own subsequent reads.
+  }, [id, transport]);
+
+  async function submit(operation: EditorialCommand['operation']) {
+    if (running.current) return;
+    let command = pending;
+    if (!command) {
+      try {
+        command = editorialCommand({ operation, key: crypto.randomUUID(),
+          ...(session.current ? { session: session.current } : {}),
+          ...(operation === 'create' ? { labels: { [language]: name.trim() } } : { id: currentId }),
+        });
+      } catch { setFailure({ ok: false, reason: 'invalid' }); return; }
+      setPending(command);
+    }
+    running.current = true;
+    setBusy(true);
+    setFailure(undefined);
+    setConfirmation(undefined);
+    setReading(undefined);
+    try {
+      const result = await transport.submit(command);
+      if (!mounted.current) return;
+      session.current = result.session ?? session.current;
+      if (!result.ok) {
+        setFailure(result);
+        if (command.operation === 'restore' && result.reason === 'conflict') setRestoreBlocked(true);
+        return;
+      }
+      // Drop all cached Context content before the ordinary reread. No cascade or cleanup claim.
+      setReading(undefined);
+      setCurrentId(result.id);
+      setKnownDeleted(result.operation === 'delete');
+      setNotice(result.operation);
+      setPending(undefined);
+      setName('');
+      running.current = false;
+      await refresh(result.id);
+    } catch { if (mounted.current) setFailure({ ok: false, reason: 'unavailable' }); }
+    finally { running.current = false; if (mounted.current) setBusy(false); }
+  }
+  const active = reading?.ok ? reading.context : undefined;
+  const errorText = (reason: EditorialFailure['reason']) => reason === 'denied' ? m.editorial_denied({}, o)
+    : reason === 'missing' ? m.editorial_missing({}, o)
+    : reason === 'invalid' ? m.editorial_invalid({}, o)
+    : reason === 'conflict' ? m.editorial_conflict({}, o) : m.editorial_unavailable({}, o);
+  const uncertain = pending && failure?.reason === 'unavailable';
+  const action = knownDeleted ? 'restore' : 'delete';
+  const eligibleAttempt = (knownDeleted && !restoreBlocked) || active?.kind === 'community';
+  return (
+    <section aria-label={m.editorial_title({}, o)} aria-busy={busy} className="min-w-0 space-y-6">
+      <header className="space-y-2">
+        <h2 className="text-2xl font-semibold">{active ? pickText(active.labels, locale).text || m.context_unnamed({}, o) : m.editorial_title({}, o)}</h2>
+        <p className="text-sm text-muted-foreground">{m.editorial_intro({}, o)}</p>
+      </header>
+      {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {notice && <p role="status">{notice === 'delete' ? m.editorial_deleted({}, o) : notice === 'restore' ? m.editorial_restored({}, o) : m.editorial_created({}, o)}</p>}
+      {knownDeleted && !active && <Tombstone shape="row" reason="deleted" labels={{ deleted: m.contribution_tombstone({}, o) }} />}
+      {failure && <p role="alert">{errorText(failure.reason)}</p>}
+      {reading && !reading.ok && <p role="status">{errorText(reading.reason)}</p>}
+      {!currentId && (
+        <form className="max-w-xl space-y-4" onSubmit={(event) => { event.preventDefault(); void submit('create'); }}>
+          <p>{m.editorial_empty({}, o)}</p>
+          <Field>
+            <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
+            <NativeSelect id={`${fieldId}-language`} value={language} disabled={busy || !!pending} onChange={(event) => setLanguage(event.target.value)}>
+              {locales.map((value) => <NativeSelectOption key={value} value={value}>{languageNames.of(value) ?? value}</NativeSelectOption>)}
+            </NativeSelect>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={`${fieldId}-name`}>{m.catalogue_create_label({}, o)}</FieldLabel>
+            <Input id={`${fieldId}-name`} value={name} maxLength={250} required disabled={busy || !!pending} onChange={(event) => { setName(event.target.value); setFailure(undefined); }} />
+          </Field>
+          {!pending && <Button type="submit" disabled={busy || !name.trim()}>{m.editorial_create({}, o)}</Button>}
+        </form>
+      )}
+      {active?.kind === 'global' && <p>{m.editorial_global({}, o)}</p>}
+      {active && (
+        <div className="flex flex-wrap gap-3">
+          {reviewHref && <a className={buttonVariants({ variant: 'outline' })} href={reviewHref(active.id)}>{m.editorial_review({}, o)}</a>}
+          <a className={buttonVariants({ variant: 'outline' })} href={`/${locale}/contexts/${encodeURIComponent(active.id)}`}>{m.editorial_open({}, o)}</a>
+          <a className={buttonVariants({ variant: 'outline' })} href={createHref ?? `/${locale}/contexts/new`}>{m.editorial_create({}, o)}</a>
+        </div>
+      )}
+      <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
+        {currentId && <p className="text-sm text-muted-foreground">{m.editorial_authority({}, o)}</p>}
+        {confirmation && <p>{confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}</p>}
+        <div className="flex flex-wrap gap-3">
+          {pending ? <>
+            {!restoreBlocked && <Button disabled={busy} onClick={() => void submit(pending.operation)}>{m.editorial_retry({}, o)}</Button>}
+            {!uncertain && <Button variant="outline" disabled={busy} onClick={() => { setPending(undefined); setFailure(undefined); if (currentId) void refresh(); }}>{m.editorial_revise({}, o)}</Button>}
+          </> : eligibleAttempt && <>
+            <Button variant={action === 'delete' ? 'destructive' : 'default'} disabled={busy}
+              onClick={() => confirmation ? void submit(action) : setConfirmation(action)}>
+              {confirmation ? m.contribution_confirm({}, o) : action === 'delete' ? m.editorial_delete({}, o) : m.editorial_restore({}, o)}
+            </Button>
+            {confirmation && <Button variant="outline" onClick={() => setConfirmation(undefined)}>{m.candidate_cancel({}, o)}</Button>}
+          </>}
+          {currentId && !pending && <Button variant="outline" disabled={busy} onClick={() => void refresh()}>{m.candidate_reload({}, o)}</Button>}
+        </div>
+      </div>
+      {active && !busy && children?.(active.id)}
+    </section>
+  );
+}

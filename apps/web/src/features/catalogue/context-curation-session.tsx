@@ -1,8 +1,7 @@
+import { EditorialContextSession } from './editorial-context-session';
 import { CandidateReview } from '../../subject/candidate-review';
 import type { CandidateSlot } from '../../subject/candidates';
-import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
-import { m } from '../../paraglide/messages.js';
 import { readSubjectContext, confirmSubjectContext } from './context-curation-actions';
 
 export function ContextCurationSession({
@@ -11,24 +10,18 @@ export function ContextCurationSession({
   property,
   slot,
   locale,
+  createHref,
 }: {
   id: string;
   context: string;
   property?: string | undefined;
   slot?: CandidateSlot | undefined;
   locale: string;
+  createHref?: string;
 }) {
-  const { state } = useSession();
-  if (state !== 'signed-in')
-    return (
-      <p>
-        {state === 'signed-out'
-          ? m.relation_sign_in({}, { locale: locale as never })
-          : m.candidate_loading({}, { locale: locale as never })}
-      </p>
-    );
   return (
-    <CandidateReview
+    <EditorialContextSession id={context} locale={locale} {...(createHref ? { createHref } : {})}>
+    {() => <CandidateReview
       id={id}
       locale={locale}
       context={context}
@@ -39,6 +32,7 @@ export function ContextCurationSession({
           readSubjectContext({ data: { id, context, property, slot, cursor, session }, headers: csrfHeaders() }),
         confirm: (command) => confirmSubjectContext({ data: command, headers: csrfHeaders() }),
       }}
-    />
+    />}
+    </EditorialContextSession>
   );
 }
