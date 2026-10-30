@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import { documentText, parseDocument } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -42,25 +42,35 @@ type DecisionReads = {
 function postText(value: unknown): string {
   if (!value || typeof value !== 'object') return '';
   const record = value as Record<string, unknown>;
-  const body = record.body;
-  const parts: string[] = [];
-  const visit = (node: unknown) => {
-    if (!node || typeof node !== 'object') return;
-    const current = node as Record<string, unknown>;
-    if (current.type === 'text' && typeof current.text === 'string') parts.push(current.text);
-    if (Array.isArray(current.content)) current.content.forEach(visit);
-  };
-  visit(body);
-  return parts.join('');
+  try {
+    return documentText(parseDocument(record.body));
+  } catch {
+    return '';
+  }
 }
 
 /** Resolves the private decision and exactly one existing target read when the native visibility permits it. */
 export async function loadDecisionPage(id: string, reads: DecisionReads): Promise<DecisionPage | null> {
   const decision = await reads.decision(id);
-  if (!decision) return null;
+  if (!decision || decision.id !== id) return null;
   const target =
     decision.targetKind === 'post' ? await reads.post(decision.targetId) : await reads.thread(decision.targetId);
   return { decision, target, viewerId: null };
+}
+
+/** Keep the private decision gated before and after the independent target read. */
+export async function loadCurrentDecisionPage(id: string, reads: DecisionReads): Promise<DecisionPage | null> {
+  const page = await loadDecisionPage(id, reads);
+  if (!page) return null;
+  const current = await reads.decision(id);
+  if (
+    !current ||
+    current.id !== id ||
+    current.targetKind !== page.decision.targetKind ||
+    current.targetId !== page.decision.targetId
+  )
+    return null;
+  return { ...page, decision: current };
 }
 
 export function canAppealDecision(
@@ -125,7 +135,7 @@ export const readDecisionPage = createServerFn({ method: 'GET' })
     const authorization = viewerCredential(request);
     if (!authorization) throw notFound();
     const reads = decisionReadAdapters(kernelClient() as unknown as DecisionKernel, authorization);
-    const page = await loadDecisionPage(data.id, reads);
+    const page = await loadCurrentDecisionPage(data.id, reads);
     if (!page) throw notFound();
     return { ...page, viewerId: sessionSubject(request) ?? null };
   });
@@ -144,13 +154,15 @@ export function decisionReadAdapters(client: DecisionKernel, authorization: stri
       }
       const record = (result.data as { post?: Record<string, unknown> } | undefined)?.post;
       if (!record) throw notFound();
+      if (record.id !== id || record.availability !== 'available' || record.removed === true) return null;
+      if (typeof record.threadId !== 'string') return null;
       return {
         id,
         ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
         ...(typeof record.threadId === 'string' ? { threadId: record.threadId } : {}),
         ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
         text: postText(record),
-        href: targetHref('post', id, String(record.threadId ?? id)),
+        href: targetHref('post', encodeURIComponent(id), encodeURIComponent(record.threadId)),
       };
     },
     thread: async (id) => {
@@ -161,12 +173,13 @@ export function decisionReadAdapters(client: DecisionKernel, authorization: stri
       }
       const record = (result.data as { thread?: Record<string, unknown> } | undefined)?.thread;
       if (!record) throw notFound();
+      if (record.id !== id || record.availability !== 'available' || record.removed === true) return null;
       return {
         id,
         ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
         ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
         text: String(record.title ?? ''),
-        href: targetHref('thread', id),
+        href: targetHref('thread', encodeURIComponent(id)),
       };
     },
   };

@@ -162,3 +162,128 @@ test('a private decision remains readable when its target is withheld, including
     expect(markup.includes('appeal-statement')).toBe(now <= Date.parse(decision.appealDeadline));
   }
 });
+
+test('Moderation decision receipt and author appeal, one main and understandable current outcome', async () => {
+  const { SidebarInset } = await import('@rezics/ui/shadcn/sidebar');
+  for (const outcome of [null, 'reversed', 'upheld'] as const) {
+    const appeal = {
+      id: 'appeal-1',
+      outcome,
+      statement: outcome ? 'Independent review statement.' : null,
+      resolvedAt: outcome ? decidedAt : null,
+    };
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarInset,
+        null,
+        createElement(DecisionPageView, {
+          page: { decision: { ...decision, appeal }, target: null, viewerId: 'author-1' },
+          now: Date.parse(decidedAt),
+        }),
+      ),
+    );
+    expect(markup.match(/<main\b/g)).toHaveLength(1);
+    expect(markup.match(/<h1\b/g)).toHaveLength(1);
+    expect(markup).toContain('Original decision');
+    expect(markup).toContain(decision.statement);
+    expect(markup).toContain('Current content availability');
+    expect(markup).toContain('This content is unavailable.');
+    expect(markup).toContain(decision.id);
+    expect(markup).not.toContain(decision.targetId);
+    expect(markup).not.toContain('/threads/');
+    expect(markup).not.toContain('appeal-statement');
+    expect(markup).toContain(
+      outcome === null
+        ? 'Appeal awaiting review'
+        : outcome === 'reversed'
+          ? 'The decision was reversed.'
+          : 'The decision was upheld.',
+    );
+    if (outcome) expect(markup).toContain('Independent review statement.');
+  }
+});
+
+test('current target reads hide nonavailable bytes and final decision denial discards the entire private page', async () => {
+  const { fromPlainText } = await import('@rezics/document');
+  const { decisionReadAdapters, loadCurrentDecisionPage } = await import('../src/moderation/decision-read');
+  let record = {
+    id: decision.targetId,
+    threadId: 'thread-1',
+    authorId: 'author-1',
+    availability: 'available',
+    removed: false,
+    body: fromPlainText('Current permitted text'),
+  };
+  const reads = decisionReadAdapters(
+    {
+      'moderation-decisions': () => ({ get: async () => ({ data: decision }) }),
+      posts: () => ({ get: async () => ({ data: { post: record } }) }),
+      threads: () => ({
+        get: async () => {
+          throw new Error('No unrelated target read');
+        },
+      }),
+    },
+    'Bearer author',
+  );
+  expect(await reads.post(decision.targetId)).toMatchObject({
+    text: 'Current permitted text',
+    href: '/threads/thread-1#post-1',
+  });
+  for (const availability of ['withheld', 'erased', 'unavailable', 'unknown']) {
+    record = { ...record, availability };
+    expect(await reads.post(decision.targetId)).toBeNull();
+  }
+  record = { ...record, availability: 'available', id: 'another-post' };
+  expect(await reads.post(decision.targetId)).toBeNull();
+  const calls: string[] = [];
+  const result = await loadCurrentDecisionPage(decision.id, {
+    ...reads,
+    decision: async () => {
+      calls.push('decision');
+      return calls.length === 1 ? decision : null;
+    },
+    post: async () => {
+      calls.push('target');
+      return { id: decision.targetId, text: 'Do not disclose after final denial', href: '/threads/thread-1#post-1' };
+    },
+  });
+  expect(result).toBeNull();
+  expect(calls).toEqual(['decision', 'target', 'decision']);
+});
+
+test('appeal denial, known conflict and uncertain confirmation stay distinct without optimistic native state', async () => {
+  const { createModerationIntent } = await import('../src/moderation/command-intent');
+  const intent = createModerationIntent();
+  const command = { id: decision.id, statement: 'Keep this exact statement.' };
+  const originalKey = intent.keyFor(command);
+  for (const status of [401, 403, 404]) {
+    expect(
+      await submitDecisionAppeal(decision.id, command.statement, {
+        appeal: async () => ({ status }),
+        decision: async () => {
+          throw new Error('Denied writes must not become success through a read');
+        },
+      }),
+    ).toEqual({ state: 'denied' });
+  }
+  for (const status of [409, 422]) {
+    expect(
+      await submitDecisionAppeal(decision.id, command.statement, {
+        appeal: async () => ({ status }),
+        decision: async () => {
+          throw new Error('Read unavailable');
+        },
+      }),
+    ).toEqual({ state: 'conflict' });
+  }
+  for (const status of [201, 503]) {
+    expect(
+      await submitDecisionAppeal(decision.id, command.statement, {
+        appeal: async () => ({ status }),
+        decision: async () => decision,
+      }),
+    ).toEqual({ state: 'failed' });
+    expect(intent.keyFor(command)).toBe(originalKey);
+  }
+});

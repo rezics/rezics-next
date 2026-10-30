@@ -1453,10 +1453,44 @@ shared shell. The same IDs use phone390/desktop1280 and locale/theme globals for
 
 ### Moderation decision (`/moderation/decisions/<id>`)
 
-- **Touches:** One private decision read and one existing read of its post or thread; one appeal write and one decision re-read after submission.
-- **Bound:** Exactly two kernel reads per page view. The author can appeal through the decision's `:appeal` method through the inclusive 183-day deadline; successful and terminal-conflict submissions use the next decision read to show current state.
-- **Growth check:** `tests/moderation-decision.test.ts` checks the two-read bound, author and deadline gates, pending appeal state, overlong draft preservation and refreshed late/duplicate states.
-- **Visual check:** Decision stories cover open, pending and expired appeals in English and Simplified Chinese at 390 and 1280 pixels.
+The route uses the existing `DecisionPageView` inside AppShell's single main. The same view supplies the reusable
+Pattern and Pages stories. The latest recorded outcome leads the page; the original takedown reason/date and the
+independently read current content availability have separate sections. A reversed appeal never implies a readable
+target. Unknown, withheld, erased, removed or mismatched targets expose no preview, target identifier or link. Only
+the authorized native decision's own reference is displayed. Available post text uses the shared document reader.
+
+The deadline is the native DTO's inclusive 183-day deadline. The local clock and any readable author identity only
+control the form hint; an unavailable target cannot establish authorship. Native commands recheck current author,
+deadline and single-appeal admission. Pending and resolved states come only from a native decision read, including
+independent reviewer statements and resolution times. A successful write without a visible appeal remains uncertain.
+
+Current denial, known conflict and uncertain confirmation have distinct messages. Drafts survive each failure.
+Only uncertainty offers an explicit retry with the identical statement and command UUID. Denials and conflicts
+require a fresh read before another attempt. Every write attempt hides the previous target link until an explicit
+current-state refresh; a failed refresh keeps content hidden. Late responses from an old page are ignored.
+
+- **Touches:** The page reads its private decision, one post/thread and the private decision again for final disclosure.
+  An appeal sends one command and, after success or conflict, at most one decision read. Refresh repeats the page read.
+- **Bound:** At most three native reads per page/refresh, no history or target fallback. Each submit/retry sends one
+  command and at most one exact decision read, using the existing native command authorization and quoted key.
+- **Acceptance:** `tests/moderation-decision.test.ts` retains the original cases and adds the named receipt/appeal
+  outcome, unavailable-byte/final-denial race and denial/conflict/uncertain-confirmation cases. Execution is deferred
+  to integration under the current minimal verification policy.
+
+Review the same IDs with the existing phone390/desktop1280 and light/dark globals:
+
+- `pages-community-moderation-decision--open`, `--pending`, `--reversed-unavailable`, `--upheld`, `--available`,
+  `--expired`, `--native-denied`, `--conflict`, `--uncertain-retry`
+- `patterns-moderation-decision--open`, `--pending`, `--reversed-unavailable`, `--upheld`, `--available`,
+  `--expired`, `--native-denied`, `--conflict`, `--uncertain-retry`
+
+Pages compose the served `DecisionPageView` in the actual AppShell; Patterns use that same component without the
+shell. Focused plays cover the single main, current outcome, hidden target, confirmed pending receipt, retained draft,
+terminal refusal and exact lost-response retry. Constructed native DTO fixtures establish presentation only. Web owns
+390/1280 light/dark visual review; this delivery runs no browser, screenshot or native acceptance. English messages
+use the configured base-locale fallback pending localization review. Source references read for this surface were
+`services/kernel/src/content/{README.md,moderation-decisions.ts,appeal-routes.ts,schemas.ts}` and the existing shell,
+report queue and reporter views. No external reference-project source was named or needed.
 
 ### Appeal retry and reviewer confirmation
 

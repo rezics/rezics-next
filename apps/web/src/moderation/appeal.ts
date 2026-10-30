@@ -17,21 +17,26 @@ export type AppealSubmission =
   | { state: 'pending'; decision: ModerationDecision }
   | { state: 'invalid'; text: string }
   | { state: 'updated'; decision: ModerationDecision }
+  | { state: 'denied' }
+  | { state: 'refused' }
+  | { state: 'conflict' }
   | { state: 'failed' };
 
 /** Sends once and re-reads current appeal state after success or terminal conflicts. */
 export async function submitDecisionAppeal(id: string, text: string, reads: AppealReads): Promise<AppealSubmission> {
   const result = await reads.appeal(id, text);
   if (result.status === 201 || result.status === 200) {
-    const decision = await reads.decision(id);
-    return decision ? { state: 'pending', decision } : { state: 'failed' };
+    const decision = await reads.decision(id).catch(() => null);
+    return decision?.id === id && decision.appeal ? { state: 'pending', decision } : { state: 'failed' };
   }
+  if ([401, 403, 404].includes(result.status)) return { state: 'denied' };
   if (result.status === 422 && Array.from(text).length > 2000) return { state: 'invalid', text };
   if (result.status === 409 || result.status === 422) {
-    const decision = await reads.decision(id);
-    return decision ? { state: 'updated', decision } : { state: 'failed' };
+    const decision = await reads.decision(id).catch(() => null);
+    // A known refusal stays terminal even when the follow-up read is unavailable.
+    return decision?.id === id ? { state: 'updated', decision } : { state: 'conflict' };
   }
-  return { state: 'failed' };
+  return { state: result.status >= 400 && result.status < 500 ? 'refused' : 'failed' };
 }
 
 export const appealDecision = createServerFn({ method: 'POST' })
@@ -57,7 +62,7 @@ export const appealDecision = createServerFn({ method: 'POST' })
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
-    if (!authorization) return { state: 'failed' };
+    if (!authorization) return { state: 'denied' };
     return sendDecisionAppeal(kernelClient(), data, authorization);
   });
 
@@ -79,7 +84,7 @@ export async function sendDecisionAppeal(
         response.error && typeof response.error === 'object' && 'status' in response.error
           ? Number(response.error.status)
           : undefined;
-      return { status: response.status ?? errorStatus ?? (response.error ? 500 : 201), error: response.error };
+      return { status: response.status ?? errorStatus ?? 500, error: response.error };
     },
     decision: async (id) => {
       const response = await (id === data.id ? resource : client['moderation-decisions']({ id })).get({
