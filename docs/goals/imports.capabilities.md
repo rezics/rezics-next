@@ -861,3 +861,17 @@ Native command reserved for integration (not executed in this attempt):
 `bun run --cwd services/kernel check test/imports/vndb-zero-refresh.test.ts`.
 Local verification is limited to the importer and kernel workspace typechecks and the new stack-free protocol
 suite, under the current worker instruction. No native/database acceptance or promotion result is claimed.
+
+Local receipts: at `38a64a4718`, `bun test services/importer/tests/source-statistic-zero.test.ts` returned
+`5 pass`, `0 fail`, `63 expect() calls` (1.75 seconds). At `a80a255d5c`,
+`bun run --cwd services/importer typecheck` returned `No type errors in 163 files`.
+The ordinary VNDB archive admission gate remains intact: recovery validates its supplied native archive,
+then replays the sealed run without consuming the replacement grouped source records. The native caller
+supplies a distinct positive replacement to distinguish replay from a newly converted zero.
+
+Source inspection covered the installed rating clear handler and owner README, generated client route and
+custom-method mapping, sanitized VNDB converter, existing archive materialization/capture and identity/figure
+fixtures. The reference-project index was read; no external reference implementation was needed for this
+installed protocol. Outside the declared paths, `services/importer/tests/cli-source-reappearance.test.ts`
+adds only the required clear protocol capability to its existing coordinator double; its old assertions and
+semantic receipt observations are preserved. This local double does not supply native evidence.
