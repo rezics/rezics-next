@@ -6,6 +6,7 @@ import { ClosedErrorPage } from '../../shell/closed';
 import { spacePageHead } from '../../community/space-head';
 
 export const Route = createFileRoute('/realms/$id')({
+  staticData: { publicCache: true },
   loader: async ({ params, context }) => {
     const located = await context.queryClient.ensureQueryData(
       realmPageQuery(params.id, getLocale(), context.credentialMode),

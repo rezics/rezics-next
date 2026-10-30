@@ -9,6 +9,7 @@ import { ClosedErrorPage } from '../../shell/closed';
 import { spacePageHead } from '../../community/space-head';
 
 export const Route = createFileRoute('/spaces/$address')({
+  staticData: { publicCache: true },
   loader: ({ params, context }) =>
     context.queryClient.ensureQueryData(spaceQuery(params.address, getLocale(), 'anonymous')),
   head: ({ loaderData, params }) =>

@@ -47,6 +47,7 @@ function threadSearch(search: Record<string, unknown>): { cursor?: string } {
 }
 
 export const Route = createFileRoute('/threads/$id_/$slug')({
+  staticData: { publicCache: true },
   validateSearch: threadSearch,
   loaderDeps: ({ search }) => ({ cursor: threadSearch(search).cursor }),
   loader: async ({ params, deps, context }) => {

@@ -19,6 +19,7 @@ const publicOrigin = createIsomorphicFn()
   );
 
 export const Route = createFileRoute('/search')({
+  staticData: { publicCache: true },
   validateSearch: searchParams,
   loaderDeps: ({ search }) => searchLoaderDeps(search),
   loader: ({ deps, context }) => {

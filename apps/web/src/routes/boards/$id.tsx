@@ -46,6 +46,7 @@ function threadOpeningWords(body: unknown): string | undefined {
 }
 
 export const Route = createFileRoute('/boards/$id')({
+  staticData: { publicCache: true },
   validateSearch: boardSearch,
   // The router passes unvalidated keys through, so read the sort through the same check again.
   loaderDeps: ({ search }) => {

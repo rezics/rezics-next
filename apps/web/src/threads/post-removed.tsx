@@ -29,7 +29,7 @@ export function RemovedPost({
   anchorId: string;
   itemRef: Ref<HTMLLIElement>;
   menuButton: Ref<HTMLButtonElement>;
-  minHeight?: number;
+  minHeight?: number | undefined;
   restoreError?: string;
   onCopyLink: () => void | Promise<void>;
   onRestore?: () => void;

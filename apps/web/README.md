@@ -275,6 +275,8 @@ Renamed handles redirect 302 to the current handle for 30 days; afterwards, like
 
 **Data reads**: Each kernel read has one `queryOptions` factory beside its loader code. Loaders call `context.queryClient.ensureQueryData`; components use `useSuspenseQuery` for public reads and `useQuery` for personal reads in the browser only. Public reads keep `staleTime` 60 s, personal reads 0. The router preloads on intent.
 
+`tests/public-cache-routes.test.ts` guards which routes use `staticData.publicCache` and verifies their server HTML is reader-independent.
+
 The home route reads its page through the public `homePageQuery`. Its server render reads no session; after hydration, a signed-in visitor starts the personal Continue query, which reserves its section height while it loads. Signed-out visitors see no Continue section or personal read.
 
 Space and Realm pages start from anonymous reads on the server. A signed-in visitor loads membership and participation in the browser. When the anonymous Space response does not expose a carried Realm, the browser makes one bounded session read of that Space page; protected Realm boards and publications are requested only if the session can read the Realm. A denied or unavailable response never becomes a false empty list. The Realm id route resolves its native Realm and Space, then redirects to the Space's address when one exists.

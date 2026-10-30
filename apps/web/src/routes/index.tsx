@@ -31,6 +31,7 @@ const readLegacyHomeContinue = createServerFn({ method: 'GET' }).handler(async (
 
 /** The public page query calls loadRoutePage() once on the server. */
 export const Route = createFileRoute('/')({
+  staticData: { publicCache: true },
   loader: ({ context }) => context.queryClient.ensureQueryData(homePageQuery(getLocale())),
   head: ({ loaderData }) => {
     const locale = getLocale();
