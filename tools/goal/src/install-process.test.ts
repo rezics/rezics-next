@@ -75,41 +75,37 @@ test('nonzero preparation exits are infrastructure failures while nonzero checks
   }
 });
 
-test(
-  'a timed out install kills its hanging descendant within the termination budget and names installer output',
-  async () => {
-    const h = temporaryDirectory();
-    try {
-      const pidFile = join(h.path, 'descendant.pid');
-      const started = performance.now();
-      const error = captureFailure(() =>
-        runBoundedInstallProcess({
-          command: 'sh',
-          args: [
-            '-c',
-            `echo 'Installing package @fixture/hanging-dependency@1.2.3' >&2; sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; wait`,
-          ],
-          cwd: h.path,
-          step: 'bun install --frozen-lockfile',
-          limits: { startupMs: 2_000, runMs: 250, terminationMs: 500 },
-        }),
-      );
+test('a timed out install kills its hanging descendant within the termination budget and names installer output', async () => {
+  const h = temporaryDirectory();
+  try {
+    const pidFile = join(h.path, 'descendant.pid');
+    const started = performance.now();
+    const error = captureFailure(() =>
+      runBoundedInstallProcess({
+        command: 'sh',
+        args: [
+          '-c',
+          `echo 'Installing package @fixture/hanging-dependency@1.2.3' >&2; sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; wait`,
+        ],
+        cwd: h.path,
+        step: 'bun install --frozen-lockfile',
+        limits: { startupMs: 2_000, runMs: 250, terminationMs: 500 },
+      }),
+    );
 
-      expect(performance.now() - started).toBeLessThan(2_000);
-      expect(error.infrastructure).toBe(true);
-      expect(error.timedOut).toBe(true);
-      expect(error.phase).toBe('run');
-      expect(error.step).toBe('bun install --frozen-lockfile');
-      expect(error.packageName).toBe('@fixture/hanging-dependency');
-      expect(error.message).toContain('workspace=');
-      expect(error.stderr).toContain('Installing package @fixture/hanging-dependency@1.2.3');
-      await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
-    } finally {
-      h.close();
-    }
-  },
-  10_000,
-);
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(error.infrastructure).toBe(true);
+    expect(error.timedOut).toBe(true);
+    expect(error.phase).toBe('run');
+    expect(error.step).toBe('bun install --frozen-lockfile');
+    expect(error.packageName).toBe('@fixture/hanging-dependency');
+    expect(error.message).toContain('workspace=');
+    expect(error.stderr).toContain('Installing package @fixture/hanging-dependency@1.2.3');
+    await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+  } finally {
+    h.close();
+  }
+}, 10_000);
 
 test('a failed command also reaps its process group while preserving install diagnostics', async () => {
   const h = temporaryDirectory();
@@ -158,39 +154,35 @@ test('generic dependency progress and completed package lines do not name the ac
   }
 });
 
-test(
-  'the absolute install budget covers startup and postinstall work and remains distinct from the Goal check budget',
-  async () => {
-    const h = temporaryDirectory();
-    try {
-      const pidFile = join(h.path, 'postinstall-descendant.pid');
-      const started = performance.now();
-      const error = captureFailure(() =>
-        runBoundedInstallProcess({
-          command: 'sh',
-          args: [
-            '-c',
-            `echo 'Installing dependencies'; sleep 0.25; echo 'postinstall setup started'; sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; wait`,
-          ],
-          cwd: h.path,
-          step: 'bun install --frozen-lockfile',
-          limits: { startupMs: 2_000, runMs: 2_000, budgetMs: 400, terminationMs: 500 },
-        }),
-      );
+test('the absolute install budget covers startup and postinstall work and remains distinct from the Goal check budget', async () => {
+  const h = temporaryDirectory();
+  try {
+    const pidFile = join(h.path, 'postinstall-descendant.pid');
+    const started = performance.now();
+    const error = captureFailure(() =>
+      runBoundedInstallProcess({
+        command: 'sh',
+        args: [
+          '-c',
+          `echo 'Installing dependencies'; sleep 0.25; echo 'postinstall setup started'; sleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'; wait`,
+        ],
+        cwd: h.path,
+        step: 'bun install --frozen-lockfile',
+        limits: { startupMs: 2_000, runMs: 2_000, budgetMs: 400, terminationMs: 500 },
+      }),
+    );
 
-      expect(INSTALL_PROCESS_LIMITS.budgetMs).toBe(180_000);
-      expect(GOAL_GATE_CHECK_LIMITS.budgetMs).toBeGreaterThan(INSTALL_PROCESS_LIMITS.budgetMs);
-      expect(error.timedOut).toBe(true);
-      expect(error.phase).toBe('run');
-      expect(error.stdout).toContain('postinstall setup started');
-      expect(performance.now() - started).toBeLessThan(1_800);
-      await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
-    } finally {
-      h.close();
-    }
-  },
-  10_000,
-);
+    expect(INSTALL_PROCESS_LIMITS.budgetMs).toBe(180_000);
+    expect(GOAL_GATE_CHECK_LIMITS.budgetMs).toBeGreaterThan(INSTALL_PROCESS_LIMITS.budgetMs);
+    expect(error.timedOut).toBe(true);
+    expect(error.phase).toBe('run');
+    expect(error.stdout).toContain('postinstall setup started');
+    expect(performance.now() - started).toBeLessThan(1_800);
+    await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+  } finally {
+    h.close();
+  }
+}, 10_000);
 
 test('a successful install keeps its artifact and output', () => {
   const h = temporaryDirectory();
@@ -269,35 +261,29 @@ test('the Goal gate classifies nonzero installs as infrastructure and nonzero ch
   }
 });
 
-test(
-  'the Goal gate bounds install setup, reports the exact step and workspace, and does not start checks after timeout',
-  async () => {
-    const fixture = gateFixture(
-      `#!/bin/sh\necho 'Installing package @fixture/gate-dependency@2.0.0' >&2\nsleep 30 >/dev/null 2>&1 & echo $! > '../../gate-descendant.pid'\nwait\n`,
-    );
-    try {
-      const pidFile = join(fixture.path, 'gate-descendant.pid');
-      const started = performance.now();
-      const result = await invokeGoalGate(
-        fixture.path,
-        fixture.bin,
-        { install: { startupMs: 2_000, runMs: 250, terminationMs: 500 } },
-      );
+test('the Goal gate bounds install setup, reports the exact step and workspace, and does not start checks after timeout', async () => {
+  const fixture = gateFixture(
+    `#!/bin/sh\necho 'Installing package @fixture/gate-dependency@2.0.0' >&2\nsleep 30 >/dev/null 2>&1 & echo $! > '../../gate-descendant.pid'\nwait\n`,
+  );
+  try {
+    const pidFile = join(fixture.path, 'gate-descendant.pid');
+    const started = performance.now();
+    const result = await invokeGoalGate(fixture.path, fixture.bin, {
+      install: { startupMs: 2_000, runMs: 250, terminationMs: 500 },
+    });
 
-      expect(performance.now() - started).toBeLessThan(2_500);
-      expect(result.code).not.toBe(0);
-      expect(result.output).toContain('ETIMEDOUT: Infrastructure failure');
-      expect(result.output).toContain('step="bun install --frozen-lockfile"');
-      expect(result.output).toContain('workspace="@fixture/goal"');
-      expect(result.output).toContain('package="@fixture/gate-dependency"');
-      expect(result.output).not.toContain('bun run check');
-      await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
-    } finally {
-      fixture.close();
-    }
-  },
-  10_000,
-);
+    expect(performance.now() - started).toBeLessThan(2_500);
+    expect(result.code).not.toBe(0);
+    expect(result.output).toContain('ETIMEDOUT: Infrastructure failure');
+    expect(result.output).toContain('step="bun install --frozen-lockfile"');
+    expect(result.output).toContain('workspace="@fixture/goal"');
+    expect(result.output).toContain('package="@fixture/gate-dependency"');
+    expect(result.output).not.toContain('bun run check');
+    await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+  } finally {
+    fixture.close();
+  }
+}, 10_000);
 
 test('the Goal gate still completes successful install and check setup steps', async () => {
   const fixture = gateFixture(
@@ -313,30 +299,26 @@ test('the Goal gate still completes successful install and check setup steps', a
   }
 });
 
-test(
-  'the Goal gate also bounds its check setup step and reaps its descendants',
-  async () => {
-    const fixture = gateFixture(
-      `#!/bin/sh\nif [ "$1" = "install" ]; then echo goal-install-complete; exit 0; fi\necho goal-check-started\nsleep 30 >/dev/null 2>&1 & echo $! > '../../gate-check-descendant.pid'\nwait\n`,
-    );
-    try {
-      const pidFile = join(fixture.path, 'gate-check-descendant.pid');
-      const started = performance.now();
-      const result = await invokeGoalGate(fixture.path, fixture.bin, {
-        check: { startupMs: 2_000, runMs: 250, terminationMs: 500 },
-      });
+test('the Goal gate also bounds its check setup step and reaps its descendants', async () => {
+  const fixture = gateFixture(
+    `#!/bin/sh\nif [ "$1" = "install" ]; then echo goal-install-complete; exit 0; fi\necho goal-check-started\nsleep 30 >/dev/null 2>&1 & echo $! > '../../gate-check-descendant.pid'\nwait\n`,
+  );
+  try {
+    const pidFile = join(fixture.path, 'gate-check-descendant.pid');
+    const started = performance.now();
+    const result = await invokeGoalGate(fixture.path, fixture.bin, {
+      check: { startupMs: 2_000, runMs: 250, terminationMs: 500 },
+    });
 
-      expect(performance.now() - started).toBeLessThan(2_500);
-      expect(result.code).not.toBe(0);
-      expect(result.output).toContain('goal-install-complete');
-      expect(result.output).toContain('goal-check-started');
-      expect(result.output).toContain('step="bun run check"');
-      expect(result.output).toContain('workspace="@fixture/goal"');
-      expect(result.output).toContain('package="unknown"');
-      await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
-    } finally {
-      fixture.close();
-    }
-  },
-  10_000,
-);
+    expect(performance.now() - started).toBeLessThan(2_500);
+    expect(result.code).not.toBe(0);
+    expect(result.output).toContain('goal-install-complete');
+    expect(result.output).toContain('goal-check-started');
+    expect(result.output).toContain('step="bun run check"');
+    expect(result.output).toContain('workspace="@fixture/goal"');
+    expect(result.output).toContain('package="unknown"');
+    await expectStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+  } finally {
+    fixture.close();
+  }
+}, 10_000);

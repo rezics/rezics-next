@@ -180,7 +180,10 @@ function groupLeaderIdentity(pid: number): ProcessIdentity | null {
   if (active) return active;
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+    const fields = stat
+      .slice(stat.lastIndexOf(')') + 2)
+      .trim()
+      .split(/\s+/);
     if (!fields[19]) return null;
     return {
       pid,
@@ -257,7 +260,8 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
       result = JSON.parse(readFileSync(resultPath, 'utf8')) as ProcessResult;
       if (result.outputTruncated) stderr += '\n[process output truncated after 32 MiB]\n';
     } catch {
-      fallbackError = supervisor.error?.message ?? supervisor.stderr?.trim() ?? `supervisor exited ${supervisor.status}`;
+      fallbackError =
+        supervisor.error?.message ?? supervisor.stderr?.trim() ?? `supervisor exited ${supervisor.status}`;
       result = {
         code: supervisor.status,
         signal: supervisor.signal as NodeJS.Signals | null,
@@ -425,12 +429,20 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
             ...(cleanupErrors.length ? { cleanupError: cleanupErrors.join('; ') } : {}),
             ...(outputTruncated ? { outputTruncated: true } : {}),
           });
-        })().catch((error) => resolve({ ...value, cleanupError: error instanceof Error ? error.message : String(error) }));
+        })().catch((error) =>
+          resolve({ ...value, cleanupError: error instanceof Error ? error.message : String(error) }),
+        );
       };
       let cleanupStartedAt = Date.now();
       const stopForSignal = () => {
         cleanupStartedAt = Date.now();
-        finish({ code: null, signal: null, phase: 'supervisor', timedOut: true, error: 'supervisor received a termination signal' });
+        finish({
+          code: null,
+          signal: null,
+          phase: 'supervisor',
+          timedOut: true,
+          error: 'supervisor received a termination signal',
+        });
       };
       externalStop = stopForSignal;
       child!.once('spawn', () => {
@@ -438,7 +450,13 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
         if (!identity && child?.pid) identity = groupLeaderIdentity(child.pid);
         if (!identity || identity.group !== child!.pid) {
           cleanupStartedAt = Date.now();
-          finish({ code: null, signal: null, phase: 'startup', timedOut: false, error: 'could not identify the detached command process group' });
+          finish({
+            code: null,
+            signal: null,
+            phase: 'startup',
+            timedOut: false,
+            error: 'could not identify the detached command process group',
+          });
           return;
         }
         if (startupTimer) clearTimeout(startupTimer);
@@ -448,10 +466,13 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
           finish({ code: null, signal: null, phase: 'startup', timedOut: true });
           return;
         }
-        runTimer = setTimeout(() => {
-          cleanupStartedAt = Date.now();
-          finish({ code: null, signal: null, phase: 'run', timedOut: true });
-        }, Math.min(request.limits.runMs, runBudget));
+        runTimer = setTimeout(
+          () => {
+            cleanupStartedAt = Date.now();
+            finish({ code: null, signal: null, phase: 'run', timedOut: true });
+          },
+          Math.min(request.limits.runMs, runBudget),
+        );
       });
       child!.once('error', (error) => {
         cleanupStartedAt = Date.now();
@@ -473,10 +494,13 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
           ...(outputError.length ? { cleanupError: outputError.join('; ') } : {}),
         });
       });
-      startupTimer = setTimeout(() => {
-        cleanupStartedAt = Date.now();
-        finish({ code: null, signal: null, phase: 'startup', timedOut: true });
-      }, Math.min(request.limits.startupMs, request.limits.budgetMs));
+      startupTimer = setTimeout(
+        () => {
+          cleanupStartedAt = Date.now();
+          finish({ code: null, signal: null, phase: 'startup', timedOut: true });
+        },
+        Math.min(request.limits.startupMs, request.limits.budgetMs),
+      );
     });
     return result;
   } catch (error) {
@@ -520,7 +544,7 @@ async function runSupervisor(requestPath: string): Promise<void> {
 
 if (process.argv[2] === '--goal-bounded-install-supervisor') {
   void runSupervisor(process.argv[3]!).catch((error) => {
-    process.stderr.write(error instanceof Error ? error.stack ?? error.message : String(error));
+    process.stderr.write(error instanceof Error ? (error.stack ?? error.message) : String(error));
     process.exitCode = 1;
   });
 }

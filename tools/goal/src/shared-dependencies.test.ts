@@ -250,55 +250,51 @@ try {
   }
 }, 10_000);
 
-test(
-  'a timed out shared install is an infrastructure failure, reaps descendants, releases its lease, and publishes no store',
-  async () => {
-    const h = fixture();
-    try {
-      const a = h.tree('a');
-      const stores = join(h.root, 'stores');
-      const bin = join(h.root, 'bin');
-      const pidFile = join(h.root, 'installer-descendant.pid');
-      mkdirSync(bin);
-      writeFileSync(
-        join(bin, 'bun'),
-        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo fixture-bun; exit 0; fi\necho 'Installing package @fixture/shared-stall@3.4.5' >&2\nsleep 0.1\necho 'postinstall setup active' >&2\nsleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'\nwait\n`,
-      );
-      chmodSync(join(bin, 'bun'), 0o755);
-      const started = performance.now();
-      const module = new URL('./shared-dependencies.ts', import.meta.url).href;
-      const source = `import { installShared } from ${JSON.stringify(module)}; try { installShared(process.cwd(), ${JSON.stringify(stores)}, { startupMs: 2_000, runMs: 2_000, budgetMs: 350, terminationMs: 500 }); } catch (error) { console.error(String(error)); process.exitCode = 1; }`;
-      const childEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GOAL_')));
-      const child = Bun.spawn([process.execPath, '-e', source], {
-        cwd: a,
-        env: { ...childEnv, PATH: `${bin}:${process.env.PATH ?? ''}` },
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe',
-      });
-      const [code, stdout, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]);
-      const failure = `${stdout}${stderr}`;
-      expect(code).not.toBe(0);
-      expect(failure).toContain('ETIMEDOUT: Infrastructure failure');
-      expect(failure).toContain('phase=run');
-      expect(failure).toContain('bun install --frozen-lockfile --backend=copyfile');
-      expect(failure).toContain('package="@fixture/shared-stall"');
-      expect(performance.now() - started).toBeLessThan(1_500);
+test('a timed out shared install is an infrastructure failure, reaps descendants, releases its lease, and publishes no store', async () => {
+  const h = fixture();
+  try {
+    const a = h.tree('a');
+    const stores = join(h.root, 'stores');
+    const bin = join(h.root, 'bin');
+    const pidFile = join(h.root, 'installer-descendant.pid');
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, 'bun'),
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo fixture-bun; exit 0; fi\necho 'Installing package @fixture/shared-stall@3.4.5' >&2\nsleep 0.1\necho 'postinstall setup active' >&2\nsleep 30 >/dev/null 2>&1 & echo $! > '${pidFile}'\nwait\n`,
+    );
+    chmodSync(join(bin, 'bun'), 0o755);
+    const started = performance.now();
+    const module = new URL('./shared-dependencies.ts', import.meta.url).href;
+    const source = `import { installShared } from ${JSON.stringify(module)}; try { installShared(process.cwd(), ${JSON.stringify(stores)}, { startupMs: 2_000, runMs: 2_000, budgetMs: 350, terminationMs: 500 }); } catch (error) { console.error(String(error)); process.exitCode = 1; }`;
+    const childEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GOAL_')));
+    const child = Bun.spawn([process.execPath, '-e', source], {
+      cwd: a,
+      env: { ...childEnv, PATH: `${bin}:${process.env.PATH ?? ''}` },
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    const failure = `${stdout}${stderr}`;
+    expect(code).not.toBe(0);
+    expect(failure).toContain('ETIMEDOUT: Infrastructure failure');
+    expect(failure).toContain('phase=run');
+    expect(failure).toContain('bun install --frozen-lockfile --backend=copyfile');
+    expect(failure).toContain('package="@fixture/shared-stall"');
+    expect(performance.now() - started).toBeLessThan(1_500);
 
-      expect(readdirSync(stores).filter((name) => /^[a-f0-9]{64}$/.test(name))).toEqual([]);
-      expect(readdirSync(stores).filter((name) => name.startsWith('.building-'))).toEqual([]);
-      expect(readdirSync(join(stores, '.leases'))).toEqual([]);
-      await expectProcessStopped(Number(readFileSync(pidFile, 'utf8').trim()));
-    } finally {
-      h.close();
-    }
-  },
-  10_000,
-);
+    expect(readdirSync(stores).filter((name) => /^[a-f0-9]{64}$/.test(name))).toEqual([]);
+    expect(readdirSync(stores).filter((name) => name.startsWith('.building-'))).toEqual([]);
+    expect(readdirSync(join(stores, '.leases'))).toEqual([]);
+    await expectProcessStopped(Number(readFileSync(pidFile, 'utf8').trim()));
+  } finally {
+    h.close();
+  }
+}, 10_000);
 
 test('an install without node_modules/.bun stays private and publishes no store', async () => {
   const h = fixture();
@@ -446,7 +442,10 @@ test('a worktree on a shared store gets each workspace its own dependency links'
     const tree = (name: string) => {
       const path = h.tree(name);
       mkdirSync(join(path, 'packages', 'other'), { recursive: true });
-      writeFileSync(join(path, 'packages/other/package.json'), JSON.stringify({ name: '@test/other', version: '1.0.0' }));
+      writeFileSync(
+        join(path, 'packages/other/package.json'),
+        JSON.stringify({ name: '@test/other', version: '1.0.0' }),
+      );
       writeFileSync(
         join(path, 'packages/sample/package.json'),
         JSON.stringify({ name: '@test/sample', version: '1.0.0', dependencies: { '@test/other': 'workspace:*' } }),
