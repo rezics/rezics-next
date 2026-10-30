@@ -192,7 +192,7 @@ test('the resolved different principal needs its own exact fact or ordinary gran
 
 test('account standing, membership coverage and group bans remain mandatory', async () => {
   await atRead(async (time) => {
-    const who = actor();
+    let who = actor();
     const access = createAccess(config(nativeReader));
     async function allowed() {
       const proof = await access.prepare!(who, action, resource, await context(who, time));
@@ -202,6 +202,9 @@ test('account standing, membership coverage and group bans remain mandatory', as
     await setFixtureAccountState(pool, buyer, 'suspended');
     expect(await allowed()).toBe(false);
     await setFixtureAccountState(pool, buyer, 'active');
+    // Reinstatement keeps the raised floor; the old token stays revoked.
+    const restored = await readAccount(pool, routeOf(buyer)!, buyer);
+    who = { ...who, authnEpoch: Number(restored!.minimumAuthnEpoch) };
     await pool.query('UPDATE access.account SET fenced=true WHERE route=$1 AND account_id=$2', [routeOf(buyer), buyer]);
     expect(await allowed()).toBe(false);
     await pool.query(
