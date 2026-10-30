@@ -1,12 +1,13 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { createAccess } from '../access/index.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
+import type { WorkerAuthorization } from '../work/authorization.ts';
 import { registerCommerceErasure } from './erasure-participant.ts';
 import { routeOf } from '../route/route.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { createCheckoutAnchorResolver, type CheckoutAnchor, type CheckoutAnchorResult } from './checkout-anchor.ts';
 import { CheckoutMismatchError } from './settlement.ts';
 import { readCommerceProviderConfig } from './config.ts';
-import type { WorkModule } from '../work/registry.ts';
+import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createCommerceCommands, type CheckoutOutcome } from './commands.ts';
 import { createCheckoutForOrder } from './creation-attempt.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
@@ -66,8 +67,11 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
         provider,
       });
       if (!Object.hasOwn(queues, WORKFLOWS_QUEUE)) throw new Error('Commerce requires the workflows queue');
-      // Only the trusted checkout command ports are used here. No request identity is fabricated.
-      const commands = createCommerceCommands({ pool, access: createAccess({ actions: new Map() }) });
+      // Accounts supplies this getter on the actual context, memoized across work modules.
+      // Keep the consumer declaration here until its producer-owned registry binding lands.
+      const authorizedContext = context as WorkContext & { getAuthorization(): WorkerAuthorization };
+      if (typeof authorizedContext.getAuthorization !== 'function') throw new AccessUnavailableError('overloaded');
+      const commands = createCommerceCommands({ pool, access: authorizedContext.getAuthorization().access });
       const stripeRetries = {
         retriesAllowed: true,
         intervalSeconds: 1,

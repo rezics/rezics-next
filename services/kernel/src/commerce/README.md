@@ -151,13 +151,23 @@ body is forbidden. Immutable SQL guards include null historical mapping. No migr
 subject, newest revision, label or payment metadata. Historical reads/authorized receipt replays retain identity;
 a new subject-only create cannot silently create a benefit. Price changes never change the capture.
 
-**Commerce binding delivered, Content runtime pending.** [benefit](benefit.ts) imports the exact
+**Native sale source and Commerce binding.** [benefit](benefit.ts) imports the exact
 `readContentEditionSaleAuthority({pool, access, clock?}, editionId, {actor, deadline})` and server-only
 `readContentEditionMechanicalSaleAuthority({pool, access, clock?}, editionId, {deadline})` owner entrypoints.
-The [Content module](../content/edition-sale.ts) currently contains only their agreed typed unavailable declarations.
-Content must replace those declarations with its actual bounded native verifier and current Auth consent binding,
-restoring the real original publisher independently for `edition:sell` and `post:revise`. No seller/buyer Actor is
-manufactured by Commerce. Fresh sale remains unavailable until that producer is delivered.
+The [Content module](../content/edition-sale.ts) supplies the bounded native verifier, restoring the real original
+publisher independently for `edition:sell` and `post:revise` using current Auth consent. Commerce manufactures no
+seller/buyer Actor.
+
+The default [worker](work.ts), reached through [its registered module](work-module.ts), constructs its existing
+commands with `context.getAuthorization().access`. Accounts owns
+[`WorkerAuthorization`](../work/authorization.ts) and the lazy getter, memoized once per actual `WorkContext`.
+Its factory captures the existing kernel's Access only after mounted action/role validation through
+`createKernel.onAccessReady`, with the same current native Auth consent reader supplied to Content. Commerce
+retains the complete context and its pool/client/clock/registries; it creates no Access root, action map, listener,
+pool, client or work engine. The mechanical sale wrapper supplies no delivery Actor, and the native buyer fact
+reader never calls Content. Missing genuine authorization configuration is typed unavailable, never an empty or
+permissive Access fallback. The Accounts factory body and registry getter remain a producer dependency; their
+absence in this source checkout does not establish native paid fulfilment or protected use.
 
 `captureContentEditionSaleAuthority` copies only the native benefit/creator/subject/source/licence and rejects
 inconsistent source revision/hash or edition identity. `saleTermsReference` is a JSON tuple of the actual native
