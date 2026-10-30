@@ -103,9 +103,11 @@ anonymous original eligibility and the native Source's own Type, release, candid
 related-item guards. Exact-job installed mappings become available only inside that asynchronous operation;
 ordinary pending reads retain their existing behavior. Hidden originals cannot borrow visible terminal facts.
 
-FAA's agreed declarations are in `public-filter-source-binding.ts` and `subject-source-key-pages.ts`.
-Their adapters are visibly provisional and always unavailable until replaced by the real native producers.
-`public-filter-source.ts` and the actual mapping producer are absent on this base. The bridge never substitutes
+FAA's admitted-support declarations and visibly provisional unavailable binding factory are in
+`public-filter-source-binding.ts`, alongside the existing `PublicFilterNativeSource` handoff. The existing
+`subject-source-key-pages.ts` port is preserved unchanged; the bridge does not consume its rebuild interface.
+The bridge directly imports the installed `public-filter-source.ts` factory, whose adapter also remains
+provisional and unavailable. The actual mapping producer is absent on this base. The bridge never substitutes
 `subjectSource`'s history fold, sampled scalar arrays or caller-created registrations for those producers.
 Native binding, projection and admitted-job outcome acceptance remain deferred; the new native outcome test
 requires those actual producers and contains no success fallback. No support page certifies Search writer drain,

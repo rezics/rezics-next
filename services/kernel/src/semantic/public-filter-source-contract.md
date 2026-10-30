@@ -36,9 +36,10 @@ The following are actual code, not proposed ports:
 | `command/command.ts:runCommand/currentCommand/commandTime/mintReadTime/authoritativeTimeValue`                                     | Actual authorization-before-receipt, live transaction T, serializable attempts, event validation and partition fencing; command callbacks run before receipt/outbox, never on replay.                                                       |
 | `command/fence.sql`, `partition/partition.ts:readPartition`, `route/route.ts:partitionOf/routeOf`                                  | Native home is one of 4096 partitions containing 16 routes; partition position advances at successful command fence. Ownership epoch is independent of catalogue identity epoch.                                                            |
 
-Missing producer module: `services/kernel/src/semantic/public-filter-source.ts` with exactly
-`publicFilterSource(config)` and `recordPrivacyReduction(tx, reduction)`. The selected factory methods are exactly
-`readPublicFilterProjectionPage`, `readPrivacyReductionHeads`, `readPrivacyReductionPage`, as declared beside this document. No runtime stub is added.
+The installed `services/kernel/src/semantic/public-filter-source.ts:publicFilterSource(config)` is a
+visibly provisional unavailable adapter. The native implementation and `recordPrivacyReduction(tx, reduction)`
+remain required. The selected projection/privacy readers are `readPublicFilterProjectionPage`,
+`readPrivacyReductionHeads`, `readPrivacyReductionPage`, as declared beside this document.
 All methods return actual counted work even on changed/unready/unavailable outcomes. Invalid shape or impossible
 route/digest/limit rejects before enumeration. Missing metadata is an explicit unready/unavailable result.
 
@@ -56,9 +57,12 @@ The selected native public Source binding declarations now live in
 `resolve({source, meaning, capture}, context)` must resolve the actual Source instance and full immutable
 compiler input to a native definition. `join({queried, execution?}, context)` resolves native queried observation,
 covered cut and retained execution. The implementation on this base is an explicitly provisional unavailable
-adapter; matching strings or object identity never become registration or Source coverage. The adjacent
-`subject-source-key-pages.ts` carries the agreed rebuild-only key-page declarations and unavailable adapter.
-Both adapters are replaced by the native producer on integration.
+adapter; matching strings or object identity never become registration or Source coverage. Existing
+`PublicFilterNativeSource` and `JoinedPopulationRequest` declarations in that module remain intact. The adjacent
+`subject-source-key-pages.ts` retains its existing rebuild-only `readSubjectKeyPage` port and unavailable adapter,
+without a second incompatible `SubjectSourceKeyPages` declaration. The admitted support bridge consumes the
+installed Source factory directly and does not consume the rebuild interface. Provisional adapters remain
+unavailable until their native producers land.
 
 ### Admitted-job support bridge
 
@@ -84,7 +88,7 @@ refs, native mapping custody and exact Source definition. It retains only scalar
 projection continuation within eight scalar keys and 2048 payload bytes, never source bodies, arrays of originals
 or cached allow decisions. Input limits include
 examined originals and native projection inputs; one-key steps can retain an original and spend their next step
-on its projection. Missing producer modules remain unavailable. This bridge exports no engine writer registration,
+on its projection. Missing native implementations remain unavailable. This bridge exports no engine writer registration,
 drain, ACK, participant completion, publication or account-erasure operation. The few native outcomes in
 `test/semantic/identity-source-support-outcomes.test.ts` remain later integration proof, without a stub pass.
 

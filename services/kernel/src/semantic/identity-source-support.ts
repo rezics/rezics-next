@@ -15,12 +15,8 @@ import type {
   IdentitySourceSupportRequest,
 } from './identity-source-support-contract.ts';
 import { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
-import type {
-  PublicFilterCost,
-  PublicFilterProjectionFrontier,
-  PublicFilterSource,
-  PublicFilterSourceFactory,
-} from './public-filter-source-contract.ts';
+import { publicFilterSource } from './public-filter-source.ts';
+import type { PublicFilterCost, PublicFilterProjectionFrontier } from './public-filter-source-contract.ts';
 import { readIdentitySourceProjection } from './search-source.ts';
 import inputsStatement from './identity-source-support-inputs.sql';
 import originalsStatement from './identity-source-support-originals.sql';
@@ -154,16 +150,9 @@ export const createIdentitySourceSupportReader: IdentitySourceSupportReaderFacto
   };
   const binding = createPublicFilterSourceBinding(config.pool, config.routeKey, config.access);
 
-  async function source(): Promise<PublicFilterSource | null> {
-    // The agreed Source factory is not landed on every implementation base. Its absence
-    // remains unavailable, never a raw subjectSource fallback or an empty projection.
-    const path = new URL('./public-filter-source.ts', import.meta.url).pathname;
-    if (!(await Bun.file(path).exists())) return null;
-    const module = (await import(path)) as {
-      publicFilterSource: PublicFilterSourceFactory;
-    };
-    return module.publicFilterSource(config);
-  }
+  // Bind the installed Source instance from the same pool, route key and Access.
+  // Its provisional unavailable adapter never becomes an ordinary SubjectSource fallback.
+  const nativeSource = publicFilterSource(config);
 
   async function basis(request: IdentitySourceSupportRequest, charge: (points: number) => void) {
     requireAccessDeadline(request.context.deadline);
@@ -259,8 +248,6 @@ export const createIdentitySourceSupportReader: IdentitySourceSupportReaderFacto
         try {
           const start = await basis(request, charge);
           if (retained && retained.basis !== start.fingerprint) return { status: 'changed', cost };
-          const nativeSource = await source();
-          if (!nativeSource) return { status: 'unavailable', cost };
           const resolved = await binding.resolve(
             {
               source: nativeSource,
