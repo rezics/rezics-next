@@ -307,14 +307,12 @@ for (const path of ['registration options', 'verified registration', 'registrati
               [person, path === 'registration options' ? 32 : 31],
             );
           }
+          // prepare is not called before the default warmup. Give that invocation
+          // its own ceremony here, outside capture, then prepare afresh for every
+          // physical measured run, including discarded cold-backend runs.
+          await prepare();
         },
         prepare,
-        async warmup() {
-          // The harness does not call prepare before warmups. Physical measured
-          // runs can also be discarded when a new backend needs warming.
-          await prepare();
-          await operation();
-        },
         operation,
       });
       expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
