@@ -1,4 +1,6 @@
 import { pickLanguage } from '@rezics/composition';
+import { checkDocument, documentParagraphs, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import { spoilerLevel, type Stmt } from './shared.tsx';
 import { originalLanguage } from '../../subject/language.ts';
 import type { Related, Subject } from '../../subject/types.ts';
 
@@ -64,9 +66,75 @@ function date(value: unknown): string | undefined {
   return `${year}-${parts[2]}-${parts[3]}`;
 }
 
-function statementValue(statement: Statement, references: Map<string, JsonValue>): JsonValue | undefined {
+/** The released property measures integer minutes; never round or guess a unit. */
+function cookTime(value: unknown): string | undefined {
+  if (!record(value) || value.unit !== 'http://www.wikidata.org/entity/Q7727') return;
+  if (typeof value.amount !== 'string' || !/^\+?(?:0|[1-9]\d*)$/.test(value.amount)) return;
+  if (Object.keys(value).some((key) => !['amount', 'unit', 'lowerBound', 'upperBound'].includes(key))) return;
+  for (const key of ['lowerBound', 'upperBound']) {
+    const bound = value[key];
+    if (bound !== undefined && bound !== value.amount) return;
+  }
+  const minutes = Number(value.amount);
+  if (!Number.isSafeInteger(minutes)) return;
+  return `PT${minutes}M`;
+}
+
+/** Remove concealed inline branches before using the document package's reading traversal. */
+function publicNode(node: DocumentNode): DocumentNode | undefined {
+  if (node.marks?.some((mark) => mark.type === 'spoiler')) return;
+  return {
+    ...node,
+    ...(node.content ? { content: node.content.flatMap((child) => publicNode(child) ?? []) } : {}),
+  };
+}
+
+function instructions(content: unknown): JsonValue[] | undefined {
+  if (!record(content) || typeof content.language !== 'string' || !checkDocument(content.document)) return;
+  const document: DocumentSnapshot = { ...content.document, doc: publicNode(content.document.doc)! };
+  // All text comes from the same validated reading units as documentText: ruby base text,
+  // hard breaks, unresolved mentions and opaque extension fallbacks, never extension payloads.
+  const paragraphs = new Map(documentParagraphs(document).map((unit) => [unit.id, unit.text]));
+  const textOf = (node: DocumentNode): string => {
+    const unit = paragraphs.get(String(node.attrs?.id));
+    return unit ?? (node.content ?? []).map(textOf).filter(Boolean).join('\n');
+  };
+  const steps: JsonValue[] = [];
+  let section: { [key: string]: JsonValue } | undefined;
+  const append = (step: JsonValue) => {
+    if (section) (section.itemListElement as JsonValue[]).push(step);
+    else steps.push(step);
+  };
+  const visit = (node: DocumentNode, language: string): void => {
+    const lang = typeof node.attrs?.lang === 'string' ? node.attrs.lang : language;
+    if (node.type === 'heading') {
+      const name = textOf(node);
+      if (name) {
+        section = { '@type': 'HowToSection', name, inLanguage: lang, itemListElement: [] };
+        steps.push(section);
+      }
+    } else if (['orderedList', 'bulletList', 'taskList', 'blockquote'].includes(node.type)) {
+      for (const child of node.content ?? []) visit(child, lang);
+    } else {
+      const text = textOf(node);
+      if (text) append({ '@type': 'HowToStep', text, inLanguage: lang });
+    }
+  };
+  for (const node of document.doc.content ?? []) visit(node, content.language);
+  return steps.length ? steps : undefined;
+}
+
+function statementValue(
+  statement: Statement,
+  references: Map<string, JsonValue>,
+  property: string,
+): JsonValue | undefined {
   if (statement.value.type !== 'value') return;
   const content = statement.value.content;
+  if (property === 'schema:cookTime')
+    return statement.property.data_type === 'quantity' ? cookTime(content) : undefined;
+  if (property === 'schema:recipeInstructions')
+    return statement.property.data_type === 'document' ? instructions(content) : undefined;
   switch (statement.property.data_type) {
     case 'wikibase-item':
       return typeof content === 'string' ? references.get(content) : undefined;
@@ -148,21 +216,29 @@ export function subjectJsonLd({
     const key = property.startsWith('schema:') ? property.slice(7) : undefined;
     const externalId = /^wdt:P\d+$/.test(property);
     if ((key === undefined && !externalId) || (key !== undefined && reserved.has(key))) continue;
+    const rank = statements.some((statement) => statement.rank === 'preferred') ? 'preferred' : 'normal';
+    const documents = statements.flatMap((statement) => {
+      const content = statement.value.type === 'value' ? statement.value.content : undefined;
+      return statement.rank === rank &&
+        statement.property.data_type === 'document' &&
+        record(content) &&
+        typeof content.language === 'string'
+        ? [content.language]
+        : [];
+    });
+    const language = documents.length > 1 ? pickLanguage(documents, locale, original) : undefined;
     const publicStatements = statements.filter((statement) => {
       if (statement.rank !== 'normal' && statement.rank !== 'preferred') return false;
-      return !(statement.qualifiers ?? []).some((qualifier) => {
-        if (qualifier.property.id !== 'rezics:spoilerLevel' || qualifier.value.type !== 'value') return false;
-        const content = qualifier.value.content;
-        const level = record(content) && typeof content.amount === 'string' ? Number(content.amount) : 2;
-        return !Number.isInteger(level) || level > 0;
-      });
+      return !spoilerLevel(statement as unknown as Stmt);
     });
-    const rank = publicStatements.some((statement) => statement.rank === 'preferred') ? 'preferred' : 'normal';
     const values: JsonValue[] = [];
     for (const statement of publicStatements) {
       if (statement.rank !== rank) continue;
       if (externalId && statement.property.data_type !== 'external-id') continue;
-      const value = statementValue(statement, references);
+      if (spoilerLevel(statement as unknown as Stmt) > 0) continue;
+      const content = statement.value.content;
+      if (language !== undefined && record(content) && content.language !== language) continue;
+      const value = statementValue(statement, references, property);
       if (value === undefined) continue;
       if (externalId) {
         identifiers.push({
@@ -171,7 +247,8 @@ export function subjectJsonLd({
           value,
         });
       } else {
-        values.push(value);
+        if (property === 'schema:recipeInstructions' && Array.isArray(value)) values.push(...value);
+        else values.push(value);
       }
     }
     if (key !== undefined && values.length) entries.push([key, values.length === 1 ? values[0]! : values]);

@@ -1012,6 +1012,33 @@ Space response at 390 and 1280 pixels.
   `services/kernel/test/semantic/growth-reads.test.ts`: `the fact writer refuses more than 512 facts for one subject`;
   `Anchored subject read stays within its bound as the subject's history grows`
 
+### Publish Recipe structured data
+
+- **Touches:** Only the public subject, related identities and validated document snapshots already supplied to the
+  page. No network request, Source read or metadata lookup is added. `schema:cookTime` uses the released integer
+  minute unit (`http://www.wikidata.org/entity/Q7727`): `+25` becomes `PT25M`, including zero and safe large integers.
+  Unknown units, malformed or unsafe amounts and uncertain bounds cannot produce a duration. Other quantities retain
+  their existing representation. Instructions use the page's rank and document language selection, document reading
+  units and language attributes. Paragraphs and list items become ordered `HowToStep` items, grouped under authored
+  headings as `HowToSection` items. Concealed statement and inline spoiler branches stay out; opaque components supply
+  only their visible fallback. A related diet keeps its disclosed identity; a label alone supplies no ontology mapping.
+- **Bound:** O(public statement and document bytes), with the existing page descriptor limits (16 reads, cost 128) and
+  document caps unchanged. Serialization adds no cached authority or aggregate. JSON-LD escapes HTML-sensitive text.
+- **Growth check:** `tests/recipe-page-structured-data.test.ts` counts the composed page request with unrelated records
+  held outside the selected Recipe and checks exact public instruction text and serialized byte growth.
+  `tests/native/recipe-publication.host.test.ts` creates actual released Recipes through the ordinary APIs and compares
+  public/page reads and served HTML/JSON-LD, including unrelated record growth, a Japanese instruction body in an
+  English page and authored-document owner erasure. The released instruction property stays single-valued; language
+  cases create separate Recipes. The erasure control uses the existing document owner grant, without changing scopes.
+  These counters describe this publication slice, not whole backend or private population cost.
+
+The native authored-document producer currently replaces an input snapshot with `{language, document: id, digest}`
+(`services/kernel/src/semantic/authored.ts`). Ordinary subject reads and `pages:read` retain that reference, while the
+page's document renderer requires an inline validated snapshot. The native instruction cases intentionally require
+that missing public body; a reference alone is never permission to emit text. Satisfying those cases requires an
+owner-approved public body producer within the existing page-read and disclosure contract. The serializer does not
+fetch `/v1/documents/:id`. Diet enumeration mapping metadata is also absent; public related identities remain usable.
+
 ### Subject reactions
 
 - **Touches:** In parallel with the subject page, one K `GET /v1/subjects/<id>/reactions` for the counts (at most five

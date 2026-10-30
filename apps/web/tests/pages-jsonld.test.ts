@@ -101,7 +101,7 @@ test("a subject's public representation becomes schema.org JSON-LD", () => {
     dateModified: '1914-04',
     isbn: '978-4-10-101013-7',
     numberOfPages: 248,
-    cookTime: { '@type': 'QuantitativeValue', value: 45, unitText: 'http://www.wikidata.org/entity/Q7727' },
+    cookTime: 'PT45M',
     identifier: [{ '@type': 'PropertyValue', propertyID: 'http://www.wikidata.org/entity/P648', value: 'OL45804W' }],
   });
 });
@@ -158,4 +158,79 @@ test('the serialized JSON-LD cannot close its script element', () => {
   expect(JSON.parse(text)).toEqual({ name: '</script><script>alert(1)</script> &   ' });
   const page = serializeJsonLd(build({ labels: { en: 'A <b>bold</b> title' } }));
   expect(page).toContain('\\u003cb\\u003ebold\\u003c/b\\u003e');
+});
+
+test('only exact nonnegative safe integer minutes become durations without changing other quantities', () => {
+  const duration = (content: unknown, type = 'value', dataType = 'quantity') =>
+    build({ statements: { 'schema:cookTime': [statement('schema:cookTime', dataType, { type, content })] } });
+  const minute = 'http://www.wikidata.org/entity/Q7727';
+  for (const amount of ['+0', '+1', '+25', '+60', '+9007199254740991']) {
+    expect(duration({ amount, unit: minute }).cookTime).toBe(`PT${amount.slice(1)}M`);
+  }
+  expect(duration({ amount: '+25', unit: minute, lowerBound: '+25', upperBound: '+25' }).cookTime).toBe('PT25M');
+  for (const content of [
+    null,
+    {},
+    '+25',
+    { amount: 25, unit: minute },
+    ...[
+      '-1',
+      '-0',
+      '+1.5',
+      '+25.0000000000000001',
+      '+9007199254740992',
+      '+9007199254740993',
+      'NaN',
+      'Infinity',
+      '+1e2',
+      ' 25 ',
+      '+025',
+      '',
+    ].map((amount) => ({ amount, unit: minute })),
+    ...['1', 'minute', 'minutes', 'wd:Q7727', 'https://www.wikidata.org/entity/Q7727', '', null].map((unit) => ({
+      amount: '+25',
+      unit,
+    })),
+    { amount: '+25', unit: minute, lowerBound: '+24' },
+    { amount: '+25', unit: minute, upperBound: '+26' },
+    { amount: '+25', unit: minute, extra: 'malformed' },
+  ])
+    expect(duration(content)).not.toHaveProperty('cookTime');
+  for (const type of ['somevalue', 'novalue'])
+    expect(duration({ amount: '+25', unit: minute }, type)).not.toHaveProperty('cookTime');
+  expect(duration('PT25M', 'value', 'string')).not.toHaveProperty('cookTime');
+  const quantities = build({
+    statements: {
+      'schema:recipeYield': [
+        statement('schema:recipeYield', 'quantity', { type: 'value', content: { amount: '+4', unit: '1' } }),
+      ],
+      'schema:weight': [
+        statement('schema:weight', 'quantity', { type: 'value', content: { amount: '+2.5', unit: 'kg' } }),
+      ],
+    },
+  });
+  expect(quantities.recipeYield).toBe(4);
+  expect(quantities.weight).toEqual({ '@type': 'QuantitativeValue', value: 2.5, unitText: 'kg' });
+});
+
+test('duration rank and spoiler controls never fall back to an undisclosed value', () => {
+  const normal = statement('schema:cookTime', 'quantity', {
+    type: 'value',
+    content: { amount: '+25', unit: 'http://www.wikidata.org/entity/Q7727' },
+  });
+  const preferred = { ...normal, rank: 'preferred', value: { type: 'somevalue' } };
+  expect(build({ statements: { 'schema:cookTime': [normal, preferred] } })).not.toHaveProperty('cookTime');
+  expect(build({ statements: { 'schema:cookTime': [{ ...normal, rank: 'deprecated' }] } })).not.toHaveProperty(
+    'cookTime',
+  );
+  const qualified = {
+    ...normal,
+    qualifiers: [
+      {
+        property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+        value: { type: 'value', content: { amount: '+1', unit: '1' } },
+      },
+    ],
+  };
+  expect(build({ statements: { 'schema:cookTime': [qualified] } })).not.toHaveProperty('cookTime');
 });
