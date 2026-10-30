@@ -214,6 +214,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           current.minimumAuthnEpoch > BigInt(owner.authnEpoch)
         )
           throw new GrantDeniedError();
+        await shareAccount(tx, owner.accountId);
         return authorization.authorize(tx, attempt, evidence);
       },
     };
@@ -328,7 +329,10 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     );
     return runCommand(
       pool,
-      { ...options(actor, r, 'commerce.offer.delist', requestKey, { id }), authorization },
+      {
+        ...options(actor, r, 'commerce.offer.delist', requestKey, { id }),
+        authorization,
+      },
       async (tx, command) => {
         const offer = await store.readOffer(tx, r, id);
         if (!offer) throw new GrantDeniedError();
@@ -358,7 +362,10 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       throw new TypeError('Invalid offer');
     return runCommand(
       pool,
-      { ...options(actor, r, 'commerce.offer.revise', requestKey, input), authorization },
+      {
+        ...options(actor, r, 'commerce.offer.revise', requestKey, input),
+        authorization,
+      },
       async (tx, command) => {
         const value = await store.reviseOfferPrice(tx, r, id, input.unitAmountMinor, {
           transactionId: command.transactionId,
@@ -408,7 +415,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
       },
       async (tx, command) => {
         const offer = parent.at(command.time);
-        if (offer.state !== 'active') throw new OfferUnavailableError();
+        if (!parent.availableAt(command.time) || offer.state !== 'active') throw new OfferUnavailableError();
         // The command body runs only after current authorization and exact receipt replay.
         if (offer.revision !== expectedOfferRevision) throw new OfferRevisionConflictError();
         const contentEdition = sale.at(tx, command.time);
@@ -653,31 +660,35 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
   // The trusted internal apply port is restricted to one recorded order/Session/intent.
   // Buyer attribution names its receipt owner, not an AccountActor or an Access grant.
   // Omitting legacy command basis deliberately retains null service attribution.
+  async function buyerBenefits(tx: CommandTransaction, accountId: string): Promise<boolean> {
+    try {
+      await shareAccount(tx, accountId);
+      return true;
+    } catch (error) {
+      if (!(error instanceof LifecycleDeniedError)) throw error;
+      return false;
+    }
+  }
   function refreshAuthorization(
     order: Order,
     sessionId: string,
     intent: PrincipalCommandReceipt,
-  ): CommandAuthorization & { permitsBenefits(tx: CommandTransaction): boolean } {
-    const activeBuyers = new WeakSet<CommandTransaction>();
+    admission = false,
+  ): CommandAuthorization {
     const r = route(order.id);
     const expectedDigest = digest({ orderId: order.id });
     return {
       action: 'commerce.checkout.apply',
       resource: { route: r, id: order.id },
       denied: () => new GrantDeniedError(),
-      permitsBenefits: (tx) => activeBuyers.has(tx),
       async authorize(tx) {
         if (intent.kind !== 'commerce.checkout.apply' || !Buffer.from(intent.digest).equals(expectedDigest))
           throw new GrantDeniedError();
-        // Account before order in admission and both apply ports. Keep this evidence
-        // local to the physical transaction: a serialization retry must fence again.
-        try {
-          await shareAccount(tx, order.buyerAccountId);
-          activeBuyers.add(tx);
-        } catch (error) {
-          if (!(error instanceof LifecycleDeniedError)) throw error;
-        }
-        const current = await store.lockOrder(tx, r, order.id);
+        // Apply admission verifies immutable service binding without taking the order
+        // lock. Receipt replay cannot create a fresh benefit or revision claim.
+        // Begin-refresh retains its exact lock through own-completion lookup and claim.
+        if (admission) await buyerBenefits(tx, order.buyerAccountId);
+        const current = admission ? await store.lockOrder(tx, r, order.id) : await store.readOrder(tx, r, order.id);
         if (!current || current.buyerAccountId !== order.buyerAccountId || current.checkoutSessionId !== sessionId)
           throw new GrantDeniedError();
         return 'execute';
@@ -703,7 +714,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         pool,
         {
           partition: partitionOf(r),
-          authorization: refreshAuthorization(order, sessionId, intent),
+          authorization: refreshAuthorization(order, sessionId, intent, true),
           receipt: {
             actorAccountId: order.buyerAccountId,
             kind: 'commerce.checkout.refresh',
@@ -793,15 +804,12 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           },
         },
         async (tx, command) => {
-          if (claim) {
-            const locked = await store.lockOrder(tx, r, id);
-            if (
-              !locked ||
-              locked.revision !== claim.order.revision ||
-              locked.checkoutSessionId !== claim.order.checkoutSessionId
-            )
-              throw new SupersededRefresh();
-          }
+          // Fresh application fences the buyer before the first order lock, even
+          // for a business no-op. Availability failures must roll back all money effects.
+          const permitsBenefits = await buyerBenefits(tx, order.buyerAccountId);
+          const locked = await store.lockOrder(tx, r, id);
+          if (!locked || locked.checkoutSessionId !== snapshot.sessionId) throw new Unchanged();
+          if (claim && locked.revision !== claim.order.revision) throw new SupersededRefresh();
           const state = await store.readSettlementState(
             tx,
             r,
@@ -815,7 +823,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           let decision = decideCheckout(state, snapshot, claim ? 'admitted-revision' : 'legacy-time');
           if (
             decision.changed &&
-            !authorization.permitsBenefits(tx) &&
+            !permitsBenefits &&
             (decision.entitlement.kind === 'grant' || decision.entitlement.kind === 'restore')
           ) {
             // Terminal buyers retain financial truth, never a new private benefit.
@@ -900,19 +908,28 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
     const r = routeOf(id);
     return r === null ? null : store.readOffer(pool, r, id);
   }
+  async function privateAccountReadable(accountId: string) {
+    const r = routeOf(accountId);
+    if (r === null) return false;
+    const current = await readAccount({ query: pool.query.bind(pool) }, r, accountId);
+    return current !== null && current.state !== 'deleted';
+  }
   async function readOrderForAccount(accountId: string, id: string) {
+    if (!(await privateAccountReadable(accountId))) return null;
     const r = routeOf(accountId);
     if (r === null || routeOf(id) !== r) return null;
     const order = await store.readOrder(pool, r, id);
     return order?.buyerAccountId === accountId ? order : null;
   }
   async function readEntitlementForAccount(accountId: string, id: string) {
+    if (!(await privateAccountReadable(accountId))) return null;
     const r = routeOf(accountId);
     if (r === null || routeOf(id) !== r) return null;
     const entitlement = await store.readEntitlement(pool, r, id);
     return entitlement?.accountId === accountId ? entitlement : null;
   }
   async function listEntitlementsForAccount(accountId: string, page: { after: string | null; limit: number }) {
+    if (!(await privateAccountReadable(accountId))) return [];
     const r = routeOf(accountId);
     return r === null ? [] : store.listEntitlements(pool, r, accountId, page);
   }

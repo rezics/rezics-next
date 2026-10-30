@@ -1,3 +1,4 @@
+import { registerCommerceErasure } from './erasure-participant.ts';
 import { createStripePort } from './stripe.ts';
 import { readCommerceWorkerConfig, readCommerceProviderConfig } from './config.ts';
 import type { WorkModule } from '../work/registry.ts';
@@ -6,7 +7,10 @@ export const commerceWorkModule: WorkModule = {
   name: 'commerce',
   async register(context) {
     const config = readCommerceWorkerConfig(context.env);
-    if (config === null) return;
+    if (config === null) {
+      registerCommerceErasure(context);
+      return;
+    }
     const { createCommerceWork } = await import('./work.ts');
     await createCommerceWork({
       stripe: createStripePort({ ...config.stripe, clock: context.clock }),

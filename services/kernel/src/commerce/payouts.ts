@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { shareAccount } from '../access/account-share.ts';
+import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { grantAccountRole } from '../access/account-role-grant.ts';
+import { readAccount } from '../access/account-data.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -86,6 +89,8 @@ async function ownAccount(pool: Pool, actor: Actor, check: AccessCheck): Promise
   if (actor.kind !== 'account') throw notFound();
   const route = routeOf(actor.accountId);
   if (route === null || !(await withConnection(pool, check))) throw notFound();
+  const current = await readAccount(queryClient(pool), route, actor.accountId);
+  if (!current || current.state === 'deleted') throw notFound();
   return { route, id: actor.accountId };
 }
 export async function readPayoutStatement(pool: Pool, actor: Actor, id: string, check: AccessCheck) {
@@ -136,6 +141,8 @@ async function readPage<T>(
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
       if (!(await check(client))) throw notFound();
+      const current = await readAccount(queryClient(client), route, owner.id);
+      if (!current || current.state === 'deleted') throw notFound();
       const partition = await readPartition(client, partitionOf(route));
       if (epoch !== null && epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
       if (statementId !== null) {
@@ -236,6 +243,15 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
           },
         },
         async (tx, command) => {
+          // Creator-home account fence precedes every local royalty/role write.
+          // Inactive creators still receive financial reconciliation, never a private role.
+          let permitsBenefits = true;
+          try {
+            await shareAccount(tx, order.creatorAccountId);
+          } catch (error) {
+            if (!(error instanceof LifecycleDeniedError)) throw error;
+            permitsBenefits = false;
+          }
           const at = authoritativeTimeValue(command.time),
             period = statementPeriod(at);
           const rows = await record.run(tx, {
@@ -261,10 +277,11 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
           });
           // Roll back a no-op, including its receipt/outbox position. Old IDs cannot create an empty later statement.
           if (!rows.length) throw new Unchanged();
-          await grantAccountRole(tx, {
-            account: { route, id: order.creatorAccountId },
-            role: 'commerce.payout.owner',
-          });
+          if (permitsBenefits)
+            await grantAccountRole(tx, {
+              account: { route, id: order.creatorAccountId },
+              role: 'commerce.payout.owner',
+            });
           return {
             value: rows.map(statement),
             events: rows.map((row) => ({

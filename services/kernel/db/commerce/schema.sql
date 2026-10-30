@@ -199,6 +199,21 @@ CREATE TABLE commerce.entitlement (
 
 
 --
+-- Name: erasure_progress; Type: TABLE; Schema: commerce; Owner: -
+--
+
+CREATE TABLE commerce.erasure_progress (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    had_data boolean NOT NULL,
+    cursor_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    phase text DEFAULT 'entitlements'::text NOT NULL,
+    blocker text,
+    CONSTRAINT erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['entitlements'::text, 'pending'::text])))
+);
+
+
+--
 -- Name: offer; Type: TABLE; Schema: commerce; Owner: -
 --
 
@@ -401,6 +416,14 @@ ALTER TABLE ONLY commerce.entitlement
 
 
 --
+-- Name: erasure_progress erasure_progress_pkey; Type: CONSTRAINT; Schema: commerce; Owner: -
+--
+
+ALTER TABLE ONLY commerce.erasure_progress
+    ADD CONSTRAINT erasure_progress_pkey PRIMARY KEY (route, account_id);
+
+
+--
 -- Name: offer offer_pkey; Type: CONSTRAINT; Schema: commerce; Owner: -
 --
 
@@ -456,6 +479,13 @@ CREATE INDEX entitlement_account_page ON commerce.entitlement USING btree (route
 
 
 --
+-- Name: offer_erasure_owner; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX offer_erasure_owner ON commerce.offer USING btree (route, creator_account_id, offer_id);
+
+
+--
 -- Name: order_transaction_order; Type: INDEX; Schema: commerce; Owner: -
 --
 
@@ -481,6 +511,20 @@ CREATE INDEX purchase_order_buyer_page ON commerce.purchase_order USING btree (r
 --
 
 CREATE UNIQUE INDEX purchase_order_checkout_session ON commerce.purchase_order USING btree (route, checkout_session_id) WHERE (checkout_session_id IS NOT NULL);
+
+
+--
+-- Name: purchase_order_erasure_buyer; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX purchase_order_erasure_buyer ON commerce.purchase_order USING btree (route, buyer_account_id, order_id);
+
+
+--
+-- Name: royalty_line_erasure_creator; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX royalty_line_erasure_creator ON commerce.royalty_line USING btree (route, creator_account_id, balance_transaction_id);
 
 
 --

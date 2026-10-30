@@ -1,5 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAccess } from '../access/index.ts';
+import { registerCommerceErasure } from './erasure-participant.ts';
 import { routeOf } from '../route/route.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { createCheckoutAnchorResolver, type CheckoutAnchor, type CheckoutAnchorResult } from './checkout-anchor.ts';
@@ -48,7 +49,9 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
   const checkout = { ...deps.checkout };
   return {
     name: 'commerce',
-    register({ pool, queues, client, addEffects, env, clock: workClock }) {
+    register(context) {
+      const { pool, queues, client, addEffects, env, clock: workClock } = context;
+      registerCommerceErasure(context);
       const provider = { ...(deps.provider ?? readCommerceProviderConfig(env)) };
       const locator: StripeCheckoutLocatorPort = {
         readCheckoutLocator(sessionId) {
