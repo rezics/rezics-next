@@ -1,11 +1,16 @@
+import type { Pool } from 'pg';
+import type { Access } from '../request/access.ts';
 import type { CustodyDefinition } from '../search/public-filter-custody-contract.ts';
 import type {
   PublicCanonicalCaptureInput,
+  PublicFilterConsumerCaptureInput,
   PublicFilterConsumerContext,
   PublicFilterConsumerUnavailable,
   PublicFilterQueriedObservation,
 } from '../search/public-filter-consumer-contract.ts';
 import type {
+  PrivacyReductionStart,
+  PublicFilterDependencyKey,
   PrivacyReductionObservation,
   PrivacyReductionObservationRequest,
   PublicFilterCost,
@@ -36,4 +41,95 @@ export interface PublicFilterNativeSource extends PublicFilterSource {
     request: JoinedPopulationRequest,
     context: PublicFilterConsumerContext,
   ): Promise<PrivacyReductionObservation>;
+}
+
+export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
+export type NativePublicSource = Readonly<{
+  id: string;
+  partition: number;
+  epoch: number;
+  configuration: string;
+}>;
+export type PublicFilterSourceDefinition = Readonly<{
+  source: NativePublicSource;
+  readDefinition: string;
+  meaning: PublicFilterProjectionMeaning;
+  capture: PublicFilterConsumerCaptureInput;
+  dependencyKeys: readonly PublicFilterDependencyKey[];
+}>;
+export type PublicFilterBindingFailure = Readonly<{
+  status: 'unready' | 'unavailable';
+  reason:
+    | 'source_missing'
+    | 'configuration_changed'
+    | 'definition_missing'
+    | 'observation_lost'
+    | 'execution_missing'
+    | 'binding_mismatch'
+    | 'owner_unavailable'
+    | 'identity_pending'
+    | 'deadline';
+  cost: PublicFilterCost;
+}>;
+export type PublicFilterSourceBinding = Readonly<{
+  resolve(
+    request: Readonly<{
+      source: PublicFilterSource;
+      meaning: PublicFilterProjectionMeaning;
+      capture: PublicFilterConsumerCaptureInput;
+    }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<
+    | Readonly<{ status: 'resolved'; definition: PublicFilterSourceDefinition; cost: PublicFilterCost }>
+    | PublicFilterBindingFailure
+  >;
+  join(
+    request: Readonly<{
+      queried: PublicFilterQueriedObservation;
+      execution?: string;
+    }>,
+    context: PublicFilterConsumerContext,
+  ): Promise<
+    | Readonly<{
+        status: 'joined';
+        definition: PublicFilterSourceDefinition;
+        queried: PublicFilterQueriedObservation;
+        covered: PrivacyReductionStart;
+        execution: Readonly<{
+          id: string;
+          start: PrivacyReductionStart;
+          ownRows: readonly Readonly<{ original: string; terminal: string }>[];
+        }> | null;
+        cost: PublicFilterCost;
+      }>
+    | PublicFilterBindingFailure
+  >;
+}>;
+
+/** PROVISIONAL agreed producer adapter. The owning native implementation replaces this module on landing.
+ * No local registry, caller object, or structural Source can establish native binding here. */
+export function createPublicFilterSourceBinding(
+  _pool: Pool,
+  _routing: Uint8Array,
+  _access: Access,
+): PublicFilterSourceBinding {
+  const unavailable = async (): Promise<PublicFilterBindingFailure> => ({
+    status: 'unavailable',
+    reason: 'owner_unavailable',
+    cost: unavailableCost(),
+  });
+  return { resolve: unavailable, join: unavailable };
+}
+function unavailableCost(): PublicFilterCost {
+  return {
+    inputKeys: 0,
+    candidates: 0,
+    accessPoints: 0,
+    dependencyPoints: 0,
+    engineSearches: 0,
+    engineIteratorSteps: 0,
+    outputSlots: 0,
+    resultWrites: 0,
+    frontierWrites: 0,
+  };
 }

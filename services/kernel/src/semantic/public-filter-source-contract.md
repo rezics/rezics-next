@@ -65,6 +65,37 @@ suppression. Those projected relation keysets are useful native evidence but nei
 selection stream nor immediate authoritative reduction observation. Their relay positions cannot substitute for
 the missing log/cut. No Search or publication-hook implementation is changed here.
 
+## Complete native facet population extension
+
+The separate extension adopts the closed types in [facet-population-contract.ts](facet-population-contract.ts),
+also exported as types from `semantic/index.ts`. The selected module/export is
+`semantic/facet-population.ts:createFacetPopulationSource(config: Parameters<PublicFilterSourceFactory>[0])`,
+returning `{readFacetPopulationPage(request): Promise<FacetPopulationPage>}`. This declaration does not change
+the three existing Source readers or establish callable availability.
+
+`FacetPopulationRequest` carries `population`, opaque nullable `frontier`, `inputLimit` and
+`capture: Extract<PrivacyReductionObservationRequest, {kind: 'population'}>`. The canonical capture retains its
+exact queried/start/execution/context union. Resolve the registered complete native catalogue definition and
+its actual Source/incarnation/meaning and immutable PIT/prepared consumer linkage internally. Neither caller
+strings nor diagnostic consumer status establish that linkage. The existing reader-only Source boundary does
+not declare the required registered-definition lookup or native key-page reader; their owning declarations
+must be supplied before implementing that join. Do not invent their proof fields or a duplicate registry.
+
+A successful page enumerates anchored subject identities, including excluded and order/privacy-relevant inputs,
+with a retained observation and frontier. It supplies no public values or permission verdicts. Preparation visits
+native homes with authoritative empty results, releases each home before visiting another, and drains finite
+captured ordinary creation/change and dependency windows before a native seal/CAS can return `complete`.
+An insertion behind the key frontier must enter that bridge. Missing/moved/pending ownership, uncertain identity
+or metadata never means empty; lost observations or log gaps invalidate the build. Later changes feed replacement
+work rather than indefinitely extending the captured window. Search separately exhausts each subject's complete
+projection; sampled Source statements and named membership probes cannot discover unseen values.
+
+### Cost
+
+- Touches: native Source/definition/consumer/capture metadata, bounded native keys and captured change windows, retained frontier/seal records, including failed/replayed work.
+- Bound: `inputLimit` is 1..1000 examined keys including rejects, rereads and lookahead; all lower native Source/capture/step, SQL, byte and deadline limits still apply. No served-request catalogue scan or per-key home/dependency vector is admitted.
+- Growth check: reuse the existing measured Source/population controls; this declaration supplies no runtime or growth evidence.
+
 ## Complete bounded selected facets
 
 `readPublicFilterProjectionPage` receives an actual original subject, immutable `meaning.digest/release/type`, input limit and
@@ -543,3 +574,38 @@ minimized-source completion, direct/prepared/composed full growth matrix and ser
 rising reduction rates and actual latency. Default public queries, API surfaces, Source256 compatibility and main
 acceptance remain distinct obligations. No helper/type/protocol pass here claims runtime availability, native
 feasibility, public default queries, the main gate or completion of this remaining matrix.
+
+## Separate complete population extension
+
+`facet-population.ts:createFacetPopulationSource(config: Parameters<PublicFilterSourceFactory>[0])`
+returns `FacetPopulationSource` from [facet-population-contract.ts](facet-population-contract.ts).
+The closed request/page types and factory are exported additively from `semantic/index.ts`.
+The existing three reader signatures are unchanged. This is preparation work on the existing caller/worker
+lifetime, with no new scheduler, Source registry, matcher or native acknowledgement API.
+
+`population` names the native `PublicFilterSourceBinding.join` result's exact immutable `readDefinition`.
+The canonical `capture` is passed unchanged to native observation and execution readers; input objects and
+fingerprints never establish registration, permission or immutable custody. Joined execution starts must match.
+Missing agreed binding/key-page implementations are provisional fail-unavailable adapters under their agreed
+producer module names. Actual producer implementations replace these adapters on integration.
+
+Each home retains the first observed ordinary position before its key traversal continues, then fixes the
+last key page's position as its creation/change upper fence. Exact outbox position/sequence seeks drain that
+finite interval, including rejected events and behind-frontier creations. A separate bounded native point
+resolves each routable event locator to an anchored subject. No sampled values, returned hits, counts or named
+membership probes establish membership. Missing sequence/count/epoch evidence invalidates instead of skipping. An expected subject event whose
+anchor metadata is missing stays unready; unrelated product event subjects are not assumed to be subjects.
+Native PIT renewal is validated by the binding reader; a rotating PIT transport locator does not change
+the retained immutable observation identity.
+Native complete empty key pages advance; missing, moved and identity-pending homes never imply emptiness.
+
+Every call revalidates the same retained consumer and native privacy observation, including final seal.
+An indexed predecessor CAS commits the step's subjects and scalar frontier together. Replay returns the
+committed successor; an allowance too small for that page yields readiness. The frontier is an opaque UUID,
+not serialized population, permission or home vector. Key traversal applies the lower native 256 examined-key
+cap; ordinary event and anchor reads are separate charged steps so inputLimit=1 remains meaningful.
+Native costs, failures, replay, result slots and frontier attempts remain charged to PublicFilterCost.
+
+A complete population is not a published facet generation: Search separately exhausts every subject's
+projection, evaluates the existing matcher and validates final current disclosure and consumer publication.
+Native producer adoption and the unchanged later acceptance remain required; typechecking is not native proof.

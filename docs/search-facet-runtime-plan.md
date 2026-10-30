@@ -8,7 +8,8 @@ The wire and `facet-discovery-contract.ts` remain authoritative and unchanged.
 The [Search consumer](../services/kernel/src/search/public-filter-consumer-contract.md) and
 [Semantic Source](../services/kernel/src/semantic/public-filter-source-contract.md) own native custody.
 
-All new cross-owner choices below are **proposals pending owner adoption**.
+New cross-owner choices below are **proposals pending owner adoption**, except the complete population
+declaration adopted by Semantic below.
 Search owns the proposed runtime, retained result and call-site changes.
 Semantic owns complete value population, selection, identity and Source extensions.
 Performance owns verification of existing budgets, without a proposed increase.
@@ -277,7 +278,7 @@ A progress page does not certify subject exhaustion.
 A subject count cannot establish that all native keys were enumerated.
 A privacy log alone cannot establish ordinary creation or non-reducing additions.
 
-The exact missing population operation is described in the proposed adapter section below.
+The adopted population operation is described in the adapter section below.
 It must capture finite membership/upper fences and preserve source epoch/ownership.
 Use durable frontier traversal of all native homes during preparation, not per served page.
 An empty home advances the retained frontier only after an authoritative empty-page result.
@@ -480,19 +481,25 @@ Do not cast a facet operation into these subject signatures or fabricate a succe
 The Source population request's consumer/start input still needs its exact observation join.
 Trust the owner closure of that gap; do not implement an alternate SQL safety oracle here.
 
-### Proposed population extension, pending Semantic adoption
+### Adopted Semantic population declaration
 
-Add a separately reviewed complete population page to the native Source boundary.
-The names in this fence are **proposed**, not imports available to the runtime today.
+The separate complete population extension's closed types are exported from
+`services/kernel/src/semantic/facet-population-contract.ts` and additively from `semantic/index.ts`.
+The selected callable is `semantic/facet-population.ts:createFacetPopulationSource(config)`, with
+`config: Parameters<PublicFilterSourceFactory>[0]`. The retained runtime is implemented behind the agreed
+Source binding and key-page producer modules. Their provisional adapters fail unavailable until the real
+registered Source/definition, key-page and retained consumer readers are delivered.
+Type availability does not establish callable availability or native completeness.
 It enumerates anchored subject identities, not public response values or permission verdicts.
 Its retained window is native custody with ordinary creation/change coverage.
 
 ```ts
-// Proposal only; Semantic chooses the owning module and adopts the declaration.
+// Exact owning declaration: semantic/facet-population-contract.ts.
 type FacetPopulationRequest = Readonly<{
   population: string; // registered complete native catalogue definition
   frontier: string | null; // opaque retained finite-window frontier
   inputLimit: number; // examined keys, 1..1000, including rejects/lookahead
+  capture: Extract<PrivacyReductionObservationRequest, { kind: 'population' }>;
 }>;
 type FacetPopulationPage =
   | Readonly<{
@@ -507,12 +514,20 @@ type ReadFacetPopulationPage = (request: FacetPopulationRequest) => Promise<Face
 ```
 
 The implementation validates current owners/epochs and native registered population internally.
+The population locator equals the joined immutable Source read definition. Each native home fixes its first
+and final key-page ordinary positions, then drains exact outbox event sequences in that finite interval.
+Behind-frontier creations enter that bridge; subsequent changes feed replacements. Native gaps and epoch
+changes invalidate the build. Retained predecessor CAS makes page replay idempotent. Provisional producer
+adapters never manufacture registration, observation coverage or native completeness.
 The caller cannot supply head vectors, allowed IDs, claimed complete flags or arbitrary SQL.
 `complete` closes the retained finite population plus its captured creation/change bridge.
 It is not an empty current home and not a count comparison.
 Projection pages still independently exhaust each enumerated subject's selected evidence.
-The Source owner may adopt an equivalent existing internal declaration instead of this spelling.
-Search must then record and consume that exact callable; no guessed method is permitted.
+The canonical capture supplies the exact queried observation, start/execution union and deadline context.
+There is no second observation type or caller-supplied completeness evidence. Its immutable PIT/prepared
+registration, Source identity/incarnation/meaning and population definition must be resolved internally;
+neither a raw capture object nor the latest live ACK proves that binding. Search consumes this exact
+declaration; no guessed producer method or successful substitute registration is permitted.
 
 ### Proposed facet consumer extension, pending Search and Semantic adoption
 
