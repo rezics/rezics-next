@@ -39,7 +39,8 @@ test('malformed descriptor input closes every source without contacting Auth or 
           'file-local',
         ],
         {
-          fetch: (async (request: Request) => {
+          fetch: (async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
+            const request = input instanceof Request ? input : new Request(input, init);
             requests.push(request.url);
             throw new Error('Invalid input reached network');
           }) as typeof fetch,

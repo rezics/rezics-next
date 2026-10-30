@@ -71,7 +71,13 @@ function scalar(source: Exclude<SourceId, 'vndb'>, successor = false) {
     lines = records.map((record) => JSON.stringify(record));
   } else if (source === 'openlibrary') {
     // Explicit bibliographic projection; never retain private fields or user posts.
-    const work = { type: { key: '/type/work' }, key: '/works/OL900000001W', revision: 7, title: 'The Glass Atlas' };
+    const work = {
+      type: { key: '/type/work' },
+      key: '/works/OL900000001W',
+      revision: 7,
+      title: 'The Glass Atlas',
+      last_modified: { type: '/type/datetime', value: '2025-01-02T03:04:05.123456' },
+    };
     const edition = {
       type: { key: '/type/edition' },
       key: '/books/OL900000002M',
@@ -418,6 +424,7 @@ export async function runCliFileAdmissionJourney() {
       const nativeReceiptRows = (await receipts()).filter((row) => row.anchor.source === source);
       expect(nativeReceiptRows.length).toBeGreaterThan(0);
       const initialObjects = await objects();
+      expect(initialObjects.subjects.filter((row) => row.source === source).length).toBe(2);
       const invalids =
         source === 'vndb'
           ? [input.subarray(0, input.length - 700), archive(false, '../escape'), archive(false, 'db/vn')]
@@ -472,6 +479,7 @@ export async function runCliFileAdmissionJourney() {
         {
           bundle: { release: bundledRelease.catalogue, digest: bundledDigest },
           invocations: evidence,
+          results,
           receipts: await receipts(),
           objects: await objects(),
           media: await runtime.mediaBoundary.capture(),
