@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { stripeEvidenceMoneyUnit, type StripeMoneyProvenance } from './money.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { stripeTransport } from './stripe-transport.ts';
 import { assertCheckoutEvidence, assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
@@ -17,6 +18,7 @@ import {
 export type StripePortConfig = {
   apiKey: string;
   managedPayments: boolean;
+  accountNamespace?: string;
   host?: string;
   port?: number;
   protocol?: 'http' | 'https';
@@ -61,7 +63,7 @@ function currency(value: string | null): value is string {
 }
 
 // https://docs.stripe.com/api/balance_transactions/object: preserve Stripe's settlement amounts, fees and FX rate.
-function transaction(balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string): StripeTransaction {
+function transaction(balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string, provenance: StripeMoneyProvenance): StripeTransaction {
   evidence(
     balance.object === 'balance_transaction' &&
       validId(balance.id, 'txn_') &&
@@ -78,6 +80,9 @@ function transaction(balance: Stripe.BalanceTransaction, kind: TransactionKind, 
     'balance transaction association or amounts are inconsistent',
   );
   return {
+    moneyUnit: stripeEvidenceMoneyUnit(balance.currency, 'balance_transaction'),
+    providerApiVersion: provenance.responseApiVersion ?? provenance.requestApiVersion,
+    moneyProvenance: provenance,
     id: balance.id,
     kind,
     sourceId,
@@ -100,6 +105,7 @@ function transaction(balance: Stripe.BalanceTransaction, kind: TransactionKind, 
 async function boundedList<T extends { id: string }>(
   maximum: number,
   read: (limit: number, after: string | undefined) => Promise<Stripe.ApiList<T>>,
+  onPage?: (page: Stripe.ApiList<T>) => void,
 ): Promise<T[]> {
   const items: T[] = [];
   const seen = new Set<string>();
@@ -107,6 +113,7 @@ async function boundedList<T extends { id: string }>(
   for (;;) {
     const limit = maximum - items.length;
     const page = await read(limit, after);
+    onPage?.(page);
     evidence(
       page.object === 'list' &&
         typeof page.has_more === 'boolean' &&
@@ -127,6 +134,12 @@ async function boundedList<T extends { id: string }>(
     if (!page.data.length) throw new StripeUnavailableError('Stripe pagination did not advance');
     after = items.at(-1)!.id;
   }
+}
+
+/** Expanded objects inherit the actual response that carried them, including each list page. */
+function responseApiVersion(value: unknown): string | null {
+  const version = (value as { lastResponse?: { apiVersion?: string } }).lastResponse?.apiVersion;
+  return typeof version === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:\.[a-z]+)?$/.test(version) ? version : null;
 }
 
 export function createStripePort(config: StripePortConfig): StripePort & StripeCheckoutLocatorPort {
@@ -334,6 +347,15 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
             'succeeded payment charge is not fully captured',
           );
         }
+        const requestApiVersion = stripe.getApiField('version') ?? Stripe.API_VERSION;
+        const versions = new Map<string, string | null>();
+        const remember = (page: Stripe.ApiList<{ id: string }>) => {
+          for (const item of page.data) versions.set(item.id, responseApiVersion(page));
+        };
+        const lineage = (objectId: string, object: StripeMoneyProvenance['object'], context: StripeMoneyProvenance['context'], responseVersion: string | null): StripeMoneyProvenance => ({
+          accountNamespace: config.accountNamespace ?? 'direct', livemode: session.livemode,
+          objectId, object, context, requestApiVersion, responseApiVersion: responseVersion,
+        });
         const refunds = intent
           ? await boundedList(100, (limit, after) =>
               stripe.refunds.list({
@@ -342,6 +364,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
                 ...(after ? { starting_after: after } : {}),
                 expand: ['data.balance_transaction', 'data.failure_balance_transaction'],
               }),
+              remember,
             )
           : [];
         const disputes = intent
@@ -352,6 +375,7 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
                 ...(after ? { starting_after: after } : {}),
                 expand: ['data.balance_transactions'],
               }),
+              remember,
             )
           : [];
         // Validate associations while the original provider fields are still present. Lists are complete or fail.
@@ -418,30 +442,37 @@ export function createStripePort(config: StripePortConfig): StripePort & StripeC
         }
         const transactions: StripeTransaction[] = [];
         const transactionIds = new Set<string>();
-        const addTransaction = (balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string) => {
+        const addTransaction = (balance: Stripe.BalanceTransaction, kind: TransactionKind, sourceId: string, version: string | null) => {
           if (transactions.length === MAX_ORDER_TRANSACTIONS)
             throw new StripeUnavailableError('Stripe transaction limit exceeded');
           evidence(!transactionIds.has(balance.id), 'balance transaction identity repeated');
           transactionIds.add(balance.id);
-          transactions.push(transaction(balance, kind, sourceId));
+          transactions.push(transaction(balance, kind, sourceId, lineage(balance.id, 'balance_transaction', 'balance_transaction', version)));
         };
         const chargeBalance = charge ? expanded(charge.balance_transaction) : null;
-        if (charge && chargeBalance) addTransaction(chargeBalance, 'charge', charge.id);
+        if (charge && chargeBalance) addTransaction(chargeBalance, 'charge', charge.id, responseApiVersion(session));
         // https://docs.stripe.com/api/refunds/object: failed refunds can have a separate failure reversal.
         for (const refund of refunds) {
           const balance = expanded(refund.balance_transaction);
           const failure = expanded(refund.failure_balance_transaction ?? null);
-          if (balance) addTransaction(balance, 'refund', refund.id);
-          if (failure) addTransaction(failure, 'refund_reversal', refund.id);
+          if (balance) addTransaction(balance, 'refund', refund.id, versions.get(refund.id) ?? null);
+          if (failure) addTransaction(failure, 'refund_reversal', refund.id, versions.get(refund.id) ?? null);
         }
         // https://docs.stripe.com/api/disputes/object: balance_transactions includes withdrawals and reinstatements.
         for (const dispute of disputes) {
           for (const balance of dispute.balance_transactions) {
-            addTransaction(balance, balance.amount < 0 ? 'dispute' : 'dispute_reversal', dispute.id);
+            addTransaction(balance, balance.amount < 0 ? 'dispute' : 'dispute_reversal', dispute.id, versions.get(dispute.id) ?? null);
           }
         }
         assertTransactionBound(transactions);
+        const local = session.presentment_details;
+        evidence(!local || (currency(local.presentment_currency) && minor(local.presentment_amount)), 'presentment amounts are inconsistent');
         const snapshot: CheckoutSnapshot = {
+          integrationMoneyUnit: session.currency === null ? null : stripeEvidenceMoneyUnit(session.currency, 'checkout.integration'),
+          providerApiVersion: responseApiVersion(session) ?? requestApiVersion,
+          moneyProvenance: lineage(session.id, 'checkout.session', 'checkout.integration', responseApiVersion(session)),
+          presentment: local ? { currency: local.presentment_currency, amountMinor: local.presentment_amount,
+            moneyUnit: stripeEvidenceMoneyUnit(local.presentment_currency, 'checkout.presentment') } : null,
           sessionId: session.id,
           clientReferenceId: session.client_reference_id,
           metadataOrderId: session.metadata?.order_id ?? null,

@@ -100,7 +100,7 @@ function readWebhookSecrets(env: Environment): readonly string[] {
 function readStripeConfig(env: Environment, apiKey = readStripeApiKey(env)): CommerceConfig['stripe'] {
   const managed = required(env, 'STRIPE_MANAGED_PAYMENTS');
   if (managed !== 'true' && managed !== 'false') throw new ConfigError('STRIPE_MANAGED_PAYMENTS');
-  const stripe: CommerceConfig['stripe'] = { apiKey, managedPayments: managed === 'true' };
+  const stripe: CommerceConfig['stripe'] = { apiKey, managedPayments: managed === 'true', accountNamespace: readCommerceProviderConfig(env).accountNamespace };
   if (env.STRIPE_API_HOST !== undefined) {
     const value = required(env, 'STRIPE_API_HOST');
     const url = absoluteUrl(value, 'STRIPE_API_HOST', ['http:', 'https:']);

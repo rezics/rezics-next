@@ -19,7 +19,7 @@ import {
   type StripeEventRef,
   type StripePort,
 } from './model.ts';
-import { readOrder } from './store.ts';
+import { readOrder, readOrderTransactions } from './store.ts';
 import { createPayouts } from './payouts.ts';
 import { createCommerceWork as createCommerceEnqueue } from './enqueue.ts';
 import {
@@ -356,10 +356,14 @@ export function createCommerceWork(deps: CommerceWorkDependencies): WorkModule {
         },
         {
           name: 'commerce_royalty',
-          types: ['com.rezics.commerce.transactions.recorded.v1'],
+          types: ['com.rezics.commerce.transactions.recorded.v1', 'com.rezics.commerce.money.observed.v1', 'com.rezics.commerce.order.updated.v1'],
           async run(event) {
-            const { orderId, transactionIds } = event.data as { orderId: string; transactionIds: string[] };
-            await payouts.recordTransactions(orderId, transactionIds, `effect:${event.id}:royalty`);
+            const { orderId, transactionIds } = event.data as { orderId: string; transactionIds?: string[] };
+            // A later paid decision or ordinary known-order repair can release a prior pending source obligation.
+            const route = routeOf(orderId);
+            if (route === null) return;
+            const ids = transactionIds ?? (await readOrderTransactions(pool, route, orderId)).map((t) => t.id);
+            await payouts.recordTransactions(orderId, ids, `effect:${event.id}:royalty`);
           },
         },
         {

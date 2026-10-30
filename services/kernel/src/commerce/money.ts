@@ -103,3 +103,39 @@ export function validateOfferAmount(
     throw new RangeError('Invalid configured sale amount');
   return Object.freeze({ moneyUnit: scale2, taxBehavior: 'exclusive' });
 }
+
+/** Persisted observation contexts, mapped to the canonical field-unit authority below. */
+export type StripeMoneyContext = 'checkout.integration' | 'checkout.presentment' | 'balance_transaction';
+const evidenceFieldContexts: Readonly<Record<StripeMoneyContext, MoneyFieldContext>> = Object.freeze({
+  'checkout.integration': 'checkout_integration',
+  'checkout.presentment': 'checkout_presentment',
+  balance_transaction: 'balance_transaction',
+});
+export function stripeEvidenceMoneyUnit(currency: string, context: StripeMoneyContext): StripeMoneyUnit | null {
+  return readStripeMoneyUnit(currency, evidenceFieldContexts[context]);
+}
+
+export function sameMoneyUnit(a: StripeMoneyUnit | null | undefined, b: StripeMoneyUnit | null | undefined): boolean {
+  return !!a && !!b && a.system === b.system && a.exponent === b.exponent && a.factsVersion === b.factsVersion;
+}
+
+/** Validates serialized recorded meaning; never fills missing historical metadata. */
+export function recordedMoneyUnit(value: unknown): StripeMoneyUnit | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const unit = value as Record<string, unknown>;
+  return unit.system === 'stripe-api' && (unit.exponent === 0 || unit.exponent === 2) &&
+    unit.factsVersion === 'stripe-money-v1'
+    ? { system: 'stripe-api', exponent: unit.exponent, factsVersion: 'stripe-money-v1' }
+    : null;
+}
+
+/** Lineage of the actual API operation, excluding credentials, tokens and provider bodies. */
+export type StripeMoneyProvenance = Readonly<{
+  accountNamespace: string;
+  livemode: boolean;
+  objectId: string;
+  object: 'checkout.session' | 'balance_transaction';
+  context: StripeMoneyContext;
+  requestApiVersion: string;
+  responseApiVersion: string | null;
+}>;

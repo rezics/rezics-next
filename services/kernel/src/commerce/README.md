@@ -563,12 +563,56 @@ local allocation/reserve assumptions, **not provider facts**. Preserve actual pr
 unknown classifications/FX/tax evidence cannot justify payment. A full customer refund need not zero net receipts
 or earnings because tax/fees may remain. Do not fabricate tax credits, zero fees or full reversal evidence.
 
-Further commercial/shared adoption is required for separate integration/presentment/settlement amounts; provider
-allocation versus reserves, release conditions, same-currency negative carry and positive evidence-complete payable
-rules; and richer external attestation with actual date/method/amount/currency/reference. These are the provider
+Further commercial/shared adoption is required before runtime bodies for provider allocation versus reserves,
+release conditions, same-currency negative carry and positive evidence-complete payable rules; and richer external
+attestation with actual date/method/amount/currency/reference. These are the provider
 report's recommendations, not hidden adopted economics. Reserve duration, clawback, thresholds, partial external
 payment, correction states and FX netting remain unchosen. Existing mark-paid records an authorized external reference
 on a statement; it sends no Stripe transfer and does not prove payability or external finality.
+
+### Provider money observations
+
+[Money](money.ts) exports the closed `StripeMoneyUnit = Readonly<{system:'stripe-api'; exponent:0|2;
+factsVersion:'stripe-money-v1'}>` meaning. Unit facts version and actual provider API baseline are distinct.
+Nullable or absent historical metadata is unknown. The read-only evidence mapping recognizes USD/EUR exponent two
+for Checkout integration and balance amounts, and CAD exponent two for actual local presentment. It does not admit
+sales, qualify deployment, infer ISO/Intl units or apply charge/payout quanta to fees. Unproven exceptional balance
+contexts retain their raw amount, fee and net with unknown units.
+
+`CheckoutSnapshot.integrationMoneyUnit` applies to Session `currency`, `amount_subtotal`,
+`total_details.amount_tax` and `amount_total`. Optional `presentment` captures only actual `presentment_details`
+`presentment_currency`/`presentment_amount` as `{currency,amountMinor,moneyUnit}`; absence is null. It is neither a
+copy of integration amounts nor an FX calculation. `StripeTransaction.moneyUnit` describes the balance object's
+`currency`, `amount`, `fee`, `net` and same-currency `fee_details[].amount`. `providerApiVersion` records the
+response baseline when supplied, otherwise the actual pinned SDK request baseline. `moneyProvenance` separately
+records request and response versions, namespace, live/test mode, exact native object ID/type and field context.
+The SDK version is unchanged; expanded balances inherit the response/page carrying them. No account ledger or
+bank payout collection is added.
+
+[Native observations](money-observation.ts) append these sanitized tuples and an economics hash in buyer-home
+`commerce.money_observation`; original movements never change. A historical unknown acquires meaning only from a
+fresh matching provider read, after native revision/claim, receipt and account fences and raw economics comparison.
+Terminal buyers cannot append interpretations. Metadata-only refreshes commit `moneyMetadataChanged`, their receipt,
+order revision and registered `money.observed` effect without extra payment or entitlement effects. Exact observation
+replay adds nothing. Existing royalty effects consume both new movements and interpretations; known matching source
+interpretations flow through the same named-transaction read and repair paths.
+
+Royalty lines, totals and statement DTOs expose optional nullable `moneyUnit`. Projection requires recorded known
+units and refuses incompatible same-currency grouping. Tax reserves use recorded exponents; allocation and rounding
+policy is unchanged. Missing unit/tax interpretation is a typed unavailable royalty obligation, never successful
+empty work or permission to pay. It cannot erase historical paid/refund/dispute truth or existing safe entitlement
+eligibility. Legacy statement/line units remain null, including paid identities; their numbers are never relabelled
+by a current lookup. Existing unknown/incompatible statement grouping blocks new aggregation rather than absorbing
+known money. Missing interpretation remains repair debt with retained source transactions.
+
+`moneyObservationOwnership` declares the existing financial `commerce` participant as owner, with bounded indexed
+buyer-home page/probe and minimization queries. Fields are only route/buyer/order and provider object/context/version
+keys, unit/amount evidence, economics hash and native command times/ID; there are no URLs, tokens, provider bodies or
+fee-description copies. No new retention exception is granted. The financial participant and its schedule remain
+unavailable in this base as described below; this surface does not acknowledge erasure or claim full custody delivery.
+Each snapshot supplies at most 256 balance objects plus integration and actual presentment. Reads use named
+route/order/object/context index seeks with one recorded known interpretation per key; buyer cleanup touches at most
+100 indexed rows per page.
 
 The [module map](../../../../docs/commerce-modules.md#preserve-todays-facts-for-a-later-ledger) owns future immutable
 party/capacity, benefit/terms, money/unit, source/effect and royalty evidence requirements. Historical incomplete

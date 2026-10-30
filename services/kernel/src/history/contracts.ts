@@ -191,6 +191,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.commerce.order.updated.v1': personal('buyer', 'creator'),
   'com.rezics.commerce.payout_statement.paid.v1': personal('creator'),
   'com.rezics.commerce.payout_statement.updated.v1': personal('creator'),
+  'com.rezics.commerce.money.observed.v1': personal('buyer', 'creator'),
   'com.rezics.commerce.transactions.recorded.v1': personal('buyer', 'creator'),
   'com.rezics.community.publication.adopted.v1': nonPersonal,
   'com.rezics.community.publication.rejected.v1': nonPersonal,

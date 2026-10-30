@@ -1,3 +1,4 @@
+import { MoneyInterpretationUnavailable } from './royalty.ts';
 import { randomBytes } from 'node:crypto';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -17,12 +18,17 @@ import { createPayouts, listPayoutLines, listPayoutStatements, readPayoutStateme
 
 const amount = t.Integer({ minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER });
 const id = t.String({ format: 'uuid' });
+const moneyUnit = t.Optional(t.Union([t.Object({
+  system: t.Literal('stripe-api'), exponent: t.Union([t.Literal(0), t.Literal(2)]),
+  factsVersion: t.Literal('stripe-money-v1'),
+}, { additionalProperties: false }), t.Null()]));
 const statement = t.Object(
   {
     id,
     creatorAccountId: id,
     period: t.String({ pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }),
     currency: t.String(),
+    moneyUnit,
     grossMinor: amount,
     taxMinor: amount,
     feeMinor: amount,
@@ -57,6 +63,7 @@ const line = t.Object(
     offerId: id,
     creatorAccountId: id,
     currency: t.String(),
+    moneyUnit,
     kind: t.Union([
       t.Literal('charge'),
       t.Literal('refund'),
@@ -87,6 +94,7 @@ const unavailable = problemSchema(
   'partition_unavailable',
   'transaction_retry_exhausted',
   'deadline_exceeded',
+  'dependency_unavailable',
 );
 const errors = {
   400: problemSchema('invalid_request'),
@@ -230,6 +238,7 @@ export function payoutRoutes(
             ),
           )
           .catch((error: unknown) => {
+            if (error instanceof MoneyInterpretationUnavailable) throw new ProblemError('dependency_unavailable');
             if (error instanceof GrantDeniedError) throw new ProblemError('not_found');
             throw error;
           });

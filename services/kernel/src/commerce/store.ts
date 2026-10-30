@@ -37,6 +37,7 @@ import transactionsCount from './store-transactions-count.sql';
 import transactionsProbe from './store-transactions-probe.sql';
 import transactionsNamed from './store-transactions-named.sql';
 import { assertTransactionBound, CheckoutMismatchError, MovementIntegrityError } from './settlement.ts';
+import { interpretedTransactions } from './money-observation.ts';
 import { MAX_ORDER_TRANSACTIONS } from './model.ts';
 
 type Client = Pick<PoolClient, 'query'>;
@@ -326,7 +327,7 @@ export async function readNamedOrderTransactions(
   assertTransactionBound(ids);
   const rows = await transactionsNamed.run(queryClient(client), { route, ids: [...ids] });
   if (rows.some((row) => row.orderId !== orderId)) throw new MovementIntegrityError();
-  return rows.map(asTransaction);
+  return interpretedTransactions(client, route, orderId, rows.map(asTransaction));
 }
 
 export async function readOrderTransactions(
@@ -335,7 +336,7 @@ export async function readOrderTransactions(
   orderId: string,
 ): Promise<StripeTransaction[]> {
   const rows = await transactionsRead.run(queryClient(client), { route, order_id: orderId });
-  return rows.map(asTransaction);
+  return interpretedTransactions(client, route, orderId, rows.map(asTransaction));
 }
 export async function readSettlementState(
   client: Client,
@@ -360,6 +361,7 @@ export type AppliedCheckoutDecision =
   | { changed: false }
   | {
       changed: true;
+      moneyMetadataChanged?: true;
       order: Order;
       entitlement: Entitlement | null;
       entitlementAction: Extract<CheckoutDecision, { changed: true }>['entitlement'];

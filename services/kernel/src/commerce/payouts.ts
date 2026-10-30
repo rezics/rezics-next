@@ -18,9 +18,12 @@ import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { recordedMoneyUnit, sameMoneyUnit } from './money.ts';
+import { checkoutIntegrationMoney } from './money-observation.ts';
 import type { TransactionKind } from './model.ts';
-import { statementPeriod, royaltyLines, type RoyaltyLine, type StatementTotal } from './royalty.ts';
+import { statementPeriod, royaltyLines, MoneyInterpretationUnavailable, type RoyaltyLine, type StatementTotal } from './royalty.ts';
 import { readOrder, readNamedOrderTransactions } from './store.ts';
+import retainedUnits from './payout-retained-units.sql';
 import record from './payout-record.sql';
 import { assertTransactionBound, MovementIntegrityError } from './settlement.ts';
 import statementRead from './payout-statement-read.sql';
@@ -62,6 +65,7 @@ function statement(row: StatementRow): PayoutStatement {
   const creatorShareMinor = money(BigInt(row.weightedNetMinor) / 10000n);
   return {
     ...row,
+    moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
     grossMinor: money(row.grossMinor),
     taxMinor: money(row.taxMinor),
     feeMinor: money(row.feeMinor),
@@ -202,6 +206,7 @@ export async function listPayoutLines(
   });
   const lines: PayoutLine[] = result.rows.map((row) => ({
     ...row,
+    moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
     kind: row.kind as TransactionKind,
     created: new Date(row.created).toISOString(),
     recordedAt: new Date(row.recordedAt).toISOString(),
@@ -226,7 +231,9 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
     const order = await readOrder(pool, buyerRoute, orderId);
     if (!order || order.settlement !== 'paid') return { changed: false };
     const transactions = await readNamedOrderTransactions(pool, buyerRoute, orderId, ids);
-    const lines = royaltyLines(order, order.amountTaxMinor ?? null, transactions);
+    if (transactions.length !== ids.length) throw new MoneyInterpretationUnavailable();
+    const integration = await checkoutIntegrationMoney(pool, buyerRoute, order);
+    const lines = royaltyLines(order, integration?.amountTaxMinor ?? order.amountTaxMinor ?? null, transactions, integration?.moneyUnit);
     if (!lines.length) return { changed: false };
     const route = routeOf(order.creatorAccountId)!;
     try {
@@ -254,6 +261,12 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
           }
           const at = authoritativeTimeValue(command.time),
             period = statementPeriod(at);
+          const existing = await retainedUnits.run(tx, { route, ids });
+          for (const row of existing) {
+            const line = lines.find((line) => line.balanceTransactionId === row.id)!;
+            if (!sameMoneyUnit(row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)), line.moneyUnit))
+              throw new MoneyInterpretationUnavailable();
+          }
           const rows = await record.run(tx, {
             route,
             creator: order.creatorAccountId,
@@ -266,6 +279,7 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
               id: line.balanceTransactionId,
               kind: line.kind,
               currency: line.currency,
+              money_unit: line.moneyUnit,
               gross: line.grossMinor,
               tax: line.taxMinor,
               fee: line.feeMinor,
@@ -296,6 +310,8 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
       if (error instanceof Unchanged) return { changed: false };
       // The exact-key conflict branch reaches the existing immutable-row guard, never an overwrite.
       // Serialization errors remain native retry signals; unrelated constraint failures propagate.
+      if (error instanceof Error && 'code' in error && error.code === '23514' &&
+          error.message === 'Statement money interpretation unavailable') throw new MoneyInterpretationUnavailable();
       if (
         error instanceof Error &&
         'code' in error &&
@@ -341,6 +357,7 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
         if (!current) throw notFound();
         const at = authoritativeTimeValue(command.time),
           period = statementPeriod(at);
+        if (current.moneyUnit === null || !recordedMoneyUnit(JSON.parse(current.moneyUnit))) throw new MoneyInterpretationUnavailable();
         if (current.state !== 'open' || current.period >= period) throw new ProblemError('conflict');
         const row = await paid.run(tx, { route, id, at, period, reference: paidReference });
         if (!row) throw new ProblemError('conflict');

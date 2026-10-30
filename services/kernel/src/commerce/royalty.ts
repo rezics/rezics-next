@@ -1,7 +1,13 @@
 import type { Order, StripeTransaction, TransactionKind } from './model.ts';
 import { movementEconomics, MovementIntegrityError } from './settlement.ts';
+import { recordedMoneyUnit, sameMoneyUnit, type StripeMoneyUnit } from './money.ts';
+
+export class MoneyInterpretationUnavailable extends Error {
+  constructor() { super('Royalty money interpretation unavailable'); this.name = 'MoneyInterpretationUnavailable'; }
+}
 
 export type RoyaltyLine = {
+  moneyUnit?: StripeMoneyUnit | null;
   balanceTransactionId: string;
   orderId: string;
   currency: string;
@@ -16,7 +22,7 @@ export type RoyaltyLine = {
 
 export type StatementTotal = Pick<
   RoyaltyLine,
-  'currency' | 'grossMinor' | 'taxMinor' | 'feeMinor' | 'disputeFeeMinor' | 'netReceiptsMinor'
+  'currency' | 'moneyUnit' | 'grossMinor' | 'taxMinor' | 'feeMinor' | 'disputeFeeMinor' | 'netReceiptsMinor'
 > & {
   /** Signed deductions: reversals reduce these subtotals. Already included in grossMinor. */
   refundsMinor: number;
@@ -40,18 +46,13 @@ function ceiling(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator - 1n) / denominator;
 }
 
-// Stripe amounts use currency minor units, including its two-decimal ISK and UGX exceptions:
-// https://docs.stripe.com/currencies#minor-units-in-api-amounts
-function scale(currency: string): bigint {
-  const digits =
-    currency === 'isk' || currency === 'ugx'
-      ? 2
-      : new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits;
-  return 10n ** BigInt(digits!);
-}
-
-function convertedTax(tax: bigint, from: string, transaction: StripeTransaction): bigint {
-  if (tax === 0n || from === transaction.currency) return tax;
+function convertedTax(tax: bigint, from: string, fromUnit: StripeMoneyUnit | null | undefined, transaction: StripeTransaction): bigint {
+  if (tax === 0n) return tax;
+  if (!recordedMoneyUnit(fromUnit) || !recordedMoneyUnit(transaction.moneyUnit)) throw new MoneyInterpretationUnavailable();
+  if (from === transaction.currency) {
+    if (!sameMoneyUnit(fromUnit, transaction.moneyUnit)) throw new MoneyInterpretationUnavailable();
+    return tax;
+  }
   const rate = transaction.exchangeRate;
   if (rate === null || !Number.isFinite(rate) || rate <= 0)
     throw new RangeError('Missing valid settlement exchange rate');
@@ -65,7 +66,7 @@ function convertedTax(tax: bigint, from: string, transaction: StripeTransaction)
   const denominator = 10n ** BigInt(Math.max(0, -power));
   // Assumption: the API above defines the rate, not rounding for an allocated tax component.
   // Reserve the next whole settlement minor unit so rounding cannot overpay the creator.
-  return ceiling(tax * numerator * scale(transaction.currency), denominator * scale(from));
+  return ceiling(tax * numerator * 10n ** BigInt(transaction.moneyUnit!.exponent), denominator * 10n ** BigInt(fromUnit!.exponent));
 }
 
 /** snapshotTax is Checkout total_details.amount_tax, in the Session's integration currency. */
@@ -73,6 +74,7 @@ export function royaltyLines(
   order: Order,
   snapshotTax: number | null,
   transactions: readonly StripeTransaction[],
+  integrationUnit?: StripeMoneyUnit | null,
 ): RoyaltyLine[] {
   // amount_tax sums Session taxes:
   // https://docs.stripe.com/api/checkout/sessions/object?query=total_details
@@ -84,6 +86,8 @@ export function royaltyLines(
   if ((tax !== null && tax < 0n) || subtotal < 0n) throw new RangeError('Sale amounts must be nonnegative');
   const lines = new Map<string, { signature: string; line: RoyaltyLine }>();
   for (const transaction of transactions) {
+    const moneyUnit = recordedMoneyUnit(transaction.moneyUnit);
+    if (!moneyUnit) throw new MoneyInterpretationUnavailable();
     const gross = integer(transaction.amountMinor);
     const stripeFee = integer(transaction.feeMinor);
     // amount is signed gross, including collected tax. fee includes withheld tax, and only net
@@ -136,7 +140,7 @@ export function royaltyLines(
       lineTax = 0n;
       if (!debit) {
         if (tax === null) throw new Error('Missing Checkout tax evidence');
-        if (transaction.kind === 'charge') lineTax = convertedTax(tax, order.currency, transaction);
+        if (transaction.kind === 'charge') lineTax = convertedTax(tax, order.currency, integrationUnit, transaction);
         else if (tax > 0n) {
           // Refund failures return funds, and won disputes reinstate funds:
           // https://docs.stripe.com/refunds#handle-failed-refunds
@@ -151,6 +155,7 @@ export function royaltyLines(
     // Stripe doesn't normally return processing fees on refunds. Credit only actual negative details:
     // https://docs.stripe.com/refunds
     const line: RoyaltyLine = {
+      moneyUnit,
       balanceTransactionId: transaction.id,
       orderId: order.id,
       currency: transaction.currency,
@@ -188,7 +193,12 @@ export function statementTotals(
     Record<(typeof amountFields)[number] | 'refundsMinor' | 'chargebacksMinor' | 'weightedNetMinor', bigint>
   >();
   const seen = new Map<string, string>();
+  const units = new Map<string, StripeMoneyUnit>();
   for (const line of lines) {
+    const unit = recordedMoneyUnit(line.moneyUnit);
+    if (!unit || (units.has(line.currency) && !sameMoneyUnit(units.get(line.currency), unit)))
+      throw new MoneyInterpretationUnavailable();
+    units.set(line.currency, unit);
     const basisPoints = rate(line.royaltyBasisPoints ?? royaltyBasisPoints!);
     const amounts = amountFields.map((field) => integer(line[field]));
     const signature = JSON.stringify([
@@ -196,6 +206,7 @@ export function statementTotals(
       line.kind,
       line.created,
       line.currency,
+      unit,
       ...amountFields.map((field) => line[field]),
       String(basisPoints),
     ]);
@@ -230,6 +241,7 @@ export function statementTotals(
     const creator = total.weightedNetMinor / 10000n;
     return {
       currency,
+      moneyUnit: units.get(currency)!,
       grossMinor: minor(total.grossMinor),
       taxMinor: minor(total.taxMinor),
       feeMinor: minor(total.feeMinor),
