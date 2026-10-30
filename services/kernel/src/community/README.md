@@ -736,8 +736,8 @@ Accounts owns `member-count.ts` and its `RealmMemberCount = Readonly<{count:numb
 `readRealmMemberCount(client: AccessClient, {realmId, at: AuthoritativeTime})` returns that native current result
 or null when unknown. Content binds this original module at the reader's existing before/final Realm anchors;
 it neither initializes nor maintains counts. The native source below supplies only covered current results.
-Source errors and null remain unknown,
-never zero; a changed final count/version is withheld without retry. This registration grants no membership,
+Source errors and null remain unknown, never zero; a changed final count/version is withheld without retry.
+This registration grants no membership,
 role admission, removal or creator authority.
 
 ### Cost: presentation settings and rules adoption
@@ -748,6 +748,7 @@ role admission, removal or creator authority.
   at most 65,536 canonical bytes; no revision walk, recount or retry scan.
 - Growth check: later reuse `test/community/growth-realm.test.ts` and `test/content/growth-threads.test.ts`;
   focused native outcomes live in `test/community/presentation.test.ts`. Type checking proves no native cost outcome.
+
 ## Current native Realm member count
 
 `readRealmMemberCount(client, { realmId, at })` in `member-count.ts` returns only
