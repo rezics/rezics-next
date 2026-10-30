@@ -27,6 +27,7 @@ import { beginSemanticErasure, createSemanticLocatorEffect, SEMANTIC_ERASURE_SCH
 import { registerSemanticErasureWork } from './account-erasure-work.ts';
 
 import { registerRecordRetentionWork } from './retention-work.ts';
+import { registerIdentityScopedObservationWork } from './identity-scoped-observations.ts';
 import { providerReviewProjection, registerProviderReviewWork } from './provider-review-queue.ts';
 
 const ACCOUNT_TOMBSTONED = 'com.rezics.access.account-tombstoned.v1';
@@ -68,6 +69,7 @@ export const semanticWorkModule: WorkModule = {
     registerSubjectPagePublicationWork(context, publication);
     const scheduleErasure = registerSemanticErasureWork(context);
     await registerRecordRetentionWork(context);
+    await registerIdentityScopedObservationWork(context);
     registerProviderReviewWork(context);
     registerIdentityEpochCoordinator(context);
     context.addEffects([

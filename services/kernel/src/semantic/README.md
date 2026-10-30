@@ -503,6 +503,55 @@ NOT and order-only originals. A finite unchanged owner source must make useful-p
 run continuously. A genuinely all-group catalogue can have broad dependencies without stalling that owner source.
 Partition summaries carry committed scoped reader revisions, never max allocated epoch or global job history.
 
+`createIdentityScopedObservations(pool)` publishes the native `register`, `arm`, `finish`, `revalidate`,
+`repair` and `retire` declarations in `identity-scope-types.ts`. Registration retains complete Source capture
+frontiers and inverse enrollment; pre-arm receiving commits the exact attempt obligation and reader revision
+together. The existing maintenance queue revisits one pending scope per selected home, with retained circular
+cursors so an unavailable scope does not prevent another scope's repair. Public structural capture is owned
+by `identity-scoped-public-source.ts`; the opaque handle only locates its committed native records.
+
+Library completion pages the original `library/identity-scope-effects.ts` native expected selections, one
+bounded page per step. Caller `records`/`receiving` arrays are optional lookup hints. Each selected committed
+receiving binding, applied effect and exact control custody must resolve before the Source retains its frontier.
+The completion head binds registration, capture, source generation, immutable attempt and the complete native
+seal/version/frontier. Changed or unsealed input cannot inherit an earlier prefix. Exhaustion closes the active
+attempt only after `verifyLibraryScopeEffectsSeal` succeeds on the live Source command and current native
+owner/capture/attempt guards hold. That transaction increments the committed revision; it leaves Source repair
+to establish the next clean observation. Enumeration and native hold guards share the caller's original
+`WorkAllowance` through `NativeCollectionWork.compose`; native receipts are charged without resetting dimensions.
+Maintenance uses the retained caller or registration step ceiling for a fresh bounded reservation per step.
+A fresh registration after retirement gets a new registration ID and increments the existing revision; it
+cannot inherit the earlier attempt's completion prefix. Upgrade rows with unknown preexisting send outcomes
+stay unavailable unless their exact committed directory locator is retained; absence is never rollback.
+
+Retirement first makes the summary unsafe, finishes real outstanding attempts, then retires one directory ticket
+at a time under its original bridge. A durable source-local sending intent precedes every directory enrollment.
+Directory release retains a native receipt and tombstone, so a lost reply or delayed enrollment cannot resurrect
+a removed ticket. Closed bridges retain tickets until their preparation custody reopens them. After the final
+local unresolved seek, actual native `releaseHold` and the retired summary commit together. Immutable old cursor
+bases fail the retiring summary; retiring a registration creates no authority to purge its native business Source
+or another owner's capture/history. Attempt and retirement tombstones remain against delayed messages.
+
+Library public-output identity is separate from account-owned identity: its Source address binds Collection,
+incarnation, output generation and immutable activation transaction/decimal position/source generation. Current
+source generation is independently checked. No account ID is inferred from a Collection. The old Library native
+factory is untouched; its current rejection of an unsupported public-output locator remains unavailable until
+its owner delivers the discriminated runtime.
+
+Foreign runtime readiness remains explicit. The exact original-module Library expected-effect declarations
+are provisional unavailable adapters until the native producer arrives. The additive
+`identity-receiving-effects.ts:readIdentityReceivingSelection(pool, selection, {deadline})` is loaded read-only
+when delivered; no hint can substitute for its committed record. The admission ticket reader and FAA binding
+also remain provisional in this base. Public catalogue completion retains its own capture/attempt-bound expected
+state and never consumes a Library seal. Its remaining foreign ABI is a public-catalogue native expected
+projection/effect page, current Source-local final seal verifier, and exact committed projection/receiving lookup
+bound to `(NativePublicSource, captureId, registration, scopeId, job, attempt)`. No such export exists in
+`public-filter-source-binding.ts`; its public read/repair declarations do not certify identity-effect exhaustion.
+Until that producer is available the public active obligation is retained and cannot advance the reader revision
+as completed. These boundaries are native readiness limits, not a claim that this implementation passed native proof.
+The focused `identity-scoped-observation-outcomes.test.ts` scenarios remain integration acceptance, unexecuted
+at this implementation stage.
+
 The [owning contract](identity-epoch-contract.md#scoped-reader-publication-and-complete-query-dependencies)
 derives native registration, arm/finish custody, reordered lower-job publication/cancel handling and start/final/
 current cursor checks from existing source keys/observations. Actual complete native Collection/owner/Search

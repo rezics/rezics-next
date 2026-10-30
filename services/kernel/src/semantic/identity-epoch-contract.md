@@ -274,6 +274,22 @@ are in custody. A cancelled attempt cannot arm later or publish a source change.
 finishing after a higher one must still advance the committed scope revision: `max(allocated epoch)` loses that
 change. A cancellation after a higher publication cannot regress the revision or overwrite active state.
 
+Library scope completion enumerates the native `LibraryScopeEffectsPage` frontier from its first sealed
+page through exhaustion under the same seal key, generation, version and frontier. Every exact selected
+receiving binding, applied effect and control custody is resolved from committed owner records; caller arrays
+are optional hints. Retained completion rows bind source registration/capture/generation and immutable attempt.
+A changed seal invalidates the earlier prefix. Only live Source-local `verifyLibraryScopeEffectsSeal` plus the
+final native source/owner/attempt guards can finish the scope. Pending, missing or unsealed pages cannot seal
+zero, clear an obligation or increment the committed revision as completed. Native WorkReceipts debit the
+original reserved dimensions. Public catalogue completion requires its distinct native projection/receiving
+coverage; Library exhaustion supplies no public catalogue proof.
+
+Retirement progresses actual active attempts before directory release. The source persists each sending intent
+before visiting its directory home. Release under the same open bridge records a native receipt and tombstone
+before source-local forward custody is removed; a closed bridge keeps the ticket discoverable. Only exhausted
+source-local obligations and actual native hold release permit the retired-state commit. This retires the
+scoped registration, not the native business Source or its independent purge obligations.
+
 The existing source observation must consume these partition summaries through retained, indexed repair and a
 native source-local publication CAS. A new accepted summary advances the source's COMMITTED scoped scalar revision
 and retains pending work until all covered dependencies are current; it does not copy a per-job global history.
@@ -1616,3 +1632,11 @@ there is no fallback to fresh `readAndHold`, raw metadata or serialized custody.
 new read, complete observation, ordinary destination-disposition or general admission authority. Only the exact
 accepted receiving record and its local gate admit this effect; native effect/frontier and control custody are
 still required before release.
+
+The scoped producer's closed request/result declarations are exported by `identity-scope-types.ts`.
+Source keys distinguish native Library and public catalogue identities. Public capture is the opaque native
+`PublicIdentitySourceCapture` declared in `identity-scoped-public-source.ts`; it is never a Library capture.
+Each delivery names the Source scope and immutable admission receipt. Receiving records are lookup locators,
+not completion verdicts. Registration and bounded repair may return pending. No pending result establishes
+coverage, publication, permission or a current reader observation. The indexed pre-arm protocol closes the
+claim-to-Source boundary before the first pending claim; asynchronous arm delivery cannot establish it.
