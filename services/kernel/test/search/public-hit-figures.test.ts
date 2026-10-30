@@ -216,15 +216,20 @@ test('kept Search pages batch native missing, below-threshold, prior-ready and p
       const backendIndexes = raw.statementBackends!.flatMap((backend, index) =>
         backend === projectionBackend ? [index] : [],
       );
-      const beginPosition = backendIndexes.findIndex(
-        (index) => raw.statements[index] === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+      const figurePosition = backendIndexes.find((index) =>
+        raw.statements[index]!.includes('FROM rating.public_figure'),
       );
-      expect(beginPosition).toBeGreaterThanOrEqual(0);
-      const commitPosition = backendIndexes.findIndex(
-        (index, position) => position > beginPosition && raw.statements[index] === 'COMMIT',
+      expect(figurePosition).toBeDefined();
+      const beginPosition = backendIndexes.findLast(
+        (index) =>
+          index < figurePosition! && raw.statements[index] === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
       );
-      expect(commitPosition).toBeGreaterThan(beginPosition);
-      const statementIndexes = backendIndexes.slice(beginPosition, commitPosition + 1);
+      expect(beginPosition).toBeDefined();
+      const commitPosition = backendIndexes.find(
+        (index) => index > figurePosition! && raw.statements[index] === 'COMMIT',
+      );
+      expect(commitPosition).toBeDefined();
+      const statementIndexes = backendIndexes.filter((index) => index >= beginPosition! && index <= commitPosition!);
       const selectedStatements = new Set(statementIndexes);
       const planIndexes = raw.planStatements!.flatMap((statement, index) =>
         statement !== undefined && selectedStatements.has(statement) ? [index] : [],
