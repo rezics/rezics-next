@@ -17,6 +17,7 @@ test('minimal verification mode replaces acceptance checks with a local type che
     expect(protocol).toContain('Verification is minimal');
     expect(protocol).toContain('typecheck');
     expect(protocol).toContain('compiler database');
+    expect(protocol).toContain('env -u KERNEL_CHECK_REMOTE');
     expect(protocol).not.toContain('Run the acceptance command once');
     expect(protocol).not.toContain('--wait <id>`, poll');
   } finally {
