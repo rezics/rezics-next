@@ -185,8 +185,10 @@ export function publicRenderSite(): Promise<string> {
     await Bun.write(
       config,
       `
-      import config from ${JSON.stringify(pathToFileURL(join(app, 'vite.config.ts')).href)};
-      export default { ...config, cacheDir: ${JSON.stringify(join(directory, 'cache'))}, plugins: [...config.plugins, {
+      import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
+      export default async (env) => {
+        const config = await resolveWebViteConfig(env, ${JSON.stringify(app)});
+        return { ...config, cacheDir: ${JSON.stringify(join(directory, 'cache'))}, plugins: [...(config.plugins ?? []), {
         name: 'count-session-rpcs', enforce: 'pre',
         transform(code, id) {
           // Hold time constant as well as kernel data: router hydration includes read timestamps.
@@ -202,6 +204,7 @@ export function publicRenderSite(): Promise<string> {
             .replace('credential(): Promise<Credential> {', 'credential(): Promise<Credential> { return fetch(${JSON.stringify(`${fake.url.origin}/credential-read`)}).then(() => this.countedCredential()); } private countedCredential(): Promise<Credential> {');
         }
       }] };
+      };
     `,
     );
     const port = await new Promise<number>((resolve, reject) => {

@@ -73,8 +73,10 @@ function site() {
     await Bun.write(
       config,
       `
-      import config from ${JSON.stringify(pathToFileURL(join(app, 'vite.config.ts')).href)};
-      export default { ...config, cacheDir: ${JSON.stringify(join(directory, 'cache'))}, plugins: [...config.plugins, {
+      import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
+      export default async (env) => {
+        const config = await resolveWebViteConfig(env, ${JSON.stringify(app)});
+        return { ...config, cacheDir: ${JSON.stringify(join(directory, 'cache'))}, plugins: [...(config.plugins ?? []), {
         name: 'controlled-session-store', enforce: 'pre',
         transform(code, id) {
           if (id.endsWith('/src/router.tsx')) return code.replace('return router;', "if (typeof window !== 'undefined') window.__testRouter = router; return router;");
@@ -84,6 +86,7 @@ function site() {
           );
         }
       }] };
+      };
     `,
     );
     const port = await new Promise<number>((done, reject) => {

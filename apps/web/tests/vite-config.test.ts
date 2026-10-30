@@ -6,7 +6,7 @@ import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
 import { createServer as createViteServer } from 'vite';
-import config from '../vite.config.ts';
+import { resolveWebViteConfig } from './support/vite-config';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
@@ -17,6 +17,8 @@ function isWithin(parent: string, child: string): boolean {
 }
 
 test('Vite serves resolved workspace dependencies while keeping files outside its roots denied', async () => {
+  // This is a build-time config inspection, not a fixture runtime, so it does not allocate Worker persistence.
+  const config = await resolveWebViteConfig({ command: 'build', mode: 'test' }, appRoot);
   const dependencyRoot = realpathSync(join(workspaceRoot, 'node_modules'));
   const dependencyFile = realpathSync(join(appRoot, 'node_modules/@tanstack/react-start/dist/esm/index.js'));
   const allow = config.server?.fs?.allow ?? [];

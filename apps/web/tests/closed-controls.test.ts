@@ -204,8 +204,10 @@ function site(): Promise<string> {
     await Bun.write(
       config,
       `
-      import config from ${JSON.stringify(pathToFileURL(join(app, 'vite.config.ts')).href)};
-      export default { ...config, plugins: [...config.plugins, {
+      import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
+      export default async (env) => {
+        const config = await resolveWebViteConfig(env, ${JSON.stringify(app)});
+        return { ...config, plugins: [...(config.plugins ?? []), {
         name: 'count-exposure-session-rpcs', enforce: 'pre',
         transform(code, id) {
           if (!id.endsWith('/src/session/store.ts')) return;
@@ -214,6 +216,7 @@ function site(): Promise<string> {
             .replace('credential(): Promise<Credential> {', 'credential(): Promise<Credential> { return fetch(${JSON.stringify(`${fake.url.origin}/session-read`)}).then(() => this.countedCredential()); } private countedCredential(): Promise<Credential> {');
         }
       }] };
+      };
     `,
     );
     const port = await freePort();

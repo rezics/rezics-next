@@ -145,8 +145,10 @@ function site(): Promise<string> {
     await Bun.write(
       config,
       `
-      import config from ${JSON.stringify(pathToFileURL(join(app, 'vite.config.ts')).href)};
-      export default { ...config, cacheDir: ${JSON.stringify(join(directory, 'cache'))}, plugins: [...config.plugins, {
+      import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
+      export default async (env) => {
+        const config = await resolveWebViteConfig(env, ${JSON.stringify(app)});
+        return { ...config, cacheDir: ${JSON.stringify(join(directory, 'cache'))}, plugins: [...(config.plugins ?? []), {
         name: 'anonymous-reads-session-fixture', enforce: 'pre',
         transform(code, id) {
           if (!id.endsWith('/src/session/store.ts')) return;
@@ -161,6 +163,7 @@ function site(): Promise<string> {
             );
         }
       }] };
+      };
       `,
     );
     const port = await freePort();
