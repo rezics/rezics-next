@@ -1,3 +1,14 @@
+import { recordPreparedIdentityPrearm, sealColocatedEmptyIdentityPrearm } from './identity-epoch-prearm.ts';
+import admissionInsertJob from './identity-epoch-admission-insert-job.sql';
+import admissionInsertBases from './identity-epoch-admission-insert-bases.sql';
+import admissionHandoff from './identity-epoch-admission-handoff.sql';
+import admissionPrepare from './identity-epoch-admission-prepare.sql';
+import admissionAcquire from './identity-epoch-admission-acquire.sql';
+import admissionRecord from './identity-epoch-admission-record.sql';
+import admissionReceipt from './identity-epoch-admission-receipt.sql';
+import admissionCustodyPrepare from './identity-epoch-admission-custody-prepare.sql';
+import admissionCustodyAcquire from './identity-epoch-admission-custody-acquire.sql';
+import admissionPromote from './identity-epoch-admission-promote.sql';
 import { bindSemanticProducerRoles } from './erasure-producer.ts';
 import { readAccountIdentitySource } from '../access/agent-verification-identity.ts';
 import { admitIdentityReceivingEffect } from './identity-receiving-effects.ts';
@@ -20,10 +31,6 @@ import storeSelectMapping from './identity-epoch-store-select-mapping.sql';
 import storeSelectBootstrapHome from './identity-epoch-store-select-bootstrap-home.sql';
 import storeSelectGroup from './identity-epoch-store-select-group.sql';
 import storeSelectControl2 from './identity-epoch-store-select-control-2.sql';
-import storeInsertJob from './identity-epoch-store-insert-job.sql';
-import storeInsertInput from './identity-epoch-store-insert-input.sql';
-import storeUpdateControl from './identity-epoch-store-update-control.sql';
-import storeUpdateGroup from './identity-epoch-store-update-group.sql';
 import storeSelectSubject2 from './identity-epoch-store-select-subject-2.sql';
 import storeSelectMapping3 from './identity-epoch-store-select-mapping-3.sql';
 import storeInsertMapping from './identity-epoch-store-insert-mapping.sql';
@@ -293,6 +300,7 @@ export const identityEpochStore: IdentityEpochStore = {
         canonicalize(prior.receipt) !== canonicalize(receiptValue(receipt))
       )
         throw new IdempotencyConflictError(command.partition);
+      if (prior.state === 'preparing' || prior.state === 'cancelling') throw unavailable();
       return noEffect({ jobId: prior.job_id, epoch: BigInt(prior.epoch) });
     }
     const ids =
@@ -346,7 +354,7 @@ export const identityEpochStore: IdentityEpochStore = {
       throw unavailable();
     if (locked.some((g) => g.pending_job))
       throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
-    if (!state || state.pending_job || state.retained_preparation)
+    if (!state || state.pending_job || state.prepare_job || state.retained_preparation)
       throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Native identity home capacity is occupied');
     const job = { jobId: newId(command.partition * 16), epoch: BigInt(state.allocated_epoch) + 1n };
     const scope = createHash('sha256')
@@ -370,7 +378,7 @@ export const identityEpochStore: IdentityEpochStore = {
         receipt.kind === 'subject.merge' ? receipt.command.actorAccountId : receipt.account,
       ]);
       await tx.query(bindingAccept.sql, [command.partition, receiptKey(receipt), '1', job.jobId, job.epoch.toString()]);
-      await tx.query(storeInsertJob.sql, [
+      await tx.query(admissionInsertJob.sql, [
         command.partition,
         job.jobId,
         job.epoch.toString(),
@@ -380,14 +388,23 @@ export const identityEpochStore: IdentityEpochStore = {
         scope,
         transactionId,
       ]);
-      await tx.query(storeInsertInput.sql, [command.partition, job.jobId, inputs.map((g) => g.terminal)]);
-      await tx.query(storeUpdateControl.sql, [command.partition, job.epoch.toString(), job.jobId]);
-      await tx.query(storeUpdateGroup.sql, [
-        command.partition,
-        job.jobId,
-        job.epoch.toString(),
-        inputs.map((g) => g.terminal),
-      ]);
+      await tx.query(admissionInsertBases.sql, [command.partition,job.jobId,json(sources)]);
+      await tx.query(admissionHandoff.sql, [command.partition,job.jobId,job.epoch.toString(),scope,
+        command.partition,transactionId,json(inputs.map(g => ({ terminal:g.terminal,generation:g.generation,
+          basis_version:g.version,owner_epoch:g.owner_epoch })))]);
+      await tx.query(admissionPrepare.sql, [command.partition,job.jobId,job.epoch.toString(),scope]);
+      await tx.query(admissionRecord.sql, [command.partition,transactionId,job.jobId,'prepared']);
+      await recordPreparedIdentityPrearm(tx,job,scope,transactionId);
+      const prepared = (await tx.query(admissionReceipt.sql, [command.partition,job.jobId,job.epoch.toString(),'prepared'])).rows[0];
+      await tx.query(admissionCustodyPrepare.sql, [job.jobId,command.partition,prepared.transaction_id,
+        prepared.native_epoch,prepared.native_position,command.partition]);
+      await sealColocatedEmptyIdentityPrearm(tx,job,transactionId);
+      await tx.query(admissionAcquire.sql, [command.partition,job.jobId,job.epoch.toString(),scope]);
+      await tx.query(admissionRecord.sql, [command.partition,transactionId,job.jobId,'acquired']);
+      const claimed = (await tx.query(admissionReceipt.sql, [command.partition,job.jobId,job.epoch.toString(),'acquired'])).rows[0];
+      await tx.query(admissionCustodyAcquire.sql, [job.jobId,command.partition,claimed.transaction_id,
+        claimed.native_epoch,claimed.native_position,command.partition]);
+      if ((await tx.query(admissionPromote.sql, [job.jobId,job.epoch.toString(),command.partition])).rowCount !== 1) throw stale();
     });
     return {
       value: job,
@@ -521,6 +538,7 @@ export const identityEpochStore: IdentityEpochStore = {
         BigInt(gate.pending_epoch ?? -1) !== effect.job.epoch
       )
         throw stale();
+      await tx.query("SELECT set_config('semantic.identity_prearm_effect_job',$1,true)", [effect.job.jobId]);
     }
     return;
   },

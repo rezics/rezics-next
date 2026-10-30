@@ -1,4 +1,4 @@
-SELECT g.*,m.original AS input_original,m.source_revision,m.recorded_transaction_id AS source_transaction_id
+SELECT g.*,m.original AS input_original,m.source_revision,m.recorded_transaction_id AS source_transaction_id,s.route AS source_route,o.epoch AS source_owner_epoch
 FROM unnest($1::uuid[],$2::integer[]) requested(original,route)
 JOIN semantic.subject s ON (s.route,s.subject_id)=(requested.route,requested.original)
 JOIN semantic.identity_epoch_mapping m ON (m.route,m.original)=(s.route,s.subject_id)

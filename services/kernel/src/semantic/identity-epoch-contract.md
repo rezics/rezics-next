@@ -122,6 +122,28 @@ those exact versions before admission. Drift after safe preparation follows nati
 attempt; a new coherent attempt keeps the original binding. An Accounts decision/reversal source intent already
 committed in its native transaction is not a new Semantic admission effect and is never erased by overflow.
 
+### Native pre-arm boundary
+
+[The pre-arm protocol](identity-prearm-protocol.md) owns enrollment, scope custody and claim ordering.
+`identity-epoch-prearm.ts` implements the control side: the existing home reservation is first held by a
+`prepared` native attempt with no group/control pending fields. Immutable retained inverse pages advance only
+through contiguous Source disposition and job-home custody. Explicit empty exhaustion seals each pinned input;
+the maintained input heads permit the fixed root seal. A native seal handoff precedes every `acquired` claim
+receipt and final pending promotion. The colocated fast path proves empty closed prefixes in its own native
+transaction; a nonempty prefix requires released preparation. No caller boolean supplies coverage.
+
+`identity-epoch-prearm-contract.ts` exposes a locator-only read of immutable native page/item, exact attempt,
+input, bridge and current owner. Source enrollment owns the real capture and forward/inverse ticket custody;
+it takes the native generation bridge lock before issuing a ticket and retains retirement while closed.
+The selected Source receiving exports commit unsafe state and their own native receipt together. Missing Source
+receiving support remains retryably unavailable. Ordinary post-admission arm does not supply admission proof.
+
+Cancellation closes every planned native attempt, including unknown deliveries, before reconciling every
+exported Source ticket. Only complete cancellation custody or real publication releases the same reservation
+and bridge. Existing WorkModule wakeups advance each retained unit and reopen capacity without a new queue.
+Native framework, erasure roles, SQL/index/FK work and physical copies remain charged separately from public
+probe work; the runtime feasibility evidence required by the protocol is not supplied by body counters alone.
+
 ### Receipt history, ordered capacity and P=1 progress
 
 The stable original receipt-to-job binding is compact indexed **HISTORY**. It binds original receipt, normalized
