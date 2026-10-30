@@ -117,7 +117,7 @@ export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; lo
             {reading.decision === null
               ? m.candidate_unresolved({}, o)
               : reading.decision.verdict === 'accept'
-                ? m.value_accepted({}, o)
+                ? m.context_accepted({}, o)
                 : reading.decision.verdict === 'reject'
                   ? m.candidate_rejected_state({}, o)
                   : m.changes_abstained_detail({}, o)}
