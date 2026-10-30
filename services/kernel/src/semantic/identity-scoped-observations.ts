@@ -3,7 +3,13 @@ import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkContext } from '../work/registry.ts';
-import { currentCommand, currentCommandResources, runCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  currentCommand,
+  currentCommandResources,
+  registerCommandCallback,
+  runCommand,
+  type CommandTransaction,
+} from '../command/command.ts';
 import {
   createNativeLibrarySourceCustody,
   type NativeSourceIdentity,
@@ -23,6 +29,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type * as S from './identity-scope-types.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
+import { bindSemanticProducerRoles } from './erasure-producer.ts';
 import type { IdentityPrearmTicketData } from './identity-epoch-prearm-contract.ts';
 import type { IdentityReceivingRecord, IdentityReceivingSelection } from './identity-receiving-effects-types.ts';
 import {
@@ -296,7 +303,7 @@ async function enroll(
         await query(
           tx,
           measured,
-          `SELECT generation,owner_epoch,ready,pending_job FROM semantic.identity_epoch_group
+          `SELECT generation,version,owner_epoch,ready,pending_job FROM semantic.identity_epoch_group
         WHERE partition_no=$1 AND terminal=$2 FOR UPDATE`,
           [home, group],
         )
@@ -318,6 +325,33 @@ async function enroll(
         [home, g.generation, dep.original, group],
       );
       if (member.rowCount !== 1) return { value: false, events: [] };
+      // Register in the delivered admission producer's indexed directory. PREPARE closes
+      // this same bridge before its first export, so a late registration cannot become ready.
+      await query(
+        tx,
+        measured,
+        `INSERT INTO semantic.identity_epoch_prearm_bridge
+        (partition_no,generation,terminal,owner_epoch,basis_version) VALUES($1,$2,$3,$4,$5)
+        ON CONFLICT DO NOTHING`,
+        [home, generation, group, g.owner_epoch, g.version],
+      );
+      const nativeBridge = (
+        await query(
+          tx,
+          measured,
+          `SELECT terminal,owner_epoch,basis_version,job_id
+        FROM semantic.identity_epoch_prearm_bridge WHERE partition_no=$1 AND generation=$2 FOR UPDATE`,
+          [home, generation],
+        )
+      ).rows[0];
+      if (
+        !nativeBridge ||
+        nativeBridge.job_id !== null ||
+        nativeBridge.terminal !== group ||
+        nativeBridge.owner_epoch !== g.owner_epoch ||
+        nativeBridge.basis_version !== g.version
+      )
+        return { value: false, events: [] };
     }
     await query(
       tx,
@@ -384,7 +418,40 @@ async function enroll(
         currentCommand(tx).transactionId,
       ],
     );
+    if (dep.original) {
+      const identity = key.source.identity;
+      bindSemanticProducerRoles(
+        tx,
+        key.source.kind === 'library' && 'accountId' in identity
+          ? [{ account_id: identity.accountId, role: 'subject' }]
+          : [],
+      );
+    }
     recordIdentityEpochNativeCommit(tx, 'identity-scope-enrollment');
+    if (dep.original)
+      registerCommandCallback(tx, async (transactionId) => {
+        // The native receipt must exist before the admission inverse's same-home FK is written.
+        await query(
+          tx,
+          measured,
+          `INSERT INTO semantic.identity_epoch_prearm_inverse
+        (partition_no,generation,original,scope_key,registration,scope,capture_id,
+         source_partition,source_owner_epoch,transaction_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
+          [
+            home,
+            generation,
+            dep.original,
+            digest({ source: k.source, scope: k.scope }),
+            row.registration,
+            json(key),
+            row.capture_id,
+            k.partition,
+            key.source.kind === 'library' ? key.source.identity.ownerEpoch : key.source.identity.epoch,
+            transactionId,
+          ],
+        );
+      });
     return { value: true, events: [] };
   });
   if (!issued.value) return null;
@@ -401,8 +468,27 @@ async function enroll(
     JOIN core.partition p ON p.partition_no=i.partition_no AND p.epoch=c.epoch AND p.position>=c.position
     WHERE i.partition_no=$1 AND i.generation=$2 AND i.original=$3 AND i.source_partition=$4 AND i.source_key=$5
       AND i.scope_id=$6 AND i.registration=$7 AND i.capture_id=$8 AND c.purpose='identity-scope-enrollment'
-      AND p.write_state='active' AND p.moved_to IS NULL`,
-          [home, generation, dep.original ?? HOME, k.partition, k.source, k.scope, row.registration, row.capture_id],
+      AND p.write_state='active' AND p.moved_to IS NULL
+      AND ($3::uuid='00000000-0000-0000-0000-000000000000' OR EXISTS(
+        SELECT 1 FROM semantic.identity_epoch_prearm_inverse n
+        JOIN semantic.identity_epoch_native_commit nc ON nc.partition_no=n.partition_no
+          AND nc.transaction_id=n.transaction_id AND nc.xmin=n.xmin AND nc.purpose='identity-scope-enrollment'
+        WHERE n.partition_no=i.partition_no AND n.generation=i.generation AND n.original=i.original
+          AND n.scope_key=$9 AND n.registration=i.registration::text AND n.capture_id=i.capture_id::text
+          AND n.source_partition=i.source_partition AND n.scope=$10::jsonb AND NOT n.retired
+          AND nc.epoch=p.epoch AND nc.position<=p.position))`,
+          [
+            home,
+            generation,
+            dep.original ?? HOME,
+            k.partition,
+            k.source,
+            k.scope,
+            row.registration,
+            row.capture_id,
+            digest({ source: k.source, scope: k.scope }),
+            json(key),
+          ],
         )
       ).rows[0] ?? null,
   );
@@ -604,6 +690,18 @@ async function releaseDirectory(
       values,
     );
     if (prior.rowCount) return { value: true, events: [] };
+    if (dep.original) {
+      const nativeBridge = (
+        await query(
+          tx,
+          measured,
+          `SELECT job_id FROM semantic.identity_epoch_prearm_bridge
+        WHERE partition_no=$1 AND generation=$2 FOR UPDATE`,
+          [home, dep.directory_generation],
+        )
+      ).rows[0];
+      if (!nativeBridge || nativeBridge.job_id !== null) return { value: false, events: [] };
+    }
     await query(
       tx,
       measured,
@@ -627,6 +725,23 @@ async function releaseDirectory(
       `UPDATE semantic.identity_scope_bridge SET version=version+1 WHERE partition_no=$1 AND generation=$2`,
       [home, dep.directory_generation],
     );
+    if (dep.original)
+      await query(
+        tx,
+        measured,
+        `DELETE FROM semantic.identity_epoch_prearm_inverse
+      WHERE partition_no=$1 AND generation=$2 AND original=$3 AND scope_key=$4
+        AND registration=$5 AND capture_id=$6 AND source_partition=$7`,
+        [
+          home,
+          dep.directory_generation,
+          dep.original,
+          digest({ source: k.source, scope: k.scope }),
+          row.registration,
+          row.capture_id,
+          k.partition,
+        ],
+      );
     await query(
       tx,
       measured,

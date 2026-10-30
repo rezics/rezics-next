@@ -62,7 +62,14 @@ export type {
 export { publicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';
 
 export type * from './identity-scope-types.ts';
-export { createPublicIdentitySourceCapture, verifyPublicIdentitySourceCapture } from './identity-scoped-public-source.ts';
-export type { PublicIdentitySourceCapture, PublicIdentitySourceCapturePage, PublicIdentitySourceCaptureProducer } from './identity-scoped-public-source.ts';
+export {
+  createPublicIdentitySourceCapture,
+  verifyPublicIdentitySourceCapture,
+} from './identity-scoped-public-source.ts';
+export type {
+  PublicIdentitySourceCapture,
+  PublicIdentitySourceCapturePage,
+  PublicIdentitySourceCaptureProducer,
+} from './identity-scoped-public-source.ts';
 export { createIdentityScopedObservations } from './identity-scoped-observations.ts';
 export { receiveIdentityScopePrearm, cancelIdentityScopePrearm } from './identity-scoped-prearm.ts';

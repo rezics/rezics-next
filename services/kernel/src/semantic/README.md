@@ -1607,3 +1607,10 @@ integrations.
 - Integration checks belong to the independent repair runner acceptance:
   `test/semantic/subject-page-repair.test.ts`: `durable publication repair advances a fixed combined key budget and settles`;
   `test/semantic/growth-subject-page-repair.test.ts`: `repair store and current witness reads remain bounded as unrelated state grows`.
+
+Source original enrollment uses the delivered `identity_epoch_prearm_inverse` directory and locks its
+native bridge before taking the Source bridge. The same released-home receipt covers the Source
+forward ticket and admission inverse; Source readiness requires both. Retirement removes both under
+the same open-bridge fence. The native admission ticket reader replaces the provisional declaration
+on integration; Source PREPARATION receiving remains Source-owned. Existing original tickets are
+re-enrolled before their summary can become clean after this directory binding is installed.
