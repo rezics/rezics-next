@@ -244,6 +244,11 @@ afterAll(async () => {
 });
 
 const searches = (since: number) => calls.slice(since).filter((call) => call.path === '/v1/subjects:search');
+const searchPath = (locale: string, query: string, type?: string) => {
+  const params = new URLSearchParams({ q: query });
+  if (type) params.set('type', type);
+  return `/${locale}/search?${params}`;
+};
 const row = (page: Page, title: string, index = 0) =>
   page
     .getByRole('main')
@@ -314,10 +319,12 @@ test(
   async () => {
     for (const spec of cases) {
       const before = calls.length;
-      const page = await open(`/${spec.locale}/search?q=Kokoro&type=${encodeURIComponent(book)}`);
+      const query = 'Kokoro filtered facts';
+      const page = await open(searchPath(spec.locale, query, book));
       try {
         expect(searches(before)).toHaveLength(1);
         expect(searches(before)[0]!.body).toMatchObject({
+          text: query,
           descriptions: true,
           languages: spec.languages,
           properties: [author, published],
@@ -347,10 +354,12 @@ test(
   async () => {
     for (const spec of cases) {
       const before = calls.length;
-      const page = await open(`/${spec.locale}/search?q=Kokoro`);
+      const query = 'Kokoro years only';
+      const page = await open(searchPath(spec.locale, query));
       try {
         expect(searches(before)).toHaveLength(1);
         const body = searches(before)[0]!.body!;
+        expect(body.text).toBe(query);
         expect(body.descriptions).toBe(true);
         expect(body.languages).toEqual(spec.languages);
         expect(body.properties).toEqual([published]);
@@ -373,8 +382,8 @@ test(
     for (const spec of cases) {
       for (const filtered of [true, false]) {
         const before = calls.length;
-        const type = filtered ? `&type=${encodeURIComponent(book)}` : '';
-        const page = await open(`/${spec.locale}/search?q=Kokoro${type}`);
+        const query = `Kokoro next page ${spec.locale} ${filtered ? 'filtered' : 'unfiltered'}`;
+        const page = await open(searchPath(spec.locale, query, filtered ? book : undefined));
         try {
           const more = page.getByRole('main').getByRole('link', { name: /more|さらに表示/i });
           await more.click();
@@ -388,6 +397,8 @@ test(
           expect(await nextLink.getAttribute('href')).toContain(later.id);
           expect(searches(before)).toHaveLength(2);
           const [firstPage, secondPage] = searches(before).map((call) => call.body!);
+          expect(firstPage!.text).toBe(query);
+          expect(secondPage!.text).toBe(query);
           expect(secondPage!.cursor).toBe(cursor);
           expect(secondPage!.descriptions).toBe(true);
           expect(secondPage!.languages).toEqual(firstPage!.languages);
@@ -407,9 +418,11 @@ test(
   'search result links, header controls and rows remain usable at a phone width',
   async () => {
     const before = calls.length;
-    const page = await open('/en/search?q=Kokoro', true, 390);
+    const query = 'Kokoro phone layout';
+    const page = await open(searchPath('en', query), true, 390);
     try {
       expect(searches(before)).toHaveLength(1);
+      expect(searches(before)[0]!.body?.text).toBe(query);
       expect(searches(before)[0]!.body?.limit).toBe(100);
       const searchTrigger = page.getByRole('button', { name: 'Search subjects' });
       expect(await searchTrigger.count()).toBe(1);

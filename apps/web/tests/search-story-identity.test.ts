@@ -67,13 +67,14 @@ async function openStory(visitor: 'Signed In' | 'Signed Out', locale: string): P
   const index = (await (await fetch(`${origin}/index.json`)).json()) as {
     entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
   };
+  const storyName = visitor === 'Signed In' ? 'Member' : 'Signed out';
   const entry = Object.values(index.entries).find(
     (candidate) =>
       candidate.type === 'story' &&
-      basename(candidate.importPath) === 'search.stories.tsx' &&
-      candidate.name === visitor,
+      basename(candidate.importPath) === 'search-rating.stories.tsx' &&
+      candidate.name === storyName,
   );
-  if (!entry) throw new Error(`Missing Pages/Search ${visitor} story.`);
+  if (!entry) throw new Error(`Missing Pages/Discovery/Search ${storyName} story.`);
   browser ??= await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
   const page = await context.newPage();
