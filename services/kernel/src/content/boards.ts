@@ -25,6 +25,7 @@ import {
   discloseThreads,
   withBoardDisclosure,
   readBoard,
+  readBoards,
   type ContentReadDependencies,
   type ThreadView,
 } from './reads.ts';
@@ -181,13 +182,14 @@ export async function listRealmBoards(
   const items: BoardView[] = [];
   let after: string | null = null;
   let scanned = 0;
-  for (const candidate of result.candidates) {
-    if (items.length >= limit) break;
-    after = candidate;
+  const selected = result.candidates.slice(0, limit);
+  const disclosed = await readBoards(dependencies, selected, context);
+  for (let index = 0; index < selected.length; index++) {
+    after = selected[index]!;
     scanned++;
-    const visible = await readRealmBoard(dependencies, candidate, context);
+    const visible = disclosed[index]!;
     anchors.push(visible.anchor);
-    if (visible.value) items.push(visible.value);
+    if (visible.value?.realmId === realmId) items.push(visible.value);
   }
   const more = scanned < result.candidates.length || result.candidates.length > limit;
   return {

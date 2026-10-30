@@ -33,6 +33,9 @@ import { ensureRealmMemberGrant } from './participation.ts';
 import { realmContinuityView, realmGovernanceAuthorization, type RealmContinuity } from './realm-continuity.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
+import { emptyRealmPresentation, realmPresentation, type RealmPresentation } from './presentation.ts';
+import { claimRealmPresentationMedia } from '../content/realm-media.ts';
+import { prepareRealmRulesSelection } from '../content/community-presentation-rules.ts';
 import read from './realm-read.sql';
 import bindingRead from './container-lifecycle-binding.sql';
 import currentReadBan from './read-ban-current.sql';
@@ -59,6 +62,7 @@ export type RealmUpdate = Readonly<{
   visibility?: 'public' | 'protected';
   contextId?: string;
   votes?: RealmVotes;
+  presentation?: RealmPresentation;
 }>;
 type RealmRow = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 export type Realm = Readonly<{
@@ -73,6 +77,7 @@ export type Realm = Readonly<{
   predecessor: string | null;
   title: string;
   summary: string;
+  presentation: RealmPresentation;
   revisionCreatedAt: string;
   author: string;
 }>;
@@ -171,6 +176,7 @@ function record(row: RealmRow): RealmView {
     revisionCreatedAt: new Date(row.revision_created_at).toISOString(),
     author: row.author,
     votes: voteMap(row.votes, TypeError),
+    presentation: realmPresentation(row.presentation),
   };
 }
 
@@ -399,6 +405,7 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
         at,
         author: creator,
         votes: storedVotes,
+        presentation: emptyRealmPresentation,
       });
       inserted.add(tx);
       await initializeResourceGrants(tx, { resource, type: 'community.realm', creator });
@@ -418,6 +425,9 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
 
 export async function updateRealm(deps: RealmDependencies, actor: Actor, input: RealmUpdate, context: RealmContext) {
   const author = account(actor).accountId;
+  let presentation: RealmPresentation | undefined;
+  try { presentation = input.presentation === undefined ? undefined : realmPresentation(input.presentation); }
+  catch { throw new RealmInputError(); }
   const votes = input.votes === undefined ? undefined : voteMap(input.votes, RealmInputError);
   const body = {
     realmId: input.realmId,
@@ -427,6 +437,7 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
     visibility: input.visibility,
     contextId: input.contextId,
     ...(votes === undefined ? {} : { votes }),
+    ...(presentation === undefined ? {} : { presentation }),
   };
   const route = routeOf(body.realmId);
   if (route === null) throw new RealmInputError();
@@ -451,7 +462,17 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
     deps.pool,
     {
       ...options(deps, actor, route, 'community.realm.update', body, context),
-      authorization: realmGovernanceAuthorization(combined.bound(authorization), { route, id: body.realmId }),
+      authorization: (() => {
+        const base = realmGovernanceAuthorization(combined.bound(authorization), { route, id: body.realmId });
+        return { ...base, async prepare(attempt: Parameters<NonNullable<typeof base.prepare>>[0]) {
+          const proof = await base.prepare!(attempt);
+          if (presentation?.rules) {
+            try { await prepareRealmRulesSelection(deps, actor, body.realmId, presentation.rules, context); }
+            catch (error) { if (error instanceof TypeError) throw new RealmInputError(); throw error; }
+          }
+          return proof;
+        } };
+      })(),
     },
     async (tx, command) => {
       bindRealmDiscoveryCommand(tx);
@@ -463,6 +484,10 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
       const visibility = body.visibility === undefined ? previous.visibility : body.visibility,
         contextId = body.contextId === undefined ? previous.contextId : body.contextId;
       metadata(title, summary, visibility, contextId);
+      const selected = presentation ?? previous.presentation;
+      if (presentation && (presentation.avatarMediaId !== null || presentation.bannerMediaId !== null))
+        await claimRealmPresentationMedia(tx, { realmId: body.realmId, actor,
+          avatarMediaId: presentation.avatarMediaId, bannerMediaId: presentation.bannerMediaId }, command.time);
       const revision = newId(route);
       // No votes means the column default. The revision trigger then copies the predecessor.
       await append.run(tx, {
@@ -477,6 +502,7 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
         at: authoritativeTimeValue(command.time),
         author,
         votes: votes ?? inheritedVotes,
+        presentation: selected,
       });
       if (
         !(await moveHead.run(tx, {

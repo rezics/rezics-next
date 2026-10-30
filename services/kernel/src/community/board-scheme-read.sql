@@ -10,7 +10,7 @@ WITH input AS NOT MATERIALIZED (
   WHERE h.route = i.route AND realm_id = i.id AND state = 'active'
 )
 SELECT s.realm_id, s.space_id, s.visibility, s.context_id, s.board_scheme_id, s.state, s.head_revision_id, s.created_at::text, s.creator,
-       r.predecessor, r.title, r.summary, r.created_at::text AS revision_created_at, r.author,
+       r.predecessor, r.title, r.summary, r.presentation, r.created_at::text AS revision_created_at, r.author,
        s.inserted_here AND r.xmin::text = pg_current_xact_id_if_assigned()::text AS inserted_here
 FROM identity s
 CROSS JOIN input i

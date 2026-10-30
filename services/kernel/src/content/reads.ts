@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import { parseStoredDocument, serializeDocument } from '@rezics/document';
+import { isSpdxLicense } from './document.ts';
+import presentationRuleBodies from './community-presentation-rules.sql';
+import { readCommunityPresentations } from './community-presentation.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool } from 'pg';
 import { accountStandingCheck } from '../access/index.ts';
@@ -29,7 +34,7 @@ import type {
   Anchored,
   AnchoredPosition,
   BoardId,
-  BoardView,
+  BoardRecord as BoardView,
   ErasedPlaceholder,
   ItemView as StoredItemView,
   Page,
@@ -613,8 +618,14 @@ export async function readBoard(
   dependencies: ContentReadDependencies,
   boardId: BoardId,
   context: ReadContext,
-): Promise<Anchored<BoardView | null>> {
-  return (await observeBoard(dependencies, boardId, context)).result;
+): Promise<Anchored<import('./model.ts').BoardView | null>> {
+  const observed = await observeBoard(dependencies, boardId, context);
+  const board = observed.result.value;
+  if (!board) return { ...observed.result, value: null };
+  if (board.realmId === null) return { ...observed.result, value: { ...board, community: null } };
+  const presentation = (await readCommunityPresentations(dependencies, [board.realmId], context)).get(board.realmId);
+  if (!presentation || !(await observed.recheck())) return { ...observed.result, value: null };
+  return { ...observed.result, value: { ...board, community: presentation } };
 }
 
 function boardView(row: Row): BoardView {
@@ -1739,5 +1750,141 @@ export async function discloseThreads(
     if (known) return known;
     const partition = discovery.anchors.get(partitionOf(route(id)))!;
     return { value: null, anchor: { partition, epoch: partition.epoch, position: partition.position } };
+  });
+}
+
+/** Exact native rules reader. It shares the ordinary row, ancestry and Access
+ * formula; the immutable requested revision never becomes the current head. */
+export async function readExactPublishedRules(
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>,
+  references: readonly (import('./community-presentation-rules.ts').RulesReference & { realmId: string })[],
+  context: ReadContext,
+): Promise<ReadonlyMap<string, import('./community-presentation-rules.ts').PresentedRules>> {
+  if (references.length > 100) throw new RangeError('At most 100 rules references');
+  const refs = [...new Map(references.map((ref) => [`${ref.postId}/${ref.revisionId}/${ref.realmId}`, ref])).values()];
+  if (!refs.length) return new Map();
+  const decisions = await prepareReadDecisions(dependencies.access, {
+    actor: context.actor, actions: new Set(['thread:read', 'post:read', 'board:read', 'realm:read']),
+    context: { pool: dependencies.pool, deadline: context.deadline },
+  });
+  const ids = refs.flatMap((ref) => [ref.postId, ref.revisionId, ref.realmId]);
+  const round = () => batchSnapshot(dependencies, ids, context, async (client, anchors) => {
+    const posts = new Map<string, Row>();
+    let pending = [...new Set(refs.map((ref) => ref.postId))];
+    // Existing ordinary ancestry bound: selected post plus at most 32 parents.
+    for (let depth = 0; pending.length && depth < 33; depth++) {
+      const rows = await batchRows(client, 'post', pending.map((id) => batchKey(id)));
+      for (const row of rows) posts.set(row.id, row);
+      pending = [...new Set(rows.flatMap((row) => row.parent_id && !posts.has(row.parent_id) ? [row.parent_id] : []))];
+    }
+    const threads = await batchRows(client, 'thread', [...new Set([...posts.values()].map((row) => row.thread_id!))].map((id) => batchKey(id)));
+    const boards = await batchRows(client, 'board', [...new Set(threads.map((row) => row.board_id!))].map((id) => batchKey(id)));
+    const realms = await batchRealms(client, [...new Set(boards.flatMap((row) => row.realm_id ? [row.realm_id] : []))]);
+    const extra = [...new Set(boards.map((row) => partitionOf(route(row.id))))].filter((id) => !anchors.has(id));
+    const extraPartitions = await readPartitions(client, extra);
+    if (extraPartitions.length !== extra.length || extraPartitions.some((p) => p.writeState === 'moved'))
+      throw new Error('Rules container partition unavailable');
+    const revisions = await batchRows(client, 'revision', [...new Set(refs.map((ref) => ref.revisionId))].map((id) => batchKey(id)));
+    const parent = await decideBoardAndRealms(client, decisions, context.actor, boards, realms);
+    const permitted = new Map<string, boolean>();
+    for (const [kind, rows] of [['thread', threads], ['post', [...posts.values()]]] as const) {
+      for (let start = 0; start < rows.length; start += 100) {
+        const chunk = rows.slice(start, start + 100);
+        const allowed = await decisions.decide(client, {
+          action: `${kind}:read`, resourceType: `content.${kind}`, ids: chunk.map((row) => row.id),
+          eligibility: async () => Object.fromEntries(chunk.map((row) => [row.id, contentFloor(row, false, false)])),
+        });
+        for (const row of chunk) permitted.set(row.id,
+          row.availability === 'available' &&
+          decisionAllowed(row, allowed[row.id], context.actor, false));
+      }
+    }
+    const byThread = new Map(threads.map((row) => [row.id, row]));
+    const byBoard = new Map(boards.map((row) => [row.id, row]));
+    const byRevision = new Map(revisions.map((row) => [row.id, row]));
+    const passed = new Map<string, string>();
+    for (const ref of refs) {
+      const selected = posts.get(ref.postId);
+      const revision = byRevision.get(ref.revisionId);
+      const thread = selected && byThread.get(selected.thread_id!);
+      const board = thread && byBoard.get(thread.board_id!);
+      if (!selected || selected.visibility !== 'published' || !revision || !thread || !board || !permitted.get(thread.id) ||
+        !parent.boards.get(board.id) || !parent.realms.get(ref.realmId) || board.realm_id !== ref.realmId ||
+        revision.parent_id !== selected.id || revision.thread_id !== thread.id || revision.board_id !== board.id ||
+        revision.availability !== 'available' || route(ref.revisionId) !== route(selected.id)) continue;
+      const seen = new Set<string>();
+      const chainRows: Row[] = [];
+      let post: Row | undefined = selected;
+      let complete = false;
+      while (post && chainRows.length < 33 && !seen.has(post.id)) {
+        if (post.thread_id !== thread.id || !permitted.get(post.id)) break;
+        seen.add(post.id); chainRows.push(post);
+        if (post.parent_id === null) { complete = true; break; }
+        post = posts.get(post.parent_id);
+      }
+      if (!complete) continue;
+      const realm = realms.find((row) => row.realm_id === ref.realmId)!;
+      passed.set(`${ref.realmId}/${ref.postId}/${ref.revisionId}`, JSON.stringify([
+        signature(thread), signature(board), ...chainRows.map(signature), signature(revision), realm,
+        [...anchors.values(), ...extraPartitions].map((p) => [p.partitionNo, p.epoch]),
+      ]));
+    }
+    return { passed, clientBodies: await presentationRuleBodies.run(client, {
+      keys: JSON.stringify(refs.filter((ref) => passed.has(`${ref.realmId}/${ref.postId}/${ref.revisionId}`))
+        .map((ref) => ({ route: route(ref.revisionId), id: ref.revisionId }))),
+    }) };
+  });
+  const initial = await round();
+  const final = await round();
+  const output = new Map<string, import('./community-presentation-rules.ts').PresentedRules>();
+  for (const row of final.value.clientBodies) {
+    if (!row.body || !row.body_sha256) continue;
+    const body = parseStoredDocument(Buffer.from(row.body).toString('utf8'));
+    if (!body || body.profile !== 'text' || !isSpdxLicense(row.licence)) continue;
+    const canonical = serializeDocument(body);
+    const digest = createHash('sha256').update(canonical).digest('hex');
+    if (Buffer.byteLength(canonical) > 65536 || digest !== Buffer.from(row.body_sha256).toString('hex')) continue;
+    for (const ref of refs) {
+      if (ref.postId !== row.post_id || ref.revisionId !== row.revision_id) continue;
+      const key = `${ref.realmId}/${ref.postId}/${ref.revisionId}`;
+      if (initial.value.passed.has(key) && initial.value.passed.get(key) === final.value.passed.get(key))
+        output.set(key, { postId: row.post_id, revisionId: row.revision_id, body, licence: row.licence, sha256: digest });
+    }
+  }
+  return output;
+}
+
+/** Current bounded board response composition. The native internal reader stays
+ * independent, so exact post/rules reads cannot recurse into presentation. */
+export async function readBoards(
+  dependencies: ContentReadDependencies,
+  boardIds: readonly string[],
+  context: ReadContext,
+): Promise<readonly Anchored<import('./model.ts').BoardView | null>[]> {
+  if (boardIds.length > 100) throw new RangeError('At most 100 board identities');
+  if (!boardIds.length) return [];
+  const ids = [...new Set(boardIds)];
+  const decisions = await prepareBoardPageDecisions(dependencies, context);
+  const round = () => batchSnapshot(dependencies, ids, context, async (client) => {
+    const boards = await batchRows(client, 'board', ids.map((id) => batchKey(id)));
+    const realms = await batchRealms(client, boards.flatMap((row) => row.realm_id ? [row.realm_id] : []));
+    const checked = await decideBoardAndRealms(client, decisions, context.actor, boards, realms);
+    return new Map(boards.filter((row) => checked.boards.get(row.id) &&
+      (!row.realm_id || checked.realms.get(row.realm_id))).map((row) => [row.id, row]));
+  });
+  const initial = await round();
+  const presentations = await readCommunityPresentations(dependencies,
+    [...new Set([...initial.value.values()].flatMap((row) => row.realm_id ? [row.realm_id] : []))], context);
+  const final = await round();
+  return boardIds.map((id) => {
+    const row = final.value.get(id);
+    const partition = final.anchors.get(partitionOf(route(id)))!;
+    const before = initial.value.get(id);
+    const anchor = { partition, epoch: partition.epoch, position: partition.position };
+    if (!row || !before || signature(row) !== signature(before) || initial.anchors.get(partition.partitionNo)?.epoch !== partition.epoch)
+      return { anchor, value: null };
+    const community = row.realm_id ? presentations.get(row.realm_id) : null;
+    if (row.realm_id && !community) return { anchor, value: null };
+    return { anchor, value: { ...boardView(row), community: community ?? null } };
   });
 }

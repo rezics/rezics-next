@@ -61,6 +61,9 @@ import {
 import { banAccount, unbanAccount, listBans, RealmBanInputError, RealmBanRoleError } from './ban.ts';
 import { readRealmMembershipInterval } from './membership.ts';
 import { listOwnRealms } from './own-realms.ts';
+import { RealmPresentationSchema } from './presentation.ts';
+import { CommunityPresentationSchema, communityPresentationResponse } from '../content/community-presentation-model.ts';
+import { readCommunityPresentations } from '../content/community-presentation.ts';
 import { ownRealmsQuerySchema, ownRealmsResponseSchema } from './schemas.ts';
 import {
   listPublications,
@@ -103,6 +106,7 @@ const space = t.Object(
   closed,
 );
 const spaceResponse = t.Object({ space }, closed);
+const spaceHomeResponse = t.Object({ space, community: t.Union([CommunityPresentationSchema, t.Null()]) }, closed);
 const voteWeight = t.Unsafe<1 | -1>(t.Integer({ enum: [1, -1] }));
 const votes = t.Object(
   {
@@ -137,6 +141,7 @@ const realm = t.Object(
     revisionCreatedAt: instant,
     author: id,
     votes,
+    presentation: RealmPresentationSchema,
   },
   closed,
 );
@@ -231,6 +236,7 @@ const createRealmInput = t.Object(
 );
 const updateRealmInput = t.Object(
   {
+    presentation: t.Optional(RealmPresentationSchema),
     title: t.Optional(title),
     summary: t.Optional(summary),
     visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('protected')])),
@@ -411,6 +417,7 @@ function publishedRealm(value: RealmView) {
     revisionCreatedAt: value.revisionCreatedAt,
     author: value.author,
     votes: value.votes,
+    presentation: value.presentation,
   };
 }
 
@@ -876,7 +883,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         params,
         response: {
-          200: withHeaders(strict(spaceResponse), { etag: t.String() }),
+          200: withHeaders(strict(spaceHomeResponse), { etag: t.String() }),
           ...readFailures,
         },
         detail: {
@@ -896,9 +903,18 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           readSpaceForViewer(spaceDependencies(), actor, spaceId, observedAt(), { deadline: job.deadline }, check),
         );
         if (!current) throw new ProblemError('not_found');
-        const representation = published(current, current.realmId);
+        const community = current.realmId ? (await readCommunityPresentations(
+          { pool: dependencies.pool, access: dependencies.access(), ...(dependencies.clock ? { clock: dependencies.clock } : {}) },
+          [current.realmId], { actor, deadline: job.deadline },
+        )).get(current.realmId) : null;
+        if (current.realmId && !community) throw new ProblemError('not_found');
+        // Re-read the Space after optional enrichment with the original admission.
+        const final = await readSpaceForViewer(spaceDependencies(), actor, spaceId, observedAt(), { deadline: job.deadline }, check);
+        if (!final || final.headRevisionId !== current.headRevisionId || final.realmId !== current.realmId)
+          throw new ProblemError('not_found');
+        const representation = published(final, final.realmId);
         set.headers.etag = JSON.stringify(representation.headRevisionId);
-        return { space: representation };
+        return { space: representation, community: community ? communityPresentationResponse(community) : null };
       },
     )
     .put(
@@ -1199,6 +1215,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
                 ...(body.visibility === undefined ? {} : { visibility: body.visibility }),
                 ...(body.contextId === undefined ? {} : { contextId: body.contextId }),
                 ...(body.votes === undefined ? {} : { votes: body.votes }),
+                ...(body.presentation === undefined ? {} : { presentation: body.presentation }),
               },
               { idempotencyKey: key, deadline: job.deadline },
             );

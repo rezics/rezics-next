@@ -9,6 +9,8 @@ import { DocumentSnapshotSchema, type DocumentSnapshot } from '@rezics/document'
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
+import { CommunityPresentationSchema } from './community-presentation-model.ts';
+export { CommunityPresentationSchema } from './community-presentation-model.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { AuthorPostEntry } from './author-item-reads.ts';
 import type { BoardView } from './model.ts';
@@ -275,6 +277,7 @@ export const BoardViewSchema = t.Unsafe<BoardView>(
     {
       ...metadata,
       realmId: nullableId,
+      community: t.Union([CommunityPresentationSchema, t.Null()]),
       title: t.Union([t.String(), t.Null()]),
       purpose: t.Union([t.Literal('discussion'), t.Literal('reviews')]),
       availability,

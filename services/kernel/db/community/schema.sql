@@ -534,6 +534,30 @@ CREATE TABLE community.realm_membership_proof (
 -- Name: realm_revision; Type: TABLE; Schema: community; Owner: -
 --
 
+CREATE FUNCTION community.realm_presentation_allowed(value jsonb) RETURNS boolean
+LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE key text; ref jsonb;
+BEGIN
+  IF jsonb_typeof(value) IS DISTINCT FROM 'object' OR
+     NOT value ?& ARRAY['avatarMediaId','bannerMediaId','rules'] OR
+     (SELECT count(*) FROM jsonb_object_keys(value)) <> 3 THEN RETURN false; END IF;
+  FOREACH key IN ARRAY ARRAY['avatarMediaId','bannerMediaId'] LOOP
+    ref := value -> key;
+    IF ref <> 'null'::jsonb AND (jsonb_typeof(ref) <> 'string' OR
+      (ref #>> '{}') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') THEN RETURN false; END IF;
+  END LOOP;
+  ref := value -> 'rules';
+  IF ref = 'null'::jsonb THEN RETURN true; END IF;
+  IF jsonb_typeof(ref) <> 'object' OR NOT ref ?& ARRAY['postId','revisionId'] OR
+     (SELECT count(*) FROM jsonb_object_keys(ref)) <> 2 THEN RETURN false; END IF;
+  FOREACH key IN ARRAY ARRAY['postId','revisionId'] LOOP
+    IF jsonb_typeof(ref -> key) <> 'string' OR (ref ->> key) !~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN RETURN false; END IF;
+  END LOOP;
+  RETURN true;
+END;
+$$;
+
 CREATE TABLE community.realm_revision (
     route integer NOT NULL,
     realm_id uuid NOT NULL,
@@ -547,6 +571,8 @@ CREATE TABLE community.realm_revision (
     author uuid NOT NULL,
     board_scheme_id uuid,
     votes jsonb DEFAULT '{"upvote": 1, "downvote": -1}'::jsonb NOT NULL,
+    presentation jsonb DEFAULT '{"avatarMediaId":null,"bannerMediaId":null,"rules":null}'::jsonb NOT NULL,
+    CONSTRAINT realm_revision_presentation_check CHECK (community.realm_presentation_allowed(presentation)),
     CONSTRAINT realm_revision_board_scheme_id_check CHECK (((board_scheme_id)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
     CONSTRAINT realm_revision_check CHECK ((predecessor <> revision_id)),
     CONSTRAINT realm_revision_check1 CHECK ((route = ((get_byte(uuid_send(realm_id), 10) * 256) + get_byte(uuid_send(realm_id), 11)))),

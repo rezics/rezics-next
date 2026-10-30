@@ -1123,3 +1123,52 @@ retain their original source-owned outcome/recovery contract; aggregate callers 
 See the [Community owner contract](../community/README.md#public-realm-discussion-discovery) for the exact reader,
 predecessor, lifecycle binding and consumer obligations. Source qualification and synchronous mutation responses
 are unchanged.
+## Community presentation
+
+`community-presentation-model.ts` exports `CommunityPresentation` and its closed runtime schema, composed into
+`BoardView.community`. Only a genuinely Global board whose native `realmId` is null has null community.
+Realm/Space dependency failure fails disclosure, rather than manufacturing a Global board or another container.
+Board title/purpose remain separate from current Realm title/summary; `description` preserves even an empty summary.
+The current native Realm and Space heads, active state, read authority and placement epochs are checked before
+and at final disclosure. The native `contextId` remains independent of Global identity and editorial grants.
+
+`readCommunityPresentations({pool, access, clock?}, realmIds, {actor, deadline})` accepts at most 100 distinct
+routed Realm identities and returns a map of currently readable verified presentations. It batches full keys by
+row kind in one REPEATABLE READ snapshot per round. Realm board lists retain their existing candidate window,
+deduplicate container/rules references and enrich the response once. No client per-card HTTP, cross-partition
+SQL join, page refill or retry scan is introduced. The native internal BoardRecord remains independent of
+presentation, so ordinary exact post reads never recursively enrich their container.
+
+`readExactPublishedRules({pool, access, clock?}, refs, {actor, deadline})` is the native exact rules dependency;
+each reference is `{realmId, postId, revisionId}`. It batches native post/ancestor/thread/board/Realm/revision keys,
+uses the same Content row admissibility and Access decision formula as ordinary reads, and requires the selected
+post to remain published and its ancestors to remain ordinarily readable. It verifies the exact native revision belongs to that post
+and a board of the specified Realm, plus current parent disclosure and matching before/final source signatures
+and epochs. Text-profile canonical bytes are bounded to 65,536; native document parsing, SPDX and digest validation
+remain authoritative. Missing, concealed or erased sources produce no rules; a dependency error produces unavailable.
+No caller can supply a successful authorization flag, and no authored body is stored in Realm or Semantic JSON.
+
+`RealmPresentationOptional<T>` and `RealmPresentationImage` belong to `realm-media.ts`. Unset images are `none`;
+selected images remain `unavailable` until the real native assets producer installs its batched reader. Available
+images may contain only actual derivative facts (at most twelve variants), actual largest derivative dimensions,
+and stored optional placeholder/focal-point/credit, with absent metadata null. They never carry original URLs,
+storage keys or account identity. Summaries never authorize downloads: the existing media id/variant transport
+must check current container and media fences, including conditional requests. No successful media claim is stubbed.
+
+`members` remains `{state:'unknown', count:null, version:null}` until Accounts supplies its real current version
+and removal coverage and Content supplies the matching aggregate. No membership COUNT, fabricated zero or cached
+membership total is substituted. `join.membership` reads the actual current self interval; its action also needs
+the native `realm:join` admission used by join/leave. Public anonymous readers receive sign-in, protected self-join
+is absent, and owners or viewer actions are never treated as membership. A 202 workflow remains pending until its
+native interval settles. All membership, permission and source evidence is refreshed at final disclosure.
+
+### Cost: community presentation read
+
+- Touches: distinct full Realm/Space keys, current self memberships and protected bans; fixed source/final
+  placement/head anchors and native Access batches; at most one exact rules pin per distinct Realm.
+- Bound: O(changes log R), at most 100 returned boards and their deduplicated containers/rules, two fixed
+  source rounds, at most 33 post keys per rules chain, 65,536 canonical bytes per rules document and at most
+  twelve actual derivative facts per image. Existing list candidate bounds remain; no count scan or history walk.
+- Growth check: later reuse `test/community/growth-realm.test.ts`, `test/content/growth-threads.test.ts` and
+  the existing media growth harness after its producer lands. Native, physical, visual, cleanup, main and root
+  proof remain outstanding; focused cases and a compiler pass do not claim these outcomes.

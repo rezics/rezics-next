@@ -96,8 +96,12 @@ confers no ownership. UI or provisional types cannot prove this authority exists
 **Next action and proof.** Existing writers repair the member Space route error and guide setup, then Web recaptures
 `pages-community-space--member` and `pages-community-space-setup--new-community`; Content verifies create → addressed
 home → board → membership settlement → publication → ban/unban with native personas and current denial races later.
-The current header research assignment owns real asset/member-count/rules design. Until a real producer delivers,
-those fields are unavailable: use truthful optional fallbacks, no owner avatar, fabricated count or rules.
+Realm-owned presentation is adopted in the Community/Content READMEs: revisioned settings select native exact
+rules, and the shared current-authorized reader enriches board responses and the Space home. The assigned native
+assets producer owns permanent claims/derivative summaries; its missing adapter remains unavailable. Accounts owns
+current membership version/removal coverage and Content's assigned aggregate waits for it, so members remain
+unknown. Exact rules retain native author/editor and disclosure authority. This adoption and implementation claim
+no runtime or visual pass; Web retains header/settings design and screenshot review.
 Semantic's existing writer owns Realm page binding; do not duplicate it or claim contextual publication from a shelf.
 
 Popular/Trending source and aggregate/API remain parallel implementation. Popular counts qualifying originally
@@ -209,8 +213,8 @@ Do not dispatch duplicate writers or substitute another interface/typing pass fo
 
 Original Content, Community, Rating and notice cleanup/retention and physical-cost outcomes remain open for later
 verification under [deletion](../deletion.md). The sole membership-erasure producer awaits controller environment
-setup; notice/rating cleanup tooling settlement is routed to control-plane. The real temporal GiST physical bound
-of 4,608 remains a deliberate owner decision with Accounts, not a waived requirement or evidence of cleanup.
+setup; notice/rating cleanup tooling settlement is routed to control-plane. The native temporal-role GiST cost contract
+remains unresolved with Accounts, not a waived requirement or evidence of cleanup.
 Queued or integrated cleanup does not establish residue removal, succession or final acknowledgement.
 
 This document-only update runs no acceptance/native/database/browser/remote checks; it changes no typed workspace.

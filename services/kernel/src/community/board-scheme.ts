@@ -22,6 +22,7 @@ import { withReadTransaction } from '../semantic/read.ts';
 import { readItemTypes } from '../semantic/subject.ts';
 import { RealmConflictError, RealmInputError, type Realm, type RealmDependencies, type RealmContext } from './realm.ts';
 import { realmGovernanceAuthorization } from './realm-continuity.ts';
+import { realmPresentation } from './presentation.ts';
 import read from './board-scheme-read.sql';
 import append from './board-scheme-revision.sql';
 import moveHead from './board-scheme-head.sql';
@@ -40,6 +41,7 @@ function record(row: RealmRow): Realm {
     predecessor: row.predecessor,
     title: row.title,
     summary: row.summary,
+    presentation: realmPresentation(row.presentation),
     revisionCreatedAt: new Date(row.revision_created_at).toISOString(),
     author: row.author,
   };
@@ -148,6 +150,7 @@ export async function setBoardScheme(
           predecessor: body.expectedHead,
           title: previous.title,
           summary: previous.summary,
+          presentation: previous.presentation,
           visibility: previous.visibility,
           context: previous.contextId,
           scheme: body.schemeId,

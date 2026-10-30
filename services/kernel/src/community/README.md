@@ -636,3 +636,40 @@ report restoration success. The independent platform check is implemented, witho
 Accounts also remains the sole last-holder/succession producer; this module does not implement an ownership store,
 claim approval, `readRealmOwnershipRoles`, or any succession, grant or transfer producer. Existing orphan claim requests
 and their expiry do not confer restoration or acquisition authority.
+
+## Realm presentation
+
+Realm revisions own the closed `presentation` reference object:
+`{ avatarMediaId: UUID|null, bannerMediaId: UUID|null, rules: {postId: UUID, revisionId: UUID}|null }`.
+Creation defaults every slot to null. Ordinary Realm PATCH omission preserves the object; a supplied object
+requires all three keys and rejects unknown keys. Null clears an individual slot. The existing `expectedHead`
+CAS, idempotency digest and current `realm:manage` admission, including replay, apply. Board-scheme revisions
+also preserve presentation. There is no separate settings store, endpoint, role or Context authority.
+
+Only Realm managers select references. A rules reference selects an exact published native revision of a post
+in a board of this Realm. Content prepares its real actor, ancestry, board, Realm, revision and partition evidence
+before Realm checkout on every live command attempt. The selected Text document must occupy at most 65,536
+canonical UTF-8 bytes, with its native SPDX licence and SHA-256 digest. It remains in native Content storage;
+Realm JSON stores only the two identities. Adoption never changes the original author's or editor's permissions,
+post head or version; a later edit does not change the pin. Native disclosure repeats on every presentation read.
+Hidden/erased rules yield `none`; source failures yield `unavailable` without any retained body.
+
+Media selection invokes Content's `claimRealmPresentationMedia(tx, {realmId, actor, avatarMediaId,
+bannerMediaId}, time)` inside the settings transaction. The native media producer owns same-Realm matching-purpose
+permanent claims and current download authority. Until installed, the declaration throws dependency unavailable;
+it cannot successfully select an image. No media pipeline, Space assets or board overrides are implemented here.
+
+Content's [community presentation contract](../content/README.md#community-presentation) owns the shared DTO and
+reader. `GET /v1/spaces/{id}` adds `community` beside its existing `space` representation, reusing that exact reader
+for a currently readable carried Realm. Space-only homes retain their own native title/summary and null community.
+Membership, setup and publication remain separate regions. The final Space head and carried-Realm binding must
+still match. The independent `contextId` pointer is preserved; it grants no editorial permission.
+
+### Cost: presentation settings and rules adoption
+
+- Touches: fixed Realm authority/head/CAS, at most two media claims and one exact prepared Content source;
+  one immutable revision, receipt and event. Rules authoring uses ordinary Content commands.
+- Bound: O(changes log R), fixed before/final source anchors, one selected post plus at most 32 ancestors,
+  at most 65,536 canonical bytes; no revision walk, recount or retry scan.
+- Growth check: later reuse `test/community/growth-realm.test.ts` and `test/content/growth-threads.test.ts`;
+  focused native outcomes live in `test/community/presentation.test.ts`. Type checking proves no native cost outcome.
