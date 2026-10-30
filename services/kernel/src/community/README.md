@@ -748,3 +748,53 @@ role admission, removal or creator authority.
   at most 65,536 canonical bytes; no revision walk, recount or retry scan.
 - Growth check: later reuse `test/community/growth-realm.test.ts` and `test/content/growth-threads.test.ts`;
   focused native outcomes live in `test/community/presentation.test.ts`. Type checking proves no native cost outcome.
+## Current native Realm member count
+
+`readRealmMemberCount(client, { realmId, at })` in `member-count.ts` returns only
+`{ count, version }` from the supplied current Realm-home snapshot at live authoritative T. It does not authorize
+reading a Realm or disclose account identities, coverage reasons or an endpoint. The header consumer performs its
+ordinary current Realm/privacy checks before and at final disclosure and enriches its existing DTO.
+The count is actual `realm_member` rows with `role = 'member'`, independent of explicit owners, grants, follows and
+visitors. An initialized fresh Realm has zero at version `0`. Missing controls, partial initialization, missing removal
+coverage and unsupported/not-yet-reached temporal frontiers return null (unknown). Home, SQL and deadline failures
+propagate; they are never unknown or a fabricated zero. Keys must be full native routed Realm identifiers; counts
+must be safe nonnegative integers and versions canonical nonnegative native bigint strings.
+
+Row triggers cover every actual insert/update/delete, including physical account erasure, historical cleanup and
+reconciliation. They lock the same source control before changes and update its version, count and temporal horizon
+in the original source transaction. A replay/no-op/refusal changes nothing. A real close removes one contribution;
+a same-T deletion follows the actual row deletion; a later rejoin adds one. Account tombstones, inverse/terminal
+facts, role loss and pending erasure statuses never decrement. The existing membership engine remains the sole
+transition, reservation and causal-proof owner, with its original receipts, grants and outbox atomicity. There is no
+new erasure participant or account-bearing journal. Uncovered TRUNCATE is refused. Source positions are numeric
+metadata on existing membership rows; Realm progress stores only numeric positions and resource keys. Deleting a
+source row erases its position too, with no new account locator/custody inventory.
+
+The forward migration adds a nullable source position without rewriting old membership history. Default community
+work uses the existing maintenance queue and native commands, redriving durable outstanding controls every ten
+minutes. A finite deployment Realm frontier is enumerated fifty raw Realm keys per segment. New Realm creation
+and the first actual source write install their own controls. Legacy open rows receive positions fifty raw current
+keys per segment through the indexed unkeyed source path; closed histories remain untouched. Only after that
+installation completes under the source lock is a finite numeric cut captured. Seeding reads fifty raw open source
+keys per segment before deriving contributions. It never counts a Realm on request or mistakes filtered EOF for
+completion. During installation writers advance the source version but coverage stays unknown. During seeding,
+changes to visited or post-cut keys apply once; unvisited cut keys are read in their actual current state later.
+No seed can overwrite a live delta, clear pending work or reset the source version. All progress is native and
+restartable; DBOS retains partition locators and continuation only, and each segment releases its home connection.
+
+Native open SQL creates an immediate open-ended interval at its injected command T. Close SQL writes the actual
+end at its command T (or deletes the same-T row); it does not schedule a future transition. The read horizon is at
+least the maximum start of seeded/opened rows and the end of any actual close. Legacy finite intervals contribute
+no open count, and an exact indexed maximum end establishes the earliest valid horizon. Until T reaches that
+horizon the result stays unknown, even if elapsed worker readiness says otherwise. Explicit infinite unsupported
+endpoints stay unknown. Thus future domain times cannot expose a stale aggregate; no historical request scan or
+timer-based inferred membership change is needed. The existing erasure membership consumer's unavailable state
+remains pending; only real source-row removal, whenever committed by its owner, affects this aggregate.
+
+### Cost
+
+| Operation                             | Touches                                                                                                               | Bound                                                                                                                                                                                                     | Growth check                                                                                                |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Read native Realm member count        | The native partition ownership key and exact `(route, realm_id)` source control in the caller's home snapshot.        | Two point rows/statements; logarithmic indexed blocks, independent of members and history.                                                                                                                | Later existing native growth harness; focused outcomes in `test/community/member-count.test.ts`.            |
+| Maintain count with native membership | The exact source control and actual changed source row; first installation probes indexed open/unkeyed/end endpoints. | Constant work per actual row change; logarithmic indexed blocks. No account journal or separate command.                                                                                                  | Existing membership/transition harness at integration; no allowance changes.                                |
+| Initialize existing counts            | Fifty raw Realm inventory keys, or fifty raw unkeyed/open source keys from one control and its finite cut.            | Fixed fifty inputs per segment; indexed keysets, finite native progress and one home per command. Closed history is never paged. Total work follows installed current keys and subsequent source changes. | Later existing native growth harness; restart/live-change outcome in `test/community/member-count.test.ts`. |

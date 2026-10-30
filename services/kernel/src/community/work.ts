@@ -1,4 +1,6 @@
 import { registerDiscoveryWork } from './discovery-register.ts';
+import { maintainRealmMemberCounts } from './member-count.ts';
+import { PARTITIONS } from '../route/route.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
 import { createRevisionLocatorEffect } from './revision-locator.ts';
 import { createCommunityAccountErasureEffect, registerCommunityAccountErasureWork } from './account-erasure.ts';
@@ -88,6 +90,32 @@ export const communityWorkModule: WorkModule = {
   async register(context) {
     context.addEffects([createRevisionLocatorEffect(context.pool)]);
     registerCommunityWork(context);
+    // Use the existing maintenance queue and native command segments. DBOS
+    // retains partition locators/continuation only; source progress stays native.
+    const countSegment = DBOS.registerStep((partition: number) => maintainRealmMemberCounts(context.pool, partition), {
+      name: 'community.member-count.segment',
+      ...COMMAND_STEP_RETRIES,
+    });
+    DBOS.registerWorkflow(
+      async () => {
+        for (let partition = 0; partition < PARTITIONS; partition++) {
+          while (await countSegment(partition)) {
+            /* Each segment releases its home. */
+          }
+        }
+      },
+      { name: 'community.member-count.upkeep' },
+    );
+    await context.client.applySchedules([
+      {
+        scheduleName: 'community.member-count.every-10-minutes',
+        workflowName: 'community.member-count.upkeep',
+        schedule: '*/10 * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+    ]);
     registerCommunityAccountErasureWork(context);
     await registerDiscoveryWork(context);
     context.addEffects([createPartyLocatorEffect(context.pool), createCommunityAccountErasureEffect(context)]);
