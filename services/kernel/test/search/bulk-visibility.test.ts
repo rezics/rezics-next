@@ -768,11 +768,23 @@ test('fixed keyed actions retain one bulk and at most one conflict refresh at th
       });
       await expect(recordedWrite(index, submitted, rejected)).rejects.toBeInstanceOf(IndexWriteError);
       const lost = receiptBoundary({ lost: true });
-      await expect(recordedWrite(index, [action('lost', 9n)], lost)).rejects.toThrow(
-        'native response lost after write',
-      );
-      expect((await hits(index)).find((hit) => hit._id === 'lost')).toMatchObject({ _version: 9 });
-      const replay = await recordedWrite(index, [action('lost', 9n)]);
+      const lostAction = action('lost', 9n);
+      await expect(recordedWrite(index, [lostAction], lost)).rejects.toThrow('native response lost after write');
+      // A bounded keyed search observes visibility even when unrelated roots exceed
+      // the general fixture search's page size; realtime GET would not prove this.
+      const stored = await search.request<Hits>('POST', `/${index}/_search`, {
+        size: 1,
+        version: true,
+        query: { ids: { values: [lostAction.id] } },
+      });
+      expect(stored.body.hits.hits).toEqual([
+        expect.objectContaining({
+          _id: lostAction.id,
+          _version: 9,
+          _source: lostAction.op === 'index' ? lostAction.document : null,
+        }),
+      ]);
+      const replay = await recordedWrite(index, [lostAction]);
       for (const control of [success, conflict, rejected, lost, replay]) expect(control.calls).toHaveLength(1);
       for (const control of [success, conflict, rejected]) {
         expect(control.calls[0]!.lines).toEqual(bulkLines(index, submitted));
