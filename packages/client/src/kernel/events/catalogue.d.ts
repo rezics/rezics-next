@@ -1,6 +1,26 @@
 import { Type, type TSchema } from 'typebox';
 import { type Validator } from 'typebox/compile';
 declare const productEventTypes: {
+    readonly "com.rezics.semantic.identity-epoch.home-available.v1": Type.TObject<{
+        partition: Type.TInteger;
+        after: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.bootstrap-scheduled.v1": Type.TObject<{
+        partition: Type.TInteger;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.admitted.v1": Type.TObject<{
+        jobId: Type.TString;
+        epoch: Type.TString;
+        partition: Type.TInteger;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.progress.v1": Type.TObject<{
+        partition: Type.TInteger;
+        generation: Type.TString;
+    }>;
+    readonly "com.rezics.semantic.identity-epoch.bootstrap.v1": Type.TObject<{
+        partition: Type.TInteger;
+        generation: Type.TString;
+    }>;
     readonly "com.rezics.subject.merged.v1": Type.TObject<{
         id: Type.TString;
         survivor: Type.TString;

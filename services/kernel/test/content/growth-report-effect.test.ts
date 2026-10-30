@@ -8,7 +8,14 @@ import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -243,6 +250,11 @@ test('Report effect projection stays within its bound as source reports and targ
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  assertGrowthAccessPaths(
+    'Report effect projection stays within its bound as source reports and target reverse-index history grow',
+    report.samples,
+    ['content.report', 'content.report_target'],
+  );
   const appliedReportId = appliedReportIds[0]!;
   const reportTime = await db.admin.query<{ created_at: string }>(
     'SELECT created_at::text FROM content.report WHERE route=$1 AND report_id=$2',
@@ -263,9 +275,6 @@ test('Report effect projection stays within its bound as source reports and targ
     ],
   );
   expect(projection.rows[0]).toEqual({ rows: 1, events: 1, created_at: reportTime.rows[0]!.created_at });
-  for (const sample of report.samples)
-    for (const relation of ['content.report', 'content.report_target'])
-      expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
 });
 
 test('Report effect replay stays within its bound and changes nothing as history grows', async () => {
@@ -319,12 +328,14 @@ test('Report effect replay stays within its bound and changes nothing as history
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  assertGrowthAccessPaths(
+    'Report effect replay stays within its bound and changes nothing as history grows',
+    report.samples,
+    ['content.report', 'content.report_target'],
+  );
   for (const result of replayResults) {
     expect(result.before.rows).toBe(1);
     expect(result.before.events).toBe(1);
     expect(result.after).toEqual(result.before);
   }
-  for (const sample of report.samples)
-    for (const relation of ['content.report', 'content.report_target'])
-      expect(sample.cost.relations[relation]?.sequentialScans ?? 0, `${relation} at ${sample.scale}`).toBe(0);
 });
