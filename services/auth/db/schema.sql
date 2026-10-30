@@ -1481,7 +1481,6 @@ CREATE TABLE public.auth_copy_work (
 );
 
 
-
 --
 -- Name: auth_effect_receipt; Type: TABLE; Schema: public; Owner: -
 --
