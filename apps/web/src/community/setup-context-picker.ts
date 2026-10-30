@@ -15,7 +15,7 @@ export class ContextChoiceError extends Error {
   }
 }
 
-/** Replace this consumer-local binding when Semantic delivers its exact search declaration. */
+/** Known-reference recovery for consumers that have no directory transport. */
 export function unavailableContextChoiceSource(
   resolve: (id: string) => Promise<SetupChoice | SetupFailure>,
 ): ContextChoiceSource {

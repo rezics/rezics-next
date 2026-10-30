@@ -17,6 +17,14 @@ import {
 } from '../src/community/setup-context-picker';
 import realmRecording from '../src/kernel/recorded/realm.json';
 import spaceRecording from '../src/kernel/recorded/space.json';
+import {
+  nativeContextChoiceSource,
+  readSetupContextDirectory,
+  unavailableNativeContextDirectory,
+  type ContextDirectoryEntry,
+  type ContextDirectoryResult,
+  type NativeContextDirectory,
+} from '../src/community/setup-context-native';
 
 const contextId = realmRecording.realm.contextId;
 const otherId = '01a1a000-0000-7000-8000-000000000007';
@@ -235,5 +243,163 @@ test('new selections and current pointer validity stay independent through denia
     concurrent.dispose();
   } finally {
     picker.dispose();
+  }
+});
+
+test('Bind delivered Context picker to exact declared native active directory', async () => {
+  const entry: ContextDirectoryEntry = {
+    id: contextId,
+    kind: 'community',
+    labels: { fr: 'Catalogue alias', en: 'Reading', ja: 'Reading in Japanese' },
+    state: 'active',
+    deletedAt: null,
+    purgeAfter: null,
+  };
+  const pages: Parameters<NativeContextDirectory['get']>[0][] = [];
+  const directory: NativeContextDirectory = {
+    async get(options) {
+      pages.push(options);
+      return {
+        status: 200,
+        error: null,
+        data:
+          options.query.cursor === undefined
+            ? {
+                contexts: [
+                  entry,
+                  { ...entry, id: otherId, kind: 'global', labels: { de: 'Canonical fallback', fr: 'Later fallback' } },
+                  { ...entry, state: 'deleted', deletedAt: '2026-10-01T00:00:00Z', purgeAfter: '2026-11-01T00:00:00Z' },
+                ],
+                next: 'second',
+              }
+            : { contexts: [], next: options.query.cursor === 'second' ? '' : null },
+      };
+    },
+  };
+  const exactReads: Request[] = [];
+  let readable = true;
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      exactReads.push(request);
+      return readable
+        ? Response.json({ context: { ...entry, labels: { en: 'Current English', ja: 'Current Japanese' } } })
+        : Response.json({ code: 'not_found' }, { status: 404 });
+    },
+  });
+  const source = nativeContextChoiceSource(
+    (input) => readSetupContextDirectory(directory, 'Bearer current-viewer', input),
+    (id) => readSetupChoice(client, 'Bearer current-viewer', { kind: 'context', id }, 'ja'),
+    'ja',
+  );
+  const picker = createSetupContextPicker(source);
+  try {
+    picker.search(' Catalogue ');
+    picker.retrySearch();
+    await tick();
+    expect(pages).toHaveLength(1);
+    expect(pages[0]!.query).toEqual({ query: 'Catalogue', limit: 20, deleted: false });
+    expect(pages[0]!.headers).toEqual({ authorization: 'Bearer current-viewer' });
+    expect(pages[0]!.fetch?.signal).toBeInstanceOf(AbortSignal);
+    expect(picker.getSnapshot().page.contexts).toEqual([
+      { id: contextId, label: 'Reading in Japanese' },
+      { id: otherId, label: 'Canonical fallback' },
+    ]);
+    expect(exactReads).toHaveLength(0);
+    picker.next();
+    await tick();
+    expect(pages).toHaveLength(2);
+    expect(pages[1]!.query).toEqual({ query: 'Catalogue', limit: 20, deleted: false, cursor: 'second' });
+    expect(picker.getSnapshot().page).toMatchObject({ phase: 'ready', contexts: [], next: '' });
+    picker.next();
+    await tick();
+    expect(pages).toHaveLength(3);
+    expect(pages[2]!.query.cursor).toBe('');
+    expect(picker.getSnapshot().page.next).toBeNull();
+    await picker.choose(contextId);
+    expect(exactReads).toHaveLength(1);
+    expect(exactReads[0]!.method).toBe('GET');
+    expect(new URL(exactReads[0]!.url).pathname).toBe(`/v1/contexts/${contextId}`);
+    expect(exactReads[0]!.headers.get('authorization')).toBe('Bearer current-viewer');
+    expect(picker.getSnapshot().selected?.choice).toEqual({ id: contextId, label: 'Current Japanese' });
+    readable = false;
+    await picker.choose(contextId);
+    expect(picker.getSnapshot().selected).toEqual({ id: contextId, phase: 'denied', choice: null });
+    expect(pages).toHaveLength(3);
+    await source.search({ query: '' });
+    expect(pages.at(-1)!.query).toEqual({ limit: 20, deleted: false });
+  } finally {
+    picker.dispose();
+  }
+});
+
+test('native directory unavailable, preparing and unknown responses never become an empty final page', async () => {
+  const resolve = async (id: string) => ({ id, label });
+  const unavailable = nativeContextChoiceSource(
+    (input) => readSetupContextDirectory(unavailableNativeContextDirectory, 'Bearer viewer', input),
+    resolve,
+    'en',
+  );
+  await expect(unavailable.search({ query: '' })).rejects.toEqual(new ContextChoiceError('unavailable'));
+  for (const status of [200, 202, 500, 503, 401, 403, 404]) {
+    const source = nativeContextChoiceSource(
+      (input) =>
+        readSetupContextDirectory({ get: async () => ({ data: null, error: null, status }) }, 'Bearer viewer', input),
+      resolve,
+      'en',
+    );
+    await expect(source.search({ query: '' })).rejects.toEqual(
+      new ContextChoiceError([401, 403, 404].includes(status) ? 'denied' : 'unavailable'),
+    );
+  }
+  const unknown = nativeContextChoiceSource(
+    (input) =>
+      readSetupContextDirectory(
+        {
+          get: async () => ({ data: { contexts: [], next: null, preparing: true } as never, error: null, status: 200 }),
+        },
+        'Bearer viewer',
+        input,
+      ),
+    resolve,
+    'en',
+  );
+  await expect(unknown.search({ query: '' })).rejects.toEqual(new ContextChoiceError('unavailable'));
+});
+
+test('cancelled directory reads and a disposed viewer cannot publish labels from the prior session', async () => {
+  const late = deferred<ContextDirectoryResult>();
+  const exact = deferred<{ id: string; label: string }>();
+  const source = nativeContextChoiceSource(
+    () => late.promise,
+    () => exact.promise,
+    'en',
+  );
+  const picker = createSetupContextPicker(source);
+  picker.retrySearch();
+  await tick();
+  const current = picker.current(contextId, 'head');
+  const chosen = picker.choose(contextId);
+  picker.dispose();
+  const nextViewer = createSetupContextPicker(
+    nativeContextChoiceSource(
+      async () => ({ kind: 'denied' }),
+      async () => ({ kind: 'failure', reason: 'denied', status: 401 }),
+      'en',
+    ),
+  );
+  try {
+    late.resolve({ contexts: [], next: 'must-not-publish' });
+    exact.resolve({ id: contextId, label: 'Prior viewer label' });
+    await Promise.all([current, chosen]);
+    await tick();
+    expect(picker.getSnapshot().page.next).toBeNull();
+    expect(picker.getSnapshot().current?.choice).toBeNull();
+    expect(picker.getSnapshot().selected?.choice).toBeNull();
+    expect(nextViewer.getSnapshot().selected).toBeNull();
+    await nextViewer.choose(contextId);
+    expect(nextViewer.getSnapshot().selected).toEqual({ id: contextId, phase: 'denied', choice: null });
+  } finally {
+    nextViewer.dispose();
   }
 });

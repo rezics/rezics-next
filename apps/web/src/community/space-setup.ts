@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { pickText } from '@rezics/composition';
 import * as v from 'valibot';
 
 const id = v.pipe(v.string(), v.uuid());
@@ -254,13 +255,14 @@ export async function readSetupChoice(
   client: KernelClient,
   authorization: string,
   input: v.InferOutput<typeof setupChoiceSchema>,
+  locale = 'en',
 ): Promise<SetupChoice | SetupFailure> {
   const auth: Auth = { headers: { authorization } };
   if (input.kind === 'context') {
     const data = read(await client.contexts({ id: input.id }).get(auth));
     return failed(data)
       ? data
-      : { id: data.context.id, label: Object.values(data.context.labels)[0] ?? data.context.kind };
+      : { id: data.context.id, label: pickText(data.context.labels, locale).text || data.context.id };
   }
   const data = read(await client.subjects({ id: input.id }).get(auth));
   if (failed(data)) return data;

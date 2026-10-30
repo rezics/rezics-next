@@ -43,6 +43,11 @@ import {
 } from './container-lifecycle-native';
 import { readRealmClaim, writeRealmClaim } from './realm-claim-native';
 import { validateRealmClaimInput, type RealmClaimInput } from './realm-claim';
+import {
+  readSetupContextDirectory,
+  setupContextDirectorySchema,
+  unavailableNativeContextDirectory,
+} from './setup-context-native';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -192,7 +197,17 @@ export const readSpaceSetup = createServerFn({ method: 'GET' })
 
 export const resolveSpaceSetupChoice = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(setupChoiceSchema, input))
-  .handler(async ({ data }) => readSetupChoice(kernelClient(), await setupCredential(), data));
+  .handler(async ({ data }) => readSetupChoice(kernelClient(), await setupCredential(), data, requestLocale() ?? 'en'));
+
+export const searchSpaceSetupContexts = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => v.parse(setupContextDirectorySchema, input))
+  .handler(async ({ data }) =>
+    // Bind the original generated contexts directory here when its GET declaration is delivered.
+    readSetupContextDirectory(unavailableNativeContextDirectory, await setupCredential(), {
+      ...data,
+      signal: getRequest().signal,
+    }),
+  );
 
 export const changeSpaceSetup = createServerFn({ method: 'POST' })
   .validator((input: unknown) => v.parse(setupCommandSchema, input))

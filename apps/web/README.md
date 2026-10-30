@@ -2166,16 +2166,33 @@ existing ordinary command independently; the compact summary distinguishes saved
 Back keeps drafts, and Cancel pauses the editor with Resume on the same page. Unsaved entries, including unresolved
 selection references, survive those controls but are not persisted across navigation. Saved commands are not undone.
 
-The production transport remains `changeSpaceSetup`, `readSpaceSetup` and `resolveSpaceSetupChoice` in
-`community/space-actions.ts`. The Context region now uses
+The production transport uses `changeSpaceSetup`, `readSpaceSetup`, `resolveSpaceSetupChoice` and
+`searchSpaceSetupContexts` in `community/space-actions.ts`. The Context region uses
 `community/setup-context-picker-field.tsx`, backed by the consumer-local `ContextChoiceSource` in
 `community/setup-context-picker.ts`. Its `search({ query, cursor?, signal? })` returns one page of
 `{ contexts: readonly { id, label }[], next: string | null }`; `resolve(id)` returns one current readable choice or
-`null`. These are presentation data, never permission evidence. `SetupTransport.contexts` accepts the original
-Semantic source when delivered. The installed generated `semantic/http/contexts.d.ts` declares creation, point reads,
-definitions and lifecycle, but no current-authorized enumeration/search. The isolated default search therefore
-throws typed unavailable; its resolve uses the existing authenticated `resolveSpaceSetupChoice` point reader.
-There is no guessed endpoint or catalogue fallback. The shared EntityPicker was inspected: it requires subject
+`null`. These are presentation data, never permission evidence. The page binds `SetupTransport.contexts` through
+`community/setup-context-native.ts` to the declared native directory: `GET /v1/contexts` accepts an optional prefix
+`query`, `limit` (1–100, default 20), `cursor` and `deleted` (default false), and returns `{ contexts, next }`.
+Each entry has exactly `id`, `kind` (`global` or `community`), `labels`, `state` (`active` or `deleted`),
+`deletedAt` and `purgeAfter`. The adapter requests 20 entries with `deleted=false` and the current session credential,
+omitting an empty query and preserving the opaque cursor, including an empty cursor. Each query, Next or retry
+makes one directory request; it never resolves result rows or fills a filtered page. Only active entries without
+deletion timestamps become choices. The native directory owns current readability; its display page grants no
+authority to save a Realm.
+
+The installed generated `semantic/http/contexts.d.ts` has no directory GET or lifecycle GET declaration yet.
+`NativeContextDirectory` therefore isolates that exact declared GET shape, with a typed unavailable transport at
+the server binding. When the original generated directory is delivered, bind it there; do not add a fetch endpoint,
+Semantic writer or second native module. This declaration is not evidence of a delivered native directory.
+The declared `GET /v1/contexts/{id}/lifecycle -> { context: entry }` is independent of the existing point GET,
+creation, deletion and restoration commands; the picker issues none of those lifecycle reads or writes.
+Missing, preparing, malformed and 500/503 responses remain unavailable with Retry, never an empty final page.
+Both directory labels and independently verified selection labels use the shared `pickText` locale fallback,
+ending with the exact ID when there is no label. A match in another language never replaces the canonical label.
+The page memoizes the source for its viewer and locale; a changed session disposes old searches and resolutions.
+Selection still uses the authenticated `resolveSpaceSetupChoice` point reader, never the directory's cached label
+or a cached permission verdict. The shared EntityPicker was inspected: it requires subject
 types/covers, hides IDs and has no continuation, so this Context region reuses shared Field/Input/Button controls.
 Known-reference loading remains optional recovery alongside name search.
 
@@ -2223,8 +2240,8 @@ light/dark through existing Storybook globals; there are no width, locale or the
 
 The page composition ID remains `pages-community-space-setup--new-community`. Plays advance, select, save, retry,
 refresh a conflict/refusal, pause/resume and reach links containing returned native IDs. They use explicit typed
-transport fixtures; production source defaults remain the actual Context point reader and typed unavailable search
-and board sources above.
+transport fixtures; production uses the native directory adapter's isolated unavailable transport until the
+generated GET is installed, the actual Context point reader, and the typed unavailable board source above.
 Native acceptance and Web screenshot review follow integration; local typing does not establish those outcomes.
 
 Focused Context review IDs are `patterns-community-space-setup-context--unavailable`, `--denied` and `--loading`.
@@ -2242,7 +2259,8 @@ enabling Realm save; the ordinary command still verifies current Context disclos
 head CAS and the original pending intent. Denied or unavailable lookups hide old results and preserve drafts and
 saved creation steps. Back and pause retain the query, reference and choice. Removed Realm reads remain failures,
 never Global fallback. The focused `tests/setup-context-picker.test.ts` records these selection, denial, bounded-page
-and late-response outcomes for later integration execution.
+and late-response outcomes for later integration execution, including
+`Bind delivered Context picker to exact declared native active directory` against the declared transport boundary.
 
 The journey keeps the existing two-resource snapshot and viewer-action batch. A saved Context gets one exact read
 per pointer/head change or explicit recheck. Each chosen Context gets one exact read; no result row is resolved

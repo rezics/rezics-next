@@ -1,10 +1,13 @@
 import { Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { personalRead } from '../kernel/query';
 import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
-import { changeSpaceSetup, readSpaceSetup, resolveSpaceSetupChoice } from './space-actions';
+import { changeSpaceSetup, readSpaceSetup, resolveSpaceSetupChoice, searchSpaceSetupContexts } from './space-actions';
+import { nativeContextChoiceSource } from './setup-context-native';
 import { SpaceSetupForm, type SetupTransport } from './space-setup-form';
 import type { SetupSnapshot, SetupFailure } from './space-setup';
 
@@ -15,15 +18,34 @@ export function SpaceSetupPage({
   initial: SetupSnapshot | SetupFailure;
   spaceId?: string | undefined;
 }) {
-  const { csrfToken } = useSession();
-  const transport: SetupTransport = {
-    command: (data) =>
-      csrfToken
-        ? changeSpaceSetup({ data, headers: { 'X-CSRF-Token': csrfToken } })
-        : Promise.resolve({ kind: 'failure', reason: 'denied', status: 401 }),
-    read: (id) => readSpaceSetup({ data: (id ?? spaceId) ? { spaceId: id ?? spaceId } : {} }),
-    choice: (kind, id) => resolveSpaceSetupChoice({ data: { kind, id } }),
-  };
+  const { csrfToken, state, subject } = useSession();
+  const locale = getLocale();
+  const transport = useMemo<SetupTransport>(
+    () => ({
+      contexts: nativeContextChoiceSource(
+        ({ query, cursor, signal }) =>
+          state === 'signed-in'
+            ? searchSpaceSetupContexts({
+                data: { query, ...(cursor !== undefined ? { cursor } : {}) },
+                ...(signal ? { signal } : {}),
+              })
+            : Promise.resolve({ kind: 'denied' }),
+        (id) =>
+          state === 'signed-in'
+            ? resolveSpaceSetupChoice({ data: { kind: 'context', id } })
+            : Promise.resolve({ kind: 'failure', reason: 'denied', status: 401 }),
+        locale,
+      ),
+      command: (data) =>
+        csrfToken
+          ? changeSpaceSetup({ data, headers: { 'X-CSRF-Token': csrfToken } })
+          : Promise.resolve({ kind: 'failure', reason: 'denied', status: 401 }),
+      read: (id) => readSpaceSetup({ data: (id ?? spaceId) ? { spaceId: id ?? spaceId } : {} }),
+      choice: (kind, id) => resolveSpaceSetupChoice({ data: { kind, id } }),
+    }),
+    // A changed viewer or locale gets a fresh picker; disposed requests cannot publish earlier labels.
+    [csrfToken, state, subject, locale, spaceId],
+  );
   return (
     <article className="mx-auto max-w-5xl space-y-6 text-foreground">
       <PageHeading>{m.space_setup_heading()}</PageHeading>
