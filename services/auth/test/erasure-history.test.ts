@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { DBOSClient } from '@dbos-inc/dbos-sdk';
+import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
 import type { AuthErasureSource } from '@rezics/auth-contract';
 import { nativeFixture, password, scopes } from './support/erasure-native.ts';
 import { COPY_TABLES, copiesAbsent, createCopyWriter, eraseCopy } from '../src/erasure-copy.ts';
@@ -123,6 +123,28 @@ test('real default deletion transfers only its discharged native source, then er
         .consent_completed_at,
     ).toBeNull();
     expect(await erasureHistoryPage(f.pool, accepted.id)).toBe(false);
+    // Lose the reply after the real supported cancellation commits. The durable
+    // retirement cut must still permit exact deletion on retry, with no new
+    // producer or consumer inferred from a CANCELLED terminal status.
+    const cancel = DBOS.cancelWorkflow;
+    DBOS.cancelWorkflow = async (id) => {
+      await cancel.call(DBOS, id);
+      throw new Error('test reply lost after native cancellation');
+    };
+    try {
+      await expect(eraseCopy(f.pool, registration.workflow_id)).rejects.toThrow('reply lost');
+    } finally {
+      DBOS.cancelWorkflow = cancel;
+    }
+    expect(
+      (
+        await f.pool.query('SELECT status FROM auth_dbos.workflow_status WHERE workflow_uuid=$1', [
+          registration.workflow_id,
+        ])
+      ).rows,
+    ).toEqual([{ status: 'CANCELLED' }]);
+    expect(await eraseCopy(f.pool, registration.workflow_id)).toBe(true);
+    expect(await copiesAbsent(f.pool, registration.workflow_id)).toBe(true);
     await eventually(async () => completionAttempts > 0, 370_000);
     const local = (await f.pool.query('SELECT * FROM auth_erasure WHERE id=$1', [accepted.id])).rows[0]!;
     expect(local.copies_completed_at).toBeInstanceOf(Date);
