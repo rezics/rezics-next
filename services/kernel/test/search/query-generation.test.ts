@@ -244,25 +244,32 @@ afterAll(() => metadataPool.end());
 
 function metadataService(client: OpenSearch) {
   const fake = createFakeSource();
-  for (const [offset, id] of ids.entries()) fake.put({
-    id,
-    type: 'schema:Book',
-    visibility: 'visible',
-    redirect: null,
-    securityRevision: 17,
-    labels: [{ language: 'en', value: `Amber lantern ${offset}` }],
-    aliases: [],
-    descriptions: [],
-    statements: [],
-  });
+  for (const [offset, id] of ids.entries())
+    fake.put({
+      id,
+      type: 'schema:Book',
+      visibility: 'visible',
+      redirect: null,
+      securityRevision: 17,
+      labels: [{ language: 'en', value: `Amber lantern ${offset}` }],
+      aliases: [],
+      descriptions: [],
+      statements: [],
+    });
   let sourceWork = 0;
   const service = createSearchService({
     pool: metadataPool,
     client,
     prefix,
     source: {
-      read: (...args) => { sourceWork++; return fake.read(...args); },
-      count: (...args) => { sourceWork++; return fake.count(...args); },
+      read: (...args) => {
+        sourceWork++;
+        return fake.read(...args);
+      },
+      count: (...args) => {
+        sourceWork++;
+        return fake.count(...args);
+      },
     },
     cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
   });
@@ -270,7 +277,10 @@ function metadataService(client: OpenSearch) {
 }
 
 async function metadataProblem(promise: Promise<unknown>, code = 'index_not_ready') {
-  const error: unknown = await promise.then(() => undefined, (error: unknown) => error);
+  const error: unknown = await promise.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
   expect(error).toBeInstanceOf(ProblemError);
   expect(error).toMatchObject({ code });
   const response = problemResponse(error as ProblemError, { method: 'POST', id: 'native-metadata' });
@@ -288,13 +298,21 @@ test('actual query callers refuse malformed native start and final resolve metad
         const empty = boundary === 'empty final';
         const { client, calls } = captureMetadata(engine, 'resolve', control, start ? 1 : 2);
         const { service, sourceWork } = metadataService(client);
-        await metadataProblem(service.search('anonymous', { text: empty ? 'nohit' : 'lantern', sort: 'name', limit: 1 }));
+        await metadataProblem(
+          service.search('anonymous', { text: empty ? 'nohit' : 'lantern', sort: 'name', limit: 1 }),
+        );
         const resolves = calls.filter(({ path }) => path.startsWith('/_resolve/index/'));
         const mappings = calls.filter(({ path }) => path.endsWith('/_mapping'));
         const queries = calls.filter(({ path }) => path.endsWith('/_search/template'));
         expect(resolves, control.name).toHaveLength(start ? 1 : 2);
-        expect(mappings.map(({ path }) => path), control.name).toEqual(start ? [] : [`/${subjectIndexName(prefix, 1)}/_mapping`]);
-        expect(queries.map(({ path }) => path), control.name).toEqual(start ? [] : [`/${subjectIndexName(prefix, 1)}/_search/template`]);
+        expect(
+          mappings.map(({ path }) => path),
+          control.name,
+        ).toEqual(start ? [] : [`/${subjectIndexName(prefix, 1)}/_mapping`]);
+        expect(
+          queries.map(({ path }) => path),
+          control.name,
+        ).toEqual(start ? [] : [`/${subjectIndexName(prefix, 1)}/_search/template`]);
         expect(resolves.at(-1)!.changed, control.name).toBeDefined();
         if (start || empty) expect(sourceWork(), control.name).toBe(0);
         else expect(sourceWork(), control.name).toBeGreaterThan(0);
@@ -317,9 +335,18 @@ test('actual query callers refuse malformed concrete mapping receipts before nat
       const { client, calls } = captureMetadata(engine, 'mapping', control);
       const { service, sourceWork } = metadataService(client);
       await metadataProblem(service.search('anonymous', { text: 'lantern', sort: 'name', limit: 1 }));
-      expect(calls.filter(({ path }) => path.startsWith('/_resolve/index/')), control.name).toHaveLength(1);
-      expect(calls.filter(({ path }) => path.endsWith('/_mapping')), control.name).toHaveLength(1);
-      expect(calls.filter(({ path }) => path.endsWith('/_search/template')), control.name).toEqual([]);
+      expect(
+        calls.filter(({ path }) => path.startsWith('/_resolve/index/')),
+        control.name,
+      ).toHaveLength(1);
+      expect(
+        calls.filter(({ path }) => path.endsWith('/_mapping')),
+        control.name,
+      ).toHaveLength(1);
+      expect(
+        calls.filter(({ path }) => path.endsWith('/_search/template')),
+        control.name,
+      ).toEqual([]);
       expect(sourceWork(), control.name).toBe(0);
     }
   } finally {
@@ -370,7 +397,10 @@ test('native caller generation switches preserve pinned requests and restart409 
     }
     await switchAlias(1, 2);
     try {
-      await metadataProblem(service.search('anonymous', { ...request, cursor: first.next! }), 'search_restart_required');
+      await metadataProblem(
+        service.search('anonymous', { ...request, cursor: first.next! }),
+        'search_restart_required',
+      );
     } finally {
       await switchAlias(2, 1);
     }

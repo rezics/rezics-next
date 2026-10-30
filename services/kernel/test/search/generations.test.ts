@@ -260,7 +260,9 @@ test('native metadata admits absent, initial, rebuilding, switched and retired s
     await observe([], null);
     await createSubjectIndex(search, prefix, 1);
     await observe([1], null);
-    await search.request('POST', '/_aliases', { actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }] });
+    await search.request('POST', '/_aliases', {
+      actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }],
+    });
     await observe([1], 1);
     await createSubjectIndex(search, prefix, 2);
     await observe([1, 2], 1);
@@ -274,22 +276,29 @@ test('native metadata admits absent, initial, rebuilding, switched and retired s
         unrelated.push(subjectIndexName(other, 1));
       }
       await observe([1, 2, 3], 1);
-      console.info('native metadata growth', JSON.stringify({ population, resolve: 1, mapping: 0, writes: 0, source: 0, receipt: receipts.at(-1) }));
+      console.info(
+        'native metadata growth',
+        JSON.stringify({ population, resolve: 1, mapping: 0, writes: 0, source: 0, receipt: receipts.at(-1) }),
+      );
     }
-    await search.request('POST', '/_aliases', { actions: [
-      { remove: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } },
-      { add: { index: subjectIndexName(prefix, 2), alias: subjectAlias(prefix) } },
-    ] });
+    await search.request('POST', '/_aliases', {
+      actions: [
+        { remove: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } },
+        { add: { index: subjectIndexName(prefix, 2), alias: subjectAlias(prefix) } },
+      ],
+    });
     await observe([1, 2, 3], 2);
     await search.request('DELETE', `/${subjectIndexName(prefix, 1)}`);
     await observe([2, 3], 2);
     // A generation need not be contiguous or fit in a 32-bit integer.
     await createSubjectIndex(search, prefix, Number.MAX_SAFE_INTEGER);
     await observe([2, 3, Number.MAX_SAFE_INTEGER], 2);
-    await search.request('POST', '/_aliases', { actions: [
-      { remove: { index: subjectIndexName(prefix, 2), alias: subjectAlias(prefix) } },
-      { add: { index: subjectIndexName(prefix, Number.MAX_SAFE_INTEGER), alias: subjectAlias(prefix) } },
-    ] });
+    await search.request('POST', '/_aliases', {
+      actions: [
+        { remove: { index: subjectIndexName(prefix, 2), alias: subjectAlias(prefix) } },
+        { add: { index: subjectIndexName(prefix, Number.MAX_SAFE_INTEGER), alias: subjectAlias(prefix) } },
+      ],
+    });
     await observe([2, 3, Number.MAX_SAFE_INTEGER], Number.MAX_SAFE_INTEGER);
     console.info('native metadata lifecycle', JSON.stringify(receipts));
   } finally {
@@ -302,27 +311,54 @@ test('malformed native resolve receipts reject reads and rebuild admission witho
   prefixes.push(prefix);
   await createSubjectIndex(search, prefix, 1);
   await createSubjectIndex(search, prefix, 2);
-  await search.request('POST', '/_aliases', { actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }] });
+  await search.request('POST', '/_aliases', {
+    actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }],
+  });
   const fake = createFakeSource();
-  let sourceWork = 0, refreshes = 0;
+  let sourceWork = 0,
+    refreshes = 0;
   const source: SubjectSource = {
-    read: (...args) => { sourceWork++; return fake.read(...args); },
-    count: (...args) => { sourceWork++; return fake.count(...args); },
+    read: (...args) => {
+      sourceWork++;
+      return fake.read(...args);
+    },
+    count: (...args) => {
+      sourceWork++;
+      return fake.count(...args);
+    },
   };
   for (const control of resolveControls(prefix)) {
     for (const transition of [false, true]) {
       const { client, calls } = captureMetadata(search, 'resolve', control);
       const result = transition
-        ? rebuildSubjects({ pool, search: client, source, prefix, runner: { async refresh() { refreshes++; } } })
+        ? rebuildSubjects({
+            pool,
+            search: client,
+            source,
+            prefix,
+            runner: {
+              async refresh() {
+                refreshes++;
+              },
+            },
+          })
         : subjectGenerations(client, prefix);
       await expect(result, control.name).rejects.toBeInstanceOf(SearchUnavailableError);
-      expect(calls.map(({ method, path }) => ({ method, path })), control.name).toEqual([
-        { method: 'GET', path: `/_resolve/index/${prefix}subjects*` },
-      ]);
-      expect(calls[0]!.raw).toMatchObject({ status: 200, body: { indices: [
-        { name: subjectIndexName(prefix, 1), attributes: ['open'], aliases: [subjectAlias(prefix)] },
-        { name: subjectIndexName(prefix, 2), attributes: ['open'] },
-      ], aliases: [{ name: subjectAlias(prefix), indices: [subjectIndexName(prefix, 1)] }], data_streams: [] } });
+      expect(
+        calls.map(({ method, path }) => ({ method, path })),
+        control.name,
+      ).toEqual([{ method: 'GET', path: `/_resolve/index/${prefix}subjects*` }]);
+      expect(calls[0]!.raw).toMatchObject({
+        status: 200,
+        body: {
+          indices: [
+            { name: subjectIndexName(prefix, 1), attributes: ['open'], aliases: [subjectAlias(prefix)] },
+            { name: subjectIndexName(prefix, 2), attributes: ['open'] },
+          ],
+          aliases: [{ name: subjectAlias(prefix), indices: [subjectIndexName(prefix, 1)] }],
+          data_streams: [],
+        },
+      });
     }
   }
   expect({ sourceWork, refreshes }).toEqual({ sourceWork: 0, refreshes: 0 });
@@ -333,7 +369,9 @@ test('native mapping receipts bind exactly one generation and malformed receipts
   prefixes.push(prefix);
   await createSubjectIndex(search, prefix, 1);
   await createSubjectIndex(search, prefix, 2);
-  await search.request('POST', '/_aliases', { actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }] });
+  await search.request('POST', '/_aliases', {
+    actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }],
+  });
   const index = subjectIndexName(prefix, 2);
   const { client, calls } = captureMetadata(search, 'mapping');
   expect(await readSubjectSortFormat(client, prefix, 2)).toBe(1);
@@ -342,17 +380,37 @@ test('native mapping receipts bind exactly one generation and malformed receipts
   for (const control of mappingControls(index)) {
     for (const transition of [false, true]) {
       const { client, calls } = captureMetadata(search, 'mapping', control);
-      let sourceWork = 0, refreshes = 0;
+      let sourceWork = 0,
+        refreshes = 0;
       const fake = createFakeSource();
       const source: SubjectSource = {
-        read: (...args) => { sourceWork++; return fake.read(...args); },
-        count: (...args) => { sourceWork++; return fake.count(...args); },
+        read: (...args) => {
+          sourceWork++;
+          return fake.read(...args);
+        },
+        count: (...args) => {
+          sourceWork++;
+          return fake.count(...args);
+        },
       };
       const result = transition
-        ? rebuildSubjects({ pool, search: client, source, prefix, runner: { async refresh() { refreshes++; } } })
+        ? rebuildSubjects({
+            pool,
+            search: client,
+            source,
+            prefix,
+            runner: {
+              async refresh() {
+                refreshes++;
+              },
+            },
+          })
         : readSubjectSortFormat(client, prefix, 2);
       await expect(result, control.name).rejects.toBeInstanceOf(SearchUnavailableError);
-      expect(calls.map(({ method, path }) => ({ method, path })), control.name).toEqual([
+      expect(
+        calls.map(({ method, path }) => ({ method, path })),
+        control.name,
+      ).toEqual([
         ...(transition ? [{ method: 'GET', path: `/_resolve/index/${prefix}subjects*` }] : []),
         { method: 'GET', path: `/${index}/_mapping` },
       ]);
