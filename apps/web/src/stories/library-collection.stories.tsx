@@ -119,7 +119,7 @@ export const GridLayout: Story = {
     await expect(context.canvasElement.querySelector('[data-slot="cover-grid"]')).toBeVisible();
     await expect(context.canvasElement.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(4);
   },
-  render: () => <PageStory visitor="Signed In" path={`/collections/${variants.CuratorPublicMany.id}?layout=grid`} />,
+  render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-collection']}?layout=grid`} />,
 };
 export const ReaderPublicMany: Story = {
   ...variantStory(variants.ReaderPublicMany),
