@@ -2,7 +2,7 @@
 -- Correlated bounded branches retain index predicates under generic prepared plans.
 WITH input AS MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id,
-         :prefix::text COLLATE "C" AS prefix, :upper::text COLLATE "C" AS upper_bound,
+         :prefix::text COLLATE "C" AS prefix, :upper::nullable(text) COLLATE "C" AS upper_bound,
          :after_name::text COLLATE "C" AS after_name, :after_label_id::uuid AS after_label_id,
          :limit::integer AS page_limit
 ), bounded AS MATERIALIZED (
