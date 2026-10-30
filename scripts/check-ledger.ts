@@ -18,7 +18,9 @@ export type CheckLedgerEntry = {
   exitStatus?: number;
   terminalStatus: string;
   infrastructureCause?: string;
+  /** Monotonic time awaiting local memory or remote host admission; excludes command execution. */
   slotWaitSeconds?: number;
+  /** Physical command phases plus wrapperTotal, which includes admission and setup for this row. */
   phases?: Record<string, number>;
   commandPhases?: Record<string, number>;
   memoryGiBSeconds?: number;

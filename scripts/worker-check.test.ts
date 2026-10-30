@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -10,13 +12,14 @@ import {
   utimesSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { hostname } from 'node:os';
-import { randomUUID } from 'node:crypto';
 import { acquireStackSlot } from './stack-lease.ts';
 import { requestExecutionCancellation } from './remote-check.ts';
 import {
   processTreeCpuTicks,
+  readWorkerCheckHistory,
+  readWorkerCheckRecord,
   runWorkerCheck,
   resolveRepositoryBun,
   scopeRootTypecheck,
@@ -27,8 +30,8 @@ import {
 } from './worker-check.ts';
 import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
 
+const repository = resolve(import.meta.dir, '..');
 const dirs: string[] = [];
-const repository = join(import.meta.dir, '..');
 let suiteRoot: string;
 const inheritedCheckEnvironment = { ...process.env };
 
@@ -650,22 +653,38 @@ function workerFixture(): {
   const memory = join(root, 'memory');
   const scripts = join(root, 'scripts');
   mkdirSync(scripts);
+  const initialized = spawnSync(
+    'git',
+    ['init', '-q', '--separate-git-dir', join(root, '.fixture-git'), root],
+    { cwd: root, encoding: 'utf8' },
+  );
+  if (initialized.status !== 0) throw new Error(initialized.stderr || 'could not initialize placement fixture');
   const remoteEvents = join(root, 'remote-events');
   const remoteArgs = join(root, 'remote-args.json');
   const localMarker = join(root, 'local-marker');
   writeFileSync(
     join(scripts, 'remote-check.ts'),
-    `import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+    `import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { requestExecutionCancellation } from ${JSON.stringify(join(repository, 'scripts/remote-check.ts'))};
 appendFileSync(process.env.WORKER_REMOTE_EVENTS!, 'remote\\n');
 appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.args', JSON.stringify(process.argv.slice(2)));
+const markRemoteTerminal = (started = false) => {
+  const file = process.env.REZICS_CHECK_REMOTE_CUSTODY_FILE;
+  const physicalRunId = process.env.REZICS_CHECK_PHYSICAL_RUN_ID;
+  if (!file || !physicalRunId) return;
+  mkdirSync(dirname(file), { recursive: true });
+  const now = new Date().toISOString();
+  const attempts = started ? [{ host: 'check-a', id: 'fixture-run', status: 'terminal', startedAt: now, endedAt: now }] : [];
+  writeFileSync(file, JSON.stringify({ version: 1, physicalRunId, status: 'terminal', attempts, updatedAt: now }));
+};
 writeFileSync(process.env.WORKER_REMOTE_ARGS!, JSON.stringify(Bun.argv.slice(2)));
 if (process.env.WORKER_REMOTE_PROFILE_OUTPUT) {
   mkdirSync(dirname(process.env.WORKER_REMOTE_PROFILE_OUTPUT), { recursive: true });
   writeFileSync(process.env.WORKER_REMOTE_PROFILE_OUTPUT, 'remote growth\\n');
 }
 if (process.env.WORKER_REMOTE_MODE === 'transport') {
+  markRemoteTerminal();
   writeFileSync(3, JSON.stringify({ nonce: process.env.REMOTE_CHECK_RECEIPT_NONCE, transportFailure:{schema:1,message:'remote-check: connection to host failed during rsync before a result'} })+'\\n');
   console.error('remote-check: connection to host failed during rsync before a result');
   console.error('remote-check: transport failure marker');
@@ -673,6 +692,7 @@ if (process.env.WORKER_REMOTE_MODE === 'transport') {
 }
 if (process.env.WORKER_REMOTE_MODE === 'cancel-transport') {
   requestExecutionCancellation({ file: process.env.REMOTE_CHECK_CANCELLATION_FILE!, id: process.env.REMOTE_CHECK_CANCELLATION_ID! });
+  markRemoteTerminal();
   writeFileSync(3, JSON.stringify({ nonce: process.env.REMOTE_CHECK_RECEIPT_NONCE, transportFailure:{schema:1,message:'remote-check: connection to host failed during rsync before a result'} })+'\\n');
   console.error('remote-check: connection to host failed during rsync before a result');
   console.error('remote-check: transport failure marker');
@@ -691,11 +711,71 @@ if (process.env.WORKER_REMOTE_MODE?.startsWith('lifetime-')) {
 }
 if (process.env.WORKER_REMOTE_MODE === 'failure') process.exit(7);
 if (process.env.WORKER_REMOTE_MODE === 'failure-75') process.exit(75);
+const mode = process.env.WORKER_REMOTE_MODE;
+if (mode === 'artifact') {
+  const arguments = process.argv.slice(2);
+  const separator = arguments.lastIndexOf('--');
+  if (separator < 0) process.exit(92);
+  const physicalRunId = process.env.REZICS_CHECK_PHYSICAL_RUN_ID!;
+  const relativeStage = process.env.REZICS_CHECK_ARTIFACTS_DIR!;
+  const remoteRoot = process.env.WORKER_ARTIFACT_REMOTE_BASE! + '/run-' + physicalRunId;
+  mkdirSync(remoteRoot, { recursive: true });
+  const artifactModule = await import(${JSON.stringify(join(repository, 'scripts/check-artifacts.ts'))});
+  artifactModule.prepareArtifactRun(remoteRoot, physicalRunId);
+  const command = Bun.spawn(arguments.slice(separator + 1), {
+    cwd: remoteRoot,
+    env: process.env,
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  const code = await command.exited;
+  const remoteStage = remoteRoot + '/' + relativeStage;
+  const localStage = process.cwd() + '/' + relativeStage;
+  rmSync(localStage, { recursive: true, force: true });
+  cpSync(remoteStage, localStage, { recursive: true });
+  rmSync(remoteRoot, { recursive: true, force: true });
+  appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.artifact-cleanup', 'removed\\n');
+  markRemoteTerminal(true);
+  process.exit(code);
+}
+const waitForRelease = async () => {
+  appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.waiting', 'waiting\\n');
+  const started = performance.now();
+  while (!existsSync(process.env.WORKER_REMOTE_RELEASE!)) await Bun.sleep(5);
+  console.error('remote-check: slot wait ' + ((performance.now() - started) / 1000).toFixed(3) + ' s on check-a');
+};
+if (mode === 'admission' || mode === 'transport-admission' || mode === 'telemetry') await waitForRelease();
+if (mode === 'cancel-admission') {
+  appendFileSync(process.env.WORKER_REMOTE_EVENTS! + '.waiting', 'waiting\\n');
+  const started = performance.now();
+  process.on('SIGTERM', () => {
+    console.error('remote-check: slot wait ' + ((performance.now() - started) / 1000).toFixed(3) + ' s (cancelled)');
+    process.exit(143);
+  });
+  await new Promise(() => {});
+}
+if (mode === 'transport-admission') {
+  markRemoteTerminal();
+  console.error('remote-check: connection to host failed during rsync before a result');
+  console.error('remote-check: transport failure marker');
+  await new Promise(resolve => process.stdout.write('x'.repeat(20_000) + '\\n', resolve));
+  process.exit(75);
+}
+if (mode === 'telemetry') {
+  process.stderr.write('remote-check: command phase compile 0.');
+  await Bun.sleep(5);
+  process.stderr.write('250 s\\n');
+  console.error('remote-check: command 0.500 s on check-a');
+  process.stdout.write('x'.repeat(20_000) + '\\n');
+}
+if (process.env.WORKER_REMOTE_MODE === 'failure') { markRemoteTerminal(true); process.exit(7); }
+if (process.env.WORKER_REMOTE_MODE === 'failure-75') { markRemoteTerminal(true); process.exit(75); }
 if (process.env.WORKER_REMOTE_MODE === 'queued') {
   console.error('remote-check: every check slot is busy; waiting for a free one (check-a 0/1 free)');
   console.error('remote-check: every check slot is busy; waiting for a free one (check-a 0/1 free)');
 }
 console.error('remote-check: run used 2.000 CPU seconds over 1.000 s (2.00 cores), peak memory 3072 MiB on check-a');
+markRemoteTerminal(true);
 process.exit(0);
 `,
   );
@@ -992,6 +1072,73 @@ test('stack-free placement: a real managed local check completes while every fak
   }
 });
 
+test('worker-check CLI keeps canonical launch, explicit compatibility alias and detached physical resume unambiguous', async () => {
+  const root = mkdtempSync(join(import.meta.dir, '../.temp/worker-check-cli-test-'));
+  dirs.push(root);
+  const old = { ...process.env };
+  const cli = join(repository, 'scripts/worker-check.ts');
+  const env = cleanTestEnvironment(process.env);
+  env.REZICS_CHECK_MEMORY = 'off';
+  env.REZICS_CHECK_SCOPE = 'off';
+  const invoke = (args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: root, env, encoding: 'utf8', timeout: 15_000 });
+  const started = join(root, 'canonical.started');
+  const release = join(root, 'canonical.release');
+  const command = [
+    process.execPath,
+    '-e',
+    `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(started)},String(process.pid));while(!fs.existsSync(${JSON.stringify(release)}))await Bun.sleep(5)`,
+  ];
+  try {
+    const canonical = invoke(['--', ...command]);
+    expect(canonical.status, canonical.stderr).toBe(0);
+    const id = canonical.stdout.match(/check: id ([0-9a-f-]{36})/)?.[1];
+    expect(id).toBeTruthy();
+    const record = readWorkerCheckRecord(id!, root);
+    expect(record.physicalRunId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(record.runnerIdentity?.pid).toBe(record.runnerPid);
+    const cmdline = readFileSync(`/proc/${record.runnerPid}/cmdline`, 'utf8');
+    expect(cmdline).toContain(`--run\0${id}\0--physical-run\0${record.physicalRunId}`);
+    writeFileSync(release, 'release');
+    expect(await waitWorkerCheck(id!, root, 5_000, { pollMs: 10 })).toBe(0);
+    expect(existsSync(started)).toBe(true);
+    expect(readWorkerCheckHistory(id!, record.physicalRunId!, root)?.status).toBe('finished');
+
+    const aliasMarker = join(root, 'compatibility.started');
+    const alias = invoke([
+      '--run',
+      '--',
+      process.execPath,
+      '-e',
+      `require('node:fs').writeFileSync(${JSON.stringify(aliasMarker)},'started')`,
+    ]);
+    expect(alias.status, alias.stderr).toBe(0);
+    const aliasId = alias.stdout.match(/check: id ([0-9a-f-]{36})/)?.[1];
+    expect(aliasId).toBeTruthy();
+    expect(await waitWorkerCheck(aliasId!, root, 5_000, { pollMs: 10 })).toBe(0);
+    expect(existsSync(aliasMarker)).toBe(true);
+
+    const malformedMarker = join(root, 'malformed.must-not-run');
+    const malformed = invoke([
+      '--run',
+      'not-a-valid-id',
+      '--',
+      '/bin/sh',
+      '-c',
+      `touch ${malformedMarker}`,
+    ]);
+    expect(malformed.status).not.toBe(0);
+    expect(malformed.stderr).toContain('Invalid check id');
+    expect(existsSync(malformedMarker)).toBe(false);
+
+    const empty = invoke(['--run', '--']);
+    expect(empty.status).not.toBe(0);
+    expect(empty.stderr).toContain('--run -- requires a command');
+  } finally {
+    writeFileSync(release, 'release');
+    restoreWorkerEnvironment(old);
+  }
+});
+
 test('stack-free placement: native command still reaches existing remote admission and explicit local and already-remote behavior remain compatible', async () => {
   const fixture = workerFixture();
   const old = { ...process.env };
@@ -1027,6 +1174,570 @@ test('stack-free placement: native command still reaches existing remote admissi
   } finally {
     restoreWorkerEnvironment(old);
   }
+});
+
+type NativeWorker = {
+  pid: number;
+  child: ReturnType<typeof spawn>;
+  output: () => string;
+  wait: () => Promise<number>;
+  stop: () => void;
+};
+
+function startNativeWorker(
+  fixture: ReturnType<typeof workerFixture>,
+  argv: string[],
+  env: Record<string, string | undefined>,
+  logicalCheckId?: string,
+): NativeWorker {
+  const driver = `import { runWorkerCheck } from ${JSON.stringify(join(repository, 'scripts/worker-check.ts'))};
+try { process.exitCode = await runWorkerCheck(JSON.parse(process.env.PLACEMENT_ARGV!), ${JSON.stringify(fixture.root)}, false, undefined, 60_000, process.env.PLACEMENT_LOGICAL_ID); }
+catch (error) { console.error(error); process.exitCode = 1; }`;
+  const child = spawn(process.execPath, ['--eval', driver], {
+    cwd: fixture.root,
+    env: {
+      ...env,
+      PLACEMENT_ARGV: JSON.stringify(argv),
+      ...(logicalCheckId ? { PLACEMENT_LOGICAL_ID: logicalCheckId } : {}),
+    },
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  child.stdout?.on('data', (chunk: Buffer) => (output += chunk.toString('utf8')));
+  child.stderr?.on('data', (chunk: Buffer) => (output += chunk.toString('utf8')));
+  const wait = new Promise<number>((resolveExit, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      const signals: Record<string, number> = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 };
+      resolveExit(code ?? 128 + (signal ? (signals[signal] ?? 1) : 1));
+    });
+  });
+  return {
+    pid: child.pid!,
+    child,
+    output: () => output,
+    wait: () => wait,
+    stop: () => {
+      try {
+        process.kill(-child.pid!, 'SIGKILL');
+      } catch {
+        try {
+          child.kill('SIGKILL');
+        } catch {}
+      }
+    },
+  };
+}
+
+function placementEnvironment(
+  fixture: ReturnType<typeof workerFixture>,
+  hostsPath?: string,
+  mode = 'success',
+): Record<string, string | undefined> {
+  const env = cleanTestEnvironment(process.env);
+  for (const key of ['GOAL_TASK_ID', 'REMOTE_CHECK_PRIORITY', 'GOAL_CHECK_WAIT_FILE']) delete env[key];
+  env.REZICS_CHECK_MEMORY = 'on';
+  env.REZICS_CHECK_MEMORY_DIR = fixture.memory;
+  env.REZICS_CHECK_MEMORY_GIB = '4';
+  env.REZICS_CHECK_SCOPE = 'off';
+  env.WORKER_REMOTE_EVENTS = fixture.remoteEvents;
+  env.WORKER_REMOTE_ARGS = fixture.remoteArgs;
+  env.WORKER_REMOTE_MODE = mode;
+  if (hostsPath === undefined) delete env.KERNEL_CHECK_REMOTE;
+  else env.KERNEL_CHECK_REMOTE = hostsPath;
+  return env;
+}
+
+function writeHosts(fixture: ReturnType<typeof workerFixture>): string {
+  const hosts = join(fixture.root, 'hosts.json');
+  writeFileSync(hosts, JSON.stringify({ hosts: [{ name: 'check-a', address: 'ops@check-a.test', identity: '/unused', memoryMaxGiB: 8, cpuQuotaPercent: 800, slots: 2 }] }));
+  return hosts;
+}
+
+function writeSharedHosts(fixture: ReturnType<typeof workerFixture>, hosts: string): void {
+  const shared = join(fixture.root, '.temp/goal/remote-check-hosts.json');
+  mkdirSync(join(fixture.root, '.temp/goal'), { recursive: true });
+  copyFileSync(hosts, shared);
+}
+
+async function waitUntil(predicate: () => boolean, message: string, timeoutMs = 5_000): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  while (!predicate()) {
+    if (performance.now() >= deadline) throw new Error(message);
+    await Bun.sleep(5);
+  }
+}
+
+async function boundedWorkerExit(worker: NativeWorker, timeoutMs = 10_000): Promise<number> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      worker.wait(),
+      new Promise<number>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`worker process ${worker.pid} did not exit within ${timeoutMs} ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function lockedSlots(directory: string, capacity: number): number[] {
+  const locked: number[] = [];
+  for (let index = 1; index <= capacity; index++) {
+    const file = join(directory, `slot-${index}.lock`);
+    const result = spawnSync('flock', ['-n', '-E', '75', file, 'true'], { encoding: 'utf8', timeout: 2_000 });
+    if (result.status === 75) locked.push(index);
+    else if (result.status !== 0) throw new Error(result.stderr || `flock could not inspect ${file}`);
+  }
+  return locked;
+}
+
+function latestLedgerEntries(root: string): any[] {
+  const directory = join(root, '.temp/check-ledger');
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory).flatMap((day) =>
+    readdirSync(join(directory, day))
+      .filter((file) => file.endsWith('.json'))
+      .map((file) => JSON.parse(readFileSync(join(directory, day, file), 'utf8'))),
+  );
+}
+
+test('bounded artifact returns: the real outer wrapper restores inner stack-run bytes before fake remote cleanup', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  const hosts = writeHosts(fixture);
+  const paths = ['browser captures/frame #1.png', 'browser captures/trace.bin'];
+  const expected = [Buffer.from([137, 80, 78, 71, 0, 255, 1]), Buffer.from([0, 3, 0, 4, 254])];
+  const logicalCheckId = randomUUID();
+  const remoteBase = join(fixture.root, '.temp/fake-check-host');
+  const inner = `
+    import { mkdirSync, writeFileSync } from 'node:fs';
+    import { dirname, join } from 'node:path';
+    import { stackRun } from ${JSON.stringify(join(repository, 'scripts/stack-run.ts'))};
+    const root = process.cwd();
+    const paths = JSON.parse(process.env.WORKER_ARTIFACT_PATHS!);
+    const code = await stackRun({
+      label: 'nested artifact fixture',
+      root,
+      cwd: ${JSON.stringify(join(repository, 'runs/nested-artifact-fixture'))},
+      command: ['true'],
+      returns: paths,
+    }, async () => {
+      if (process.env.WORKER_ARTIFACT_WRITE === '1') {
+        for (let index = 0; index < paths.length; index += 1) {
+          const output = join(root, paths[index]);
+          mkdirSync(dirname(output), { recursive: true });
+          writeFileSync(output, Buffer.from(JSON.parse(process.env.WORKER_ARTIFACT_BYTES!)[index]));
+        }
+      }
+      return Number(process.env.WORKER_ARTIFACT_EXIT ?? 0);
+    }, process.env);
+    process.exitCode = code;
+  `;
+  const command = ['bun', '-e', inner];
+  const commandClass = checkClass(command, fixture.root);
+  for (let sample = 0; sample < 3; sample += 1) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
+  try {
+    Object.assign(process.env, placementEnvironment(fixture, hosts, 'artifact'));
+    process.env.WORKER_REMOTE_MODE = 'artifact';
+    process.env.WORKER_ARTIFACT_REMOTE_BASE = remoteBase;
+    process.env.WORKER_ARTIFACT_PATHS = JSON.stringify(paths);
+    process.env.WORKER_ARTIFACT_BYTES = JSON.stringify(expected.map((bytes) => [...bytes]));
+    process.env.WORKER_ARTIFACT_WRITE = '1';
+    const firstPhysicalRun = randomUUID();
+    const firstCode = await runWorkerCheck(
+      ['--returns', paths[0]!, '--returns', paths[1]!, ...command],
+      fixture.root,
+      false,
+      undefined,
+      60_000,
+      logicalCheckId,
+      0,
+      undefined,
+      true,
+      firstPhysicalRun,
+    );
+    expect(firstCode).toBe(0);
+    expect(readFileSync(join(fixture.root, paths[0]!))).toEqual(expected[0]!);
+    expect(readFileSync(join(fixture.root, paths[1]!))).toEqual(expected[1]!);
+    expect(existsSync(join(remoteBase, `run-${firstPhysicalRun}`))).toBe(false);
+    expect(existsSync(join(fixture.root, '.temp/goal/checks/artifact-returns', firstPhysicalRun))).toBe(false);
+    expect(readFileSync(fixture.remoteEvents + '.artifact-cleanup', 'utf8')).toContain('removed');
+
+    process.env.WORKER_ARTIFACT_WRITE = '0';
+    const missingPhysicalRun = randomUUID();
+    expect(
+      await runWorkerCheck(
+        ['--returns', paths[0]!, '--returns', paths[1]!, ...command],
+        fixture.root,
+        false,
+        undefined,
+        60_000,
+        logicalCheckId,
+        0,
+        undefined,
+        true,
+        missingPhysicalRun,
+      ),
+    ).toBe(0);
+    expect(() => readFileSync(join(fixture.root, paths[0]!))).toThrow();
+    expect(() => readFileSync(join(fixture.root, paths[1]!))).toThrow();
+    expect(existsSync(join(remoteBase, `run-${missingPhysicalRun}`))).toBe(false);
+
+    process.env.WORKER_ARTIFACT_WRITE = '1';
+    process.env.WORKER_ARTIFACT_EXIT = '7';
+    const failedPhysicalRun = randomUUID();
+    expect(
+      await runWorkerCheck(
+        ['--returns', paths[0]!, '--returns', paths[1]!, ...command],
+        fixture.root,
+        false,
+        undefined,
+        60_000,
+        logicalCheckId,
+        0,
+        undefined,
+        true,
+        failedPhysicalRun,
+      ),
+    ).toBe(7);
+    expect(readFileSync(join(fixture.root, paths[0]!))).toEqual(expected[0]!);
+    expect(readFileSync(join(fixture.root, paths[1]!))).toEqual(expected[1]!);
+    expect(existsSync(join(remoteBase, `run-${failedPhysicalRun}`))).toBe(false);
+  } finally {
+    restoreWorkerEnvironment(old);
+    for (const key of ['WORKER_ARTIFACT_REMOTE_BASE', 'WORKER_ARTIFACT_PATHS', 'WORKER_ARTIFACT_BYTES', 'WORKER_ARTIFACT_WRITE', 'WORKER_ARTIFACT_EXIT']) {
+      if (old[key] === undefined) delete process.env[key];
+      else process.env[key] = old[key]!;
+    }
+  }
+});
+
+test('placement memory: a remotely queued check holds zero local check-memory slots, including shared default hosts discovery and env-prefixed commands', async () => {
+  for (const mode of ['shared-default', 'env-prefixed'] as const) {
+    const fixture = workerFixture();
+    const hosts = writeHosts(fixture);
+    writeSharedHosts(fixture, hosts);
+    const remoteRelease = join(fixture.root, 'remote.release');
+    const localStarted = join(fixture.root, `local-${mode}.started`);
+    const localRelease = join(fixture.root, `local-${mode}.release`);
+    const local = [
+      process.execPath,
+      '-e',
+      `(async()=>{const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(localStarted)},'started');while(!fs.existsSync(${JSON.stringify(localRelease)}))await Bun.sleep(5)})()`,
+    ];
+    const commandClass = checkClass(local, fixture.root);
+    for (let count = 0; count < 3; count++) recordPeak(fixture.memory, commandClass, 4 * 2 ** 30);
+    const env = placementEnvironment(fixture, undefined, 'admission');
+    env.WORKER_REMOTE_RELEASE = remoteRelease;
+    const argv = mode === 'env-prefixed' ? ['env', '-u', 'KERNEL_RATING_COUNTER_SECRET', ...local] : local;
+    const waiting = startNativeWorker(fixture, argv, env);
+    try {
+      await waitUntil(
+        () => existsSync(fixture.remoteEvents + '.waiting') || existsSync(localStarted),
+        `worker ${mode} neither reached remote admission nor started its local command`,
+      );
+      if (existsSync(localStarted)) expect(lockedSlots(fixture.memory, 4)).toEqual([1, 2, 3, 4]);
+      expect(existsSync(fixture.remoteEvents + '.waiting'), `worker ${mode} must use remote admission`).toBe(true);
+      expect(lockedSlots(fixture.memory, 4)).toEqual([]);
+      if (mode === 'env-prefixed') {
+        const dispatched = JSON.parse(readFileSync(fixture.remoteArgs, 'utf8')) as string[];
+        expect(dispatched.slice(dispatched.indexOf('--') + 1)).toEqual(argv);
+      }
+
+      const localProgress = join(fixture.root, `local-progress-${mode}`);
+      const progress = startNativeWorker(
+        fixture,
+        ['--local', process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(localProgress)}, 'ran')`],
+        env,
+      );
+      try {
+        expect(await boundedWorkerExit(progress)).toBe(0);
+        expect(readFileSync(localProgress, 'utf8')).toBe('ran');
+        expect(lockedSlots(fixture.memory, 4)).toEqual([]);
+      } finally {
+        progress.stop();
+      }
+    } finally {
+      writeFileSync(remoteRelease, 'release');
+      writeFileSync(localRelease, 'release');
+      try {
+        expect(await boundedWorkerExit(waiting)).toBe(0);
+      } finally {
+        waiting.stop();
+      }
+    }
+  }
+});
+
+test('placement memory: a local execution is admitted under its measured local memory weight, and genuine remote-to-local fallback acquires that lease only before local execution', async () => {
+  const localFixture = workerFixture();
+  const localStarted = join(localFixture.root, 'weighted-local.started');
+  const localRelease = join(localFixture.root, 'weighted-local.release');
+  const localCommand = [
+    process.execPath,
+    '-e',
+    `(async()=>{const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(localStarted)},'started');while(!fs.existsSync(${JSON.stringify(localRelease)}))await Bun.sleep(5)})()`,
+  ];
+  const weightClass = checkClass(localCommand, localFixture.root);
+  for (let count = 0; count < 3; count++) recordPeak(localFixture.memory, weightClass, 2.1 * 2 ** 30);
+  const localEnv = placementEnvironment(localFixture, undefined);
+  localEnv.REZICS_CHECK_MEMORY_GIB = '4';
+  const holder = await acquireStackSlot('placement memory holder', {
+    REZICS_STACK_SLOTS: '4',
+    REZICS_STACK_LEASE_DIR: localFixture.memory,
+  }, 2);
+  const weighted = startNativeWorker(localFixture, ['--local', ...localCommand], localEnv);
+  try {
+    await waitUntil(() => readdirSync(localFixture.memory).some((name) => name.startsWith('ticket-')),
+      'weighted local execution did not enter memory admission');
+    expect(existsSync(localStarted)).toBe(false);
+    await holder.release();
+    await waitUntil(() => existsSync(localStarted), 'weighted local command did not start after admission released');
+    expect(lockedSlots(localFixture.memory, 4)).toHaveLength(3);
+  } finally {
+    await holder.release();
+    writeFileSync(localRelease, 'release');
+    try {
+      expect(await boundedWorkerExit(weighted)).toBe(0);
+    } finally {
+      weighted.stop();
+    }
+  }
+
+  const fallbackFixture = workerFixture();
+  const hosts = writeHosts(fallbackFixture);
+  const remoteRelease = join(fallbackFixture.root, 'transport.release');
+  const localStart = join(fallbackFixture.root, 'fallback.local.started');
+  const localDone = join(fallbackFixture.root, 'fallback.local.done');
+  const fallbackCommand = [
+    process.execPath,
+    '-e',
+    `(async()=>{const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(localStart)},'started');while(!fs.existsSync(${JSON.stringify(localDone)}))await Bun.sleep(5)})()`,
+  ];
+  const fallbackClass = checkClass(fallbackCommand, fallbackFixture.root);
+  for (let count = 0; count < 3; count++) recordPeak(fallbackFixture.memory, fallbackClass, 4 * 2 ** 30);
+  const fallbackEnv = placementEnvironment(fallbackFixture, hosts, 'transport-admission');
+  fallbackEnv.WORKER_REMOTE_RELEASE = remoteRelease;
+  const blocker = await acquireStackSlot('placement memory fallback blocker', {
+    REZICS_STACK_SLOTS: '4',
+    REZICS_STACK_LEASE_DIR: fallbackFixture.memory,
+  }, 4);
+  const fallback = startNativeWorker(fallbackFixture, fallbackCommand, fallbackEnv, 'fallback-logical');
+  try {
+    await waitUntil(() => existsSync(fallbackFixture.remoteEvents + '.waiting'), 'remote attempt did not reach admission');
+    expect(lockedSlots(fallbackFixture.memory, 4)).toEqual([1, 2, 3, 4]);
+    expect(existsSync(localStart)).toBe(false);
+    writeFileSync(remoteRelease, 'release');
+    await waitUntil(
+      () => readdirSync(fallbackFixture.memory).filter((name) => name.startsWith('ticket-')).length > 0,
+      'local fallback did not request memory admission after transport failure',
+    );
+    expect(existsSync(localStart)).toBe(false);
+    await blocker.release();
+    await waitUntil(() => existsSync(localStart), 'local fallback did not start after admission');
+    expect(lockedSlots(fallbackFixture.memory, 4)).toHaveLength(4);
+  } finally {
+    await blocker.release();
+    writeFileSync(localDone, 'done');
+    writeFileSync(remoteRelease, 'release');
+    try {
+      expect(await boundedWorkerExit(fallback)).toBe(0);
+    } finally {
+      fallback.stop();
+    }
+  }
+  const records = latestLedgerEntries(fallbackFixture.root);
+  expect(records).toHaveLength(2);
+  expect(new Set(records.map((entry) => entry.runId)).size).toBe(2);
+  expect(records.map((entry) => entry.logicalCheckId)).toEqual(['fallback-logical', 'fallback-logical']);
+  expect(records.find((entry) => entry.host === 'remote')?.slotWaitSeconds).toBeGreaterThan(0);
+  expect(records.find((entry) => entry.host !== 'remote')?.slotWaitSeconds).toBeGreaterThan(0);
+  expect(records.find((entry) => entry.host !== 'remote')?.phases.command).toBeGreaterThan(0);
+}, 30_000);
+
+test('placement memory: actual local and remote admission waits are nonzero in the physical ledger and remain separate from command execution, including long output, cancellation and fallback', async () => {
+  const remoteFixture = workerFixture();
+  const hosts = writeHosts(remoteFixture);
+  const remoteRelease = join(remoteFixture.root, 'telemetry.release');
+  const remoteEnv = placementEnvironment(remoteFixture, hosts, 'telemetry');
+  remoteEnv.WORKER_REMOTE_RELEASE = remoteRelease;
+  const heavyCommand = localCommand(remoteFixture.localMarker);
+  const remoteClass = checkClass(heavyCommand, remoteFixture.root);
+  for (let count = 0; count < 3; count++) recordPeak(remoteFixture.memory, remoteClass, 4 * 2 ** 30);
+  const remote = startNativeWorker(remoteFixture, heavyCommand, remoteEnv, 'remote-wait');
+  try {
+    await waitUntil(() => existsSync(remoteFixture.remoteEvents + '.waiting'), 'remote telemetry fixture did not queue');
+    await Bun.sleep(100);
+    writeFileSync(remoteRelease, 'release');
+    expect(await boundedWorkerExit(remote)).toBe(0);
+  } finally {
+    writeFileSync(remoteRelease, 'release');
+    remote.stop();
+  }
+  const remoteRecords = latestLedgerEntries(remoteFixture.root);
+  expect(remoteRecords).toHaveLength(1);
+  expect(remoteRecords[0].slotWaitSeconds).toBeGreaterThan(0);
+  expect(remoteRecords[0].phases.command).toBe(0.5);
+  expect(remoteRecords[0].commandPhases.compile).toBe(0.25);
+  expect(remoteRecords[0].phases.wrapperTotal).toBeGreaterThanOrEqual(remoteRecords[0].phases.command);
+
+  const localFixture = workerFixture();
+  const localStart = join(localFixture.root, 'local-wait.started');
+  const localDone = join(localFixture.root, 'local-wait.done');
+  const localEnv = placementEnvironment(localFixture);
+  const localWaitCommand = [
+    process.execPath,
+    '-e',
+    `(async()=>{const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(localStart)},'started');while(!fs.existsSync(${JSON.stringify(localDone)}))await Bun.sleep(5)})()`,
+  ];
+  const localHolder = await acquireStackSlot('placement memory local wait holder', {
+    REZICS_STACK_SLOTS: '4',
+    REZICS_STACK_LEASE_DIR: localFixture.memory,
+  }, 4);
+  const local = startNativeWorker(localFixture, ['--local', ...localWaitCommand], localEnv, 'local-wait');
+  try {
+    await waitUntil(
+      () => readdirSync(localFixture.memory).some((name) => name.startsWith('ticket-')),
+      'local execution did not enter memory admission',
+    );
+    expect(existsSync(localStart)).toBe(false);
+    await Bun.sleep(100);
+    await localHolder.release();
+    await waitUntil(() => existsSync(localStart), 'local execution did not start after memory admission');
+    expect(lockedSlots(localFixture.memory, 4)).toEqual([1, 2, 3, 4]);
+    writeFileSync(localDone, 'done');
+    expect(await boundedWorkerExit(local)).toBe(0);
+  } finally {
+    await localHolder.release();
+    writeFileSync(localDone, 'done');
+    local.stop();
+  }
+  const localRecords = latestLedgerEntries(localFixture.root);
+  expect(localRecords).toHaveLength(1);
+  expect(localRecords[0].slotWaitSeconds).toBeGreaterThan(0);
+  expect(localRecords[0].phases.command).toBeGreaterThan(0);
+  expect(localRecords[0].phases.wrapperTotal).toBeGreaterThanOrEqual(localRecords[0].phases.command);
+
+  const cancelledFixture = workerFixture();
+  const cancelHosts = writeHosts(cancelledFixture);
+  const cancelledEnv = placementEnvironment(cancelledFixture, cancelHosts, 'cancel-admission');
+  const cancelCommand = localCommand(cancelledFixture.localMarker);
+  const cancelClass = checkClass(cancelCommand, cancelledFixture.root);
+  for (let count = 0; count < 3; count++) recordPeak(cancelledFixture.memory, cancelClass, 4 * 2 ** 30);
+  const cancelled = startNativeWorker(cancelledFixture, cancelCommand, cancelledEnv, 'cancel-wait');
+  try {
+    await waitUntil(() => existsSync(cancelledFixture.remoteEvents + '.waiting'), 'remote cancellation fixture did not queue');
+    await Bun.sleep(100);
+    cancelled.child.kill('SIGTERM');
+    expect(await boundedWorkerExit(cancelled)).toBe(143);
+  } finally {
+    cancelled.stop();
+  }
+  const cancelledRecord = latestLedgerEntries(cancelledFixture.root)[0];
+  expect(cancelledRecord.terminalStatus).toBe('failed');
+  expect(cancelledRecord.exitStatus).toBe(143);
+  expect(cancelledRecord.slotWaitSeconds).toBeGreaterThan(0);
+  expect(lockedSlots(cancelledFixture.memory, 4)).toEqual([]);
+});
+
+test('placement memory: signals, transport failure and spawn failure release only owned leases and preserve inherited ownership, check results and one-rerun rules', async () => {
+  const fixture = workerFixture();
+  const env = placementEnvironment(fixture);
+  const holder = await acquireStackSlot('placement memory inherited holder', {
+    REZICS_STACK_SLOTS: '4',
+    REZICS_STACK_LEASE_DIR: fixture.memory,
+  });
+  const inheritedEnv = { ...env, REZICS_CHECK_MEMORY_LEASE: holder.env.REZICS_STACK_SLOT };
+  const inherited = startNativeWorker(
+    fixture,
+    ['--local', process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(fixture.localMarker)}, process.env.REZICS_CHECK_MEMORY_LEASE)`],
+    inheritedEnv,
+  );
+  try {
+    expect(await boundedWorkerExit(inherited)).toBe(0);
+    expect(readFileSync(fixture.localMarker, 'utf8')).toBe(holder.env.REZICS_STACK_SLOT!);
+    expect(lockedSlots(fixture.memory, 4)).toEqual([Number(holder.env.REZICS_STACK_SLOT!.split('/')[0])]);
+  } finally {
+    await holder.release();
+    inherited.stop();
+  }
+  expect(lockedSlots(fixture.memory, 4)).toEqual([]);
+
+  const waitingFixture = workerFixture();
+  const waitingEnv = placementEnvironment(waitingFixture);
+  const waitingMarker = join(waitingFixture.root, 'cancelled-local-wait.started');
+  const waitingCommand = localCommand(waitingMarker);
+  const waitingHolder = await acquireStackSlot('placement memory local cancellation holder', {
+    REZICS_STACK_SLOTS: '4',
+    REZICS_STACK_LEASE_DIR: waitingFixture.memory,
+  }, 4);
+  const waitingWorker = startNativeWorker(waitingFixture, ['--local', ...waitingCommand], waitingEnv, 'local-cancel');
+  try {
+    await waitUntil(
+      () => readdirSync(waitingFixture.memory).some((name) => name.startsWith('ticket-')),
+      'local cancellation did not reach memory admission',
+    );
+    await Bun.sleep(100);
+    waitingWorker.child.kill('SIGTERM');
+    expect(await boundedWorkerExit(waitingWorker)).toBe(143);
+    expect(existsSync(waitingMarker)).toBe(false);
+    expect(lockedSlots(waitingFixture.memory, 4)).toEqual([1, 2, 3, 4]);
+    const cancelled = latestLedgerEntries(waitingFixture.root)[0];
+    expect(cancelled.terminalStatus).toBe('failed');
+    expect(cancelled.exitStatus).toBe(143);
+    expect(cancelled.slotWaitSeconds).toBeGreaterThan(0);
+  } finally {
+    await waitingHolder.release();
+    waitingWorker.stop();
+  }
+  expect(lockedSlots(waitingFixture.memory, 4)).toEqual([]);
+
+  const signalFixture = workerFixture();
+  const signalEnv = placementEnvironment(signalFixture);
+  const started = join(signalFixture.root, 'signal.started');
+  const signalCommand = [
+    process.execPath,
+    '-e',
+    `require('node:fs').writeFileSync(${JSON.stringify(started)}, 'started');process.on('SIGTERM',()=>process.exit(143));setInterval(()=>{},1000)`,
+  ];
+  const signalRun = startNativeWorker(signalFixture, ['--local', ...signalCommand], signalEnv);
+  try {
+    await waitUntil(() => existsSync(started), 'local signal command did not start');
+    expect(lockedSlots(signalFixture.memory, 4)).toEqual([1, 2, 3, 4]);
+    signalRun.child.kill('SIGTERM');
+    expect(await boundedWorkerExit(signalRun)).toBe(143);
+  } finally {
+    signalRun.stop();
+  }
+  expect(lockedSlots(signalFixture.memory, 4)).toEqual([]);
+
+  const spawnFixture = workerFixture();
+  const spawnFailure = startNativeWorker(spawnFixture, ['/missing/placement-memory-command'], placementEnvironment(spawnFixture));
+  try {
+    expect(await boundedWorkerExit(spawnFailure)).toBe(1);
+  } finally {
+    spawnFailure.stop();
+  }
+  expect(lockedSlots(spawnFixture.memory, 4)).toEqual([]);
+  const failedRecords = latestLedgerEntries(spawnFixture.root);
+  expect(failedRecords).toHaveLength(1);
+  expect(failedRecords[0].terminalStatus).toBe('infrastructure-failure');
+
+  const resultFile = join(spawnFixture.root, 'exit-75-count');
+  const failure = startNativeWorker(
+    spawnFixture,
+    ['--local', process.execPath, '-e', `require('node:fs').appendFileSync(${JSON.stringify(resultFile)}, 'run\\n');process.exit(75)`],
+    placementEnvironment(spawnFixture),
+  );
+  try {
+    expect(await boundedWorkerExit(failure)).toBe(75);
+  } finally {
+    failure.stop();
+  }
+  expect(readFileSync(resultFile, 'utf8')).toBe('run\n');
 });
 
 test('worker checks at least 2 GiB run remotely and record the remote peak under their class', async () => {
@@ -1494,6 +2205,13 @@ test('transient response', () => {
     expect(status).toBe(0);
     const finished = JSON.parse(readFileSync(join(root, '.temp/goal/checks/results', `${id}.json`), 'utf8'));
     expect(finished.reruns).toBe(1);
+    expect(finished.physicalRunId).not.toBe(record.physicalRunId);
+    const firstPhysical = readWorkerCheckHistory(id, record.physicalRunId, root);
+    const rerunPhysical = readWorkerCheckHistory(id, finished.physicalRunId, root);
+    expect(firstPhysical).toMatchObject({ status: 'finished', exitCode: 1 });
+    expect(rerunPhysical).toMatchObject({ status: 'finished', exitCode: 0, argv: ['bun', 'test', 'overloaded.test.ts'] });
+    expect(rerunPhysical?.runnerIdentity).not.toEqual(firstPhysical?.runnerIdentity);
+    expect(firstPhysical?.terminalProof).toMatchObject({ local: true, resultKnown: true });
     expect(readFileSync(healthyRuns, 'utf8')).toBe('ran');
     expect(readFileSync(failedRuns, 'utf8')).toBe('2');
     const log = readFileSync(join(root, record.log), 'utf8');

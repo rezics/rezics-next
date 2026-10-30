@@ -14,6 +14,8 @@ import {
 import { join, resolve } from 'node:path';
 import { onCheckHost, runOnCheckHost } from './stack-run.ts';
 import { ROOT, requestExecutionCancellation } from './remote-check.ts';
+import { runWorkerCheck } from './worker-check.ts';
+import { checkClass, recordPeak } from './check-memory.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const stackRun = join(repository, 'scripts/stack-run.ts');
@@ -338,6 +340,65 @@ function workspace(): string {
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'seed');
   return directory;
 }
+
+function lockedMemorySlots(directory: string, capacity: number): number[] {
+  const locked: number[] = [];
+  for (let index = 1; index <= capacity; index++) {
+    const result = spawnSync('flock', ['-n', '-E', '75', join(directory, `slot-${index}.lock`), 'true'], {
+      encoding: 'utf8',
+      timeout: 2_000,
+    });
+    if (result.status === 75) locked.push(index);
+    else if (result.status !== 0) throw new Error(result.stderr || 'could not inspect check-memory slot');
+  }
+  return locked;
+}
+
+test('placement memory: explicit local placement and a nested stack runner cannot retain local memory slots during remote admission or execute local work without its required memory admission', async () => {
+  const { env: remoteEnv, events } = scenario({ a: { available: 30e9, exit: 5 } });
+  const directory = workspace();
+  const memory = join(directory, '.temp/check-memory');
+  const localMarker = join(directory, 'nested-local.started');
+  const old = { ...process.env };
+  const nested = `import { stackRun } from ${JSON.stringify(stackRun)};
+const result = await stackRun(
+  { label: 'nested placement', root: process.cwd(), cwd: process.cwd(), command: ['true'] },
+  async () => { require('node:fs').writeFileSync(${JSON.stringify(localMarker)}, process.env.REZICS_CHECK_MEMORY_LEASE ?? 'missing'); await Bun.sleep(150); return 0; },
+  process.env,
+);
+process.exitCode = result;`;
+  const command = [process.execPath, '--eval', nested];
+  const commandClass = checkClass(command, directory);
+  for (let count = 0; count < 3; count++) recordPeak(memory, commandClass, 4 * 2 ** 30);
+  const oldKeys = new Set(Object.keys(process.env));
+  Object.assign(process.env, {
+    ...remoteEnv,
+    REZICS_CHECK_MEMORY: 'on',
+    REZICS_CHECK_MEMORY_DIR: memory,
+    REZICS_CHECK_MEMORY_GIB: '4',
+    REZICS_CHECK_SCOPE: 'off',
+    REZICS_STACK_SLOTS: '1',
+    REZICS_STACK_LEASE_DIR: join(directory, '.temp/stack-lease'),
+  });
+  try {
+    const running = runWorkerCheck(['--local', ...command], directory, false);
+    for (let attempt = 0; attempt < 200 && !existsSync(localMarker); attempt++) await Bun.sleep(5);
+    expect(existsSync(localMarker)).toBe(true);
+    expect(readFileSync(localMarker, 'utf8')).not.toBe('missing');
+    expect(lockedMemorySlots(memory, 4)).toEqual([1, 2, 3, 4]);
+    expect(events().filter((event) => event.kind === 'probe')).toEqual([]);
+    expect(await running).toBe(0);
+    expect(lockedMemorySlots(memory, 4)).toEqual([]);
+  } finally {
+    for (const key of Object.keys(process.env)) {
+      if (!oldKeys.has(key)) delete process.env[key];
+    }
+    for (const [key, value] of Object.entries(old)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
 
 async function stack(
   environment: Record<string, string>,

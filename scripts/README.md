@@ -11,6 +11,9 @@ CPU measurements. Entries are first written with `terminalStatus: "running"` and
 ledger write failures are warnings and do not change a check result.
 Set `REZICS_CHECK_LEDGER_DIR` to override the directory for both recording and `summary`; relative paths resolve
 from the main checkout, and test suites use temporary directories.
+`slotWaitSeconds` is monotonic time spent waiting for local memory or remote host admission. It is independent of
+`phases.command` and `phases.wrapperTotal`: the first measures the admitted command, while the second includes the
+whole physical wrapper attempt, including admission and remote setup. A transport fallback has its own physical row.
 
 Commands may append phase markers to the file named by `REZICS_CHECK_PHASES`, one per line:
 `<phase name>\t<start|end>\t<CLOCK_MONOTONIC nanoseconds>`. Paired markers are returned as phase durations; malformed
@@ -37,13 +40,29 @@ returned file is merged.
 
 | Check        | Placement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker       | Classes weighted at least 2 GiB run on check hosts first when `KERNEL_CHECK_REMOTE` names a readable hosts file; lighter classes run locally under the memory lease. A class with at least three recorded local peaks whose 90th percentile over the last 20 is below 256 MiB skips the local memory lease, logs that percentile, and still records its peak; fewer than three peaks or a percentile of 256 MiB or more uses the normal lease weight. `--local` forces local placement. A remote transport failure is logged and retried once locally under the memory lease; command failures are not retried. Hosts marked `fallback: true` run non-gate checks only when no other host can start them. |
+| Worker       | Default command classification sends pure Importer file tests, lint, and genuinely pure compiler or tool commands local. Real Kernel, Auth, Web, native, and SQL compiler-database work keeps stack placement; unknown commands also use the stack path. Local commands still use the worker's measured memory admission policy. Stack-using commands with weight at least 2 GiB can use check hosts when the explicit `KERNEL_CHECK_REMOTE` or shared default hosts file is readable. Worker and `stack-run` share host discovery. Remote admission holds no local memory slots. A local worker pins nested stack runners local while its memory lease is held. A class with at least three recorded local peaks whose 90th percentile over the last 20 is below 256 MiB skips the local lease, logs that percentile, and still records its peak; fewer than three peaks or a percentile of 256 MiB or more uses the normal lease weight. `--local` also pins nested runners local. An uncancelled transport failure retries once locally only after remote terminal custody is confirmed, and only after local memory admission; command failures are not retried. Hosts marked `fallback: true` run non-gate checks only when no other host can start them. |
 | Kernel       | `bun run --cwd services/kernel check [files...]` selects files locally, then sends that plan to a host. An empty affected selection stays local. `bun run --cwd services/kernel typecheck` runs here with an existing `DATABASE_URL`; otherwise it places the command on a check host and creates its throwaway migrated database there. With no answering host it creates that database locally.                                                                                                                                                                                                                                                                                                         |
 | Auth service | `bun run --cwd services/auth check [files...]` places the database, compiler and test work through `stackRun`. `bun run --cwd services/auth typecheck` follows the kernel typecheck placement rule above, using a throwaway migrated Auth database when `DATABASE_URL` is absent.                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Browser      | The isolated runners in `apps/auth` and `apps/web` use the shared placement layer. The web check returns its browser report. UI browser tests in `packages/ui` also run on hosts as part of the remote gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Landing gate | Root `bun run check` splits all workspace checks into two duration-balanced remote groups when `KERNEL_CHECK_REMOTE` names a readable file. The lighter group also runs the control-plane gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
-Remote worker checks preserve any existing local `GROWTH_PROFILE` lines and append the returned profile when that variable names a file inside the worktree.
+Remote worker checks preserve any existing local `GROWTH_PROFILE` lines and append the returned profile when that variable names a file inside the worktree. The returned prefix is validated and merged once per physical run.
+
+### Bounded returned artifacts
+
+`stackRun({ returns: [...] })` and worker-check's `--returns <path>` declare workspace-relative output files. Each physical run accepts at most 64 unique paths and 256 MiB total. Absolute paths, dot or parent components, control characters, and symlink escapes are rejected. For a nested stack runner on an outer remote check host, worker-check prepares a staging directory keyed by the outer physical run ID; `stack-run` writes only the declared files and manifest there, and the outer remote transport returns that one directory before deleting its run directory.
+
+Returned bytes are checked against the manifest size and SHA-256 before they replace the declared local destination. A new physical run removes prior declared output so a stale image cannot prove a later result. Missing, oversized, unsafe, or failed staging is logged with the physical run identity; it does not rewrite the command's exit status or turn a missing output into a pass. A failed command may still return declared bytes that were written before failure. Returned files remain in the caller's workspace after remote cleanup; the per-run staging directory is removed after restoration.
+
+### Durable worker-check custody
+
+`worker-check` freezes `GOAL_TASK_ID` and `GOAL_ATTEMPT` when a task-owned check starts. Both variables must be valid together. When `GOAL_CHECK_REGISTRY` names an available absolute directory, the detached runner publishes a version 1 registration containing the task attempt, logical check ID, result path, physical run UUID, host, and Linux boot/start/group identity before the command may begin. Registration failure terminates the new runner and makes start fail. Standalone checks without task identity keep working but cannot be stopped as task-owned checks.
+
+Each detached incarnation and automatic rerun has a fresh physical UUID and an immutable history record under `.temp/goal/checks/`. The logical result file remains at `.temp/goal/checks/results/<check-id>.json`. The public script API exports `CheckRecord`, `CHECK_RECORD_CUSTODY_VERSION`, `readWorkerCheckRecord(id, cwd?)`, `readWorkerCheckHistory(id, physicalRunId, cwd?)`, and `stopWorkerCheck(id, cwd, expected)`. The stop expectation binds ownership, physical UUID, host, PID, boot ID, process start time, and group ID. Stop returns a `CheckCleanupReceipt`; `readWorkerCheckCleanupReceipt` and `readWorkerCheckCleanupHistory` expose the current receipt and immutable receipt events. A stop refuses unknown, stale, mismatched, reused, or foreign-host identity without signaling it. Local terminality, the original result, and every owned remote run must be confirmed before the receipt reports terminal cleanup.
+
+The supported launch is `bun scripts/worker-check.ts -- <command...>`. The documented compatibility launch is only `bun scripts/worker-check.ts --run -- <command...>`. `--run <check-id> [--physical-run <physical-run-id>]` is the detached runner entry, not a command-launch fallback. Malformed IDs and an empty compatibility alias are refused. `--wait <check-id>` resumes observation of the existing logical check; it never starts a fresh command for an unknown or cancelled check.
+
+`cancelWorkerCheck(authorization, cwd?)` accepts a version 1 Root authorization bound to an exact result path and digest, command argv, task attempt, and bounded receipt path and digest. It persists an idempotent logical cancellation tombstone without sending a signal or inventing physical cleanup. A legacy record with unknown process custody keeps its original bytes and remains physically unknown; later waits and detached runner starts return a nonzero cancellation result, and no retry or local fallback is allowed. Exact stop and cancellation receipts are separate facts.
 
 ### Test lanes
 
@@ -63,21 +82,29 @@ Capture observes child exit and stream completion once each, allowing either to 
 wait timer while work remains. After a bound sends SIGTERM, the process group receives SIGKILL after 10 seconds
 even if its leader has exited; output draining is limited to one further second before the readers are cancelled.
 
-`bun scripts/worker-check.ts -- <command...>` prints `check: id <id>` as soon as its detached check starts.
+`bun scripts/worker-check.ts -- <command...>` prints `check: id <id>` after the detached runner has published its
+physical identity and, when task registry is configured, its registration. The only command-launch compatibility
+alias is `bun scripts/worker-check.ts --run -- <command...>`. `--run <id> [--physical-run <uuid>]` is reserved for
+the detached runner and validates both identifiers; a malformed ID never falls through to launch a command.
+
 Use `bun scripts/worker-check.ts --wait <id>` to wait for up to 10 minutes. Exit status 75 with
 `check: still running` means resume with the same `--wait <id>`; never start the check again. The log path and its
-latest non-empty line are printed when the wait yields, including while admission is queued. A runner is considered
-live only on its recorded host and when `/proc/<pid>/cmdline` identifies this script's `--run <id>` invocation;
-otherwise the log modification time determines whether it is silent. One dead or silent runner is rerun detached
-under the same id. A second dead or silent runner ends as an infrastructure failure with exit status 1.
-Memory admission and remote slot waits write their current capacity state to stderr and the check log immediately
-and at least every 60 seconds. Silence is measured from the log's modification time across successive waits.
-A recorded local runner whose pid no longer exists is detected immediately; a record from another host, an unrelated pid or a record
-without a runner pid is judged only by log growth. A silent verified local runner's process group is stopped first.
-Quiet commands stay alive through CPU progress lines. A command that is idle (no output and no CPU) for 10 minutes is stopped.
-The rerun gets a fresh log and records its reason, host and old log; its own exit status follows the infrastructure
-line. Treat that infrastructure line as a `tool` blocker, even if the rerun passed. A completed command that exits
-75 prints `check: exit status 75`, while a wait that yields prints `check: still running`.
+latest non-empty line are printed when the wait yields, including while admission is queued. A runner is live only
+when its recorded host, boot ID, process start time, group, and command line match its immutable physical record.
+Unknown or legacy custody is quarantined rather than inferred from cwd or log timestamps. A dead or silent runner
+is eligible for its one infrastructure rerun only after its exact local process group, remote run, and result have
+terminal proof. A second infrastructure failure ends with exit status 1. The rerun receives a fresh physical UUID,
+log, and history entry; prior physical evidence is retained. Treat the infrastructure line as a `tool` blocker,
+even if the rerun passed. A completed command that exits 75 prints `check: exit status 75`, while a wait that yields
+prints `check: still running`.
+
+Memory admission and remote slot waits write capacity state to stderr and the check log immediately and at least
+every 60 seconds. `slotWaitSeconds` records monotonic time spent in actual local memory or remote slot admission;
+the wait-hint integer file remains separate. Command execution phases and `phases.wrapperTotal` keep queue time
+separate from admitted command time. The silence monitor measures log growth across waits. Quiet commands stay
+alive through CPU progress lines. A local command that is idle (no output and no CPU) for 10 minutes follows the
+same verified stop and drain path as an explicit task stop. Unknown remote teardown keeps the physical check
+quarantined and prevents replacement.
 
 When the command runs `scripts/typecheck.ts` without an existing `TYPECHECK_CHANGED`, worker-check prefixes it with the
 same `env TYPECHECK_CHANGED=<newline-joined changed files>` form as landing, using tracked changes since the merge base
@@ -90,7 +117,7 @@ It partitions eligible hosts between groups when at least two qualify by configu
 Otherwise both groups use the original hosts file. Admission still checks actual slice capacity.
 `GATE_CONCURRENCY` controls workspace concurrency inside each group. Group results return to `.temp/gate/`.
 
-`stack-run.ts` uses a nonempty `KERNEL_CHECK_REMOTE` first. Otherwise it looks for the readable shared file
+`stack-run.ts` and worker-check use a nonempty `KERNEL_CHECK_REMOTE` first. Otherwise they look for the readable shared file
 `<main checkout>/.temp/goal/remote-check-hosts.json`. An unreadable explicit path does not use that fallback.
 Once a host answers, a busy run queues. Later probe silence does not send it back locally.
 Slot locks own the host's reserved descriptor range, and admission also bounds the sum of recorded slots for live runs by the host's slot count.
@@ -157,12 +184,16 @@ G = max(0, O - 1)        gate capacity
 
 Slice processors are the quota divided by the period in `cpu.max`.
 Slice memory is `memory.max`; configured values supply the fallbacks above.
-Admission also needs 2.5 GiB of current memory headroom for each requested slot. A host is skipped when its 1-minute load exceeds 1.5 times its slice processors, its machine `MemAvailable` is below 4 GiB, `/tmp` has less than 4 GiB free, or `/tmp` has fewer than 65,536 free inodes. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity. Because check-host `/tmp` is tmpfs, the byte floor protects the same RAM needed by checks, while the inode floor catches exhaustion before the byte limit is reached.
-Under the host reservation lock, admission requires the memory reserved by held slots plus the new request to fit within the slice's `memory.max` (or configured `memoryMaxGiB` fallback). A host is skipped when its 1-minute load exceeds 1.5 times its slice processors or its machine `MemAvailable` is below 4 GiB. These thresholds apply to gates and multi-slot runs too; skipped hosts are logged and the check waits for capacity. A free slot's stale reservation file does not count.
-Under the host reservation lock, admission requires the memory reserved by held slots plus the new request to fit
-within the host's configured `memoryMaxGiB`. A host is skipped when its 1-minute load exceeds 1.5 times its slice
-processors or its machine `MemAvailable` is below 4 GiB. These thresholds apply to gates and multi-slot runs too;
-skipped hosts are logged and the check waits for capacity. A free slot's stale reservation file does not count.
+Admission also needs 2.5 GiB of current memory headroom for each requested slot. A host is skipped when its 1-minute
+load exceeds 1.5 times its slice processors, its machine `MemAvailable` is below 4 GiB, `/tmp` has less than 4 GiB
+free, or `/tmp` has fewer than 65,536 free inodes. These thresholds apply to gates and multi-slot runs too; skipped
+hosts are logged and the check waits for capacity. Because check-host `/tmp` is tmpfs, the byte floor protects the
+same RAM needed by checks, while the inode floor catches exhaustion before the byte limit is reached.
+
+Under the host reservation lock, each held slot contributes its recorded per-slot reservation. A new request for
+`n` slots at `m` GiB per slot is admitted only when held memory plus `n * m` fits the same host memory maximum used
+by physical take (`memory.max`, or configured `memoryMaxGiB` when that counter is unavailable). A priority head is
+ranked with this total reservation too. A free slot's stale reservation file does not count.
 Headroom is `max(0, memory.max - memory.current)` in the shared slice.
 When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run also sets Node's compile cache to a directory inside its run directory; cleanup removes the cache with that run.
 Slots reserve admission capacity. They do not impose a separate CPU or memory cap on each run.
@@ -387,6 +418,10 @@ Its capacity is `max(1, min(floor(logical processors / 8), floor(total GiB / 7.5
 `REZICS_STACK_SLOTS` overrides capacity; `REZICS_STACK_LEASE_DIR` overrides the directory, but `TMPDIR` does not.
 Inherited `REZICS_STACK_SLOT` or `REZICS_STACK_LEASE=off` skips acquisition.
 Waits have no timeout. Stderr reports held slots and tickets ahead every minute, then acquisition time.
+Worker memory admission uses a separate FIFO lease under `/tmp/rezics-check-memory`. The worker acquires it only
+before local execution or after remote transport failure. A nested `stack-run` recognizes the worker's memory lease
+and remains local for that admitted command; explicit `--local` is propagated to nested stack runs even when no
+memory lease is needed.
 
 ### Provisioning
 

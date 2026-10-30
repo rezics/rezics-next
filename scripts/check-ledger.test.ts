@@ -120,4 +120,32 @@ describe('ledger', () => {
     expect(result.byCommandClass['script and control-plane tests'].memoryGiBHours).toBeCloseTo(1);
     expect(result.limits.samplingIntervalSeconds).toBe(5);
   });
+
+  test('placement memory: physical admission wait remains separate from wrapper and command execution phases', () => {
+    const root = mkdtempSync(join(tmpdir(), 'check-ledger-placement-memory-'));
+    try {
+      const entry: CheckLedgerEntry = {
+        runId: 'physical-placement-memory',
+        logicalCheckId: 'logical-placement-memory',
+        rerunNumber: 0,
+        host: 'remote',
+        argv: ['bun', 'test', 'scripts/worker-check.test.ts'],
+        start: '2026-10-29T12:00:00.000Z',
+        end: '2026-10-29T12:00:20.000Z',
+        terminalStatus: 'passed',
+        slotWaitSeconds: 3.25,
+        phases: { command: 8.5, wrapperTotal: 20 },
+        commandPhases: { compile: 6.25 },
+      };
+      writeLedger(entry, root);
+      const recorded = JSON.parse(readFileSync(ledgerPath(entry, root), 'utf8')) as CheckLedgerEntry;
+      expect(recorded.slotWaitSeconds).toBe(3.25);
+      expect(recorded.phases).toEqual({ command: 8.5, wrapperTotal: 20 });
+      expect(recorded.commandPhases).toEqual({ compile: 6.25 });
+      expect(recorded.slotWaitSeconds).toBeLessThan(recorded.phases!.wrapperTotal!);
+      expect(recorded.phases!.command).toBeLessThan(recorded.phases!.wrapperTotal!);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

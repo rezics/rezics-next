@@ -31,6 +31,13 @@ import {
   validateEstimateMs,
 } from './remote-check.ts';
 import { withStackSlot } from './stack-lease.ts';
+import {
+  captureArtifactReturns,
+  clearDeclaredArtifacts,
+  registerArtifactDeclarations,
+  validateArtifactDeclarations,
+  writeArtifactCatalog,
+} from './check-artifacts.ts';
 
 export type StackRun = {
   label: string;
@@ -153,6 +160,8 @@ function pollMs(env: Environment): number | undefined {
 
 function localReason(run: StackRun, env: Environment): string | { hostsFile: string } {
   if (onCheckHost(run.cwd)) return 'already on a check host';
+  if (env.REZICS_CHECK_LOCAL_ONLY === '1') return 'worker-check requested local placement';
+  if (env.REZICS_CHECK_MEMORY_LEASE !== undefined) return 'already under local check-memory admission';
   if (!isWorker(env) && env.REZICS_STACK_REMOTE === 'off') return 'REZICS_STACK_REMOTE=off';
   if (!isWorker(env) && env.REZICS_STACK_SLOT !== undefined) return 'already inside a stack slot';
   if (run.keepsFiles && run.returns === undefined) return 'the run keeps files it writes';
@@ -271,15 +280,57 @@ export async function stackRun(
   local: (env: Record<string, string>) => Promise<number>,
   env: Environment = process.env,
 ): Promise<number> {
-  const remote = await runOnCheckHost(run, env);
-  if (remote !== null) return remote;
+  const returned = validateArtifactDeclarations(run.returns ?? []);
+  if (returned.length) clearDeclaredArtifacts(run.root, returned);
+  const remoteCode = await runOnCheckHost(run, env);
+  const logicalCheckId = env.REZICS_CHECK_ID;
+  if (remoteCode !== null) {
+    if (logicalCheckId && returned.length) {
+      try {
+        writeArtifactCatalog(run.root, logicalCheckId, returned);
+      } catch (error) {
+        console.error(`stack-run: could not record declared outputs: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+    return remoteCode;
+  }
   const cancellation = run.cancellation ?? executionCancellationFromEnvironment(env);
   const intent = executionCancellation(cancellation);
   if (intent) return 128 + intent.signal;
-  return withStackSlot(run.label, (leaseEnv) => {
-    const intent = executionCancellation(cancellation);
-    return intent ? Promise.resolve(128 + intent.signal) : local(leaseEnv);
-  });
+  const stageDirectory = env.REZICS_CHECK_ARTIFACTS_DIR;
+  const physicalRunId = env.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
+  let handoff = false;
+  if (stageDirectory !== undefined && physicalRunId !== undefined && returned.length > 0) {
+    try {
+      await registerArtifactDeclarations(run.root, stageDirectory, physicalRunId, returned);
+      handoff = true;
+    } catch (error) {
+      console.error(`stack-run: artifact handoff unavailable: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+  let code: number;
+  try {
+    code = await withStackSlot(run.label, (leaseEnv) => {
+      const intent = executionCancellation(cancellation);
+      return intent ? Promise.resolve(128 + intent.signal) : local(leaseEnv);
+    });
+  } finally {
+    if (handoff && stageDirectory !== undefined && physicalRunId !== undefined) {
+      try {
+        await captureArtifactReturns(run.root, stageDirectory, physicalRunId, returned);
+      } catch (error) {
+        console.error(`stack-run: could not stage declared outputs: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+  }
+  if (logicalCheckId && returned.length) {
+    try {
+      writeArtifactCatalog(run.root, logicalCheckId, returned);
+    } catch (error) {
+      console.error(`stack-run: could not record declared outputs: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+  return code;
 }
 
 if (import.meta.main) {

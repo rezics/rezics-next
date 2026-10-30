@@ -53,6 +53,13 @@ type Lock = { release(): Promise<void> };
 const BUSY = 75;
 const MAX_WAIT_RECORD_MS = 60_000;
 
+export class StackLeaseAborted extends Error {
+  constructor() {
+    super('stack-lease: admission was cancelled');
+    this.name = 'StackLeaseAborted';
+  }
+}
+
 /** Records elapsed wait time in full-line appends, without allowing a reporting error to fail the check. */
 function waitRecorder(file?: string): { begin(): void; record(): void; stop(): void } {
   if (!file) return { begin() {}, record() {}, stop() {} };
@@ -149,10 +156,12 @@ export async function acquireStackSlot(
   weight = 1,
   onWaiting?: (line: string) => void,
   repeatMs = 60_000,
+  signal?: AbortSignal,
 ): Promise<StackSlot> {
   const capacity = stackCapacity(env);
   if (!Number.isSafeInteger(weight) || weight < 1 || weight > capacity)
     throw new Error(`Lease weight must be between 1 and capacity (${capacity}), received ${weight}`);
+  if (signal?.aborted) throw new StackLeaseAborted();
   if (env.REZICS_STACK_LEASE === 'off' || env.REZICS_STACK_SLOT !== undefined) {
     return {
       index: null,
@@ -175,14 +184,18 @@ export async function acquireStackSlot(
   });
   const changed = (observed: number) =>
     new Promise<void>((done) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       if (generation !== observed) return done();
-      const timer = setTimeout(finish, Math.min(2000, repeatMs));
       function finish() {
-        clearTimeout(timer);
-        wake = undefined;
+        if (timer) clearTimeout(timer);
+        signal?.removeEventListener('abort', finish);
+        if (wake === finish) wake = undefined;
         done();
       }
+      timer = setTimeout(finish, Math.min(2000, repeatMs));
       wake = finish;
+      signal?.addEventListener('abort', finish, { once: true });
+      if (signal?.aborted) finish();
     });
   const mutexFile = join(directory, 'queue.lock');
   let ticket: string | undefined;
@@ -208,9 +221,11 @@ export async function acquireStackSlot(
 
     let lastLog = -Infinity;
     while (true) {
+      if (signal?.aborted) throw new StackLeaseAborted();
       const observed = generation;
       const mutex = (await lock(mutexFile, true))!;
       try {
+        if (signal?.aborted) throw new StackLeaseAborted();
         // Only the queue mutex may delete dead tickets, so their lock inode cannot be replaced under an enqueuer.
         const tickets = readdirSync(directory).filter((name) => /^ticket-\d+$/.test(name));
         const live = tickets
@@ -234,6 +249,10 @@ export async function acquireStackSlot(
             if (slotLock) acquired.push({ index, lock: slotLock });
           }
           if (acquired.length === weight) {
+            if (signal?.aborted) {
+              await Promise.all(acquired.map((entry) => entry.lock.release()));
+              throw new StackLeaseAborted();
+            }
             await ticketLock.release();
             ticketLock = undefined;
             unlinkSync(ticket);
@@ -261,6 +280,7 @@ export async function acquireStackSlot(
           }
           await Promise.all(acquired.map((entry) => entry.lock.release()));
         }
+        if (signal?.aborted) throw new StackLeaseAborted();
         const held = heldSlots.length;
         if (performance.now() - lastLog >= repeatMs) {
           const line = `stack-lease: ${label} waiting (${held}/${capacity} held, ${ahead} ahead)`;

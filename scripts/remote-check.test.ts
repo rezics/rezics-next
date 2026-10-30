@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
@@ -12,6 +13,8 @@ import {
   realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
+  truncateSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -19,6 +22,7 @@ import { dirname, join, resolve } from 'node:path';
 import { startPostgresContainer } from '../services/kernel/scripts/check.ts';
 import { onCheckHost } from './stack-run.ts';
 import { remoteLifetimeInfrastructureCause } from './worker-check.ts';
+import { CHECK_ARTIFACTS_MAX_BYTES } from './check-artifacts.ts';
 import {
   DEFAULT_PREPARATION_TIMEOUT_MS,
   dependencyPreparationProgram,
@@ -585,7 +589,7 @@ if (script.includes('/proc/loadavg')) {
     );
     const expired = Date.now() - Number(oldestLanding.arrivalOrder) >= opportunityMs;
     const headFits = ordinaryCapacity - occupiedSlots.length >= oldestLanding.slots
-      && reserved + oldestLanding.memoryBytes <= (config.memoryMax ?? (16 * 2 ** 30));
+      && reserved + oldestLanding.slots * oldestLanding.memoryBytes <= (config.memoryMax ?? (16 * 2 ** 30));
     if (priority !== 'ordinary' && landingId === oldestLanding.id) actualAdmissionLimit = ordinaryCapacity;
     else if (!expired && headFits) actualAdmissionLimit = Math.max(0, ordinaryCapacity - oldestLanding.slots);
     else actualAdmissionLimit = ordinaryCapacity;
@@ -2251,6 +2255,61 @@ test('a remote slot wait is appended to GOAL_CHECK_WAIT_FILE while it is still w
   const lines = readFileSync(waitFile, 'utf8').trim().split('\n');
   expect(lines.length).toBeGreaterThan(0);
   expect(lines.every((line) => /^\d+$/.test(line) && Number(line) > 0 && Number(line) <= 60_000)).toBe(true);
+});
+
+test('a cancelled answered remote admission records its actual slot wait before returning the signal result', async () => {
+  const { env, events } = scenario({ a: { available: 8 * 2 ** 30, slots: 2, busy: 100 } });
+  const run = startRemote(env, workspace(), ['true']);
+  let exited = false;
+  try {
+    const deadline = performance.now() + 5_000;
+    while (!events().some((event) => event.kind === 'slot' && event.granted === false)) {
+      if (performance.now() >= deadline) throw new Error('remote admission did not reach the controlled busy slot');
+      await Bun.sleep(5);
+    }
+    await Bun.sleep(100);
+    run.child.kill('SIGTERM');
+    const [code, stderr] = await Promise.all([run.child.exited, run.stderr]);
+    exited = true;
+    expect(code).toBe(143);
+    const wait = stderr.match(/remote-check: slot wait ([0-9.]+) s \(cancelled before a slot was acquired\)/);
+    expect(wait).not.toBeNull();
+    expect(Number(wait![1])).toBeGreaterThan(0);
+  } finally {
+    if (!exited) {
+      run.child.kill('SIGTERM');
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+  }
+});
+
+test('placement memory: cancelling an unanswered remote admission still records its physical wait', async () => {
+  const { env } = scenario({ a: { down: true } });
+  const run = startRemote(env, workspace(), ['true']);
+  let exited = false;
+  try {
+    const probe = join(env.FAKE_DIR!, 'ops_a_test.connection');
+    const deadline = performance.now() + 5_000;
+    while (!existsSync(probe)) {
+      if (performance.now() >= deadline) throw new Error('unanswered remote admission did not start probing');
+      await Bun.sleep(5);
+    }
+    await Bun.sleep(100);
+    run.child.kill('SIGTERM');
+    const [code, stderr] = await Promise.all([run.child.exited, run.stderr]);
+    exited = true;
+    expect(code).toBe(143);
+    const wait = stderr.match(/remote-check: slot wait ([0-9.]+) s \(cancelled before a slot was acquired\)/);
+    expect(wait).not.toBeNull();
+    expect(Number(wait![1])).toBeGreaterThan(0);
+  } finally {
+    if (!exited) {
+      run.child.kill('SIGTERM');
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+  }
 });
 
 test('without GOAL_CHECK_WAIT_FILE no wait is recorded', async () => {
@@ -5045,6 +5104,41 @@ test('the returns probe runs under bash with nothing on stderr and lists present
   }
 });
 
+test('the returns probe rejects symlinked or oversized bounded output trees before rsync', () => {
+  const temporaryDirectory = join(root, '.temp');
+  mkdirSync(temporaryDirectory, { recursive: true });
+  const directory = mkdtempSync(join(temporaryDirectory, 'bounded-returns-probe-'));
+  const physicalRunId = randomUUID();
+  const path = `.temp/goal/checks/artifact-returns/${physicalRunId}`;
+  const stage = join(directory, path);
+  mkdirSync(join(stage, 'files'), { recursive: true });
+  writeFileSync(join(stage, 'manifest.json'), '{"version":1}\n');
+  const file = join(stage, 'files/000.bin');
+  writeFileSync(file, 'fixture');
+  try {
+    const present = spawnSync('bash', ['-c', returnsProbe(directory, [path])], { encoding: 'utf8' });
+    expect(present.status).toBe(0);
+    expect(present.stderr).toBe('');
+    expect(present.stdout).toBe(`PRESENT ${path}\n`);
+
+    rmSync(file);
+    const outside = join(directory, 'outside.bin');
+    writeFileSync(outside, 'outside');
+    symlinkSync(outside, file);
+    const symlinked = spawnSync('bash', ['-c', returnsProbe(directory, [path])], { encoding: 'utf8' });
+    expect(symlinked.stdout).toContain(`UNSAFE ${path}\n`);
+    rmSync(file);
+    writeFileSync(file, 'fixture');
+    truncateSync(file, CHECK_ARTIFACTS_MAX_BYTES + 1);
+    const oversized = spawnSync('bash', ['-c', returnsProbe(directory, [path])], { encoding: 'utf8' });
+    expect(oversized.status).toBe(0);
+    expect(oversized.stdout).toContain(`OVERSIZE ${path} `);
+    expect(oversized.stdout).toContain('OVERSIZE_RETURN_SET');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('the docker wrapper calls the docker behind it, not a shim that called the wrapper', () => {
   const { env, events } = scenario({ a: { available: 4.5e9 } });
   const shims = join(root, 'shims');
@@ -5433,6 +5527,60 @@ test('admission backfill: ordinary execution starts in capacity the priority hea
       await Promise.all([run.stdout, run.stderr]);
     }
     rmSync(memoryDirectory, { recursive: true, force: true });
+  }
+
+  const totalReservation = scenario({
+    b: {
+      available: 20e9,
+      slots: 3,
+      memoryMax: 10 * 2 ** 30,
+      memoryMaxGiB: 10,
+      memoryHeadroom: 10 * 2 ** 30,
+      holdLandingGrant: true,
+    },
+  });
+  totalReservation.env.REMOTE_CHECK_POLL_MS = '20';
+  const totalReservationDirectory = workspace();
+  const oversizedHead = startRemote(
+    { ...totalReservation.env, REMOTE_CHECK_PRIORITY: 'landing' },
+    totalReservationDirectory,
+    ['sh', '-c', 'echo two-slot-head-needs-twelve-gib'],
+    ['--slots', '2', '--memory-gib', '6'],
+  );
+  let fittingOrdinary: ReturnType<typeof startRemote> | undefined;
+  try {
+    await waitFor(() => totalReservation.events().some((event) => event.kind === 'landing-marker'));
+    fittingOrdinary = startRemote(
+      totalReservation.env,
+      totalReservationDirectory,
+      ['sh', '-c', 'echo two-slot-work-fits-eight-gib'],
+      ['--slots', '2', '--memory-gib', '4', '--estimate-ms', '120001'],
+    );
+    await waitFor(() =>
+      totalReservation
+        .events()
+        .some((event) => event.kind === 'run' && String(event.script).includes('echo two-slot-work-fits-eight-gib')),
+    );
+    const grant = totalReservation.events().find(
+      (event) =>
+        event.kind === 'slot' &&
+        event.granted &&
+        String(event.script).includes('# REMOTE_CHECK_MEMORY_RESERVATION_BYTES 4294967296'),
+    )!;
+    expect(grant.actualAdmissionLimit).toBe(2);
+    expect(grant.script).toContain('memory_reserved + landing_waiting_slots * landing_waiting_memory_bytes');
+    expect(totalReservation.events().some((event) => event.kind === 'slot' && event.reason === 'held-priority-grant')).toBe(false);
+    expect(await fittingOrdinary.child.exited).toBe(0);
+  } finally {
+    for (const run of [fittingOrdinary, oversizedHead]) {
+      if (!run) continue;
+      try {
+        run.child.kill('SIGTERM');
+      } catch {}
+      await run.child.exited;
+      await Promise.all([run.stdout, run.stderr]);
+    }
+    rmSync(totalReservationDirectory, { recursive: true, force: true });
   }
 });
 
