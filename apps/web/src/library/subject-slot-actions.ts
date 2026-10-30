@@ -11,6 +11,7 @@ import {
   type SubjectLibraryMutationResponse,
 } from './subject-slot';
 import { applySubjectLibraryMutation } from './subject-slot-mutation';
+import { restorePersonalLibraryEntry, type LibraryRestoreInput } from './entries-read';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const incarnationIdPattern = idempotencyKeyPattern;
@@ -87,4 +88,28 @@ export const mutateSubjectLibrarySlot = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<SubjectLibraryMutationResponse> => {
     setResponseHeader('cache-control', 'private, no-store');
     return applySubjectLibraryMutation(getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+function validateRestore(input: unknown): LibraryRestoreInput {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid library restore');
+  const value = input as Record<string, unknown>;
+  if (
+    typeof value.subjectId !== 'string' ||
+    !value.subjectId ||
+    value.subjectId.length > 128 ||
+    typeof value.deletionId !== 'string' ||
+    !value.deletionId ||
+    value.deletionId.length > 128 ||
+    !Number.isSafeInteger(value.revision) ||
+    (value.revision as number) < 1
+  )
+    throw new Error('Invalid library restore');
+  return { subjectId: value.subjectId, deletionId: value.deletionId, revision: value.revision as number };
+}
+
+export const restoreSubjectLibrarySlot = createServerFn({ method: 'POST' })
+  .validator(validateRestore)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return restorePersonalLibraryEntry(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });

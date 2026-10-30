@@ -37,6 +37,7 @@ export const operationGroups = {
   'library_entry.delete': 'personal_library',
   'library_entry.get': 'personal_library',
   'library_entry.put': 'personal_library',
+  'library_entry.restore': 'personal_library',
   'library_shelf.summary': 'personal_library',
   'library_shelf.types': 'personal_library',
   'offer.get': 'purchases',
@@ -116,6 +117,8 @@ export function useOperation(operation: GatedOperation): boolean {
   const { data: viewerGroups } = useQuery({ ...exposureQuery, enabled: hydrated && state === 'signed-in' }, client);
   const admitted =
     !hydrated || state === 'signed-out' ? publicGroups : state === 'signed-in' ? viewerGroups : undefined;
+  // This future route must be explicitly advertised; today's group admission does not imply support.
+  if (operation === 'library_entry.restore') return admitted?.includes(operation) ?? false;
   return admitted?.includes(operationGroups[operation]) ?? false;
 }
 

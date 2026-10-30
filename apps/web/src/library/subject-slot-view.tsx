@@ -1,4 +1,7 @@
-import { Exposure } from '../kernel/exposure';
+import { Toaster } from '@rezics/ui/shadcn/toast';
+import { EntryUndoForm, EntryRemoveForm, EntryRestoreFeedback } from './entry-undo';
+import { Exposure, useOperation } from '../kernel/exposure';
+import { undoToast } from '@rezics/ui/undo-toast';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import {
   Select,
@@ -15,7 +18,11 @@ import { subjectHref } from '../subject/subject-href';
 import { AccountRef } from './account-ref';
 import { SubjectRef } from './subject-ref';
 import type { SubjectReference } from './subject-ref';
-import { mutateSubjectLibrarySlot, readSubjectLibraryCollections } from './subject-slot-actions';
+import {
+  mutateSubjectLibrarySlot,
+  readSubjectLibraryCollections,
+  restoreSubjectLibrarySlot,
+} from './subject-slot-actions';
 import type {
   LibraryEntryStateWrite,
   SubjectLibraryMutation,
@@ -93,12 +100,17 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
   const [actionResult, setActionResult] = useState(data.result);
-  const [entry, setEntry] = useState(data.entry);
-  const [selectedState, setSelectedState] = useState(data.entry?.state ?? '');
+  const initialEntry =
+    data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
+  const [entry, setEntry] = useState(initialEntry);
+  const [selectedState, setSelectedState] = useState(initialEntry?.state ?? '');
+  const [removeKey] = useState(() => crypto.randomUUID());
   const [collections, setCollections] = useState(data.collections);
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
   const [collectionsProblem, setCollectionsProblem] = useState<'closed' | 'unavailable' | null>(null);
   const [collectionMenuOpen, setCollectionMenuOpen] = useState(data.collectionsLoaded);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const restoreAdmitted = useOperation('library_entry.restore');
   const stateOptions = [
     ['planned', m.library_subject_state_planned()],
     ['in_progress', m.library_subject_state_in_progress()],
@@ -136,6 +148,37 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
       setEntry(null);
       setSelectedState('');
       setActionResult('cleared');
+      if (response.undo && restoreAdmitted) {
+        const receipt = response.undo;
+        undoToast(
+          m.library_removed(),
+          () => {
+            void restoreSubjectLibrarySlot({
+              data: { subjectId: subject.id, ...receipt },
+              headers: { 'X-CSRF-Token': data.csrfToken ?? '' },
+            })
+              .then((restored) => {
+                if (restored.ok) {
+                  setEntry(restored.entry);
+                  setSelectedState(restored.entry.state);
+                  setActionResult('saved');
+                  setRestoreMessage(null);
+                } else if (restored.reason === 'occupied') {
+                  if (restored.entry) {
+                    setEntry(restored.entry);
+                    setSelectedState(restored.entry.state);
+                  }
+                  setActionResult(undefined);
+                  setRestoreMessage(m.library_restore_occupied());
+                } else if (restored.reason === 'stale') setRestoreMessage(m.library_restore_stale());
+                else if (restored.reason === 'expired') setRestoreMessage(m.library_restore_expired());
+                else setRestoreMessage(m.library_subject_unavailable());
+              })
+              .catch(() => setRestoreMessage(m.library_subject_unavailable()));
+          },
+          { undo: m.editor_undo() },
+        );
+      }
       return;
     }
     if (response.result === 'conflict' && 'entry' in response) {
@@ -237,152 +280,176 @@ export function SubjectLibrarySlot({ subject, locale, data }: SubjectSlotProps) 
   }
 
   return (
-    <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
-      {data.session === 'signed-in' && data.entryAvailable ? (
-        <Exposure operation="library_entry.put">
-          <form
-            data-library-entry
-            method="get"
-            action={action}
-            onSubmit={(event) => event.preventDefault()}
-            className="flex flex-wrap items-center gap-2"
-          >
-            <input type="hidden" name="subjectId" value={subject.id} />
-            {entry ? <input type="hidden" name="revision" value={entry.revision} /> : null}
-            {typeof entry?.incarnationId === 'string' ? (
-              <input type="hidden" name="incarnationId" value={entry.incarnationId} />
-            ) : null}
-            <LibraryStateSelect
-              busy={pending}
-              disabled={!hydrated || pending}
-              hasEntry={entry !== null}
-              onChoose={choose}
-              selectedState={selectedState}
-              stateOptions={stateOptions}
+    <Toaster>
+      <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
+        {data.undo ? (
+          <EntryUndoForm undo={data.undo} locale={locale} csrfToken={data.csrfToken} returnTo={action} />
+        ) : null}
+        {data.restore ? <EntryRestoreFeedback restore={data.restore} /> : null}
+        {entry && data.session === 'signed-in' ? (
+          <noscript>
+            <EntryRemoveForm
+              subjectId={subject.id}
+              revision={entry.revision}
+              incarnationId={entry.incarnationId}
+              idempotencyKey={removeKey}
+              locale={locale}
+              csrfToken={data.csrfToken}
+              returnTo={action}
             />
-          </form>
-        </Exposure>
-      ) : null}
+          </noscript>
+        ) : null}
+        {data.session === 'signed-in' && data.entryAvailable ? (
+          <Exposure operation="library_entry.put">
+            <form
+              data-library-entry
+              method="get"
+              action={action}
+              onSubmit={(event) => event.preventDefault()}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <input type="hidden" name="subjectId" value={subject.id} />
+              {entry ? <input type="hidden" name="revision" value={entry.revision} /> : null}
+              {typeof entry?.incarnationId === 'string' ? (
+                <input type="hidden" name="incarnationId" value={entry.incarnationId} />
+              ) : null}
+              <LibraryStateSelect
+                busy={pending}
+                disabled={!hydrated || pending}
+                hasEntry={entry !== null}
+                onChoose={choose}
+                selectedState={selectedState}
+                stateOptions={stateOptions}
+              />
+            </form>
+          </Exposure>
+        ) : null}
 
-      {data.session === 'signed-in' ? (
-        <Exposure operation="collection_member.create">
-          <details
-            data-add-to-collection
-            open={collectionMenuOpen}
-            onToggle={(event) => setCollectionMenuOpen(event.currentTarget.open)}
-            className="relative"
+        {data.session === 'signed-in' ? (
+          <Exposure operation="collection_member.create">
+            <details
+              data-add-to-collection
+              open={collectionMenuOpen}
+              onToggle={(event) => setCollectionMenuOpen(event.currentTarget.open)}
+              className="relative"
+            >
+              <summary className={`${buttonClass} cursor-pointer list-none`}>
+                {m.library_subject_add_collection()}
+              </summary>
+              <div className="absolute end-0 z-20 mt-2 w-72 max-w-[90vw] rounded-xl border border-border bg-background p-4 shadow-xl">
+                <p className="mb-3 text-sm text-muted-foreground">
+                  {m.library_subject_add_subject()} <SubjectRef subject={subject} />
+                </p>
+                {collectionsLoaded && collections ? (
+                  collections.length ? (
+                    <ul className="space-y-2">
+                      {collections.map((collection) => (
+                        <li key={collection.id}>
+                          <button
+                            className={`${linkClass} inline-flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-start hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60`}
+                            type="button"
+                            disabled={!hydrated}
+                            onClick={() => void addToCollection(collection.id)}
+                          >
+                            <span className="truncate">{collection.title}</span>
+                            <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{m.library_subject_no_collections()}</p>
+                  )
+                ) : (
+                  <form method="get" action={action} onSubmit={(event) => void loadCollections(event)}>
+                    <input type="hidden" name="slot" value="collections" />
+                    <button className={buttonClass} type="submit">
+                      {m.library_subject_load_collections()}
+                    </button>
+                  </form>
+                )}
+                {collectionsProblem ? (
+                  <p role="alert" className="mt-3 text-sm text-muted-foreground">
+                    {collectionsProblem === 'closed' ? m.library_subject_closed() : m.library_subject_unavailable()}
+                  </p>
+                ) : null}
+              </div>
+            </details>
+          </Exposure>
+        ) : data.session === 'signed-out' ? (
+          <Exposure operation="library_entry.put">
+            <a
+              data-library-sign-in
+              className={primaryClass}
+              href={`/auth/sign-in?return_to=${encodeURIComponent(action)}`}
+            >
+              {m.account_sign_in()}
+            </a>
+          </Exposure>
+        ) : null}
+
+        {data.session === 'signed-in' ? (
+          <nav
+            data-library-subject-links
+            aria-label={m.library_subject_more_options()}
+            className="mt-4 flex flex-col gap-2 border-t border-border pt-3 empty:hidden"
           >
-            <summary className={`${buttonClass} cursor-pointer list-none`}>
-              {m.library_subject_add_collection()}
-            </summary>
-            <div className="absolute end-0 z-20 mt-2 w-72 max-w-[90vw] rounded-xl border border-border bg-background p-4 shadow-xl">
-              <p className="mb-3 text-sm text-muted-foreground">
-                {m.library_subject_add_subject()} <SubjectRef subject={subject} />
-              </p>
-              {collectionsLoaded && collections ? (
-                collections.length ? (
-                  <ul className="space-y-2">
-                    {collections.map((collection) => (
-                      <li key={collection.id}>
-                        <button
-                          className={`${linkClass} inline-flex min-h-9 w-full items-center justify-between gap-2 rounded-md px-2 text-start hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60`}
-                          type="button"
-                          disabled={!hydrated}
-                          onClick={() => void addToCollection(collection.id)}
+            <Exposure operation="progress_session.create">
+              <a className={linkClass} href={`/library/progress?subjectId=${encodeURIComponent(subject.id)}`}>
+                {m.library_subject_start_progress()}
+              </a>
+            </Exposure>
+            <Exposure operation="copy.list">
+              <a className={linkClass} href={`/library/copies?subjectId=${encodeURIComponent(subject.id)}`}>
+                {m.library_subject_your_copies()}
+              </a>
+            </Exposure>
+          </nav>
+        ) : null}
+        {data.publicCollections ? (
+          <Exposure operation="subject_collection.list">
+            <details data-public-collections className="relative">
+              <summary className={`${buttonClass} cursor-pointer list-none`}>
+                {m.library_subject_public_collections({ count: data.publicCollections.length })}
+              </summary>
+              <div className="absolute end-0 z-20 mt-2 w-80 max-w-[90vw] rounded-xl border border-border bg-background p-4 shadow-xl">
+                {data.publicCollections.length ? (
+                  <ul className="space-y-3">
+                    {data.publicCollections.map((collection) => (
+                      <li key={collection.id} className="flex flex-col gap-1">
+                        <a
+                          className={linkClass}
+                          href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
                         >
-                          <span className="truncate">{collection.title}</span>
-                          <span className="shrink-0 text-muted-foreground">{collection.memberCount}</span>
-                        </button>
+                          {collection.title}
+                        </a>
+                        <span className="text-sm text-muted-foreground">
+                          <AccountRef account={collection.curator} />
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {m.library_subject_multiplicity({ count: collection.multiplicity })}
+                        </span>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-muted-foreground">{m.library_subject_no_collections()}</p>
-                )
-              ) : (
-                <form method="get" action={action} onSubmit={(event) => void loadCollections(event)}>
-                  <input type="hidden" name="slot" value="collections" />
-                  <button className={buttonClass} type="submit">
-                    {m.library_subject_load_collections()}
-                  </button>
-                </form>
-              )}
-              {collectionsProblem ? (
-                <p role="alert" className="mt-3 text-sm text-muted-foreground">
-                  {collectionsProblem === 'closed' ? m.library_subject_closed() : m.library_subject_unavailable()}
-                </p>
-              ) : null}
-            </div>
-          </details>
-        </Exposure>
-      ) : data.session === 'signed-out' ? (
-        <Exposure operation="library_entry.put">
-          <a
-            data-library-sign-in
-            className={primaryClass}
-            href={`/auth/sign-in?return_to=${encodeURIComponent(action)}`}
-          >
-            {m.account_sign_in()}
-          </a>
-        </Exposure>
-      ) : null}
-
-      {data.session === 'signed-in' ? (
-        <nav
-          data-library-subject-links
-          aria-label={m.library_subject_more_options()}
-          className="mt-4 flex flex-col gap-2 border-t border-border pt-3 empty:hidden"
-        >
-          <Exposure operation="progress_session.create">
-            <a className={linkClass} href={`/library/progress?subjectId=${encodeURIComponent(subject.id)}`}>
-              {m.library_subject_start_progress()}
-            </a>
+                  <p className="text-sm text-muted-foreground">{m.library_subject_no_public_collections()}</p>
+                )}
+              </div>
+            </details>
           </Exposure>
-          <Exposure operation="copy.list">
-            <a className={linkClass} href={`/library/copies?subjectId=${encodeURIComponent(subject.id)}`}>
-              {m.library_subject_your_copies()}
-            </a>
-          </Exposure>
-        </nav>
-      ) : null}
-      {data.publicCollections ? (
-        <Exposure operation="subject_collection.list">
-          <details data-public-collections className="relative">
-            <summary className={`${buttonClass} cursor-pointer list-none`}>
-              {m.library_subject_public_collections({ count: data.publicCollections.length })}
-            </summary>
-            <div className="absolute end-0 z-20 mt-2 w-80 max-w-[90vw] rounded-xl border border-border bg-background p-4 shadow-xl">
-              {data.publicCollections.length ? (
-                <ul className="space-y-3">
-                  {data.publicCollections.map((collection) => (
-                    <li key={collection.id} className="flex flex-col gap-1">
-                      <a
-                        className={linkClass}
-                        href={`/${encodeURIComponent(locale)}/collections/${encodeURIComponent(collection.id)}`}
-                      >
-                        {collection.title}
-                      </a>
-                      <span className="text-sm text-muted-foreground">
-                        <AccountRef account={collection.curator} />
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {m.library_subject_multiplicity({ count: collection.multiplicity })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">{m.library_subject_no_public_collections()}</p>
-              )}
-            </div>
-          </details>
-        </Exposure>
-      ) : null}
-      {resultText ? (
-        <p role="alert" className="basis-full text-sm text-muted-foreground">
-          {resultText}
-        </p>
-      ) : null}
-    </section>
+        ) : null}
+        {resultText ? (
+          <p role="alert" className="basis-full text-sm text-muted-foreground">
+            {resultText}
+          </p>
+        ) : null}
+        {restoreMessage ? (
+          <p role="status" className="basis-full text-sm text-muted-foreground">
+            {restoreMessage}
+          </p>
+        ) : null}
+      </section>
+    </Toaster>
   );
 }

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
+import { undoToast } from '@rezics/ui/undo-toast';
+import { m } from '../paraglide/messages.js';
+import { useOperation } from '../kernel/exposure';
 import { csrfHeaders } from '../threads/composer';
-import { deletePersonalLibraryEntry, savePersonalLibraryEntry } from './entries-actions';
+import {
+  deletePersonalLibraryEntry,
+  restorePersonalLibraryEntryAction,
+  savePersonalLibraryEntry,
+} from './entries-actions';
 import { libraryEntryStateWrite, type PersonalLibraryEntry } from './entries-read';
 
 export type ShelfFailure = 'closed' | 'unavailable' | 'signed-out';
@@ -29,6 +36,8 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
   );
   const [pending, setPending] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const restoreAdmitted = useOperation('library_entry.restore');
 
   const patch = useCallback(
     (subjectId: string, change: (row: ShelfRow) => ShelfRow | null) =>
@@ -112,6 +121,43 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
       });
       if (result.ok || result.reason === 'missing') {
         patch(subjectId, () => null);
+        if (result.ok && result.undo && restoreAdmitted) {
+          const receipt = result.undo;
+          undoToast(
+            m.library_removed(),
+            () => {
+              void restorePersonalLibraryEntryAction({ data: { subjectId, ...receipt }, headers: csrfHeaders() })
+                .then((restored) => {
+                  if (restored.ok) {
+                    setRows((current) => [
+                      ...current.filter((row) => row.entry.subjectId !== subjectId),
+                      {
+                        entry: { ...restored.entry, changeKey: crypto.randomUUID(), removeKey: crypto.randomUUID() },
+                        conflict: false,
+                        failure: null,
+                      },
+                    ]);
+                    setRestoreMessage(null);
+                  } else if (restored.reason === 'occupied') {
+                    if (restored.entry)
+                      setRows((current) => [
+                        ...current.filter((row) => row.entry.subjectId !== subjectId),
+                        {
+                          entry: { ...restored.entry!, changeKey: crypto.randomUUID(), removeKey: crypto.randomUUID() },
+                          conflict: false,
+                          failure: null,
+                        },
+                      ]);
+                    setRestoreMessage(m.library_restore_occupied());
+                  } else if (restored.reason === 'stale') setRestoreMessage(m.library_restore_stale());
+                  else if (restored.reason === 'expired') setRestoreMessage(m.library_restore_expired());
+                  else setRestoreMessage(m.library_subject_unavailable());
+                })
+                .catch(() => setRestoreMessage(m.library_subject_unavailable()));
+            },
+            { undo: m.editor_undo() },
+          );
+        }
       } else if (result.reason === 'conflict') {
         patch(subjectId, (current) => ({
           entry: { ...current.entry, ...result.entry, removeKey: crypto.randomUUID() },
@@ -127,11 +173,12 @@ export function useShelfRows(initial: PersonalLibraryEntry[]) {
       setPending(false);
       setRemoving(null);
     }
-  }, [removing, rows, pending, patch]);
+  }, [removing, rows, pending, patch, restoreAdmitted]);
 
   return {
     rows,
     pending,
+    restoreMessage,
     removing,
     askRemove: setRemoving,
     cancelRemove: () => setRemoving(null),

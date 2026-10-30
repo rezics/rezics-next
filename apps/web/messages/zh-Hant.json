@@ -787,5 +787,10 @@
   "settings_verification_verified": "此帳號已通過驗證。",
   "settings_verification_view_agent": "查看代理人頁面",
   "settings_verification_withdraw": "撤回驗證",
-  "settings_verification_withdrawn": "申請已撤回。"
+  "settings_verification_withdrawn": "申請已撤回。",
+  "library_removed": "已從你的書庫中移除。",
+  "library_restore_occupied": "這部作品已在你的書庫中，現有條目已顯示。",
+  "library_restore_stale": "此移除記錄已變更，條目未恢復。",
+  "library_restore_expired": "此移除記錄已過期，無法復原。",
+  "library_nav_labels": "標籤"
 }

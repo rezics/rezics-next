@@ -35,6 +35,7 @@ const preview: Preview = {
           'purchases',
           'agent_verification',
           'personal_library',
+          'library_entry.restore',
           'reading_progress',
           'collections',
         ],

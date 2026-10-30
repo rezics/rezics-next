@@ -32,7 +32,7 @@ export async function applySubjectLibraryMutation(
           ...(input.incarnationId === undefined ? {} : { incarnationId: input.incarnationId }),
           idempotencyKey: input.idempotencyKey,
         });
-        if (removed.ok) return { result: 'cleared', entry: null };
+        if (removed.ok) return { result: 'cleared', entry: null, ...(removed.undo ? { undo: removed.undo } : {}) };
         if (removed.reason === 'conflict')
           return {
             result: 'conflict',

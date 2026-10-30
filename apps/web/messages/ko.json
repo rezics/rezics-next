@@ -787,5 +787,10 @@
   "settings_verification_verified": "이 계정은 인증되었습니다.",
   "settings_verification_view_agent": "에이전트 보기",
   "settings_verification_withdraw": "인증 철회",
-  "settings_verification_withdrawn": "요청을 철회했습니다."
+  "settings_verification_withdrawn": "요청을 철회했습니다.",
+  "library_removed": "서재에서 삭제했습니다.",
+  "library_restore_occupied": "이 작품은 이미 서재에 있습니다. 현재 항목을 표시했습니다.",
+  "library_restore_stale": "삭제 기록이 변경되어 항목을 복원하지 못했습니다.",
+  "library_restore_expired": "삭제 기록이 만료되어 취소할 수 없습니다.",
+  "library_nav_labels": "라벨"
 }

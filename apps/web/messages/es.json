@@ -787,5 +787,10 @@
   "settings_verification_verified": "Esta cuenta está verificada.",
   "settings_verification_view_agent": "Ver agente",
   "settings_verification_withdraw": "Retirar verificación",
-  "settings_verification_withdrawn": "Solicitud retirada."
+  "settings_verification_withdrawn": "Solicitud retirada.",
+  "library_removed": "Se ha eliminado de tu biblioteca.",
+  "library_restore_occupied": "Esta obra ya está en tu biblioteca. Se muestra su entrada actual.",
+  "library_restore_stale": "El registro de eliminación ha cambiado. No se restauró la entrada.",
+  "library_restore_expired": "Esta eliminación ya no se puede deshacer.",
+  "library_nav_labels": "Etiquetas"
 }

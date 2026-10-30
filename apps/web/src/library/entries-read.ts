@@ -80,7 +80,7 @@ export type SavedLibraryEntry = {
 export type ReloadedLibraryEntry = Omit<PersonalLibraryEntry, 'changeKey' | 'removeKey'>;
 
 export type LibraryMutationResult =
-  | { ok: true; entry?: SavedLibraryEntry }
+  | { ok: true; entry?: SavedLibraryEntry; undo?: { deletionId: string; revision: number } }
   | { ok: false; reason: 'conflict'; entry: ReloadedLibraryEntry }
   | { ok: false; reason: 'closed' | 'missing' | 'unavailable' | 'signed-out' };
 
@@ -98,6 +98,12 @@ export type LibraryRemoveInput = {
   incarnationId?: string | null;
   idempotencyKey: string;
 };
+
+export type LibraryRestoreInput = { subjectId: string; deletionId: string; revision: number };
+export type LibraryRestoreResult =
+  | { ok: true; entry: ReloadedLibraryEntry }
+  | { ok: false; reason: 'occupied'; entry?: ReloadedLibraryEntry }
+  | { ok: false; reason: 'stale' | 'expired' | 'closed' | 'unavailable' | 'signed-out' };
 
 type RawEntry = {
   subjectId: string;
@@ -148,6 +154,14 @@ function statusOf(result: { status?: number; error?: { status?: number } | null 
   if (typeof result.status === 'number') return result.status;
   if (result.error && typeof result.error.status === 'number') return result.error.status;
   return undefined;
+}
+
+function codeOf(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('value' in error)) return undefined;
+  const value = (error as { value: unknown }).value;
+  if (!value || typeof value !== 'object' || !('code' in value)) return undefined;
+  const code = (value as { code: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
 }
 
 function writeHeaders(authorization: string, idempotencyKey: string) {
@@ -310,10 +324,52 @@ export async function removePersonalLibraryEntry(
       headers: writeHeaders(authorization, input.idempotencyKey),
     });
     const status = statusOf(result);
-    if (!result.error && status !== undefined && status >= 200 && status < 300) return { ok: true };
+    if (!result.error && status !== undefined && status >= 200 && status < 300) {
+      const headers = (result as typeof result & { response?: Response }).response?.headers;
+      const deletionId = headers?.get('Library-Entry-Deletion-Id');
+      const revision = Number(headers?.get('Library-Entry-Deletion-Revision'));
+      return deletionId && Number.isSafeInteger(revision) && revision > 0
+        ? { ok: true, undo: { deletionId, revision } }
+        : { ok: true };
+    }
     const conflict = await explainConflict(client, authorization, input.subjectId, result);
     if (conflict) return conflict;
     if (status === 404) return { ok: false, reason: 'missing' };
+    return { ok: false, reason: 'unavailable' };
+  } catch (error) {
+    if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/** Restores with the exact deletion receipt and uses the response body as the rendered entry. */
+export async function restorePersonalLibraryEntry(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: LibraryRestoreInput,
+): Promise<LibraryRestoreResult> {
+  try {
+    const authorization = await bearer(request, sessionEnv);
+    if (!authorization) return { ok: false, reason: 'signed-out' };
+    const result = await client
+      .libraryEntries({ subjectId: input.subjectId })
+      .$restore.post(
+        { deletionId: input.deletionId, revision: input.revision },
+        { headers: writeHeaders(authorization, crypto.randomUUID()) },
+      );
+    if (!result.error && result.data?.libraryEntry) return { ok: true, entry: presentEntry(result.data.libraryEntry) };
+    const code = codeOf(result.error);
+    if (statusOf(result) === 409 && code === 'library_entry_restore_occupied') {
+      try {
+        const current = await reloadEntry(client, authorization, input.subjectId);
+        return current.ok ? { ok: false, reason: 'occupied', entry: current.entry } : { ok: false, reason: 'occupied' };
+      } catch {
+        return { ok: false, reason: 'occupied' };
+      }
+    }
+    if (statusOf(result) === 409 && code === 'library_entry_restore_stale') return { ok: false, reason: 'stale' };
+    if (statusOf(result) === 409 && code === 'library_entry_restore_expired') return { ok: false, reason: 'expired' };
     return { ok: false, reason: 'unavailable' };
   } catch (error) {
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };

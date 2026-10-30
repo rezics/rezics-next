@@ -787,5 +787,10 @@
   "settings_verification_verified": "Dieses Konto ist verifiziert.",
   "settings_verification_view_agent": "Agentenseite ansehen",
   "settings_verification_withdraw": "Verifizierung zurückziehen",
-  "settings_verification_withdrawn": "Anfrage zurückgezogen."
+  "settings_verification_withdrawn": "Anfrage zurückgezogen.",
+  "library_removed": "Aus deiner Bibliothek entfernt.",
+  "library_restore_occupied": "Dieses Werk ist bereits in deiner Bibliothek. Der aktuelle Eintrag wird angezeigt.",
+  "library_restore_stale": "Der Löschvorgang hat sich geändert. Der Eintrag wurde nicht wiederhergestellt.",
+  "library_restore_expired": "Dieser Löschvorgang kann nicht mehr rückgängig gemacht werden.",
+  "library_nav_labels": "Schlagwörter"
 }

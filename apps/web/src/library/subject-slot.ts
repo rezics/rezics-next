@@ -1,3 +1,4 @@
+import type { LibraryRestoreInput, LibraryRestoreResult } from './entries-read';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
@@ -56,6 +57,8 @@ export type SubjectLibrarySlotData = {
   collectionsLoaded: boolean;
   collections: SubjectSlotCollection[] | null;
   result?: SubjectLibrarySlotResult;
+  undo?: LibraryRestoreInput;
+  restore?: LibraryRestoreResult;
 };
 
 export type SubjectLibraryMutation = {
@@ -71,6 +74,7 @@ export type SubjectLibraryMutation = {
 export type SubjectLibraryMutationResponse = {
   result: SubjectLibrarySlotResult;
   entry?: SubjectSlotEntry | null;
+  undo?: { deletionId: string; revision: number };
 };
 export type SubjectSlotCollectionsResult = {
   state: 'loaded' | 'closed' | 'unavailable';

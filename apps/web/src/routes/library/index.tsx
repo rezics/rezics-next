@@ -1,3 +1,4 @@
+import { prepareExposure } from '../../kernel/exposure';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
@@ -9,7 +10,10 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 
 export const Route = createFileRoute('/library/')({
-  beforeLoad: requireSignedIn,
+  beforeLoad: async (context) => {
+    await requireSignedIn(context);
+    await prepareExposure(context.context.queryClient);
+  },
   validateSearch: validateShelfSearch,
   // The router merges what the address says over what validation returns, so a value the validator dropped is still
   // there; reading through the validator again keeps only the documented values.

@@ -788,5 +788,10 @@
   "settings_verification_verified": "此账号已通过认证。",
   "settings_verification_view_agent": "查看代理主页",
   "settings_verification_withdraw": "撤回认证",
-  "settings_verification_withdrawn": "申请已撤回。"
+  "settings_verification_withdrawn": "申请已撤回。",
+  "library_removed": "已从你的书库中移除。",
+  "library_restore_occupied": "这部作品已在你的书库中，现有条目已显示。",
+  "library_restore_stale": "此移除记录已变更，条目未恢复。",
+  "library_restore_expired": "此移除记录已过期，无法撤销。",
+  "library_nav_labels": "标签"
 }

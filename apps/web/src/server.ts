@@ -251,6 +251,14 @@ async function fetchRequest(request: Request): Promise<Response> {
     !isAllowedSiteOrigin(request, request.headers.get('origin'), sessionEnv.SITE_ORIGINS)
   )
     return problemResponse(problem(403, 'forbidden', 'Forbidden'));
+  if (url.pathname === '/library/entry') {
+    const [{ libraryEntryFormResponse }, { kernelClient }, { default: stylesheet }] = await Promise.all([
+      import('./library/entry-form'),
+      import('./kernel/client'),
+      import('./styles.css?url'),
+    ]);
+    return libraryEntryFormResponse(request, sessionEnv, kernelClient(), stylesheet);
+  }
   const orderStatus = /^\/orders\/([^/]+)\/status$/.exec(url.pathname);
   if (orderStatus && request.method === 'GET') {
     try {

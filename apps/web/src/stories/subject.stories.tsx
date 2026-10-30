@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
+import { selectEntryUndoOutcome } from '../kernel/fake/library-entry-undo';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { SubjectPage, type SubjectPageData } from '../features/pages/subject';
@@ -174,4 +176,70 @@ export const CountUnavailable: Story = {
   name: 'Count Unavailable',
   play: pageReady,
   render: () => <CountUnavailablePageStory />,
+};
+
+function SubjectUndoStory({ outcome = 'ok' }: { outcome?: 'ok' | 'occupied' | 'stale' | 'expired' }) {
+  selectEntryUndoOutcome(outcome);
+  useEffect(() => () => selectEntryUndoOutcome(), []);
+  return <PageStory visitor="Signed In" path={pagePaths.subject} />;
+}
+
+async function removeSubjectEntry(context: { canvasElement: HTMLElement }) {
+  await pageReady(context);
+  const view = within(context.canvasElement);
+  const state = await view.findByRole('combobox', { name: m.library_subject_entry() });
+  await waitFor(() => expect(state).toBeEnabled());
+  await userEvent.click(state);
+  await userEvent.click(await within(document.body).findByRole('option', { name: m.library_subject_remove() }));
+  await expect(await within(document.body).findByRole('button', { name: m.editor_undo() })).toBeVisible();
+}
+
+export const UndoAfterLibraryRemoval: Story = {
+  name: 'Undo after Library removal',
+  play: removeSubjectEntry,
+  render: () => <SubjectUndoStory />,
+};
+
+export const UndoRestored: Story = {
+  name: 'Undo / restored entry',
+  play: async (context) => {
+    await removeSubjectEntry(context);
+    await userEvent.click(await within(document.body).findByRole('button', { name: m.editor_undo() }));
+    await waitFor(() =>
+      expect(
+        within(context.canvasElement).getByRole('combobox', { name: m.library_subject_entry() }),
+      ).toHaveTextContent(m.library_subject_state_planned()),
+    );
+  },
+  render: () => <SubjectUndoStory />,
+};
+
+function refusedSubjectRestore(reason: 'occupied' | 'stale' | 'expired') {
+  return async (context: { canvasElement: HTMLElement }) => {
+    await removeSubjectEntry(context);
+    await userEvent.click(await within(document.body).findByRole('button', { name: m.editor_undo() }));
+    const view = within(context.canvasElement);
+    await expect(await view.findByText(m[`library_restore_${reason}`]())).toBeVisible();
+    if (reason === 'occupied')
+      await waitFor(() =>
+        expect(view.getByRole('combobox', { name: m.library_subject_entry() })).toHaveTextContent(
+          m.library_subject_state_completed(),
+        ),
+      );
+  };
+}
+export const RestoreOccupied: Story = {
+  name: 'Restore refused / entry already exists',
+  play: refusedSubjectRestore('occupied'),
+  render: () => <SubjectUndoStory outcome="occupied" />,
+};
+export const RestoreStale: Story = {
+  name: 'Restore refused / stale removal',
+  play: refusedSubjectRestore('stale'),
+  render: () => <SubjectUndoStory outcome="stale" />,
+};
+export const RestoreExpired: Story = {
+  name: 'Restore refused / expired removal',
+  play: refusedSubjectRestore('expired'),
+  render: () => <SubjectUndoStory outcome="expired" />,
 };

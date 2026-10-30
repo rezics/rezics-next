@@ -787,5 +787,10 @@
   "settings_verification_verified": "このアカウントは認証済みです。",
   "settings_verification_view_agent": "エージェントを見る",
   "settings_verification_withdraw": "認証を取り下げる",
-  "settings_verification_withdrawn": "申請を取り下げました。"
+  "settings_verification_withdrawn": "申請を取り下げました。",
+  "library_removed": "ライブラリから削除しました。",
+  "library_restore_occupied": "この作品はすでにライブラリにあります。現在の登録内容を表示しています。",
+  "library_restore_stale": "削除記録が変更されたため、復元できませんでした。",
+  "library_restore_expired": "この削除記録は期限切れのため、取り消せません。",
+  "library_nav_labels": "ラベル"
 }

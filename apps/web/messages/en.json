@@ -788,5 +788,10 @@
   "settings_verification_verified": "This account is verified.",
   "settings_verification_view_agent": "View agent",
   "settings_verification_withdraw": "Withdraw verification",
-  "settings_verification_withdrawn": "Request withdrawn."
+  "settings_verification_withdrawn": "Request withdrawn.",
+  "library_removed": "Removed from your library.",
+  "library_restore_occupied": "This work is already in your library. Its current entry is shown.",
+  "library_restore_stale": "This removal has changed. The entry was not restored.",
+  "library_restore_expired": "This removal can no longer be undone.",
+  "library_nav_labels": "Labels"
 }

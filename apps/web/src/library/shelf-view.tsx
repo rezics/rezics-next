@@ -1,3 +1,4 @@
+import { EntryRemoveForm } from './entry-undo';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
 import { ProgressRow } from '@rezics/ui/progress-row';
@@ -359,16 +360,35 @@ export function ShelfEntries({
   const controls: Controls = { ...shelfRows, locale, hydrated };
   const leaving = shelfRows.rows.find((row) => row.entry.subjectId === shelfRows.removing)?.entry;
   const notices = layout === 'grid' ? [] : shelfRows.rows.filter((row) => row.conflict || row.failure);
-  if (shelfRows.rows.length === 0) return null;
   const sectionId = useId();
+  if (shelfRows.rows.length === 0 && !shelfRows.restoreMessage) return null;
   const body = (
     <>
+      {shelfRows.restoreMessage ? (
+        <p role="status" className="text-sm">
+          {shelfRows.restoreMessage}
+        </p>
+      ) : null}
       {notices.map((row) => (
         <p key={row.entry.subjectId} role={row.failure ? 'alert' : 'status'} className="text-sm">
           <span className="font-medium">{titleOf(row.entry, locale).text}</span>{' '}
           {row.failure ? failureText(row.failure) : m.library_conflict()}
         </p>
       ))}
+      <noscript>
+        {shelfRows.rows.map(({ entry }) => (
+          <div key={entry.subjectId}>
+            <p>{titleOf(entry)}</p>
+            <EntryRemoveForm
+              subjectId={entry.subjectId}
+              revision={entry.revision}
+              incarnationId={entry.incarnationId}
+              idempotencyKey={entry.removeKey}
+              locale={locale}
+            />
+          </div>
+        ))}
+      </noscript>
       {layout === 'grid' ? <GridView controls={controls} shelf={shelf} size={size} /> : null}
       {layout === 'list' ? <ListView controls={controls} /> : null}
       {layout === 'table' ? (

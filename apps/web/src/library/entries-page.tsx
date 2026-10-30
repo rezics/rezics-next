@@ -1,3 +1,6 @@
+import { Toaster } from '@rezics/ui/shadcn/toast';
+import { EntryUndoForm, EntryRestoreFeedback } from './entry-undo';
+import type { LibraryRestoreInput, LibraryRestoreResult } from './entries-read';
 import { Exposure } from '../kernel/exposure';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -228,16 +231,26 @@ export function PersonalLibraryPage({
   locale,
   display,
   cursor,
+  undo,
+  restore,
+  csrfToken,
 }: {
   page: PersonalLibraryView;
   locale: string;
   display: Display;
   cursor?: string | undefined;
+  undo?: LibraryRestoreInput;
+  restore?: LibraryRestoreResult;
+  csrfToken?: string | null;
 }) {
   return (
-    <div className="max-w-6xl space-y-6 text-foreground">
-      <PageHeading>{m.library_heading()}</PageHeading>
-      <SignedInLibrary page={page as SignedIn} cursor={cursor} locale={locale} display={display} />
-    </div>
+    <Toaster>
+      <div className="max-w-6xl space-y-6 text-foreground">
+        <PageHeading>{m.library_heading()}</PageHeading>
+        {undo ? <EntryUndoForm undo={undo} locale={locale} csrfToken={csrfToken ?? null} /> : null}
+        {restore ? <EntryRestoreFeedback restore={restore} /> : null}
+        <SignedInLibrary page={page as SignedIn} cursor={cursor} locale={locale} display={display} />
+      </div>
+    </Toaster>
   );
 }
