@@ -404,7 +404,7 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection,row: P
     const last=keys.at(-1); next=rows.length===257 && last ? {route:last.route,id:last.id}:null;
     position=0n;
   }
-  await projection.project(partition,keys);
+  await projection.project(partition,keys,0n,true);
   await withConnection(pool,async(client)=>{
     await client.query(`UPDATE search.discovery_population SET after_route=$5,after_id=$6,complete=$7,position=GREATEST(position,$8)
       WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4 AND after_id IS NOT DISTINCT FROM $9::uuid AND NOT complete`,
@@ -456,12 +456,22 @@ async function reconcileDiscoveryPage(pool: Pool,search: OpenSearch,projection: 
     const withoutPosition=({source_position,...body}:IndexedDiscoveryDocument)=>body;
     if (action.op!=='index' || !isDeepStrictEqual(withoutPosition(current),withoutPosition(action.document))) mismatch=true;
   }
-  if (mismatch) { await projection.project(partition,keys); return; }
+  if (mismatch) { await projection.project(partition,keys,0n,true); return; }
   const finish=await entry.source.count(partition), end=(await readAccountDiscoveryWitness(pool,[partition])).get(partition);
   const stable=finish.position===census.position && finish.count===census.count && end?.revision===witness.revision && end.claimRevision===witness.claimRevision;
   const total=(reset ? 0n:indexed)+BigInt(hits.length), exhausted=hits.length<100;
   if (!stable) return;
-  if (exhausted && total!==BigInt(census.count)) throw new Error('Discovery identified population does not match native census');
+  if (exhausted && total!==BigInt(census.count)) {
+    // A missing identity has no engine key to repair. Rewalk only this native owner/partition.
+    await withConnection(pool,async(client)=>{await client.query('BEGIN');try {
+      await client.query(`UPDATE search.discovery_population SET complete=false,certified=false,after_route=NULL,
+        after_id=NULL,reconcile_position=NULL,indexed=0 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4`,
+        [partition,target.prefix,target.generation,row.owner]);
+      await client.query("UPDATE search.discovery_generation SET state='populating' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='reconciling'",[target.prefix,target.generation]);
+      await client.query('COMMIT');
+    }catch(error){await client.query('ROLLBACK');throw error;}});
+    return;
+  }
   const last=keys.at(-1);
   await withConnection(pool,async(client)=>{
     await client.query(`UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$8,reconcile_position=$9,

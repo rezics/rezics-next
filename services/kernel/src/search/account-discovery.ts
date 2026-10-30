@@ -322,7 +322,7 @@ export function createDiscoveryProjection(options: {
   const accounts = registry.get('account');
   if (accounts.owner !== 'accounts') throw new TypeError('Account source is required');
   const subject = registry.entries.find((entry) => entry.owner === 'semantic');
-  async function project(partition: number, input: readonly DiscoveryKey[], atLeast = 0n): Promise<void> {
+  async function project(partition: number, input: readonly DiscoveryKey[], atLeast = 0n, repair = false): Promise<void> {
     const unique = new Map(input.map((key) => { const checked=registry.key(key); return [discoveryDocumentId(registry,checked),checked]; }));
     const keys = [...unique.values()];
     if (keys.some((key) => discoveryPartition(key.id) !== partition)) throw new RangeError('Foreign discovery key');
@@ -369,7 +369,7 @@ export function createDiscoveryProjection(options: {
               'SELECT position::text,revision::text,settled FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',values);
             const revision=action.op==='index' && action.document.owner==='accounts' ? BigInt(action.document.revision) : 0n;
             if (old && revision>0n && BigInt(old.revision)>revision) throw new Error('Account native revision rewound; new incarnation required');
-            if (old && (BigInt(old.position)>action.version || (BigInt(old.position)===action.version && old.settled))) continue;
+            if (old && (BigInt(old.position)>action.version || (BigInt(old.position)===action.version && old.settled && !repair))) continue;
             await client.query(`INSERT INTO search.discovery_copy(route,source_id,prefix,generation,kind,position,revision,deleted,settled)
               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false) ON CONFLICT(route,source_id,prefix,generation,kind)
               DO UPDATE SET position=EXCLUDED.position,revision=GREATEST(search.discovery_copy.revision,EXCLUDED.revision),deleted=EXCLUDED.deleted,settled=false`,
