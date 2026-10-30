@@ -148,6 +148,34 @@ test('empty legacy homes retain three distinct native commits and reject source 
       acknowledged: true,
     },
   ]);
+  const copies = (
+    await f.admin.query(
+      `
+    SELECT 'home' relation,count(*)::integer copies,coalesce(sum(pg_column_size(t)),0)::text row_bytes
+      FROM semantic.identity_epoch_bootstrap_home t WHERE partition_no=$1
+    UNION ALL SELECT 'page',count(*)::integer,coalesce(sum(pg_column_size(t)),0)::text
+      FROM semantic.identity_epoch_bootstrap_page t WHERE partition_no=$1
+    UNION ALL SELECT 'custody',count(*)::integer,coalesce(sum(pg_column_size(t)),0)::text
+      FROM semantic.identity_epoch_bootstrap_custody t WHERE partition_no=$1
+    UNION ALL SELECT 'basis',count(*)::integer,coalesce(sum(pg_column_size(t)),0)::text
+      FROM semantic.identity_epoch_bootstrap_basis t WHERE partition_no=$1
+    UNION ALL SELECT 'native',count(*)::integer,coalesce(sum(pg_column_size(t)),0)::text
+      FROM semantic.identity_epoch_native_commit t WHERE partition_no=$1
+    UNION ALL SELECT 'outbox',count(*)::integer,coalesce(sum(pg_column_size(t)),0)::text
+      FROM core.outbox t WHERE partition_no=$1
+  `,
+      [partition],
+    )
+  ).rows;
+  expect(copies.map((row) => [row.relation, row.copies])).toEqual([
+    ['home', 1],
+    ['page', 1],
+    ['custody', 1],
+    ['basis', 1],
+    ['native', 3],
+    ['outbox', 3],
+  ]);
+  console.info('native empty-home retained copies', JSON.stringify({ partition, receipts: rows, copies }));
 });
 
 test('an interrupted empty export recovers its same retained page through the original native receiving and ACK path', async () => {
