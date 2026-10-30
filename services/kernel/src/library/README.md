@@ -246,7 +246,9 @@ custody remain in the existing Semantic ledgers, with their existing erasure-rol
 job locators only; no new DBOS payload, worker or workflow output is created. These private links and bases survive
 uncertainty until actual irreversible Source/receiving/control closure, never timeout or local count exhaustion.
 Library's erasure probe now names all three stores, and its missing-custody inventory prevents an ACK while their
-minimizer/late-item handoff is absent. Neither local invalidation nor Semantic reference exhaustion proves erasure.
+minimizer/late-item handoff is absent. Inherited job subject/operator-role locators for these Library copies also remain unbound;
+the owner-prefix probes do not certify absence for those other roles. Neither local invalidation nor Semantic
+reference exhaustion proves erasure.
 
 Cost: one exact registered work key, native source/account/gate/receipt points, one source-state mutation and one
 structural directory point per step; zero original fact enumeration, engine calls or history scans. Existing
