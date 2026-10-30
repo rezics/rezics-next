@@ -284,7 +284,10 @@ export async function readAgentIdentityCopyReceiving(
 /** Unconverted associations keep their original retention gap. A native seal permits the
  * independent physical owner to minimize its payload; source and SDK metadata remain retained. */
 export async function agentIdentityCopyRetentionGap(
-  tx: CommandTransaction, partition: number, type: HistoryArtifact['locator']['artifactType'], locator: Buffer,
+  tx: CommandTransaction,
+  partition: number,
+  type: HistoryArtifact['locator']['artifactType'],
+  locator: Buffer,
 ): Promise<string | null> {
   const copy = await tx.query(
     `SELECT 1 FROM core.agent_identity_history_copy c
@@ -295,7 +298,8 @@ export async function agentIdentityCopyRetentionGap(
        AND i.source_receipt_id=c.source_receipt_id AND i.state='sealed' AND i.native_writer_state='closed'
        AND EXISTS (SELECT 1 FROM core.partition p WHERE p.partition_no=i.partition_no
          AND p.write_state='active' AND p.epoch=i.receiver_epoch)
-       AND EXISTS (SELECT 1 FROM core.history_family_domain d WHERE d.singleton AND d.generation=i.domain_generation)) LIMIT 1`, [partition, type, locator],
+       AND EXISTS (SELECT 1 FROM core.history_family_domain d WHERE d.singleton AND d.generation=i.domain_generation)) LIMIT 1`,
+    [partition, type, locator],
   );
   return copy.rows.length ? 'agent-identity-source-retention-custody-pending' : null;
 }
