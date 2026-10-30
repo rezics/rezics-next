@@ -578,6 +578,20 @@ unbounded dependency expansion, retry or refill. This read does not change image
 collection or erasure. Focused native privacy, current-variant and schema cases live in
 `test/content/media-presentation.test.ts`; existing native download/privacy suites remain applicable.
 
+Media download eligibility callbacks carry optional Access work declarations. Captured initial rows perform pure
+preparation; their original reads belong to the enclosing Source. Current board, thread and post callbacks declare
+their exact primary-key probes, including the post head revision and conditional draft-author probe. Each invocation
+records only its dispatched plans, keeps native row charges on empty seeks, and binds the receipt to its exact
+context and result. Failure retains the complete admitted envelope. These receipts never replace the independent
+current image, container, ancestor, board, Realm, Space or source-fence authority.
+
+Metered image callbacks currently refuse before verification IO with a named projection dependency:
+`read-download-media.sql` and `realm-media-read.sql` project ThumbHash and average colour without enforced native
+size bounds for avatar, post and Realm assets. Post credit/provenance are also unconstrained. The cover-only display
+constraint is `NOT VALID`; it does not bound all existing rows. Cover callbacks additionally require the nested
+Semantic subject/Context Access check's own work declaration. No initial-row size is assumed to bound a fresh read.
+Unmetered download and paid-image behavior retain the existing native checks and cache policy.
+
 ## Realm presentation media
 
 Content adopts the native Realm asset slice of the [community presentation research](../../../../docs/research/content-community-presentation-contract.md).

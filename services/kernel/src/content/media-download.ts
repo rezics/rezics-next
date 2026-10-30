@@ -18,6 +18,10 @@ import readThreadAuthor from './read-thread-author.sql';
 import type { DownloadDecision, DownloadVariant, MediaDependencies } from './media.ts';
 import read from './read-download-media.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
+import {
+  COVER_MEDIA_WORK_DEPENDENCY,
+  mediaEligibilityCallbacks,
+} from './media-eligibility-access-work.ts';
 
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 type RealmHeadRow = NonNullable<Awaited<ReturnType<typeof realmHead.run>>>;
@@ -175,15 +179,15 @@ async function authorizeDownload(
           eligibility: createResourcePublicEligibility({
             resource,
             action: 'media:read',
-            async prepare() {
-              return initial;
-            },
-            async verify({ client }) {
-              const current = await point(client, mediaId, slot);
-              if (!current || !usable(current) || signature(current) !== signature(initial))
-                throw new GrantDeniedError();
-              return true;
-            },
+            ...mediaEligibilityCallbacks({
+              evidence: initial,
+              async verify({ client }) {
+                const current = await point(client, mediaId, slot);
+                if (!current || !usable(current) || signature(current) !== signature(initial))
+                  throw new GrantDeniedError();
+                return true;
+              },
+            }),
           }),
         },
         { pool: dependencies.pool, deadline: context.deadline },
@@ -261,23 +265,24 @@ async function authorizeDownload(
           eligibility: createResourcePublicEligibility({
             resource: mediaResource,
             action: 'media:read',
-            async prepare() {
-              return initial;
-            },
-            async verify({ client }) {
-              const current = await point(client, mediaId, slot);
-              if (!current || !usable(current) || signature(current) !== signature(initial))
-                throw new GrantDeniedError();
-              // Existence is a hard prerequisite even when an independent grant
-              // could satisfy the subject formula without a public floor.
-              if (!(await subjectExists.run(client, { route: r, subject_id: initial.container_id })))
-                throw new GrantDeniedError();
-              if (!(await subject(client))) throw new GrantDeniedError();
-              // Anonymous viewing and public visibility use the same prepared
-              // check on this snapshot; evaluate that formula only once.
-              publiclyVisible = publicSubject !== null && (publicSubject === subject || (await publicSubject(client)));
-              return publiclyVisible;
-            },
+            ...mediaEligibilityCallbacks({
+              evidence: initial,
+              dependency: COVER_MEDIA_WORK_DEPENDENCY,
+              async verify({ client }) {
+                const current = await point(client, mediaId, slot);
+                if (!current || !usable(current) || signature(current) !== signature(initial))
+                  throw new GrantDeniedError();
+                // Existence is a hard prerequisite even when an independent grant
+                // could satisfy the subject formula without a public floor.
+                if (!(await subjectExists.run(client, { route: r, subject_id: initial.container_id })))
+                  throw new GrantDeniedError();
+                if (!(await subject(client))) throw new GrantDeniedError();
+                // Anonymous viewing and public visibility use the same prepared
+                // check on this snapshot; evaluate that formula only once.
+                publiclyVisible = publicSubject !== null && (publicSubject === subject || (await publicSubject(client)));
+                return publiclyVisible;
+              },
+            }),
           }),
         },
         accessContext,
@@ -329,32 +334,41 @@ async function authorizeDownload(
           eligibility: createResourcePublicEligibility({
             resource,
             action,
-            async prepare() {
-              return row;
-            },
-            async verify({ client }) {
-              const current =
-                row.kind === 'board'
-                  ? await mediaParentBoard(client, row.id)
-                  : (await parent.run(client, { route: r, id: row.id, kind: row.kind }))[0];
-              if (
-                !current ||
-                signature(current) !== signature(row) ||
-                !['published', 'protected', 'draft'].includes(current.visibility) ||
-                current.availability !== 'available'
-              )
-                throw new GrantDeniedError();
-              if (current.visibility === 'draft') {
-                if (actor.kind !== 'account' || (row.kind !== 'thread' && row.kind !== 'post'))
+            ...mediaEligibilityCallbacks({
+              evidence: row,
+              parent: {
+                kind: row.kind,
+                route: resource.route,
+                id: row.id,
+                author: row.visibility === 'draft' && actor.kind === 'account' && row.kind !== 'board',
+              },
+              async verify({ client }, reads) {
+                const currentRows = await reads.parent(async () =>
+                  row.kind === 'board'
+                    ? mediaParentBoard(client, row.id)
+                    : parent.run(client, { route: r, id: row.id, kind: row.kind }),
+                );
+                const current = Array.isArray(currentRows) ? currentRows[0] : currentRows;
+                if (
+                  !current ||
+                  signature(current) !== signature(row) ||
+                  !['published', 'protected', 'draft'].includes(current.visibility) ||
+                  current.availability !== 'available'
+                )
                   throw new GrantDeniedError();
-                const author =
-                  row.kind === 'thread'
-                    ? await readThreadAuthor.run(client, { route: r, id: row.id })
-                    : await readPostAuthor.run(client, { route: r, id: row.id });
-                if (!author || author.author_account_id !== actor.accountId) throw new GrantDeniedError();
-              }
-              return current.visibility === 'published';
-            },
+                if (current.visibility === 'draft') {
+                  if (actor.kind !== 'account' || (row.kind !== 'thread' && row.kind !== 'post'))
+                    throw new GrantDeniedError();
+                  const author = await reads.author(() =>
+                    row.kind === 'thread'
+                      ? readThreadAuthor.run(client, { route: r, id: row.id })
+                      : readPostAuthor.run(client, { route: r, id: row.id }),
+                  );
+                  if (!author || author.author_account_id !== actor.accountId) throw new GrantDeniedError();
+                }
+                return current.visibility === 'published';
+              },
+            }),
           }),
         },
         accessContext,
@@ -375,16 +389,16 @@ async function authorizeDownload(
         eligibility: createResourcePublicEligibility({
           resource,
           action: 'media:read',
-          async prepare() {
-            return initial;
-          },
-          async verify({ client }) {
-            const current = await point(client, mediaId, slot);
-            if (!current || !usable(current) || signature(current) !== signature(initial)) throw new GrantDeniedError();
-            const currentChain = await mediaParentChain(client, current.container_id);
-            if (signature(currentChain) !== signature(chain)) throw new GrantDeniedError();
-            return publiclyVisible;
-          },
+          ...mediaEligibilityCallbacks({
+            evidence: initial,
+            async verify({ client }) {
+              const current = await point(client, mediaId, slot);
+              if (!current || !usable(current) || signature(current) !== signature(initial)) throw new GrantDeniedError();
+              const currentChain = await mediaParentChain(client, current.container_id);
+              if (signature(currentChain) !== signature(chain)) throw new GrantDeniedError();
+              return publiclyVisible;
+            },
+          }),
         }),
       },
       accessContext,
