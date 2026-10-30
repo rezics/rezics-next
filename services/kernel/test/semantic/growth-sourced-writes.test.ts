@@ -24,6 +24,7 @@ import {
   costOf,
   openGrowthDatabase,
   seed,
+  type Cost,
   type GrowthDatabase,
   type Population,
   type Row,
@@ -195,10 +196,9 @@ const sourcedStatementDerivation = {
   // runCommand time; current actor admission; permission time/inverse/candidates;
   // Global anchor validation; final Access formula. The proof consumption is in memory.
   admission: 1 + 1 + (1 + 1 + 1) + 1 + 1,
-  // The upstream Command and receipt derivation states counts per attempt and
-  // allows three contention attempts. Own fixture partitions remain writable,
-  // so this workload requires no fence-wait polls or cross-home deferred pass.
-  maximumAttempts: 3,
+  // runCommand retries contention until the original request deadline, with
+  // fresh admission each time. There is no absolute number-of-attempts limit.
+  // Own fixture partitions stay writable: no fence waits or deferred pass.
   receipt: 1,
   // Both changed fence (position/outbox/basis/receipt) and noEffect fence
   // (partition/receipt only) are one statement. No extra finalizer is installed.
@@ -222,21 +222,29 @@ const sourcedStatementDerivation = {
 const d = sourcedStatementDerivation;
 const sourcedStatementFormula =
   'request + tupleHomes + mediaHomes + coverProbes + ' +
-  'maximumAttempts * ((changed + noEffect + replayed) * (admission + receipt) + ' +
+  '(changed + noEffect + replayed) * (admission + receipt) + ' +
   '(changed + noEffect) * fence + changed * changedBody + noEffect * noEffectBody + ' +
-  'documentInserts + mediaClaims)';
-const sourcedStatementCeiling =
+  'documentInserts + mediaClaims + failedStatements * retryAttempt';
+const sourcedCommittedStatementBound =
   d.request +
   d.tupleHomes +
   d.mediaHomes +
   d.coverProbes +
-  d.maximumAttempts *
-    ((d.changed + d.noEffect + d.replayed) * (d.admission + d.receipt) +
-      (d.changed + d.noEffect) * d.fence +
-      d.changed * d.changedBody +
-      d.noEffect * d.noEffectBody +
-      d.documentInserts +
-      d.mediaClaims);
+  (d.changed + d.noEffect + d.replayed) * (d.admission + d.receipt) +
+  (d.changed + d.noEffect) * d.fence +
+  d.changed * d.changedBody +
+  d.noEffect * d.noEffectBody +
+  d.documentInserts +
+  d.mediaClaims;
+// A failed attempt can reach admission, receipt, the full changed body, one
+// document insert OR media claim, and its fence before aborting (including COMMIT).
+// The retained native ledger identifies the contention failures. Charge the full
+// attempt for each failed statement, even one whose plan was never emitted.
+const retryAttemptStatementBound = d.admission + d.receipt + d.changedBody + 1 + d.fence;
+function sourcedStatementCeiling(cost: Cost): number {
+  const failedStatements = Object.values(cost.failedStatements ?? {}).reduce((sum, count) => sum + count, 0);
+  return sourcedCommittedStatementBound + failedStatements * retryAttemptStatementBound;
+}
 
 function source(externalId: string, field_group: Source['field_group']): Source {
   return {
@@ -1197,13 +1205,6 @@ async function runSourcedBatch(scale: number, repetition: number): Promise<unkno
     commands.map(({ source }) => JSON.stringify([source.source, source.external_id, source.field_group])),
   ).size;
   expect(tuples).toBe(52);
-  console.info(
-    `SOURCED_STATEMENT_BOUND ${JSON.stringify({
-      formula: sourcedStatementFormula,
-      operands: sourcedStatementDerivation,
-      ceiling: sourcedStatementCeiling,
-    })}`,
-  );
   nativeRun = new Map();
   nativeFailures = [];
   let answer: Awaited<ReturnType<typeof batch>>;
@@ -1254,9 +1255,9 @@ async function runSourcedBatch(scale: number, repetition: number): Promise<unkno
   return answer.body;
 }
 
-test('the actual fixed batch has100 commands with several tuple homes and duplicates and stays within the existing derived statement bound', () => {
+test('the actual fixed batch has100 commands with several tuple homes and duplicates and accounts for deadline-bounded retries', () => {
   expect(sourcedBatchReport).toBeDefined();
-  expect(sourcedStatementCeiling).toBe(5138);
+  expect(sourcedBatchReport!.rule).toBe('series');
   expect(batchRuns).toHaveLength(scales.length * warmupsAndRepetitions);
   for (const run of batchRuns) {
     expect(run.commands).toBe(100);
@@ -1267,7 +1268,21 @@ test('the actual fixed batch has100 commands with several tuple homes and duplic
   }
   for (const sample of sourcedBatchReport!.samples) {
     expect(sample.repetitions).toHaveLength(5);
-    for (const cost of sample.repetitions) expect(cost.statements).toBeLessThanOrEqual(sourcedStatementCeiling);
+    for (const [repetition, cost] of sample.repetitions.entries()) {
+      const ceiling = sourcedStatementCeiling(cost);
+      console.info(
+        `SOURCED_STATEMENT_BOUND ${JSON.stringify({
+          scale: sample.scale,
+          repetition,
+          formula: sourcedStatementFormula,
+          operands: { ...sourcedStatementDerivation, retryAttempt: retryAttemptStatementBound },
+          failedStatements: cost.failedStatements ?? {},
+          statements: cost.statements,
+          ceiling,
+        })}`,
+      );
+      expect(cost.statements).toBeLessThanOrEqual(ceiling);
+    }
   }
 });
 
