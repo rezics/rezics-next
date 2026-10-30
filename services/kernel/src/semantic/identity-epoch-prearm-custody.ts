@@ -153,7 +153,13 @@ async function directory(tx: PoolClient, job: IdentityJobRef, input: Input, root
 export async function readIdentityPrearmCustodyPage(
   pool: Pool, request: IdentityPrearmCustodyRequest, context: IdentityPrearmCustodyContext,
 ): Promise<IdentityPrearmCustodyPage> {
+  // Snapshot caller-owned locators before the first await. Authentication cannot authorize
+  // a later mutation of the job, work allowance or scalar continuation.
+  request = { ...request, job: { ...request.job }, allowance: { ...request.allowance } };
   const work = new ReadWork(request.allowance, context);
+  if (request.after && (request.after.after.length > 8 || Buffer.byteLength(json(request.after)) > 2048))
+    return { status: 'unavailable', reason: 'invalid-frontier', work: work.work };
+  request = { ...request, after: request.after ? { segment: request.after.segment, after: [...request.after.after] } : null };
   if (!validJob(request.job) || !validAllowance(request.allowance) || !Number.isInteger(request.limit) ||
       request.limit < 1 || request.limit > 100) return { status: 'unavailable', reason: 'invalid-request', work: work.work };
   return withRequestDeadline(work.deadline, async () => {
@@ -224,6 +230,7 @@ export async function readIdentityPrearmCustodyPage(
 export async function verifyIdentityPrearmCustodyCut(
   pool: Pool, job: IdentityJobRef, cut: IdentityPrearmCustodyCut, context: IdentityPrearmCustodyContext,
 ): Promise<IdentityPrearmCustodyVerification> {
+  job = { ...job };
   const saved = cuts.get(cut);
   if (!saved || !validJob(job) || !sameJob(job, saved.job)) return { status: 'unavailable', work: emptyWork() };
   const work = new ReadWork(saved.allowance, context);

@@ -40,4 +40,5 @@ WHERE d.partition_no=$1 AND d.job_id=$2 AND d.job_epoch=$3 AND d.generation=$4
   i(terminal uuid,generation uuid,basis_version bigint,owner_epoch integer)
   WHERE i.terminal=d.terminal AND i.generation=d.generation AND i.basis_version=d.basis_version AND i.owner_epoch=d.owner_epoch)
  AND (($9='published' AND t.state='acquired') OR
- ($9 IN ('cancelling','cancelled') AND t.state='closed' AND k.epoch=o.epoch AND k.position<=o.position));
+ ($9 IN ('cancelling','cancelled') AND t.state='closed' AND d.cancel_sequence=d.sequence
+  AND k.epoch=o.epoch AND k.position<=r.position));
