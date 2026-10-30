@@ -39,7 +39,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           </div>
         ) : (
           <>
-            <AccountRenameLink context={props.renameAccount} securityHref={props.securityHref} />
+            <AccountRenameLink context={props.renameAccount ?? null} securityHref={props.securityHref} />
             {links ? (
               <a href={links.security} className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), linkClass)}>
                 {m.account_security_settings()}

@@ -1,11 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { AccountSafetyCard } from '../../settings/account-safety';
+import { AccountSafetyCard, type AccountSafetyProps } from '../../settings/account-safety';
 import { m } from '../../paraglide/messages.js';
+
+function SignedInAccount(props: Extract<AccountSafetyProps, { state: 'signed-in' }>) {
+  return <AccountSafetyCard {...props} />;
+}
 
 const meta = {
   title: 'Patterns/Account/Handle rename',
-  component: AccountSafetyCard,
+  component: SignedInAccount,
   parameters: { layout: 'padded' },
   args: {
     state: 'signed-in',
@@ -14,7 +18,7 @@ const meta = {
     onReload() {},
     renameAccount: { accountId: '123e4567-e89b-42d3-a456-426614174000', handle: 'alice', available: true },
   },
-} satisfies Meta<typeof AccountSafetyCard>;
+} satisfies Meta<typeof SignedInAccount>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
