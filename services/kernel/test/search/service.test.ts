@@ -653,28 +653,35 @@ test('native service keeps ordinary ties, Unicode/null keysets and sparse refill
     subject(4, '\u{10000}'),
     subject(5, ''),
     subject(6, ''),
-  ];
-  const observed = receiptObserver();
-  const reads: string[][] = [];
-  const { prefix, fake, service } = await deployment(books, {
-    client: observed.client,
-    source: (fake) => ({
-      read: (partition, ids) => {
-        reads.push([...ids]);
-        return fake.read(partition, ids);
-      },
-      count: (...args) => fake.count(...args),
-    }),
-  });
-  for (const n of [5, 6])
-    await client.request(
-      'POST',
-      `/${subjectIndexName(prefix, 1)}/_update/${books[n - 1]!.id}`,
-      { doc: { name_sort: null } },
-      { query: { refresh: true } },
-    );
+  ].map((book) => ({ ...book, descriptions: [{ language: 'en', value: 'Refill' }] }));
   for (const sort of ['id', 'name', 'collections', 'relevance'] as const) {
-    const request = { filter: { type: { in: ['schema:Book'] } }, sort, limit: 1 };
+    const observed = receiptObserver();
+    const reads: string[][] = [];
+    const { prefix, fake, service } = await deployment(books, {
+      client: observed.client,
+      source: (fake) => ({
+        read: (partition, ids) => {
+          reads.push([...ids]);
+          return fake.read(partition, ids);
+        },
+        count: (...args) => fake.count(...args),
+      }),
+    });
+    for (const n of [5, 6])
+      await client.request(
+        'POST',
+        `/${subjectIndexName(prefix, 1)}/_update/${books[n - 1]!.id}`,
+        { doc: { name_sort: null } },
+        { query: { refresh: true } },
+      );
+    // Relevance requires text. All six descriptions match; native scores may differ with document length.
+    const request = { text: 'refill', filter: { type: { in: ['schema:Book'] } }, sort, limit: 1 };
+    const complete = await service.search('anonymous', { ...request, limit: 10 });
+    expect(observed.calls).toHaveLength(1);
+    const nativeOrder = observed.calls[0]!.raw.hits.hits.map(({ _id }) => _id);
+    expect(ids(complete)).toEqual(nativeOrder);
+    expect(nativeOrder).toHaveLength(6);
+    if (sort !== 'relevance') expect(nativeOrder).toEqual(books.map(({ id }) => id));
     let cursor: string | undefined;
     const seen: string[] = [];
     observed.calls.length = 0;
@@ -684,18 +691,22 @@ test('native service keeps ordinary ties, Unicode/null keysets and sparse refill
       if (response.next === null) break;
       cursor = response.next;
     }
-    expect(seen).toEqual(books.map(({ id }) => id));
+    expect(seen).toEqual(nativeOrder);
     expect(new Set(seen).size).toBe(6);
     expect(observed.calls.length).toBeLessThanOrEqual(7);
-    console.info('native service ordinary keysets', JSON.stringify({ sort, calls: observed.calls, reads }));
-  }
-  // Remove the first native page's candidates only in current Source. The engine still returns them.
-  for (const book of books.slice(0, 3)) fake.put({ ...book, visibility: 'taken_down', securityRevision: 2 });
-  for (const sort of ['id', 'name', 'collections', 'relevance'] as const) {
+    console.info(
+      'native service ordinary keysets',
+      JSON.stringify({ sort, nativeOrder, calls: observed.calls, reads }),
+    );
+    // Hide exactly the first native page's candidates in current Source, preserving the native receipt.
+    for (const id of nativeOrder.slice(0, 3)) {
+      const book = books.find((book) => book.id === id)!;
+      fake.put({ ...book, visibility: 'taken_down', securityRevision: 2 });
+    }
     observed.calls.length = 0;
     reads.length = 0;
-    const page = await service.search('anonymous', { filter: { type: { in: ['schema:Book'] } }, sort, limit: 1 });
-    expect(ids(page)).toEqual([books[3]!.id]);
+    const page = await service.search('anonymous', request);
+    expect(ids(page)).toEqual([nativeOrder[3]!]);
     expect(page.next).toBeString();
     expect(observed.calls).toHaveLength(2);
     expect(observed.calls[1]!.request).toMatchObject({
@@ -703,7 +714,7 @@ test('native service keeps ordinary ties, Unicode/null keysets and sparse refill
     });
     expect(reads).toHaveLength(2);
     expect(reads.map((ids) => ids.length)).toEqual([3, 3]);
-    console.info('native service ordinary refill', JSON.stringify({ sort, calls: observed.calls, reads }));
+    console.info('native service ordinary refill', JSON.stringify({ sort, nativeOrder, calls: observed.calls, reads }));
   }
 }, 120_000);
 
