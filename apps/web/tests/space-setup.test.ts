@@ -234,3 +234,59 @@ test('uncertain retry and a head conflict retain identities and entered work; cu
   expect(applySetupResult(state, denied)).toBe(state);
   expect(retainSetupAttempt(denied)).toBe(false);
 });
+
+// Product rendering is kept with the two transport outcomes above; story plays exercise actual advance/save/retry.
+async function renderSetup(initial: SetupSnapshot | import('../src/community/space-setup').SetupFailure) {
+  const { createElement } = await import('react');
+  const { renderToString } = await import('react-dom/server');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { SpaceSetupForm } = await import('../src/community/space-setup-form');
+  const transport: import('../src/community/space-setup-form').SetupTransport = {
+    command: async () => ({ kind: 'failure', reason: 'denied', status: 403 }),
+    read: async () => initial,
+    choice: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  };
+  const root = createRootRoute({ component: () => createElement(SpaceSetupForm, { initial, transport }) });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/realms/new'] }) });
+  await router.load();
+  return renderToString(createElement(RouterProvider, { router }));
+}
+
+test('the actual setup starts with one identity form and keeps later steps progressive without a fabricated Realm', async () => {
+  const { m } = await import('../src/paraglide/messages.js');
+  const html = await renderSetup(empty);
+  expect(html.match(/<form/g)).toHaveLength(1);
+  expect(html.match(/<input/g)).toHaveLength(1);
+  expect(html).toContain(m.space_setup_create_space());
+  expect(html).toContain(m.space_setup_overview());
+  expect(html).toContain(m.space_setup_not_saved());
+  expect(html).not.toContain(m.space_setup_reference());
+  expect(html).not.toContain(m.space_setup_create_realm());
+  expect(html).not.toContain(m.space_setup_complete());
+});
+
+test('the actual unavailable or currently refused setup offers recovery without a writable fallback or a success claim', async () => {
+  const { m } = await import('../src/paraglide/messages.js');
+  const unavailable = await renderSetup({ kind: 'failure', reason: 'unavailable', status: 503 });
+  expect(unavailable).toContain(m.space_setup_refresh());
+  expect(unavailable).toContain('<fieldset disabled=""');
+  expect(unavailable).not.toContain(m.space_setup_complete());
+  const refused = await renderSetup({
+    kind: 'ready',
+    space: {
+      id: spaceRecording.space.spaceId,
+      head: spaceRecording.space.headRevisionId,
+      title: spaceRecording.space.title,
+      summary: spaceRecording.space.summary,
+      address: null,
+      realmId: null,
+    },
+    realm: null,
+    permitted: empty.permitted,
+  });
+  expect(refused).toContain(m.space_setup_denied());
+  expect(refused).toContain(spaceRecording.space.title);
+  expect(refused).not.toContain(spaceRecording.space.spaceId);
+  expect(refused).not.toContain('<input');
+  expect(refused).not.toContain(m.space_setup_complete());
+});

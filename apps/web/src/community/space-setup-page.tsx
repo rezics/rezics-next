@@ -25,7 +25,7 @@ export function SpaceSetupPage({
     choice: (kind, id) => resolveSpaceSetupChoice({ data: { kind, id } }),
   };
   return (
-    <article className="space-y-8 text-foreground">
+    <article className="mx-auto max-w-5xl space-y-6 text-foreground">
       <PageHeading>{m.space_setup_heading()}</PageHeading>
       <SpaceSetupForm initial={initial} transport={transport} />
     </article>

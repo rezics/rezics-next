@@ -1710,3 +1710,48 @@ Its cost is under Cost.
 Public composition previews keep their readable content when a group is closed. Links to individual collections
 require `collection.get`; an account collection list's continuation requires `account.collections`, since later
 pages use that standalone operation rather than the public composition read.
+
+### Guided community setup
+
+`/realms/new` reuses the `Patterns/Community/Space Setup` component inside the existing shell. It progresses through
+Space name/address, Realm settings and existing Context, board scheme, and the first board. Each step issues the
+existing ordinary command independently; the compact summary distinguishes saved resources from unfinished steps.
+Back keeps drafts, and Cancel pauses the editor with Resume on the same page. Unsaved entries, including unresolved
+selection references, survive those controls but are not persisted across navigation. Saved commands are not undone.
+
+The production transport remains `changeSpaceSetup`, `readSpaceSetup` and `resolveSpaceSetupChoice` in
+`community/space-actions.ts`. Context and SKOS subject point readers return real labels. No bounded catalogue reader
+for setup options is installed: the default chooser explicitly explains that browsing is unavailable and offers a
+single existing-reference lookup. It supplies no default Context, Realm, owner, Concept, membership or Global grant.
+The current server still checks parent creation grants, role authority, scheme membership and current readability.
+The existing Space home and lifecycle/removal controls remain the destination, rather than a second home layout.
+
+Uncertain requests lock editing and replay the entire saved command with its original key and expected head.
+Conflicts and current refusals preserve work and require an explicit current-state refresh before another write.
+A confirmed write keeps its returned identity even if the following read fails; recovery refreshes instead of
+replaying that confirmed write. Invalid selections and unavailable readers retain entered values.
+
+The complete Pattern folder has autodocs, a Journey docs page and these state IDs, shared across phone390 and
+desktop1280 through viewport, locale and theme globals:
+
+- `patterns-community-space-setup--rest`
+- `patterns-community-space-setup--entered-data`
+- `patterns-community-space-setup--selection`
+- `patterns-community-space-setup--loading`
+- `patterns-community-space-setup--saving`
+- `patterns-community-space-setup--retry-preserves-work`
+- `patterns-community-space-setup--configured-realm`
+- `patterns-community-space-setup--head-conflict`
+- `patterns-community-space-setup--current-authority-refused`
+- `patterns-community-space-setup--selection-unavailable`
+- `patterns-community-space-setup--unavailable`
+- `patterns-community-space-setup--created`
+
+The page composition ID remains `pages-community-space-setup--new-community`. Plays advance, select, save, retry,
+refresh a conflict/refusal, pause/resume and reach links containing returned native IDs. They use explicit typed
+transport fixtures; production source defaults remain the actual point readers and unavailable catalogue above.
+Native acceptance and Web/Root screenshot review follow integration; local typing does not establish those outcomes.
+
+The journey adds no reads to the existing two-resource snapshot and viewer-action batch. Each explicit selection
+performs one current point read. Rendering is linear in the fixed four steps and supplied labels, without catalogue
+scans, counts, membership probes, additional per-card requests or new continuations.
