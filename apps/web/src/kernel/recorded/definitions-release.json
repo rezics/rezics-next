@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:5ce80804c4cc09983190130049f7883ebdb2f628cd30db0f774d5889d23fa0bd",
+  "digest": "sha256:1fbf42a8b2a42ca0fd6fad47459f9e7ef3485ddcdb3ef3ea12786518b9f2b234",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -19,7 +19,8 @@
         "mappings": [],
         "coverRatio": "1:1",
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
-        "schemaOrgType": "https://schema.org/Thing"
+        "schemaOrgType": "https://schema.org/Thing",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "wd:Q95074": {
         "iri": "http://www.wikidata.org/entity/Q95074",
@@ -68,7 +69,8 @@
           "zh-Hans": "虚构角色",
           "zh-Hant": "虛構角色"
         },
-        "schemaOrgType": "https://schema.org/Thing"
+        "schemaOrgType": "https://schema.org/Thing",
+        "listPresentation": { "keyFacts": [], "imageAspect": "portrait" }
       },
       "wd:Q209163": {
         "iri": "http://www.wikidata.org/entity/Q209163",
@@ -163,7 +165,8 @@
           "zh-Hans": "资料片",
           "zh-Hant": "資料片"
         },
-        "schemaOrgType": "https://schema.org/CreativeWork"
+        "schemaOrgType": "https://schema.org/CreativeWork",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "wd:Q689445": {
         "iri": "http://www.wikidata.org/entity/Q689445",
@@ -237,7 +240,11 @@
           "wdt:P361",
           "wdt:P725"
         ],
-        "schemaOrgType": "https://schema.org/VideoGame"
+        "schemaOrgType": "https://schema.org/VideoGame",
+        "listPresentation": {
+          "keyFacts": ["schema:author", "schema:datePublished", "schema:genre"],
+          "imageAspect": "portrait"
+        }
       },
       "bf:Instance": {
         "iri": "http://id.loc.gov/ontologies/bibframe/Instance",
@@ -323,7 +330,11 @@
           "fr": "version, édition ou traduction",
           "zh-Hans": "作品版本或翻译"
         },
-        "schemaOrgType": "https://schema.org/Book"
+        "schemaOrgType": "https://schema.org/Book",
+        "listPresentation": {
+          "keyFacts": ["schema:author", "schema:datePublished", "schema:numberOfPages"],
+          "imageAspect": "portrait"
+        }
       },
       "schema:Book": {
         "iri": "http://schema.org/Book",
@@ -395,7 +406,11 @@
           "ko": "저작물",
           "zh-Hans": "书面作品"
         },
-        "schemaOrgType": "https://schema.org/Book"
+        "schemaOrgType": "https://schema.org/Book",
+        "listPresentation": {
+          "keyFacts": ["schema:author", "schema:datePublished", "schema:wordCount"],
+          "imageAspect": "portrait"
+        }
       },
       "wd:Q2620972": {
         "iri": "http://www.wikidata.org/entity/Q2620972",
@@ -440,7 +455,8 @@
           "wdt:P179",
           "wdt:P361"
         ],
-        "schemaOrgType": "https://schema.org/CreativeWork"
+        "schemaOrgType": "https://schema.org/CreativeWork",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "wd:Q7725310": {
         "iri": "http://www.wikidata.org/entity/Q7725310",
@@ -494,7 +510,8 @@
           "zh-Hans": "系列创意作品",
           "zh-Hant": "系列創意作品"
         },
-        "schemaOrgType": "https://schema.org/CreativeWorkSeries"
+        "schemaOrgType": "https://schema.org/CreativeWorkSeries",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "schema:Movie": {
         "iri": "http://schema.org/Movie",
@@ -577,7 +594,11 @@
           "wdt:P7937",
           "wdt:P973"
         ],
-        "schemaOrgType": "https://schema.org/Movie"
+        "schemaOrgType": "https://schema.org/Movie",
+        "listPresentation": {
+          "keyFacts": ["schema:director", "schema:datePublished", "schema:duration"],
+          "imageAspect": "landscape"
+        }
       },
       "skos:Concept": {
         "iri": "http://www.w3.org/2004/02/skos/core#Concept",
@@ -604,7 +625,8 @@
           "skos:broader",
           "skos:inScheme"
         ],
-        "schemaOrgType": "https://schema.org/DefinedTerm"
+        "schemaOrgType": "https://schema.org/DefinedTerm",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "wd:Q20631656": {
         "iri": "http://www.wikidata.org/entity/Q20631656",
@@ -709,7 +731,8 @@
           "wdt:P648"
         ],
         "descriptions": { "de": "Mensch", "es": "ser humano", "fr": "être humain", "zh-Hans": "人类" },
-        "schemaOrgType": "https://schema.org/Person"
+        "schemaOrgType": "https://schema.org/Person",
+        "listPresentation": { "keyFacts": ["schema:birthDate"], "imageAspect": "portrait" }
       },
       "schema:Recipe": {
         "iri": "http://schema.org/Recipe",
@@ -751,7 +774,8 @@
           "schema:url",
           "wdt:P186"
         ],
-        "schemaOrgType": "https://schema.org/Recipe"
+        "schemaOrgType": "https://schema.org/Recipe",
+        "listPresentation": { "keyFacts": ["schema:cookTime", "schema:suitableForDiet"], "imageAspect": "landscape" }
       },
       "schema:Episode": {
         "iri": "http://schema.org/Episode",
@@ -833,7 +857,11 @@
           "wdt:P58",
           "wdt:P725"
         ],
-        "schemaOrgType": "https://schema.org/Episode"
+        "schemaOrgType": "https://schema.org/Episode",
+        "listPresentation": {
+          "keyFacts": ["schema:director", "schema:datePublished", "schema:duration"],
+          "imageAspect": "landscape"
+        }
       },
       "schema:TVSeason": {
         "iri": "http://schema.org/TVSeason",
@@ -923,7 +951,11 @@
           "zh-Hans": "编播季",
           "zh-Hant": "編播季"
         },
-        "schemaOrgType": "https://schema.org/TVSeason"
+        "schemaOrgType": "https://schema.org/TVSeason",
+        "listPresentation": {
+          "keyFacts": ["schema:director", "schema:datePublished", "schema:numberOfEpisodes"],
+          "imageAspect": "landscape"
+        }
       },
       "schema:TVSeries": {
         "iri": "http://schema.org/TVSeries",
@@ -1010,7 +1042,11 @@
           "wdt:P973"
         ],
         "descriptions": { "ja": "テレビ番組シリーズ", "zh-Hans": "电视系列节目", "zh-Hant": "電視系列節目" },
-        "schemaOrgType": "https://schema.org/TVSeries"
+        "schemaOrgType": "https://schema.org/TVSeries",
+        "listPresentation": {
+          "keyFacts": ["schema:director", "schema:datePublished", "schema:numberOfEpisodes"],
+          "imageAspect": "landscape"
+        }
       },
       "schema:VideoGame": {
         "iri": "http://schema.org/VideoGame",
@@ -1094,7 +1130,8 @@
           "wdt:P725",
           "wdt:P973"
         ],
-        "schemaOrgType": "https://schema.org/VideoGame"
+        "schemaOrgType": "https://schema.org/VideoGame",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "schema:BookSeries": {
         "iri": "http://schema.org/BookSeries",
@@ -1154,7 +1191,8 @@
           "wdt:P361",
           "wdt:P973"
         ],
-        "schemaOrgType": "https://schema.org/BookSeries"
+        "schemaOrgType": "https://schema.org/BookSeries",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "schema:MusicAlbum": {
         "iri": "http://schema.org/MusicAlbum",
@@ -1204,7 +1242,8 @@
           "wdt:P361",
           "wdt:P5732"
         ],
-        "schemaOrgType": "https://schema.org/MusicAlbum"
+        "schemaOrgType": "https://schema.org/MusicAlbum",
+        "listPresentation": { "keyFacts": ["schema:datePublished", "schema:genre"], "imageAspect": "square" }
       },
       "schema:ComicSeries": {
         "iri": "http://schema.org/ComicSeries",
@@ -1279,7 +1318,11 @@
           "zh-Hans": "日本系列漫画",
           "zh-Hant": "日本系列漫畫"
         },
-        "schemaOrgType": "https://schema.org/ComicSeries"
+        "schemaOrgType": "https://schema.org/ComicSeries",
+        "listPresentation": {
+          "keyFacts": ["schema:author", "schema:datePublished", "schema:genre"],
+          "imageAspect": "portrait"
+        }
       },
       "skos:ConceptScheme": {
         "iri": "http://www.w3.org/2004/02/skos/core#ConceptScheme",
@@ -1298,7 +1341,8 @@
         "mappings": [],
         "coverRatio": "1:1",
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
-        "schemaOrgType": "https://schema.org/DefinedTermSet"
+        "schemaOrgType": "https://schema.org/DefinedTermSet",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "rezics:AnimeRelease": {
         "iri": "https://rezics.com/vocab/AnimeRelease",
@@ -1389,7 +1433,8 @@
           "zh-Hans": "独立标识的动画出版或发行版本，与作品本身分开。",
           "zh-Hant": "具有獨立識別身分的動畫出版或發行版本，與作品本身分開。"
         },
-        "schemaOrgType": "https://schema.org/CreativeWork"
+        "schemaOrgType": "https://schema.org/CreativeWork",
+        "listPresentation": { "keyFacts": ["schema:datePublished", "schema:director"], "imageAspect": "landscape" }
       },
       "schema:Organization": {
         "iri": "http://schema.org/Organization",
@@ -1408,7 +1453,8 @@
         "mappings": ["wd:Q43229"],
         "coverRatio": "1:1",
         "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
-        "schemaOrgType": "https://schema.org/Organization"
+        "schemaOrgType": "https://schema.org/Organization",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       },
       "schema:PublicationVolume": {
         "iri": "http://schema.org/PublicationVolume",
@@ -1476,7 +1522,11 @@
           "wdt:P5732",
           "wdt:P725"
         ],
-        "schemaOrgType": "https://schema.org/PublicationVolume"
+        "schemaOrgType": "https://schema.org/PublicationVolume",
+        "listPresentation": {
+          "keyFacts": ["schema:author", "schema:datePublished", "schema:numberOfPages"],
+          "imageAspect": "portrait"
+        }
       },
       "schema:SoftwareApplication": {
         "iri": "http://schema.org/SoftwareApplication",
@@ -1495,7 +1545,8 @@
         "mappings": ["wd:Q166142"],
         "coverRatio": "1:1",
         "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
-        "schemaOrgType": "https://schema.org/SoftwareApplication"
+        "schemaOrgType": "https://schema.org/SoftwareApplication",
+        "listPresentation": { "keyFacts": [], "imageAspect": "square" }
       }
     },
     "format": "https://rezics.com/definitions/release/1",
