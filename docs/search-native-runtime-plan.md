@@ -406,7 +406,8 @@ Supplied pools, Source and OpenSearch belong to the host and remain open until h
 ### Request-slice files and generated closure
 
 Implement `search/public-filter-runtime.ts` and adopt its narrow trusted constructor/output.
-Update `search/service.ts`, `search/http/routes.ts` and `server.ts` at the call sites above.
+Update `search/service.ts`, `search/http/routes.ts`, `http/kernel.ts` and `server.ts`
+at the call sites above, including the proposed post-catalogue native Access handoff.
 Update `search/public-filter-consumer-contract.ts/.md` only through their owner for adopted joins;
 the mechanics writer remains the sole writer of `search/public-filter-consumer.ts` behavior.
 Update `semantic/public-filter-source-contract.ts/.md` through Semantic for binding/join declarations.
@@ -421,8 +422,8 @@ Other Zone, TypeList and Collection consumers import the adopted capability when
 They do not gain default-catalogue evidence merely by sharing this service object.
 
 Keep HTTP response shapes unchanged, including count omission and existing Problem variants.
-Run `services/kernel/scripts/openapi.ts` only in the later implementation if route declarations change,
-using the owning documented generation command; review the generated schema and client diff together.
+Run `bun run --cwd services/kernel derived` only in the later implementation if route declarations
+change; it invokes the owning OpenAPI/client generators. Review both generated outputs together.
 Do not hand-edit generated client shapes or widen DTOs to carry internal locators.
 The artifact-only change here generates no runtime/client/schema files.
 
@@ -704,8 +705,11 @@ Do not import the superseded `coverage.ts` coordinator as a population implement
 Reconcile `search/indexer.ts` only to expose/reuse its current bounded owned apply path.
 Keep exact per-chunk source versions, current fences, normalization and keyed write outcomes.
 Do not fork `write-actions.ts` behavior for cold population.
-Any required typed SQL changes generate their owning `db/search` or `db/semantic` artifacts
-through the kernel's existing SQL generation command and include generated imports in typechecking.
+For migrations, run `bun run --cwd services/kernel derived schema` in the later implementation;
+it regenerates committed `db/schema.sql` and module `db/<module>/schema.sql` from fresh migrations.
+For SQL statements under `src`, run `bun run --cwd services/kernel analyse` for the owning release
+analysis in `dist/reylo`; these are Reylo analyses, not committed generated TypeScript SQL ports.
+Include changed SQL imports in the owning typecheck/check closure and retain every required analysis.
 No new package dependency, external service or generated public API is selected.
 
 Add `test/search/default-public-filter-population.test.ts` and
@@ -741,7 +745,8 @@ Do not infer sharing from equal DSL or from the first page's returned rows.
 Public-query retention needs native principal-class quota and a global admission cap before writes.
 `docs/search-conditions.md` explicitly withholds a free public retained store.
 No numeric public quota is declared by this proposal; copying the owner allowance would invent permission.
-Select native definition admission from the existing configured/released read-definition registry.
+Select native definition admission from the Source-binding producer's configured/released
+read-definition registry, adopted with the proposed grant facility below.
 Only definitions with a current retention grant may create or keep a shared prepared generation.
 The grant is resolved internally with the actual definition; no request supplies it.
 This native admitted-definition/grant facility is an owner producer requirement, not a callable
@@ -1281,7 +1286,8 @@ Existing native-cut reports supply the accepted counterexamples and remaining ev
 they are not a second research round or proof that the missing runtime is impossible.
 
 Reference reading used the read-only reference index and OpenSearch 3.9.0 source via `git show`
-at the index's pinned revision in `.reference/search-rating-populations/opensearch`:
+at the index's pinned revision `4ee42a94e87f66fbf1e62a9871b1b87f91e02472`
+in `.reference/search-rating-populations/opensearch`:
 `server/src/main/java/org/opensearch/action/search/CreatePitController.java` and
 `server/src/main/java/org/opensearch/search/profile/query/QueryTimingType.java`.
 The upstream repository is [OpenSearch](https://github.com/opensearch-project/OpenSearch), Apache-2.0.
