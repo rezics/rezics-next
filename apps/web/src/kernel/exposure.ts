@@ -47,6 +47,7 @@ export const operationGroups = {
   'order.create': 'purchases',
   'order.get': 'purchases',
   'order.list': 'purchases',
+  'entitlement.get': 'purchases',
   'progress_session.list': 'reading_progress',
   'progress_session.create': 'reading_progress',
   'progress_session.read': 'reading_progress',

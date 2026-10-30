@@ -478,7 +478,6 @@ const neverCalled = [
   'payout_statement.lines',
   'payout_statement.mark_paid',
   'entitlement.list',
-  'entitlement.get',
   'rating.vote_delete',
   'rating.vote_get',
   'rating.vote_put',

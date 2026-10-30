@@ -1,10 +1,10 @@
 import { Exposure, useOperation } from '../kernel/exposure';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import type { OrderPageData, Settlement } from './order';
+import type { CurrentEntitlement, OrderPageData, Settlement } from './order';
 import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
 
@@ -18,35 +18,45 @@ function normalize(value: string): Settlement {
   return 'unknown';
 }
 
+/** Status polling updates settlement only; current access needs a fresh page read. */
+export function applyOrderStatus(order: OrderPageData, settlement: Settlement, offerId: string): OrderPageData {
+  if (order.settlement === settlement && order.offerId === offerId) return order;
+  return { ...order, settlement, offerId, entitlement: { kind: 'refresh' } };
+}
+
+function entitlementLabel(entitlement: CurrentEntitlement): string {
+  if (entitlement.kind === 'current')
+    return entitlement.active ? m.order_entitlement_active() : m.order_entitlement_revoked();
+  if (entitlement.kind === 'none') return m.orders_entitlement_none();
+  if (entitlement.kind === 'refresh') return m.order_entitlement_refresh();
+  return m.order_entitlement_unavailable();
+}
+
 export function OrderPage({ order: initial, checkout }: { order: OrderPageData; checkout?: 'canceled' | 'success' }) {
   const [order, setOrder] = useState(initial);
   const [gaveUp, setGaveUp] = useState(false);
+  const polls = useRef(0);
   const canReadOrder = useOperation('order.get');
   useEffect(() => {
     if (checkout === 'canceled' || !openSettlement.has(order.settlement)) return;
-    let polls = 0;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const recheck = () => {
       timer = setTimeout(async () => {
         if (stopped) return;
-        if (polls >= recheckLimit) {
+        if (polls.current >= recheckLimit) {
           setGaveUp(true);
           return;
         }
-        polls += 1;
-        const attempt = polls;
+        polls.current += 1;
+        const attempt = polls.current;
         try {
           const response = await fetch(`/orders/${order.id}/status`, { headers: { accept: 'application/json' } });
           if (response.ok && !stopped) {
             const body = (await response.json()) as { settlement?: unknown; offerId?: unknown };
             if (typeof body.settlement === 'string' && typeof body.offerId === 'string') {
               const settlement = normalize(body.settlement);
-              setOrder((current) =>
-                current.settlement === settlement && current.offerId === body.offerId
-                  ? current
-                  : { ...current, settlement, offerId: body.offerId as string },
-              );
+              setOrder((current) => applyOrderStatus(current, settlement, body.offerId as string));
               if (!openSettlement.has(settlement) || attempt >= recheckLimit) {
                 if (openSettlement.has(settlement)) setGaveUp(true);
                 return;
@@ -123,6 +133,10 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
           </div>
         </div>
       </div>
+      <dl className="space-y-1">
+        <dt className="font-medium">{m.order_current_access()}</dt>
+        <dd role="status">{entitlementLabel(order.entitlement)}</dd>
+      </dl>
       {confirming && (
         <Alert role="status">
           <AlertDescription className="text-foreground">{m.order_confirming()}</AlertDescription>
@@ -174,7 +188,7 @@ export function OrderPage({ order: initial, checkout }: { order: OrderPageData; 
           </AlertDescription>
         </Alert>
       )}
-      {gaveUp && pending && (
+      {((gaveUp && pending) || order.entitlement.kind === 'refresh') && (
         <Button
           variant="outline"
           size="lg"

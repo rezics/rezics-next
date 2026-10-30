@@ -1,15 +1,20 @@
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
-import { loadOrder } from './order.server';
+import { loadOrderPage } from './order.server';
 import { UUID } from './price';
 import type { SubjectCoverData } from './subject-cover';
 
 export type Settlement = 'failed' | 'paid' | 'pending' | 'unknown';
+export type CurrentEntitlement =
+  | { kind: 'current'; active: boolean }
+  | { kind: 'none' | 'unavailable' | 'refresh' };
 export type OrderPageData = {
   id: string;
   offerId: string;
   title: string;
   settlement: Settlement;
+  entitlementId: string | null;
+  entitlement: CurrentEntitlement;
   /** Creation time is present in the order read; it is not a payment-settlement time. */
   createdAt: string;
   subject: SubjectCoverData;
@@ -32,4 +37,4 @@ function validateOrder(input: unknown): { id: string; locale: string } {
 
 export const readOrder = createServerFn({ method: 'GET' })
   .validator(validateOrder)
-  .handler(({ data }) => loadOrder(data.id, data.locale));
+  .handler(({ data }) => loadOrderPage(data.id, data.locale));
