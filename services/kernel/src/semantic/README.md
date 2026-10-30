@@ -423,11 +423,12 @@ terminals and corrections preserve unrelated later edits.
 
 ### Native cutover and retained evidence
 
-The [owning native contract](identity-epoch-contract.md#native-cutover-adoption) requires all 4096 homes, including
-empty/unselected homes and actual owner epochs, every birth/writer/queued continuation, native source export,
+The [owning native contract](identity-epoch-contract.md#native-cutover-adoption) requires locked native absence
+custody for a fresh installation or all 4096 legacy homes, including empty/unselected homes and actual owner epochs.
+Both paths retain every birth/writer/queued continuation, native source export,
 receiving custody BEFORE exact-head ACK, and home barrier plus deferred SAME-TX final guard. Ordinary/import
 births initialize self at the SUBJECT source home; account-agent births use account home. Real scheduler/bootstrap
-must close coverage; readEpoch side effects, seeded rows or preset readiness are insufficient. Actual guard races
+or actual locked absence installation must close coverage; readEpoch side effects, seeded rows or preset readiness are insufficient. Actual guard races
 cover verify AND reversal in flight; an owner move proves retryable availability, not the final guard.
 
 Immutable input refs plus a constant transform form the affected index before effect gates run. Current generations

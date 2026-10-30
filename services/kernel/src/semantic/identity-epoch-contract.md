@@ -470,7 +470,8 @@ uncovered writers at cutover. A missing aggregate, absent mapping or default epo
 owners use native partition availability and routing; the job remains pending until actual ownership resolves.
 `stepIdentityEpochBootstrap(pool, partition)` implements retained subject/member/dirty keysets, native export,
 receiving custody and exact-head source ACK. `stepIdentityEpochBootstrapWork(pool)` is the actual default-worker
-scheduler over all 4096 topology slots. Fixture inserts are source data; only those native receipts establish closure.
+legacy scheduler over all 4096 topology slots. Fixture inserts are source data; only actual native receipts establish
+legacy closure. Default installation may instead establish locked absence custody as specified below.
 
 The home fence has a required ordering proof. Install the pending gate at each affected destination before mapping
 or participant effects there. Installation serializes against old-epoch apply in that home: an apply committed first
@@ -807,8 +808,8 @@ read-only evidence under the reference paths listed in the integrated reports; n
 
 ## Native cutover adoption
 
-All 4096 native partition homes, including empty and unselected homes, require actual scheduler/bootstrap closure
-and native owner epochs; each has sixteen routes. Fixture seeding is before final guards. `readEpoch` is not an
+Legacy deployments require actual scheduler/bootstrap closure and native owner epochs at all 4096 native partition
+homes, including empty and unselected homes; each has sixteen routes. Fixture seeding is before final guards. `readEpoch` is not an
 implicit scheduler, preset bootstrapReady is not proof, and an unsealed bootstrap group is not G=0/free storage.
 Birth initialization, source capture, OLD/NEW dirty export, native custody and deferred writer guard are required
 in the actual owners. The following actual writer inventory retains native source bindings.
@@ -900,7 +901,9 @@ redelivers the same retained page/receipt and then that exact ACK. No next front
 export. A replayed saved empty page proves only its captured generation; it cannot close a newer dirty head or new
 writer generation. Closure binds exhausted base/member frontiers, drained captured heads, all exports in custody,
 complete unfinished old work, installed mapping and native barrier/owner epoch. Reduce exact coverage incrementally
-across all 4096 slots, decrementing once per validated slot; a zero counter alone is not proof.
+across all 4096 legacy slots, decrementing once per validated slot; a zero counter alone is not proof. A fresh
+installation may instead prove native absence under the installation/writer cut described below; that proof is
+separate from topology custody and never supplies fabricated home receipts.
 
 Post-conversion births continue source-locally with exact self evidence. They need not keep a finite legacy drain
 permanently open. Structural admission on a new original waits for actual enrollment custody and never guesses a
@@ -1235,7 +1238,7 @@ catalogue/DDL/trigger costs and installation waiting remain visible in their act
 
 - Bound: O(n) examined rows,
   O(n(log A+log G+log(R+L+H))) blocks, EACH actual command's K+body. Each saved page costs THREE distinct native
-  transactions: export, custody, ACK. At least ceil(4096/100) topology pages before metadata, with empty homes
+  transactions: export, custody, ACK. Legacy closure needs at least ceil(4096/100) topology pages before metadata, with empty homes
   included; actual capacity is smaller after metadata/lookahead. Large page payload/custody subdivides within
   unit, retaining exact source receipt/head across steps.
 
@@ -1310,7 +1313,7 @@ never full publication success. Native setup failures before a named assertion a
 | Library owner write order    | Retain existing native allocator rollback/replay, wrong-home/authorization, bigint and independent-owner cases. Separately require actual set/equal-set/clear/Undo writer allocation, legacy-null readiness refusal and bounded cutover, live/archive distinction, and separate exact terminal counter cleanup under Library erasure custody. Helper-only consumer probes do not prove those production paths.                                                                      |
 | Public HTTP                  | Native POST body/Auth/quoted key/202 ONLY after admitted/Location and same authorized replay; conflicting key; poll pending/completed/unknown/denied/revoked/hidden original concealment. Native held pre-suspension token 401 invalid_credentials/Bearer invalid_token and Auth sign-in 403 actual shape, never invented valid suspended bearer.                                                                                                                                   |
 | Accounts publication         | Verify and reversal keep successful DTO and wait before approval/page/finish/clear. Busy/capacity retry same native decision/reversal intent, crash before/after job return; already-verified/reversal replay waits publication; no worker held during durable sleep.                                                                                                                                                                                                               |
-| Cutover topology and birth   | EXPLICIT real scheduler/bootstrap closure on all 4096 including empty/unselected homes and actual owner epochs; lower-key births after frontier, failed birth rollback/revision1, ordinary/import correct source home and named/unnamed person/org/software account-agent births. Legacy seed before final guard. Missing native bootstrap callable remains red.                                                                                                                    |
+| Cutover topology and birth   | Locked native absence custody for fresh installation, or EXPLICIT real legacy scheduler/bootstrap closure on all 4096 including empty/unselected homes and actual owner epochs; lower-key births after frontier, failed birth rollback/revision1, ordinary/import correct source home and named/unnamed person/org/software account-agent births. Legacy seed before final guard. Missing native bootstrap callable remains red.                                                    |
 | Writer final handoff         | Actual verify AND reversal in flight before/after installed home barrier/deferred SAME-TX guard, queued merge/move/link/reversal continuations. Owner move shows availability retry only; separate legitimate native guard race proves handoff. Active-XID1/8/64 only when inspected.                                                                                                                                                                                               |
 | Native structural semantics  | Larger survivor, split/restore/repoint, overlapping undo/replay preserve direct terminals and exact immutable counts; first/deep/empty/shared100/101 changes include overlap/lookahead/retries without free row101; current flat lookup never follows ancestors.                                                                                                                                                                                                                    |
 | Export/custody               | Lower dirty head, OLD+NEW key-changing update, delete negative, saved empty replay, source export crash before custody and custody before source ACK; failed ACK of h leaves h+1; failed/moved control custody retains exact page and native receipt.                                                                                                                                                                                                                               |

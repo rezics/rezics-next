@@ -40,7 +40,7 @@ BEGIN
       AND m.origin='creation' AND m.terminal=r.subject_id AND m.control_group=r.subject_id
       AND m.control_partition=r.route/16 AND m.owner_epoch=p.epoch AND p.write_state='active'
       AND m.epoch>0 AND g.epoch=m.epoch AND g.terminal=r.subject_id
-      AND m.pending_job IS NULL AND g.pending_job IS NULL
+      AND g.pending_job IS NULL AND g.pending_epoch IS NULL
   ) THEN RAISE EXCEPTION 'identity_epoch_birth_custody_required'; END IF;
   RETURN NEW;
 END; $$;
@@ -102,11 +102,13 @@ BEGIN
       SELECT 1 FROM semantic.revision r
       JOIN semantic.identity_epoch_mapping m ON (m.route,m.original)=(r.route,r.subject_id)
       JOIN semantic.identity_epoch_home_gate g ON (g.route,g.destination,g.original)=(r.route,r.subject_id,r.subject_id)
+      JOIN core.partition p ON p.partition_no=r.route/16
       WHERE r.route=s.route AND r.subject_id=s.subject_id AND r.revision=1 AND r.kind='create'
         AND r.recorded_transaction_id=m.recorded_transaction_id AND r.recorded_transaction_id=g.recorded_transaction_id
         AND r.xmin=m.xmin AND r.xmin=g.xmin AND m.origin='creation'
         AND m.terminal=r.subject_id AND m.control_group=r.subject_id AND m.control_partition=r.route/16
-        AND m.epoch>0 AND g.epoch=m.epoch AND g.terminal=r.subject_id AND m.pending_job IS NULL AND g.pending_job IS NULL
+        AND m.owner_epoch=p.epoch AND p.write_state='active'
+        AND m.epoch>0 AND g.epoch=m.epoch AND g.terminal=r.subject_id AND g.pending_job IS NULL AND g.pending_epoch IS NULL
     )
   ) OR EXISTS (SELECT 1 FROM semantic.revision r WHERE NOT EXISTS (
     SELECT 1 FROM semantic.subject s WHERE (s.route,s.subject_id)=(r.route,r.subject_id)))
