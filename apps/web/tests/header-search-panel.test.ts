@@ -151,8 +151,12 @@ describe('bounded suggestion boundary', () => {
         'Scoped suggestions are unavailable',
       );
       expect(calls).toBe(0);
-      await readHeaderSuggestions(loadGlobalHeaderSuggestions, 'Prince & fox', 'zh-Hans', new AbortController().signal);
+      const controller = new AbortController();
+      await readHeaderSuggestions(loadGlobalHeaderSuggestions, 'Prince & fox', 'zh-Hans', controller.signal);
       expect(calls).toBe(1);
+      expect(requests).toEqual([
+        { url: '/api/search/suggestions?q=Prince%20%26%20fox&locale=zh-Hans', signal: controller.signal },
+      ]);
     } finally {
       globalThis.fetch = original;
     }
