@@ -66,10 +66,16 @@ export async function mediaRealmDownloadFixture() {
   const actions = [...actionCatalogue(kernel).keys()].sort();
   const ordinaryScopes = actions.filter((action) => action !== 'media:complete');
   const ordinaryClientId = `media_realm_${crypto.randomUUID()}`;
+  const governanceClientId = `media_realm_governance_${crypto.randomUUID()}`;
   await registerTestClient(auth.host.service, {
     clientId: ordinaryClientId,
     firstParty: true,
     scopes: ordinaryScopes,
+  });
+  await registerTestClient(auth.host.service, {
+    clientId: governanceClientId,
+    firstParty: true,
+    scopes: [...ordinaryScopes, 'gate:any'],
   });
 
   const websiteKeyPair = await generateKeyPair('ES256', { extractable: true });
@@ -178,11 +184,13 @@ export async function mediaRealmDownloadFixture() {
   async function person(role: string): Promise<MediaRealmPerson> {
     const name = `media_${role}_${crypto.randomUUID()}`;
     const registered = await auth.person(name);
+    const clientId = role === 'governor' ? governanceClientId : ordinaryClientId;
+    const scopes = role === 'governor' ? [...ordinaryScopes, 'gate:any'] : ordinaryScopes;
     const signed = await auth.request('/signin', {
       email: `${name}@ordinary.test`,
       password,
-      client_id: ordinaryClientId,
-      scope: ordinaryScopes,
+      client_id: clientId,
+      scope: scopes,
     });
     expect(signed.status).toBe(200);
     const ordinaryToken = await auth.request('/token', {}, cookies(signed));
