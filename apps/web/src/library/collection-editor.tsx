@@ -2,6 +2,7 @@ import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
 import type { DragEvent, ReactNode } from 'react';
@@ -168,6 +169,7 @@ export function CollectionMemberList({
         const localizedTitle = member.subject ? pageText(libraryTitleValue(member.subject.label), getLocale()) : null;
         const title = localizedTitle?.text ?? m.library_subject_unavailable();
         const href = member.subject ? subjectHref({ id: member.subject.id, label: title }, getLocale()) : null;
+        const noteId = `collection-member-note-${member.id}`;
         const rowRatio = collectionMemberRatio(member.subject, typeRatios, listPresentations);
         const landscape = rowRatio === '16:9' || rowRatio === '4:3';
         const columns = editing
@@ -241,21 +243,25 @@ export function CollectionMemberList({
             </div>
             {editing && member.subject ? (
               <ListRowControl className="col-span-2 col-start-2">
-                <Textarea
-                  aria-label={`${m.library_member_note()}: ${title}`}
-                  className="min-h-16"
-                  disabled={busy}
-                  maxLength={20_000}
-                  value={member.note ?? ''}
-                  onChange={(event) => onNoteChange?.(member.id, event.target.value)}
-                />
+                <Field className="min-w-0 gap-1">
+                  <FieldLabel htmlFor={noteId}>{m.library_member_note()}</FieldLabel>
+                  <Textarea
+                    id={noteId}
+                    aria-label={`${m.library_member_note()}: ${title}`}
+                    className="min-h-16"
+                    disabled={busy}
+                    maxLength={20_000}
+                    value={member.note ?? ''}
+                    onChange={(event) => onNoteChange?.(member.id, event.target.value)}
+                  />
+                </Field>
               </ListRowControl>
             ) : member.subject && member.note ? (
               <p data-slot="collection-member-note" className="col-start-2 line-clamp-2 text-sm text-muted-foreground">
                 {member.note}
               </p>
             ) : null}
-            <ListRowControl className={`col-start-2 flex flex-wrap items-center gap-1 ${editing ? 'col-span-2' : ''}`}>
+            <ListRowControl className={`col-start-2 flex flex-wrap items-center gap-2 ${editing ? 'col-span-2' : ''}`}>
               {onCopy && member.subject ? (
                 <Menu
                   title={m.library_collection_actions()}
@@ -272,7 +278,8 @@ export function CollectionMemberList({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-sm"
+                    size="icon-lg"
+                    className="size-11 sm:size-9"
                     aria-label={m.library_member_move_up()}
                     disabled={busy || moveUpAfter === undefined}
                     onClick={() => moveUpAfter !== undefined && onMove?.(member.id, moveUpAfter)}
@@ -282,7 +289,8 @@ export function CollectionMemberList({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-sm"
+                    size="icon-lg"
+                    className="size-11 sm:size-9"
                     aria-label={m.library_member_move_down()}
                     disabled={busy || nextAfter === undefined || (!firstPage && index === 0)}
                     onClick={() => nextAfter !== undefined && onMove?.(member.id, nextAfter)}
@@ -292,7 +300,8 @@ export function CollectionMemberList({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-sm"
+                    size="icon-lg"
+                    className="ms-2 size-11 sm:size-9"
                     aria-label={m.library_member_remove()}
                     disabled={busy}
                     onClick={() => onRemove?.(member.id)}

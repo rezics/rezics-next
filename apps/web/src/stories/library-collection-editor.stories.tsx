@@ -91,6 +91,13 @@ export const Members: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
     await expect(canvas.getAllByRole('checkbox')).toHaveLength(4);
+    for (const row of canvasElement.querySelectorAll<HTMLElement>('[data-collection-members] [data-member]')) {
+      const label = within(row).getByText(m.library_member_note(), { selector: 'label', exact: true });
+      const note = within(row).getByRole('textbox');
+      await expect(label).toBeVisible();
+      await expect(label).toHaveAttribute('for', note.id);
+      await expect(note).toHaveAttribute('id', `collection-member-note-${row.dataset.member}`);
+    }
   },
 };
 export const Selection: Story = {
@@ -106,8 +113,29 @@ export const Reordering: Story = {
   render: () => renderEditor(),
   play: async ({ canvasElement }) => {
     const canvas = await openEditor(canvasElement);
+    const row = within(firstRow(canvasElement));
+    const controls = [m.library_member_move_up(), m.library_member_move_down(), m.library_member_remove()].map(
+      (name) => row.getByRole('button', { name }),
+    );
+    const minimumTarget = window.matchMedia('(min-width: 640px)').matches ? 36 : 44;
+    for (const control of controls) {
+      const target = control.getBoundingClientRect();
+      await expect(target.width).toBeGreaterThanOrEqual(minimumTarget);
+      await expect(target.height).toBeGreaterThanOrEqual(minimumTarget);
+    }
+    for (let index = 1; index < controls.length; index++) {
+      const previous = controls[index - 1]!.getBoundingClientRect();
+      const current = controls[index]!.getBoundingClientRect();
+      const gap = Math.max(
+        current.left - previous.right,
+        previous.left - current.right,
+        current.top - previous.bottom,
+      );
+      await expect(gap).toBeGreaterThanOrEqual(index === 2 && current.top < previous.bottom ? 16 : 8);
+    }
     const down = within(firstRow(canvasElement)).getByRole('button', { name: m.library_member_move_down() });
     down.focus();
+    await expect(down).toHaveFocus();
     await userEvent.keyboard('{Enter}');
     await expect(firstRow(canvasElement)).toHaveTextContent('The Tale of Genji');
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
@@ -131,6 +159,8 @@ export const Note: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_save() }));
     await waitFor(() => expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull());
     await expect(await canvas.findByText('A saved note', { exact: true })).toBeVisible();
+    await openEditor(canvasElement);
+    await expect(within(firstRow(canvasElement)).getByRole('textbox')).toHaveValue('A saved note');
   },
 };
 export const SavePending: Story = {
