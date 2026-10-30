@@ -44,6 +44,7 @@ import type { NavigationContribution, NavigationSession } from './navigation';
 import { FeatureSlotsProvider } from './feature-slots';
 import type { SubjectPurchaseRegions } from '../features/pages/subject-slots';
 import { useSession } from '../session/query';
+import manropeFontUrl from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
 type ShellSession = NavigationSession;
 
 /** Hidden until the first Tab press; the sr-only utilities reveal it on focus. */
@@ -471,7 +472,7 @@ function ShellContent({ children, search }: Pick<AppShellProps, 'children' | 'se
           </a>
           <link
             rel="preload"
-            href="/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2"
+            href={manropeFontUrl}
             as="font"
             type="font/woff2"
             crossOrigin="anonymous"

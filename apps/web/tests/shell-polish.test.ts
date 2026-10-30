@@ -1,7 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 
 const app = join(import.meta.dir, '..');
@@ -9,6 +10,37 @@ const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as co
 const desktop = { width: 1280, height: 860 };
 const phone = { width: 390, height: 844 };
 const timeout = 300_000;
+
+test('the font preload uses an actual bundler-resolved existing font asset rather than a development node_modules URL', async () => {
+  const shell = await Bun.file(join(app, 'src/shell/shell.tsx')).text();
+  const preloads = shell.match(/<link\b[^>]*\brel="preload"[^>]*\bas="font"[^>]*\/>/g) ?? [];
+  expect(preloads).toHaveLength(1);
+  const preload = preloads[0]!;
+  expect(preload).toContain('type="font/woff2"');
+  expect(preload).toContain('crossOrigin="anonymous"');
+  const binding = /href=\{(\w+)\}/.exec(preload)?.[1];
+  expect(binding).toBeDefined();
+  const imports = [
+    ...shell.matchAll(
+      /import\s+(\w+)\s+from\s+['"](@fontsource-variable\/manrope\/files\/[^'"]+\.woff2)\?url['"]/g,
+    ),
+  ];
+  const fontImport = imports.find((match) => match[1] === binding);
+  expect(fontImport).toBeDefined();
+
+  const require = createRequire(join(app, 'package.json'));
+  const fontPath = require.resolve(fontImport![2]!);
+  const font = await Bun.file(fontPath).arrayBuffer();
+  expect(new TextDecoder().decode(font.slice(0, 4))).toBe('wOF2');
+
+  // Both the preload and the existing typography must resolve to the same installed resource.
+  const styles = await Bun.file(join(app, 'src/styles.css')).text();
+  expect(styles).toContain("@import '@fontsource-variable/manrope'");
+  const cssPath = require.resolve('@fontsource-variable/manrope');
+  const css = await Bun.file(cssPath).text();
+  const cssFonts = [...css.matchAll(/url\(([^)]+)\)/g)].map((match) => resolve(dirname(cssPath), match[1]!));
+  expect(cssFonts).toContain(fontPath);
+});
 
 type Messages = Record<string, string>;
 async function messages(locale: string): Promise<Messages> {
