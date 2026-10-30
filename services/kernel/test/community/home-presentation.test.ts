@@ -42,11 +42,10 @@ async function patch(realmId: string, head: string, body: unknown) {
 }
 
 function read(realmId: string, access = world.system.access) {
-  return readRealmHomePresentation(
-    { pool: world.system.database.pool, access },
-    realmId,
-    { actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 },
-  );
+  return readRealmHomePresentation({ pool: world.system.database.pool, access }, realmId, {
+    actor: { kind: 'anonymous' },
+    deadline: Date.now() + 30_000,
+  });
 }
 
 /** The native reader releases its first home snapshot before preparing rules. */
@@ -65,111 +64,144 @@ function atRulesBoundary(work: () => Promise<void>): Access {
   };
 }
 
-test.serial('Expose the adopted native Realm presentation for its Space home', async () => {
-  const target = await adoptedRealm('Native Realm home');
-  const result = await world.call('GET', `/v1/realms/${target.realmId}/presentation`);
-  expect(result.response.status, result.text).toBe(200);
-  expect(Object.keys(result.value!)).toEqual(['community']);
-  const community = result.value!.community;
-  expect(Compile(CommunityPresentationSchema).Check(community)).toBe(true);
-  expect(community).toMatchObject({
-    realmId: target.realmId,
-    spaceId: target.realm.spaceId,
-    contextId: target.realm.contextId,
-    name: 'Native Realm home',
-    description: '',
-    avatar: { state: 'none', value: null },
-    banner: { state: 'none', value: null },
-    members: { state: 'current', count: 0, version: '0' },
-    rules: {
-      state: 'available',
-      value: { ...target.pin, licence: target.post.licence, sha256: target.post.sha256 },
-    },
-    join: { membership: 'unknown', action: 'sign-in' },
-  });
-  expect(serializeDocument(community.rules.value.body)).toBe(serializeDocument(target.post.body));
-  const space = await world.call('GET', `/v1/spaces/${target.realm.spaceId}`);
-  const board = await world.call('GET', `/v1/boards/${target.boardId}`);
-  expect(space.response.status, space.text).toBe(200);
-  expect(board.response.status, board.text).toBe(200);
-  expect(space.value!.community).toEqual(community);
-  expect(board.value!.board.community).toEqual(community);
-}, 120_000);
-
-test.serial('home presentation obeys current rules, protected Realm and host removal disclosure', async () => {
-  const target = await adoptedRealm('Home disclosure');
-  await world.command('POST', `/v1/posts/${target.postId}:takeDown`, { reason: 'Hide native rules' }, {
-    bearer: world.governance.bearer,
-    expectedStatus: 200,
-  });
-  const concealed = await world.call('GET', `/v1/realms/${target.realmId}/presentation`);
-  expect(concealed.response.status, concealed.text).toBe(200);
-  expect(concealed.value!.community.rules).toEqual({ state: 'none', value: null });
-  expect(concealed.text).not.toContain(target.pin.revisionId);
-
-  await patch(target.realmId, target.realm.headRevisionId, { visibility: 'protected' });
-  const denied = await world.call('GET', `/v1/realms/${target.realmId}/presentation`);
-  const missing = await world.call('GET', `/v1/realms/${newId(routeOf(target.realmId)!)}/presentation`);
-  expect(denied.response.status, denied.text).toBe(404);
-  expect(missing.response.status, missing.text).toBe(404);
-  expect(denied.value!.code).toBe(missing.value!.code);
-  expect(denied.text).not.toContain(target.realmId);
-  const owner = await world.call('GET', `/v1/realms/${target.realmId}/presentation`, {
-    bearer: world.author.bearer,
-  });
-  expect(owner.response.status, owner.text).toBe(200);
-  expect(owner.value!.community.contextId).toBe(target.realm.contextId);
-
-  const lifecycle = await world.call('GET', `/v1/spaces/${target.realm.spaceId}/lifecycle`, {
-    bearer: world.author.bearer,
-  });
-  expect(lifecycle.response.status, lifecycle.text).toBe(200);
-  await world.command('POST', `/v1/spaces/${target.realm.spaceId}/removal`, {
-    expectedVersion: lifecycle.value!.container.version,
-    reason: 'Remove the native host',
-  }, {
-    headers: { 'if-match': JSON.stringify(lifecycle.value!.container.headRevisionId) },
-    expectedStatus: 200,
-  });
-  const removed = await world.call('GET', `/v1/realms/${target.realmId}/presentation`, {
-    bearer: world.author.bearer,
-  });
-  expect(removed.response.status, removed.text).toBe(404);
-  expect(removed.text).not.toContain(target.realmId);
-}, 120_000);
-
-test.serial('home composition preserves native unavailable states and withholds changed final sources', async () => {
-  const target = await adoptedRealm('Home source transitions');
-  const native = world.system.access;
-  await expect(read(target.realmId, {
-    ...native,
-    async prepareReadDecisions() {
-      throw new Error('Required native Realm source unavailable');
-    },
-  })).rejects.toMatchObject({ code: 'dependency_unavailable' });
-
-  const unavailable = await read(target.realmId, atRulesBoundary(async () => {
-    throw new Error('Optional native rules source unavailable');
-  }));
-  expect(unavailable?.rules).toEqual({ state: 'unavailable', value: null });
-  expect((await read(target.realmId))?.rules.state).toBe('available');
-
-  const changed = await read(target.realmId, atRulesBoundary(async () => {
-    // Exercise the actual producer trigger, without a replacement count source.
-    await openMembership.run(world.system.database.pool, {
-      route: routeOf(target.realmId)!,
-      realm_id: target.realmId,
-      account_id: world.other.accountId,
-      reservation_id: newId(routeOf(world.other.accountId)!),
-      transaction_id: newId(routeOf(target.realmId)!),
-      at: new Date().toISOString(),
+test.serial(
+  'Expose the adopted native Realm presentation for its Space home',
+  async () => {
+    const target = await adoptedRealm('Native Realm home');
+    const result = await world.call('GET', `/v1/realms/${target.realmId}/presentation`);
+    expect(result.response.status, result.text).toBe(200);
+    expect(Object.keys(result.value!)).toEqual(['community']);
+    const community = result.value!.community;
+    expect(Compile(CommunityPresentationSchema).Check(community)).toBe(true);
+    expect(community).toMatchObject({
+      realmId: target.realmId,
+      spaceId: target.realm.spaceId,
+      contextId: target.realm.contextId,
+      name: 'Native Realm home',
+      description: '',
+      avatar: { state: 'none', value: null },
+      banner: { state: 'none', value: null },
+      members: { state: 'current', count: 0, version: '0' },
+      rules: {
+        state: 'available',
+        value: { ...target.pin, licence: target.post.licence, sha256: target.post.sha256 },
+      },
+      join: { membership: 'unknown', action: 'sign-in' },
     });
-  }));
-  expect(changed?.members).toEqual({ state: 'unknown', count: null, version: null });
-  expect((await read(target.realmId))?.members).toEqual({ state: 'current', count: 1, version: '1' });
+    expect(serializeDocument(community.rules.value.body)).toBe(serializeDocument(target.post.body));
+    const space = await world.call('GET', `/v1/spaces/${target.realm.spaceId}`);
+    const board = await world.call('GET', `/v1/boards/${target.boardId}`);
+    expect(space.response.status, space.text).toBe(200);
+    expect(board.response.status, board.text).toBe(200);
+    expect(space.value!.community).toEqual(community);
+    expect(board.value!.board.community).toEqual(community);
+  },
+  120_000,
+);
 
-  const lost = await read(target.realmId, atRulesBoundary(async () => {
+test.serial(
+  'home presentation obeys current rules, protected Realm and host removal disclosure',
+  async () => {
+    const target = await adoptedRealm('Home disclosure');
+    await world.command(
+      'POST',
+      `/v1/posts/${target.postId}:takeDown`,
+      { reason: 'Hide native rules' },
+      {
+        bearer: world.governance.bearer,
+        expectedStatus: 200,
+      },
+    );
+    const concealed = await world.call('GET', `/v1/realms/${target.realmId}/presentation`);
+    expect(concealed.response.status, concealed.text).toBe(200);
+    expect(concealed.value!.community.rules).toEqual({ state: 'none', value: null });
+    expect(concealed.text).not.toContain(target.pin.revisionId);
+
     await patch(target.realmId, target.realm.headRevisionId, { visibility: 'protected' });
-  }));
-  expect(lost).toBeNull();
-}, 120_000);
+    const denied = await world.call('GET', `/v1/realms/${target.realmId}/presentation`);
+    const missing = await world.call('GET', `/v1/realms/${newId(routeOf(target.realmId)!)}/presentation`);
+    expect(denied.response.status, denied.text).toBe(404);
+    expect(missing.response.status, missing.text).toBe(404);
+    expect(denied.value!.code).toBe(missing.value!.code);
+    expect(denied.text).not.toContain(target.realmId);
+    const owner = await world.call('GET', `/v1/realms/${target.realmId}/presentation`, {
+      bearer: world.author.bearer,
+    });
+    expect(owner.response.status, owner.text).toBe(200);
+    expect(owner.value!.community.contextId).toBe(target.realm.contextId);
+
+    const lifecycle = await world.call('GET', `/v1/spaces/${target.realm.spaceId}/lifecycle`, {
+      bearer: world.author.bearer,
+    });
+    expect(lifecycle.response.status, lifecycle.text).toBe(200);
+    await world.command(
+      'POST',
+      `/v1/spaces/${target.realm.spaceId}/removal`,
+      {
+        expectedVersion: lifecycle.value!.container.version,
+        reason: 'Remove the native host',
+      },
+      {
+        headers: { 'if-match': JSON.stringify(lifecycle.value!.container.headRevisionId) },
+        expectedStatus: 200,
+      },
+    );
+    const removed = await world.call('GET', `/v1/realms/${target.realmId}/presentation`, {
+      bearer: world.author.bearer,
+    });
+    expect(removed.response.status, removed.text).toBe(404);
+    expect(removed.text).not.toContain(target.realmId);
+  },
+  120_000,
+);
+
+test.serial(
+  'home composition preserves native unavailable states and withholds changed final sources',
+  async () => {
+    const target = await adoptedRealm('Home source transitions');
+    const native = world.system.access;
+    await expect(
+      read(target.realmId, {
+        ...native,
+        async prepareReadDecisions() {
+          throw new Error('Required native Realm source unavailable');
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'dependency_unavailable' });
+
+    const unavailable = await read(
+      target.realmId,
+      atRulesBoundary(async () => {
+        throw new Error('Optional native rules source unavailable');
+      }),
+    );
+    expect(unavailable?.rules).toEqual({ state: 'unavailable', value: null });
+    expect((await read(target.realmId))?.rules.state).toBe('available');
+
+    const changed = await read(
+      target.realmId,
+      atRulesBoundary(async () => {
+        // Exercise the actual producer trigger, without a replacement count source.
+        await openMembership.run(world.system.database.pool, {
+          route: routeOf(target.realmId)!,
+          realm_id: target.realmId,
+          account_id: world.other.accountId,
+          reservation_id: newId(routeOf(world.other.accountId)!),
+          transaction_id: newId(routeOf(target.realmId)!),
+          at: new Date().toISOString(),
+        });
+      }),
+    );
+    expect(changed?.members).toEqual({ state: 'unknown', count: null, version: null });
+    expect((await read(target.realmId))?.members).toEqual({ state: 'current', count: 1, version: '1' });
+
+    const lost = await read(
+      target.realmId,
+      atRulesBoundary(async () => {
+        await patch(target.realmId, target.realm.headRevisionId, { visibility: 'protected' });
+      }),
+    );
+    expect(lost).toBeNull();
+  },
+  120_000,
+);
