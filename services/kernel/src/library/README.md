@@ -54,7 +54,7 @@ Current implementation evidence is narrower than the capability:
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
 - Every method of `createCollectionSource` and the canonical-source-store factories throws `dependency_unavailable`.
   Integrated tables, typed ports, outcome interfaces and missing-driver verifiers are not runtime completion.
-- `work-module.ts` registers `work.ts` Collection listing effects only. `account-fact-purge.ts` exports
+- `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
 - Semantic identity STORE/mapping/participants/coordinator and whole-query Source2a remain contracts without
   runtime producers. Existing point Access/disclosure, `subjectSource` and projection checkpoints do not close them.
@@ -1437,13 +1437,17 @@ continuation with its original cutoff and raw-key cursor. SDK checkpoints/recove
 after physical commit safely replays to a no-op. Retained physical purge does not raise the live fact head again.
 
 Disposition of all added state: the three episode columns, generated partition and four partial indexes disappear with
-the owning copy row on ordinary due purge or earlier terminal cleanup. The existing account source purger remains the
+the owning copy row on ordinary due purge or earlier terminal cleanup. The existing `account-fact-purge.ts` / `account-fact-purge-copy.sql` source purger remains the
 owning callsite; this adds no participant or acknowledgement. `fact_source_head` must still be erased last in complete
 terminal orchestration. Shared copies include `core.receipt` results for create/update/delete/restore (original Copy
 values, never pins), ID-only copy updated/deleted outbox envelopes and write basis, plus DBOS inputs/checkpoints for
 partition, cutoff, exact due locators and boolean purge results. Locators for shared receipt/event/work copies and their
 minimizer custody remain explicitly pending under the existing shared-history owner; no fake ACK/NoData or blanket
-account-erasure claim follows from local purge. Existing safe public Collection references contain no copy values.
+account-erasure claim follows from local purge. Current dev has no `erasure-participant.ts`, `erasure-copy.sql`,
+`erasure-collection-member.sql` or installed terminal acknowledgement callback. The native source purger's current
+terminal-owner transaction is the available local disposition; no alternate participant or guessed binding is added.
+The complete copy row, including subject/owner references, pin, private values and episode metadata, is personal
+in every state and is removed whole. Existing safe public Collection references contain no copy values.
 
 Native acceptance covers independent identity, authorization, strict JSON/CAS, original pins/times, hidden-source replay,
 strict expiry while parked, stale work after restore/redelete, rollback, commit-before-checkpoint recovery, the default

@@ -541,7 +541,18 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         query: t.Object({ revision: t.Optional(revision) }, closed),
         headers,
         response: { 204: t.Void(), ...failures },
-        detail: detail('copy.delete', 'copy:delete', true),
+        detail: {
+          ...detail('copy.delete', 'copy:delete', true),
+          responses: {
+            204: {
+              description: 'Copy cleared',
+              headers: {
+                'Library-Copy-Deletion-Id': { schema: { type: 'string', format: 'uuid' } },
+                'Library-Copy-Deletion-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
+              },
+            },
+          },
+        },
       },
       async ({ actor, params, query, headers, admission, job, session, set }) => {
         account(actor);

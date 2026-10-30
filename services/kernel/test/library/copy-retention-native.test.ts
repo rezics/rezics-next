@@ -5,7 +5,10 @@ import { fixture, libraryLabels } from '../../../../packages/definitions/test/su
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { createCopyCommands } from '../../src/library/copies.ts';
 import { purgeAccountFactsPage } from '../../src/library/account-fact-purge.ts';
-import type { DueCopy } from '../../src/library/copy-retention.ts';
+import { COPY_RETENTION_EXACT_WORKFLOW, type DueCopy } from '../../src/library/copy-retention.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import rawFacts from '../../src/library/collection-source-native-facts.sql';
+import { readOwnerFactVersion } from '../../src/library/owner-fact-version.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -150,6 +153,17 @@ test('native exact copies retain original pins/times, suppress live facts, and r
     note: before.note,
   });
   expect(await row(sibling.value.id)).toEqual(liveSibling);
+  const liveFacts = await rawFacts.run(reader, {
+    route: routeOf(owner.actor.accountId)!,
+    account_id: owner.actor.accountId,
+    after_subject: null,
+    after_fact: null,
+    limit: 100,
+    driver: 'copy',
+  });
+  expect(liveFacts.some((fact) => fact.factId === copy.value.id)).toBe(false);
+  expect(liveFacts.some((fact) => fact.factId === sibling.value.id)).toBe(true);
+  expect(await readOwnerFactVersion(reader, owner.actor.accountId)).toBe(generation + 1n);
   await expect(commands.readCopy(owner.actor, copy.value.id)).rejects.toMatchObject({ name: 'LibraryNotFoundError' });
   expect(
     (await commands.listCopies(owner.actor, { subjectId: copy.value.subjectId })).copies.map((copy) => copy.id),
@@ -254,17 +268,27 @@ test('strict original expiry and native exact due purge survive parked stale epi
   // An exact work locator is durable before it is due. Native cutoff still rejects early cleanup.
   expect(await runtime.call('purge', { key: key1, workflowId: entryKey() })).toBeUndefined();
   expect(await row(copy.value.id)).toHaveProperty('note', 'private original');
-  await runtime.call('park', { copyId: copy.value.id, phase: 'before' });
-  const parked = runtime.call('purge', { key: key1, workflowId: entryKey() });
-  await runtime.until('parked');
+  // Park an actual durable old episode in the maintenance queue with no executor.
+  // It starts at D1's due time, so only the exact episode fence protects D3.
+  const executorBeforeDelay = runtime.executor;
+  await runtime.close();
+  runtime = undefined;
+  const queuedClient = await createWorkClient(process.env.DATABASE_URL!, f.pool);
+  const delayed = await queuedClient.enqueue(
+    { workflowName: COPY_RETENTION_EXACT_WORKFLOW, queueName: 'maintenance', workflowID: entryKey() },
+    key1,
+  );
   now += 1000;
   const undo = await restore(copy.value.id, d1.body);
   const d3 = await clear(undo),
     key3 = await due(copy.value.id);
   now = Date.parse(key1.restoreUntil);
-  await runtime.call('time', { time: now });
-  await runtime.call('release');
-  await parked;
+  try {
+    runtime = await copyRetentionRuntime(now, executorBeforeDelay);
+    await delayed.getResult();
+  } finally {
+    await queuedClient.close();
+  }
   expect(await row(copy.value.id)).toMatchObject({ deletion_id: d3.body.deletionId, note: 'private original' });
   // One millisecond before the original D3 boundary is restorable; at the boundary it is expired.
   now = Date.parse(key3.restoreUntil) - 1;
@@ -328,6 +352,27 @@ test('strict original expiry and native exact due purge survive parked stale epi
   expect(erased.value.removed).toBe(2);
   expect(await row(held.value.id)).toBeUndefined();
   expect(await row(living.value.id)).toBeUndefined();
+  // Observe whole-row disposition and live source suppression, not just a DTO.
+  expect(
+    (
+      await reader.query(
+        'SELECT copy_id, subject_id FROM library.copy WHERE route=$1 AND account_id=$2 ORDER BY created_at,copy_id LIMIT 100',
+        [routeOf(terminal.actor.accountId), terminal.actor.accountId],
+      )
+    ).rows,
+  ).toEqual([]);
+  expect(
+    await rawFacts.run(reader, {
+      route: routeOf(terminal.actor.accountId)!,
+      account_id: terminal.actor.accountId,
+      after_subject: null,
+      after_fact: null,
+      limit: 100,
+      driver: 'copy',
+    }),
+  ).toEqual([]);
+  // Native fact versions are invalidation only; the whole participant owns their head-last cleanup.
+  expect(await readOwnerFactVersion(reader, terminal.actor.accountId)).not.toBeNull();
   // The installed real scheduler dispatches the same ordinary default module/queue.
   const scheduledOwner = await f.identity(scopes, 0);
   const scheduled = await made(scheduledOwner);
