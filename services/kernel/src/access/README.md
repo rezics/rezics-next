@@ -819,6 +819,36 @@ current open-ended direct owner interval. Native role revoke, demotion and inter
 the same SERIALIZABLE command; contention retries must reauthorize and recheck. Ordinary action grant changes
 operate only on `resource_grant`, so they neither remove nor infer an explicit role holder.
 
+`RealmLastOwnerError`, exported from Access, extends `ResourceAccessWriteDeniedError`. Only the same
+authorized command's locked native predicate with `target && !remaining` throws it. Missing authority,
+creation source or explicit target, wrong transaction/T, formula denial, inactive accounts and unavailable
+dependencies retain their existing refusal. Grant catches preserve this exact error only from that guard.
+The standard HTTP mapping is exactly:
+
+```json
+{
+  "type": "https://rezics.com/problems/realm_last_owner",
+  "title": "Realm Ownership Transfer Required",
+  "status": 409,
+  "code": "realm_last_owner",
+  "retryable": false,
+  "effect_status": "not_applied",
+  "request_id": "<request id>"
+}
+```
+
+There is no detail, failure text or owner/role/account/member/grant evidence in this response. Existing role
+change/revoke response metadata permits this exact 409. Content must bind this guard in its current native
+leave writer under the same exact command admission and T, preserve the error and declare
+`409: problemSchema('realm_last_owner')` in its response schema. The delivered
+`community/membership.ts` currently does not invoke this guard; this Access change does not complete native leave
+acceptance. A private role read cannot authorize leave, and no Actor may be fabricated for the guard.
+
+An authorized consumer can direct the member to the existing localized `/access/$resourceId` page
+(`ResourceAccessPage`, reached through `ResourceAccessLink`) to grant an owner role to an eligible account
+before retrying leave. That page uses `readResourceAccess`, `findAccessIdentity` and `saveResourceAccess` under
+current native `access:grant`/delegability. There is no delivered atomic transfer HTTP route or UI.
+
 `createGrantCommands({pool, access, managementAction, clock?}).transferRealmOwner(context,
 {resource, fromAccountId, toAccountId, previousValid, key})` checks the new account on its source connection
 before target checkout, validates the exact current source owner interval, creates the recipient's `[T,)` owner
@@ -828,7 +858,7 @@ It retains ordinary scopes, grantor anti-amplification,
 principal admission and authorization before receipt replay. The native command result contains
 `{resource, subject: {kind: 'account', id}, role, valid}` and the ordinary command outcome version fields.
 
-Content integrates the leave guard in its existing native membership writer. The separate native
+Content owns integration of the leave guard in its existing native membership writer. The separate native
 `createRealmOwnershipCommands({pool,access,clock?})` constructor exposes:
 
 ```ts

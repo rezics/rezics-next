@@ -6,6 +6,7 @@ import { NotFound, ParseError, ValidationError, t } from 'elysia';
 import type { TSchema } from 'typebox';
 import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
 import { AuthenticationError } from '../request/access.ts';
+import { RealmLastOwnerError } from '../access/realm-ownership.ts';
 
 export const PROBLEM_TYPE_BASE = 'https://rezics.com/problems/';
 
@@ -38,6 +39,7 @@ export const PROBLEMS = {
   copy_restore_occupied: { status: 409, title: 'Copy Restore Occupied', retryable: false },
   copy_restore_expired: { status: 409, title: 'Copy Restore Expired', retryable: false },
   conflict: { status: 409, title: 'Conflict', retryable: false },
+  realm_last_owner: { status: 409, title: 'Realm Ownership Transfer Required', retryable: false },
   library_label_restore_stale: { status: 409, title: 'Stale Library Label Restore', retryable: false },
   library_label_restore_expired: { status: 409, title: 'Library Label Restore Expired', retryable: false },
   library_label_restore_occupied: { status: 409, title: 'Library Label Restore Occupied', retryable: false },
@@ -181,6 +183,7 @@ function extensionMembers<T extends Readonly<Record<string, unknown>>>(
 }
 
 function schemaFor(codes: readonly ProblemCode[], status: number) {
+  const lastOwner = codes.length === 1 && codes[0] === 'realm_last_owner';
   return t.Object(
     {
       type: schemaUnion(codes.map((code) => t.Literal(`${PROBLEM_TYPE_BASE}${code}`))),
@@ -188,10 +191,16 @@ function schemaFor(codes: readonly ProblemCode[], status: number) {
       status: t.Literal(status),
       code: schemaUnion(codes.map((code) => t.Literal(code))),
       retryable: schemaUnion(codes.map((code) => t.Literal(PROBLEMS[code].retryable))),
-      effect_status: t.Union([t.Literal('not_applicable'), t.Literal('not_applied')]),
+      effect_status: lastOwner
+        ? t.Literal('not_applied')
+        : t.Union([t.Literal('not_applicable'), t.Literal('not_applied')]),
       request_id: t.String(),
-      detail: t.Optional(t.String({ maxLength: 512 })),
-      errors: t.Optional(t.Array(fieldErrorSchema(), { maxItems: 16 })),
+      ...(lastOwner
+        ? {}
+        : {
+            detail: t.Optional(t.String({ maxLength: 512 })),
+            errors: t.Optional(t.Array(fieldErrorSchema(), { maxItems: 16 })),
+          }),
     },
     { additionalProperties: false },
   );
@@ -230,6 +239,7 @@ export function problemSchema(...codesAndExtensions: (ProblemCode | Record<strin
   const status = statuses.values().next().value!;
   if (codes.length === 1 && codes[0] === 'command_result_erased' && typeof last !== 'object')
     return erasedResultSchema();
+  if (codes.length === 1 && codes[0] === 'realm_last_owner') return schemaFor(codes, status);
   return typeof last === 'object' ? extendedSchema(codes, status, last) : schemaFor(codes, status);
 }
 
@@ -324,7 +334,9 @@ export function problemResponse(
   let errors: readonly FieldError[] | undefined;
   const headers = new Headers();
 
-  if (error instanceof ProblemError) {
+  if (error instanceof RealmLastOwnerError) {
+    code = 'realm_last_owner';
+  } else if (error instanceof ProblemError) {
     code = error.code;
     detail = error.detail;
     errors = error.errors;
@@ -369,23 +381,25 @@ export function problemResponse(
   }
 
   const definition = PROBLEMS[code];
-  const safeErrors = safeFieldErrors(errors);
+  const lastOwner = code === 'realm_last_owner';
+  const safeErrors = lastOwner ? undefined : safeFieldErrors(errors);
   const body = {
     type: `${PROBLEM_TYPE_BASE}${code}`,
     title: definition.title,
     status: definition.status,
     code,
     retryable: definition.retryable,
-    effect_status:
-      error instanceof CommandResultErasedError
+    effect_status: lastOwner
+      ? 'not_applied'
+      : error instanceof CommandResultErasedError
         ? 'applied'
         : error instanceof ProblemError && error.effectStatus
           ? error.effectStatus
           : effectStatus(context.method, context.action, code),
     request_id: context.id,
-    ...(detail === undefined ? {} : { detail: truncateDetail(detail) }),
+    ...(lastOwner || detail === undefined ? {} : { detail: truncateDetail(detail) }),
     ...(safeErrors ? { errors: safeErrors } : {}),
-    ...(error instanceof ProblemError ? extensionMembers(error.extensions ?? {}) : {}),
+    ...(!lastOwner && error instanceof ProblemError ? extensionMembers(error.extensions ?? {}) : {}),
   };
 
   if (code === 'deadline_exceeded') logDeadlineExceeded(context);

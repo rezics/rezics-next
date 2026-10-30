@@ -39,6 +39,15 @@ import erasureSource from './realm-ownership-erasure-source.sql';
 import roleMutation from './role-grant-mutate.sql';
 
 export const REALM_OWNER_ROLE = 'community.realm.owner';
+
+/** Only the authorized, locked native holder predicate may issue this refusal. */
+export class RealmLastOwnerError extends ResourceAccessWriteDeniedError {
+  constructor() {
+    super();
+    this.name = 'RealmLastOwnerError';
+  }
+}
+
 // This ordering is container data. It changes neither role actions nor the Access formula.
 const roles = [
   REALM_OWNER_ROLE,
@@ -111,7 +120,8 @@ export async function lockRealmOwnership(client: AccessClient, input: Input): Pr
 export async function assertRealmOwnerMayLeave(client: AccessClient, input: Input): Promise<void> {
   await lockRealmOwnership(client, input);
   const row = await holders.run(client, parameters(input));
-  if (!row.target || !row.remaining) throw new ResourceAccessWriteDeniedError();
+  if (!row.target) throw new ResourceAccessWriteDeniedError();
+  if (!row.remaining) throw new RealmLastOwnerError();
 }
 
 export type RealmErasureSuccessionInput = Readonly<{ resource: Resource; accountId: string }>;

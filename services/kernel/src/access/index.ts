@@ -600,6 +600,7 @@ export { resourceRoleHeld } from './resource-role-held.ts';
 export {
   readRealmOwnershipRoles,
   assertRealmOwnerMayLeave,
+  RealmLastOwnerError,
   createRealmOwnershipCommands,
   readAppliedRealmErasureSuccession,
   type AppliedRealmErasureSuccession,

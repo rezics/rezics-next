@@ -8,7 +8,12 @@ import { grantCommand, validActions, validResource, type GrantCommandContext } f
 import createStatement from './grant-create.sql';
 import changeStatement from './grant-change.sql';
 import revokeStatement from './grant-revoke.sql';
-import { assertRealmOwnerMayLeave, lockRealmOwnership, REALM_OWNER_ROLE } from './realm-ownership.ts';
+import {
+  assertRealmOwnerMayLeave,
+  lockRealmOwnership,
+  REALM_OWNER_ROLE,
+  RealmLastOwnerError,
+} from './realm-ownership.ts';
 import realmMutation from './realm-ownership-mutation.sql';
 import realmRecipient from './realm-ownership-recipient.sql';
 import { ResourceAccessWriteDeniedError } from './resource-denials.ts';
@@ -203,6 +208,7 @@ export function createGrantCommands(config: {
               if (operation !== 'create' && effect.current && !effect.retained)
                 await assertRealmOwnerMayLeave(tx, ownership);
             } catch (error) {
+              if (error instanceof RealmLastOwnerError) throw error;
               if (error instanceof ResourceAccessWriteDeniedError) throw new GrantDeniedError();
               throw error;
             }
@@ -307,6 +313,7 @@ export function createGrantCommands(config: {
         try {
           await assertRealmOwnerMayLeave(tx, ownership);
         } catch (error) {
+          if (error instanceof RealmLastOwnerError) throw error;
           if (error instanceof ResourceAccessWriteDeniedError) throw new GrantDeniedError();
           throw error;
         }

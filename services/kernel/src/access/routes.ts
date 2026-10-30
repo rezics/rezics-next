@@ -1509,7 +1509,7 @@ export function accessRoutes(
       {
         headers,
         body: strict(roleChange),
-        response: { 200: response(roleGrant), ...failures },
+        response: { 200: response(roleGrant), ...failures, 409: problemSchema('realm_last_owner') },
         detail: detail('role_grant.change'),
       },
       async ({ body, headers, actor, admission, job, session }) => {
@@ -1531,7 +1531,7 @@ export function accessRoutes(
       {
         headers,
         body: strict(roleGrant),
-        response: { 200: response(roleGrant), ...failures },
+        response: { 200: response(roleGrant), ...failures, 409: problemSchema('realm_last_owner') },
         detail: detail('role_grant.revoke'),
       },
       async ({ body, headers, actor, admission, job, session }) => {

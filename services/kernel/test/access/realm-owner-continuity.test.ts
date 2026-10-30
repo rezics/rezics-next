@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { assertRealmOwnerMayLeave, createAccess, readRealmOwnershipRoles } from '../../src/access/index.ts';
+import {
+  assertRealmOwnerMayLeave,
+  createAccess,
+  readRealmOwnershipRoles,
+  RealmLastOwnerError,
+} from '../../src/access/index.ts';
+import { problemResponse } from '../../src/http/problem.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { authoritativeTimeValue, currentCommand, mintReadTime } from '../../src/command/command.ts';
@@ -306,3 +313,106 @@ test('native last-owner enforcement uses command T for an interval that is not c
   );
   expect(remaining.rowCount).toBe(1);
 });
+
+test('only the authorized locked native sole-owner refusal exposes realm_last_owner without effects', async () => {
+  const before = await f.snapshot();
+  const error = await commands.revokeRole(await f.context(), input()).then(
+    () => {
+      throw new Error('Expected sole-owner refusal');
+    },
+    (error: unknown) => error,
+  );
+  expect(error).toBeInstanceOf(RealmLastOwnerError);
+  expect(error).toBeInstanceOf(ResourceAccessWriteDeniedError);
+  const response = problemResponse(error, { method: 'POST', id: 'sole-owner' });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    type: 'https://rezics.com/problems/realm_last_owner',
+    title: 'Realm Ownership Transfer Required',
+    status: 409,
+    code: 'realm_last_owner',
+    retryable: false,
+    effect_status: 'not_applied',
+    request_id: 'sole-owner',
+  });
+  expect(await owners()).toEqual([f.actor]);
+  expect(await f.snapshot()).toEqual(before);
+});
+
+for (const missing of ['target', 'source', 'command-time', 'resource'] as const) {
+  test(`the locked leave guard keeps missing ${missing} generic without effects`, async () => {
+    if (missing === 'target')
+      await f.reader.query('DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2', [
+        f.resource.route,
+        f.resource.id,
+      ]);
+    if (missing === 'source')
+      await f.reader.query('DELETE FROM access.resource_initialization WHERE route=$1 AND resource_id=$2', [
+        f.resource.route,
+        f.resource.id,
+      ]);
+    const otherTime = await mintReadTime(f.pool);
+    const before = await f.snapshot();
+    const error = await grantCommand(
+      { pool: f.pool, access: f.access },
+      await f.context(),
+      {
+        resource: f.resource,
+        actions: ['realm:manage'],
+        kind: 'access.role-grant.revoke',
+        key: Bun.randomUUIDv7(),
+        input: { leave: f.actor },
+        denied: () => new GrantDeniedError(),
+      },
+      async (tx) => {
+        await assertRealmOwnerMayLeave(tx, {
+          resource: missing === 'resource' ? f.otherResource : f.resource,
+          accountId: f.actor,
+          at: missing === 'command-time' ? otherTime : currentCommand(tx).time,
+        });
+        throw new Error('A generic refusal must not reach the effect');
+      },
+    ).then(
+      () => {
+        throw new Error('Expected generic refusal');
+      },
+      (error: unknown) => error,
+    );
+    expect(error).toBeInstanceOf(ResourceAccessWriteDeniedError);
+    expect(error).not.toBeInstanceOf(RealmLastOwnerError);
+    expect(await f.snapshot()).toEqual(before);
+  });
+}
+
+for (const refusal of ['authority', 'inactive', 'unavailable'] as const) {
+  test(`${refusal} before owner mutation never exposes realm_last_owner or applies effects`, async () => {
+    const context = await f.context();
+    if (refusal === 'authority')
+      await f.reader.query(
+        "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action='access:grant'",
+        [f.resource.route, f.resource.id],
+      );
+    if (refusal === 'inactive')
+      await f.reader.query("UPDATE access.account SET state='deleted' WHERE account_id=$1", [f.actor]);
+    const before = await f.snapshot();
+    const unavailable = new AccessUnavailableError('overloaded');
+    const pool = Object.create(f.pool) as typeof f.pool;
+    pool.connect = (async () => {
+      throw unavailable;
+    }) as typeof pool.connect;
+    const writer =
+      refusal === 'unavailable'
+        ? createGrantCommands({ pool, access: f.access, managementAction: 'access:grant' })
+        : commands;
+    const error = await writer.revokeRole(context, input()).then(
+      () => {
+        throw new Error('Expected generic refusal or unavailability');
+      },
+      (error: unknown) => error,
+    );
+    expect(error).not.toBeInstanceOf(RealmLastOwnerError);
+    expect(error).toBeInstanceOf(refusal === 'unavailable' ? AccessUnavailableError : GrantDeniedError);
+    expect(await owners()).toEqual([f.actor]);
+    expect(await f.snapshot()).toEqual(before);
+  });
+}
