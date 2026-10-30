@@ -6,9 +6,10 @@ import {
   createPageEtag,
   isPublicCacheRoute,
   privateServerFunctionResponse,
+  recordPublicPageFailure,
 } from '../src/security/page-cache.ts';
 import { cookie } from '../src/session/cookies.ts';
-import { prepareSession } from '../src/session/request.ts';
+import { prepareSession, requestCsrfToken } from '../src/session/request.ts';
 
 type CacheEntry = { request: Request; response: Response };
 class MemoryCache {
@@ -291,4 +292,113 @@ test('Set-Cookie, non-200/non-404, POST, server functions, and personal server f
   }
   expect(cache.matches).toBe(0);
   expect(cache.puts).toBe(0);
+});
+
+test('native private and no-store HTML and unsuccessful outcomes never become public or conditional responses', async () => {
+  const request = new Request('https://rezics.test/en/test-only', { headers: { 'if-none-match': '*' } });
+  const cache = new MemoryCache();
+  for (const [status, cacheControl] of [
+    [200, 'no-store'],
+    [200, 'PUBLIC, max-age=60, No-Store'],
+    [200, 'private, max-age=60'],
+    [200, 'private="set-cookie"'],
+    [404, 'private, no-store'],
+    [202, undefined],
+    [403, undefined],
+    [500, undefined],
+    [503, undefined],
+  ] as const) {
+    let dataReads = 0;
+    const response = await cachePublicPage(request, {
+      publicRoute: true,
+      cache,
+      buildId: 'build-a',
+      dehydratedData: () => {
+        dataReads += 1;
+        return { mustNotBePublic: true };
+      },
+      render: async () =>
+        html('native-nonce', status, { etag: '"native"', ...(cacheControl ? { 'cache-control': cacheControl } : {}) }),
+    });
+    expect(response.status).toBe(status);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('x-robots-tag')).toBe('noindex');
+    expect(response.headers.has('etag')).toBe(false);
+    expect(response.headers.get('content-security-policy')).toContain("'nonce-native-nonce'");
+    expect(await response.text()).toContain('nonce="native-nonce"');
+    expect(dataReads).toBe(0);
+  }
+  expect(cache.puts).toBe(0);
+});
+
+test('cookie and Authorization requests bypass a warm public entry without public headers or a 304', async () => {
+  globalThis.HTMLRewriter = TestHtmlRewriter as never;
+  const cache = new MemoryCache();
+  const url = 'https://rezics.test/en/test-only';
+  const options = {
+    publicRoute: true,
+    cache,
+    buildId: 'build-a',
+    dehydratedData: () => ({}),
+    freshNonce: () => 'fresh',
+    render: async () => html('public'),
+  };
+  const publicResponse = await cachePublicPage(new Request(url), options);
+  const etag = publicResponse.headers.get('etag')!;
+  for (const credentials of [{ cookie: '__Host-rezics_session=opaque' }, { authorization: 'Bearer private' }]) {
+    let renders = 0;
+    const response = await cachePublicPage(new Request(url, { headers: { ...credentials, 'if-none-match': etag } }), {
+      ...options,
+      dehydratedData: () => {
+        throw new Error('a bypass must not compute a public validator');
+      },
+      render: async () => {
+        renders += 1;
+        return html('uncached');
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('x-robots-tag')).toBe('noindex');
+    expect(response.headers.has('etag')).toBe(false);
+    expect(await response.text()).toContain('nonce="uncached"');
+    expect(renders).toBe(1);
+  }
+  expect(cache.matches).toBe(1);
+  expect(cache.puts).toBe(1);
+});
+
+test('private cached entries and caught public render failures cannot supply a cached or fresh 304', async () => {
+  const cache = new MemoryCache();
+  const request = new Request('https://rezics.test/en/test-only', { headers: { 'if-none-match': '*' } });
+  await cache.put(request, html('private', 200, { 'cache-control': 'private, no-store', etag: '"old"' }));
+  for (const fail of [
+    () => recordPublicPageFailure(request, 503),
+    () => {
+      try {
+        requestCsrfToken(request);
+      } catch {
+        /* The route renders its error boundary. */
+      }
+    },
+  ]) {
+    const response = await cachePublicPage(request, {
+      publicRoute: true,
+      cache,
+      buildId: 'build-a',
+      dehydratedData: () => {
+        throw new Error('an error fallback must not compute a public validator');
+      },
+      render: async () => {
+        fail();
+        return html('fallback');
+      },
+    });
+    expect([500, 503]).toContain(response.status);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('x-robots-tag')).toBe('noindex');
+    expect(response.headers.has('etag')).toBe(false);
+    expect(await response.text()).toContain('nonce="fallback"');
+  }
+  expect(cache.puts).toBe(1);
 });

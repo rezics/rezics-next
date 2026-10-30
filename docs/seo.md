@@ -3,6 +3,8 @@
 How public pages are found, understood and shared. This document is the authority for URLs, indexing, metadata,
 structured data, sitemaps and HTTP status of public pages. Routing mechanics live in
 [apps/web](../apps/web/README.md#routing); subject page content lives in [subject pages](subject-pages.md).
+The [public discovery research](research/web-seo-design.md) supplies evidence for the adopted boundaries here;
+its checkout observations do not establish current native delivery.
 
 ## Principles
 
@@ -32,6 +34,15 @@ locale picks one from the preference cookie or `Accept-Language` and redirects 3
 Paths are lowercase except ids and handles; trailing slashes redirect to the form without one.
 
 The public origin comes from configuration, never from the request's `Host` header.
+
+Canonical heads, reciprocal locale alternates, visible navigation and sitemap families use the same current
+identity and locale mapping. A feed's id and labels alone do not establish every eligible subject view or an
+agent's current handle. The canonical subject reader owns merge, alias and original-language fallback resolution;
+SEO consumers must not infer missing identity fields or create another resolver.
+
+Former-handle forwarding is mutable current resolution: it uses `private, no-store`, including missing/private
+outcomes, and rechecks the active destination and forwarding expiry through the account owner. It is separate
+from cacheable canonical public profile HTML. See [accounts](accounts.md) for handle lifecycle and discovery.
 
 ## Indexing
 
@@ -87,6 +98,17 @@ Each indexed page embeds one JSON-LD graph from the same data it renders:
 - an agent as `Person` or `Organization` with `sameAs` links the agent published;
 - `BreadcrumbList` for type and parent pages.
 
+Creator links, images, external identity links and edition relations require the corresponding actual public
+page projection. An external identifier is not automatically a `sameAs` link. A supported Schema.org class does
+not grant access to its properties or establish a rich result. Metadata and media withdrawal follow the same
+current disclosure boundary as visible content.
+
+A Collection `ItemList` may describe the complete current anonymously disclosed first page only when that page
+proves the whole exportable list, with no continuation or active filter. A preview must not claim a full list or
+an undisclosed total. Ordered entries have explicit positions. Collection SSR owns its public read mode, filtered
+and unlisted head policy, and post-hydration curator state under
+[Collection presentation](collection-presentation.md) and [library and Collections](library-and-collections.md).
+
 The 24 concrete profile mappings and the explicit `schema_org_type` annotation
 rule are authoritative in the [definitions README](../packages/definitions/README.md#schemaorg-subject-types), with
 [research evidence](research/catalogue-schema-org-mapping.md). The optional
@@ -121,6 +143,8 @@ one in. A file's `lastmod` in the index is when that file last changed. Neither 
 
 Sitemaps are an inventory as of the last successful export. A page that becomes `noindex`, closed or removed
 answers its new status at once and leaves the sitemaps at the next export, within about a day.
+This inventory is not an ACL: an old shard or a failed export never authorizes an old profile, private member,
+withdrawn fact or media response. Retaining immutable historical shards is a separate artifact policy.
 
 The public `GET /v1/subject-pages` feed accepts an optional opaque `cursor` and integer `limit` from 1 to 1,000
 (default 20). The 1,000 maximum is an exception to the ordinary list maximum of 100 for server-to-server sitemap
@@ -173,7 +197,65 @@ verify cursors or establish indexability.
 
 ## Performance
 
-Indexed pages stream server-rendered HTML, send `Cache-Control` and an `ETag` for anonymous responses so the edge
-can serve them, and keep Core Web Vitals in the good range on phones: the cover is the LCP image with
+Indexed pages stream server-rendered HTML and keep Core Web Vitals in the good range on phones: the cover is the LCP image with
 `fetchpriority="high"` and responsive `srcset`, layout is reserved by the cover frame, and personal controls never
 shift content when they hydrate.
+
+## Public HTML cache
+
+Only genuinely anonymous, publicly disclosed HTML from an opted-in public route can receive
+`Cache-Control: public, max-age=0, s-maxage=60` and the public weak ETag. Route opt-in and an HTML 200 or 404 are
+necessary mechanics, not a grant to override the native result. Native `private`, `no-store` or revalidation
+directives, `Set-Cookie`, session-dependent variation and router failures exclude promotion. A private or unknown
+Collection's concealed 404 remains private/no-store. Public negative caching must not bypass the owner's current
+disclosure or restoration rules.
+
+Cookie or Authorization requests bypass shared lookup, storage and public conditional responses and receive
+private/no-store headers. Public SSR still uses anonymous data; credentials do not permit personal data in its
+HTML, query dehydration, head or ETag. Session, cookie, credential and CSRF reads are forbidden during public
+rendering, including when a route catches the read error. Personal data stays in browser queries after hydration
+or in private routes and server functions.
+
+Preparing, unavailable, error and closed fallbacks retain their native status, private/no-store and noindex;
+they must not become cacheable successful HTML. A router error or pending fallback that would otherwise be 200
+gets a failure status; platform closure is 403. Source owners supply truthful native preparation/unavailability
+outcomes. A public ETag or 304 is produced only for an eligible public result, including on cache hits. Cache
+lookup failure falls through to normal rendering without changing disclosure requirements.
+
+Public HTML cache mechanics retain URL keys, build/data ETags and the 60-second shared TTL. Stored HTML has a
+nonce placeholder; every served body gets a fresh nonce in CSP, marked attributes and the nonce meta element.
+A 304 has no CSP nonce. This mechanism neither changes native authorization nor adds source/detail requests.
+
+### Waiting on withdrawal policy
+
+**Root, with Web and the Access, Semantic, Commerce and Content owners, must resolve the warm-cache withdrawal
+boundary.** Native privacy reductions require current disclosure immediately; the existing 60-second public
+cache can reuse an earlier positive response or validator without contacting its owner. Its TTL bounds cache
+freshness, not proof of immediate withdrawal, and is not an adopted exception to native privacy requirements.
+Sending a new no-store response does not remove an existing public entry.
+
+The remaining decision is which owner-authorized invalidation or current-authority fence must precede reuse of
+warm HTML and 304s after a privacy/security reduction, how that decision reaches every affected public family,
+and how restoration invalidates old negative decisions. The same decision must cover already cached mutable
+alias redirects and define retained sitemap artifact policy separately. No purge API, timestamp table or
+background coordinator is specified here. Keep the existing valid public cache mechanism while this decision
+is routed to Root; do not claim zero stale disclosure or completed withdrawal proof from the TTL. Implementing
+per-result private/no-store classification does not settle this cross-owner policy.
+
+## Producer and consumer boundaries
+
+| Join                                      | Owner and remaining boundary                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Subject publication and eligible families | [Subject pages](subject-pages.md) and the [semantic publication design](../services/kernel/src/semantic/subject-pages-design.md) own positive public evidence, meaningful-change clocks and bounded repair. The canonical reader and family workers own view/profile families, sparse-language agreement and verified agent destinations. Registration or a proposed record is not native delivery. |
+| Collection source and export              | [Collection source](collection-source.md), [dynamic Collections](dynamic-collections.md) and [Collection presentation](collection-presentation.md) own completed source generations, complete current dependency authorization and canonical export readiness. SSR consumes only delivered contracts; a public header or preview does not prove source completeness.                                |
+| Community families                        | Content/Community own public eligibility and meaningful shown-change times. Their family consumers must reconcile carried Realm/Space destinations with the canonical-only inventory; this document does not choose an additional destination contract. Unknown times stay omitted.                                                                                                                 |
+| Metadata projections                      | Subject/profile metadata workers own typed creator, identity, image and edition joins through actual public projections. The generated placeholder card requirement remains; a static default card does not prove it. No native fields or permissions are invented to fill a missing producer.                                                                                                      |
+| Withdrawal and restoration                | Root and source owners resolve the warm HTML/304 and alias invalidation decision above. The existing daily offline exporter remains discovery infrastructure and cannot substitute for live authorization.                                                                                                                                                                                          |
+
+Reuse the current keyset exporter, immutable shards and atomic index publication. A native feed that is preparing
+or unavailable fails the export and preserves the previous inventory; it never becomes a successful empty feed.
+These boundaries adopt the research's owner-defined public set and separate export stage, consistent with its
+[Open Library](https://github.com/internetarchive/openlibrary/blob/37e446827465be2febad416de1bc18753b66997d/scripts/sitemaps/sitemap.py),
+[Discourse](https://github.com/discourse/discourse/blob/589325e2b8466178ee83acac9ec411de555a0093/app/models/sitemap.rb)
+and [Wagtail](https://github.com/wagtail/wagtail/blob/adafbaf7570d028543aae02cd916aae8410603a7/wagtail/contrib/sitemaps/sitemap_generator.py)
+references. Their export and publication clocks do not replace REZICS's native disclosure requirements.

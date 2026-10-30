@@ -20,6 +20,7 @@ export class PublicCacheReadError extends Error {
 
 const activePublicRenders = new WeakMap<Request, number>();
 const dehydratedPageData = new WeakMap<Request, unknown>();
+const publicPageFailures = new WeakMap<Request, number>();
 
 export async function duringPublicCacheRender<T>(request: Request, render: () => Promise<T>): Promise<T> {
   activePublicRenders.set(request, (activePublicRenders.get(request) ?? 0) + 1);
@@ -33,15 +34,25 @@ export async function duringPublicCacheRender<T>(request: Request, render: () =>
 }
 
 export function assertPublicCacheReadAllowed(request: Request, read: string): void {
-  if ((activePublicRenders.get(request) ?? 0) > 0) throw new PublicCacheReadError(read);
+  if (isPublicCacheRender(request)) {
+    recordPublicPageFailure(request, 500);
+    throw new PublicCacheReadError(read);
+  }
 }
 
 export function isPublicCacheRender(request: Request): boolean {
   return (activePublicRenders.get(request) ?? 0) > 0;
 }
 
+/** A caught read violation or router fallback cannot become public successful HTML. */
+export function recordPublicPageFailure(request: Request, status: number): void {
+  if (!isPublicCacheRender(request)) return;
+  publicPageFailures.set(request, status);
+  dehydratedPageData.delete(request);
+}
+
 export function recordDehydratedPageData(request: Request, data: unknown): void {
-  if (isPublicCacheRender(request)) dehydratedPageData.set(request, data);
+  if (isPublicCacheRender(request) && !publicPageFailures.has(request)) dehydratedPageData.set(request, data);
 }
 
 export function consumeDehydratedPageData(request: Request): unknown {
@@ -106,45 +117,57 @@ export async function cachePublicPage(request: Request, options: CachePublicPage
   if (!options.publicRoute) return options.render();
 
   return duringPublicCacheRender(request, async () => {
-    if (!isPublicPageGetRequest(request)) return options.render();
-    const eligible = isPageCacheRequest(request);
-    const key = pageCacheKey(request);
-    let cached: Response | undefined;
-    if (eligible && options.cache) {
-      try {
-        cached = await options.cache.match(key);
-      } catch {
-        // A Cache API outage leaves the normal request path available.
+    try {
+      if (!isPublicPageGetRequest(request)) return privateNoStore(await options.render());
+      const eligible = isPageCacheRequest(request);
+      const key = pageCacheKey(request);
+      let cached: Response | undefined;
+      if (eligible && options.cache) {
+        try {
+          cached = await options.cache.match(key);
+        } catch {
+          // A Cache API outage leaves the normal request path available.
+        }
       }
-    }
-    if (cached) {
-      if (matchesIfNoneMatch(request.headers.get('if-none-match'), cached.headers.get('etag')))
-        return notModified(cached);
-      return rewriteNonce(cached, (options.freshNonce ?? (() => createNonce(request)))());
-    }
-
-    const response = await options.render();
-    if (response.headers.has('set-cookie')) return privateNoStore(response);
-    if (isCollectionNotFound(request, response)) return privateNoStore(response);
-    if (!isPublicCacheableResponse(response)) return response;
-
-    const etag = await createPageEtag(request.url, options.buildId, options.dehydratedData());
-    const headed = withHeaders(response, (headers) => {
-      headers.set('cache-control', publicPageCacheControl);
-      headers.set('etag', etag);
-    });
-    if (eligible && options.cache) {
-      try {
-        const stored = await rewriteNonce(headed.clone(), cachedNoncePlaceholder);
-        await options.cache.put(key, stored);
-      } catch {
-        // Rendering succeeds even if the shared edge cache cannot store this response.
+      if (
+        cached &&
+        isPublicCacheableResponse(cached) &&
+        cached.headers.get('cache-control') === publicPageCacheControl
+      ) {
+        if (matchesIfNoneMatch(request.headers.get('if-none-match'), cached.headers.get('etag')))
+          return notModified(cached);
+        return rewriteNonce(cached, (options.freshNonce ?? (() => createNonce(request)))());
       }
-    }
-    if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) return notModified(headed);
 
-    const nonce = (options.freshNonce ?? (() => requestNonce(request) ?? createNonce(request)))();
-    return rewriteNonce(headed, nonce);
+      const response = await options.render();
+      const failureStatus = publicPageFailures.get(request);
+      if (failureStatus !== undefined)
+        return privateNoStore(response, failureStatus === 403 || response.status === 200 ? failureStatus : undefined);
+      if (!eligible) return privateNoStore(response);
+      if (isCollectionNotFound(request, response)) return privateNoStore(response);
+      if (!isPublicCacheableResponse(response)) return privateNoStore(response);
+
+      const etag = await createPageEtag(request.url, options.buildId, options.dehydratedData());
+      const headed = withHeaders(response, (headers) => {
+        headers.set('cache-control', publicPageCacheControl);
+        headers.set('etag', etag);
+      });
+      if (eligible && options.cache) {
+        try {
+          const stored = await rewriteNonce(headed.clone(), cachedNoncePlaceholder);
+          await options.cache.put(key, stored);
+        } catch {
+          // Rendering succeeds even if the shared edge cache cannot store this response.
+        }
+      }
+      if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag)) return notModified(headed);
+
+      const nonce = (options.freshNonce ?? (() => requestNonce(request) ?? createNonce(request)))();
+      return rewriteNonce(headed, nonce);
+    } finally {
+      publicPageFailures.delete(request);
+      dehydratedPageData.delete(request);
+    }
   });
 }
 
@@ -176,18 +199,33 @@ function isPublicPageGetRequest(request: Request): boolean {
 }
 
 export function isPublicCacheableResponse(response: Response): boolean {
+  const directives = (response.headers.get('cache-control') ?? '')
+    .split(',')
+    .map((directive) => directive.trim().toLowerCase());
+  const vary = (response.headers.get('vary') ?? '').split(',').map((field) => field.trim().toLowerCase());
   return (
     (response.status === 200 || response.status === 404) &&
-    response.headers.get('content-type')?.toLowerCase().includes('text/html') === true
+    response.headers.get('content-type')?.toLowerCase().includes('text/html') === true &&
+    !response.headers.has('set-cookie') &&
+    !directives.some((directive) => /^(?:private|no-store|no-cache)(?:\s*=|$)/u.test(directive)) &&
+    !vary.some((field) => field === '*' || field === 'cookie' || field === 'authorization')
   );
 }
 
 export function privateServerFunctionResponse(response: Response): Response {
-  return withHeaders(response, (headers) => headers.set('cache-control', 'private, no-store'));
+  return privateNoStore(response);
 }
 
-function privateNoStore(response: Response): Response {
-  return withHeaders(response, (headers) => headers.set('cache-control', 'private, no-store'));
+function privateNoStore(response: Response, status = response.status): Response {
+  const headers = new Headers(response.headers);
+  headers.set('cache-control', 'private, no-store');
+  headers.delete('etag');
+  if (headers.get('content-type')?.toLowerCase().includes('text/html')) headers.set('x-robots-tag', 'noindex');
+  return new Response(response.body, {
+    status,
+    statusText: status === response.status ? response.statusText : undefined,
+    headers,
+  });
 }
 
 function isCollectionNotFound(request: Request, response: Response): boolean {

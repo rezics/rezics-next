@@ -43,7 +43,9 @@ import {
   isPublicCacheRender,
   privateServerFunctionResponse,
   recordDehydratedPageData,
+  recordPublicPageFailure,
 } from './security/page-cache.ts';
+import { isPlatformClosedError } from './kernel/platform-closed.ts';
 import { createNonce, requestNonce } from './security/nonce.ts';
 import {
   defineCustomServerStrategy,
@@ -233,8 +235,19 @@ defineCustomServerStrategy('custom-accept-language', {
 });
 
 const fetchHandler = createStartHandler((options) => {
-  if (isPublicCacheRender(options.request))
+  if (isPublicCacheRender(options.request)) {
+    const matches = options.router.stores.matches.get();
+    if (matches.some((match) => isPlatformClosedError(match.error))) recordPublicPageFailure(options.request, 403);
+    else if (matches.some((match) => match.status === 'error'))
+      recordPublicPageFailure(
+        options.request,
+        options.router.state.statusCode >= 400 ? options.router.state.statusCode : 500,
+      );
+    else if (matches.some((match) => match.status === 'pending')) recordPublicPageFailure(options.request, 503);
+    else if (matches.some((match) => match.status === 'notFound' || match.globalNotFound))
+      recordPublicPageFailure(options.request, 404);
     recordDehydratedPageData(options.request, dehydratedPageDataFromRouter(options.router));
+  }
   return defaultStreamHandler(options);
 });
 
@@ -555,10 +568,9 @@ async function siteRequest(request: Request): Promise<Response> {
     ? await fetchHandler(request)
     : await paraglideMiddleware(request, () => fetchHandler(request));
   const headers = new Headers(response.headers);
-  const location = headers.get('Location');
-  const destination = location ? new URL(location, request.url).pathname : '';
-  const publicAgentMove = response.status === 302 && /^\/[^/]+\/@[^/]+(?:\/[^/]+)?$/.test(destination);
-  headers.set('Cache-Control', publicAgentMove ? 'public, max-age=300' : 'private, no-store');
+  // Native result directives survive to the public cache classifier. Mutable redirects always resolve afresh.
+  if (!isPublicCacheRender(request) || (response.status >= 300 && response.status < 400))
+    headers.set('Cache-Control', 'private, no-store');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 

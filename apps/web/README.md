@@ -298,7 +298,7 @@ then the total, and stops the server when it exits.
 
 **Thread URLs**: A thread's canonical path is `/threads/{id}/{slug}`. `{slug}` is `slug(title)` from `@rezics/definitions/slug`, or `thread` when the title is null. `/threads/{id}` and any other slug redirect 301 to that path and keep `cursor`. Links use `threadHref`.
 
-Renamed handles redirect 302 to the current handle for 30 days; afterwards, like a deleted account's handle, they answer the same 404 as an unknown handle.
+Renamed handles redirect 302 to the current handle for 30 days; afterwards, like a deleted account's handle, they answer the same 404 as an unknown handle. Mutable resolution uses `private, no-store`; canonical public profile HTML has its own cache classification under [SEO](../../docs/seo.md#public-html-cache).
 
 **Public and signed-in routes**: Public routes render on the server without reading the session or any cookie. The session, CSRF token and personal state (library status, own vote, reactions, membership and edit controls) load in the browser after hydration through queries. Signed-in routes check the session in `beforeLoad` and redirect to sign-in with a return path; components never check it themselves.
 
@@ -331,7 +331,7 @@ The search route keeps its schema in `search/search-params.ts`; its query key in
 
 **Subject URLs**: A subject's canonical path is `/{locale}/subjects/{id}/{slug}`, where `slug` comes from the display label in that locale. Views append their view name; an id without a slug and an outdated slug redirect 301 while retaining the view and search params. Use `apps/web/src/subject/subject-href.ts` for every subject link. The id selects the page, and the loader supplies every locale's slug for canonical and alternate tags.
 
-**Caching**: Anonymous responses of public routes carry `Cache-Control: public, max-age=0, s-maxage=60` and a weak `ETag`, never `Set-Cookie`. A deleted, restored, or withheld record can remain in shared cache for at most 60 seconds. Server functions that read the session answer `private, no-store`.
+**Caching**: [SEO](../../docs/seo.md#public-html-cache) owns disclosure and withdrawal policy. The Worker promotes only eligible anonymous public HTML results to `Cache-Control: public, max-age=0, s-maxage=60` with a weak build/data `ETag`. Native private/no-store directives and failures survive classification; cookie/Authorization requests bypass shared reuse and remain private/no-store. Session-reading server functions remain private/no-store. The unresolved warm-cache invalidation/fence decision is routed to Root and source owners in [SEO](../../docs/seo.md#waiting-on-withdrawal-policy); the TTL does not prove immediate privacy withdrawal.
 
 **Origin**: Absolute URLs use the configured `PUBLIC_ORIGIN`, never the request's `Host` header.
 
@@ -343,7 +343,8 @@ A route module reads Worker bindings only inside server functions; `head()` and 
 
 Page HTML receives a fresh base64 nonce from one 16-byte cryptographic random draw. Request middleware keeps
 it with the request and passes it to TanStack Router's `ssr.nonce`, including its streamed scripts. Client
-navigation reuses the document's nonce. Pages remain private and uncacheable; media downloads retain their
+navigation reuses the document's nonce. Eligible public HTML uses the cache's nonce placeholder rewrite on storage
+and a fresh nonce on delivery; private pages remain uncacheable. Media downloads retain their
 separate `default-src 'none'; sandbox` policy.
 
 The rich-text editor disables Tiptap's runtime CSS injection. Its ProseMirror base rules ship in the UI
@@ -374,7 +375,7 @@ The production Content Security Policy is defined in `src/security/headers.ts`:
 Development adds only the dev server's exact WebSocket origin to `connect-src` for Vite's module reloading.
 `html.cspNonce` marks Vite's injected assets; development middleware replaces that marker with the request
 nonce while streaming HTML. It never adds a nonce to unmarked content. Production has no WebSocket allowance
-or HTML rewriting. Neither environment permits script `unsafe-inline`, `unsafe-eval` or wildcard hosts.
+asset-marker rewriting. Public-cache nonce replacement applies in both environments. Neither environment permits script `unsafe-inline`, `unsafe-eval` or wildcard hosts.
 
 Pages also send `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
 `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()` and
@@ -393,8 +394,9 @@ document nonce explicitly; do not relax the policy to accommodate them.
 Web stores no records of its own, so it soft-deletes, restores and purges nothing itself.
 References to deleted, withheld or unavailable records render with `Tombstone`; a withheld part renders with
 `Withheld`, leaving the other fields visible. A deleted or withheld page answers 404, following
-[the SEO policy](../../docs/seo.md). Sitemaps drop the URL at the next export, and a shared cache serves a page
-at most `s-maxage` (60 s) after its record goes. Restore and Undo call the owner's restore route only once
+[the SEO policy](../../docs/seo.md). Sitemaps drop the URL at the next export; they never authorize page disclosure.
+The warm-cache withdrawal decision remains [with Root and source owners](../../docs/seo.md#waiting-on-withdrawal-policy).
+Restore and Undo call the owner's restore route only once
 that route exists.
 
 ## Cost
@@ -438,8 +440,8 @@ action needs no additional session read.
 
 ### Page cache
 
-- **Touches:** One Cache API lookup per anonymous GET of an opted-in route; on a miss, the page's usual reads and one Cache API put.
-- **Bound:** A hit makes no kernel request; the HTML rewrite is linear in the page's bytes. A deleted, restored, or withheld record appears everywhere within 60 seconds.
+- **Touches:** One Cache API lookup per anonymous GET of an opted-in route; on a miss, the page's usual reads and at most one Cache API put for an eligible public result. Credentialed requests do neither cache operation.
+- **Bound:** A valid hit makes no kernel request; the HTML rewrite is linear in the page's bytes. This describes the existing mechanism, subject to the [unresolved withdrawal fence](../../docs/seo.md#waiting-on-withdrawal-policy), and does not establish immediate privacy withdrawal.
 - **Growth check:** The acceptance test counts kernel requests for two GETs of an opted-in page within the TTL: the first makes the page's reads, the second none.
 
 The web Goal owns this Worker app. These bounds follow `src/server.ts`, `src/routes/`, `src/kernel/`,

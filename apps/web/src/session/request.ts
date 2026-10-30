@@ -73,5 +73,6 @@ export function viewerCredential(request: Request): string | null {
 }
 
 export function requestCsrfToken(request: Request): string | null {
+  assertPublicCacheReadAllowed(request, 'session CSRF token');
   return csrfTokens.get(request) ?? null;
 }
