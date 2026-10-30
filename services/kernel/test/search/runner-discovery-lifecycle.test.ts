@@ -97,7 +97,7 @@ async function setup(history: number) {
       apply(target, receiver, args: unknown[]) {
         const query = args[0];
         const text = typeof query === 'string' ? query : (query as { text?: string } | undefined)?.text;
-        if (text?.includes('oldest_pending_at')) sql.scans++;
+        if (text?.includes('oldest_pending_at') && /FROM\s+core\.partition\s+AS\s+partition/i.test(text)) sql.scans++;
         if (text && /UPDATE\s+core\.consumer_checkpoint/i.test(text)) {
           sql.checkpoints++;
           events.push('checkpoint:dispatch');
