@@ -63,12 +63,52 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     await expect(f.pool.query('DELETE FROM "user" WHERE id=$1', [owner])).rejects.toThrow(
       'Auth native user children remain',
     );
-    const result = await f.delete(victim);
+    // A producer which entered before the account fence must commit before
+    // acceptance. Its exact native artifact must then be included in cleanup.
+    const producer = await f.pool.connect();
+    let deletion: Promise<Response>;
+    try {
+      await producer.query('BEGIN');
+      await producer.query(
+        `INSERT INTO verification (id,identifier,value,"expiresAt","createdAt","updatedAt",erasure_account_id)
+         VALUES ('racing-native-proof','racing-native-proof','opaque',now()+interval '1 hour',now(),now(),$1)`,
+        [owner],
+      );
+      deletion = f.delete(victim);
+      await eventually(
+        async () =>
+          (
+            await f.kernel.query('SELECT state FROM access.account WHERE route=$1 AND account_id=$2', [
+              f.routeOf(owner),
+              owner,
+            ])
+          ).rows[0]?.state === 'deleted',
+      );
+      expect((await f.pool.query('SELECT 1 FROM auth_erasure WHERE account_id=$1', [owner])).rowCount).toBe(0);
+      await producer.query('COMMIT');
+    } finally {
+      await producer.query('ROLLBACK');
+      producer.release();
+    }
+    const result = await deletion!;
     expect({ status: result.status, body: await result.json() }).toEqual({ status: 200, body: { accountId: owner } });
     const obligation = (await f.pool.query('SELECT * FROM auth_erasure WHERE account_id=$1', [owner])).rows[0]!;
     expect(obligation.applicable).toBe(true);
     expect(obligation.user_deleted_at).toBeInstanceOf(Date);
     expect(obligation.consent_due_at.getTime() - obligation.user_deleted_at.getTime()).toBeGreaterThanOrEqual(309_900);
+    expect(obligation.native_completed_at).toBeNull();
+    // Remove original operation history while native post-user phases remain.
+    // Restart the actual host; its default registered maintenance must finish
+    // those phases from Auth progress, without replaying the expired approval.
+    const jobs = (
+      await f.pool.query(
+        `SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE name='accounts.operation'`,
+      )
+    ).rows;
+    expect(jobs.length).toBeGreaterThan(0);
+    await DBOS.deleteWorkflows(jobs.map((row) => row.workflow_uuid));
+    await f.host.workflows.close();
+    await f.host.workflows.start();
     expect((await f.pool.query('SELECT id FROM "user" WHERE id=$1', [owner])).rowCount).toBe(0);
     for (const [table, column] of [
       ['account', 'userId'],
@@ -123,28 +163,18 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     await expect(
       f.host.service.internal.registerClient({ clientId: 'owned-0', firstParty: true, scopes }),
     ).rejects.toThrow('Auth erased client fence');
-    await f.host.service.internal.eraseAccount(owner);
+    expect(await f.host.service.internal.startAccountErasure(owner)).toBe(obligation.id);
     expect(
       (await f.pool.query('SELECT consent_due_at,applicable FROM auth_erasure WHERE account_id=$1', [owner])).rows[0],
     ).toEqual({ consent_due_at: due, applicable: true });
     expect(await f.host.service.internal.eraseDueConsents()).toBe(0);
-    // Remove the original job through the SDK, then restart the actual executor.
-    // Only native obligations/markers survive; no replacement scheduler is installed.
-    const jobs = (
-      await f.pool.query(
-        `SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE name='accounts.operation'`,
-      )
-    ).rows;
-    expect(jobs.length).toBeGreaterThan(0);
-    await DBOS.deleteWorkflows(jobs.map((row) => row.workflow_uuid));
-    await f.host.workflows.close();
-    await f.host.workflows.start();
     await eventually(
       async () =>
         !!(await f.pool.query('SELECT native_completed_at FROM auth_erasure WHERE account_id=$1', [owner])).rows[0]
           ?.native_completed_at,
       90_000,
     );
+    await f.host.service.internal.eraseAccount(owner);
     expect(
       (await f.pool.query('SELECT pending_code FROM auth_erasure WHERE account_id=$1', [owner])).rows[0]!.pending_code,
     ).toBe('consent');

@@ -45,14 +45,14 @@ export async function eraseConsentPage(database: Pool): Promise<string | null> {
       return null;
     }
     const client = (
-      await connection.query<{ client_id: string }>(
-        `SELECT client_id FROM auth_consent WHERE account_id=$1 AND client_id>$2
+      await connection.query<{ client_id: string | null }>(
+        `SELECT CASE WHEN octet_length(client_id)<=1024 THEN client_id END AS client_id FROM auth_consent WHERE account_id=$1 AND client_id>$2
        ORDER BY client_id LIMIT 1`,
         [accountId, due.after_client],
       )
     ).rows[0];
     if (client) {
-      if (Buffer.byteLength(client.client_id) > 1024) throw new Error('Auth consent locator exceeds 1 KiB');
+      if (client.client_id === null) throw new Error('Auth consent locator exceeds 1 KiB');
       await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
         `auth-client:${client.client_id}`,
       ]);

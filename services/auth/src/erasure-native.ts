@@ -112,6 +112,7 @@ export const nativeErasureStores: readonly Store[] = [
   { table: 'auth_client_reduction', key: 'client_id', roles: [], client: 'client_id' },
   { table: 'auth_client_coverage', key: 'client_id', roles: [], client: 'client_id' },
   { table: 'oauthClientResource', key: 'id', roles: [], client: 'clientId' },
+  { table: 'auth_workflow_request', key: 'workflow_id', roles: [], client: 'erasure_client_id' },
 ];
 const subjectPhases = nativeErasureStores.flatMap((store) => store.roles.map((role) => ({ store, role })));
 const clientPhases = nativeErasureStores.filter((store) => store.client);
@@ -177,6 +178,13 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
       );
       if (held.rowCount) return { after, keys, blocked: 'native-stage' };
     }
+    if (store.table === 'auth_workflow_request') {
+      const held = await connection.query(
+        'SELECT 1 FROM auth_workflow_request WHERE workflow_id=$1 AND terminal_at IS NULL',
+        [key],
+      );
+      if (held.rowCount) return { after, keys, blocked: 'native-request' };
+    }
     // A surviving subject's live recovery release still owns its witness. Expiry
     // makes this native verifier unusable; no shared-history completion is inferred.
     if (store.table === 'auth_recovery_establishment') {
@@ -230,8 +238,8 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
       // across client boundaries. Its existing lock excludes in-flight issuance.
       if (!row.client_id) {
         const client = (
-          await connection.query<{ client_id: string }>(
-            'SELECT client_id FROM auth_client WHERE "userId"=$1 ORDER BY client_id LIMIT 1',
+          await connection.query<{ client_id: string | null }>(
+            'SELECT CASE WHEN octet_length(client_id)<=1024 THEN client_id END AS client_id FROM auth_client WHERE "userId"=$1 ORDER BY client_id LIMIT 1',
             [row.account_id],
           )
         ).rows[0];
@@ -239,7 +247,7 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
           await checkpoint(connection, row, { phase: 1, clientPhase: 0 });
           return answer('more', 'subject');
         }
-        if (Buffer.byteLength(client.client_id) > 1024) {
+        if (client.client_id === null) {
           await checkpoint(connection, row, { code: 'locator-size' });
           return answer('pending', 'locator-size');
         }
@@ -364,8 +372,8 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
     const requestRole = requestRoles[tail - 3];
     if (requestRole) {
       const requests = (
-        await connection.query<{ workflow_id: string; terminal_at: Date | null }>(
-          `SELECT workflow_id,terminal_at FROM auth_workflow_request WHERE ${quote(requestRole)}=$1
+        await connection.query<{ workflow_id: string | null; terminal_at: Date | null }>(
+          `SELECT CASE WHEN octet_length(workflow_id)<=1024 THEN workflow_id END AS workflow_id,terminal_at FROM auth_workflow_request WHERE ${quote(requestRole)}=$1
          ORDER BY workflow_id LIMIT $2 FOR UPDATE`,
           [row.account_id, ERASURE_PAGE_SIZE],
         )
@@ -376,7 +384,7 @@ export async function nativeErasurePage(pool: Pool, id: string): Promise<Erasure
           await checkpoint(connection, row, { code: 'native-request' });
           return answer('pending', 'native-request');
         }
-        if (Buffer.byteLength(request.workflow_id) > 1024) {
+        if (request.workflow_id === null) {
           await checkpoint(connection, row, { code: 'locator-size' });
           return answer('pending', 'locator-size');
         }

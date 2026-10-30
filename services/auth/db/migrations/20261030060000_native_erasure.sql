@@ -590,6 +590,14 @@ BEGIN
      AND (NEW.erasure_subject_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_id,NEW.erasure_member_id,NEW.erasure_previous_operator_id)
        IS NOT DISTINCT FROM (OLD.erasure_subject_id,OLD.erasure_human_id,OLD.erasure_operator_id,OLD.erasure_client_id,OLD.erasure_member_id,OLD.erasure_previous_operator_id)
      AND NEW.terminal_at IS NOT NULL THEN RETURN NEW; END IF;
+  IF TG_OP='UPDATE' THEN
+    PERFORM auth_erasure_admit(OLD.erasure_member_id);
+    PERFORM auth_erasure_admit(OLD.erasure_previous_operator_id);
+    PERFORM auth_erasure_admit(OLD.erasure_subject_id);
+    PERFORM auth_erasure_admit(OLD.erasure_human_id);
+    PERFORM auth_erasure_admit(OLD.erasure_operator_id);
+    PERFORM auth_erasure_admit_client(OLD.erasure_client_id);
+  END IF;
   PERFORM auth_erasure_admit(NEW.erasure_member_id);
   PERFORM auth_erasure_admit(NEW.erasure_previous_operator_id);
   PERFORM auth_erasure_admit(NEW.erasure_subject_id);

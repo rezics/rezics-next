@@ -988,159 +988,173 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       },
       { name: 'accounts.client-reduction' },
     );
-    operation = DBOS.registerWorkflow(
-      async (input: AccountOperation) => {
-        if (input.kind === 'membership') {
-          if (input.role === null && !input.reservationId) denied();
-          let releaseKey: string | undefined;
-          await coordinateMembership({
-            leaving: input.role === null,
-            reserve: async () => ({
-              organizationId: input.organizationId,
-              memberAccountId: input.memberAccountId,
-              reservationId: input.reservationId ?? (await reserveMember(input)).reservationId,
-            }),
-            publish: async (membership) => {
-              releaseKey = (await changeMember({ ...membership, role: input.role }, input)).releaseKey;
-            },
-            release: (membership) => releaseMember(membership, required(releaseKey)),
-          });
-          return { accountId: input.memberAccountId };
+    const terminalRequest = step('native-operation-terminal', async (id: string) => {
+      // The executor owns this proof after its last native release consumer.
+      // An HTTP disconnect between workflow completion and getResult cannot
+      // strand the witness, and DBOS history loss alone never supplies it.
+      await database.query(
+        'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
+        [id],
+      );
+    });
+    const executeOperation = async (input: AccountOperation) => {
+      if (input.kind === 'membership') {
+        if (input.role === null && !input.reservationId) denied();
+        let releaseKey: string | undefined;
+        await coordinateMembership({
+          leaving: input.role === null,
+          reserve: async () => ({
+            organizationId: input.organizationId,
+            memberAccountId: input.memberAccountId,
+            reservationId: input.reservationId ?? (await reserveMember(input)).reservationId,
+          }),
+          publish: async (membership) => {
+            releaseKey = (await changeMember({ ...membership, role: input.role }, input)).releaseKey;
+          },
+          release: (membership) => releaseMember(membership, required(releaseKey)),
+        });
+        return { accountId: input.memberAccountId };
+      }
+      if (input.kind === 'transfer') {
+        const held = await reserveOperator(input, input.operatorAccountId, input.previous.subjectAccountId);
+        try {
+          await relation(held, input.previous.operatorAccountId, input.expectedVersion, input);
+        } catch (error) {
+          // An authorized cancellation terminalizes a held destination slot
+          // after a pre-publication failure. Revoked authority leaves it held.
+          await cancelTransferOperator(held, input);
+          throw error;
         }
-        if (input.kind === 'transfer') {
-          const held = await reserveOperator(input, input.operatorAccountId, input.previous.subjectAccountId);
-          try {
-            await relation(held, input.previous.operatorAccountId, input.expectedVersion, input);
-          } catch (error) {
-            // An authorized cancellation terminalizes a held destination slot
-            // after a pre-publication failure. Revoked authority leaves it held.
-            await cancelTransferOperator(held, input);
-            throw error;
-          }
-          await revoke(input.previous.subjectAccountId, input);
-          await retireOperator(input.previous, input);
-          await releaseOperator(input.previous, input);
-          return { accountId: held.subjectAccountId };
-        }
-        if (input.kind === 'delete') {
-          await authorize(input);
-          const account = await inspect(input.accountId, input);
-          if (
-            account.operatorAccountId !== (input.responsibility?.operatorAccountId ?? null) ||
-            (input.responsibility && input.responsibility.subjectAccountId !== input.accountId)
-          )
-            denied();
-          const barrier = await tombstone(input);
-          const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
-          if (operationKey) {
-            await erase(input.accountId, undefined, operationKey);
-            if (input.responsibility) {
-              await retireOperator(input.responsibility, undefined, operationKey);
-              await releaseOperator(input.responsibility, undefined, operationKey);
-            }
-            if (account.handle) await redirectDeleted(account.accountId, account.handle, undefined, operationKey);
-            return { accountId: input.accountId };
-          }
-          await erase(input.accountId, input);
+        await revoke(input.previous.subjectAccountId, input);
+        await retireOperator(input.previous, input);
+        await releaseOperator(input.previous, input);
+        return { accountId: held.subjectAccountId };
+      }
+      if (input.kind === 'delete') {
+        await authorize(input);
+        const account = await inspect(input.accountId, input);
+        if (
+          account.operatorAccountId !== (input.responsibility?.operatorAccountId ?? null) ||
+          (input.responsibility && input.responsibility.subjectAccountId !== input.accountId)
+        )
+          denied();
+        const barrier = await tombstone(input);
+        const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
+        if (operationKey) {
+          await erase(input.accountId, undefined, operationKey);
           if (input.responsibility) {
-            await retireOperator(input.responsibility, input);
-            await releaseOperator(input.responsibility, input);
+            await retireOperator(input.responsibility, undefined, operationKey);
+            await releaseOperator(input.responsibility, undefined, operationKey);
           }
-          if (account.handle) await redirectDeleted(account.accountId, account.handle, input);
+          if (account.handle) await redirectDeleted(account.accountId, account.handle, undefined, operationKey);
           return { accountId: input.accountId };
         }
-        if (input.kind === 'fence-operator') {
-          await authorize(input);
-          const barrier = await fence(input.accountId, input);
-          const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
-          if (typeof operationKey !== 'string') denied();
-          await revoke(input.accountId, undefined, operationKey);
-          return {
-            accountId: barrier.accountId,
-            state: 'suspended' as const,
-            minimumAuthnEpoch: barrier.minimumAuthnEpoch,
-            receiptId: barrier.receiptId,
-          };
+        await erase(input.accountId, input);
+        if (input.responsibility) {
+          await retireOperator(input.responsibility, input);
+          await releaseOperator(input.responsibility, input);
         }
-        if (input.kind === 'consent') {
-          await authorize(input);
-          const barrier = await fence(input.accountId);
-          await consent(input, barrier);
+        if (account.handle) await redirectDeleted(account.accountId, account.handle, input);
+        return { accountId: input.accountId };
+      }
+      if (input.kind === 'fence-operator') {
+        await authorize(input);
+        const barrier = await fence(input.accountId, input);
+        const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
+        if (typeof operationKey !== 'string') denied();
+        await revoke(input.accountId, undefined, operationKey);
+        return {
+          accountId: barrier.accountId,
+          state: 'suspended' as const,
+          minimumAuthnEpoch: barrier.minimumAuthnEpoch,
+          receiptId: barrier.receiptId,
+        };
+      }
+      if (input.kind === 'consent') {
+        await authorize(input);
+        const barrier = await fence(input.accountId);
+        await consent(input, barrier);
+        await revoke(input.accountId);
+        return { accountId: input.accountId };
+      }
+      if (input.kind === 'automated') {
+        const row = await read(input.registrationId, input);
+        const claim = await reserve(row, input);
+        const held = await reserveOperator(input, input.operatorAccountId, row.account_id);
+        await pending(claim, input.registrationId, input);
+        await relation(held, null, '0', input, claim.reservationId);
+        const installed = (await hasCredential(input.registrationId, input))
+          ? await provision(input.registrationId, input)
+          : await credentialless(claim, input);
+        if (!('expired' in installed)) {
+          const proof = await evidence(claim, input);
+          const claimed = await claimHandle(claim, proof, input.registrationId, input);
+          if (!('expired' in claimed)) {
+            const activated = await activate(row.account_id, proof, input.registrationId, input);
+            if (!('expired' in activated)) {
+              await complete(input.registrationId, input);
+              return { accountId: row.account_id };
+            }
+          }
+        }
+        await expire(claim);
+        await release(claim);
+        await erase(row.account_id);
+        await retireOperator(held);
+        await releaseOperator(held);
+        await expired(input.registrationId);
+        denied();
+      }
+      if (input.kind === 'revoke') {
+        if (!('authorization' in input)) {
+          await fence(input.accountId);
           await revoke(input.accountId);
           return { accountId: input.accountId };
         }
-        if (input.kind === 'automated') {
-          const row = await read(input.registrationId, input);
-          const claim = await reserve(row, input);
-          const held = await reserveOperator(input, input.operatorAccountId, row.account_id);
-          await pending(claim, input.registrationId, input);
-          await relation(held, null, '0', input, claim.reservationId);
-          const installed = (await hasCredential(input.registrationId, input))
-            ? await provision(input.registrationId, input)
-            : await credentialless(claim, input);
-          if (!('expired' in installed)) {
-            const proof = await evidence(claim, input);
-            const claimed = await claimHandle(claim, proof, input.registrationId, input);
-            if (!('expired' in claimed)) {
-              const activated = await activate(row.account_id, proof, input.registrationId, input);
-              if (!('expired' in activated)) {
-                await complete(input.registrationId, input);
-                return { accountId: row.account_id };
-              }
-            }
-          }
-          await expire(claim);
-          await release(claim);
-          await erase(row.account_id);
-          await retireOperator(held);
-          await releaseOperator(held);
-          await expired(input.registrationId);
-          denied();
+        // Access first: the fence, its receipt and the continuation commit before Auth deletes anything.
+        const barrier = await fence(input.accountId, input);
+        const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
+        if (typeof operationKey !== 'string') denied();
+        await revoke(input.accountId, undefined, operationKey);
+        return { accountId: input.accountId };
+      }
+      if (input.kind === 'rename' || input.kind === 'organization') {
+        const accountId =
+          input.kind === 'rename'
+            ? input.accountId
+            : access.registrationTarget(await organizationKey(input, 'organization-id'));
+        const owner = input.kind === 'organization' ? await reserveOwner(input, accountId) : null;
+        if (owner) {
+          await organization(accountId, owner.accountId, owner.reservationId, input);
+          await defaults(accountId, input);
         }
-        if (input.kind === 'revoke') {
-          if (!('authorization' in input)) {
-            await fence(input.accountId);
-            await revoke(input.accountId);
-            return { accountId: input.accountId };
-          }
-          // Access first: the fence, its receipt and the continuation commit before Auth deletes anything.
-          const barrier = await fence(input.accountId, input);
-          const operationKey = 'continuationOperationKey' in barrier ? barrier.continuationOperationKey : undefined;
-          if (typeof operationKey !== 'string') denied();
-          await revoke(input.accountId, undefined, operationKey);
-          return { accountId: input.accountId };
-        }
-        if (input.kind === 'rename' || input.kind === 'organization') {
-          const accountId =
-            input.kind === 'rename'
-              ? input.accountId
-              : access.registrationTarget(await organizationKey(input, 'organization-id'));
-          const owner = input.kind === 'organization' ? await reserveOwner(input, accountId) : null;
-          if (owner) {
-            await organization(accountId, owner.accountId, owner.reservationId, input);
-            await defaults(accountId, input);
-          }
-          const claim = await reserve({ account_id: accountId, handle: input.handle } as Stage, input);
-          const transition = {
-            accountId,
-            handle: claim.handle,
-            reservationId: claim.reservationId,
-            expectedHandle: input.kind === 'rename' ? input.expectedHandle : null,
-            operationId:
-              input.kind === 'organization'
-                ? await organizationKey(input, 'handle-operation')
-                : required(DBOS.workflowID),
-            key: input.kind === 'organization' ? await organizationKey(input, 'transition') : commandKey('transition'),
-          };
-          await hold(transition, input);
-          if (owner) await bootstrap(transition, owner.accountId, owner.reservationId, input);
-          else await publish(transition, input);
-          await finalize(transition, input);
-          if (transition.expectedHandle !== null) await redirect(transition, input);
-          await finishHandle(transition, input);
-          return { accountId };
-        }
-        denied();
+        const claim = await reserve({ account_id: accountId, handle: input.handle } as Stage, input);
+        const transition = {
+          accountId,
+          handle: claim.handle,
+          reservationId: claim.reservationId,
+          expectedHandle: input.kind === 'rename' ? input.expectedHandle : null,
+          operationId:
+            input.kind === 'organization'
+              ? await organizationKey(input, 'handle-operation')
+              : required(DBOS.workflowID),
+          key: input.kind === 'organization' ? await organizationKey(input, 'transition') : commandKey('transition'),
+        };
+        await hold(transition, input);
+        if (owner) await bootstrap(transition, owner.accountId, owner.reservationId, input);
+        else await publish(transition, input);
+        await finalize(transition, input);
+        if (transition.expectedHandle !== null) await redirect(transition, input);
+        await finishHandle(transition, input);
+        return { accountId };
+      }
+      denied();
+    };
+    operation = DBOS.registerWorkflow(
+      async (input: AccountOperation) => {
+        const result = await executeOperation(input);
+        await terminalRequest(required(DBOS.workflowID));
+        return result;
       },
       { name: 'accounts.operation' },
     );
