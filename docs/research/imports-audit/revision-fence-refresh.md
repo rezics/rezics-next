@@ -81,3 +81,18 @@ the current run's exact candidate signature as well as the producing revision.
 
 An independent read-only review of the implementation revision found no blocking provenance, fence, identity,
 recovery or statistic-retention defect. Native authorization/disclosure evidence remains with acceptance.
+
+Final production revision: `5f6ee518a1`. Edited-file formatting and the direct importer compiler both passed.
+The final local command was:
+
+```sh
+IMPORT_LEDGER_DRIVER="$PWD/services/importer/tests/ledger-driver.ts" TMPDIR="$PWD/.temp" \
+  bun test --timeout 30000 ./.temp/imports-ledger-local.test.ts \
+  services/importer/tests/revision-fence-refresh.test.ts services/importer/tests/source-statistics.test.ts
+```
+
+The scratch entry contains only `await import('../specs/imports-ledger.test.ts')`, so all unchanged ledger cases
+execute in-process with the ordinary production driver. Result: 40 passed, zero failed, 8,497 assertions:
+28 unchanged ledger cases, six focused regressions and six existing source-statistic cases. All three originally
+failing ledger cases passed, including rollback through the exact field fence. No native stack or effect
+counter was substituted for these local outcomes.
