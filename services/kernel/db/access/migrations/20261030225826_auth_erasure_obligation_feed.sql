@@ -84,7 +84,7 @@ CREATE TRIGGER auth_erasure_cut_guard BEFORE UPDATE OR DELETE ON access.auth_era
 
 -- The existing native routing row serializes bootstrap, writers and cut capture.
 -- There is no global erasure counter or new command/coordinator authority.
-CREATE FUNCTION access.lock_auth_erasure_source(p integer) RETURNS access.auth_erasure_source
+CREATE FUNCTION access.lock_auth_erasure_source(p integer,require_lineage boolean DEFAULT true) RETURNS access.auth_erasure_source
  LANGUAGE plpgsql AS $$
 DECLARE home core.partition; source access.auth_erasure_source;
 BEGIN
@@ -95,7 +95,7 @@ BEGIN
  INSERT INTO access.auth_erasure_source(partition_no,source_epoch,source_owner)
  VALUES(p,home.epoch,home.node) ON CONFLICT DO NOTHING;
  SELECT * INTO source FROM access.auth_erasure_source WHERE partition_no=p FOR UPDATE;
- IF source.source_epoch<>home.epoch OR source.source_owner<>home.node THEN
+ IF require_lineage AND (source.source_epoch<>home.epoch OR source.source_owner<>home.node) THEN
   RAISE EXCEPTION 'Auth erasure source lineage recovery required' USING ERRCODE='40001';
  END IF;
  RETURN source;
@@ -106,7 +106,10 @@ CREATE FUNCTION access.capture_auth_erasure_obligation(r integer,a uuid,native b
 DECLARE source access.auth_erasure_source; root access.erasure; terminal access.account;
  original access.lifecycle_fence_receipt; candidate access.lifecycle_fence_receipt; found_count integer:=0;
 BEGIN
- source:=access.lock_auth_erasure_source(r/16);
+ -- Even while source lineage recovery is pending, current native deletion still
+ -- commits and retains its exact obligation in the same ordinal feed. It cannot
+ -- relabel the old source epoch or release a stale cut.
+ source:=access.lock_auth_erasure_source(r/16,NOT native);
  SELECT * INTO root FROM access.erasure WHERE route=r AND account_id=a FOR UPDATE;
  IF NOT FOUND OR root.auth_obligation_indexed THEN RETURN; END IF;
  SELECT * INTO terminal FROM access.account WHERE route=r AND account_id=a;

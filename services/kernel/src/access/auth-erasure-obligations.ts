@@ -21,7 +21,7 @@ type Source = {
   head: string;
   initialized: boolean;
 };
-type Segment = Source & { high_water: string; source_position: string };
+type Segment = { high_water: string };
 type NativeRow = {
   route: number;
   accountId: string;
@@ -214,7 +214,7 @@ export function createAuthErasureObligationBindings(pool: Pool): AuthErasureObli
               [input.cutId],
             );
             cut = await header(client, input.cutId);
-            segment = { ...source, high_water: source.head, source_position: '0' };
+            segment = { high_water: source.head };
           }
         }
         const highWater = segment?.high_water ?? source.head;

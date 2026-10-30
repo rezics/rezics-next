@@ -3008,8 +3008,9 @@ Access's live account fence, including during restore admission cutover.
 
 Source generation/ownership epoch and inventory/producer versions are independent
 of account barrier versions. A missing, moved, fenced or changed-epoch source stays
-pending; lineage recovery cannot relabel retained source rows or reset completed
-roots. The port assumes the independently current Access source required by the
+pending; current native deletion still captures its original obligation under the
+current home fence. Lineage recovery cannot relabel retained source rows or reset
+completed roots. The port assumes the independently current Access source required by the
 Auth custody contract. It does not certify recovery of an older Access database,
 physical backup/restore lineage, external receiving closure, Auth native replay,
 consent due evidence or final cleanup. Those authorities remain with their owners;

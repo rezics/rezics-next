@@ -106,8 +106,8 @@ test('Trusted Auth restore reconciliation discovers exact committed Access erasu
       receiptId: native.value.receiptId,
       minimumAuthnEpoch: native.value.minimumAuthnEpoch,
     });
-    expect(original.obligation.at).toBe((await ports.readAuthErasureBarrier(accountId))!.at);
-    expect(await ports.readAuthErasureSource({ accountId, receiptId: native.value.receiptId })).toBeNull();
+    expect(original.obligation.at).toBe((await ports.readAuthErasureBarrier!(accountId))!.at);
+    expect(await ports.readAuthErasureSource!({ accountId, receiptId: native.value.receiptId })).toBeNull();
     // Later native floors cannot relabel the original tombstone floor.
     await db.admin.query(
       'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+7 WHERE route=0 AND account_id=$1',
@@ -220,6 +220,12 @@ test('missing original native floor evidence remains pending and ownership chang
       ),
     ).rejects.toThrow();
     await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=1');
+    const afterMove = await person(db, 16);
+    await erase(db, afterMove);
+    expect(await ports.readAuthErasureObligation({ accountId: afterMove, deadline: deadline() })).toMatchObject({
+      state: 'pending',
+      reason: 'source-unavailable',
+    });
     expect(await ports.readAuthErasureObligation({ accountId: missing, deadline: deadline() })).toMatchObject({
       state: 'pending',
       reason: 'source-unavailable',
