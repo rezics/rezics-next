@@ -290,7 +290,6 @@ function createBanEvidence(
   client: AccessClient,
   actor: Actor,
   boards: readonly Row[],
-  realms: readonly RealmBatchRow[],
 ): { read(at: string): Promise<ReadonlySet<string>>; current(): Promise<ReadonlySet<string>> } {
   const keys = requiredBanKeys(actor, boards);
   let evidence: Promise<ReadonlySet<string>> | undefined;
@@ -645,7 +644,7 @@ async function decideBoardAndRealms(
   boards: readonly Row[],
   realms: readonly RealmBatchRow[],
 ): Promise<Readonly<{ boards: ReadonlyMap<string, boolean>; realms: ReadonlyMap<string, boolean>; bans: ReadonlySet<string> }>> {
-  const bans = createBanEvidence(client, actor, boards, realms);
+  const bans = createBanEvidence(client, actor, boards);
   const boardIds = boards.map((row) => row.id);
   const boardRows = new Map(boards.map((row) => [row.id, row]));
   let boardDecisions: Readonly<Record<string, { allowed: boolean; explicit: boolean }>> = Object.create(null);

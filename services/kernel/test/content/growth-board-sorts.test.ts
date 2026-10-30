@@ -387,6 +387,7 @@ test(
         return page;
       },
     });
+    expect(queryReport.samples.map(({ scale }) => scale)).toEqual([...scales]);
     const queryCounts = queryReport.samples.map(({ cost }) => cost.statements);
     expect(queryCounts.every((count) => count <= 43)).toBe(true);
     expect(new Set(queryCounts).size).toBe(1);
@@ -401,6 +402,7 @@ test(
           expect.any(Number),
         );
       }
+      expect(cost.relations['content.board_thread']?.rows).toBeGreaterThan(0);
       expect(cost.relations['content.board_thread']?.rows).toBeLessThanOrEqual(2 * candidateLimit);
     }
     assertGrowthAccessPaths('Board page s=100 with text query', queryReport.samples, queryRelations);

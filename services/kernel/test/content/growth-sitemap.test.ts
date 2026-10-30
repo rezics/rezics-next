@@ -255,6 +255,7 @@ for (const feed of ['boards', 'threads'] as const) {
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     const statementCounts = report.samples.map(({ cost }) => cost.statements);
+    expect(statementCounts[0]).toBeGreaterThan(0);
     expect(statementCounts).toEqual(scales.map(() => statementCounts[0]));
     const relations = ['content.board', 'content.board_thread', 'content.thread', 'content.post', 'content.revision'];
     for (const { scale, cost } of report.samples) {
@@ -291,6 +292,7 @@ for (const feed of ['boards', 'threads'] as const) {
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     const statementCounts = report.samples.map(({ cost }) => cost.statements);
+    expect(statementCounts[0]).toBeGreaterThan(0);
     expect(statementCounts).toEqual(scales.map(() => statementCounts[0]));
     if (feed === 'boards') {
       const relations = [
