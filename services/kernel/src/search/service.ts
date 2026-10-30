@@ -526,7 +526,7 @@ export function createSearchService({
           return checked;
       };
       const runtime = publicFilters?.();
-      if (runtime && !readContext) throw indexNotReady();
+      if (publicFilters && (!runtime || !readContext)) throw indexNotReady();
       const context = { deadline: readContext?.deadline ?? Date.now() + 10_000 };
       const capturePlan = {
           ...plan, generation, filterDocument: admitted, text,

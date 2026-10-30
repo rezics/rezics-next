@@ -4,12 +4,13 @@ import { type KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type FacetRequest, type FacetValue } from './facets.ts';
 import { type OpenSearch } from './opensearch.ts';
-import { type PublicSearchHit } from './public-figures.ts';
-import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
-import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
 import { type SearchPlan } from './query.ts';
 import { type PublicRatingSource } from './rating-source.ts';
 import type { SubjectSource } from './source.ts';
+import { type DefaultPublicFilterRuntime } from './public-runtime.ts';
+import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
+import type { PublicSearchHit } from './public-figures.ts';
+import type { KindValue } from './query.ts';
 export type SearchRequest = {
     text?: string;
     filter?: unknown;
@@ -23,17 +24,17 @@ export type SearchRequest = {
 };
 export type PublicSearchPage = {
     subjects: PublicSearchHit[];
-    next: string | null;
-    as_of: string;
     kinds?: {
-        values: import('./query.ts').KindValue[];
+        values: KindValue[];
         next: string | null;
     };
+    next: string | null;
+    as_of: string;
 };
-export type PublicSearchReadContext = {
+export type PublicSearchReadContext = Readonly<{
     deadline: number;
-    complete(page: PublicSearchPage): Promise<void>;
-};
+    complete: (page: PublicSearchPage) => Promise<void>;
+}>;
 type Result = {
     id: string;
     type: string;
@@ -43,7 +44,7 @@ type Result = {
 export declare function validateSearchLimit(value: unknown): number;
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
-export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, release: releaseOverride, publicFilters, preparePublic, }: {
+export declare function createSearchService({ pool, client, prefix, source, ratings, cursors, clock, facetSample, publicFilters, preparePublic, release: releaseOverride, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
@@ -53,22 +54,14 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     clock?: KernelClock;
     release?: () => Promise<FilterRelease | null>;
     facetSample?: number;
-    /** Installed only by trusted default host composition. */
+    /** Trusted native provider; omitted only by historical isolated service fixtures. */
     publicFilters?: () => DefaultPublicFilterRuntime;
     preparePublic?: (job: PublicFilterConsumerJob) => Promise<void>;
 }): {
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number, active?: {
         digest: string;
         release: FilterRelease;
-    } | null, read?: PublicSearchReadContext): Promise<{
-        subjects: PublicSearchHit[];
-        kinds?: {
-            values: import("./query.ts").KindValue[];
-            next: string | null;
-        };
-        next: string | null;
-        as_of: string;
-    }>;
+    } | null, readContext?: PublicSearchReadContext): Promise<PublicSearchPage>;
     facets(principal: 'anonymous' | `account:${string}`, request: FacetRequest & {
         languages?: string[];
     }, now?: number): Promise<{
