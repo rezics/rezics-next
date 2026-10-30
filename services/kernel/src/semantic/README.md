@@ -591,6 +591,10 @@ backoff of up to 100 ms with no attempt-count cap. Fence waits and extra constan
 partition polls remain charged. The default deadline and executor behavior do not
 change.
 
+| Operation | Touches | Bound | Growth check |
+| --- | --- | --- | --- |
+| Community Context deletion, restoration and current disclosure | Context PK/active point and direct current temporal owner-grant probe at native T; ordinary Access/command/receipt/basis/outbox; one Context update for a real transition. Readers probe current Context before cached extension/overlay use. | Constant selected point rows and statements; logarithmic indexed blocks in Context population and subject history, plus existing separately charged Access/command work. No dependent-subject enumeration, history scan, cross-home SQL or cached permission. Delete and restore use the same bounded shape. | `test/semantic/growth-context-lifecycle.test.ts` retains history and population scales 64/512/4096 and all native pool work across delete/restore/Context/definition/overlay reads. Scoped acceptance passed after a normal 60s timeout/cascade and automatic isolated 2/8352 scoped pass. Raw all-scale cost evidence was not independently recovered in review, so this row does not certify physical all-Cost, retention/account cleanup or main closure. `context-lifecycle.test.ts` preserves settings/extensions/current decisions; `context-lifecycle-command.test.ts` adds receipt/noEffect/rollback/denial/state/time controls. |
+
 ### Subject identity reference
 
 - Touches: one `core.partition` primary-key probe, one route-leading `semantic.subject` primary-key probe filtered by native visibility, and one descending `semantic.redirect` primary-key range limited to the latest row. The mandatory caller's Access check runs on that same snapshot and retains its own evidence cost. No projection, checkpoint, pending-member, definition, fact, relation, label, media or summary reads.
@@ -984,6 +988,73 @@ on the same client; Global has no personal owner. Creator, adopter, provenance a
   `lifecycle-input.test.ts` covers only negative pre-IO validation. Access's native `resource-role-held.test.ts`
   separately covers microsecond validity, branded T, direct grants and anchored RR after revocation.
 
+### Zone account-owner fence
+
+#### Zone read and mutation owner fence
+
+- Touches: after the exact Zone head lookup, read the current owner through the Access account primary key
+  `(routeOf(owner_id), owner_id)`. The native account state and `fenced` bit are checked in the same database
+  transaction as the Zone visibility decision or mutation. A missing owner fails closed. No owner, role, subject,
+  history, or account-wide scan is used.
+- Bound: at most two exact account point statements per Zone metadata/configuration/page read (eligibility plus the
+  response guard) and one per mutation; constant rows and statements, O(log A + log Z) B-tree blocks where A is
+  Accounts history and Z is Zone data. Zone-owned list already checks the requesting account once for the whole
+  page and does not add a per-row owner lookup.
+- Growth check: `test/zones/resource-growth.test.ts`: `Zone resource point metadata and bounded owned keys retain native growth bounds`, scales `[64, 512, 4096]`; native T behavior is covered by
+  `test/zones/account-erasure-user-cases.test.ts`.
+
+#### Community Context current-owner fence
+
+- Touches: a community Context read seeks the native resource-owner grant prefix and its exact current Access
+  account records. A transferred Context follows its surviving current owner, independently of minimized former
+  creator provenance. Global Context reads add no statement.
+- Bound: a resource/role-prefixed owner probe and one returned owner account point, with logarithmic indexed
+  access; ownership membership remains governed by native Access grants.
+- Growth check: `test/semantic/growth-context-lifecycle.test.ts`: `Context native delete restore and current overlay disclosure stay bounded without scanning dependents`, scales `[64, 512, 4096]`; native account T behavior is covered by
+  `test/semantic/account-erasure-user-cases.test.ts`.
+
+### Semantic account tombstone effect
+
+#### Existing account-agent identity cleanup
+
+- Touches: one exact Access account/agent source read and, when a derived Semantic agent exists, the existing
+  account-agent subject/backlink keys and a single local label revision. Verified identities continue through the
+  existing bounded reversal workflow; unrelated Semantic subjects are not enumerated.
+- Bound: constant point reads and writes for an ordinary unverified account agent. Verified reversal retains the
+  existing paged inbound-link bound; this effect adds no account-wide or subject-wide scan and makes no claim about
+  all-role erasure or shared custody.
+- Growth check: `test/semantic/agent-verification-reversal.test.ts`: `verification reversal growth stays flat across survivor in-degree`, scales `[64, 512, 4096]`; registration is covered by
+  `test/semantic/work-module.test.ts`.
+
+### Semantic candidate owner fence
+
+#### Candidate page and disclosure owner checks
+
+- Touches: one bounded batch joining each returned proposal candidate to its exact revision transaction, editorial
+  principal and Access account primary key; direct Content disclosure checks use the same exact candidate and owner
+  evidence. Missing owner evidence fails closed on candidate pages.
+- Bound: one additional statement for a candidate page with at most the requested page size plus one indexed
+  transaction and account join per candidate; one additional indexed join for a point disclosure read. Rows are
+  O(page size), independent of unrelated subjects and account count. No subject or history sweep is used.
+- Growth check: `test/semantic/account-erasure-user-cases.test.ts`: `native T fences a live moderator private candidate overlay while retaining the communal subject` and
+  `native T fences disclosed personal consent at the Semantic source before consumer catchup`.
+
+### indexed local account erasure
+
+- Touches: actual source/provenance transaction joins and same-home keyed role locators; one pending locator and
+  exact owning row per continuation, followed by released-home account progress. The registered locator effect
+  uses the actual participant fence, late-item and open-work protocols. No account-wide graph or payload scan.
+- Bound: one pending locator, one unsettled receipt and at most one exact Context child key, or one empty routing-home key; all count within native ceilings of 100 raw keys, 64 KiB returned and 1 KiB per locator;
+  fixed 4096-home routing discovery plus work proportional to this account's source records. Permanent applicability,
+  per-home receipts and delivery cursors survive process loss and workflow replay. Native growth captures all SQL
+  and pools. The default account-and-T workflow uses one persisted DBOS step per native page on the existing
+  effects queue and partition key; no queue settings change or nested page loop is involved. Its actual workflow
+  ID remains a pending shared-copy locator in native progress. Pending shared custody is observable and idle,
+  and never authorizes a Semantic ACK.
+- Growth check: `test/semantic/growth-account-erasure-local.test.ts` and
+  `test/semantic/account-erasure-local-runtime.test.ts`; default composition is covered by `work-module.test.ts`.
+  The owning contract retains historical-coverage, full shared-custody and final-ACK launch requirements.
+
 ## Deletion and retention
 
 The [deletion contract](deletion-contract.md) audits first-public-scope records, native evidence, required routes,
@@ -1021,7 +1092,6 @@ Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP 
 | State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                         |
 | Owned lifecycle and retention | Community Context DELETE/restore is implemented; contribution DELETE/restore, purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.             |
 | Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters. |
-| Community Context deletion, restoration and current disclosure | Context PK/active point and direct current temporal owner-grant probe at native T; ordinary Access/command/receipt/basis/outbox; one Context update for a real transition. Readers probe current Context before cached extension/overlay use. | Constant selected point rows and statements; logarithmic indexed blocks in Context population and subject history, plus existing separately charged Access/command work. No dependent-subject enumeration, history scan, cross-home SQL or cached permission. Delete and restore use the same bounded shape. | `test/semantic/growth-context-lifecycle.test.ts` retains history and population scales 64/512/4096 and all native pool work across delete/restore/Context/definition/overlay reads. Scoped acceptance passed after a normal 60s timeout/cascade and automatic isolated 2/8352 scoped pass. Raw all-scale cost evidence was not independently recovered in review, so this row does not certify physical all-Cost, retention/account cleanup or main closure. `context-lifecycle.test.ts` preserves settings/extensions/current decisions; `context-lifecycle-command.test.ts` adds receipt/noEffect/rollback/denial/state/time controls. |
 
 ### Community Context lifecycle
 
@@ -1062,70 +1132,3 @@ or private fields and preserve the nonpersonal identity skeleton unless that ske
 
 The bounded lifecycle derivation and evidence qualifications are recorded in the Community Context deletion,
 restoration and current disclosure row of the [Cost table](#cost).
-
-## Cost: Zone account-owner fence
-
-### Zone read and mutation owner fence
-
-- Touches: after the exact Zone head lookup, read the current owner through the Access account primary key
-  `(routeOf(owner_id), owner_id)`. The native account state and `fenced` bit are checked in the same database
-  transaction as the Zone visibility decision or mutation. A missing owner fails closed. No owner, role, subject,
-  history, or account-wide scan is used.
-- Bound: at most two exact account point statements per Zone metadata/configuration/page read (eligibility plus the
-  response guard) and one per mutation; constant rows and statements, O(log A + log Z) B-tree blocks where A is
-  Accounts history and Z is Zone data. Zone-owned list already checks the requesting account once for the whole
-  page and does not add a per-row owner lookup.
-- Growth check: `test/zones/resource-growth.test.ts`: `Zone resource point metadata and bounded owned keys retain native growth bounds`, scales `[64, 512, 4096]`; native T behavior is covered by
-  `test/zones/account-erasure-user-cases.test.ts`.
-
-### Community Context current-owner fence
-
-- Touches: a community Context read seeks the native resource-owner grant prefix and its exact current Access
-  account records. A transferred Context follows its surviving current owner, independently of minimized former
-  creator provenance. Global Context reads add no statement.
-- Bound: a resource/role-prefixed owner probe and one returned owner account point, with logarithmic indexed
-  access; ownership membership remains governed by native Access grants.
-- Growth check: `test/semantic/growth-context-lifecycle.test.ts`: `Context native delete restore and current overlay disclosure stay bounded without scanning dependents`, scales `[64, 512, 4096]`; native account T behavior is covered by
-  `test/semantic/account-erasure-user-cases.test.ts`.
-
-## Cost: Semantic account tombstone effect
-
-### Existing account-agent identity cleanup
-
-- Touches: one exact Access account/agent source read and, when a derived Semantic agent exists, the existing
-  account-agent subject/backlink keys and a single local label revision. Verified identities continue through the
-  existing bounded reversal workflow; unrelated Semantic subjects are not enumerated.
-- Bound: constant point reads and writes for an ordinary unverified account agent. Verified reversal retains the
-  existing paged inbound-link bound; this effect adds no account-wide or subject-wide scan and makes no claim about
-  all-role erasure or shared custody.
-- Growth check: `test/semantic/agent-verification-reversal.test.ts`: `verification reversal growth stays flat across survivor in-degree`, scales `[64, 512, 4096]`; registration is covered by
-  `test/semantic/work-module.test.ts`.
-
-## Cost: Semantic candidate owner fence
-
-### Candidate page and disclosure owner checks
-
-- Touches: one bounded batch joining each returned proposal candidate to its exact revision transaction, editorial
-  principal and Access account primary key; direct Content disclosure checks use the same exact candidate and owner
-  evidence. Missing owner evidence fails closed on candidate pages.
-- Bound: one additional statement for a candidate page with at most the requested page size plus one indexed
-  transaction and account join per candidate; one additional indexed join for a point disclosure read. Rows are
-  O(page size), independent of unrelated subjects and account count. No subject or history sweep is used.
-- Growth check: `test/semantic/account-erasure-user-cases.test.ts`: `native T fences a live moderator private candidate overlay while retaining the communal subject` and
-  `native T fences disclosed personal consent at the Semantic source before consumer catchup`.
-
-## Cost: indexed local account erasure
-
-- Touches: actual source/provenance transaction joins and same-home keyed role locators; one pending locator and
-  exact owning row per continuation, followed by released-home account progress. The registered locator effect
-  uses the actual participant fence, late-item and open-work protocols. No account-wide graph or payload scan.
-- Bound: one pending locator, one unsettled receipt and at most one exact Context child key, or one empty routing-home key; all count within native ceilings of 100 raw keys, 64 KiB returned and 1 KiB per locator;
-  fixed 4096-home routing discovery plus work proportional to this account's source records. Permanent applicability,
-  per-home receipts and delivery cursors survive process loss and workflow replay. Native growth captures all SQL
-  and pools. The default account-and-T workflow uses one persisted DBOS step per native page on the existing
-  effects queue and partition key; no queue settings change or nested page loop is involved. Its actual workflow
-  ID remains a pending shared-copy locator in native progress. Pending shared custody is observable and idle,
-  and never authorizes a Semantic ACK.
-- Growth check: `test/semantic/growth-account-erasure-local.test.ts` and
-  `test/semantic/account-erasure-local-runtime.test.ts`; default composition is covered by `work-module.test.ts`.
-  The owning contract retains historical-coverage, full shared-custody and final-ACK launch requirements.
