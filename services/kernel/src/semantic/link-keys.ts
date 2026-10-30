@@ -1,3 +1,4 @@
+import { collectSemanticRecordFacts } from './record-source-set.ts';
 import type { Release } from '@rezics/definitions';
 import { chooseLabel, languageRanges } from './language.ts';
 import type { FactRow } from './item.ts';
@@ -266,6 +267,7 @@ export async function holderFacts(
     .filter((row) => row.kind === 'label')
     .map((row) => ({ ...row, kind: 'label' as const, operation: row.operation as FactRow['operation'] }));
   facts.push(...(await slotView(tx, subject, 'schema:datePublished')).facts);
+  await collectSemanticRecordFacts(tx, subject, facts);
   return { type, facts };
 }
 

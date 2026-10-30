@@ -1,3 +1,6 @@
+import {
+  beginSemanticRecordSourceSet, collectSemanticRecordFacts, sealSemanticRecordSourceSet,
+} from './record-source-set.ts';
 import { initializeSubjectPagePublication, retainSubjectPageSource } from './subject-page-publication-store.ts';
 import { subjectPageFacts, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import {
@@ -170,6 +173,7 @@ export async function writeSubject(
     routeKey?: Uint8Array;
   },
 ) {
+  const sourceSet = await beginSemanticRecordSourceSet(tx);
   const { route, id: subjectId } = options.target;
   const input = options.item as Record<string, unknown>;
   const authored = options.source === undefined;
@@ -258,6 +262,7 @@ export async function writeSubject(
     fact.body = installed.body;
     events.push(...installed.events);
   }
+  await collectSemanticRecordFacts(tx, subjectId, facts, 1);
   await writeFacts(tx, {
     route,
     subject_id: subjectId,
@@ -329,6 +334,7 @@ export async function writeSubject(
     ),
     events,
   );
+  await sealSemanticRecordSourceSet(tx, sourceSet);
   return {
     value: resolveItem(subjectId, facts, String(input.type), dataTypes, {
       revision: 1,
@@ -1008,6 +1014,7 @@ export async function updateSubjectIdentity(
       },
     },
     async (tx, { transactionId }) => {
+      const sourceSet = await beginSemanticRecordSourceSet(tx);
       const visibility = await readIdentityVisibility.run(tx, { route, subject_id: options.subject });
       if (visibility?.visibility !== 'visible') throw new SubjectAccessDeniedError();
       if (options.labels !== undefined) {
@@ -1035,6 +1042,7 @@ export async function updateSubjectIdentity(
       )
         throw new SubjectInputError([{ pointer: '/labels', code: 'out_of_range' }]);
       const revision = (latest[0]!.revision ?? 0) + 1;
+      await collectSemanticRecordFacts(tx, options.subject, before.facts);
       await updateIdentity.run(tx, {
         route,
         subject_id: options.subject,
@@ -1045,6 +1053,7 @@ export async function updateSubjectIdentity(
         source: null,
         labels: facts.map((fact) => ({ slot_id: fact.slot_id, language: fact.language, body: fact.body })),
       });
+      await collectSemanticRecordFacts(tx, options.subject, facts, revision);
       const keysChanged = options.labels !== undefined || type !== before.type;
       const publicationEvents: { type: string; subject: string; data: unknown }[] = [];
       await recordSubjectPageDiff(
@@ -1066,6 +1075,7 @@ export async function updateSubjectIdentity(
         publicationEvents,
       );
       if (type !== before.type) await invalidateSubjectPage(tx, options.subject, transactionId, publicationEvents);
+      await sealSemanticRecordSourceSet(tx, sourceSet);
       return {
         value: { revision },
         events: [

@@ -2,6 +2,8 @@
 export const SEMANTIC_ERASURE_STORES = [
   'release_composite',
   'fact',
+  'record_source_set',
+  'record_source_set_member',
   'revision',
   'candidate',
   'acceptance',

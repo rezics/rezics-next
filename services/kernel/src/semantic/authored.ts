@@ -1,3 +1,4 @@
+import { recordSemanticDocumentSource } from './record-source-set.ts';
 import type { Release } from '@rezics/definitions';
 import { currentCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { appendAuthoredField } from '../content/authored-fields.ts';
@@ -32,6 +33,8 @@ function authoredInstall(tx: CommandTransaction, subject: string, events: Author
       revision,
       ...content,
     });
+    await recordSemanticDocumentSource(tx, { kind: 'contribution', subjectId: subject,
+      candidateId: candidate, revision, documentId: stored.id });
     events.push({
       type: 'com.rezics.content.authored-field.created.v1',
       subject,

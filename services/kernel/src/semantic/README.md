@@ -799,6 +799,36 @@ counter is rewound. Ordinary DELETE retains native rows and payload. This capabi
 account-terminal cleanup, legal hold commands or takedown deadline. Future retention must remove minimal personal
 or private fields and preserve the nonpersonal identity skeleton unless that skeleton is itself private.
 
+## Native command record sources
+
+`record-source-set.ts` issues one opaque set on the original native command transaction, before any
+Content, work or history serializer. The native writers append exact compact/candidate snapshots,
+old and current selections, actual term field/language revisions, and document identities returned
+by Content. Reading a copied document uses Content's native original-source helper; missing metadata
+is unavailable, never source absence. Terms use their real field/language keys, without candidate IDs.
+
+The original 512 submitted-fact, current-fact, term, byte and snak bounds remain binding. A set has at
+most 512 actual source units. Old/current versions share a unit only when
+that unit is the same actual contribution/document reference or term field/language. Distinct
+document references count separately; the existing snak bounds do not raise the source-member cap. Append rejects a genuinely larger
+set. There is no repeated declaration, truncated vector or raised sixteen-reference history limit.
+Native membership is relational and indexed in both set and member directions. Seal validates exact
+native revisions and computes the canonical digest in PostgreSQL; the executor callback and deferred
+commit constraint reject an unsealed, mismatched or incomplete native writer attempt. Committed heads
+and members are immutable. Rollback exposes no set.
+
+Accounts owns the mutually exclusive `declareCommandRecordSourceSet(tx,set)` declaration and its
+association with each real generated HistoryLocator. The Source producer provides the transaction-local
+building locator before seal; Accounts must defer sealed digest verification until the native command
+commits. The producer calls the actual Accounts declaration port directly. Source owns no history SQL
+or serializer initializer. Context and Zone keep the existing small port.
+
+Indexed member lookup pages only known native sets. Its end frontier says nothing about prior producer
+coverage, permissions, purge eligibility, historical completeness or a final acknowledgement. Reads use
+one live native home and release it before any foreign history read. Set metadata enters the existing
+Semantic all-role erasure inventory and minimizer; only the immutable technical keys needed to resolve
+ownership survive, with no account attribution or copied content body in the native set stores.
+
 ## Cost
 
 These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.

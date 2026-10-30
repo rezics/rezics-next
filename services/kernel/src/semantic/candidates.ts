@@ -1,3 +1,7 @@
+import {
+  beginSemanticRecordSourceSet, collectSemanticRecordFacts, sealSemanticRecordSourceSet,
+} from './record-source-set.ts';
+import { collectSemanticCandidateSource } from './record-source-set.ts';
 import { retainSubjectPageSource } from './subject-page-publication-store.ts';
 import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import { disclosureAccount, keepStatementPrivate, statementAudience } from './statement-disclosure.ts';
@@ -203,6 +207,7 @@ export async function writeProposal(
     install?: ProposalInstall;
   },
 ) {
+  const sourceSet = await beginSemanticRecordSourceSet(tx);
   const route = routeOf(options.subject)!;
   const subject = listed(await readSubjectRevision.run(tx, { route, subject_id: options.subject }))[0];
   if (!subject) throw new SubjectNotFoundError();
@@ -315,6 +320,7 @@ export async function writeProposal(
     }
     throw error;
   }
+  await collectSemanticRecordFacts(tx, options.subject, [{ ...input.fact, statement_id: candidate, body: factBody }], revision);
   if (options.source && 'source' in options.source && options.routeKey)
     await retainSubjectPageSource(tx, {
       subject: { route, id: options.subject },
@@ -333,6 +339,7 @@ export async function writeProposal(
       revision,
       release: options.release.release,
     });
+  await sealSemanticRecordSourceSet(tx, sourceSet);
   return {
     value: { candidate, revision },
     events: [
@@ -426,6 +433,7 @@ export async function decideCandidate(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
+      const sourceSet = await beginSemanticRecordSourceSet(tx);
       type CandidateRow = {
         revision: number;
         release: string;
@@ -452,6 +460,7 @@ export async function decideCandidate(
         )[0] as CandidateRow | undefined;
       }
       if (!candidate) throw new SubjectNotFoundError();
+      await collectSemanticCandidateSource(tx, options.subject, options.candidate);
       const concealed = await readHidden.run(tx, {
         route,
         subject_id: options.subject,
@@ -569,6 +578,7 @@ export async function decideCandidate(
               },
             });
         }
+        await sealSemanticRecordSourceSet(tx, sourceSet);
         return {
           value: {
             acceptance: {
@@ -642,6 +652,7 @@ export async function adoptCandidates(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
+      const sourceSet = await beginSemanticRecordSourceSet(tx);
       const subject = listed(await readAdoptionSubject.run(tx, { route, subject_id: options.subject }))[0];
       if (!subject) throw new SubjectNotFoundError();
       if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
@@ -687,6 +698,8 @@ export async function adoptCandidates(
         if (routeOf(entry.candidate) !== route || !supported || hiddenCandidates.has(entry.candidate))
           throw new SubjectInputError([{ pointer: `/selection/${index}/candidate`, code: 'unsupported' }]);
       }
+      for (const entry of options.selection)
+        await collectSemanticCandidateSource(tx, options.subject, entry.candidate);
       const seen = new Set<string>();
       for (const [index, entry] of options.selection.entries()) {
         if (seen.has(entry.candidate))
@@ -868,6 +881,7 @@ export async function adoptCandidates(
               });
           }
         }
+        await sealSemanticRecordSourceSet(tx, sourceSet);
         return {
           value: {
             adoption: {

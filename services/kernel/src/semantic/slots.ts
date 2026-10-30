@@ -1,3 +1,4 @@
+import { collectSemanticRecordFacts } from './record-source-set.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
@@ -217,7 +218,9 @@ export async function slotView(
   slot = slotId(subject, property),
 ): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
   const view = await readSlotView(tx, subject, property, context, defaults, slot);
-  return { ...view, facts: await omitHidden(tx, subject, view.facts) };
+  const facts = await omitHidden(tx, subject, view.facts);
+  await collectSemanticRecordFacts(tx, subject, facts);
+  return { ...view, facts };
 }
 
 /** Current Global authority only: rejected display candidates never enter this view.
@@ -236,8 +239,10 @@ export async function effectiveGlobalSlotFacts(
     ? await selectionFacts(tx, subject, property, selection)
     : state.compact.map((candidate) => candidateFact(property, candidate));
   if (state.expanded && facts.length !== selection.length) throw new AccessUnavailableError('contention');
+  const visible = await omitHidden(tx, subject, facts);
+  await collectSemanticRecordFacts(tx, subject, visible);
   return {
-    facts: await omitHidden(tx, subject, facts),
+    facts: visible,
     basis: state.expanded ? state.adoption : state.compact,
   };
 }
@@ -314,6 +319,7 @@ export async function expandSlot(
 ): Promise<void> {
   const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
   if (state.expanded) return;
+  await collectSemanticRecordFacts(tx, subject, state.compact.map((row) => candidateFact(property, row)));
   for (const row of state.compact) {
     await insertCandidate.run(tx, {
       route: routeOf(subject)!,

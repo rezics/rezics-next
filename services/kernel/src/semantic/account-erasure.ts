@@ -265,6 +265,7 @@ async function minimizePayload(
     );
   }
   if (role === 'acting-human' && store !== 'write_basis') return;
+  if (store === 'record_source_set' || store === 'record_source_set_member') return;
   if (store === 'write_basis') {
     const original = await tx.query(
       'SELECT transaction_id FROM semantic.erasure_provenance WHERE partition_no=$1 AND record_key=$2',
