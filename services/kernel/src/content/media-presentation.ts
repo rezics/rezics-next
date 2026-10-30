@@ -81,7 +81,7 @@ export async function readDocumentMediaPresentations(
     const before = rows.find((row) => presentation(row) !== null);
     if (!before) continue;
     const current = await authorizeMediaDerivative(
-      deps, id, actor, `${before.variant_format as 'avif' | 'webp'}-${before.variant_width}`, context, before,
+      deps, id, actor, `${before.variant_format as 'avif' | 'webp'}-${before.variant_width!}`, context, before,
     );
     if (current) {
       const image = presentation(current);

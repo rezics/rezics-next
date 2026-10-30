@@ -18,6 +18,7 @@ import type { BoardView } from './model.ts';
 import type { ItemView, PostEntry, ThreadView } from './reads.ts';
 import type { ReporterReportView, ReportReadView, ReportView } from './reports.ts';
 import type { Operation } from './operation-contract.ts';
+import type { DocumentMediaPage } from './media-presentation.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
@@ -469,7 +470,7 @@ export const DocumentMediaInputSchema = t.Object(
   { ids: t.Array(ContentIdSchema, { minItems: 1, maxItems: 32, uniqueItems: true }) },
   closed,
 );
-export const DocumentMediaPageSchema = t.Object(
+export const DocumentMediaPageSchema = t.Unsafe<DocumentMediaPage>(t.Object(
   {
     images: t.Array(t.Object({
       id: ContentIdSchema,
@@ -494,7 +495,7 @@ export const DocumentMediaPageSchema = t.Object(
     }, closed), { maxItems: 32 }),
   },
   closed,
-);
+));
 const reservationRequestId = t.String({ minLength: 1, maxLength: 255 });
 const mediaReservationFields = {
   mediaType: t.Union([
