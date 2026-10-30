@@ -35,14 +35,13 @@ export async function prepareRealmParticipationResult(
 ): Promise<RealmParticipationResult> {
   if (realmId === null || !check) return { realmId, allowed: true, readable: true };
   return within(deadline, async () => {
-    const client = await pool.connect();
-    try {
-      const readDecision: RealmParticipationReadDecision = {};
-      const allowed = await check(deadlineClient(client, deadline), { realmId, actor, readDecision }, time);
-      return { realmId, allowed, readable: readDecision.readable };
-    } finally {
-      client.release();
-    }
+    // Access prepares its evidence through independent pool reads before it
+    // evaluates the Realm anchor. Passing a checked-out client here would hold
+    // one connection across those reads and deadlock a bounded single-connection
+    // pool. Keep this client lazy so each anchored query gets its own checkout.
+    const readDecision: RealmParticipationReadDecision = {};
+    const allowed = await check(deadlineClient(pool, deadline), { realmId, actor, readDecision }, time);
+    return { realmId, allowed, readable: readDecision.readable };
   });
 }
 
