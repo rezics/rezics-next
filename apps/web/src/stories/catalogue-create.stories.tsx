@@ -1,0 +1,166 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+import { useMemo } from 'react';
+import { CreateSubjectForm } from '../features/catalogue/create-subject-form';
+import { catalogueCreateFixture, catalogueCreatedId, type CreateScenario } from '../kernel/fake/catalogue-create';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { AppShell } from '../shell/shell';
+import { PatternStory } from './page';
+
+function CreateStory({ scenario = 'ready' }: { scenario?: CreateScenario }) {
+  const locale = getLocale();
+  const fixture = useMemo(() => catalogueCreateFixture(scenario, locale), [scenario, locale]);
+  return (
+    <PatternStory path="/catalogue/new" visitor={scenario === 'signed-out' ? 'Signed Out' : 'Signed In'}>
+      <AppShell>
+        <CreateSubjectForm
+          key={`${scenario}:${locale}`}
+          locale={locale}
+          session={scenario === 'signed-out' ? 'signed-out' : 'signed-in'}
+          transport={fixture.transport}
+          onNavigate={() => {
+            /* Keep the confirmed ordinary-reader link reviewable in this story. */
+          }}
+        />
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+const meta = {
+  title: 'Pages/Catalogue/Create subject',
+  component: CreateStory,
+  tags: ['autodocs'],
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+    docs: {
+      description: {
+        component:
+          'Initial multilingual terms using released Type metadata and the generated subject request seam. These stories do not establish native API or visual acceptance.',
+      },
+    },
+  },
+} satisfies Meta<typeof CreateStory>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+async function fill(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await userEvent.selectOptions(
+    await canvas.findByRole('combobox', { name: m.catalogue_create_type() }),
+    'schema:Movie',
+  );
+  const language = canvas.getByRole('textbox', { name: m.catalogue_create_language() });
+  await userEvent.clear(language);
+  await userEvent.type(language, 'en');
+  await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'A new film');
+  await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_description() }), 'An independent film');
+  await userEvent.type(canvas.getByRole('textbox', { name: m.catalogue_create_aliases() }), 'Working title');
+  return canvas;
+}
+async function submit(canvasElement: HTMLElement) {
+  const canvas = await fill(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+  return canvas;
+}
+
+export const Ready: Story = {};
+export const CreateMultilingualSubject: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = await fill(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_add_language() }));
+    await userEvent.type(canvas.getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!, 'ja');
+    await userEvent.type(canvas.getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!, '新しい映画');
+    await userEvent.dblClick(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    const link = await canvas.findByRole('link', { name: m.catalogue_create_open() });
+    expect(link.getAttribute('href')).toBe(`/${getLocale()}/subjects/${catalogueCreatedId}/a-new-film`);
+    expect(canvas.queryByRole('button', { name: m.catalogue_create_submit() })).toBeNull();
+  },
+};
+export const Loading: Story = { args: { scenario: 'loading' } };
+export const NoReleasedTypes: Story = { args: { scenario: 'empty' } };
+export const SignedOut: Story = { args: { scenario: 'signed-out' } };
+export const Denied: Story = {
+  args: { scenario: 'denied' },
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_denied());
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue('A new film');
+  },
+};
+export const InvalidFields: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('combobox', { name: m.catalogue_create_type() });
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_submit() }));
+    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_invalid());
+    expect(canvas.getByRole('combobox', { name: m.catalogue_create_type() })).toHaveAttribute('aria-invalid', 'true');
+  },
+};
+export const RejectedValuesRefreshTypes: Story = {
+  args: { scenario: 'invalid' },
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_refresh());
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveAttribute('aria-invalid', 'true');
+  },
+};
+export const Conflict: Story = {
+  args: { scenario: 'conflict' },
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_conflict());
+    expect(canvas.getByRole('button', { name: m.catalogue_create_submit() })).toBeDisabled();
+  },
+};
+export const UnavailableRetry: Story = {
+  args: { scenario: 'definitions-unavailable' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.catalogue_create_retry() }));
+    expect(await canvas.findByRole('combobox', { name: m.catalogue_create_type() })).toBeVisible();
+  },
+};
+export const UncertainSubmitRetry: Story = {
+  args: { scenario: 'uncertain' },
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_uncertain());
+    expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    expect(await canvas.findByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/subjects/${catalogueCreatedId}/a-new-film`,
+    );
+  },
+};
+export const Saving: Story = {
+  args: { scenario: 'saving' },
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    expect(await canvas.findByRole('button', { name: m.catalogue_create_saving() })).toBeDisabled();
+  },
+};
+export const CreatedReaderUnavailable: Story = {
+  args: { scenario: 'reader-unavailable' },
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    expect(await canvas.findByText(m.catalogue_create_reader_unavailable())).toBeVisible();
+    expect(canvas.queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
+  },
+};
+export const CreatedReaderConcealed: Story = {
+  args: { scenario: 'concealed' },
+  play: async ({ canvasElement }) => {
+    const canvas = await submit(canvasElement);
+    expect(await canvas.findByText(m.catalogue_create_concealed())).toBeVisible();
+    expect(canvas.queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
+  },
+};

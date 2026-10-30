@@ -1,4 +1,5 @@
 import type { PublicFigure } from './subject-ratings';
+import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -330,7 +331,16 @@ export function SubjectPage({
 }) {
   const overview = view === 'overview';
   const read = subjectBody(page);
-  const renderedActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
+  const existingActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
+  const renderedActions =
+    read && !page.account ? (
+      <>
+        {existingActions}
+        <CreateSubjectEntry locale={locale} />
+      </>
+    ) : (
+      existingActions
+    );
   const jsonLd = overview ? subjectPageJsonLd(page, locale) : undefined;
   const bar =
     tabs && tabLabels && tabs.length > 0 ? (

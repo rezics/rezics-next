@@ -1,3 +1,4 @@
+import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import type { KernelClient } from '@rezics/client';
 import {
   planReads,
@@ -206,7 +207,7 @@ export function SubjectFrame({
   const facts = [typeLabel, frame.date].filter((fact): fact is string => !!fact);
   return (
     <div data-slot="subject-frame" className="flex min-w-0 flex-col gap-4">
-      <header data-slot="subject-header" className="flex min-w-0 items-center gap-3">
+      <header data-slot="subject-header" className="flex min-w-0 flex-wrap items-center gap-3">
         <Cover
           subject={coverSubject(frame.id, title, frame.summary ?? undefined, frame.type)}
           cover={coverOf(frame.summary ?? undefined)}
@@ -217,7 +218,7 @@ export function SubjectFrame({
           {...(coverLabels ? { labels: coverLabels } : {})}
           {...(ratio ? { ratio } : {})}
         />
-        <div className="min-w-0 space-y-0.5">
+        <div className="min-w-0 flex-1 space-y-0.5">
           <p className="flex flex-wrap items-baseline gap-x-3 break-words">
             <span
               className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} font-serif text-lg font-semibold`}
@@ -237,6 +238,9 @@ export function SubjectFrame({
               <MetaLine items={facts} />
             </p>
           )}
+        </div>
+        <div data-slot="actions">
+          <CreateSubjectEntry locale={locale} />
         </div>
       </header>
       {navigation ?? (

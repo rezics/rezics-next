@@ -11,6 +11,31 @@ views are organised. Mechanisms live with their owners: covers in [Cover](../pac
 This page spans those modules because a reader experiences one page; splitting its rules across owners would let
 each owner ship a correct part and the page still fail.
 
+## Create a catalogue subject
+
+`/{locale}/catalogue/new` is the generic initial-terms form, discoverable in the ordinary subject header's
+content action slot. It offers the existing header search and search page first; opening a matching subject keeps
+that existing identity. Creation never merges identities or assigns a client-generated subject ID.
+
+The form reads the active immutable definition release through the shared release helpers. Its Type choices and
+localized help come from emitted metadata and the existing language fallback. Work, edition and release remain
+different objects. The data-language tags on names, descriptions and aliases are independent of the interface
+language. One name is required per entered language; descriptions and newline-separated aliases are optional.
+This route creates initial terms only, with no manufactured statement, citation, custom Type publication, Type
+migration or post-create term-update API. Later field contributions use their separate editor.
+
+Submission uses the generated `POST /v1/subjects` ItemInputSchema body and the existing session BFF, CSRF check
+and native idempotency key. A confirmed response means **created**, not a pending proposal: initial facts are
+virtually accepted and adopted in Global. The same native client reads the exact returned ID without bearer
+fallback, carrying the native write session token into that ordinary read. A successful read supplies its canonical
+localized subject address; a failed or concealed read never becomes a fabricated page or a different identity.
+
+Definitions loading, no available Types, signed-out, denied, invalid, conflict, unavailable and saving have explicit
+states. Errors link to controls. Server value rejection refreshes the active release while retaining the draft.
+An uncertain submit freezes the exact draft and idempotency key for retry; concurrent clicks issue one command.
+A key conflict requires explicit review before a new request. A confirmed creation with an unavailable reader
+keeps its exact ID and offers an ordinary read retry without creating again. This private, uncached form is noindex.
+
 ## Canonical public reading
 
 Adopt the complete reader journey recommended by [subject design research](research/web-subject-design.md):
