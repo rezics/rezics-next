@@ -6,10 +6,10 @@ export type SuggestionState = 'idle' | 'loading' | 'ready' | 'empty' | 'error' |
 export type HeaderSearchState = {
   expanded: boolean;
   phoneSheet: boolean;
-  scope?: SearchScope;
+  scope?: SearchScope | undefined;
   suggestions: SuggestionState;
   query: string;
-  result?: SuggestionResult;
+  result?: SuggestionResult | undefined;
   activeIndex: number;
 };
 
@@ -19,11 +19,11 @@ export type HeaderSearchEvent =
   | { type: 'escape' }
   | { type: 'outside' }
   | { type: 'remove-scope' }
-  | { type: 'sync-scope'; scope?: SearchScope }
+  | { type: 'sync-scope'; scope?: SearchScope | undefined }
   | { type: 'query'; query: string }
   | { type: 'sync-query'; query: string }
   | { type: 'active'; index: number }
-  | { type: 'suggestions'; state: SuggestionState; result?: SuggestionResult };
+  | { type: 'suggestions'; state: SuggestionState; result?: SuggestionResult | undefined };
 
 export function initialHeaderSearchState(scope?: SearchScope, query = ''): HeaderSearchState {
   return { expanded: false, phoneSheet: false, scope, query, suggestions: 'idle', activeIndex: -1 };

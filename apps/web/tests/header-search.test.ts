@@ -60,3 +60,12 @@ test('available route filters report active conditions while preserving the one 
   expect(markup).not.toContain(m.header_search_filters_unavailable());
   expect(markup.match(/role="combobox"/g) ?? []).toHaveLength(1);
 });
+
+// Retained existing regression for the sibling toolbar, which this slice does not change.
+const source = async (path: string) => Bun.file(new URL(path, import.meta.url)).text();
+
+test('the shelf toolbar no longer renders a second text search box', async () => {
+  const toolbar = await source('../../../packages/ui/src/components/shelf-toolbar.tsx');
+  expect(toolbar).not.toContain('<Input');
+  expect(toolbar).not.toContain('type="search"');
+});

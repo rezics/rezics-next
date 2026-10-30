@@ -18,15 +18,15 @@ import type { SearchScope } from './types';
 
 export type HeaderSearchProps = {
   locale: string;
-  scope?: SearchScope;
+  scope?: SearchScope | undefined;
   initialQuery?: string;
-  fields?: readonly [string, string][];
+  fields?: readonly [string, string][] | undefined;
   loadSuggestions?: HeaderSuggestionLoader;
   /** Only supply this for an existing suggestion operation that enforces the current scope. */
   loadScopedSuggestions?: HeaderSuggestionLoader;
   onNavigate?(href: string): void;
   /** Resolve a member's list presentation only when supplied by the read. Otherwise use its own type. */
-  suggestionRatio?(suggestion: SuggestionResult['subjects'][number]): CoverRatio | undefined;
+  suggestionRatio?: ((suggestion: SuggestionResult['subjects'][number]) => CoverRatio | undefined) | undefined;
   /** Reserved named empty action slot. No action is rendered. */
   slots?: { ask?: null };
   /** Use the same full-screen sheet when an enclosing surface requires it. */

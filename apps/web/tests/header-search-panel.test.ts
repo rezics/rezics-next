@@ -20,6 +20,7 @@ import { m } from '../src/paraglide/messages.js';
 
 const scope: SearchScope = { kind: 'Collection', id: 'reading', name: 'Reading list' };
 const result: SuggestionResult = {
+  as_of: '2026-10-27T11:31:57.344Z',
   subjects: [
     {
       id: '01a17dfd-5dbf-738a-9405-9dfa9a8ec069',

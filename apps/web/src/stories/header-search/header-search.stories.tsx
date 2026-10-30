@@ -14,7 +14,11 @@ import { searchQueryOptions } from '../../search/search-queries';
 import { searchLoaderDeps } from '../../search/search-params';
 import { PatternStory } from '../page';
 
-const suggestions = { subjects: recording.subjects, types: { 'schema:Book': { en: 'Book', 'zh-Hans': '图书' } } };
+const suggestions = {
+  as_of: recording.as_of,
+  subjects: recording.subjects,
+  types: { 'schema:Book': { en: 'Book', 'zh-Hans': '图书' } },
+};
 const ready: HeaderSuggestionLoader = async () => suggestions;
 const empty: HeaderSuggestionLoader = async () => ({ ...suggestions, subjects: [] });
 const failed: HeaderSuggestionLoader = async () => {
@@ -81,7 +85,7 @@ type Story = StoryObj<typeof meta>;
 async function expand({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
   if (window.matchMedia('(max-width: 767px)').matches)
-    await userEvent.click(await canvas.findByRole('button', { name: m.search_label(), exact: true }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.search_label() }));
   else await userEvent.click(await canvas.findByRole('combobox', { name: m.search_label() }));
   const input = await canvas.findByRole('combobox', { name: m.search_label() });
   await expect(input).toHaveAttribute('aria-expanded', 'true');
@@ -112,7 +116,7 @@ export const ScopeChip: Story = {
 export const Expanded: Story = {
   play: async (context) => {
     const { canvas } = await expand(context);
-    await expect(canvas.getByRole('button', { name: m.search_submit(), exact: true })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: m.search_submit() })).toBeDisabled();
   },
 };
 export const Typing: Story = {
