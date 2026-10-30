@@ -17,6 +17,7 @@ import {
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
+import { BoundedProcessError, runBoundedInstallProcess, type ProcessLimits } from './install-process.ts';
 
 const hour = 60 * 60 * 1000;
 function manifestPaths(root: string): string[] {
@@ -51,13 +52,36 @@ export function dependencyKey(root: string): string {
       .update('\0');
   return hash.digest('hex');
 }
-function runInstall(root: string, shared = false): void {
+export class DependencyInstallError extends Error {
+  readonly infrastructure = true;
+  readonly step: string;
+  readonly workspace: string;
+  readonly packageName: string | undefined;
+
+  constructor(root: string, step: string, cause: unknown) {
+    super(`Infrastructure failure: dependency install failed in ${root}: ${String(cause)}`, { cause });
+    this.name = 'DependencyInstallError';
+    this.step = cause instanceof BoundedProcessError ? cause.step : step;
+    this.workspace = cause instanceof BoundedProcessError ? cause.workspace : root;
+    this.packageName = cause instanceof BoundedProcessError ? cause.packageName : undefined;
+  }
+}
+
+function runInstall(root: string, shared = false, limits?: Partial<ProcessLimits>): void {
   const args = ['install', '--frozen-lockfile', ...(shared ? ['--backend=copyfile'] : [])];
-  const result = spawnSync('bun', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-  if (result.status !== 0)
-    throw new Error(
-      `Dependency install failed in ${root}: ${result.stderr || result.error?.message || `bun exited ${result.status}`}`,
-    );
+  const step = `bun ${args.join(' ')}`;
+  try {
+    runBoundedInstallProcess({
+      command: 'bun',
+      args,
+      cwd: root,
+      step,
+      purpose: 'preparation',
+      ...(limits ? { limits } : {}),
+    });
+  } catch (error) {
+    throw new DependencyInstallError(root, step, error);
+  }
 }
 /** Workspace directories (relative to root) that have a package.json. */
 function workspaceDirs(root: string): string[] {
@@ -151,10 +175,10 @@ function copySkeleton(template: string, worktree: string): void {
   copyWorkspaceSkeletons(template, worktree);
   localWorkspaceLinks(worktree);
 }
-export function installPrivate(worktree: string): void {
+export function installPrivate(worktree: string, limits?: Partial<ProcessLimits>): void {
   const nodeModules = join(worktree, 'node_modules');
   rmSync(nodeModules, { recursive: true, force: true });
-  runInstall(worktree);
+  runInstall(worktree, false, limits);
   localWorkspaceLinks(worktree);
   ignoreNodeModules(worktree);
   writeFileSync(join(nodeModules, '.goal-private-dependencies'), dependencyKey(worktree));
@@ -169,18 +193,22 @@ export function sealReadOnly(path: string): void {
   chmodSync(path, 0o555);
 }
 
-export function installShared(worktree: string, storeRoot = join(dirname(worktree), '..', 'dependency-stores')): void {
+export function installShared(
+  worktree: string,
+  storeRoot = join(dirname(worktree), '..', 'dependency-stores'),
+  processLimits?: Partial<ProcessLimits>,
+): void {
   if (!existsSync(join(worktree, 'package.json'))) return;
   const key = dependencyKey(worktree);
   const prior = readlinkStore(worktree);
   const marker = join(worktree, 'node_modules', '.goal-private-dependencies');
   if (existsSync(marker)) {
     if (readFileSync(marker, 'utf8') === key) return;
-    installPrivate(worktree);
+    installPrivate(worktree, processLimits);
     return;
   }
   if (prior && basename(dirname(dirname(prior))) !== key) {
-    installPrivate(worktree);
+    installPrivate(worktree, processLimits);
     return;
   }
   const store = join(storeRoot, key);
@@ -189,7 +217,7 @@ export function installShared(worktree: string, storeRoot = join(dirname(worktre
   try {
     if (!existsSync(join(store, 'node_modules', '.bun'))) {
       if (prior) {
-        installPrivate(worktree);
+        installPrivate(worktree, processLimits);
         return;
       }
       const temp = join(storeRoot, `.building-${key}-${randomUUID()}`);
@@ -205,10 +233,10 @@ export function installShared(worktree: string, storeRoot = join(dirname(worktre
           mkdirSync(dirname(dest), { recursive: true });
           cpSync(path, dest);
         }
-        runInstall(temp, true);
+        runInstall(temp, true, processLimits);
         if (!existsSync(join(temp, 'node_modules', '.bun'))) {
           removeBuild(temp);
-          installPrivate(worktree);
+          installPrivate(worktree, processLimits);
           return;
         }
         sealReadOnly(join(temp, 'node_modules', '.bun'));
