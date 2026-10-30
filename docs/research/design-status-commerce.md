@@ -55,6 +55,32 @@ curated-members preparation guard and the creator-publication translations along
 `bun test apps/web/tests/mapped-entitlement.test.ts` passes three tests with 198 assertions. Browser, Storybook,
 native, remote and integration proof/publication remain pending. No protected-use, privacy, runtime or main approval is claimed.
 
+**Offer acquisition recovery.** The existing `/checkout` BFF now decodes native `409 benefit_already_owned` and
+`409 acquisition_pending` Problems with `effect_status: not_applied`, using the existing Valibot decoder and native
+UUID shape. It forwards only recognized Problem members and validated record IDs from its current-session
+`POST /v1/orders` response. The Offer page explains the two outcomes separately and links through the current
+locale helper to the existing entitlement (preferred for already-owned) or order. An already-owned response with
+only an order ID opens that order; missing/malformed IDs and unknown conflicts retain unavailable/retry behavior.
+It never follows a supplied href, infers ownership from Library, replaces displayed terms with an old order, creates
+a second checkout intent or grants reader access. The existing order and entitlement pages remain their own
+authorized reads. Price conflict still requires explicit reload/review; timeout retries retain the original snapshot,
+key and observed revision. Concurrent clicks share one in-flight request; resolved recovery cannot resubmit.
+
+The shared decoder/request helper is in `apps/web/src/checkout/offer-recovery.ts`; the live BFF is
+`apps/web/src/checkout/start.ts` (the alternative handler/route paths in the assignment do not exist).
+The current base does not expose the two native conflict producers; this consumer uses the real generated
+order-create call and recognizes their exact response when present, without a guessed transport or ownership stub.
+Constructed current-wire fixtures use actual example record IDs and declared mapped-offer money/tax/benefit facts;
+historical recordings remain unchanged. Added source tests cover both recovery outcomes, response validation,
+single submission, original-intent retry, price conflict distinction and the credential-bound BFF request.
+They have not been executed in this interface delivery.
+
+Web's next ordinary 390/1280, eight-locale review receives
+`pages-commerce-offer--already-owned`, `pages-commerce-offer--already-owned-mobile`,
+`pages-commerce-offer--acquisition-pending` and `pages-commerce-offer--acquisition-pending-mobile`;
+retain `pages-commerce-offer--terms-changed` and `pages-commerce-offer--terms-changed-mobile` for comparison.
+Source fixtures are not payment, protected-use, native, visual or promoted-main approval.
+
 **Creator offers and exact money.** The [native money policy](../../services/kernel/src/commerce/README.md#native-money-policy-and-captured-prices)
 owns closed USD/EUR sale configuration, recorded units and nullable historical tax facts. The served
 `/creator/offers/new?editionId=<published edition ID>` consumes Content's actual published metadata through the

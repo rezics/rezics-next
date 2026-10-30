@@ -4,6 +4,7 @@ import { dependencyUnavailable, problem, problemResponse } from '../media/kernel
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { UUID } from './price';
+import { decodeAcquisitionProblem } from './offer-recovery';
 
 const bodyLimit = 4 * 1024;
 
@@ -97,6 +98,12 @@ export async function startCheckout(request: Request, sessionEnv: Partial<Sessio
     const status = result.status || result.error?.status;
     if (status === 409 && result.error) {
       const failure: unknown = result.error.value;
+      const existing = decodeAcquisitionProblem(status, failure);
+      if (existing)
+        return Response.json(existing, {
+          status: 409,
+          headers: { 'content-type': 'application/problem+json', 'cache-control': 'private, no-store' },
+        });
       if (failure && typeof failure === 'object' && 'code' in failure) {
         if (failure.code === 'offer_revision_conflict')
           return problemResponse(problem(409, 'offer_revision_conflict', 'Offer Terms Changed'));

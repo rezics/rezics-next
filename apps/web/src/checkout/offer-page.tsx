@@ -4,22 +4,26 @@ import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
-import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { OfferPageData } from './offer';
 import { PageHeading } from '../shell/page-heading';
 import { SubjectCover } from './subject-cover';
 import { BenefitDetails } from './benefit-details';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { isMoneyUnit } from './money-schema';
+import { createOfferRequest, type AcquisitionProblem } from './offer-recovery';
 
-type Phase = 'ready' | 'submitting' | 'retry' | 'terms-changed' | 'unavailable' | 'closed';
+type Phase = 'ready' | 'submitting' | 'retry' | 'terms-changed' | 'unavailable' | 'closed' | 'existing';
 
 export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
   const submittedOffer = useRef<OfferPageData | null>(null);
+  const submission = useRef<ReturnType<typeof createOfferRequest> | null>(null);
   const offer = submittedOffer.current ?? observedOffer;
   const { state: session, csrfToken: csrf } = useSession();
+  const csrfToken = useRef(csrf);
+  csrfToken.current = csrf;
   const admitted = useOperation('order.create');
   const [phase, setPhase] = useState<Phase>(offer.state === 'delisted' ? 'unavailable' : 'ready');
+  const [existing, setExisting] = useState<AcquisitionProblem | null>(null);
   const termsKnown =
     isMoneyUnit(offer.moneyUnit) && offer.taxBehavior === 'exclusive' && offer.benefit?.kind === 'mapped';
 
@@ -32,57 +36,32 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
     }
     // A loader refresh cannot replace consent while the original creation outcome is uncertain.
     submittedOffer.current ??= offer;
-    setPhase('submitting');
-    try {
-      const response = await fetch('/checkout', {
+    submission.current ??= createOfferRequest(
+      { offerId: offer.id, expectedOfferRevision: offer.revision, idempotencyKey: offer.idempotencyKey },
+      (intent) => fetch('/checkout', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: { 'content-type': 'application/json', 'x-csrf-token': csrf },
-        body: JSON.stringify({
-          offerId: offer.id,
-          expectedOfferRevision: offer.revision,
-          idempotencyKey: offer.idempotencyKey,
-        }),
-      });
-      if (response.status === 409) {
-        const failure: unknown = await response.json();
-        if (failure && typeof failure === 'object' && 'code' in failure && failure.code === 'offer_revision_conflict')
-          setPhase('terms-changed');
-        else if (failure && typeof failure === 'object' && 'code' in failure && failure.code === 'offer_unavailable')
-          setPhase('unavailable');
-        else setPhase('retry');
-        return;
-      }
-      if (!response.ok) {
-        if (
-          response.status === 403 &&
-          isPlatformClosedProblem(
-            response.status,
-            await response
-              .clone()
-              .json()
-              .catch(() => undefined),
-          )
-        ) {
-          setPhase('closed');
-          return;
-        }
-        setPhase('retry');
-        return;
-      }
-      const body = (await response.json()) as { checkoutUrl?: unknown };
-      if (typeof body.checkoutUrl === 'string' && body.checkoutUrl) {
-        window.location.assign(body.checkoutUrl);
-        return;
-      }
-      setPhase('retry');
-    } catch {
-      setPhase('retry');
+        headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken.current ?? '' },
+        body: JSON.stringify(intent),
+      }),
+    );
+    setPhase('submitting');
+    const result = await submission.current();
+    if (!result) return;
+    if (result.kind === 'checkout') {
+      window.location.assign(result.url);
+      return;
     }
+    if (result.kind === 'existing') setExisting(result.problem);
+    setPhase(result.kind);
   }
 
   const note =
-    phase === 'terms-changed'
+    phase === 'existing' && existing
+      ? existing.code === 'benefit_already_owned'
+        ? m.offer_already_owned()
+        : m.offer_acquisition_pending()
+      : phase === 'terms-changed'
       ? m.offer_terms_changed()
       : phase === 'unavailable'
         ? m.offer_unavailable()
@@ -125,7 +104,25 @@ export function OfferPage({ offer: observedOffer }: { offer: OfferPageData }) {
         <BenefitDetails benefit={offer.benefit} creatorName={offer.creatorName} locale={getLocale()} review />
       ) : null}
       <div className="pt-2">
-        {phase === 'terms-changed' ? (
+        {phase === 'existing' && existing ? (
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full sm:w-auto"
+            nativeButton={false}
+            render={
+              <a href={localizeHref(
+                existing.code === 'benefit_already_owned' && existing.entitlementId
+                  ? `/entitlements/${encodeURIComponent(existing.entitlementId)}`
+                  : `/orders/${encodeURIComponent(existing.orderId!)}`,
+              )} />
+            }
+          >
+            {existing.code === 'benefit_already_owned' && existing.entitlementId
+              ? m.offer_open_entitlement()
+              : m.offer_open_order()}
+          </Button>
+        ) : phase === 'terms-changed' ? (
           <Button variant="outline" size="lg" className="w-full sm:w-auto" onClick={() => window.location.reload()}>
             {m.offer_review_terms()}
           </Button>

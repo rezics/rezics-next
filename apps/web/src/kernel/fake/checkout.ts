@@ -1,6 +1,33 @@
 import type { FakeRoute } from '../fake-modules.ts';
 import type { KernelRecording } from '../fake.ts';
-import { fixedEditionTerms } from './entitlements';
+import { fixedEditionTerms, mappedEntitlement } from './entitlements';
+import pending from '../recorded/order-pending.json';
+import type { AcquisitionProblem } from '../../checkout/offer-recovery';
+
+// Constructed current native 409 bodies, not recordings or an ownership lookup.
+export const acquisitionProblems = {
+  owned: {
+    type: 'https://rezics.com/problems/benefit_already_owned',
+    title: 'Benefit Already Owned',
+    status: 409,
+    code: 'benefit_already_owned',
+    retryable: false,
+    effect_status: 'not_applied',
+    request_id: '0192f3a0-6c1e-7b2a-9d4e-000000000071',
+    entitlementId: mappedEntitlement.id,
+    orderId: mappedEntitlement.orderId,
+  },
+  pending: {
+    type: 'https://rezics.com/problems/acquisition_pending',
+    title: 'Acquisition Pending',
+    status: 409,
+    code: 'acquisition_pending',
+    retryable: false,
+    effect_status: 'not_applied',
+    request_id: '0192f3a0-6c1e-7b2a-9d4e-000000000072',
+    orderId: pending.order.id,
+  },
+} satisfies Record<string, AcquisitionProblem>;
 
 let mapped = false;
 export function setMappedCheckoutStory(enabled: boolean) {
@@ -50,7 +77,15 @@ export const routes: FakeRoute[] = [
       if (!localized) return;
       return {
         ...recording,
-        offer: mapped ? { ...localized, revision: 3, contentEdition: fixedEditionTerms } : localized,
+        offer: mapped
+          ? {
+              ...localized,
+              revision: 3,
+              contentEdition: fixedEditionTerms,
+              moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+              taxBehavior: 'exclusive',
+            }
+          : localized,
       };
     },
   },

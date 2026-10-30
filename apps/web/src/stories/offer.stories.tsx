@@ -2,7 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { PageStory, exposureStory, pagePaths, offerCjkReady, offerDelistedReady, offerPageReady } from './page';
-import { setMappedCheckoutStory } from '../kernel/fake/checkout';
+import { acquisitionProblems, setMappedCheckoutStory } from '../kernel/fake/checkout';
+import { localizeHref } from '../paraglide/runtime.js';
+
+function currentMappedOffer() {
+  setMappedCheckoutStory(true);
+  return () => setMappedCheckoutStory(false);
+}
 
 const meta = {
   title: 'Pages/Commerce/Offer',
@@ -59,6 +65,7 @@ export const ExposureClosed: Story = exposureStory(pagePaths.offer, true);
 
 export const TermsChanged: Story = {
   name: 'Terms changed after review',
+  beforeEach: currentMappedOffer,
   play: async ({ canvasElement }) => {
     const originalFetch = window.fetch;
     let starts = 0;
@@ -110,3 +117,55 @@ export const MappedFixedEdition: Story = {
     await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
   },
 };
+
+function recoveryStory(problem: (typeof acquisitionProblems)[keyof typeof acquisitionProblems]): Story {
+  return {
+    beforeEach: currentMappedOffer,
+    render: () => <PageStory visitor="Signed In" path={pagePaths.offer} />,
+    async play({ canvasElement }) {
+      const originalFetch = window.fetch;
+      let starts = 0;
+      window.fetch = (async (input, init) => {
+        const target = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const method = init?.method ?? (typeof input === 'string' || input instanceof URL ? 'GET' : input.method);
+        if (new URL(target, window.location.href).pathname === '/checkout' && method === 'POST') {
+          starts++;
+          return Response.json(problem, { status: 409, headers: { 'content-type': 'application/problem+json' } });
+        }
+        return originalFetch(input, init);
+      }) as typeof window.fetch;
+      try {
+        const view = within(await within(canvasElement).findByRole('main'));
+        await userEvent.click(await view.findByRole('button', { name: m.offer_buy() }));
+        const owned = problem.code === 'benefit_already_owned';
+        await view.findByText(owned ? m.offer_already_owned() : m.offer_acquisition_pending());
+        const link = await view.findByRole('link', {
+          name: owned ? m.offer_open_entitlement() : m.offer_open_order(),
+        });
+        await expect(link).toHaveAttribute(
+          'href',
+          localizeHref(owned ? `/entitlements/${acquisitionProblems.owned.entitlementId}` : `/orders/${problem.orderId}`),
+        );
+        await expect(view.queryByRole('button', { name: m.offer_buy() })).toBeNull();
+        await expect(view.queryByRole('button', { name: m.offer_retry() })).toBeNull();
+        await expect(view.queryByRole('button', { name: m.offer_review_terms() })).toBeNull();
+        await expect(view.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+        await expect(starts).toBe(1);
+      } finally {
+        window.fetch = originalFetch;
+      }
+    },
+  };
+}
+
+export const AlreadyOwned: Story = { ...recoveryStory(acquisitionProblems.owned), name: 'Already purchased' };
+export const AcquisitionPending: Story = {
+  ...recoveryStory(acquisitionProblems.pending),
+  name: 'Existing payment in progress',
+};
+const phone = {
+  parameters: { viewport: { options: { phone: { name: 'Phone 390', styles: { width: '390px', height: '844px' } } } } },
+  globals: { viewport: { value: 'phone' } },
+};
+export const AlreadyOwnedMobile: Story = { ...AlreadyOwned, ...phone };
+export const AcquisitionPendingMobile: Story = { ...AcquisitionPending, ...phone };
