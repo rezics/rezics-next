@@ -118917,6 +118917,10 @@
           }
         ],
         "x-action": "exposure:close",
+        "x-authority-resource-id": "00000000-0000-8000-8000-000000000000",
+        "x-authority-resource-types": [
+          "semantic.context"
+        ],
         "x-exposure": "public",
         "x-rate-limit": {
           "family": "write",
@@ -119536,6 +119540,10 @@
           }
         ],
         "x-action": "exposure:open",
+        "x-authority-resource-id": "00000000-0000-8000-8000-000000000000",
+        "x-authority-resource-types": [
+          "semantic.context"
+        ],
         "x-exposure": "public",
         "x-rate-limit": {
           "family": "write",

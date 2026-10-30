@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { type Exposure } from './gates/declaration.ts';
+import { type AuthoritativeTime } from '../command/command.ts';
 import type { createApp } from '../http/app.ts';
 import { type MountedRoute } from '../http/request.ts';
 import { type Access, type AccessClient, type Actor, type AccountAuthorityKind } from '../request/access.ts';
@@ -8,7 +9,7 @@ import { type Access, type AccessClient, type Actor, type AccountAuthorityKind }
  * public floor are separate: a private resource may still have an explicit grant. */
 export type ViewerActionResource = Readonly<{
     readAction: string;
-    read(client: AccessClient, ids: readonly string[], at: string): Promise<Readonly<Record<string, boolean>>>;
+    read(client: AccessClient, ids: readonly string[], at: string, time?: AuthoritativeTime): Promise<Readonly<Record<string, boolean>>>;
 }>;
 export type ViewerActionResources = ReadonlyMap<string, ViewerActionResource>;
 export type ViewerActionBinding = Readonly<{
@@ -17,6 +18,7 @@ export type ViewerActionBinding = Readonly<{
     exposure: Exposure;
     authority: 'resource' | 'own-account';
     accountAuthority?: AccountAuthorityKind;
+    fixedResourceId?: string;
 }>;
 export type ViewerActionBindings = ReadonlyMap<string, readonly ViewerActionBinding[]>;
 /** Include conditional native anchors in the same per-type/action limit. */

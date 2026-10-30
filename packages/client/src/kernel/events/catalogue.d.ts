@@ -21,6 +21,7 @@ declare const productEventTypes: {
         id: Type.TString;
         revision: Type.TString;
     }>;
+    readonly 'com.rezics.access.context-role-delivery-advanced.v1': Type.TObject<{}>;
     readonly 'com.rezics.access.organization-close.page.v1': Type.TObject<{
         count: Type.TInteger;
         members: Type.TArray<Type.TString>;

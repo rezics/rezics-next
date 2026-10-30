@@ -10,11 +10,20 @@ export type NativeSourceIdentity = Readonly<{
     accountId: string;
     incarnation: string;
     generation: string;
-    scope: 'curated' | 'private_builtin';
     ownerEpoch: number;
     receivingEpoch: string;
     effectKey: string;
-}>;
+} & ({
+    scope: 'curated' | 'private_builtin';
+    outputGeneration?: never;
+    publicationTransactionId?: never;
+    publicationPosition?: never;
+} | {
+    scope: 'active_explicit_output';
+    outputGeneration: string;
+    publicationTransactionId: string;
+    publicationPosition: string;
+})>;
 export type NativeSourceDriver = 'member' | 'entry' | 'entry_deleted' | 'label' | 'assignment' | 'session' | 'unit' | 'change' | 'copy' | 'output' | 'done';
 export type NativeSourceFrontier = Readonly<{
     captureId: string;

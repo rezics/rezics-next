@@ -8267,6 +8267,8 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         operationId: string;
         'x-exposure': string;
         'x-action': string;
+        'x-authority-resource-types': string[];
+        'x-authority-resource-id': "00000000-0000-8000-8000-000000000000";
         'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
         security: {
             bearerAuth: never[];
@@ -8595,6 +8597,8 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
             operationId: string;
             'x-exposure': string;
             'x-action': string;
+            'x-authority-resource-types': string[];
+            'x-authority-resource-id': "00000000-0000-8000-8000-000000000000";
             'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
             security: {
                 bearerAuth: never[];
@@ -8812,6 +8816,8 @@ export declare function exposureRoutes(app: ReturnType<typeof definitionRoutes>,
         operationId: string;
         'x-exposure': string;
         'x-action': string;
+        'x-authority-resource-types': string[];
+        'x-authority-resource-id': "00000000-0000-8000-8000-000000000000";
         'x-rate-limit': Readonly<import("../../http/rate-limit.ts").RateLimitDeclaration>;
         security: {
             bearerAuth: never[];
