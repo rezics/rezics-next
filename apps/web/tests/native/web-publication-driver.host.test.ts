@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, setDefaultTimeout } from 'bun:test';
+import { describe, expect, setDefaultTimeout } from 'bun:test';
 import data from '../../../../specs/fixtures/web-publication.json';
 import type { WebPublicationDriver } from '../../../../specs/web-publication-driver';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -13,7 +13,6 @@ nativeBeforeAll(lifecycle, 600_000, async () => {
   driver = await binding.createWebPublicationDriver(600_000);
   fixture = await driver.provision(data);
 });
-afterAll(async () => driver?.close());
 nativeAfterAll(lifecycle, 600_000);
 
 describe('native web publication driver host', () => {
