@@ -51,6 +51,11 @@ export const OWNED_PHASES = [
   'owner_index_control',
   'native_source_capture',
   'fact_source_head',
+  // Append phases so existing durable numeric checkpoints keep their meaning.
+  'collection_kind_subject',
+  'collection_kind_count',
+  'collection_kind_observation',
+  'collection_kind_retired',
 ] as const;
 const childQueries = {
   units,

@@ -1,3 +1,7 @@
+import purgeCollectionKindRetired from './collection-kind-erase-retired.sql';
+import purgeCollectionKindObservation from './collection-kind-erase-observation.sql';
+import purgeCollectionKindCount from './collection-kind-erase-count.sql';
+import purgeCollectionKindSubject from './collection-kind-erase-subject.sql';
 import purgeOwnerIndexLabelRepair from './erasure-owned-owner-index-label-repair.sql';
 import purgeOwnerIndexState from './erasure-owned-owner-index-state.sql';
 import purgeOwnerMemberSupport from './erasure-owned-owner-member-support.sql';
@@ -27,6 +31,10 @@ import purgeBulkTarget from './erasure-owned-bulk-target.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
 export const ownedQueries = {
+  collection_kind_retired: purgeCollectionKindRetired,
+  collection_kind_observation: purgeCollectionKindObservation,
+  collection_kind_count: purgeCollectionKindCount,
+  collection_kind_subject: purgeCollectionKindSubject,
   owner_index_label_repair: purgeOwnerIndexLabelRepair,
   owner_index_state: purgeOwnerIndexState,
   owner_member_support: purgeOwnerMemberSupport,

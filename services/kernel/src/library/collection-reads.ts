@@ -19,6 +19,7 @@ import {
   readablePresentationCover,
   type CollectionPresentation,
 } from './collection-presentation.ts';
+import { createCollectionKindReads } from './collection-kind.ts';
 import { subjectCollections } from './listing.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
@@ -262,6 +263,7 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
   const retainPreview = createCollectionPreviewPreparation(dependencies);
   const { pool, access, tokens } = dependencies;
   const anchors = { pool, access };
+  const readKind = createCollectionKindReads(dependencies);
   const builtins = createBuiltinRuntime(dependencies);
 
   return { readCollection, listCollections, listAccountCollections, listMembers, readMembers, listSubjectCollections };
@@ -346,7 +348,7 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
       );
       editor = await withConnection(pool, (client) => check(deadlineClient(client, deadline)));
     }
-    if (row.coverMediaId !== null) {
+    if (row.coverMediaId !== null || row.presentationKind === null) {
       const final = await loadCollection(viewer, row.id, deadline);
       if (!final) throw notFound();
       if (
@@ -357,9 +359,11 @@ export function createCollectionReads(dependencies: PreviewPreparationDependenci
       )
         throw new ProblemError('dependency_unavailable');
     }
+    const kind = await readKind(viewer, row, deadline);
     return {
       ...collectionView(row),
       ...collectionPresentation(row, cover),
+      ...kind,
       ...(editor && row.coverMediaId !== null ? { coverMediaId: row.coverMediaId } : {}),
     };
   }

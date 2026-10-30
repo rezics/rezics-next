@@ -9,11 +9,12 @@ import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { CoverSummary } from '../semantic/summaries.ts';
+import { collectionKind, type CollectionKind } from './collection-kind.ts';
 
 export type PresentationSelection = { presentationKind?: string | null; coverMediaId?: string | null };
 export type CollectionPresentation = {
-  presentationKind: string | null;
-  presentationKindSource: 'owner' | 'members' | 'empty' | 'pending';
+  presentationKind: CollectionKind['presentationKind'];
+  presentationKindSource: CollectionKind['presentationKindSource'];
   cover: CoverSummary | null;
   coverSource: 'owner' | 'member' | 'none' | 'pending';
   coverMediaId?: string | null;
@@ -105,8 +106,10 @@ export function collectionPresentation(
 ): Omit<CollectionPresentation, 'coverMediaId'> {
   const empty = row.membershipKind !== 'dynamic' && row.memberCount === 0;
   return {
-    presentationKind: row.presentationKind ?? null,
-    presentationKindSource: row.presentationKind != null ? 'owner' : empty ? 'empty' : 'pending',
+    ...collectionKind(row.presentationKind, {
+      presentationKind: null,
+      presentationKindSource: empty ? 'empty' : 'pending',
+    }),
     cover,
     coverSource: cover !== null ? 'owner' : empty ? 'none' : 'pending',
   };

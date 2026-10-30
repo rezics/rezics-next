@@ -25,7 +25,7 @@ export type PublicIdentitySourceCapturePage =
       cost: PublicFilterCost;
     }>
   | Readonly<{ status: 'changed' | 'unready' | 'unavailable'; cost: PublicFilterCost }>;
-export function createPublicIdentitySourceCapture(config: Parameters<PublicFilterSourceFactory>[0]): Readonly<{
+export type PublicIdentitySourceCaptureProducer = Readonly<{
   capturePage(
     request: Readonly<{
       definition: PublicFilterSourceDefinition;
@@ -34,7 +34,10 @@ export function createPublicIdentitySourceCapture(config: Parameters<PublicFilte
       context: PublicFilterReadContext;
     }>,
   ): Promise<PublicIdentitySourceCapturePage>;
-}> {
+}>;
+export function createPublicIdentitySourceCapture(
+  config: Parameters<PublicFilterSourceFactory>[0],
+): PublicIdentitySourceCaptureProducer {
   return {
     async capturePage() {
       return { status: 'unavailable', cost: unavailableCost() };

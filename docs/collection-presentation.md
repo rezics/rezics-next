@@ -36,12 +36,18 @@ keyFacts may select ONLY effective properties representable by the EXISTING Fact
 Document/media/free-text properties are rejected at authoring/compilation; they never silently become fake code or
 complete-empty facts. No new Fact variant, engine or endpoint is introduced.
 
-Until actual generated handoff, Web treats new fields as additive/optional and uses an explicit exact-Type
-fallback: `schema:Book`, `bf:Instance`, `schema:ComicSeries` and `schema:PublicationVolume` use portrait 3:4;
-`schema:Movie`, `schema:TVSeries`, `schema:TVSeason`, `schema:Episode`, `rezics:AnimeRelease` and `schema:Recipe`
-use landscape 16:9; `schema:MusicAlbum` uses square 1:1. Other Types use their existing valid `coverRatio`,
-otherwise square 1:1. Do not infer a vertical from a label or
-substring. A missing or retired Collection kind uses this member-Type fallback; it never converts member Types.
+Until actual generated handoff, Web treats new fields as additive/optional and uses explicit released Type anchors:
+`schema:Book` (including a book classified by a light novel work-form Concept, not a new light novel Type),
+`bf:Instance`, `schema:ComicSeries` and `schema:PublicationVolume` use portrait 3:4; `schema:Movie`,
+`schema:TVSeries`, `schema:TVSeason`, `schema:Episode` and `rezics:AnimeRelease` use landscape 16:9;
+`schema:MusicAlbum` uses square 1:1 and `schema:Recipe` uses landscape 16:9. Apply an anchor to an actual released
+descendant through its declared ancestry, using the nearest explicit declaration. In the current release TVSeries
+inherits CreativeWorkSeries; Movie, TVSeason, Episode and AnimeRelease inherit CreativeWork. Those shared bases do
+not classify their other descendants as video. The released inventory has no separate general-purpose video Type;
+Semantic owns any future native definition, and clients must not invent a video or light novel TypeId. Other Types
+use their existing valid `coverRatio`, otherwise square 1:1; legacy `coverRatio` values remain unchanged. Do not
+infer a visual family from a label or substring. A missing or retired Collection kind uses this member-Type
+fallback; it never converts member Types.
 Facts remain absent without a delivered producer; no guessed author, runtime, episode or page count fills a row.
 
 ## Collection kind reads and writes
@@ -70,7 +76,10 @@ current original **and** terminal disclosure. Native bounded repair/preparation 
 replace synchronous full-table/group scans per GET, stale cached winners or global job gates. List/detail GET
 remain pure under the Library contract; only the already authorized common-members preparation boundary may
 start retained work. Different viewers may receive different derived kinds because their eligible members differ;
-no hidden Type or curator-private count oracle is exposed. This native derivation is missing today.
+no hidden Type or curator-private count oracle is exposed. The Library consumer maintains generation-bound canonical
+votes and indexed Type counts through fenced operational work. Its native retained Type/disclosure capture binding
+remains explicitly unavailable until the authoritative complete Source and scoped dependency producers execute.
+A missing binding cannot publish a winner or complete zero.
 
 ## FULL member key fact values
 

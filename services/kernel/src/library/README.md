@@ -120,6 +120,13 @@ Current implementation evidence is narrower than the capability:
   checkpoints and complete publication CAS. The sole default Library WorkModule supplies its operational client
   and maintenance queue. Missing Semantic scope/public capture remains retryable unavailability; the provisional
   Semantic factory returns `source_unready`, never current/ready-empty. Native useful outcomes remain pending.
+- `collection-kind.ts` and `collection-kind-work.ts` consume complete audience-specific native observations.
+  Owner overrides bypass observation access. Metadata reads do not enqueue work; native mutation effects and the
+  admitted repair boundary drive raw100/4096-byte steps, generation/version CAS, canonical unique votes, indexed
+  Type winners and bounded retired-generation cleanup. Account-fenced operational transactions retain work with
+  its owning account; the existing Library erasure inventory includes all four local kind stores. The native
+  Type/disclosure/audience capture adapter is explicitly unavailable, and cannot certify empty or a winner.
+  The Semantic scoped-observation factory is a provisional typed unavailable adapter using its closed declarations.
 - `work-module.ts` registers Collection listing effects and ordinary entry, label and copy retention. `account-fact-purge.ts` exports
   `purgeAccountFactsPage` for entry/copy/follow, without a terminal whole-graph worker. It still omits most of that graph.
 - Semantic's `identity-epoch-store.ts:identityEpochStore`, admission/receiving custody, native birth mappings and
@@ -1841,7 +1848,9 @@ The curator with update scope may also receive the configured ID. After foreign 
 Collection authorization, revision and source generation; a changed source returns unavailable rather than a stale
 positive. Metadata GET starts no work and creates no header, grant, receipt or event.
 
-The read seam is `collectionPresentation` plus `collection-reads.ts`'s `present`. Owner overrides return `owner`.
+The read seam is `collectionPresentation` plus `collection-reads.ts`'s `present`. `collection-kind.ts` separates
+constant-size override/observation projection from repair-side dominant-Type arithmetic over complete canonical
+visible support. The arithmetic supplies no Source, identity or disclosure proof. Owner overrides return `owner`.
 A proved zero-count curated source returns `empty`/`none`; a nonempty or dynamic source without a complete admitted
 observation returns null/`pending`. Losing configured-cover readability follows the same rule. The complete automatic
 dominant-Type and ordered member-cover producer must connect here using the existing

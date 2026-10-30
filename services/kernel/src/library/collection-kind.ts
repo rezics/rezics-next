@@ -1,0 +1,527 @@
+import type { Pool } from 'pg';
+import type { KernelClock } from '../clock.ts';
+import type { AuthoritativeTime } from '../command/command.ts';
+import type { OperationalTransaction } from '../command/operational.ts';
+import { withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
+import type { Access, Actor } from '../request/access.ts';
+import { routeOf } from '../route/route.ts';
+import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
+import type { IdentityScopedObservations, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
+import { createNativeLibrarySourceCustody, type NativeLibrarySourceCustody } from './native-source-custody.ts';
+import {
+  createCollectionSource,
+  type CollectionSource,
+  type CollectionAliasProgress,
+  type CollectionSourceObservation,
+  type CollectionSourceContext,
+  type PreparedCollectionSource,
+  type WorkAllowance,
+  type WorkDimensions,
+  type WorkReceipt,
+} from './collection-source.ts';
+import readObservation from './collection-kind-read.sql';
+
+/** Presentation arithmetic only. These values are not Source, identity or disclosure evidence. */
+export type AutomaticCollectionKind =
+  | { presentationKind: string; presentationKindSource: 'members' }
+  | { presentationKind: null; presentationKindSource: 'empty' | 'pending' };
+
+export type CollectionKind = AutomaticCollectionKind | { presentationKind: string; presentationKindSource: 'owner' };
+
+/** A constant-size projection of an already admitted observation; an override needs no observation. */
+export function collectionKind(override: string | null, observation: AutomaticCollectionKind): CollectionKind {
+  if (override !== null) return { presentationKind: override, presentationKindSource: 'owner' };
+  return { ...observation };
+}
+
+/**
+ * Repair-side reduction of COMPLETE current canonical visible support, keyed by terminal subject ID.
+ * The native producer must establish completeness, currentness and canonical identity before using this result.
+ * A missing observation must never be passed as an empty map. This function does not run on metadata GET.
+ */
+export function dominantCollectionKind(canonicalTypes: ReadonlyMap<string, string>): AutomaticCollectionKind {
+  const counts = new Map<string, number>();
+  let winner: string | null = null;
+  let maximum = 0;
+  for (const type of canonicalTypes.values()) {
+    const count = (counts.get(type) ?? 0) + 1;
+    counts.set(type, count);
+    if (count > maximum || (count === maximum && (winner === null || type < winner))) {
+      winner = type;
+      maximum = count;
+    }
+  }
+  return winner === null
+    ? { presentationKind: null, presentationKindSource: 'empty' }
+    : { presentationKind: winner, presentationKindSource: 'members' };
+}
+
+export const COLLECTION_KIND_RAW_LIMIT = 100;
+export const COLLECTION_KIND_BYTE_LIMIT = 4096;
+export const pendingCollectionKind = (): AutomaticCollectionKind => ({
+  presentationKind: null,
+  presentationKindSource: 'pending',
+});
+
+/** Opaque native retained observation, NOT a cached permission, invented epoch or serialized Actor. */
+export type CollectionKindCapture = Readonly<{
+  collectionId: string;
+  accountId: string;
+  audience: string;
+  sourceGeneration: string;
+  token: string;
+}>;
+export type CollectionKindVote = Readonly<{ subjectId: string; typeId: string }>;
+type NativeUnavailable = Readonly<{ status: 'unavailable'; reason: 'source_unready' }>;
+export type CollectionKindPage = Readonly<{
+  status: 'progress' | 'complete';
+  afterSubject: string | null;
+  /** Native retained unfinished-group locator, not a public cursor or a permission. */
+  frontier: string | null;
+  /** Raw examined work includes excluded/duplicate originals, not just votes. */
+  examined: number;
+  bytes: number;
+  votes: readonly CollectionKindVote[];
+}>;
+
+/**
+ * Owned integration boundary, not a new Source/matcher/permission API. The native binding must retain COMPLETE
+ * original+terminal Type/disclosure/selective (including excluded/order) dependencies in existing custody.
+ * A capture is audience-specific. Work never stores an Actor or mints a worker principal from an account ID.
+ * Revalidation resolves retained native records, never trusts this locator or an old custody hold as fresh authority.
+ */
+export interface CollectionKindNative {
+  prepare(input: {
+    collectionId: string;
+    accountId: string;
+    audience: string | null;
+    deadline: number;
+  }): Promise<NativeUnavailable | { status: 'prepared'; capture: CollectionKindCapture }>;
+  page(input: {
+    capture: CollectionKindCapture;
+    afterSubject: string | null;
+    frontier: string | null;
+    inputLimit: number;
+    byteLimit: number;
+    deadline: number;
+  }): Promise<NativeUnavailable | CollectionKindPage>;
+  select(input: {
+    collectionId: string;
+    actor: Actor;
+    deadline: number;
+  }): Promise<NativeUnavailable | { status: 'selected'; audience: string }>;
+  /** Includes fresh Collection authority and current grant after all foreign waits, as well as Type dependencies. */
+  revalidate(input: {
+    capture: CollectionKindCapture;
+    actor?: Actor;
+    deadline: number;
+  }): Promise<NativeUnavailable | { status: 'current' | 'stale' }>;
+  /** Same-home adoption of already retained native custody, with current account-T fencing and no foreign checkout.
+   * OperationalTransaction is never cast to CommandTransaction to manufacture a native readAndHold call. */
+  adopt(input: {
+    capture: CollectionKindCapture;
+    tx: OperationalTransaction;
+    deadline: number;
+  }): Promise<NativeUnavailable | { status: 'adopted' | 'stale' }>;
+  /** Resolve exact native custody, release only this retired observation, never its business Source. */
+  retire(input: {
+    collectionId: string;
+    accountId: string;
+    token: string;
+    deadline: number;
+  }): Promise<NativeUnavailable | { status: 'retired' }>;
+}
+
+export type CollectionKindSourceBindings = Readonly<{
+  source(access: Access): CollectionSource;
+  identity: IdentityScopedObservations;
+  custody: NativeLibrarySourceCustody;
+}>;
+
+/** Real producer factories; replacement bodies integrate under their authoritative module names. */
+export function collectionKindSourceBindings(dependencies: {
+  pool: Pool;
+  clock?: KernelClock;
+}): CollectionKindSourceBindings {
+  return {
+    source: (access) => createCollectionSource({ ...dependencies, access }),
+    identity: createIdentityScopedObservations(dependencies.pool),
+    custody: createNativeLibrarySourceCustody(dependencies),
+  };
+}
+
+/**
+ * Explicit provisional owned adapter. Complete native Type/disclosure capture and audience preparation are not
+ * executable yet; do not borrow Library capture as public capture, invent a work Actor, or reinterpret missing
+ * coverage as empty. The owned consumer/storage/worker below is independent of this missing binding body.
+ */
+export type CollectionKindPreparation = Omit<CollectionKindNative, 'page'> & {
+  resume(input: { capture: CollectionKindCapture; deadline: number }): Promise<
+    | NativeUnavailable
+    | {
+        status: 'prepared';
+        step: Omit<CollectionKindSourceStep, 'collection' | 'afterSubject' | 'progress'>;
+        access: Access;
+        identity: IdentityScopeObservation;
+      }
+  >;
+};
+
+function unavailableKindPreparation(): CollectionKindPreparation {
+  const unavailable = async (): Promise<NativeUnavailable> => ({ status: 'unavailable', reason: 'source_unready' });
+  return {
+    prepare: unavailable,
+    resume: unavailable,
+    select: unavailable,
+    revalidate: unavailable,
+    adopt: unavailable,
+    retire: unavailable,
+  };
+}
+
+export function createCollectionKindNative(
+  sources: CollectionKindSourceBindings,
+  preparation: CollectionKindPreparation = unavailableKindPreparation(),
+): CollectionKindNative {
+  return {
+    prepare: (input) => preparation.prepare(input),
+    select: (input) => preparation.select(input),
+    revalidate: (input) => preparation.revalidate(input),
+    adopt: (input) => preparation.adopt(input),
+    retire: (input) => preparation.retire(input),
+    async page(input) {
+      const unavailable: NativeUnavailable = { status: 'unavailable', reason: 'source_unready' };
+      if (input.inputLimit !== COLLECTION_KIND_RAW_LIMIT || input.byteLimit !== COLLECTION_KIND_BYTE_LIMIT)
+        return unavailable;
+      const resumed = await preparation.resume({ capture: input.capture, deadline: input.deadline });
+      if (resumed.status !== 'prepared') return resumed;
+      if (
+        resumed.step.source.observation.collectionId !== input.capture.collectionId ||
+        resumed.step.source.observation.route !== routeOf(input.capture.collectionId)
+      )
+        return unavailable;
+      const check = () =>
+        sources.identity.revalidate({
+          key: resumed.identity.key,
+          expected: resumed.identity,
+          deadline: input.deadline,
+        });
+      if ((await check()).status !== 'current') return unavailable;
+      const progress = decodeCollectionKindProgress(input.frontier);
+      const result = await readCollectionKindSourcePage({
+        ...resumed.step,
+        deadline: input.deadline,
+        collection: sources.source(resumed.access),
+        afterSubject: input.afterSubject,
+        ...(progress === null ? {} : { progress }),
+      });
+      if ((await check()).status !== 'current') return unavailable;
+      if (result.status === 'settled') return result.page;
+      // An owner-repair wait with no raw progress cannot become an empty-loop continuation.
+      if (result.progress === null && result.afterSubject === input.afterSubject) return unavailable;
+      const frontier = result.progress === null ? null : JSON.stringify(result.progress);
+      const bytes = new TextEncoder().encode(JSON.stringify({ frontier, votes: result.votes })).byteLength;
+      if (bytes > input.byteLimit) return unavailable;
+      return {
+        status: 'progress',
+        frontier,
+        afterSubject: result.afterSubject,
+        votes: result.votes,
+        examined: result.work.used.candidateKeys,
+        bytes,
+      };
+    },
+  };
+}
+
+/** Private durable Source progress only; exact structural validation never creates identity or membership proof. */
+function decodeCollectionKindProgress(frontier: string | null): CollectionAliasProgress | null {
+  if (frontier === null) return null;
+  const value: unknown = JSON.parse(frontier);
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('subjectId' in value) ||
+    typeof value.subjectId !== 'string' ||
+    routeOf(value.subjectId) === null ||
+    !('basisDigest' in value) ||
+    typeof value.basisDigest !== 'string' ||
+    !value.basisDigest ||
+    !('aliasAfter' in value) ||
+    (value.aliasAfter !== null && (typeof value.aliasAfter !== 'string' || routeOf(value.aliasAfter) === null)) ||
+    !('sourceAfter' in value) ||
+    !sourceAfter(value.sourceAfter)
+  )
+    throw new ProblemError('dependency_unavailable');
+  return {
+    subjectId: value.subjectId,
+    basisDigest: value.basisDigest,
+    aliasAfter: value.aliasAfter,
+    sourceAfter: value.sourceAfter,
+  };
+}
+function sourceAfter(value: unknown): value is CollectionAliasProgress['sourceAfter'] {
+  if (value === null) return true;
+  if (typeof value !== 'string' || !/^1:[0-5]:[0-9a-f-]{36}:[0-9a-f-]{36}$/.test(value)) return false;
+  return routeOf(value.slice(4, 40)) !== null && routeOf(value.slice(41)) !== null;
+}
+
+/** Shared allowance settlement for actual Source calls; no reset/refill between prefix and membership probes. */
+class KindSourceWork {
+  private readonly used: Record<keyof WorkDimensions, number> = {
+    candidateKeys: 0,
+    nativeRows: 0,
+    identityMetadataRows: 0,
+    emptySeeks: 0,
+    nativePoints: 0,
+    witnessKeys: 0,
+    statements: 0,
+    bytes: 0,
+  };
+  constructor(private readonly allowance: WorkAllowance) {}
+  remaining(): WorkAllowance {
+    const remaining = { ...this.allowance.remaining };
+    for (const axis of Object.keys(this.used) as (keyof WorkDimensions)[])
+      remaining[axis] = this.allowance.remaining[axis] - this.used[axis];
+    return { reservationId: this.allowance.reservationId, remaining };
+  }
+  settle(receipt: WorkReceipt) {
+    if (receipt.reservationId !== this.allowance.reservationId) throw new ProblemError('dependency_unavailable');
+    for (const axis of Object.keys(this.used) as (keyof WorkDimensions)[]) {
+      const amount = receipt.used[axis];
+      if (!Number.isSafeInteger(amount) || amount < 0 || amount > this.allowance.remaining[axis] - this.used[axis])
+        throw new ProblemError('dependency_unavailable');
+      this.used[axis] += amount;
+    }
+  }
+  receipt(): WorkReceipt {
+    return { reservationId: this.allowance.reservationId, used: { ...this.used } };
+  }
+}
+
+/**
+ * Owned Source traversal for an admitted native repair step. Type projection is supplied by the native capture
+ * binding with charged work, not a second Semantic reader. Never called by metadata GET. The same fresh opaque T,
+ * actor and deadline bind prefix, original+terminal membership and Type projection. EOF is canonical Source EOF,
+ * never raw EOF, a page limit, preview completion or count zero. No group is skipped when native proof is pending.
+ */
+export type CollectionKindSourceStep = CollectionSourceContext & {
+  source: PreparedCollectionSource;
+  collection: CollectionSource;
+  allowance: WorkAllowance;
+  afterSubject: string | null;
+  progress?: CollectionAliasProgress;
+  readType(request: {
+    subjectId: string;
+    at: AuthoritativeTime;
+    actor: Actor;
+    deadline: number;
+    allowance: WorkAllowance;
+  }): Promise<{ status: 'current'; typeId: string; work: WorkReceipt } | { status: 'unavailable'; work: WorkReceipt }>;
+};
+
+export async function readCollectionKindSourcePage(input: CollectionKindSourceStep): Promise<
+  | { status: 'settled'; page: CollectionKindPage; observation: CollectionSourceObservation; work: WorkReceipt }
+  | {
+      status: 'pending';
+      afterSubject: string | null;
+      pendingSubject: string;
+      progress: CollectionAliasProgress | null;
+      votes: readonly CollectionKindVote[];
+      observation: CollectionSourceObservation;
+      work: WorkReceipt;
+    }
+> {
+  if (
+    input.progress &&
+    (input.progress.basisDigest !== input.source.observation.basis.digest ||
+      (input.afterSubject !== null && input.progress.subjectId <= input.afterSubject))
+  )
+    throw new ProblemError('dependency_unavailable');
+  const work = new KindSourceWork({
+    ...input.allowance,
+    remaining: {
+      ...input.allowance.remaining,
+      candidateKeys: Math.min(COLLECTION_KIND_RAW_LIMIT, input.allowance.remaining.candidateKeys),
+      bytes: Math.min(COLLECTION_KIND_BYTE_LIMIT, input.allowance.remaining.bytes),
+    },
+  });
+  const prefixAllowance = work.remaining();
+  const prefix = await input.collection.prefix({
+    ...input,
+    allowance: {
+      ...prefixAllowance,
+      remaining: {
+        ...prefixAllowance.remaining,
+        candidateKeys: Math.floor(prefixAllowance.remaining.candidateKeys / 3),
+      },
+    },
+    afterSubjectId: input.afterSubject,
+  });
+  work.settle(prefix.work);
+  if (
+    prefix.observation.basis.digest !== input.source.observation.basis.digest ||
+    prefix.observation.incarnation !== input.source.observation.incarnation ||
+    prefix.candidates.length > COLLECTION_KIND_RAW_LIMIT
+  )
+    throw new ProblemError('dependency_unavailable');
+  if (input.progress && prefix.candidates[0]?.subjectId !== input.progress.subjectId)
+    throw new ProblemError('dependency_unavailable');
+  const votes: CollectionKindVote[] = [];
+  let previous = input.afterSubject;
+  let settled = input.afterSubject;
+  for (const candidate of prefix.candidates) {
+    if (routeOf(candidate.subjectId) === null || (previous !== null && candidate.subjectId <= previous))
+      throw new ProblemError('dependency_unavailable');
+    previous = candidate.subjectId;
+    const membership = await input.collection.containsSubject({
+      ...input,
+      subjectId: candidate.subjectId,
+      allowance: work.remaining(),
+      positiveEvidence: candidate.evidence,
+      ...(input.progress?.subjectId === candidate.subjectId ? { progress: input.progress } : {}),
+    });
+    work.settle(membership.work);
+    if (
+      membership.subjectId !== candidate.subjectId ||
+      membership.observation.basis.digest !== prefix.observation.basis.digest ||
+      membership.observation.incarnation !== prefix.observation.incarnation ||
+      membership.observation.stamp.epoch !== prefix.observation.stamp.epoch ||
+      membership.observation.stamp.position !== prefix.observation.stamp.position
+    )
+      throw new ProblemError('dependency_unavailable');
+    if (membership.result === 'not_proven')
+      return {
+        status: 'pending',
+        afterSubject: settled,
+        pendingSubject: candidate.subjectId,
+        progress: membership.progress,
+        votes,
+        observation: prefix.observation,
+        work: work.receipt(),
+      };
+    if (!membership.result) {
+      settled = candidate.subjectId;
+      continue;
+    }
+    const type = await input.readType({
+      subjectId: candidate.subjectId,
+      at: input.at,
+      actor: input.actor,
+      deadline: input.deadline,
+      allowance: work.remaining(),
+    });
+    work.settle(type.work);
+    if (type.status !== 'current') throw new ProblemError('dependency_unavailable');
+    votes.push({ subjectId: candidate.subjectId, typeId: type.typeId });
+    settled = candidate.subjectId;
+  }
+  const bytes = new TextEncoder().encode(JSON.stringify(votes)).byteLength;
+  // The binding admits these bytes BEFORE native dispatch; this also rejects a broken producer boundary.
+  if (bytes > COLLECTION_KIND_BYTE_LIMIT || work.receipt().used.candidateKeys > COLLECTION_KIND_RAW_LIMIT)
+    throw new ProblemError('dependency_unavailable');
+  if (
+    !prefix.exhausted &&
+    (prefix.coveredThrough === null || (input.afterSubject !== null && prefix.coveredThrough <= input.afterSubject))
+  )
+    throw new ProblemError('dependency_unavailable');
+  return {
+    status: 'settled',
+    page: {
+      frontier: null,
+      status: prefix.exhausted ? 'complete' : 'progress',
+      afterSubject: prefix.coveredThrough,
+      examined: work.receipt().used.candidateKeys,
+      bytes,
+      votes,
+    },
+    observation: prefix.observation,
+    work: work.receipt(),
+  };
+}
+
+export function validateCollectionKindPage(
+  page: CollectionKindPage,
+  after: string | null,
+  frontier: string | null = null,
+): void {
+  if (
+    !Number.isSafeInteger(page.examined) ||
+    page.examined < 0 ||
+    page.examined > COLLECTION_KIND_RAW_LIMIT ||
+    !Number.isSafeInteger(page.bytes) ||
+    page.bytes < 0 ||
+    page.bytes > COLLECTION_KIND_BYTE_LIMIT ||
+    page.votes.length > page.examined ||
+    new TextEncoder().encode(JSON.stringify(page.votes)).byteLength > page.bytes ||
+    (page.afterSubject !== null && routeOf(page.afterSubject) === null) ||
+    (page.frontier !== null &&
+      (!page.frontier || new TextEncoder().encode(page.frontier).byteLength > COLLECTION_KIND_BYTE_LIMIT)) ||
+    (page.status === 'complete' && page.frontier !== null) ||
+    (page.status === 'progress' && page.afterSubject === after && page.frontier === frontier) ||
+    (page.afterSubject !== null && after !== null && page.afterSubject < after) ||
+    (page.afterSubject === null && after !== null)
+  )
+    throw new ProblemError('dependency_unavailable');
+  let previous = after;
+  for (const vote of page.votes) {
+    if (
+      routeOf(vote.subjectId) === null ||
+      !vote.typeId ||
+      vote.typeId.includes('\0') ||
+      (previous !== null && vote.subjectId <= previous) ||
+      (page.afterSubject !== null && vote.subjectId > page.afterSubject)
+    )
+      throw new ProblemError('dependency_unavailable');
+    previous = vote.subjectId;
+  }
+}
+
+/** Fixed metadata/proof points only. Read callers retain their own Collection authorization and final reread. */
+export function createCollectionKindReads(
+  dependencies: { pool: Pool; clock?: KernelClock },
+  native: CollectionKindNative = createCollectionKindNative(collectionKindSourceBindings(dependencies)),
+) {
+  return async (
+    actor: Actor,
+    row: {
+      id: string;
+      presentationKind: string | null;
+      sourceGeneration: string;
+      memberCount?: number;
+      membershipKind?: string;
+    },
+    deadline: number,
+  ): Promise<CollectionKind> => {
+    if (row.presentationKind !== null)
+      return { presentationKind: row.presentationKind, presentationKindSource: 'owner' };
+    // Only the actual complete curated count certifies this shortcut; dynamic sources never use self-zero.
+    if (row.membershipKind !== 'dynamic' && row.memberCount === 0)
+      return { presentationKind: null, presentationKindSource: 'empty' };
+    const selected = await native.select({ collectionId: row.id, actor, deadline });
+    if (selected.status !== 'selected') return pendingCollectionKind();
+    const route = routeOf(row.id);
+    if (route === null) throw new ProblemError('not_found');
+    const observation = await withConnection(dependencies.pool, (client) =>
+      readObservation.run(client, { route, collection_id: row.id, audience: selected.audience }),
+    );
+    if (!observation || !observation.complete || observation.sourceGeneration !== row.sourceGeneration)
+      return pendingCollectionKind();
+    const current = await native.revalidate({
+      capture: {
+        collectionId: row.id,
+        accountId: observation.accountId,
+        audience: selected.audience,
+        sourceGeneration: observation.sourceGeneration,
+        token: observation.capture,
+      },
+      actor,
+      deadline,
+    });
+    if (current.status !== 'current') return pendingCollectionKind();
+    return observation.winner === null
+      ? { presentationKind: null, presentationKindSource: 'empty' }
+      : { presentationKind: observation.winner, presentationKindSource: 'members' };
+  };
+}
