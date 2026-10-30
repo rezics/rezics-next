@@ -641,8 +641,11 @@ export async function readPublicFilterRepairSettlement(
           settlement: Object.freeze({ id: state.id }) as NativePublicFilterRepairSettlement, cost: meter };
       } catch (error) {
         // Rollback must release every held writer/owner lock even after allowance/deadline failure.
-        await client.query('ROLLBACK');
         meter.statements++;
+        meter.bytes += Buffer.byteLength('ROLLBACK') + Buffer.byteLength(encode([]));
+        const rolledBack = await client.query('ROLLBACK');
+        meter.rows += rolledBack.rowCount ?? 0;
+        meter.bytes += Buffer.byteLength(encode(rolledBack.rows));
         throw error;
       }
     });
