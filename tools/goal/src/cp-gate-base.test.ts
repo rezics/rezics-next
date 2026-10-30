@@ -50,11 +50,7 @@ async function withEnvironment<T>(values: Record<string, string | undefined>, ru
   }
 }
 
-async function controlPlaneOutcome(
-  suiteOutput: string,
-  suiteTimedOut = false,
-  baseFailureFile?: string,
-) {
+async function controlPlaneOutcome(suiteOutput: string, suiteTimedOut = false, baseFailureFile?: string) {
   const h = integrationHarness();
   try {
     if (baseFailureFile) {
@@ -90,7 +86,14 @@ async function controlPlaneOutcome(
         return { passed: false, output: suiteOutput, timedOut: suiteTimedOut };
       return { passed: true, output: '', timedOut: false };
     });
-    return { outcome: h.outcomes[0], commands, mainBefore, devBefore, mainAfter: h.head('main'), devAfter: h.head('dev') };
+    return {
+      outcome: h.outcomes[0],
+      commands,
+      mainBefore,
+      devBefore,
+      mainAfter: h.head('main'),
+      devAfter: h.head('dev'),
+    };
   } finally {
     h.dispose();
   }
@@ -119,28 +122,31 @@ test('run() passes detached train mode to its runtime factory without changing t
   }
 });
 
-test.serial('run() selects train mode explicitly and attributes manager commands in SQLite without changing env', async () => {
-  const before = process.env.GOAL_TRAIN_MODE;
-  const fixture = cliRuntimeFixture();
-  const received: unknown[] = [];
-  try {
-    await withEnvironment({ GOAL_MANAGER: 'fixture-manager' }, async () => {
-      for (const command of ['status', 'train', 'status']) {
-        expect(
-          await run([command], (options) => {
-            received.push(options);
-            return fixture.create(options);
-          }),
-        ).toBe(0);
-        expect(process.env.GOAL_TRAIN_MODE).toBe(before);
-      }
-    });
-    expect(received).toEqual([{ trainMode: 'detached' }, { trainMode: 'inline' }, { trainMode: 'detached' }]);
-    expect(fixture.managerDecision()).toBeTruthy();
-  } finally {
-    fixture.h.dispose();
-  }
-});
+test.serial(
+  'run() selects train mode explicitly and attributes manager commands in SQLite without changing env',
+  async () => {
+    const before = process.env.GOAL_TRAIN_MODE;
+    const fixture = cliRuntimeFixture();
+    const received: unknown[] = [];
+    try {
+      await withEnvironment({ GOAL_MANAGER: 'fixture-manager' }, async () => {
+        for (const command of ['status', 'train', 'status']) {
+          expect(
+            await run([command], (options) => {
+              received.push(options);
+              return fixture.create(options);
+            }),
+          ).toBe(0);
+          expect(process.env.GOAL_TRAIN_MODE).toBe(before);
+        }
+      });
+      expect(received).toEqual([{ trainMode: 'detached' }, { trainMode: 'inline' }, { trainMode: 'detached' }]);
+      expect(fixture.managerDecision()).toBeTruthy();
+    } finally {
+      fixture.h.dispose();
+    }
+  },
+);
 
 test.serial(
   'a required full-suite failure is refused even when the same test failure exists on main',

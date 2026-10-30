@@ -403,7 +403,9 @@ test('launch smoke accepts one explicit evidence report path and rejects ambiguo
   expect(() => parseSmokeArguments(['--report', 'one.json', '--report', 'two.json'])).toThrow(
     '--report can be supplied only once',
   );
-  expect(parseSmokeArguments(['--expected-dev-script-tree', 'a'.repeat(40)]).expectedDevScriptTree).toBe('a'.repeat(40));
+  expect(parseSmokeArguments(['--expected-dev-script-tree', 'a'.repeat(40)]).expectedDevScriptTree).toBe(
+    'a'.repeat(40),
+  );
   expect(() => parseSmokeArguments(['--expected-dev-script-tree'])).toThrow(
     '--expected-dev-script-tree requires a commit',
   );

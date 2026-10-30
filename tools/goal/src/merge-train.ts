@@ -2055,7 +2055,10 @@ export class MergeTrain {
     let controlPlaneRefChanges = 0;
     const retryMovedControlPlaneRefs = (): void => {
       controlPlaneRefChanges++;
-      appendFileSync(logPath, `Control-plane release refs moved during validation (${controlPlaneRefChanges}/5); rebuilding the candidate checks\n`);
+      appendFileSync(
+        logPath,
+        `Control-plane release refs moved during validation (${controlPlaneRefChanges}/5); rebuilding the candidate checks\n`,
+      );
       if (controlPlaneRefChanges >= 5)
         throw new Error('Control-plane release refs kept moving during five validation attempts');
     };
@@ -2068,11 +2071,7 @@ export class MergeTrain {
       }
       if (controlPlane) {
         const release = this.readControlPlaneRecord(request);
-        if (
-          !release ||
-          release.mainCommit !== entry.candidate ||
-          !this.controlPlaneRecordPublished(release)
-        ) {
+        if (!release || release.mainCommit !== entry.candidate || !this.controlPlaneRecordPublished(release)) {
           result.stage = 'merge';
           result.firstFailure = firstFailure(
             `Control-plane candidate ${entry.candidate} is on ${mainBranch} without complete verified propagation; refusing to report the landing complete`,
@@ -2502,7 +2501,7 @@ export class MergeTrain {
             passed: installs.passed && validation.passed,
             output: installs.output + validation.output,
             timedOut: installs.timedOut || validation.timedOut,
-            ...(installs.failedCommand ?? validation.failedCommand
+            ...((installs.failedCommand ?? validation.failedCommand)
               ? { failedCommand: installs.failedCommand ?? validation.failedCommand }
               : {}),
           };
@@ -2538,7 +2537,12 @@ export class MergeTrain {
               runGate,
             );
             assertCandidate(trainTree, candidate, 'control-plane dev compatibility install', logPath);
-            assertCandidate(compatibilityTree, releaseSnapshot!.devHead, 'control-plane dev compatibility install', logPath);
+            assertCandidate(
+              compatibilityTree,
+              releaseSnapshot!.devHead,
+              'control-plane dev compatibility install',
+              logPath,
+            );
             if (target() !== base || !this.controlPlaneSnapshotMatches(releaseSnapshot!)) {
               retryMovedControlPlaneRefs();
               continue;
@@ -2550,12 +2554,7 @@ export class MergeTrain {
               result.stage = 'gate';
               return finish();
             }
-            const compatibility = await runIntegrationChecks(
-              [compatibilityCommand],
-              trainTree,
-              logPath,
-              runGate,
-            );
+            const compatibility = await runIntegrationChecks([compatibilityCommand], trainTree, logPath, runGate);
             assertCandidate(trainTree, candidate, 'main-dev compatibility contract', logPath);
             assertCandidate(compatibilityTree, releaseSnapshot!.devHead, 'main-dev compatibility contract', logPath);
             if (target() !== base || !this.controlPlaneSnapshotMatches(releaseSnapshot!)) {
@@ -2570,8 +2569,7 @@ export class MergeTrain {
               return finish();
             }
           } finally {
-            if (compatibilityTreeAdded)
-              git(o.mainCheckout, 'worktree', 'remove', '--force', compatibilityTree);
+            if (compatibilityTreeAdded) git(o.mainCheckout, 'worktree', 'remove', '--force', compatibilityTree);
           }
 
           appendFileSync(logPath, '\nComplete real-boundary lifecycle suite on control-plane candidate\n');
@@ -2593,9 +2591,7 @@ export class MergeTrain {
             continue;
           }
           const evidencePrefix = `release evidence: candidate=${candidate} dev-script-tree=${releaseSnapshot!.devHead}`;
-          lifecycleEvidence = smoke.output
-            .split(/\r?\n/)
-            .find((line) => line.startsWith(evidencePrefix));
+          lifecycleEvidence = smoke.output.split(/\r?\n/).find((line) => line.startsWith(evidencePrefix));
           if (!smoke.passed || !lifecycleEvidence) {
             const infrastructureUnverified =
               smoke.timedOut ||
@@ -3119,10 +3115,7 @@ export class MergeTrain {
     renameSync(temporary, recordPath);
     const summary =
       `Task ${taskId} ${sourceBranch} ${sourceCommit} conflicts with ${targetBranch}: ${files.join(', ')}. ` +
-      `Cause: ${cause}. ${targetBranch} was left unchanged.`.replace(
-        /[\r\n]+/g,
-        ' ',
-      );
+      `Cause: ${cause}. ${targetBranch} was left unchanged.`.replace(/[\r\n]+/g, ' ');
     const supermanager =
       this.options.supermanager ??
       localBranchSettings(this.options.mainCheckout).supermanager ??
@@ -3626,7 +3619,13 @@ export class MergeTrain {
     lifecycleEvidence: string,
     compatibilityCommand: string[],
     logPath: string,
-  ): { prepared?: PreparedControlPlaneRelease; conflicts?: string[]; sourceBranch?: string; targetBranch?: string; cause?: string } {
+  ): {
+    prepared?: PreparedControlPlaneRelease;
+    conflicts?: string[];
+    sourceBranch?: string;
+    targetBranch?: string;
+    cause?: string;
+  } {
     if (!this.controlPlaneSnapshotMatches(snapshot)) return {};
     let stabilizeCommit: string | undefined;
     let devSource = candidate;
@@ -3656,13 +3655,7 @@ export class MergeTrain {
       );
     }
 
-    const dev = this.mergeControlPlaneCandidate(
-      devSource,
-      sourceBranch,
-      snapshot.devBranch,
-      snapshot.devHead,
-      logPath,
-    );
+    const dev = this.mergeControlPlaneCandidate(devSource, sourceBranch, snapshot.devBranch, snapshot.devHead, logPath);
     if (!dev.commit)
       return {
         ...(dev.conflicts ? { conflicts: dev.conflicts } : {}),
