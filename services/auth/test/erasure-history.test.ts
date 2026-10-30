@@ -123,9 +123,9 @@ test('real default deletion transfers only its discharged native source, then er
         .consent_completed_at,
     ).toBeNull();
     expect(await erasureHistoryPage(f.pool, accepted.id)).toBe(false);
-    // Lose the reply after the real supported cancellation commits. The durable
+    // Lose the reply after the real supported cancellation returns. The durable
     // retirement cut must still permit exact deletion on retry, with no new
-    // producer or consumer inferred from a CANCELLED terminal status.
+    // producer or consumer inferred from terminal status.
     const cancel = DBOS.cancelWorkflow;
     DBOS.cancelWorkflow = async (id) => {
       await cancel.call(DBOS, id);
@@ -142,7 +142,12 @@ test('real default deletion transfers only its discharged native source, then er
           registration.workflow_id,
         ])
       ).rows,
-    ).toEqual([{ status: 'CANCELLED' }]);
+    ).toEqual([{ status: 'SUCCESS' }]);
+    // The pinned SDK leaves SUCCESS unchanged. Retirement, not cancellation
+    // status, persists the earlier verified consumer cut.
+    expect(
+      (await f.pool.query('SELECT retired FROM auth_copy_work WHERE workflow_id=$1', [registration.workflow_id])).rows,
+    ).toEqual([{ retired: true }]);
     expect(await eraseCopy(f.pool, registration.workflow_id)).toBe(true);
     expect(await copiesAbsent(f.pool, registration.workflow_id)).toBe(true);
     await eventually(async () => completionAttempts > 0, 370_000);

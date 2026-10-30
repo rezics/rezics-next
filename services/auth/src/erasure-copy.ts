@@ -177,14 +177,10 @@ export async function copiesAbsent(database: Pool, id: string): Promise<boolean>
 export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
   const ready = await copyTransaction(database, async (client) => {
     const row = (
-      await client.query<{
-        ready: boolean;
-        absent: boolean;
-        retired: boolean;
-        rows: number;
-        bytes: number;
-        version: number;
-      }>('SELECT ready,absent,retired,rows,bytes,version FROM auth_copy_work WHERE workflow_id=$1 FOR UPDATE', [id])
+      await client.query<{ ready: boolean; absent: boolean; rows: number; bytes: number; version: number }>(
+        'SELECT ready,absent,rows,bytes,version FROM auth_copy_work WHERE workflow_id=$1 FOR UPDATE',
+        [id],
+      )
     ).rows[0];
     if (!row || !row.ready || row.version !== 1 || row.rows > 139 || row.bytes > 10485760) return false;
     const ledger = (
@@ -222,9 +218,7 @@ export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
         id,
       ])
     ).rows[0];
-    // Retirement persists the verified ready/SUCCESS cut before cancellation.
-    // A crash or lost reply after SDK cancellation must resume that same cut.
-    if (status && status.status !== 'SUCCESS' && !(row.retired && status.status === 'CANCELLED')) return false;
+    if (status && status.status !== 'SUCCESS') return false;
     await client.query('UPDATE auth_copy_work SET retired=true WHERE workflow_id=$1', [id]);
     return true;
   });
