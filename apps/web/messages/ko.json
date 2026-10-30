@@ -2959,5 +2959,16 @@
   "story_arc_relations_help": "현재 배포된 시리즈, 부분, 이전 작품 및 관계 필드를 사용합니다. 각 대상, 순서 한정자 및 인용을 유지하며 소속을 추론하지 않습니다.",
   "story_arc_work": "작품과 편 순서",
   "story_arc_work_help": "실제로 이 편을 포함하는 작품을 선택합니다. 작품의 이야기 편 관계에 대상 편, 위치 및 시작·끝 부분 근거를 저장합니다. 편을 만들어도 이 관계는 생성되지 않습니다.",
-  "story_arc_choose_work": "기존 상위 작품 선택"
+  "story_arc_choose_work": "기존 상위 작품 선택",
+  "library_my_logs_heading": "내가 공개한 독서 기록",
+  "library_my_logs_description": "직접 공개한 독서 스냅샷입니다. 공개 당시의 상태, 날짜와 메모가 그대로 보존됩니다.",
+  "library_my_logs_denied": "현재 접근 권한으로는 공개한 독서 기록을 읽을 수 없습니다.",
+  "library_my_logs_preparing": "공개한 독서 기록을 준비하고 있습니다. 잠시 후 다시 시도하세요.",
+  "library_my_logs_unavailable": "공개한 독서 기록을 사용할 수 없습니다. 다시 시도하세요.",
+  "library_my_logs_retry": "다시 시도",
+  "library_my_logs_restarted": "페이지가 변경되어 가장 최근에 공개한 기록을 표시합니다.",
+  "library_my_logs_newest": "최근 공개 기록",
+  "library_my_logs_no_visible": "이 페이지에 표시할 수 있는 공개 기록이 없습니다.",
+  "library_my_logs_read": "{title}의 기록 읽기, 공개 일시: {date}",
+  "library_my_logs_sign_in": "로그인하여 공개한 독서 기록 보기"
 }

@@ -4,6 +4,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { PublishedLogListError } from './my-logs';
 import {
   LIBRARY_PAGE_LIMIT,
   libraryFullQuery,
@@ -11,29 +12,15 @@ import {
   readLibraryResult,
   StaleCursorError,
   subjectOf,
-  type LibraryLabel,
   type LibraryAccount,
   type LibrarySubject,
 } from './reads';
 
-type RawPublishedLog = {
-  id: string;
-  accountId: string;
-  subjectId: string;
-  sessionState: 'active' | 'completed' | 'abandoned';
-  startedAt: string;
-  completedAt: string | null;
-  note: string | null;
-  publishedAt: string;
-  subject?: {
-    id: string;
-    type: string;
-    types?: readonly string[];
-    label: LibraryLabel;
-    cover?: unknown;
-  } | null;
-  account?: { id: string; handle: string | null; displayName: string | null } | null;
-};
+type NativePublishedLogPage = Extract<
+  NonNullable<Awaited<ReturnType<KernelClient['publishedLogs']['get']>>['data']>,
+  { publishedLogs: unknown[] }
+>;
+type RawPublishedLog = NativePublishedLogPage['publishedLogs'][number];
 
 export type PublishedLog = {
   id: string;
@@ -50,6 +37,7 @@ export type PublishedLogPage = {
   signedIn: boolean;
   logs: PublishedLog[];
   next: string | null;
+  restarted?: true;
 };
 
 function present(log: RawPublishedLog): PublishedLog {
@@ -90,7 +78,12 @@ async function readLogPage(client: KernelClient, accountId: string, authorizatio
     query: { ...libraryListQuery(cursor, LIBRARY_PAGE_LIMIT), accountId },
     headers: { authorization },
   });
-  return readLibraryResult(result) as { publishedLogs: RawPublishedLog[]; next: string | null };
+  const status = result.response.status;
+  if (status === 202) throw new PublishedLogListError('preparing');
+  if (status === 401 || status === 403 || status === 404) throw new PublishedLogListError('denied');
+  const page = readLibraryResult(result);
+  if (!('publishedLogs' in page) || !Array.isArray(page.publishedLogs)) throw new PublishedLogListError('unavailable');
+  return page;
 }
 
 /** Reads one newest-first page of the viewer's own public snapshots. */
@@ -105,14 +98,21 @@ export async function loadMyPublishedLogs(
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, logs: [], next: null };
 
-  let page: { publishedLogs: RawPublishedLog[]; next: string | null };
+  let page: NativePublishedLogPage;
+  let restarted = false;
   try {
     page = await readLogPage(client, accountId, authorization, input.cursor);
   } catch (error) {
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     page = await readLogPage(client, accountId, authorization);
+    restarted = true;
   }
-  return { signedIn: true, logs: page.publishedLogs.map(present), next: page.next };
+  return {
+    signedIn: true,
+    logs: page.publishedLogs.map(present),
+    next: page.next,
+    ...(restarted ? { restarted: true } : {}),
+  };
 }
 
 export type PublishedLogWriteResult =

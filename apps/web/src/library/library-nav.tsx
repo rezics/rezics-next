@@ -7,7 +7,13 @@ import { builtinCollectionDestinations, type BuiltinCollectionRecord } from './b
 import type { LibraryPinsRead } from './pins-read';
 import { dynamicCollectionTitle } from './dynamic-collection';
 
-export type LibraryDestination = 'tracked' | 'continue' | 'collections' | 'follow-counts' | { collectionId: string };
+export type LibraryDestination =
+  | 'tracked'
+  | 'continue'
+  | 'collections'
+  | 'follow-counts'
+  | 'logs'
+  | { collectionId: string };
 export type LibraryNavigationEntry = {
   id: string;
   label: string;
@@ -166,6 +172,12 @@ export function LibraryNavigation({
   // Management destinations are additive to the existing Collection and pin model.
   const tabs: LibraryNavigationEntry[] = [
     ...destinations.tabs,
+    {
+      id: 'logs',
+      label: m.library_my_logs_heading(),
+      href: `/${locale}/library/logs`,
+      current: current === 'logs',
+    },
     {
       id: 'follow-counts',
       label: m.library_follow_counts_heading(),

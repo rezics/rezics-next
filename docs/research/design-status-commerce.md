@@ -190,6 +190,28 @@ Owner-route sessions/history/units, `/library/progress` and `/v1/progressSession
 publication is explicit. Cross-profile/structure-change journey design coverage is incomplete. **Handoff:** how should changed
 subject structure preserve sparse completed-unit IDs and reread history without inventing completion or rewriting accepted meaning?
 
+**Own published-log entry.** Source now exposes `/library/logs`, the missing personal entry into explicitly published
+reading snapshots, through the existing `loadMyPublishedLogs`/`readMyPublishedLogs` owner reader. The signed-in shared
+AppShell contribution uses native `published_log.list`; the existing Library navigation gains the same destination.
+The native GET/FULL response supplies titles, covers, nullable subjects, recorded state/note/dates and signed next
+cursors. No publisher selector, private session/change/unit reads, inferred progress, count or list mutation is added.
+The raw list cast is replaced with the generated wire type. Native stale epochs restart once and explain the restart;
+newest-page navigation clears the opaque cursor. Denied, unavailable and preparing never become a successful empty
+page. Null subjects keep the shared neutral cover/title. Existing detail, publication and exact revision/Undo remain
+their sole authorities. The new entry uses the existing session credential, private no-store and locale helpers.
+
+Web's ordinary review receives `pages-library-my-published-logs--desktop`, `--phone`, `--empty`, `--long`,
+`--unknown-subject`, `--denied`, `--unavailable`, `--preparing`, `--newest-page`, `--restarted` and `--signed-out`
+(all suffixes use the same prefix). Review at 1280/390 with the eight locale and theme globals. Actual-route stories
+derive opt-in consumer responses from `library-published-logs.json`; variations are constructed presentation inputs,
+not new native recordings or grants. The signed-out story inspects the fallback; the actual route requires sign-in
+before loading. Four focused source cases cover owner selection/hidden references, unsuccessful reads, native cursor
+restart and route/navigation binding. On the committed implementation, local foreground
+`bun run --cwd apps/web typecheck` passed with no type errors in 1,256 files; the four focused
+`bun test apps/web/tests/library-my-logs.test.ts` cases passed with 137 assertions. No separate build or browser,
+native, database or remote check ran. Story plays, ordinary Web visual review, native/privacy/runtime and
+promoted-main proof remain pending.
+
 **Copies / holdings.** Same module/profile authorities and delivered abstraction study; private owner-route copies,
 `/library/copies` and `/v1/copies` exist, independently of progress/state/payment rights. Profile columns/readers are
 partial delivery; the all-kind journey remains incomplete. **Handoff:** which released holding-kind/status transitions and historic-pin display distinguish a digital holding from a consumable purchased benefit?

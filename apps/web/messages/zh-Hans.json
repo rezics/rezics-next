@@ -2960,5 +2960,16 @@
   "story_arc_relations_help": "使用当前发布的系列、组成、前作及关系字段，保留各目标、顺序限定和引用，不推断归属。",
   "story_arc_work": "所属作品与篇章顺序",
   "story_arc_work_help": "选择实际承载篇章的作品。作品的故事篇章关系保存篇章目标、位置及起止部分依据。创建篇章不会自动创建此关系。",
-  "story_arc_choose_work": "选择已有父作品"
+  "story_arc_choose_work": "选择已有父作品",
+  "library_my_logs_heading": "我发布的阅读日志",
+  "library_my_logs_description": "你主动发布的阅读快照，保留发布时的状态、日期和笔记。",
+  "library_my_logs_denied": "当前访问权限无法读取你发布的阅读日志。",
+  "library_my_logs_preparing": "正在准备你发布的阅读日志，请稍后重试。",
+  "library_my_logs_unavailable": "暂时无法读取你发布的阅读日志，请重试。",
+  "library_my_logs_retry": "重试",
+  "library_my_logs_restarted": "页面已发生变化，现显示最新发布的阅读日志。",
+  "library_my_logs_newest": "最新发布的阅读日志",
+  "library_my_logs_no_visible": "此页没有可显示的已发布阅读日志。",
+  "library_my_logs_read": "阅读《{title}》的日志，发布于 {date}",
+  "library_my_logs_sign_in": "登录以查看你发布的阅读日志"
 }

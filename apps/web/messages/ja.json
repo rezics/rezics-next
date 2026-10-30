@@ -2959,5 +2959,16 @@
   "story_arc_relations_help": "公開済みのシリーズ、構成、前作、関係フィールドを使います。対象、順序の修飾子、出典を保持し、所属を推測しません。",
   "story_arc_work": "作品と編の順序",
   "story_arc_work_help": "実際にこの編を含む作品を選択します。作品の編の関係に、対象の編、位置、開始・終了部分の根拠を保存します。編の作成だけでは関係は作成されません。",
-  "story_arc_choose_work": "既存の親作品を選択"
+  "story_arc_choose_work": "既存の親作品を選択",
+  "library_my_logs_heading": "公開した読書ログ",
+  "library_my_logs_description": "自分で公開した読書のスナップショットです。公開時の状態、日付、メモがそのまま保存されています。",
+  "library_my_logs_denied": "現在のアクセス権では、公開した読書ログを読み込めません。",
+  "library_my_logs_preparing": "公開した読書ログを準備しています。しばらくしてから再試行してください。",
+  "library_my_logs_unavailable": "公開した読書ログを利用できません。再試行してください。",
+  "library_my_logs_retry": "再試行",
+  "library_my_logs_restarted": "ページが変更されたため、最新の公開ログを表示しています。",
+  "library_my_logs_newest": "最新の公開ログ",
+  "library_my_logs_no_visible": "このページに表示できる公開ログはありません。",
+  "library_my_logs_read": "{title}のログを読む（公開日時：{date}）",
+  "library_my_logs_sign_in": "ログインして公開した読書ログを見る"
 }

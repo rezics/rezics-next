@@ -2959,5 +2959,16 @@
   "story_arc_relations_help": "Nutze die veröffentlichten Felder für Reihen, Teile, Vorgänger und Beziehungen. Bewahre Ziele, Reihenfolgequalifikatoren und Belege; Zugehörigkeit wird nicht abgeleitet.",
   "story_arc_work": "Werk und Reihenfolge",
   "story_arc_work_help": "Wähle das tatsächliche Werk dieses Handlungsbogens. Seine Beziehung zu Handlungsbögen speichert Ziel, Position und Belege für Anfang und Ende. Das Erstellen eines Handlungsbogens erzeugt diese Beziehung nicht.",
-  "story_arc_choose_work": "Vorhandenes übergeordnetes Werk auswählen"
+  "story_arc_choose_work": "Vorhandenes übergeordnetes Werk auswählen",
+  "library_my_logs_heading": "Meine veröffentlichten Leseeinträge",
+  "library_my_logs_description": "Von dir ausdrücklich veröffentlichte Momentaufnahmen. Status, Daten und Notiz bleiben wie bei der Veröffentlichung.",
+  "library_my_logs_denied": "Mit deinem aktuellen Zugriff können deine veröffentlichten Leseeinträge nicht gelesen werden.",
+  "library_my_logs_preparing": "Deine veröffentlichten Leseeinträge werden vorbereitet. Versuche es gleich noch einmal.",
+  "library_my_logs_unavailable": "Deine veröffentlichten Leseeinträge sind nicht verfügbar. Versuche es erneut.",
+  "library_my_logs_retry": "Erneut versuchen",
+  "library_my_logs_restarted": "Die Seite hat sich geändert. Deine neuesten veröffentlichten Leseeinträge werden angezeigt.",
+  "library_my_logs_newest": "Neueste veröffentlichte Leseeinträge",
+  "library_my_logs_no_visible": "Keine sichtbaren veröffentlichten Leseeinträge auf dieser Seite.",
+  "library_my_logs_read": "Leseeintrag zu {title} lesen, veröffentlicht am {date}",
+  "library_my_logs_sign_in": "Melde dich an, um deine veröffentlichten Leseeinträge zu sehen"
 }

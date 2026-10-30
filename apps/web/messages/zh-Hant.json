@@ -2959,5 +2959,16 @@
   "story_arc_relations_help": "使用目前發布的系列、組成、前作及關係欄位，保留各目標、順序限定與引用，不推斷歸屬。",
   "story_arc_work": "所屬作品與篇章順序",
   "story_arc_work_help": "選擇實際承載篇章的作品。作品的故事篇章關係保存篇章目標、位置及起迄部分依據。建立篇章不會自動建立此關係。",
-  "story_arc_choose_work": "選擇既有父作品"
+  "story_arc_choose_work": "選擇既有父作品",
+  "library_my_logs_heading": "我發布的閱讀日誌",
+  "library_my_logs_description": "你主動發布的閱讀快照，保留發布時的狀態、日期與筆記。",
+  "library_my_logs_denied": "目前的存取權限無法讀取你發布的閱讀日誌。",
+  "library_my_logs_preparing": "正在準備你發布的閱讀日誌，請稍後重試。",
+  "library_my_logs_unavailable": "暫時無法讀取你發布的閱讀日誌，請重試。",
+  "library_my_logs_retry": "重試",
+  "library_my_logs_restarted": "頁面已變更，現顯示最新發布的閱讀日誌。",
+  "library_my_logs_newest": "最新發布的閱讀日誌",
+  "library_my_logs_no_visible": "此頁沒有可顯示的已發布閱讀日誌。",
+  "library_my_logs_read": "閱讀《{title}》的日誌，發布於 {date}",
+  "library_my_logs_sign_in": "登入以查看你發布的閱讀日誌"
 }

@@ -2959,5 +2959,16 @@
   "story_arc_relations_help": "Usa los campos publicados de serie, parte, predecesor y relaciones. Conserva cada destino, calificador de orden y cita; no se infiere pertenencia.",
   "story_arc_work": "Obra y orden del arco",
   "story_arc_work_help": "Selecciona la obra que realmente contiene este arco. Su relación de arcos guarda el destino, la posición y las pruebas de la primera y última parte. Crear el arco no crea esta relación.",
-  "story_arc_choose_work": "Elegir una obra principal existente"
+  "story_arc_choose_work": "Elegir una obra principal existente",
+  "library_my_logs_heading": "Mis registros publicados",
+  "library_my_logs_description": "Instantáneas de lectura que publicaste expresamente. Conservan el estado, las fechas y la nota del momento de publicación.",
+  "library_my_logs_denied": "Tu acceso actual no permite leer tus registros publicados.",
+  "library_my_logs_preparing": "Se están preparando tus registros publicados. Vuelve a intentarlo en unos instantes.",
+  "library_my_logs_unavailable": "Tus registros publicados no están disponibles. Vuelve a intentarlo.",
+  "library_my_logs_retry": "Volver a intentar",
+  "library_my_logs_restarted": "La página ha cambiado. Se muestran tus registros publicados más recientes.",
+  "library_my_logs_newest": "Registros publicados más recientes",
+  "library_my_logs_no_visible": "No hay registros publicados visibles en esta página.",
+  "library_my_logs_read": "Leer el registro de {title}, publicado el {date}",
+  "library_my_logs_sign_in": "Inicia sesión para ver tus registros publicados"
 }

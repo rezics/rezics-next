@@ -4,6 +4,7 @@ import { env } from 'cloudflare:workers';
 import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
+import { myLogsResult, myLogsSearch } from './my-logs';
 import {
   deletePublishedLog as deleteLog,
   restorePublishedLog as restoreLog,
@@ -33,7 +34,7 @@ function validateListInput(input: unknown): { cursor?: string } {
     typeof input !== 'object' ||
     ('cursor' in input &&
       input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || input.cursor.length > 2048))
+      (typeof input.cursor !== 'string' || input.cursor.length > 4096))
   )
     throw new Error('Invalid published log cursor');
   return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};
@@ -102,6 +103,14 @@ export const readMyPublishedLogs = createServerFn({ method: 'GET' })
     const page = await loadMyPublishedLogs(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
     await nameSubjectTypes(page.logs.map((log) => log.subject));
     return page;
+  });
+
+/** The history entry uses the same owner reader as the session page, with explicit failure states. */
+export const readMyPublishedLogHistory = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => myLogsSearch(validateListInput(input)))
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return myLogsResult(() => readMyPublishedLogs({ data }));
   });
 
 export const publishProgressLog = createServerFn({ method: 'POST' })
