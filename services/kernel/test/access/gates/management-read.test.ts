@@ -98,20 +98,20 @@ beforeAll(async () => {
   const composition = spyOn(appModule, 'createApp').mockImplementation((dependencies) => {
     const app = original(dependencies);
     for (const [index, group] of [...groups, groups[0]!].entries()) {
+      const detail = {
+        operationId: `fixture.management_${String.fromCharCode(97 + index)}`,
+        'x-action': 'fixture:read',
+        'x-exposure': `gate:${group}`,
+        security: [{ bearerAuth: [] }, {}],
+      };
       app.get(
         `/v1/management-fixture/${index}`,
-        {
-          detail: {
-            operationId: `fixture.management_${String.fromCharCode(97 + index)}`,
-            'x-action': 'fixture:read',
-            'x-exposure': `gate:${group}`,
-            security: [{ bearerAuth: [] }, {}],
-          },
-        },
+        { detail },
         () => ({ ok: true }),
       );
     }
-    app.get('/v1/management-hidden', { detail: { hide: true, 'x-exposure': 'gate:management_hidden' } }, () => ({}));
+    const hidden = { hide: true, 'x-exposure': 'gate:management_hidden' };
+    app.get('/v1/management-hidden', { detail: hidden }, () => ({}));
     return app;
   });
   try {

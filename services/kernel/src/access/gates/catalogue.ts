@@ -1,4 +1,4 @@
-import { requireAccessDeadline } from '../unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../unavailable.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -9,7 +9,6 @@ import {
   type CommandOutcome,
   type AuthoritativeTime,
 } from '../../command/command.ts';
-import { CommandUnavailableError } from '../unavailable.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { withConnection } from '../../database/pool.ts';
 import { deadlineClient, within } from '../authenticate.ts';
@@ -40,7 +39,8 @@ export async function readExposure(
   at: Date | AuthoritativeTime,
   deadline: number,
 ): Promise<ExposureState> {
-  if (!isExposureGroup(group)) throw new TypeError('Invalid exposure lookup');
+  if (!isExposureGroup(group) || (at instanceof Date && !Number.isFinite(at.getTime())))
+    throw new TypeError('Invalid exposure lookup');
   const native = !(at instanceof Date);
   const instant = native ? authoritativeTimeValue(at) : at.toISOString();
   requireAccessDeadline(deadline);
