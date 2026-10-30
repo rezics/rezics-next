@@ -43,22 +43,22 @@ or isolated helper release counts as either brief's outcome.
 
 These declarations were read at this repository base; proposed interfaces below are distinct.
 
-| Existing declaration or surface | Actual capability | Boundary it does not satisfy |
-| --- | --- | --- |
-| `SubjectSource.read(partition, ids): Promise<SubjectSnapshot>` in [source.ts](../services/kernel/src/search/source.ts) | Bounded keyed Subject snapshots; Semantic factory rejects more than 256 IDs | Account population or Account current discovery |
-| `SubjectSource.count(partition)` | Subject population count and source position | Key-complete mixed population reconciliation |
-| `IndexedSubject` / `SubjectSnapshot` | Subject type, visibility, redirect, security revision, texts and statements | Account identity or native Account disclosure T |
-| `subjectSource(pool, routeKey?)` in [Semantic](../services/kernel/src/semantic/search-source.ts) | Native Subject implementation with partition snapshot | Account adapter; optional route key is not permission to omit default source fences |
-| `readPublicIdentities(client, routes, accountIds)` in [account-data.ts](../services/kernel/src/access/account-data.ts) | Attribution for supplied IDs in request order | Enumeration; suspended-as-active attribution cannot establish discovery |
-| `readPublicAccountByHandle(client, handle, at?)` | Active claim or live former-handle forwarding, then public profile | Active-claim-only search alias or exact-match evidence |
-| `readPublicAccountByAgent(client, subjectId)` | Pointer plus current active verified account check | Population stream or proof that an account is unfenced |
-| `pageActiveAccounts(client, {afterRoute, afterAccountId, limit})` | Deployment enumeration, limit 1–100, active and unfenced | Retained generation population cut, replay protocol or public ordered search |
-| `readAgentPages(client, tokens, input, at?)` in `account-data.ts` | Public agent page feed with its existing projection | Search population certificate or ranked result producer |
-| `readAvatarSummaries(client, ids)` in [avatar.ts](../services/kernel/src/content/avatar.ts) | Current media summaries, at most 256 IDs per call | Account profile eligibility or query-level reduction safety |
-| `SearchService.search(principal, request, now?)` in [service.ts](../services/kernel/src/search/service.ts) | Current Subject search implementation | Mixed request, Accounts current-source composition or whole-query privacy proof |
-| `SearchHit` / `projectHit` / `projectFacts` in [hits.ts](../services/kernel/src/search/hits.ts) | Subject labels/descriptions/facts | Generic Account hit with native current guards |
-| `FilterRelease.types` in [filter.ts](../packages/filter/src/filter.ts) | Released catalogue types, bases and facets | A registry of enumerable Account kinds |
-| `searchWorkModule` in [work.ts](../services/kernel/src/search/work.ts) | Default Subject index service registration | Accounts producer registration or complete mixed rebuild |
+| Existing declaration or surface                                                                                        | Actual capability                                                           | Boundary it does not satisfy                                                        |
+| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `SubjectSource.read(partition, ids): Promise<SubjectSnapshot>` in [source.ts](../services/kernel/src/search/source.ts) | Bounded keyed Subject snapshots; Semantic factory rejects more than 256 IDs | Account population or Account current discovery                                     |
+| `SubjectSource.count(partition)`                                                                                       | Subject population count and source position                                | Key-complete mixed population reconciliation                                        |
+| `IndexedSubject` / `SubjectSnapshot`                                                                                   | Subject type, visibility, redirect, security revision, texts and statements | Account identity or native Account disclosure T                                     |
+| `subjectSource(pool, routeKey?)` in [Semantic](../services/kernel/src/semantic/search-source.ts)                       | Native Subject implementation with partition snapshot                       | Account adapter; optional route key is not permission to omit default source fences |
+| `readPublicIdentities(client, routes, accountIds)` in [account-data.ts](../services/kernel/src/access/account-data.ts) | Attribution for supplied IDs in request order                               | Enumeration; suspended-as-active attribution cannot establish discovery             |
+| `readPublicAccountByHandle(client, handle, at?)`                                                                       | Active claim or live former-handle forwarding, then public profile          | Active-claim-only search alias or exact-match evidence                              |
+| `readPublicAccountByAgent(client, subjectId)`                                                                          | Pointer plus current active verified account check                          | Population stream or proof that an account is unfenced                              |
+| `pageActiveAccounts(client, {afterRoute, afterAccountId, limit})`                                                      | Deployment enumeration, limit 1–100, active and unfenced                    | Retained generation population cut, replay protocol or public ordered search        |
+| `readAgentPages(client, tokens, input, at?)` in `account-data.ts`                                                      | Public agent page feed with its existing projection                         | Search population certificate or ranked result producer                             |
+| `readAvatarSummaries(client, ids)` in [avatar.ts](../services/kernel/src/content/avatar.ts)                            | Current media summaries, at most 256 IDs per call                           | Account profile eligibility or query-level reduction safety                         |
+| `SearchService.search(principal, request, now?)` in [service.ts](../services/kernel/src/search/service.ts)             | Current Subject search implementation                                       | Mixed request, Accounts current-source composition or whole-query privacy proof     |
+| `SearchHit` / `projectHit` / `projectFacts` in [hits.ts](../services/kernel/src/search/hits.ts)                        | Subject labels/descriptions/facts                                           | Generic Account hit with native current guards                                      |
+| `FilterRelease.types` in [filter.ts](../packages/filter/src/filter.ts)                                                 | Released catalogue types, bases and facets                                  | A registry of enumerable Account kinds                                              |
+| `searchWorkModule` in [work.ts](../services/kernel/src/search/work.ts)                                                 | Default Subject index service registration                                  | Accounts producer registration or complete mixed rebuild                            |
 
 The current [mapping](../services/kernel/db/search/indices/subjects.json) is strict and has no `kind`.
 Its payload parser requires a UUID `_id`; its templates request Subject partition/security metadata.
@@ -80,9 +80,7 @@ or create a Semantic subject solely to make an account searchable.
 
 ```ts
 // PROPOSED names; these exports do not exist.
-type DiscoveryIdentity =
-  | { family: 'subject'; id: string }
-  | { family: 'account'; id: string };
+type DiscoveryIdentity = { family: 'subject'; id: string } | { family: 'account'; id: string };
 type DiscoveryKind = {
   id: string;
   family: 'subject' | 'account';
@@ -128,11 +126,13 @@ An unrecognized condition is 422, distinct from a recognized leaf outside a kind
   "text": "Mira",
   "filter": {
     "or": [
-      {"kind": {"in": ["account"]}},
-      {"and": [
-        {"type": {"in": ["schema:Book"]}},
-        {"statement": {"property": "schema:genre", "in": ["comedy"]}}
-      ]}
+      { "kind": { "in": ["account"] } },
+      {
+        "and": [
+          { "type": { "in": ["schema:Book"] } },
+          { "statement": { "property": "schema:genre", "in": ["comedy"] } }
+        ]
+      }
     ]
   },
   "limit": 2,
@@ -205,13 +205,13 @@ Keep the literal raw validated text bound to continuation: 512 UTF-8 bytes, dept
 
 Select comparator format `mixed-public-v1` with these native tuples:
 
-| Sort | Comparable tuple |
-| --- | --- |
-| relevance | `_score DESC, id ASC, kind ASC, identity ASC` |
-| name | `name_sort ASC missing-last, id ASC, kind ASC, identity ASC` |
-| id | `id ASC, kind ASC, identity ASC` |
-| collections | Existing Subject count/name/ID tuple, then kind/identity ties |
-| rating | Existing Subject scored/unscored phases and all question/population/prior guards, then kind/identity ties |
+| Sort        | Comparable tuple                                                                                          |
+| ----------- | --------------------------------------------------------------------------------------------------------- |
+| relevance   | `_score DESC, id ASC, kind ASC, identity ASC`                                                             |
+| name        | `name_sort ASC missing-last, id ASC, kind ASC, identity ASC`                                              |
+| id          | `id ASC, kind ASC, identity ASC`                                                                          |
+| collections | Existing Subject count/name/ID tuple, then kind/identity ties                                             |
+| rating      | Existing Subject scored/unscored phases and all question/population/prior guards, then kind/identity ties |
 
 ID precedes the new ties to preserve today's Subject tie order. Kind and tagged identity make even equal
 UUIDs across families unambiguous. The key is per-hit and natively seekable using engine `search_after`.
@@ -544,9 +544,9 @@ The universal facade and Search-backed page descriptor use one mixed contract af
     {
       "id": "00000000-0000-8000-8000-000000000011",
       "kind": "account",
-      "kindLabel": {"language": "en", "value": "Account"},
-      "title": {"language": "und", "value": "Mira"},
-      "url": {"family": "account", "id": "00000000-0000-8000-8000-000000000011", "handle": "mira"},
+      "kindLabel": { "language": "en", "value": "Account" },
+      "title": { "language": "und", "value": "Mira" },
+      "url": { "family": "account", "id": "00000000-0000-8000-8000-000000000011", "handle": "mira" },
       "summary": {
         "account": {
           "id": "00000000-0000-8000-8000-000000000011",
@@ -563,9 +563,9 @@ The universal facade and Search-backed page descriptor use one mixed contract af
     {
       "id": "00000000-0000-8000-8000-000000000022",
       "kind": "schema:Book",
-      "kindLabel": {"language": "en", "value": "Book"},
-      "title": {"language": "en", "value": "Mira's atlas"},
-      "url": {"family": "subject", "id": "00000000-0000-8000-8000-000000000022"},
+      "kindLabel": { "language": "en", "value": "Book" },
+      "title": { "language": "en", "value": "Mira's atlas" },
+      "url": { "family": "subject", "id": "00000000-0000-8000-8000-000000000022" },
       "summary": null
     }
   ],
@@ -573,8 +573,8 @@ The universal facade and Search-backed page descriptor use one mixed contract af
   "as_of": "2026-10-30T06:00:00.000Z",
   "kinds": {
     "values": [
-      {"id": "account", "label": {"language": "en", "value": "Account"}, "icon": "account"},
-      {"id": "schema:Book", "label": {"language": "en", "value": "Book"}, "icon": "book"}
+      { "id": "account", "label": { "language": "en", "value": "Account" }, "icon": "account" },
+      { "id": "schema:Book", "label": { "language": "en", "value": "Book" }, "icon": "book" }
     ],
     "next": null
   }
@@ -642,20 +642,20 @@ These are exact decisions for adoption, not requests for another research round.
 an answer for each; owners either accept it or identify a concrete incompatible contract before dispatch.
 No unlanded producer alone blocks the specification.
 
-| Owner | Exact question and selected answer |
-| --- | --- |
-| Accounts | Will you own `AccountDiscoverySource` with the three proposed operations, literal active-and-unfenced predicate, native T/context and 100-key ceiling, instead of broadening attribution? Selected: yes; supply exact callable declarations in Access. |
-| Accounts | Will you add per-partition independent discovery traversal ordinals and same-transaction discovery revisions/reduction registration to every relevant writer? Selected: yes; do not reuse active-only enumeration as completeness proof. |
-| Accounts | Will you expose only handle/display name for indexed text and exact ACTIVE claim evidence, with no biography, links or former-handle aliases? Selected: yes; current summaries preserve the IDs item and current profile/agent guards. |
-| Accounts and Search | Will a removal/replacement of handle or display name be an immediate text/order reduction, while additions and fence lift use normal publication? Selected: yes; no old string can remain a ranking/exclusion input after T. |
-| Accounts and Content | Will native current batches coalesce Account/claim/avatar/verification reads per database and register foreign image reductions within the existing page budget? Selected: yes; absent image is allowed, stale image is not. |
-| Semantic and Search | Will Search assemble Account kind metadata alongside released catalogue type metadata without changing `FilterRelease.types` into an Account schema? Selected: yes; preserve catalogue type/base semantics and distinct Person identities. |
-| Search | Will the new mixed facade use one evolved `subjects-gN` family, tagged identity, comparator and exact active-handle boost, retaining Subject compatibility adapters? Selected: yes; no second per-kind query family. |
-| Search and Accounts | Will repair ACK cover actual physical observation, current fields, exclusion/order and common ranking statistics, including reductions ACKed during a request? Selected: yes; refresh/delete alone is insufficient evidence. |
-| Search and Performance | Will all Accounts, metadata, count, privacy and summary work fit existing shared page/step ceilings with no new allowance? Selected: yes; first native measurement determines whether a direct plan must prepare. |
-| Search and Web | Will `POST /v1/search:query`, generic title/kind/url inputs, `kindPage` and optional initial counts be the mixed wire, including ID navigation when handle is null? Selected: yes; extend the existing Search descriptor after native adoption. |
-| Search and shared history | Will exact Search physical-copy locators and all typed receipt/event/work roles use the fixed erasure participants, with no acknowledgement before sealed drain and late-item resolution? Selected: yes. |
-| Acceptance owners | Will the frozen scenarios below become new native acceptance files, leaving all existing frozen files unchanged and reconciling any incompatible expectation through its owner? Selected: yes. |
+| Owner                     | Exact question and selected answer                                                                                                                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Accounts                  | Will you own `AccountDiscoverySource` with the three proposed operations, literal active-and-unfenced predicate, native T/context and 100-key ceiling, instead of broadening attribution? Selected: yes; supply exact callable declarations in Access. |
+| Accounts                  | Will you add per-partition independent discovery traversal ordinals and same-transaction discovery revisions/reduction registration to every relevant writer? Selected: yes; do not reuse active-only enumeration as completeness proof.               |
+| Accounts                  | Will you expose only handle/display name for indexed text and exact ACTIVE claim evidence, with no biography, links or former-handle aliases? Selected: yes; current summaries preserve the IDs item and current profile/agent guards.                 |
+| Accounts and Search       | Will a removal/replacement of handle or display name be an immediate text/order reduction, while additions and fence lift use normal publication? Selected: yes; no old string can remain a ranking/exclusion input after T.                           |
+| Accounts and Content      | Will native current batches coalesce Account/claim/avatar/verification reads per database and register foreign image reductions within the existing page budget? Selected: yes; absent image is allowed, stale image is not.                           |
+| Semantic and Search       | Will Search assemble Account kind metadata alongside released catalogue type metadata without changing `FilterRelease.types` into an Account schema? Selected: yes; preserve catalogue type/base semantics and distinct Person identities.             |
+| Search                    | Will the new mixed facade use one evolved `subjects-gN` family, tagged identity, comparator and exact active-handle boost, retaining Subject compatibility adapters? Selected: yes; no second per-kind query family.                                   |
+| Search and Accounts       | Will repair ACK cover actual physical observation, current fields, exclusion/order and common ranking statistics, including reductions ACKed during a request? Selected: yes; refresh/delete alone is insufficient evidence.                           |
+| Search and Performance    | Will all Accounts, metadata, count, privacy and summary work fit existing shared page/step ceilings with no new allowance? Selected: yes; first native measurement determines whether a direct plan must prepare.                                      |
+| Search and Web            | Will `POST /v1/search:query`, generic title/kind/url inputs, `kindPage` and optional initial counts be the mixed wire, including ID navigation when handle is null? Selected: yes; extend the existing Search descriptor after native adoption.        |
+| Search and shared history | Will exact Search physical-copy locators and all typed receipt/event/work roles use the fixed erasure participants, with no acknowledgement before sealed drain and late-item resolution? Selected: yes.                                               |
+| Acceptance owners         | Will the frozen scenarios below become new native acceptance files, leaving all existing frozen files unchanged and reconciling any incompatible expectation through its owner? Selected: yes.                                                         |
 
 After adoption, update the relevant owning contract with the decision and link this bounded implementation
 plan; do not copy the entire plan into every owner document. This one-file specification does not edit
@@ -840,20 +840,20 @@ of a retired index may resurrect erased Account documents.
 
 ### Failure, rollback and replay table
 
-| Injection | Required result and durable state |
-| --- | --- |
-| Invalid projection snapshot before I/O | No sink effect; no checkpoint; reject entire chunk |
-| Source unavailable on tail chunk | Earlier effects may exist; batch checkpoint unchanged; replay all unresolved work |
-| Engine wrong key or success-with-error | No success settlement; retain exact write intent and retry obligation |
-| Winner exists but not refresh-visible | Wait/retry within owned worker operation; no checkpoint or privacy ACK |
-| Crash after visible write before checkpoint | Replay same positioned action; no duplicate identity or lost tail |
-| Crash after population frontier | Resume next bounded page; replay at most one uncommitted step |
-| Account fences after source read | Immediate owner reduction invalidates public use; late effect cannot restore eligibility |
-| Rebuild reconciliation mismatch | Do not switch alias; retain repairable target and exact discrepancy frontier |
-| Physical index replaced under same name | UUID mismatch; reject old settlement/ACK and require current generation handling |
-| Retired-index late write | Native fence refuses effect; no auto-created physical generation |
-| Erasure while external response ambiguous | Open late item stays unresolved until exact physical copy is minimized/purged |
-| Worker startup failure or stop | Drain owned relays and connections; do not stop another fixture's resources |
+| Injection                                   | Required result and durable state                                                        |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Invalid projection snapshot before I/O      | No sink effect; no checkpoint; reject entire chunk                                       |
+| Source unavailable on tail chunk            | Earlier effects may exist; batch checkpoint unchanged; replay all unresolved work        |
+| Engine wrong key or success-with-error      | No success settlement; retain exact write intent and retry obligation                    |
+| Winner exists but not refresh-visible       | Wait/retry within owned worker operation; no checkpoint or privacy ACK                   |
+| Crash after visible write before checkpoint | Replay same positioned action; no duplicate identity or lost tail                        |
+| Crash after population frontier             | Resume next bounded page; replay at most one uncommitted step                            |
+| Account fences after source read            | Immediate owner reduction invalidates public use; late effect cannot restore eligibility |
+| Rebuild reconciliation mismatch             | Do not switch alias; retain repairable target and exact discrepancy frontier             |
+| Physical index replaced under same name     | UUID mismatch; reject old settlement/ACK and require current generation handling         |
+| Retired-index late write                    | Native fence refuses effect; no auto-created physical generation                         |
+| Erasure while external response ambiguous   | Open late item stays unresolved until exact physical copy is minimized/purged            |
+| Worker startup failure or stop              | Drain owned relays and connections; do not stop another fixture's resources              |
 
 Rollback a source command by rolling back its own reduction/event/revision writes in the same native
 transaction. Never send a sink action from an uncommitted source command. Rolling back an engine failure
@@ -1190,20 +1190,20 @@ Verify aggregate and serialized sizes through the real codec. Hashing the physic
 not recover the authoritative observation. Decode is constant-attempt, size-reject-before-decrypt, zero-I/O.
 Secrets, rejected raw tokens and plaintext keys must not enter ordinary logs or diagnostic JSON.
 
-| Failure | Required public behavior |
-| --- | --- |
-| Invalid bearer | Existing 401 form before execution, no anonymous downgrade |
-| Malformed/unknown condition or kind | Existing typed 400/422 distinction at exact request pointer |
-| Account-inapplicable mixed sort | 422 unsupported_query at `/sort`, zero candidates |
-| Hidden resource under NOT/true OR | Existing concealed owner outcome before enumeration |
-| Bad/tampered/request-mismatched cursor | 400 invalid_request, invalid_format at cursor pointer |
-| Authenticated expired or changed meaning/generation | 409 search_restart_required |
-| Missing Account factory or unsafe source state | Existing readiness/unavailable transport; never Subject-only success |
-| Reduction during execution, even ACKed by final | Discard response and client frontier; retry only within remaining budget |
-| Count evidence unavailable | Omit that count; preserve hit safety and no zero substitution |
-| Optional avatar unavailable without unsafe dependency | Omit image under current field guard |
-| Partial engine response or malformed tagged tuple | Unavailable; no partial page, count or token |
-| Native source fails after some candidates | Whole response fails closed; no false EOF or consumed client frontier |
+| Failure                                               | Required public behavior                                                 |
+| ----------------------------------------------------- | ------------------------------------------------------------------------ |
+| Invalid bearer                                        | Existing 401 form before execution, no anonymous downgrade               |
+| Malformed/unknown condition or kind                   | Existing typed 400/422 distinction at exact request pointer              |
+| Account-inapplicable mixed sort                       | 422 unsupported_query at `/sort`, zero candidates                        |
+| Hidden resource under NOT/true OR                     | Existing concealed owner outcome before enumeration                      |
+| Bad/tampered/request-mismatched cursor                | 400 invalid_request, invalid_format at cursor pointer                    |
+| Authenticated expired or changed meaning/generation   | 409 search_restart_required                                              |
+| Missing Account factory or unsafe source state        | Existing readiness/unavailable transport; never Subject-only success     |
+| Reduction during execution, even ACKed by final       | Discard response and client frontier; retry only within remaining budget |
+| Count evidence unavailable                            | Omit that count; preserve hit safety and no zero substitution            |
+| Optional avatar unavailable without unsafe dependency | Omit image under current field guard                                     |
+| Partial engine response or malformed tagged tuple     | Unavailable; no partial page, count or token                             |
+| Native source fails after some candidates             | Whole response fails closed; no false EOF or consumed client frontier    |
 
 No rollback attempts to undo a user command or external engine effect from a read request. Retained
 preparation, if admitted, commits its bounded frontier transactionally; failure before commit replays at
