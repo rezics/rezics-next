@@ -3,6 +3,7 @@ import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { Access, ReadDecisions } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { realmViewerActionResource } from './realm.ts';
+import { realmPresentation } from './presentation.ts';
 import { spaceViewerActionResource } from './space.ts';
 import { readRealmDiscoveryGate } from './discovery-source.ts';
 import { discoveryDescription, type DiscoveryRealm } from './discovery.ts';
@@ -23,7 +24,19 @@ type Head = {
   context_id: string;
   created_at: string;
 };
-type Revision = { realm_id: string; revision_id: string; title: string; summary: string; created_at: string };
+type Revision = {
+  realm_id: string;
+  revision_id: string;
+  title: string;
+  summary: string;
+  presentation: unknown;
+  created_at: string;
+};
+export type DiscoveryCard = {
+  value: DiscoveryRealm;
+  avatarMediaId: string | null;
+  binding: string;
+};
 type Space = { space_id: string; state: string; head_revision_id: string; created_at: string };
 
 export async function prepareDiscoveryAccess(pool: Pool, access: Access, deadline: number): Promise<ReadDecisions> {
@@ -43,7 +56,7 @@ export async function readDiscoveryCards(
   cutoff: string,
   at: string,
   deadline: number,
-): Promise<Map<string, DiscoveryRealm>> {
+): Promise<Map<string, DiscoveryCard>> {
   const groups = new Map<number, DiscoveryCandidate[]>();
   for (const candidate of candidates) {
     const route = routeOf(candidate.realm_id);
@@ -53,7 +66,7 @@ export async function readDiscoveryCards(
     group.push(candidate);
     groups.set(partition, group);
   }
-  const cards = new Map<string, DiscoveryRealm>();
+  const cards = new Map<string, DiscoveryCard>();
   for (const [partition, group] of groups) {
     const visible = await discoverySnapshot(pool, partition, deadline, async (client) => {
       const ids = group.map((c) => c.realm_id);
@@ -76,7 +89,7 @@ export async function readDiscoveryCards(
       });
       const revisions = (
         await client.query<Revision>(
-          `SELECT realm_id,revision_id,title,summary,created_at::text
+          `SELECT realm_id,revision_id,title,summary,presentation,created_at::text
         FROM community.realm_revision WHERE (route,realm_id,revision_id) IN
         (SELECT * FROM unnest($1::integer[],$2::uuid[],$3::uuid[]))`,
           [heads.map((h) => routeOf(h.realm_id)!), heads.map((h) => h.realm_id), heads.map((h) => h.head_revision_id)],
@@ -123,7 +136,7 @@ export async function readDiscoveryCards(
             }),
           })
         : {};
-      const result: DiscoveryRealm[] = [];
+      const result: DiscoveryCard[] = [];
       for (const candidate of group) {
         const head = heads.find((h) => h.realm_id === candidate.realm_id);
         const revision = revisions.find(
@@ -154,17 +167,28 @@ export async function readDiscoveryCards(
           )
         )
           continue;
+        const presentation = realmPresentation(revision.presentation);
         result.push({
-          realmId: head.realm_id,
-          spaceId: space.space_id,
-          name: revision.title,
-          description: discoveryDescription(revision.summary),
-          avatar: null,
+          value: {
+            realmId: head.realm_id,
+            spaceId: space.space_id,
+            name: revision.title,
+            description: discoveryDescription(revision.summary),
+            avatar: null,
+          },
+          avatarMediaId: presentation.avatarMediaId,
+          binding: JSON.stringify([
+            head.head_revision_id,
+            head.space_id,
+            head.context_id,
+            space.head_revision_id,
+            presentation,
+          ]),
         });
       }
       return result;
     });
-    for (const card of visible) cards.set(card.realmId, card);
+    for (const card of visible) cards.set(card.value.realmId, card);
   }
   return cards;
 }

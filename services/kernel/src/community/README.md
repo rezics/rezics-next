@@ -14,12 +14,24 @@ published board, active explicitly public Realm and anonymously readable active 
 public later never qualifies it. Returning from protected visibility starts a new public epoch without backfill.
 
 The public API contract is `GET /v1/realms/discovery?sort=popular|trending&cursor=…&limit=…`, with the closed response
-`{realms:[{realmId,spaceId,name,description,avatar:null}],next:string|null}`. IDs are native routed IDs, name is the
+`{realms:[{realmId,spaceId,name,description,avatar:RealmPresentationImage|null}],next:string|null}`. IDs are native routed IDs, name is the
 current Realm title, and description collapses whitespace, trims and truncates the current summary to 160 Unicode
-characters. No Realm or Space avatar selection authority exists, so avatar is null. No count, score, account ID,
-URL or target content is returned. Query limit is 1–100, default 20; a page examines at most `min(limit,20)` rank
+characters. Avatar is only the current Realm revision's selected `presentation.avatarMediaId`, resolved through
+Content's native `readRealmPresentationImages` as anonymous with `bannerMediaId:null`. The exact shared
+`RealmPresentationImage` type/schema belongs to `content/realm-media.ts`: only the native available same-Realm,
+matching-purpose derivative summary is returned. Unset, erased, hidden or unavailable optional images yield null;
+no owner/profile fallback, original URL, hotlink, hidden media identity or permission is returned. No count, score,
+account ID or target content is returned. Query limit is 1–100, default 20; a page examines at most `min(limit,20)` rank
 candidates, allowing sparse or empty results with continuation. There is one indexed rank seek and no refill loop.
 Consumers deduplicate Realm IDs because retractions can reorder candidates between pages.
+
+Each examined candidate has fixed native media point work for at most one selected avatar; an unset slot makes no
+media call. The first Realm/Space snapshot is released before invoking the original media authority. Final anonymous
+Realm/Space/source checks must still pass, and the Realm head, host identity/head, Context pointer and presentation
+must match the first binding before returning the image or card. A changed binding is omitted without retry or
+refill. An unreadable or removed Realm is omitted even when its optional image is null. There is no per-row HTTP,
+banner enrichment, member-count read, private membership read or additional media authority. Existing ranking,
+original qualification, completed-day windows, source generations, expiry and signed cursor gates are unchanged.
 
 Continuation uses the native signed cursor bound to sort, normalized limit, definition version, completed UTC
 cutoff, current partition/publication epoch and the last examined count/Realm ID. A day or epoch change uses
@@ -62,7 +74,10 @@ outcomes and exact fence recovery. The Community wake retains the producer's clo
 it only starts a committed-log read. No provisional producer declarations or alternate source coordinator remain.
 The native fixture in `test/community/discovery-native.test.ts` covers the integrated path. Runtime, physical,
 native worker, lifecycle-removal and growth proof remain integration obligations; compiler typing alone establishes
-none of them.
+none of them. The focused discovery test additionally exercises ordinary Realm media upload/processing/selection,
+actual native image summaries, optional source failure and retry, changed final selection and privacy, and the same
+one-candidate continuation. These are source integration cases; this change makes no additional native cost or
+physical-proof claim.
 
 The adopted design evidence is [Realm discovery research](../../../../docs/research/content-realm-discovery-design.md).
 Its proposed `items` envelope is superseded here by the kernel resource-plural `realms` envelope.

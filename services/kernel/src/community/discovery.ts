@@ -1,3 +1,8 @@
+import {
+  exactRealmPresentationImage,
+  readRealmPresentationImages,
+  type RealmPresentationImage,
+} from '../content/realm-media.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
@@ -14,7 +19,7 @@ export type DiscoveryRealm = {
   spaceId: string;
   name: string;
   description: string;
-  avatar: null;
+  avatar: RealmPresentationImage | null;
 };
 export type DiscoveryPage = { realms: DiscoveryRealm[]; next: string | null };
 
@@ -188,12 +193,26 @@ export async function listRealmDiscovery(
   if (page.rows.length) {
     const decisions = await prepareDiscoveryAccess(deps.pool, deps.access, deadline);
     const first = await readDiscoveryCards(deps.pool, decisions, page.rows, cutoff, at.toISOString(), deadline);
+    const avatars = new Map<string, RealmPresentationImage>();
+    // All owner snapshots are released. Only selected avatars of the examined,
+    // anonymously readable candidates reach the native media authority.
+    for (const [realmId, card] of first) {
+      if (card.avatarMediaId === null) continue;
+      const { avatar } = await readRealmPresentationImages(
+        { pool: deps.pool, access: deps.access },
+        { realmId, avatarMediaId: card.avatarMediaId, bannerMediaId: null },
+        { actor: { kind: 'anonymous' }, deadline },
+      );
+      if (avatar.state !== 'available') continue;
+      const image = exactRealmPresentationImage(avatar.value);
+      if (image && image.id === card.avatarMediaId && image.containerId === realmId) avatars.set(realmId, image);
+    }
     const current = await currentDiscoveryCandidates(
       deps.pool,
       page.rows.filter((row) => first.has(row.realm_id)),
       deadline,
     );
-    cards = await readDiscoveryCards(
+    const final = await readDiscoveryCards(
       deps.pool,
       decisions,
       current,
@@ -201,6 +220,10 @@ export async function listRealmDiscovery(
       (deps.clock ?? (() => new Date()))().toISOString(),
       deadline,
     );
+    for (const [realmId, card] of final) {
+      if (first.get(realmId)?.binding !== card.binding) continue;
+      cards.set(realmId, { ...card.value, avatar: avatars.get(realmId) ?? null });
+    }
     await discoverySnapshot(deps.pool, DISCOVERY_PARTITION, deadline, async (client, epoch) => {
       const anchor = (
         await client.query<{ publication_epoch: string }>(

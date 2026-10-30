@@ -1,4 +1,5 @@
 import { listRealmDiscovery } from './discovery.ts';
+import { exactRealmPresentationImage } from '../content/realm-media.ts';
 import { discoveryQuerySchema, discoveryResponseSchema } from './schemas.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -726,8 +727,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
       },
       async ({ query, admission, job }) =>
-        admission.run('normal', job, () =>
-          listRealmDiscovery(
+        admission.run('normal', job, async () => {
+          const page = await listRealmDiscovery(
             {
               pool: dependencies.pool,
               access: dependencies.access(),
@@ -736,8 +737,15 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             },
             job.deadline,
             query,
-          ),
-        ),
+          );
+          return {
+            ...page,
+            realms: page.realms.map((realm) => ({
+              ...realm,
+              avatar: realm.avatar === null ? null : exactRealmPresentationImage(realm.avatar),
+            })),
+          };
+        }),
     )
     .get(
       '/v1/sitemap/realms',

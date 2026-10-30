@@ -1,3 +1,6 @@
+import { MediaImportRequestSchema } from '@rezics/definitions/media-import';
+import { t } from 'elysia';
+import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -23,6 +26,45 @@ export type RealmPresentationImage = Readonly<{
   focalPoint: Readonly<{ x: number; y: number }> | null;
   credit: import('@rezics/definitions/media-import').MediaImportRequest['credit'] | null;
 }>;
+
+const closed = { additionalProperties: false } as const;
+const id = t.String({ format: 'uuid' });
+const nullable = <T extends import('typebox').TSchema>(schema: T) => t.Union([schema, t.Null()]);
+export const RealmPresentationImageSchema = t.Object(
+  {
+    id,
+    containerId: id,
+    digest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+    width: t.Integer({ minimum: 1 }),
+    height: t.Integer({ minimum: 1 }),
+    variants: t.Array(
+      t.Object(
+        {
+          format: t.Union([t.Literal('avif'), t.Literal('webp')]),
+          width: t.Integer({ minimum: 1 }),
+          height: t.Integer({ minimum: 1 }),
+        },
+        closed,
+      ),
+      { minItems: 1, maxItems: 12 },
+    ),
+    placeholder: nullable(t.Object({ thumbhash: t.String(), color: t.String() }, closed)),
+    focalPoint: nullable(
+      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+    ),
+    credit: nullable(MediaImportRequestSchema.properties.credit),
+  },
+  closed,
+);
+const imageValidator = Compile(RealmPresentationImageSchema);
+
+/** Exact JSON summary shared by native presentation consumers; never download authority. */
+export function exactRealmPresentationImage(
+  value: RealmPresentationImage,
+): import('typebox').Static<typeof RealmPresentationImageSchema> | null {
+  if (!imageValidator.Check(value)) return null;
+  return { ...value, variants: value.variants.map((variant) => ({ ...variant })) };
+}
 
 /** Called after the native settings revision/head writes, within their authorized command.
  * Null slots never undo claims made by an immutable earlier Realm revision. */

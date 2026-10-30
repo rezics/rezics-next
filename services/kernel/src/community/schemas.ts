@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { RealmPresentationImageSchema } from '../content/realm-media.ts';
 import { ContentIdSchema, sitemapPageSchema } from '../content/schemas.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -42,7 +43,7 @@ export const discoveryResponseSchema = t.Object(
           spaceId: id,
           name: t.String({ minLength: 1, maxLength: 1024 }),
           description: t.String({ maxLength: 160 }),
-          avatar: t.Null(),
+          avatar: t.Union([RealmPresentationImageSchema, t.Null()]),
         },
         closed,
       ),

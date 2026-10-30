@@ -1,8 +1,11 @@
 import type { DocumentSnapshot } from '@rezics/document';
 import { DocumentSnapshotSchema } from '@rezics/document';
-import { MediaImportRequestSchema } from '@rezics/definitions/media-import';
 import { t } from 'elysia';
-import type { RealmPresentationImage, RealmPresentationOptional } from './realm-media.ts';
+import {
+  RealmPresentationImageSchema,
+  type RealmPresentationImage,
+  type RealmPresentationOptional,
+} from './realm-media.ts';
 
 export type CommunityPresentation = Readonly<{
   realmId: string;
@@ -34,32 +37,6 @@ const optional = <T extends import('typebox').TSchema>(schema: T) =>
     t.Object({ state: t.Literal('available'), value: schema }, closed),
     t.Object({ state: t.Union([t.Literal('none'), t.Literal('unavailable')]), value: t.Null() }, closed),
   ]);
-const image = t.Object(
-  {
-    id,
-    containerId: id,
-    digest: t.String({ pattern: '^[0-9a-f]{64}$' }),
-    width: t.Integer({ minimum: 1 }),
-    height: t.Integer({ minimum: 1 }),
-    variants: t.Array(
-      t.Object(
-        {
-          format: t.Union([t.Literal('avif'), t.Literal('webp')]),
-          width: t.Integer({ minimum: 1 }),
-          height: t.Integer({ minimum: 1 }),
-        },
-        closed,
-      ),
-      { minItems: 1, maxItems: 12 },
-    ),
-    placeholder: nullable(t.Object({ thumbhash: t.String(), color: t.String() }, closed)),
-    focalPoint: nullable(
-      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
-    ),
-    credit: nullable(MediaImportRequestSchema.properties.credit),
-  },
-  closed,
-);
 export const CommunityPresentationSchema = t.Object(
   {
     realmId: id,
@@ -67,8 +44,8 @@ export const CommunityPresentationSchema = t.Object(
     contextId: id,
     name: t.String(),
     description: t.String(),
-    avatar: optional(image),
-    banner: optional(image),
+    avatar: optional(RealmPresentationImageSchema),
+    banner: optional(RealmPresentationImageSchema),
     members: t.Union([
       t.Object(
         { state: t.Literal('current'), count: t.Integer({ minimum: 0 }), version: t.String({ minLength: 1 }) },
