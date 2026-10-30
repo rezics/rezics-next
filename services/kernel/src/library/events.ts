@@ -8,7 +8,12 @@ export const LIBRARY_EVENTS = {
   'com.rezics.library.account-facts.purged.v1': Type.Object(
     {
       accountId: id,
-      kind: Type.Union([Type.Literal('entry'), Type.Literal('copy'), Type.Literal('follow'), Type.Literal('published_log')]),
+      kind: Type.Union([
+        Type.Literal('entry'),
+        Type.Literal('copy'),
+        Type.Literal('follow'),
+        Type.Literal('published_log'),
+      ]),
       examined: Type.Integer({ minimum: 0, maximum: 100 }),
       removed: Type.Integer({ minimum: 0, maximum: 100 }),
     },

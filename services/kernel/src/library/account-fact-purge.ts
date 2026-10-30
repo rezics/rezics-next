@@ -61,7 +61,8 @@ export async function purgeAccountFactsPage(
 ): Promise<CommandOutcome<Page>> {
   const { accountId, kind, limit, stepKey } = input;
   const route = requireRoute(accountId);
-  if (kind !== 'entry' && kind !== 'copy' && kind !== 'follow' && kind !== 'published_log') throw new TypeError('Invalid account fact kind');
+  if (kind !== 'entry' && kind !== 'copy' && kind !== 'follow' && kind !== 'published_log')
+    throw new TypeError('Invalid account fact kind');
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new RangeError('Page limit must be an integer from 1 through 100');
   const after = cursorFor(kind, input.after);
@@ -101,7 +102,9 @@ export async function purgeAccountFactsPage(
           ? await purgeCopy.run(tx, { ...args, after_created_at: after?.createdAt ?? null })
           : kind === 'entry'
             ? await purgeEntry.run(tx, args)
-            : kind === 'published_log' ? await purgeLog.run(tx, args) : await purgeFollow.run(tx, args);
+            : kind === 'published_log'
+              ? await purgeLog.run(tx, args)
+              : await purgeFollow.run(tx, args);
       const events: CommandEvent[] = [];
       let lastExamined: Cursor | null = null;
       for (const row of rows) {
@@ -116,7 +119,14 @@ export async function purgeAccountFactsPage(
         events.push({
           type: `com.rezics.library.${kind === 'follow' ? 'follow.updated' : `${kind}.deleted`}.v1`,
           subject: accountId,
-          data: kind === 'published_log' ? { logId: row.id } : kind === 'copy' ? { copyId: row.id } : kind === 'entry' ? { subjectId: row.id } : { targetId: row.id },
+          data:
+            kind === 'published_log'
+              ? { logId: row.id }
+              : kind === 'copy'
+                ? { copyId: row.id }
+                : kind === 'entry'
+                  ? { subjectId: row.id }
+                  : { targetId: row.id },
         });
       }
       const value: Page = {
