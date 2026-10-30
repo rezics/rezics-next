@@ -8,7 +8,7 @@ const profile = v.object({
   avatar: v.nullable(v.object({ media: v.string() })),
   links: v.array(v.object({ label: v.string(), url: v.string() })),
   publicViews: v.object({ posts: v.boolean(), reviews: v.boolean(), collections: v.boolean(), realms: v.boolean() }),
-  speakersListed: v.optional(v.boolean()),
+  speakersListed: v.exactOptional(v.boolean()),
 });
 const submission = v.object({ before: profile, after: profile, idempotencyKey: v.pipe(v.string(), v.uuid()) });
 

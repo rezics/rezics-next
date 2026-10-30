@@ -1,5 +1,5 @@
 import type { FakeRoute } from '../fake-modules.ts';
-import type { ProfileValues } from '../../settings/profile-data';
+import type { ProfileLink, ProfileValues } from '../../settings/profile-data';
 import { rebaseProfile, type ProfileEditorIO } from '../../settings/profile-write';
 
 export type ProfileScenario =
@@ -34,7 +34,7 @@ export function createProfileStoryIO(scenario: ProfileScenario): ProfileEditorIO
   let failed = false;
   return {
     read: async () => {
-      if ((scenario === 'unavailable' || scenario === 'handleless') && !failed) {
+      if (scenario === 'handleless' || (scenario === 'unavailable' && !failed)) {
         failed = true;
         throw new Error('Profile unavailable');
       }
@@ -97,7 +97,10 @@ const profile = (id: string, kind: 'actor' | 'organization', variant = '') => ({
   subject: null,
 });
 
-type StoryProfile = ReturnType<typeof profile>;
+type StoryProfile = Omit<ReturnType<typeof profile>, 'displayName' | 'bio'> & {
+  displayName: string | null;
+  bio: string | null;
+};
 const records = new Map<string, StoryProfile>();
 const receipts = new Set<string>();
 function recordFor(variant: string, id: string) {
@@ -136,12 +139,20 @@ export const routes: FakeRoute[] = [
           next.displayName = body.displayName;
         if ('biography' in body && (typeof body.biography === 'string' || body.biography === null))
           next.bio = body.biography;
-        if ('links' in body && Array.isArray(body.links)) next.links = body.links;
+        if ('links' in body && Array.isArray(body.links))
+          next.links = body.links.filter(
+            (link): link is ProfileLink =>
+              !!link && typeof link === 'object' && typeof link.label === 'string' && typeof link.url === 'string',
+          );
         if ('publicViews' in body && body.publicViews && typeof body.publicViews === 'object')
           next.publicViews = { ...current.publicViews, ...body.publicViews };
         if ('speakersListed' in body && typeof body.speakersListed === 'boolean' && current.kind === 'organization')
           next.speakersListed = body.speakersListed;
         if ('avatar' in body && body.avatar === null) next.avatar = null;
+        else if ('avatar' in body && typeof body.avatar === 'string') {
+          const summary = profile(id, current.kind, 'extended').avatar;
+          if (summary) next.avatar = { ...summary, media: body.avatar, id: body.avatar };
+        }
         records.set(`${variant}:${id}`, next);
         receipts.add(key);
       }

@@ -78,7 +78,12 @@ export function profileChanges(before: ProfileValues, after: ProfileValues): Pro
   for (const key of ['posts', 'reviews', 'collections', 'realms'] as const)
     if (before.publicViews[key] !== after.publicViews[key]) publicViews[key] = after.publicViews[key];
   if (Object.keys(publicViews).length) body.publicViews = publicViews;
-  if (before.kind === 'organization' && after.kind === 'organization' && before.speakersListed !== after.speakersListed)
+  if (
+    before.kind === 'organization' &&
+    after.kind === 'organization' &&
+    typeof after.speakersListed === 'boolean' &&
+    before.speakersListed !== after.speakersListed
+  )
     body.speakersListed = after.speakersListed;
   return body;
 }
@@ -94,9 +99,8 @@ export async function saveProfileRecord(
   if (after.links.length > 5) throw new Error('At most five links are allowed');
   const body = profileChanges(before, after);
   if (!Object.keys(body).length) return { ok: true, profile: before };
-  const result = await client.accounts({ accountId }).patch(body, {
-    headers: { authorization, 'idempotency-key': idempotencyKey },
-  });
+  const headers = { authorization, 'idempotency-key': idempotencyKey };
+  const result = await client.accounts({ accountId }).patch(body, { headers });
   if (!result.error && result.data) return { ok: true, profile: after };
   const errorBody = result.error?.value;
   const message =
