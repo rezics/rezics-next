@@ -243,6 +243,8 @@ test('kept Search pages batch native missing, below-threshold, prior-ready and p
         }),
         planBackends: planIndexes.map(() => projectionBackend),
       });
+      if (projection.statements.length !== 5)
+        throw new Error(`Search public figure projection exceeded five statements: ${JSON.stringify(projection)}`);
       expect(projection.statements).toHaveLength(5); // BEGIN, timeout, question, keyed figures/pending, COMMIT.
       expect(projection.statements[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       expect(projection.statements.at(-1)).toBe('COMMIT');
