@@ -340,7 +340,7 @@ export function CandidateReview({
                   ))}
                 </NativeSelect>
               </Field>
-              {current.page && (
+              {current.page && (!context || !result) && (
                 <>
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
