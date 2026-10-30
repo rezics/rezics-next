@@ -242,6 +242,33 @@ test('a new converter produces fresh same-value proposals for every record with 
   }
 });
 
+test('a converter rollback refreshes candidates preserved under an earlier field fence', async () => {
+  const f = fixture();
+  try {
+    expect((await f.run()).status).toBe('committed');
+    const oldFacts = f.candidates().filter((c) => c.field_group === 'facts');
+    expect(oldFacts.length).toBeGreaterThan(0);
+    f.fences.add(tupleKey('refresh', '1', 'facts'));
+    expect((await f.run('refresh', 'conversion-v2')).status).toBe('committed');
+    expect(f.candidates().filter((c) => c.field_group === 'facts')).toEqual(oldFacts);
+    f.fences.delete(tupleKey('refresh', '1', 'facts'));
+    f.fences.add(tupleKey('refresh', '1', 'summary'));
+    await f.reopen();
+    const start = f.calls.length;
+    expect((await f.run()).status).toBe('committed');
+    const fresh = f.calls.slice(start).flat();
+    expect(
+      fresh.some((c) => c.op === 'propose' && c.source.external_id === '1' && c.source.field_group === 'facts'),
+    ).toBe(true);
+    for (const prior of oldFacts) {
+      expect(f.candidates().some((c) => c.key === prior.key || c.candidate === prior.candidate)).toBe(false);
+      expect(fresh.some((c) => c.op === 'retract' && c.candidate === prior.candidate)).toBe(true);
+    }
+  } finally {
+    await f.close();
+  }
+});
+
 test('unchanged, changed and reconverted inputs obey exact field, record and source fences', async () => {
   const f = fixture();
   try {
