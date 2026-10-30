@@ -1,12 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import {
-  RELEASE_LIMITS,
-  releaseAdmission,
-  releaseDigest,
-  validateRelease,
-  valueSchema,
-} from '@rezics/definitions';
+import { RELEASE_LIMITS, releaseAdmission, releaseDigest, validateRelease, valueSchema } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { analyzePattern } from '../../../../packages/definitions/src/pattern-safety.ts';
 import { constructionFixture } from '../../../../packages/definitions/test/support/publication-construction.ts';
@@ -98,12 +92,18 @@ test('native cold publication keeps gate, body identity, replay, new-key, confli
   expect(conflict.body).toMatchObject({ code: 'idempotency_conflict', effect_status: 'not_applied' });
   expect(await effectsSnapshot(driver.fixtures.pool)).toEqual(bookkeeping);
 
-  const revoked = await driver.fixtures.send(account, 'POST', '/v1/grants:revoke', {
-    resource: { route: 0, id: driver.globalContext },
-    subject: { kind: 'account', id: account.accountId },
-    actions: ['definitions:publish'],
-    valid: '(,)',
-  }, key());
+  const revoked = await driver.fixtures.send(
+    account,
+    'POST',
+    '/v1/grants:revoke',
+    {
+      resource: { route: 0, id: driver.globalContext },
+      subject: { kind: 'account', id: account.accountId },
+      actions: ['definitions:publish'],
+      valid: '(,)',
+    },
+    key(),
+  );
   expect(revoked.status, JSON.stringify(revoked.body)).toBe(200);
   const deniedBefore = await effectsSnapshot(driver.fixtures.pool);
   const denied = await publish(release, headers, account);
