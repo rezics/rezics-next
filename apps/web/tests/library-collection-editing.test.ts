@@ -532,6 +532,8 @@ const fake = Bun.serve({
       });
     }
     if (memberMatch && request.method === 'DELETE') {
+      if (Number(url.searchParams.get('revision')) !== item.revision)
+        return remember(key, 409, problem(409, 'conflict'));
       const index = item.members.findIndex((entry) => entry.id === memberMatch[2]);
       if (index < 0) return remember(key, 404, problem(404, 'not_found'));
       item.members.splice(index, 1);

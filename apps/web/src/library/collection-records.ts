@@ -256,9 +256,15 @@ export async function removeCollectionMemberRecord(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { collectionId: string; memberId: string; idempotencyKey: string },
+  input: { collectionId: string; memberId: string; revision: number; idempotencyKey: string },
 ): Promise<CollectionWriteResult> {
-  if (!input.collectionId || !input.memberId || !uuid.test(input.idempotencyKey)) {
+  if (
+    !input.collectionId ||
+    !input.memberId ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision < 1 ||
+    !uuid.test(input.idempotencyKey)
+  ) {
     return { ok: false, reason: 'invalid' };
   }
   const session = await writeSession(request, sessionEnv);
@@ -267,7 +273,10 @@ export async function removeCollectionMemberRecord(
     const result = await client
       .collections({ collectionId: input.collectionId })
       .members({ memberId: input.memberId })
-      .delete(undefined, { headers: kernelHeaders(session.authorization, input.idempotencyKey) });
+      .delete(undefined, {
+        query: { revision: input.revision },
+        headers: kernelHeaders(session.authorization, input.idempotencyKey),
+      });
     return fromKernel(result, input.memberId);
   } catch (error) {
     return refused(error);

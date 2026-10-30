@@ -122,6 +122,7 @@ function validateMember(input: unknown) {
   return {
     collectionId: identifier(value, 'collectionId'),
     memberId: identifier(value, 'memberId'),
+    revision: revision(value),
     idempotencyKey: text(value, 'idempotencyKey'),
   };
 }

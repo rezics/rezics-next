@@ -71,6 +71,8 @@ test('collection editing stays within its bound as the collection grows', async 
             return Response.json({ member: { id: memberId, subjectId: 'subject', note: 'note', addedAt: stamp } });
           }
           if (request.method === 'DELETE' && url.pathname === `/v1/collections/${collectionId}/members/${memberId}`) {
+            expect(url.searchParams.get('revision')).toBe('1');
+            expect(request.body).toBeNull();
             return new Response(null, { status: 204 });
           }
           if (request.method === 'GET' && url.pathname === `/v1/collections/${collectionId}`) {
@@ -213,9 +215,10 @@ test('collection editing stays within its bound as the collection grows', async 
         updateMemberNoteRecord(client, write(), env, { collectionId, memberId, note: 'A note', idempotencyKey }),
     },
     {
-      path: `DELETE /v1/collections/${collectionId}/members/${memberId}`,
+      path: `DELETE /v1/collections/${collectionId}/members/${memberId}?revision=1`,
       id: memberId,
-      run: () => removeCollectionMemberRecord(client, write(), env, { collectionId, memberId, idempotencyKey }),
+      run: () =>
+        removeCollectionMemberRecord(client, write(), env, { collectionId, memberId, revision: 1, idempotencyKey }),
     },
     {
       path: `PUT /v1/follows/${collectionId}`,

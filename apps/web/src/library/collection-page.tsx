@@ -341,7 +341,10 @@ export function CollectionPage({
       const applied = await applyCollectionMemberEditPlan(plan, async (operation) => {
         const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation]) };
         if (operation.kind === 'remove')
-          return removeCollectionMember({ data: { ...common, memberId: operation.memberId }, headers: csrfHeaders() });
+          return removeCollectionMember({
+            data: { ...common, memberId: operation.memberId, revision: page.revision },
+            headers: csrfHeaders(),
+          });
         if (operation.kind === 'move')
           return moveCollectionMember({
             data: { ...common, memberId: operation.memberId, after: operation.after },

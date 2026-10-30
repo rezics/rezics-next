@@ -239,6 +239,8 @@ async function writeStory(request: Request) {
     const member = editedMembers.find((value) => value.id === match[1]);
     if (!member) return { status: 404, code: 'not_found' };
     if (request.method === 'DELETE') {
+      if (Number(new URL(request.url).searchParams.get('revision')) !== editedCollection.revision)
+        return { status: 409, code: 'conflict' };
       editedMembers = editedMembers.filter((value) => value.id !== member.id);
       editedCollection.memberCount -= 1;
       response = { status: 204 };
