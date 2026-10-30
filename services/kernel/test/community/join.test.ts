@@ -13,6 +13,7 @@ import { AccessUnavailableError, createAccess } from '../../src/access/index.ts'
 import * as initiatorCapture from '../../src/access/durable-initiator-capture.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { enqueueRealmJoin } from '../../src/community/join.ts';
+import { realmMembershipWorkflowId } from '../../src/community/work.ts';
 import { problemResponse } from '../../src/http/problem.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
@@ -523,7 +524,7 @@ test.serial(
     const leaveWorkflowId = left.value.workflowId as string;
     await settle(leaveWorkflowId);
     const leaveSteps =
-      (await work.listWorkflowSteps(`realm:leave:${protectedRealm.realmId}:${member.accountId}`))?.map(
+      (await work.listWorkflowSteps(realmMembershipWorkflowId(leaveWorkflowId, 'leave.membership')))?.map(
         (step) => step.name,
       ) ?? [];
     const publishedAt = leaveSteps.indexOf('accounts.membership.publish');

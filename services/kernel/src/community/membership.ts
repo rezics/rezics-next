@@ -31,9 +31,9 @@ import type { MembershipRoleProof, RealmRoleReader } from '../access/permission.
 import {
   authoritativeTimeValue,
   mintReadTime,
+  noEffect,
   principalCommandIdentity,
   runCommand,
-  noEffect,
   type CommandAuthorization,
   type CommandTransaction,
   type PrincipalCommandIdentity,
@@ -717,23 +717,27 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
             command_key: key,
             at,
           });
-        return {
-          value,
-          events: [
-            {
-              type: 'com.rezics.community.realm.membership.v1',
-              subject: realmId,
-              data: {
-                realmId,
-                accountId: input.memberAccountId,
-                reservationId: reservation.reservationId,
-                role,
-                at,
-                transactionId: command.transactionId,
-              },
-            },
-          ],
-        };
+        // Every positive Realm operation records its fresh generation proof.
+        // An already-open exact membership needs no duplicate membership event.
+        return written
+          ? {
+              value,
+              events: [
+                {
+                  type: 'com.rezics.community.realm.membership.v1',
+                  subject: realmId,
+                  data: {
+                    realmId,
+                    accountId: input.memberAccountId,
+                    reservationId: reservation.reservationId,
+                    role,
+                    at,
+                    transactionId: command.transactionId,
+                  },
+                },
+              ],
+            }
+          : noEffect(value);
       },
     );
   }

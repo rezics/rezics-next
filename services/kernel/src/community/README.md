@@ -85,6 +85,12 @@ be read. A `realm_ban` denial applies to `realm:participate` even when the Realm
 current command to target that exact Realm. `updateRealm` calls it after moving the head
 when the new visibility is protected, in the same transaction as `realm.updated`.
 
+When Accounts reuses the current live membership reservation for another join or
+owner add, publication confirms the exact current membership by its open-key index
+and records the fresh transition proof without changing the interval or emitting
+another membership event. A different reservation does not satisfy the operation.
+Authorization and the current-ban check still apply.
+
 `PUT /v1/realms/{realmId}/bans/{accountId}` opens a Realm-owned ban record and
 `realm_ban` identity denials for `realm:join` and `realm:participate` at the command's T.
 `banAccount` requires `realm:ban` on that Realm. Owners and moderators carry that action.
