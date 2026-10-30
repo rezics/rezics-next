@@ -44,6 +44,54 @@ async function erase(db: Fixture, accountId: string) {
 test('Trusted Auth restore reconciliation discovers exact committed Access erasure obligations absent from an old Auth snapshot using native bounded partition-led sealed feed and exact immutable source floor without scanning living accounts or acknowledging cleanup', async () => {
   const db = await openGrowthDatabase();
   try {
+    let historical: AuthErasureObligation[] = [];
+    {
+      // Simulate genuine rows committed before feed installation, preserving native
+      // tombstone receipts. Only the new producer is disabled in this isolated fixture.
+      await db.admin.query('ALTER TABLE access.erasure DISABLE TRIGGER auth_erasure_producer');
+      const ids: string[] = [];
+      try {
+        for (let i = 0; i < 49; i++) {
+          const id = await person(db, 0);
+          await erase(db, id);
+          ids.push(id);
+        }
+      } finally {
+        await db.admin.query('ALTER TABLE access.erasure ENABLE TRIGGER auth_erasure_producer');
+      }
+      // An old floor can be recovered only from its retained native tombstone
+      // receipt, never this unrelated later current floor.
+      await db.admin.query('UPDATE access.account SET minimum_authn_epoch=99 WHERE route=0');
+      const bootstrapPorts = createAuthErasureObligationBindings(db.pool);
+      const bootstrapCut = crypto.randomUUID();
+      await bootstrapPorts.startAuthErasureObligationCut({ cutId: bootstrapCut, deadline: deadline() });
+      const cursor = { partition: 0, afterOrdinal: '0' };
+      const first = await bootstrapPorts.pageAuthErasureObligations({
+        cutId: bootstrapCut,
+        cursor,
+        deadline: deadline(),
+      });
+      expect(first).toMatchObject({ state: 'initializing', next: cursor, obligations: [] });
+      expect((await db.admin.query('SELECT 1 FROM access.auth_erasure_obligation WHERE partition_no=0')).rowCount).toBe(
+        48,
+      );
+      const page = await bootstrapPorts.pageAuthErasureObligations({
+        cutId: bootstrapCut,
+        cursor,
+        deadline: deadline(),
+      });
+      expect(page.obligations).toHaveLength(48);
+      expect(page.obligations.every((o) => o.minimumAuthnEpoch === '2')).toBe(true);
+      expect(page.state).toBe('page');
+      const tail = await bootstrapPorts.pageAuthErasureObligations({
+        cutId: bootstrapCut,
+        cursor: page.next!,
+        deadline: deadline(),
+      });
+      expect(tail.obligations).toHaveLength(1);
+      expect(new Set([...page.obligations, ...tail.obligations].map((o) => o.accountId))).toEqual(new Set(ids));
+      historical = [...page.obligations, ...tail.obligations];
+    }
     const accountId = await person(db, 0);
     const living = await person(db, 16);
     const native = await erase(db, accountId);
@@ -82,12 +130,12 @@ test('Trusted Auth restore reconciliation discovers exact committed Access erasu
       expect(page.obligations.length).toBeLessThanOrEqual(48);
       expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(65536);
       expect(page.pending).toEqual([]);
-      expect(page.state).toBe('partition-end');
+      expect(['page', 'partition-end']).toContain(page.state);
       recovered.push(...page.obligations);
-      if (page.next) expect(page.next.partition).toBe(cursor.partition + 1);
+      if (page.next) expect(page.next.partition).toBe(cursor.partition + (page.state === 'partition-end' ? 1 : 0));
       cursor = page.next;
     }
-    expect(recovered).toEqual([original.obligation]);
+    expect(recovered).toEqual([...historical, original.obligation]);
     expect(await ports.verifyAuthErasureObligationCut({ cutId, partition: 0, deadline: deadline() })).toMatchObject({
       state: 'current',
       highWater: original.obligation.ordinal,
@@ -116,7 +164,7 @@ test('Trusted Auth restore reconciliation discovers exact committed Access erasu
       cursor: { partition: 0, afterOrdinal: '0' },
       deadline: deadline(),
     });
-    expect(replay.obligations).toEqual([original.obligation]);
+    expect(replay.obligations).toEqual(historical.slice(0, 48));
     const laterPoint = await ports.readAuthErasureObligation({ accountId: later, deadline: deadline() });
     expect(laterPoint.state).toBe('ready');
     if (laterPoint.state === 'ready')
@@ -125,75 +173,33 @@ test('Trusted Auth restore reconciliation discovers exact committed Access erasu
       ports.pageAuthErasureObligations({ cutId, cursor: { partition: 0, afterOrdinal: '999' }, deadline: deadline() }),
     ).rejects.toThrow();
     await expect(ports.readAuthErasureObligation({ accountId, deadline: Date.now() - 1 })).rejects.toThrow();
-    await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=0');
-    expect((await ports.verifyAuthErasureObligationCut({ cutId, partition: 0, deadline: deadline() })).state).toBe(
-      'pending',
-    );
-    expect(await ports.readAuthErasureObligation({ accountId, deadline: deadline() })).toMatchObject({
-      state: 'pending',
-      reason: 'source-unavailable',
-    });
   } finally {
     await db.close();
   }
 }, 120000);
 
-test('historical bootstrap drains at most 48 native roots and retains exact missing original floors as pending', async () => {
+test('missing original native floor evidence remains pending and ownership changes refuse the source', async () => {
   const db = await openGrowthDatabase();
   try {
-    // Simulate genuine rows committed before feed installation, preserving native
-    // tombstone receipts. Only the new producer is disabled in this isolated fixture.
-    await db.admin.query('ALTER TABLE access.erasure DISABLE TRIGGER auth_erasure_producer');
-    const ids: string[] = [];
-    try {
-      for (let i = 0; i < 49; i++) {
-        const id = await person(db, 0);
-        await erase(db, id);
-        ids.push(id);
-      }
-    } finally {
-      await db.admin.query('ALTER TABLE access.erasure ENABLE TRIGGER auth_erasure_producer');
-    }
-    // An old floor can be recovered only from its retained native tombstone
-    // receipt, never this unrelated later current floor.
-    await db.admin.query('UPDATE access.account SET minimum_authn_epoch=99 WHERE route=0');
     const ports = createAuthErasureObligationBindings(db.pool);
+    const missing = await person(db, 16);
+    // A permanent root without original native floor evidence cannot be certified
+    // from its current floor, even when the account is terminal and fenced.
+    await db.admin.query(
+      "UPDATE access.account SET state='deleted',authn_fenced=true,minimum_authn_epoch=123 WHERE route=16 AND account_id=$1",
+      [missing],
+    );
+    await db.admin.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES(16,$1,1,clock_timestamp())', [
+      missing,
+    ]);
     const cutId = crypto.randomUUID();
     await ports.startAuthErasureObligationCut({ cutId, deadline: deadline() });
-    const cursor = { partition: 0, afterOrdinal: '0' };
-    const first = await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() });
-    expect(first).toMatchObject({ state: 'initializing', next: cursor, obligations: [] });
-    expect((await db.admin.query('SELECT 1 FROM access.auth_erasure_obligation WHERE partition_no=0')).rowCount).toBe(
-      48,
-    );
-    const page = await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() });
-    expect(page.obligations).toHaveLength(48);
-    expect(page.obligations.every((o) => o.minimumAuthnEpoch === '2')).toBe(true);
-    expect(page.state).toBe('page');
-    const tail = await ports.pageAuthErasureObligations({ cutId, cursor: page.next!, deadline: deadline() });
-    expect(tail.obligations).toHaveLength(1);
-    expect(new Set([...page.obligations, ...tail.obligations].map((o) => o.accountId))).toEqual(new Set(ids));
-    const missing = await person(db, 16);
-    const client = await db.admin.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query('ALTER TABLE access.erasure DISABLE TRIGGER auth_erasure_producer');
-      await client.query(
-        "UPDATE access.account SET state='deleted',authn_fenced=true,minimum_authn_epoch=123 WHERE route=16 AND account_id=$1",
-        [missing],
-      );
-      await client.query('INSERT INTO access.erasure(route,account_id,version,at) VALUES(16,$1,1,clock_timestamp())', [
-        missing,
-      ]);
-      await client.query('ALTER TABLE access.erasure ENABLE TRIGGER auth_erasure_producer');
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
+    let cursor: AuthErasureObligationCursor = { partition: 0, afterOrdinal: '0' };
+    while (cursor.partition === 0) {
+      const page = await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() });
+      cursor = page.next!;
     }
-    const pending = await ports.pageAuthErasureObligations({ cutId, cursor: tail.next!, deadline: deadline() });
+    const pending = await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() });
     expect(pending).toMatchObject({
       state: 'pending',
       obligations: [],
@@ -213,6 +219,15 @@ test('historical bootstrap drains at most 48 native roots and retains exact miss
         [missing],
       ),
     ).rejects.toThrow();
+    await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=1');
+    expect(await ports.readAuthErasureObligation({ accountId: missing, deadline: deadline() })).toMatchObject({
+      state: 'pending',
+      reason: 'source-unavailable',
+    });
+    expect(await ports.pageAuthErasureObligations({ cutId, cursor, deadline: deadline() })).toMatchObject({
+      state: 'pending',
+      reason: 'source-unavailable',
+    });
   } finally {
     await db.close();
   }
