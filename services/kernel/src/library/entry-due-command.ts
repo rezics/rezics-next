@@ -14,6 +14,8 @@ import { partitionOf } from '../route/route.ts';
 import { requireRoute, workStepDeadline } from './command-support.ts';
 import { purgeDueEntryDeletion, type DueEntryDeletionKey } from './entry-due-store.ts';
 import eligibility from './entry-due-eligibility.sql';
+import { bindCommandHistoryEvidence, declareCommandHistory } from '../history/record.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
 
 export class EntryPurgeNotDueError extends Error {
   constructor() {
@@ -67,6 +69,9 @@ export async function purgeExpiredEntryDeletion(
       if (!state.due) throw new EntryPurgeNotDueError();
       if (state.present && !state.matches) throw new EntryPurgeStaleError();
       present = state.present;
+      // Mechanical maintenance has a native episode principal, never an active Actor.
+      bindCommandHistoryEvidence(tx, [{ accountRoute: route, accountId,
+        roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.subject }]);
       return 'execute';
     },
   };
@@ -87,6 +92,11 @@ export async function purgeExpiredEntryDeletion(
       },
     },
     async (tx, command) => {
+      const accounts = [{ accountRoute: route, accountId, roles: ACCOUNT_ROLE_BITS.subject }];
+      await declareCommandHistory(tx, kind, {
+        response: { artifactType: 'command-receipt/v1', accounts },
+        events: present ? [{ artifactType: 'outbox-event/v1', accounts }] : [],
+      });
       // Authorization holds the addressed archive lock through this exact native CAS.
       const purged = await purgeDueEntryDeletion(tx, exact, { time: authoritativeTimeValue(command.time) });
       if (!purged && present) throw new Error('Locked due entry deletion failed its exact native CAS');

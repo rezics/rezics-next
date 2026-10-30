@@ -14,6 +14,10 @@ import { SEARCH_IDENTITY_EVENTS } from '../search/identity-epoch-participant-eve
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const digest = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });
 const productEventTypes = {
+  'com.rezics.history.erasure-acknowledged.v1': Type.Object({
+    version: Type.Integer({ minimum: 1 }), outcome: Type.Union([Type.Literal('erased'),Type.Literal('none')]),
+  }, { additionalProperties: false }),
+  'com.rezics.history.minimized.v1': Type.Object({}, { additionalProperties: false }),
   ...ZONE_EVENTS,
   ...ACCESS_EVENTS,
   ...COMMERCE_EVENTS,

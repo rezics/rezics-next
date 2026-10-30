@@ -4,6 +4,8 @@ import type { CommandTransaction } from '../command/command.ts';
 import { decodeLocator } from './locator.ts';
 import { sealHistoryAccount } from './gates.ts';
 import minimize from './receipt.sql';
+import { commandHistoryKind } from './record.ts';
+import type { HistoryBarrier, HistoryRegistry } from './registry.ts';
 
 /** Actual owner disposition: this response has no downstream workflow consumers. No other
  * receipt kind acquires readiness from age, DBOS state or this registration. */
@@ -20,18 +22,19 @@ type Job = {
   cursor: Buffer | null;
 };
 
-async function minimizeExact(tx: CommandTransaction, job: Job, locator: Buffer) {
+export async function minimizeHistoryReceipt(
+  tx: CommandTransaction, job: Pick<Job, 'partition_no' | 'account_route' | 'account_id'>, locator: Buffer,
+  registry?: HistoryRegistry, barrier?: HistoryBarrier,
+): Promise<string | null> {
   const key = decodeLocator('command-receipt/v1', locator);
-  if (
-    key.artifactType !== 'command-receipt/v1' ||
-    key.partitionNo !== job.partition_no ||
-    key.commandKindId !== RECEIPT_OWNER_DISPOSITIONS['access.account.preferences'].commandKindId
-  )
+  if (key.artifactType !== 'command-receipt/v1' || key.partitionNo !== job.partition_no)
     throw new TypeError('Receipt owner disposition unavailable');
+  const kind = commandHistoryKind(key.commandKindId);
+  if (!kind) return 'receipt-owner-unregistered';
   const storageKey = `rk1.${key.keyVersion}.${Buffer.from(key.keyToken, 'hex').toString('base64url')}`;
   // Artifact-leading inverse bounds every association without enumerating account prefixes.
   const associations = await tx.query(
-    `SELECT account_route,account_id,minimizer_version FROM core.history_locator
+    `SELECT account_route,account_id,roles,minimizer_version FROM core.history_locator
     WHERE partition_no=$1 AND artifact_type='command-receipt/v1' AND locator=$2
     ORDER BY account_route,account_id LIMIT 65 FOR UPDATE`,
     [job.partition_no, locator],
@@ -44,11 +47,18 @@ async function minimizeExact(tx: CommandTransaction, job: Job, locator: Buffer) 
     )
   )
     throw new TypeError('Receipt source scope proof unavailable');
-  const params = [key.partitionNo, key.principalKind, key.principalId, storageKey];
+  if (registry) {
+    const owner = registry.owner('command-receipt/v1', kind);
+    if (!owner || !barrier) return 'receipt-consumer-proof-unavailable';
+    const readiness = await owner.readiness(tx, { partition: job.partition_no, locator: key,
+      accounts: associations.rows.map((row) => ({ accountRoute: row.account_route, accountId: row.account_id, roles: row.roles })) }, barrier);
+    if (!readiness.ready) return readiness.gap;
+  } else if (kind !== 'access.account.preferences') return 'receipt-consumer-proof-unavailable';
+  const params = [key.partitionNo, key.principalKind, key.principalId, storageKey, kind];
   const source = await tx.query(
     `SELECT payload_state FROM core.receipt
     WHERE partition_no=$1 AND principal_kind=$2 AND principal_id=$3
-      AND command_kind='access.account.preferences' AND idempotency_key=$4 FOR UPDATE`,
+      AND command_kind=$5 AND idempotency_key=$4 FOR UPDATE`,
     params,
   );
   if (source.rows.length !== 1) throw new TypeError('Receipt source proof unavailable');
@@ -58,6 +68,7 @@ async function minimizeExact(tx: CommandTransaction, job: Job, locator: Buffer) 
       principal_kind: key.principalKind,
       principal_id: key.principalId,
       storage_key: storageKey,
+      command_kind: kind,
     });
     if (!changed) throw new TypeError('Receipt minimization lost its source');
   } else if (source.rows[0].payload_state !== 'minimized') throw new TypeError('Unknown receipt payload state');
@@ -69,6 +80,7 @@ async function minimizeExact(tx: CommandTransaction, job: Job, locator: Buffer) 
       AND artifact_type='command-receipt/v1' AND locator=$4`,
     [job.partition_no, job.account_route, job.account_id, locator],
   );
+  return null;
 }
 
 /** One exact receipt per partition transaction. Partial coverage never emits a participant ACK,
@@ -110,7 +122,8 @@ export async function advancePreferenceHistory(pool: Pool, jobId: string): Promi
       );
       const first = page.rows[0];
       if (first) {
-        await minimizeExact(client, job, first.locator);
+        const gap = await minimizeHistoryReceipt(client, job, first.locator);
+        if (gap) throw new TypeError(gap);
         await client.query('UPDATE core.preference_history_job SET cursor=$2 WHERE job_id=$1', [jobId, first.locator]);
         await client.query(
           `UPDATE core.history_progress SET partition_epoch=$4,artifact_type='command-receipt/v1',locator=$5

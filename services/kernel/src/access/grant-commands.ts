@@ -184,6 +184,7 @@ export function createGrantCommands(config: {
         denied: () => new GrantDeniedError(),
       },
       async (tx, transactionId) => {
+        await tx.query("SELECT set_config('access.role_native_transaction',$1,true)", [transactionId]);
         if ((previous?.role ?? input.role) === REALM_OWNER_ROLE && subject.kind === 'identity' && subject.role === '') {
           const at = currentCommand(tx).time;
           const ownership = { resource: input.resource, accountId: subject.id, at };

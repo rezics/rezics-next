@@ -1,0 +1,219 @@
+import { createHash } from 'node:crypto';
+import type { Pool } from 'pg';
+import { currentCommand, CommandUnavailableError, type CommandTransaction } from '../command/command.ts';
+import { withConnection } from '../database/pool.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { commandHistoryKind } from './record.ts';
+import { encodeLocator, validateLocator, validateScope } from './locator.ts';
+import { HISTORY_PRODUCER_FAMILIES, type HistoryArtifact, type HistoryBarrier, type HistoryProducerFamily } from './registry.ts';
+
+export type HistoryReceivingDependencies = Readonly<{ pool: Pool; clock?: () => Date }>;
+export type HistoryReceivingContext = Readonly<{ deadline: number }>;
+declare const ownerCoverage: unique symbol;
+declare const receivingReceipt: unique symbol;
+export type HistoryOwnerCoverage = { readonly [ownerCoverage]: true };
+export type HistoryReceivingReceipt = { readonly [receivingReceipt]: true };
+export type HistoryOwnerCoverageResult =
+  | Readonly<{ state: 'pending'; gaps: readonly string[] }>
+  | Readonly<{ state: 'complete'; coverage: HistoryOwnerCoverage }>;
+
+type ReceiptBinding = Readonly<{
+  barrier: HistoryBarrier; partition: number; locator: Buffer; roleDigest: Buffer; epoch: number;
+}>;
+const receipts = new WeakMap<HistoryReceivingReceipt, ReceiptBinding>();
+// Owner coverage capabilities will be issued only from a native aggregate proof with routing
+// invalidation. Local prefix EOF and a registry declaration cannot mint that proof.
+const coverages = new WeakMap<HistoryOwnerCoverage, Readonly<{ barrier: HistoryBarrier; family: HistoryProducerFamily }>>();
+
+function validateBarrier(barrier: HistoryBarrier): void {
+  if (routeOf(barrier.accountId) !== barrier.accountRoute || !Number.isSafeInteger(barrier.version) ||
+      barrier.version < 1 || typeof barrier.at !== 'string' || !Number.isFinite(Date.parse(barrier.at)))
+    throw new TypeError('Invalid history barrier');
+}
+export function historyDeadline(context: HistoryReceivingContext, partition: number): void {
+  if (!Number.isFinite(context.deadline) || context.deadline <= Date.now())
+    throw new CommandUnavailableError('deadline', partition);
+}
+export async function lockHistoryBarrier(tx: CommandTransaction, barrier: HistoryBarrier): Promise<boolean> {
+  validateBarrier(barrier);
+  const row = (await tx.query(
+    'SELECT version,at::text FROM access.erasure WHERE route=$1 AND account_id=$2 FOR SHARE',
+    [barrier.accountRoute, barrier.accountId])).rows[0];
+  return row?.version === barrier.version && row?.at === barrier.at;
+}
+
+function scopeDigest(artifact: HistoryArtifact): Buffer {
+  validateLocator(artifact.locator.artifactType, artifact.locator);
+  validateScope(artifact.locator.artifactType, { artifactType: artifact.locator.artifactType, accounts: artifact.accounts });
+  if (!Number.isInteger(artifact.partition) || artifact.partition < 0 || artifact.partition > 4095 ||
+      (artifact.locator.artifactType !== 'durable-work/v1' && artifact.locator.partitionNo !== artifact.partition))
+    throw new TypeError('Invalid receiving artifact home');
+  return createHash('sha256').update(JSON.stringify([...artifact.accounts]
+    .sort((a, b) => a.accountRoute - b.accountRoute || a.accountId.localeCompare(b.accountId))
+    .map(({ accountRoute, accountId, roles }) => [accountRoute, accountId, roles]))).digest();
+}
+
+async function nativeScope(tx: CommandTransaction, partition: number, type: string, locator: Buffer) {
+  const rows = (await tx.query<{ account_route: number; account_id: string; roles: number; minimizer_version: number; state: string; proof_barrier: string | null }>(
+    `SELECT account_route,account_id,roles,minimizer_version,state,proof_barrier FROM core.history_locator
+     WHERE partition_no=$1 AND artifact_type=$2 AND locator=$3
+     ORDER BY account_route,account_id LIMIT 65 FOR SHARE`, [partition, type, locator])).rows;
+  if (rows.length === 0 || rows.length > 64 || rows.some((row) => row.minimizer_version !== 1)) return null;
+  return rows;
+}
+
+/** Called by the physical minimizer in the SAME transaction as its local locator effect. No
+ * caller boolean or process capability substitutes for the native minimized source proof. */
+export async function recordHistoryReceivingProof(
+  tx: CommandTransaction, barrier: HistoryBarrier, partition: number,
+  locator: HistoryArtifact['locator'],
+): Promise<string | null> {
+  if (!await lockHistoryBarrier(tx, barrier)) throw new TypeError('History barrier mismatch');
+  const encoded = Buffer.from(encodeLocator(locator));
+  const custodyGap = await receivingGap(tx,partition,locator);
+  if (custodyGap) return custodyGap;
+  if (!await physicalProof(tx,partition,locator)) throw new TypeError('History physical copy remains');
+  const rows = await nativeScope(tx, partition, locator.artifactType, encoded);
+  const own = rows?.find((row) => row.account_id === barrier.accountId && row.account_route === barrier.accountRoute);
+  if (!own || own.state !== 'minimized' || own.proof_barrier !== barrier.accountId)
+    throw new TypeError('History physical receiving proof unavailable');
+  const native = (await tx.query('SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE', [partition])).rows[0];
+  if (!native || native.write_state !== 'active') throw new CommandUnavailableError('moved', partition);
+  const roleDigest = scopeDigest({ partition, locator, accounts: rows!.map((row) => ({
+    accountRoute: row.account_route, accountId: row.account_id, roles: row.roles,
+  })) });
+  await tx.query(
+    `INSERT INTO core.history_receiving_proof(partition_no,account_route,account_id,artifact_type,locator,
+      barrier_version,barrier_at,partition_epoch,role_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT DO NOTHING`,
+    [partition, barrier.accountRoute, barrier.accountId, locator.artifactType, encoded,
+      barrier.version, barrier.at, native.epoch, roleDigest]);
+  return null;
+}
+
+async function receivingGap(tx: CommandTransaction, partition: number, locator: HistoryArtifact['locator']): Promise<string | null> {
+  if (locator.artifactType !== 'outbox-event/v1') return null;
+  const consumers = await tx.query(`SELECT consumer FROM core.history_event_consumer
+    WHERE partition_no=$1 AND position=$2 AND event_seq=$3 ORDER BY consumer LIMIT 1`,
+    [partition,locator.position.toString(),locator.eventSeq]);
+  // Completed business effects can still retain their original private DBOS inputs/results.
+  // Until their exact receiving binding is delivered, a source disposition is not copy closure.
+  return consumers.rows.length ? 'outbox-receiving-custody-unavailable' : null;
+}
+
+async function physicalProof(tx: CommandTransaction, partition: number, locator: HistoryArtifact['locator']): Promise<boolean> {
+  if (locator.artifactType === 'command-receipt/v1') {
+    const kind = commandHistoryKind(locator.commandKindId);
+    if (!kind || locator.partitionNo !== partition) return false;
+    const token = `rk1.${locator.keyVersion}.${Buffer.from(locator.keyToken,'hex').toString('base64url')}`;
+    const proof = await tx.query(`SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_kind=$2
+      AND principal_id=$3 AND command_kind=$4 AND idempotency_key=$5
+      AND payload_state='minimized' AND response='null'::jsonb FOR SHARE`,
+      [partition,locator.principalKind,locator.principalId,kind,token]);
+    return proof.rows.length === 1;
+  }
+  if (locator.artifactType === 'outbox-event/v1') {
+    if (locator.partitionNo !== partition) return false;
+    const proof = await tx.query(`SELECT 1 FROM core.outbox WHERE partition_no=$1 AND position=$2 AND event_seq=$3
+      AND payload_state='minimized' AND data='{}'::jsonb AND subject IS NULL FOR SHARE`,
+      [partition,locator.position.toString(),locator.eventSeq]);
+    return proof.rows.length === 1;
+  }
+  const proof = await tx.query(`SELECT 1 FROM core.history_work WHERE partition_no=$1 AND work_id=$2
+    AND state='retired' AND absence_verified AND request IS NULL AND scope IS NULL FOR SHARE`, [partition,locator.workId]);
+  return proof.rows.length === 1;
+}
+
+function sameBarrier(left: HistoryBarrier, right: HistoryBarrier): boolean {
+  return left.accountId === right.accountId && left.accountRoute === right.accountRoute &&
+    left.version === right.version && left.at === right.at;
+}
+
+async function nativeReceipt(tx: CommandTransaction, barrier: HistoryBarrier, artifact: HistoryArtifact): Promise<ReceiptBinding | null> {
+  if (!await lockHistoryBarrier(tx, barrier)) return null;
+  if (await receivingGap(tx,artifact.partition,artifact.locator)) return null;
+  const digest = scopeDigest(artifact);
+  const encoded = Buffer.from(encodeLocator(artifact.locator));
+  const rows = await nativeScope(tx, artifact.partition, artifact.locator.artifactType, encoded);
+  const own = rows?.find((row) => row.account_id === barrier.accountId && row.account_route === barrier.accountRoute);
+  if (!own || own.state !== 'minimized' || own.proof_barrier !== barrier.accountId ||
+      !scopeDigest({ ...artifact, accounts: rows!.map((row) => ({ accountRoute: row.account_route, accountId: row.account_id, roles: row.roles })) }).equals(digest))
+    return null;
+  const native = (await tx.query('SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE', [artifact.partition])).rows[0];
+  if (!native || native.write_state !== 'active') throw new CommandUnavailableError('moved', artifact.partition);
+  const proof = (await tx.query(
+    `SELECT role_digest FROM core.history_receiving_proof WHERE partition_no=$1 AND account_route=$2 AND account_id=$3
+     AND artifact_type=$4 AND locator=$5 AND barrier_version=$6 AND barrier_at=$7 AND partition_epoch=$8 FOR SHARE`,
+    [artifact.partition, barrier.accountRoute, barrier.accountId, artifact.locator.artifactType, encoded,
+      barrier.version, barrier.at, native.epoch])).rows[0];
+  if (!proof || !Buffer.from(proof.role_digest).equals(digest) || !await physicalProof(tx,artifact.partition,artifact.locator)) return null;
+  return { barrier: Object.freeze({ ...barrier }), partition: artifact.partition, locator: encoded, roleDigest: digest, epoch: native.epoch };
+}
+
+export async function readHistoryReceivingReceipt(
+  deps: HistoryReceivingDependencies, barrier: HistoryBarrier, artifact: HistoryArtifact, context: HistoryReceivingContext,
+): Promise<HistoryReceivingReceipt | null> {
+  validateBarrier(barrier);
+  historyDeadline(context, artifact.partition);
+  // Do not expose a capability retaining caller-owned mutable arrays or buffers.
+  const fixedArtifact = structuredClone(artifact);
+  const fixedBarrier = Object.freeze({ ...barrier });
+  return withConnection(deps.pool, async (tx) => {
+    await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    try {
+      await tx.query("SELECT set_config('statement_timeout',$1,true)", [`${Math.max(1, context.deadline - Date.now())}ms`]);
+      const binding = await nativeReceipt(tx, fixedBarrier, fixedArtifact);
+      historyDeadline(context, artifact.partition);
+      await tx.query('COMMIT');
+      if (!binding) return null;
+      const receipt = Object.freeze({}) as HistoryReceivingReceipt;
+      receipts.set(receipt, binding);
+      return receipt;
+    } catch (error) { await tx.query('ROLLBACK'); throw error; }
+  });
+}
+
+/** Final owners call this on their actual account-home command. Locks live through its COMMIT. */
+export async function verifyHistoryReceivingReceipt(
+  tx: CommandTransaction, barrier: HistoryBarrier, artifact: HistoryArtifact, receipt: HistoryReceivingReceipt,
+): Promise<boolean> {
+  const bound = receipts.get(receipt);
+  if (!bound || currentCommand(tx).partition !== partitionOf(barrier.accountRoute) ||
+      !sameBarrier(bound.barrier,barrier) || bound.partition !== artifact.partition ||
+      !bound.locator.equals(Buffer.from(encodeLocator(artifact.locator))) || !bound.roleDigest.equals(scopeDigest(artifact)))
+    return false;
+  const current = await nativeReceipt(tx, barrier, artifact);
+  return current !== null && current.epoch === bound.epoch && current.roleDigest.equals(bound.roleDigest);
+}
+
+export async function readHistoryOwnerCoverage(
+  deps: HistoryReceivingDependencies, barrier: HistoryBarrier, family: HistoryProducerFamily, context: HistoryReceivingContext,
+): Promise<HistoryOwnerCoverageResult> {
+  validateBarrier(barrier);
+  if (!HISTORY_PRODUCER_FAMILIES.includes(family)) throw new TypeError('Unknown history producer family');
+  historyDeadline(context, partitionOf(barrier.accountRoute));
+  return withConnection(deps.pool, async (tx) => {
+    if (!await lockHistoryBarrier(tx, barrier)) throw new TypeError('History barrier mismatch');
+    const registry = (await tx.query<{ gaps: string[] }>('SELECT gaps FROM core.history_registry WHERE singleton=true')).rows[0];
+    if (!registry) return { state: 'pending', gaps: ['producer-registry-unavailable'] };
+    const gaps = registry.gaps.filter((gap) => gap.startsWith(`${family}:`));
+    if (gaps.length) return { state: 'pending', gaps };
+    const job = (await tx.query(
+      `SELECT phase,gap FROM core.preference_history_job WHERE account_route=$1 AND account_id=$2
+       AND barrier_id=$2 AND barrier_version=$3 AND barrier_at=$4`,
+      [barrier.accountRoute, barrier.accountId, barrier.version, barrier.at])).rows[0];
+    historyDeadline(context, partitionOf(barrier.accountRoute));
+    return { state: 'pending', gaps: [job?.gap ?? (job?.phase === 'complete' ? 'routing-aggregate-proof-unavailable' : job ? 'sealed-owner-coverage-incomplete' : 'sealed-owner-coverage-unavailable')] };
+  });
+}
+
+export async function verifyHistoryOwnerCoverage(
+  tx: CommandTransaction, barrier: HistoryBarrier, family: HistoryProducerFamily, coverage: HistoryOwnerCoverage,
+): Promise<boolean> {
+  const binding = coverages.get(coverage);
+  if (!binding || binding.family !== family || !sameBarrier(binding.barrier,barrier) ||
+      currentCommand(tx).partition !== partitionOf(barrier.accountRoute)) return false;
+  // No aggregate proof issuer is installed until routing invalidation and complete historical
+  // producer inventory exist. In particular, a forged/spread value never reaches this branch.
+  return false;
+}

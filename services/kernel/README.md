@@ -137,16 +137,23 @@ written in the artifact's physical partition in the same transaction as the arti
 prefix in each of the fixed 4,096 partitions, one per step, and never scans account-wide JSON or names. This is fixed
 discovery work at erasure, with no cross-partition locator write on the hot command path.
 
-Durable workflow arguments and results follow the 4096-byte UTF-8 JSON limit in [Bounded job steps](#bounded-job-steps).
-Workflow-history budgets count steps and rows, with bytes following from that limit. Shared-history durable work carries
-locators and identifiers, never artifact payloads. There is no 64 KiB step budget or per-execution byte total; widening
-the limit is a Performance decision. Account-bearing durable work is canceled and deleted
-through supported DBOS APIs only after native obligations are settled or transferred. All durable work, its exact
-account scope and locators are enqueued with `enqueueIntent` on the producing transaction's connection in the same
-kernel database. Every direct workflow-start or client-enqueue producer must use this path. No relay transaction,
-second database handoff or second seal is part of the contract. These shared-history storage, locator, erasure and
-producer-coverage guarantees, including bounded workflow arguments and results and workflow-history budgets, remain
-open gaps until implemented; no runtime guarantee is implied here.
+The default native `shared_history` module extends the existing recorder, seals and minimizers. Erasure progress
+stays outside DBOS. Receipt and outbox producers keep same-home atomic custody; the scoped work adapter commits its
+origin intent before releasing that checkout, then guards and enqueues in the fixed kernel DBOS destination on the
+same SDK client. Auth remains a separate service/database. No second executor is launched.
+
+Scoped history retirement checks the adopted limits: 64 function/operation outputs, 8 current event keys, 64 event
+history rows, 64 KiB per payload, 4 KiB metadata and at most 139 rows / less than 10 MiB per execution. Exact native
+probes count serialized bytes and include orphan-prone SDK input/output/operation tables; unsupported messages and
+streams prevent a bounded certificate. These cleanup checks do not certify unconverted producers' future outputs.
+The ordinary bounded-job limits below continue to govern their existing surfaces.
+
+Current owner registrations permit preference receipt minimization and exact Library purge outbox minimization
+after real consumers settle. Missing owner conversions, Search projection inventory, native execution budget/scope
+admission, historical coverage and aggregate routing invalidation keep complete coverage pending. Exact receiving
+receipt capabilities are available; owner aggregate coverage and final ACK remain unavailable. See
+[Access readiness](src/access/README.md#delivered-preference-history-coverage). No native acceptance result or full
+participant readiness is implied by registration or typing.
 
 ### Bounded job steps
 

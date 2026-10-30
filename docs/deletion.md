@@ -110,6 +110,21 @@ after sealed complete coverage proves that no artifact applied. Until this proto
 are implemented, shared-history acknowledgement remains an open gap. There is no production backfill; complete
 producer coverage is required before launch. The default thirty-day workflow-history sweep is not erasure.
 
+The default native worker now advances sealed local pages and exact receipt/outbox/SDK minimizers, recording
+immutable per-artifact receiving proofs. Missing consumers do not stop independent artifacts from being minimized.
+The current runtime has no complete producer-family declaration and cannot issue aggregate coverage across routing
+changes. Auth's committed copies proof is required independently of its final ACK. The separate shared-history ACK
+rejects incomplete coverage and, when enabled, emits only a closed technical version/outcome marker.
+[Access's implementation status](../services/kernel/src/access/README.md#delivered-preference-history-coverage)
+lists the concrete remaining producer, scope, consumer and routing proof gaps. These local pages do not establish
+Commerce's mandatory unused-account `none` result.
+
+Ordinary record purge is a distinct owner exchange: Semantic's selected `record-purge-authority.ts` owns native
+ordinary deletion/generation/hold/restore validation; Content locks that same opaque authority for its own bytes;
+Accounts' selected `history/record-purge.ts` owns copied history and receiving consumers. The source module and
+record inventory/receiving implementation are absent here. The agreed interfaces still need their source implementations;
+account-role custody or account erasure cannot authorize or certify ordinary record purge.
+
 ### Access and Auth participants
 
 Neither participant can acknowledge yet: [Access's coordinator](../services/kernel/src/access/erasure.ts) supplies

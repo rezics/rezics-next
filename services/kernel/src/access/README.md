@@ -859,7 +859,7 @@ all applicable artifacts are minimized or removed, and registered locator effect
 coordinator's open locator-work rule. It reports `erased` if any artifact ever applied; `none` is valid only after
 complete sealed coverage and proof that zero artifacts applied. Missing coverage, pending effects, an incomplete
 page or failed removal keeps acknowledgement pending and erasure incomplete; none is never inferred from an empty
-page or a missing DBOS row. This shared-history acknowledgement path remains an open runtime gap.
+page or a missing DBOS row. The native gate in `acknowledgeErasure` rejects shared-history acknowledgement without matching complete coverage, registry and committed Auth copies proof. Aggregate completion remains unavailable as described below.
 
 Shared-history cleanup covers operational receipts, event payloads and durable execution copies. It does not erase
 semantic provenance, whose owner retains its own attribution and evidence contract, or delivery custody for content,
@@ -2196,9 +2196,8 @@ retain stable partition, position and event sequence plus type and schema versio
 removed. Durable-work history is canceled and deleted through supported DBOS APIs after native obligations are
 settled or transferred. Locator discovery is sealed to the committed `access.erasure` obligation and visits the
 fixed 4,096 partitions one at a time, seeking only the account prefix. These are required dispositions. Current
-runtime coverage delivers preference receipt/outbox custody and preference receipt response minimization in its
-known owner partition, as described below. Every other producer, outbox payload minimizer, durable-copy minimizer
-and the final shared-history acknowledgement remain open gaps. Semantic provenance has its own owner and retention
+runtime includes exact receipt/outbox minimizers, supported SDK retirement and the default native receiving worker
+described below. Complete producer conversion, scoped execution admission budgets and final coverage remain gaps. Semantic provenance has its own owner and retention
 rules; content and delivery custody, including media and caches, remain separate obligations.
 
 This inventory describes current storage and implemented cleanup, including account-linked ids, digests and
@@ -2502,16 +2501,47 @@ into the current transaction. It never derives a human from an automated account
 Actors, request JSON and a previous retry's proof cannot supply custody identity. The ownership, scope, version and
 conflict rules stay in the existing command and Access formula.
 
-The default `preference_history` work registration consumes the committed account tombstone. Its admission creates
-`core.preference_history_job` from the exact permanent `access.erasure` obligation in the known preference owner
-partition. Workflow `history.preferences` and step `history.preferences.advance` take only an opaque job UUID and
-return fixed `more` / `covered-pending` codes. The native job and `core.history_progress` retain applicability and
-restart cursors outside DBOS. Each step commits one exact receipt response mutation with its locator proof, after
-locking the local guard exclusively and sealing it. No downstream workflow consumes this preference response;
-that owner disposition plus the committed barrier and exact source/scope proof permits its removal. No other
-receipt kind has inferred readiness. A living account's other role association stays pending until its own barrier.
+The default `shared_history` WorkModule consumes the tombstone through native effect admission. Its opaque random
+job UUID, immutable barrier and cursors remain in PostgreSQL; it creates no generic DBOS erasure execution.
+`history/work.ts` reexports this same module for compatibility. Each unit visits one physical partition, reads at
+most eight account-prefix locator keys and invokes one physical minimizer. Unconverted artifacts record a technical
+local gap while independent artifacts continue. Sealed empty prefixes have local `none` proof; previous applicable
+artifacts retain local `erased` proof. Neither proves global absence. Consumer, work and committed Auth proof changes
+redrive the affected pending job; changed registry generations redrive one job per unit.
 
-This delivers preference receipt/outbox custody and physical preference receipt response minimization only.
-Every other command producer, effect/workflow producer, outbox payload minimizer and durable-copy minimizer remains
-an actual runtime gap. The local job ends `covered-pending`; progress remains pending, and this registration never
-acknowledges the shared-history participant, including an empty prefix. Full account erasure remains unproved.
+`HistoryRegistry.registerOwner` binds versioned native readiness for each closed artifact type.
+`registerCoverage` declares a producer family's conversion; it never certifies absence. No family currently declares
+complete conversion. Preference receipts have no downstream response consumer. The Library entry-purged event has
+no projection subscriber; its exact effects dispositions are checked independently. Account-updated events await
+Search's actual generation-specific consumer inventory. Other command owners must bind their actual consumer proof.
+
+`stageHistoryWork` and `receiveHistoryWork` in `work/history-enqueue.ts` retain exact opaque request/digest and scope
+custody at origin and destination. Destination guards, locators and SDK `enqueueInTransaction` use one client after
+releasing the origin. `settleHistoryWork` is the owning native handoff port, not a workflow-status observation.
+Retired markers prevent re-enqueue after SDK deletion. Historical executions without registered owner readiness or
+complete pre-serialization scope/budget enforcement remain pending, including Library's retention root/segments and
+existing generic effects. Scoped execution production and stale application writers still require owner conversion.
+
+`history/receiving.ts` exports `readHistoryReceivingReceipt` / `verifyHistoryReceivingReceipt` and
+`readHistoryOwnerCoverage` / `verifyHistoryOwnerCoverage` with opaque WeakMap process capabilities. Exact receiving
+proofs bind the barrier, physical locator, full role union and current partition epoch; verification locks the proof
+and source on the account-home final command. Source loss alone produces no proof. Outbox slots with effect consumers remain pending receiving-copy binding
+even after business completion; generic DBOS inputs/results are not erased by completing an effect. Family coverage reads report
+actual registry/progress gaps. No owner coverage capability is issued yet: the current router has individual home
+epochs but no aggregate invalidation proof through final commit. An earlier verified home could move during later
+units. The runtime therefore records `routing-aggregate-proof-unavailable` after otherwise complete native pages
+rather than issuing a stale aggregate certificate. Final shared-history ACK remains unavailable.
+
+Access captures current/new/former direct native grant occurrences before destructive mutation, with original creator
+and resource type retained separately. Initialization reads its committed-in-transaction rows after the sibling CTEs
+to capture the actual first holder. Context-owner occurrences deliver through Semantic's actual
+`record_erasure_locator` sink; pending exact deliveries can be retried through `deliverContextRoleProvenance`.
+This is historical provenance, never current permission or certification of former-owner absence. Existing historical
+rows have no backfill, and Access's own provenance retention/cleanup remains its separate obligation.
+
+Ordinary record purge uses the agreed Semantic `record-purge-authority.ts` opaque source owner and Content's
+`purgeAuthoredFieldForDeletedRecord`, independently of account erasure. Those source exports are absent from this
+checkout. Accounts' selected `history/record-purge.ts` preparation/minimization port and producer-recorded record-to-copy
+inventory are still undelivered. No account-role locator, caller list or released source read substitutes for them.
+Cross-home source serialization with hold/restore/generation changes also remains unavailable. These are code and
+custody dependencies, not a pending approval of the selected contract. No record or global completion is claimed.

@@ -2,8 +2,9 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { DBOS_SCHEMA, WORK_APPLICATION, type WorkClient } from './client.ts';
-import { registerEffects, type Effect } from '../events/effects.ts';
+import { registerEffects, type Effect, type NativeEffect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
+import { HistoryRegistry } from '../history/registry.ts';
 
 export type WorkService = { stop(): Promise<void> };
 
@@ -13,7 +14,9 @@ export type WorkContext = {
   readonly client: WorkClient;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly clock: KernelClock;
+  readonly history?: HistoryRegistry;
   addEffects(effects: Effect[]): void;
+  addNativeEffects?(effects: NativeEffect[]): void;
   addService(start: () => WorkService | Promise<WorkService>): void;
 };
 export type WorkModule = { name: string; register(context: WorkContext): void | Promise<void> };
@@ -54,7 +57,8 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
   for (const [name, parameters] of Object.entries(WORK_QUEUES)) {
     await options.client.registerQueue(name, parameters);
   }
-  const collectedEffects: Effect[] = [];
+  const collectedEffects: Array<Effect | NativeEffect> = [];
+  const history = new HistoryRegistry();
   const serviceStarters: Array<() => WorkService | Promise<WorkService>> = [];
   const started: WorkService[] = [];
   let accepting = true;
@@ -64,8 +68,13 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     client: options.client,
     env: options.env ?? process.env,
     clock,
+    history,
     addEffects(effects) {
       if (!accepting) throw new Error('Cannot add effects after work composition');
+      collectedEffects.push(...effects);
+    },
+    addNativeEffects(effects) {
+      if (!accepting) throw new Error('Cannot add native effects after work composition');
       collectedEffects.push(...effects);
     },
     addService(start) {
@@ -79,6 +88,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     accepting = false;
   }
   const effects = registerEffects(collectedEffects, options.pool);
+  history.seal();
 
   // Stop every service. One failure does not skip the rest; the first one is returned.
   const stopServices = async (services: readonly WorkService[]): Promise<unknown> => {

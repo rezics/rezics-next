@@ -17,7 +17,7 @@ import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { bindReceiptKeys, encodeReceiptKey, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { recordCommandHistory, releaseCommandHistory, validateCommandHistory } from '../history/record.ts';
+import { recordCommandHistory, releaseCommandHistory, validateCommandHistory, validateCommandHistoryScope } from '../history/record.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
@@ -190,7 +190,7 @@ export type CompletedCommandAuthorization = Readonly<{
   resource: Readonly<{ route: number; id: string }>;
   mode: CommandAuthorizationMode;
 }>;
-export type CurrentCommand = CommandAttempt & Readonly<{ authorization: CompletedCommandAuthorization | null }>;
+export type CurrentCommand = CommandAttempt & Readonly<{ transactionId: string; authorization: CompletedCommandAuthorization | null }>;
 type CommandContext = { transactionId: string; time: AuthoritativeTime };
 const times = new WeakMap<AuthoritativeTime, string>();
 const attempts = new WeakMap<CommandTransaction, CommandAttempt>();
@@ -556,7 +556,8 @@ async function executeCommand<T>(
                 mode,
               }) as CompletedCommandAuthorization)
             : null;
-          commands.set(tx, Object.freeze({ ...attempt, authorization: capability }));
+          const transactionId = Bun.randomUUIDv7();
+          commands.set(tx, Object.freeze({ ...attempt, transactionId, authorization: capability }));
           if (capability && mode === 'execute' && options.principal)
             receiptOwners.set(
               tx,
@@ -588,12 +589,12 @@ async function executeCommand<T>(
             }
           }
           if (mode === 'receipt-only') throw authorization!.denied();
-          const transactionId = Bun.randomUUIDv7();
           const response = await body(tx, { transactionId, time });
           const noEffect = response.events.length === 0 && noEffectResults.has(response);
           if (response.events.length === 0 && !noEffect) throw new TypeError('A command must emit at least one event');
           if (response.events.length > MAX_COMMAND_EVENTS)
             throw new TooManyEventsError(partition, response.events.length);
+          validateCommandHistoryScope(tx, options.receipt?.kind, response.events);
           const events = noEffect
             ? []
             : response.events.map(({ type, subject, data: inputData }) => {

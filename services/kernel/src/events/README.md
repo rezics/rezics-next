@@ -63,7 +63,17 @@ not invent a replacement payload. Delivery dispatch and business-effect completi
 successful dispatch alone does not prove a registered effect finished. A source may remove payload only after every
 applicable downstream consumer has durably taken custody of its own payload or completed its effect and recorded
 the source handoff. Durable effect locator completion evidence is required by the erasure coordinator's open locator-
-work rule. Minimization, reader support, consumer proof and source handoff remain open gaps.
+work rule. The exact-slot minimizer now preserves envelope count, position, index and original event identity while clearing
+subject/data to the closed minimized storage form. Log readers validate count and sequence before substituting
+`com.rezics.history.minimized.v1` at that same index. Generic effects persist exact source-slot consumer dispositions
+outside DBOS; their checkpoint still proves only enqueue. Native effects admit on the consumer transaction without
+creating a generic personal DBOS input. Actual projection inventory and complete effect/workflow copy conversion
+remain gaps. `com.rezics.library.entry.purged.v1` and label retention purge remain personal(subject), including
+mechanical maintenance without an active Actor. Missing classification still throws.
+
+A successful separate shared-history ACK emits only `com.rezics.history.erasure-acknowledged.v1` with version and
+outcome, without account subject, actor basis or generic effect subscription. Its native proof gate currently keeps
+ACK pending. This closed marker provides no exemption for ordinary account-updated or tombstone payloads.
 
 ## Cost
 

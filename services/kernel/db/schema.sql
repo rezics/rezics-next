@@ -566,3 +566,163 @@ CREATE TABLE core.preference_history_job (
 );
 CREATE INDEX history_locator_artifact ON core.history_locator
   (partition_no,artifact_type,locator,account_route,account_id);
+
+
+ALTER TABLE core.outbox ADD COLUMN payload_state text NOT NULL DEFAULT 'present'
+  CHECK (payload_state IN ('present','minimized'));
+ALTER TABLE core.outbox ADD CONSTRAINT outbox_minimized_payload
+  CHECK (payload_state <> 'minimized' OR (data='{}'::jsonb AND subject IS NULL));
+
+-- Extend the existing native job; the default worker no longer starts a preference-only execution.
+ALTER TABLE core.preference_history_job
+  ADD COLUMN scan_partition integer NOT NULL DEFAULT 0 CHECK(scan_partition BETWEEN 0 AND 4096),
+  ADD COLUMN scan_type text COLLATE "C",
+  ADD COLUMN scan_locator bytea CHECK(octet_length(scan_locator) BETWEEN 1 AND 256),
+  ADD COLUMN phase text NOT NULL DEFAULT 'scan' CHECK(phase IN ('scan','pending')),
+  ADD COLUMN applicable boolean NOT NULL DEFAULT false,
+  ADD COLUMN next_run timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN gap text CHECK(octet_length(gap)<=2048),
+  ADD CONSTRAINT history_job_cursor CHECK((scan_type IS NULL)=(scan_locator IS NULL));
+CREATE INDEX preference_history_runnable ON core.preference_history_job(next_run,job_id) WHERE phase='scan';
+CREATE UNIQUE INDEX preference_history_barrier ON core.preference_history_job(account_route,account_id,barrier_id);
+ALTER TABLE core.history_progress ADD COLUMN coverage_gap text CHECK(octet_length(coverage_gap)<=2048);
+
+-- Owner dispositions outlive DBOS history. An effects checkpoint proves enqueue only.
+CREATE TABLE core.history_event_consumer (
+  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
+  position bigint NOT NULL CHECK(position>0), event_seq integer NOT NULL CHECK(event_seq BETWEEN 0 AND 999),
+  consumer text COLLATE "C" NOT NULL CHECK(consumer ~ '^[a-z][a-z0-9_]{0,62}$'),
+  workflow_id text NOT NULL CHECK(octet_length(workflow_id)<=256),
+  state text NOT NULL DEFAULT 'open' CHECK(state IN ('open','completed','transferred','suppressed')),
+  PRIMARY KEY(partition_no,position,event_seq,consumer), UNIQUE(workflow_id)
+);
+
+ALTER TABLE core.history_work
+  ADD COLUMN owner text CHECK(owner ~ '^[a-z][a-z0-9_.-]{0,95}$'),
+  ADD COLUMN request jsonb CHECK(octet_length(request::text)<=65536),
+  ADD COLUMN scope jsonb CHECK(octet_length(scope::text)<=16384),
+  ADD COLUMN source_partition integer CHECK(source_partition BETWEEN 0 AND 4095),
+  ADD COLUMN source_transaction uuid,
+  ADD COLUMN admitted boolean NOT NULL DEFAULT false,
+  ADD COLUMN absence_verified boolean NOT NULL DEFAULT false;
+CREATE INDEX history_work_source ON core.history_work(source_partition,work_id);
+
+
+-- Native jobs contain account/barrier progress. Cleanup never copies those values into DBOS.
+ALTER TABLE core.preference_history_job
+  DROP CONSTRAINT preference_history_job_phase_check,
+  ADD CONSTRAINT preference_history_job_phase_check CHECK(phase IN ('scan','verify','pending','complete')),
+  ADD COLUMN barrier_version integer,
+  ADD COLUMN barrier_at text,
+  ADD COLUMN registry_digest text,
+  ADD COLUMN verify_partition integer NOT NULL DEFAULT 0 CHECK(verify_partition BETWEEN 0 AND 4096);
+CREATE INDEX history_job_pending ON core.preference_history_job(job_id) WHERE phase='pending';
+ALTER TABLE core.history_progress ADD COLUMN applicable boolean NOT NULL DEFAULT false;
+CREATE INDEX history_progress_pending ON core.history_progress(account_route,account_id,barrier_id,store_kind,partition_no)
+  WHERE state='pending';
+
+-- A consumer transition or a supported owner explicitly redrives only the affected native job.
+CREATE FUNCTION core.history_wake_account(p_route integer,p_account uuid) RETURNS void LANGUAGE sql AS $$
+ UPDATE core.preference_history_job SET phase='scan',scan_partition=0,scan_type=NULL,scan_locator=NULL,
+   verify_partition=0,gap=NULL,next_run=now()
+ WHERE account_route=p_route AND account_id=p_account AND phase='pending';
+$$;
+CREATE FUNCTION core.history_consumer_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE r record; k bytea;
+BEGIN
+ IF OLD.state=NEW.state THEN RETURN NEW; END IF;
+ k:=decode('0102','hex') || int2send(NEW.partition_no::smallint) || int8send(NEW.position) || int2send(NEW.event_seq::smallint);
+ FOR r IN SELECT account_route,account_id FROM core.history_locator
+   WHERE partition_no=NEW.partition_no AND artifact_type='outbox-event/v1' AND locator=k
+   ORDER BY account_route,account_id LIMIT 64
+ LOOP PERFORM core.history_wake_account(r.account_route,r.account_id); END LOOP;
+ RETURN NEW;
+END; $$;
+CREATE TRIGGER history_consumer_changed AFTER UPDATE OF state ON core.history_event_consumer
+ FOR EACH ROW EXECUTE FUNCTION core.history_consumer_changed();
+
+
+CREATE TABLE core.history_registry (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
+  generation bigint NOT NULL DEFAULT 1 CHECK(generation>0),
+  digest text NOT NULL CHECK(digest ~ '^[0-9a-f]{64}$'),
+  gaps jsonb NOT NULL CHECK(jsonb_typeof(gaps)='array' AND octet_length(gaps::text)<=4096)
+);
+ALTER TABLE core.preference_history_job ADD COLUMN registry_generation bigint NOT NULL DEFAULT 0;
+CREATE INDEX history_registry_redrive ON core.preference_history_job(registry_generation,job_id);
+DROP INDEX core.preference_history_runnable;
+CREATE INDEX preference_history_runnable ON core.preference_history_job(next_run,job_id)
+  WHERE phase IN ('scan','verify');
+-- Proof rows are issued only by physical minimizers. A later account sharing an already
+-- minimized copy receives its own barrier proof without reintroducing the payload.
+CREATE TABLE core.history_receiving_proof (
+  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
+  account_route integer NOT NULL, account_id uuid NOT NULL,
+  artifact_type text COLLATE "C" NOT NULL, locator bytea NOT NULL,
+  barrier_version integer NOT NULL CHECK(barrier_version>0), barrier_at text NOT NULL,
+  partition_epoch integer NOT NULL CHECK(partition_epoch>0),
+  role_digest bytea NOT NULL CHECK(octet_length(role_digest)=32),
+  PRIMARY KEY(partition_no,account_route,account_id,artifact_type,locator,partition_epoch),
+  FOREIGN KEY(partition_no,account_route,account_id,artifact_type,locator)
+    REFERENCES core.history_locator(partition_no,account_route,account_id,artifact_type,locator)
+);
+-- Custody evidence can only move forward. A proof cannot outlive a rewritten source scope.
+CREATE FUNCTION core.history_receiving_proof_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ RAISE EXCEPTION 'history receiving proof is immutable' USING ERRCODE='23514';
+END; $$;
+CREATE TRIGGER history_receiving_proof_immutable BEFORE UPDATE OR DELETE ON core.history_receiving_proof
+ FOR EACH ROW EXECUTE FUNCTION core.history_receiving_proof_immutable();
+
+-- Work readiness and Auth's committed copy proof are dependency changes, not timer guesses.
+CREATE FUNCTION core.history_work_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE r record; k bytea;
+BEGIN
+ IF (OLD.owner_ready,OLD.absence_verified) IS NOT DISTINCT FROM (NEW.owner_ready,NEW.absence_verified) THEN RETURN NEW; END IF;
+ k:=decode('0103','hex') || convert_to(NEW.work_id::text,'UTF8');
+ FOR r IN SELECT account_route,account_id FROM core.history_locator
+   WHERE partition_no=NEW.partition_no AND artifact_type='durable-work/v1' AND locator=k
+   ORDER BY account_route,account_id LIMIT 64
+ LOOP PERFORM core.history_wake_account(r.account_route,r.account_id); END LOOP;
+ RETURN NEW;
+END; $$;
+CREATE TRIGGER history_work_changed AFTER UPDATE OF owner_ready,absence_verified ON core.history_work
+ FOR EACH ROW EXECUTE FUNCTION core.history_work_changed();
+CREATE FUNCTION core.history_auth_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.phase='copies-erased' THEN PERFORM core.history_wake_account(NEW.route,NEW.account_id); END IF;
+ RETURN NEW;
+END; $$;
+CREATE TRIGGER history_auth_changed AFTER INSERT ON access.auth_history_proof
+ FOR EACH ROW EXECUTE FUNCTION core.history_auth_changed();
+
+-- A native marker is permanent even after the SDK's deduplication rows disappear.
+CREATE FUNCTION core.history_payload_irreversible() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_TABLE_NAME='receipt' THEN
+   IF OLD.payload_state='minimized' AND (NEW.payload_state<>'minimized' OR NEW.response<>'null'::jsonb) THEN
+     RAISE EXCEPTION 'minimized history payload is sealed' USING ERRCODE='23514';
+   END IF;
+ ELSE
+   IF OLD.payload_state='minimized' AND
+     (NEW.payload_state<>'minimized' OR NEW.data<>'{}'::jsonb OR NEW.subject IS NOT NULL) THEN
+     RAISE EXCEPTION 'minimized history payload is sealed' USING ERRCODE='23514';
+   END IF;
+ END IF;
+ RETURN NEW;
+END; $$;
+CREATE TRIGGER history_receipt_irreversible BEFORE UPDATE ON core.receipt
+ FOR EACH ROW EXECUTE FUNCTION core.history_payload_irreversible();
+CREATE TRIGGER history_outbox_irreversible BEFORE UPDATE ON core.outbox
+ FOR EACH ROW EXECUTE FUNCTION core.history_payload_irreversible();
+CREATE FUNCTION core.history_retirement_irreversible() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.state='retired' AND (NEW.state<>'retired' OR NEW.request IS NOT NULL OR NEW.scope IS NOT NULL
+   OR NEW.request_digest<>OLD.request_digest OR NEW.owner IS DISTINCT FROM OLD.owner
+   OR (OLD.absence_verified AND NOT NEW.absence_verified)) THEN
+   RAISE EXCEPTION 'retired history work is sealed' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+CREATE TRIGGER history_retirement_irreversible BEFORE UPDATE ON core.history_work
+ FOR EACH ROW EXECUTE FUNCTION core.history_retirement_irreversible();

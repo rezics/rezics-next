@@ -1,19 +1,34 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { currentCommand } from '../command/command.ts';
-import { ACCOUNT_ROLE_BITS } from './contracts.ts';
+import { ACCOUNT_ROLE_BITS, classifyEvent } from './contracts.ts';
 import { encodeLocator, validateScope, type AccountReference, type HistoryScope } from './locator.ts';
 import { guardHistoryAccounts } from './gates.ts';
 import insert from './record.sql';
 
 /** Permanent numeric namespace. Append explicit IDs; never assign IDs by registration order. */
-export const COMMAND_HISTORY_KINDS = Object.freeze({ 'access.account.preferences': 1 });
-export type CommandHistoryKind = keyof typeof COMMAND_HISTORY_KINDS;
+export const COMMAND_HISTORY_KINDS = Object.freeze({
+  'access.account.preferences': 1,
+  'library.entry.retention.purge': 2,
+});
+export type CommandHistoryKind = string;
+const commandKinds = new Map<string, number>(Object.entries(COMMAND_HISTORY_KINDS));
+/** Startup-only receiving port. IDs are permanent owner-assigned values, never registration ordinals. */
+export function registerCommandHistoryKind(kind: string, id: number): void {
+  if (!/^[a-z][a-z0-9_.-]{0,95}$/.test(kind) || !Number.isInteger(id) || id < 1000 || id > 0xffffffff ||
+      commandKinds.has(kind) || [...commandKinds.values()].includes(id))
+    throw new TypeError('Invalid or duplicate permanent history command kind');
+  commandKinds.set(kind, id);
+}
+export function commandHistoryKind(id: number): string | undefined {
+  return [...commandKinds].find(([, value]) => value === id)?.[0];
+}
 export const COMMAND_HISTORY_COVERAGE = Object.freeze({
   delivered: Object.freeze(['access.account.preferences']),
   missing: Object.freeze([
-    'all other command producers',
-    'all outbox minimizers',
-    'all durable-work producers/minimizers',
+    'other command producer and consumer conversion',
+    'complete outbox producer and consumer coverage',
+    'pre-serialization scoped durable execution and owner conversion',
+    'historical producer and aggregate routing coverage',
   ]),
   complete: false,
 });
@@ -29,7 +44,7 @@ export function bindCommandHistoryEvidence(tx: CommandTransaction, accounts: rea
   identities.set(tx, structuredClone(accounts));
 }
 
-function union(type: HistoryScope['artifactType'], ...groups: readonly (readonly AccountReference[])[]): HistoryScope {
+export function unionHistoryScope(type: HistoryScope['artifactType'], ...groups: readonly (readonly AccountReference[])[]): HistoryScope {
   const accounts = new Map<string, AccountReference>();
   for (const group of groups)
     for (const ref of group) {
@@ -49,19 +64,29 @@ export async function declareCommandHistory(
   scopes: CommandHistoryScopes,
 ): Promise<void> {
   const command = currentCommand(tx);
-  if (!Object.hasOwn(COMMAND_HISTORY_KINDS, kind) || declarations.has(tx))
+  if (!commandKinds.has(kind) || declarations.has(tx))
     throw new TypeError('Invalid or repeated command history declaration');
   const identity = identities.get(tx);
   if (!identity) throw new TypeError('Missing command history evidence: verified actor/principal/human/delegate');
   if (scopes.events.length > 1000) throw new TypeError('Too many history event scopes');
-  const response = union('command-receipt/v1', validateScope('command-receipt/v1', scopes.response).accounts, identity);
+  const response = unionHistoryScope('command-receipt/v1', validateScope('command-receipt/v1', scopes.response).accounts, identity);
   const events = scopes.events.map((scope) =>
-    union('outbox-event/v1', validateScope('outbox-event/v1', scope).accounts, identity),
+    unionHistoryScope('outbox-event/v1', validateScope('outbox-event/v1', scope).accounts, identity),
   );
   // The cap applies to the entire production unit, not independently to each artifact.
-  const all = union('command-receipt/v1', response.accounts, ...events.map((scope) => scope.accounts));
+  const all = unionHistoryScope('command-receipt/v1', response.accounts, ...events.map((scope) => scope.accounts));
   await guardHistoryAccounts(tx, command.partition, all.accounts);
   declarations.set(tx, { kind, partition: command.partition, response, events });
+}
+
+export function validateCommandHistoryScope(
+  tx: CommandTransaction, kind: string | undefined, events: readonly { type: string }[],
+): void {
+  const declaration = declarations.get(tx);
+  if (!declaration && (kind === undefined || !commandKinds.has(kind))) return;
+  if (!declaration || declaration.kind !== kind || declaration.events.length !== events.length)
+    throw new TypeError('Missing or mismatched command history declaration');
+  for (const event of events) classifyEvent(event.type);
 }
 
 export function validateCommandHistory(
@@ -71,7 +96,7 @@ export function validateCommandHistory(
   events: readonly unknown[],
 ): void {
   const declaration = declarations.get(tx);
-  if (!declaration && (kind === undefined || !Object.hasOwn(COMMAND_HISTORY_KINDS, kind))) return;
+  if (!declaration && (kind === undefined || !commandKinds.has(kind))) return;
   if (!declaration || declaration.kind !== kind || declaration.events.length !== events.length)
     throw new TypeError('Missing or mismatched command history declaration');
   for (const payload of [response, ...events]) {
@@ -103,7 +128,7 @@ export async function recordCommandHistory(
     partitionNo: declaration.partition,
     principalKind: input.principal.kind,
     principalId: input.principal.id.toLowerCase(),
-    commandKindId: COMMAND_HISTORY_KINDS[declaration.kind],
+    commandKindId: commandKinds.get(declaration.kind)!,
     keyVersion: Number(version),
     keyToken: token.toString('hex'),
   });

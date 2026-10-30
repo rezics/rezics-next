@@ -16,9 +16,17 @@ export const EFFECTS_CONSUMER = 'effects';
 export type Effect = {
   name: string;
   types: string[];
+  delivery?: undefined;
   run(event: CloudEvent): Promise<void>;
   admit?: (client: PoolClient, event: CloudEvent) => Promise<void>;
 };
+export type NativeEffect = {
+  name: string;
+  types: string[];
+  delivery: 'native';
+  admit(client: PoolClient, event: CloudEvent): Promise<void>;
+};
+type RegisteredEffect = Effect | NativeEffect;
 
 type RegisteredEffects = {
   enqueue(envelopes: readonly Envelope[]): Promise<void>;
@@ -33,23 +41,34 @@ export function effectWorkflowId(envelope: Envelope, eventSeq: number, name: str
 
 let compatibilityPool: Pool | undefined;
 
-export function registerEffects(effects: Effect[], pool?: Pool): RegisteredEffects {
+export function registerEffects(effects: RegisteredEffect[], pool?: Pool): RegisteredEffects {
   const names = new Set<string>();
   for (const effect of effects) {
     if (!/^[a-z][a-z0-9_]{0,62}$/.test(effect.name)) throw new RangeError(`Invalid effect name: ${effect.name}`);
     if (names.has(effect.name)) throw new RangeError(`Duplicate effect name: ${effect.name}`);
     names.add(effect.name);
     for (const type of effect.types) {
+      if (type === 'com.rezics.history.minimized.v1') throw new TypeError('A minimized marker has no effect consumers');
       if (!lookupEventType(type)) throw new RangeError(`Unknown event type for effect ${effect.name}: ${type}`);
     }
+  }
+  const fanout = new Map<string, number>();
+  for (const effect of effects) for (const type of new Set(effect.types)) {
+    const count = (fanout.get(type) ?? 0) + 1;
+    if (count > 32) throw new TypeError('History effect fanout exceeds 32 consumers');
+    fanout.set(type, count);
   }
 
   const byName = new Map(effects.map((effect) => [effect.name, effect]));
   const runEffect = DBOS.registerStep(
     async (name: string, event: CloudEvent) => {
       const effect = byName.get(name);
-      if (!effect) throw new Error(`Unknown registered effect: ${name}`);
+      if (!effect || effect.delivery === 'native') throw new Error('Unknown durable effect');
       await effect.run(event);
+      const selected = pool ?? compatibilityPool;
+      if (selected) await selected.query(
+        "UPDATE core.history_event_consumer SET state='completed' WHERE workflow_id=$1 AND state='open'",
+        [DBOS.workflowID]);
     },
     { name: 'effect.run', retriesAllowed: true, intervalSeconds: 1, backoffRate: 2, maxAttempts: 10 },
   );
@@ -75,8 +94,7 @@ export function registerEffects(effects: Effect[], pool?: Pool): RegisteredEffec
     { name: 'effect' },
   );
 
-  const admit = effects.some((effect) => effect.admit)
-    ? async (client: PoolClient, envelopes: readonly Envelope[]) => {
+  const admit = async (client: PoolClient, envelopes: readonly Envelope[]) => {
         const orderedEnvelopes = envelopes
           .map((envelope, index) => ({ envelope, index }))
           .sort((left, right) => {
@@ -87,24 +105,32 @@ export function registerEffects(effects: Effect[], pool?: Pool): RegisteredEffec
         for (const { envelope } of orderedEnvelopes) {
           for (const [eventSeq, event] of envelope.events.entries()) {
             for (const effect of effects) {
-              if (effect.admit && effect.types.includes(event.type)) await effect.admit(client, event);
+              if (!effect.types.includes(event.type)) continue;
+              await client.query(
+                `INSERT INTO core.history_event_consumer(partition_no,position,event_seq,consumer,workflow_id)
+                 VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
+                [envelope.partition,envelope.position.toString(),eventSeq,effect.name,effectWorkflowId(envelope,eventSeq,effect.name)]);
+              if (effect.admit) await effect.admit(client, event);
+              if (effect.delivery === 'native') await client.query(
+                `UPDATE core.history_event_consumer SET state='transferred'
+                 WHERE partition_no=$1 AND position=$2 AND event_seq=$3 AND consumer=$4 AND state='open'`,
+                [envelope.partition,envelope.position.toString(),eventSeq,effect.name]);
             }
           }
         }
-      }
-    : undefined;
+      };
 
   return {
     ...(admit === undefined ? {} : { admit }),
     async enqueue(envelopes) {
       const partitions = new Map<
         number,
-        Array<{ envelope: Envelope; eventSeq: number; event: CloudEvent; effect: Effect }>
+        Array<{ envelope: Envelope; eventSeq: number; event: CloudEvent; effect: RegisteredEffect }>
       >();
       for (const envelope of envelopes) {
         for (const [eventSeq, event] of envelope.events.entries()) {
           for (const effect of effects) {
-            if (effect.types.includes(event.type)) {
+            if (effect.delivery !== 'native' && effect.types.includes(event.type)) {
               const jobs = partitions.get(envelope.partition) ?? [];
               jobs.push({ envelope, eventSeq, event, effect });
               partitions.set(envelope.partition, jobs);

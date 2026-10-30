@@ -17,7 +17,10 @@ proof. Scope validation caps the whole production unit at 64 distinct accounts, 
 64 KiB per copied payload. No JSON search or account-looking string inference occurs. A registered producer without
 its declaration or verified identity evidence fails closed. HTTP input cannot provide either declaration or proof.
 
-`access.account.preferences` has permanent command-kind ID 1, explicitly registered in `history/record.ts`.
+`access.account.preferences` has permanent command-kind ID 1. The mechanical
+`library.entry.retention.purge` receipt has ID 2, with its original account episode principal and subject,
+normalized deletion key and original native deadline digest. It synthesizes no active Actor.
+`registerCommandHistoryKind` binds other permanent owner IDs (at least 1000) before composition.
 IDs never follow runtime registration order. Receipt locators encode the actual persisted `rk1` version/token:
 `(partition, principal kind/id, command-kind ID, key version, HMAC token)`. Version zero retains its exact native
 meaning. Outbox locators encode `(partition, position, event sequence)`. Raw caller keys and private payload values
@@ -273,3 +276,9 @@ use barriers, not elapsed-time guesses.
 - Bound: unchanged DBOS per-workflow recovery; no kernel history scan.
 - Growth check: the work-step measurement above covers kernel cost. Native process/runtime restart is a
   correctness test, not a recovery cost measurement.
+
+The default shared-history worker now seeks all fixed homes and invokes exact receipt/outbox/SDK minimizers.
+`HistoryRegistry.registerOwner` supplies actual native consumer readiness; unregistered receipt kinds retain a
+concrete gap. This extends preference cleanup without declaring other producers converted. Ordinary record purge
+needs the selected Semantic source authority and original record-to-copy inventory; account receipt custody alone
+cannot identify an ordinary record's copies. Those receiving exports are not implemented in this checkout.
