@@ -733,7 +733,7 @@ test('stack-free placement: cwd and env wrappers retain command meaning and ambi
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(
     file,
-    `import { appendFileSync } from 'node:fs';\nimport { expect, test } from 'bun:test';\ntest('selected wrapper case', () => { expect(process.env.WRAPPER_KEEP).toBe('yes'); expect(process.env.WRAPPER_REMOVE).toBeUndefined(); appendFileSync(process.env.WORKER_WRAPPER_MARKER!, 'selected\\n'); });\ntest('unselected wrapper case', () => appendFileSync(process.env.WORKER_WRAPPER_MARKER!, 'unselected\\n'));\n`,
+    `import { appendFileSync } from 'node:fs';\nimport { expect, test } from 'bun:test';\ntest('selected wrapper case', () => { expect(process.env.WRAPPER_KEEP).toBe('yes'); expect(process.env.WRAPPER_REMOVE).toBeUndefined(); appendFileSync(process.env.WORKER_WRAPPER_MARKER!, 'selected\\n'); });\ntest('other wrapper case', () => appendFileSync(process.env.WORKER_WRAPPER_MARKER!, 'other\\n'));\n`,
   );
   const old = { ...process.env };
   try {
