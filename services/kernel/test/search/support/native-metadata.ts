@@ -59,7 +59,9 @@ export function resolveControls(prefix: string): MetadataControl[] {
     controls.push({
       name: `resolve rejected HTTP ${status}`,
       reject: true,
-      corrupt: (receipt) => { receipt.status = status; },
+      corrupt: (receipt) => {
+        receipt.status = status;
+      },
     });
   for (const value of [null, [], 'metadata', 1])
     controls.push({
@@ -233,7 +235,9 @@ export function mappingControls(index: string): MetadataControl[] {
     controls.push({
       name: `mapping rejected HTTP ${status}`,
       reject: true,
-      corrupt: (receipt) => { receipt.status = status; },
+      corrupt: (receipt) => {
+        receipt.status = status;
+      },
     });
   for (const value of [null, [], 'mapping', {}])
     controls.push({
