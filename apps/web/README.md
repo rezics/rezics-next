@@ -1239,8 +1239,9 @@ explicit declared response examples based on the existing Realm recording, not n
 Web owns ordinary 390/1280 light/dark review and screenshots. No native or visual pass is claimed here.
 `tests/realm-claim-status.test.ts` adds the named return journey and focused identity, recovery, stale-response,
 unknown/null, historical outcome and privacy cases; it is intentionally not run under the current verification policy.
-Only local Web typing is run for this delivery. No external reference-project source was needed; this surface
-uses the native community continuity contract, existing claim controls and existing platform-review transport pattern.
+`bun run --cwd apps/web typecheck` passed locally on the final implementation. No external reference-project
+source was needed; this surface uses the native community continuity contract, existing claim controls and
+existing platform-review transport pattern.
 Original permission/privacy/replay/erasure and physical/growth proof remain deferred, never waived.
 
 ### Platform Realm claim review
