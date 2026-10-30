@@ -12,12 +12,7 @@ import { unreadCountQuery } from './inbox-query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
-import {
-  emptyInboxPagination,
-  nextInboxPage,
-  readableInboxPage,
-  receiveInboxPage,
-} from './inbox-pagination';
+import { emptyInboxPagination, nextInboxPage, readableInboxPage, receiveInboxPage } from './inbox-pagination';
 import {
   markInboxSeen,
   readInboxPage,
@@ -194,7 +189,12 @@ export function InboxPageView({ loadPage = readPage }: { loadPage?: typeof readP
       {cursor !== undefined && readable?.items.length ? (
         <p className="mt-2 text-sm text-muted-foreground">{m.inbox_page_retry_hint()}</p>
       ) : null}
-      <Button variant="outline" className="mt-4" onClick={() => void pageQuery.refetch()} disabled={pageQuery.isFetching}>
+      <Button
+        variant="outline"
+        className="mt-4"
+        onClick={() => void pageQuery.refetch()}
+        disabled={pageQuery.isFetching}
+      >
         {m.inbox_retry()}
       </Button>
     </section>

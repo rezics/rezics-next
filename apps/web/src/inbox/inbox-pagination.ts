@@ -24,7 +24,8 @@ export const inboxTransportFailure: InboxPage = {
 function transient(result: InboxPage): boolean {
   if (!result.signedIn || result.state === 'ready' || result.state === 'closed') return false;
   const { status, retryable, code } = result.failure;
-  if (code === 'platform_closed' || code === 'unauthorized' || code === 'forbidden' || code === 'not_found') return false;
+  if (code === 'platform_closed' || code === 'unauthorized' || code === 'forbidden' || code === 'not_found')
+    return false;
   return retryable !== false && (status === null || status === 408 || status === 429 || status >= 500);
 }
 
@@ -35,8 +36,7 @@ export function receiveInboxPage(
   transportFailed = false,
 ): InboxPagination {
   // A failed refetch can retain query data; a known native denial still takes precedence.
-  const result =
-    transportFailed && (!data || (data.signedIn && data.state === 'ready')) ? inboxTransportFailure : data;
+  const result = transportFailed && (!data || (data.signedIn && data.state === 'ready')) ? inboxTransportFailure : data;
   if (state.result === result) return state;
   if (result?.signedIn && result.state === 'ready') {
     const refreshed = new Map(result.items.map((item) => [item.id, item]));
