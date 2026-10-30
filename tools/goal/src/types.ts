@@ -161,9 +161,7 @@ export type PriorityHistoryEntry = {
   grantor: string | null;
   at: string;
   grantId?: string;
-  provenance:
-    | { kind: 'manager-session'; sessionId: string }
-    | { kind: 'programmatic' };
+  provenance: { kind: 'manager-session'; sessionId: string } | { kind: 'programmatic' };
 };
 export type PriorityGrant = {
   id: string;

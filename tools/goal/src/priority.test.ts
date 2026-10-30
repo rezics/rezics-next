@@ -9,7 +9,12 @@ function runtimeFor(h: ReturnType<typeof harness>) {
   return { settings: h.settings, db: h.store.db, store: h.store, tasks: h.tasks, drain: async () => {} } as never;
 }
 
-function addManager(db: ReturnType<typeof harness>['store']['db'], id: string, sessionId: string, supermanager: string) {
+function addManager(
+  db: ReturnType<typeof harness>['store']['db'],
+  id: string,
+  sessionId: string,
+  supermanager: string,
+) {
   if (!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'manager_sessions'").get())
     db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
   db.query('INSERT OR REPLACE INTO manager_sessions (id, state) VALUES (?, ?)').run(

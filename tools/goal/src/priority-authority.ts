@@ -41,11 +41,7 @@ export function authenticatedManager(
       continue;
     }
     if (!state || typeof state !== 'object' || Array.isArray(state)) continue;
-    if (
-      state.status !== 'running' ||
-      typeof state.threadId !== 'string' ||
-      !sessionIds.includes(state.threadId)
-    )
+    if (state.status !== 'running' || typeof state.threadId !== 'string' || !sessionIds.includes(state.threadId))
       continue;
     matches.push({ id: row.id, sessionId: state.threadId });
   }
@@ -108,7 +104,9 @@ function consumeGrant(db: Database, task: Task, actor: AuthenticatedManager, at:
   const grant = grantForTask(task, actor);
   const parent = taskManagerParent(db, task.brief.manager);
   if (!grant || !parent || grant.grantor !== parent)
-    throw new Error('critical priority requires an active task-bound grant from the task manager\'s configured supermanager');
+    throw new Error(
+      "critical priority requires an active task-bound grant from the task manager's configured supermanager",
+    );
   grant.consumedAt = at;
   grant.consumedBy = actor.id;
   return grant;
@@ -136,9 +134,7 @@ export function applyPriorityTransition(
     grantor: grant?.grantor ?? null,
     at,
     ...(grant ? { grantId: grant.id } : {}),
-    provenance: actor
-      ? { kind: 'manager-session', sessionId: actor.sessionId }
-      : { kind: 'programmatic' },
+    provenance: actor ? { kind: 'manager-session', sessionId: actor.sessionId } : { kind: 'programmatic' },
   });
 }
 

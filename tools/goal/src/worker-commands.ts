@@ -166,7 +166,9 @@ export async function runWorkerCommand(
         print(JSON.stringify(tasks.revokePriority(argv[1], argv[2], priorityActor)));
       } else {
         if (!arg || argv.length !== 2 || !['critical', 'normal'].includes(argv[1]!))
-          throw new Error('usage: priority <task> critical|normal | priority grant <task> | priority revoke <task> <grant-id>');
+          throw new Error(
+            'usage: priority <task> critical|normal | priority grant <task> | priority revoke <task> <grant-id>',
+          );
         if (options.runtime && !priorityActor)
           throw new Error('priority changes require an authenticated manager session');
         tasks.setPriority(arg, argv[1] as 'critical' | 'normal', priorityActor);

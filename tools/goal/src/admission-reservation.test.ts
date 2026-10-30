@@ -213,7 +213,9 @@ test('Admission with critical waiters cannot leave admissible capacity idle or i
     );
     releaseCritical = await critical;
     await waitFor(() => readdirSync(queue).some((name) => name.includes('-critical.admitted')));
-    expect(store.runningAttemptsCount() + readdirSync(queue).filter((name) => name.endsWith('.admitted')).length).toBe(2);
+    expect(store.runningAttemptsCount() + readdirSync(queue).filter((name) => name.endsWith('.admitted')).length).toBe(
+      2,
+    );
     expect(readdirSync(queue).some((name) => name.includes('-normal.admitted'))).toBe(false);
 
     // The reservation remains attached to this critical incarnation through preparation and launch.
@@ -233,7 +235,9 @@ test('Admission with critical waiters cannot leave admissible capacity idle or i
     );
     releaseNormal = await normal;
     expect(readdirSync(queue).some((name) => name.includes('-normal.admitted'))).toBe(true);
-    expect(store.runningAttemptsCount() + readdirSync(queue).filter((name) => name.endsWith('.admitted')).length).toBe(2);
+    expect(store.runningAttemptsCount() + readdirSync(queue).filter((name) => name.endsWith('.admitted')).length).toBe(
+      2,
+    );
 
     db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
       JSON.stringify({ state: 'running' }),
