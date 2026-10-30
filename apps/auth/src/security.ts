@@ -1,6 +1,7 @@
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
 import { loadPasskeyInventory } from './security-inventory';
+import { performSecurityAction } from './security-reconciliation';
 
 export type SecuritySession = {
   id: string;
@@ -196,11 +197,8 @@ export async function changePassword(subjectId: string, password: string): Promi
   return { ok: true };
 }
 
-export async function revokeSession(sessionId: string): Promise<{ ok: true } | { ok: false; message: string }> {
-  const result = await authPost('/sessions/revoke', { session_id: sessionId });
-  return result.ok
-    ? { ok: true }
-    : { ok: false, message: failureMessage(result.status, result.code, result.retryAfter) };
+export async function revokeSession(sessionId: string, accountId: string) {
+  return performSecurityAction({ kind: 'session', id: sessionId, accountId });
 }
 
 export function securityDevice(userAgent: string | null): { browser: string; system: string } | null {

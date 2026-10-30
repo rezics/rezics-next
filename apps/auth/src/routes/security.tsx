@@ -15,6 +15,12 @@ import { ErrorAlert } from '../alert';
 import { SecurityInventory, type InventorySource } from '../security-inventory-view';
 import { addPasskey, passkeysSupported, removePasskey } from '../passkeys';
 import {
+  readSecurityTarget,
+  type SecurityTarget,
+  type SecurityActionResult,
+  type SecuritySource,
+} from '../security-reconciliation';
+import {
   changePassword,
   formatSecurityDate,
   loadSecurity,
@@ -38,7 +44,8 @@ const STEP_UP_URL = '/step-up?return_to=%2Fsecurity';
 export function SecurityPage({
   initial,
   inventorySource,
-}: { initial?: SecurityLoadResult; inventorySource?: InventorySource } = {}) {
+  securitySource,
+}: { initial?: SecurityLoadResult; inventorySource?: InventorySource; securitySource?: SecuritySource } = {}) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
   const [sessions, setSessions] = useState<SecuritySession[]>([]);
@@ -59,6 +66,16 @@ export function SecurityPage({
   const [passkeyRemoving, setPasskeyRemoving] = useState('');
   const [passkeyNotice, setPasskeyNotice] = useState('');
   const [passkeyError, setPasskeyError] = useState('');
+  const [recovery, setRecovery] = useState<{
+    target: SecurityTarget;
+    phase: 'unknown' | 'accepted' | 'present';
+  } | null>(null);
+  const [reading, setReading] = useState(false);
+  const [signedOutNotice, setSignedOutNotice] = useState('');
+  const actionPending = useRef(false);
+  const activeAccount = useRef('');
+  const recoveryStatus = useRef<HTMLDivElement>(null);
+  const sessionStatus = useRef<HTMLDivElement>(null);
   const submittingPassword = useRef(false);
   const passwordInput = useRef<HTMLInputElement>(null);
   const passwordAlert = useRef<HTMLDivElement>(null);
@@ -68,6 +85,7 @@ export function SecurityPage({
     void (initial ? Promise.resolve(initial) : loadSecurity(passkeysSupported())).then((result) => {
       if (!active) return;
       if (result.kind === 'ready') {
+        activeAccount.current = result.accountId;
         setAccountId(result.accountId);
         setSessions(result.sessions);
         setPasskeysLoad(result.passkeys);
@@ -82,6 +100,7 @@ export function SecurityPage({
     });
     return () => {
       active = false;
+      activeAccount.current = '';
     };
   }, [initial]);
 
@@ -89,6 +108,128 @@ export function SecurityPage({
     if (passwordFieldError) passwordInput.current?.focus();
     else if (passwordError) passwordAlert.current?.focus();
   }, [passwordFieldError, passwordError]);
+
+  useLayoutEffect(() => {
+    if (recovery) recoveryStatus.current?.focus();
+    else if (sessionNotice) sessionStatus.current?.focus();
+  }, [recovery, sessionNotice]);
+
+  function clearPrivateData(state: 'signed-out' | 'failure', notice = '') {
+    activeAccount.current = '';
+    setAccountId('');
+    setSessions([]);
+    setPasskeys([]);
+    setPasskeysLoad({ kind: 'hidden' });
+    setPassword('');
+    setPasskeyName('');
+    setPasswordNotice('');
+    setPasswordError('');
+    setPasswordFieldError('');
+    setSessionNotice('');
+    setSessionError('');
+    setPasskeyNotice('');
+    setPasskeyError('');
+    setRecovery(null);
+    setSignedOutNotice(notice);
+    setLoadMessage(m.auth_security_authority_changed());
+    setLoadState(state);
+  }
+
+  async function recoverTarget() {
+    if (!recovery || actionPending.current || reading) return;
+    actionPending.current = true;
+    setReading(true);
+    const { target } = recovery;
+    const result = await (securitySource?.read(target) ?? readSecurityTarget(target));
+    actionPending.current = false;
+    setReading(false);
+    if (activeAccount.current !== target.accountId) return;
+    if (result.kind === 'signed-out' || result.kind === 'denied') {
+      clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure', m.auth_security_action_unverified());
+      return;
+    }
+    if (result.kind === 'unavailable') {
+      setRecovery({ target, phase: 'unknown' });
+      setSessionError(m.auth_security_readback_unavailable());
+      return;
+    }
+    setSessionError('');
+    setSessions(result.sessions);
+    if (result.passkeys) setPasskeys(result.passkeys);
+    if (result.presence === 'absent') {
+      setRecovery(null);
+      setSessionNotice(m.auth_security_target_absent());
+    } else {
+      setRecovery({ target, phase: result.presence === 'present' ? 'present' : 'unknown' });
+      if (result.presence === 'unknown') setSessionError(m.auth_security_readback_unavailable());
+    }
+  }
+
+  function finishAction(target: SecurityTarget, result: SecurityActionResult, current: boolean) {
+    if (result.kind === 'signed-out' || result.kind === 'denied' || result.kind === 'step-up') {
+      clearPrivateData(result.kind === 'denied' ? 'failure' : 'signed-out', m.auth_security_action_unverified());
+      if (result.kind === 'step-up') window.location.assign(STEP_UP_URL);
+      return;
+    }
+    if (result.kind === 'accepted' || result.kind === 'unknown') {
+      // Native passkey removal revokes all sessions. An acknowledgement is not a later inventory read.
+      if (result.sessionEnded || (result.kind === 'accepted' && (current || target.kind === 'passkey'))) {
+        clearPrivateData(
+          'signed-out',
+          result.kind === 'accepted' ? m.auth_security_action_accepted() : m.auth_security_action_unverified(),
+        );
+        return;
+      }
+      setRecovery({ target, phase: result.kind });
+      return;
+    }
+    if (target.kind === 'passkey')
+      setPasskeyError(
+        result.kind === 'last-credential'
+          ? m.auth_security_passkey_last_credential()
+          : m.auth_security_passkey_remove_failed(),
+      );
+    else setSessionError(m.auth_security_sessions_failed());
+  }
+
+  async function runAction(target: SecurityTarget, current = false, retry = false) {
+    if (
+      actionPending.current ||
+      sessionPending ||
+      passkeyAdding ||
+      passkeyRemoving ||
+      (recovery && (!retry || recovery.phase !== 'present')) ||
+      activeAccount.current !== target.accountId
+    )
+      return;
+    if (
+      !window.confirm(
+        target.kind === 'session'
+          ? m.auth_security_revoke_confirmation()
+          : m.auth_security_passkey_remove_confirmation(),
+      )
+    )
+      return;
+    actionPending.current = true;
+    if (target.kind === 'session') setSessionPending(target.id);
+    else setPasskeyRemoving(target.id);
+    setSessionNotice('');
+    setSessionError('');
+    setPasskeyNotice('');
+    setPasskeyError('');
+    const result = securitySource
+      ? await securitySource.act(target)
+      : target.kind === 'session'
+        ? await revokeSession(target.id, target.accountId)
+        : await removePasskey(target.id, target.accountId);
+    actionPending.current = false;
+    setSessionPending('');
+    setPasskeyRemoving('');
+    if (activeAccount.current !== target.accountId) return;
+    // A retry consumed the previous observation; another uncertain response needs another current read.
+    setRecovery(null);
+    finishAction(target, result, current);
+  }
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,9 +245,11 @@ export function SecurityPage({
     setPasswordPending(true);
     setPasswordNotice('');
     setPasswordError('');
+    const owner = accountId;
     const result = await changePassword(accountId, password);
     submittingPassword.current = false;
     setPasswordPending(false);
+    if (activeAccount.current !== owner) return;
     if (result.ok) {
       setPassword('');
       setPasswordNotice(m.auth_security_password_changed());
@@ -122,12 +265,14 @@ export function SecurityPage({
 
   async function submitPasskey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (passkeyAdding || passkeyRemoving) return;
+    if (actionPending.current || recovery || passkeyAdding || passkeyRemoving) return;
     setPasskeyAdding(true);
     setPasskeyNotice('');
     setPasskeyError('');
+    const owner = accountId;
     const result = await addPasskey(passkeyName);
     setPasskeyAdding(false);
+    if (activeAccount.current !== owner) return;
     if (result.ok) {
       setPasskeys((current) => [...current, result.passkey]);
       setPasskeyName('');
@@ -140,39 +285,11 @@ export function SecurityPage({
   }
 
   async function removeOnePasskey(passkey: SecurityPasskey) {
-    if (passkeyAdding || passkeyRemoving || !window.confirm(m.auth_security_passkey_remove_confirmation())) return;
-    setPasskeyRemoving(passkey.id);
-    setPasskeyNotice('');
-    setPasskeyError('');
-    const result = await removePasskey(passkey.id);
-    setPasskeyRemoving('');
-    if (result.ok) {
-      setPasskeys((current) => current.filter((item) => item.id !== passkey.id));
-      setPasskeyNotice(m.auth_security_passkey_removed());
-    } else if (result.reason === 'step-up') {
-      window.location.assign(STEP_UP_URL);
-    } else {
-      setPasskeyError(result.message);
-    }
+    await runAction({ kind: 'passkey', id: passkey.id, accountId });
   }
 
   async function revoke(session: SecuritySession) {
-    if (sessionPending || !window.confirm(m.auth_security_revoke_confirmation())) return;
-    setSessionPending(session.id);
-    setSessionNotice('');
-    setSessionError('');
-    const result = await revokeSession(session.id);
-    setSessionPending('');
-    if (!result.ok) {
-      setSessionError(result.message);
-      return;
-    }
-    if (session.current) {
-      window.location.assign('/login');
-      return;
-    }
-    setSessions((current) => current.filter((item) => item.id !== session.id));
-    setSessionNotice(m.auth_security_session_revoked());
+    await runAction({ kind: 'session', id: session.id, accountId }, session.current);
   }
 
   if (loadState === 'signed-out')
@@ -180,6 +297,7 @@ export function SecurityPage({
       <AuthPage heading={m.auth_security_heading()}>
         <div className="auth-login-form">
           <p>{m.auth_security_sign_in_required()}</p>
+          {signedOutNotice ? <p role="status">{signedOutNotice}</p> : null}
           {consentReduced ? <p role="status">{m.auth_inventory_reduced()}</p> : null}
           <a href="/login">{m.auth_security_sign_in()}</a>
         </div>
@@ -190,6 +308,7 @@ export function SecurityPage({
     return (
       <AuthPage heading={m.auth_security_heading()}>
         <ErrorAlert>{loadMessage}</ErrorAlert>
+        <a href="/login">{m.auth_security_sign_in()}</a>
       </AuthPage>
     );
 
@@ -203,6 +322,42 @@ export function SecurityPage({
           <p role="status">{m.auth_inventory_loading()}</p>
         ) : (
           <>
+            {recovery ? (
+              <div className="auth-login-form" aria-busy={reading}>
+                <div ref={recoveryStatus} tabIndex={-1} role="status">
+                  {recovery.phase === 'accepted'
+                    ? m.auth_security_action_accepted()
+                    : recovery.phase === 'present'
+                      ? m.auth_security_target_present()
+                      : m.auth_security_action_unknown()}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void recoverTarget()}
+                  disabled={reading || Boolean(sessionPending) || Boolean(passkeyRemoving)}
+                  aria-busy={reading}
+                >
+                  {m.auth_security_check_current()}
+                </Button>
+                {recovery.phase === 'present' ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={reading || Boolean(sessionPending) || Boolean(passkeyRemoving)}
+                    onClick={() =>
+                      void runAction(
+                        recovery.target,
+                        sessions.some((row) => row.id === recovery.target.id && row.current),
+                        true,
+                      )
+                    }
+                  >
+                    {m.auth_security_retry_action()}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             <section aria-labelledby="security-password-heading">
               <h2 id="security-password-heading">{m.auth_security_change_password()}</h2>
               <form
@@ -295,7 +450,13 @@ export function SecurityPage({
                                   type="button"
                                   variant="outline"
                                   onClick={() => void removeOnePasskey(passkey)}
-                                  disabled={passkeyAdding || Boolean(passkeyRemoving)}
+                                  disabled={
+                                    Boolean(recovery) ||
+                                    reading ||
+                                    Boolean(sessionPending) ||
+                                    passkeyAdding ||
+                                    Boolean(passkeyRemoving)
+                                  }
                                   aria-busy={passkeyRemoving === passkey.id}
                                   aria-label={m.auth_security_passkey_remove_named({ name: passkey.name })}
                                 >
@@ -324,7 +485,13 @@ export function SecurityPage({
                       </Field>
                       <Button
                         type="submit"
-                        disabled={passkeyAdding || Boolean(passkeyRemoving)}
+                        disabled={
+                          Boolean(recovery) ||
+                          reading ||
+                          Boolean(sessionPending) ||
+                          passkeyAdding ||
+                          Boolean(passkeyRemoving)
+                        }
                         aria-busy={passkeyAdding}
                         className="w-full"
                       >
@@ -339,7 +506,7 @@ export function SecurityPage({
             <section aria-labelledby="security-sessions-heading">
               <h2 id="security-sessions-heading">{m.auth_security_sessions_heading()}</h2>
               {sessionNotice ? (
-                <div className="auth-login-alert" role="status">
+                <div className="auth-login-alert" role="status" tabIndex={-1} ref={sessionStatus}>
                   {sessionNotice}
                 </div>
               ) : null}
@@ -391,7 +558,13 @@ export function SecurityPage({
                             type="button"
                             variant="outline"
                             onClick={() => void revoke(session)}
-                            disabled={Boolean(sessionPending)}
+                            disabled={
+                              Boolean(recovery) ||
+                              reading ||
+                              passkeyAdding ||
+                              Boolean(passkeyRemoving) ||
+                              Boolean(sessionPending)
+                            }
                             aria-busy={sessionPending === session.id}
                             aria-label={m.auth_security_sign_out_session({ device })}
                           >
@@ -409,11 +582,7 @@ export function SecurityPage({
               {...(inventorySource ? { source: inventorySource } : {})}
               onSessionEnded={(reduced) => {
                 setConsentReduced(reduced);
-                setAccountId('');
-                setSessions([]);
-                setPasskeys([]);
-                setPassword('');
-                setLoadState('signed-out');
+                clearPrivateData('signed-out');
               }}
             />
 

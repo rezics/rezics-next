@@ -9,6 +9,7 @@ import {
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
 import { securityDevice, type SecurityPasskey } from './security';
+import { performSecurityAction, type SecurityActionResult } from './security-reconciliation';
 import { accountOperationProfile, type AccountOperationStepUpKind } from './account-operation-step-up';
 import { SIGN_IN_CLIENT_ID, SIGN_IN_SCOPE, signInResult, type SignInResult } from './sign-in';
 
@@ -145,20 +146,8 @@ export async function addPasskey(name: string): Promise<PasskeyAddResult> {
   return { ok: true, passkey: { id, name: savedName, created_at: createdAt, last_used_at: null } };
 }
 
-export type PasskeyRemoveResult =
-  | { ok: true }
-  | { ok: false; reason: 'step-up' }
-  | { ok: false; reason: 'failure'; message: string };
+export type PasskeyRemoveResult = SecurityActionResult;
 
-export async function removePasskey(id: string): Promise<PasskeyRemoveResult> {
-  const result = await authPost('/passkeys/remove', { id });
-  if (result.ok) return { ok: true };
-  if (isStepUp(result)) return { ok: false, reason: 'step-up' };
-  const message =
-    result.status === 409
-      ? m.auth_security_passkey_last_credential()
-      : result.status === 429 || result.status === 503
-        ? failureMessage(result.status, result.code, result.retryAfter)
-        : m.auth_security_passkey_remove_failed();
-  return { ok: false, reason: 'failure', message };
+export async function removePasskey(id: string, accountId: string): Promise<PasskeyRemoveResult> {
+  return performSecurityAction({ kind: 'passkey', id, accountId });
 }

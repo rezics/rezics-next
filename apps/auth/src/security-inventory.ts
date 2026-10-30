@@ -71,7 +71,7 @@ export function parseInventoryPage<V extends InventoryView>(view: V, body: unkno
 }
 
 type InventoryInput = { view: InventoryView; cursor?: string };
-async function issuerSecurityGet(path: string): Promise<Response> {
+export async function issuerSecurityRequest(path: string, body?: unknown): Promise<Response> {
   const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
   const request = getRequest();
   setResponseHeader('Cache-Control', 'private, no-store');
@@ -85,7 +85,10 @@ async function issuerSecurityGet(path: string): Promise<Response> {
   // The existing issuer origin serves host.handler and owns its pools/keys and
   // immutable accountOperations binding. No credentials leave this issuer.
   return fetch(new URL(path, nativeOrigin), {
+    method: body === undefined ? 'GET' : 'POST',
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     headers: {
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       Accept: 'application/json',
       Origin: request.headers.get('origin')!,
       Cookie: request.headers.get('cookie') ?? '',
@@ -112,7 +115,7 @@ const readInventory = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<InventoryPage<InventoryView>> => {
     const query = data.cursor ? `?${new URLSearchParams({ cursor: data.cursor })}` : '';
     try {
-      const response = await issuerSecurityGet(`/${data.view}${query}`);
+      const response = await issuerSecurityRequest(`/${data.view}${query}`);
       if (response.status === 401) return { kind: 'signed-out' };
       if (response.status === 403) return { kind: 'denied' };
       if (response.status === 400 && data.cursor) return { kind: 'expired' };
@@ -135,7 +138,7 @@ export async function loadInventory<V extends InventoryView>(view: V, cursor?: s
 const readPasskeys = createServerFn({ method: 'POST' }).handler(
   async (): Promise<{ ok: true; body: { passkeys: PublicPasskey[] } } | { ok: false }> => {
     try {
-      const response = await issuerSecurityGet('/passkeys');
+      const response = await issuerSecurityRequest('/passkeys');
       if (response.status !== 200) return { ok: false };
       const body: unknown = await response.json();
       if (!record(body) || !Array.isArray(body.passkeys)) return { ok: false };

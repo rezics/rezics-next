@@ -114,7 +114,7 @@ The security page has Password, Passkeys, Sessions and Organizations sections, f
 content column up to 42rem wide. Organizations links to `/organizations/new`; Delete account explains the result and
 links to `/account/delete` with a destructive outline control. It reads the
 signed-in account from `GET /session`, its sessions from one `GET /sessions`, with at most 64 session rows, and its
-passkeys from one `GET /passkeys`. The view makes no kernel reads. A password change uses three Auth calls and signing out one session uses one. A signed-out response
+passkeys from one `GET /passkeys`. The view makes no kernel reads. A password change uses three Auth calls. Session revocation and passkey removal first check the current native account using the same BFF request cookie, then dispatch the existing exact-key command once. A signed-out response
 offers a link to `/login`.
 
 Password changes accept 8 to 128 characters and use one random key for the staged credential effect: stage, approve,
@@ -128,19 +128,25 @@ description contains the app name and signed-in and expiry dates formatted for t
 response `client_display_name` is used when present; `login` maps to the localized REZICS account name,
 `rezics-website` maps to REZICS, and other client ids remain muted monospace. The current session appears first and is
 marked This device. Each row offers Sign out with an accessible name containing its device. Signing out asks for
-confirmation; another session disappears from the list, while signing out the current session clears its cookie and
-sends the person to `/login`.
+confirmation. An accepted response for another session leaves the row until an explicit current inventory read; an accepted current-session revocation clears private page data and requires sign-in.
 
 Passkeys have their own section with an `h2`. Each passkey is an outlined item with its name, created date and last-used
 date (or "Never used"), formatted for the page locale and time zone, and a Remove button whose accessible name contains
 the passkey's name. The add form has an optional name that defaults to the browser and system. Adding sends
 `POST /passkeys/register/options` with `{}`, runs the browser ceremony, then sends `POST /passkeys/register` with
 `{ response, name? }`; the 201 body `{ id, name, created_at }` becomes the new row without a second list read. Removing
-asks for confirmation and sends `POST /passkeys/remove` with `{ id }`. A 409 means it was the person's last interactive
+asks for confirmation and sends the existing `POST /passkeys/remove` with `{ id }` after the current-account check. Native success revokes all sessions: the page clears private data and requires sign-in. A 409 means it was the person's last interactive
 credential, so nothing changed and a localized message says so. Registration and removal are credential changes: a 401
 `step_up_required` sends the person to `/step-up?return_to=%2Fsecurity`. A dismissed browser prompt is silent. Where the
 browser has no WebAuthn the section is absent and `GET /passkeys` is not requested; a failed list shows an alert in that
 section only.
+
+A lost or 503 mutation response retains only the account, operation kind and exact target id in page memory and
+shows an unknown result. It never sends an automatic duplicate. An explicit check reads current native authority
+and the own session/passkey inventory with no-store, using the fixed request cookie, then rechecks authority.
+Malformed inventories and saturated native list windows cannot prove a target absent. A present target enables an
+explicit retry with a new confirmation and normal native checks. A denied or ended session clears private rows;
+sign-in is the remedy and does not establish that the action succeeded. No operation target is persisted.
 
 The page heading has the same space below it as the sections have between them.
 
@@ -258,9 +264,9 @@ Sign-up makes no kernel reads. A successful submit is one browser `POST /signup`
 
 ### Removing a passkey
 
-- **Touches:** `POST /passkeys/remove`
-- **Bound:** 1 Auth request and 0 kernel reads
-- **Growth check:** `tests/passkeys-cost.test.ts`: removing a passkey makes one Auth request however many passkeys the person has
+- **Touches:** current `GET /session`, then the existing exact-key `POST /passkeys/remove`; explicit recovery reads current `/session`, `/sessions`, `/passkeys`, then `/session` again
+- **Bound:** 2 Auth requests for dispatch and 0 kernel reads; an explicit recovery check makes at most 4 current native reads
+- **Growth check:** the original `tests/passkeys-cost.test.ts` oracle remains unchanged; `test/security-reconciliation.test.ts` covers the focused recovery behavior
 
 ## Visual check
 
