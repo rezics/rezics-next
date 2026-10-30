@@ -109,8 +109,11 @@ production Auth/Access binding. Positive accounts and active definitions are no 
 The [released profile cases](../../services/kernel/test/library/released-profile-user-cases.test.ts) remain bundled
 first-public coverage, not proof of the broader custom-profile or migration suite. [Public scope](../scope.md)
 closes custom catalogue publication behind platform grants; it does not exclude historic fact clearing or authorize
-skipping these frozen cases. No suite is skipped here. The four additional entry points still reference absent native
-driver modules; complete adapters have not been delivered. Current production dependencies prevent a complete binding:
+skipping these frozen cases. No suite is skipped here. All five kernel entry points import the original specifications,
+but the four additional native driver modules are absent, so their original suites are not yet bound to production.
+The profile migration worker itself is now present: `profile-migration-runtime.ts` exports the closed start, resume
+and progress-read operations, and `work-module.ts` registers its workflow. This removes the former worker prerequisite,
+but does not supply a native profile fixture/driver. Current production dependencies still prevent complete binding:
 
 - Shelf routes require `ShelfReads`, but [kernel composition](../../services/kernel/src/http/kernel.ts) does not supply
   it, and [createShelfReads](../../services/kernel/src/library/shelf-contract.ts) still throws for all three reads.
@@ -120,10 +123,10 @@ driver modules; complete adapters have not been delivered. Current production de
 - [Personal label commands](../../services/kernel/src/library/label-commands.ts) provide the label catalogue, but
   kernel composition mounts no label action/HTTP boundary or complete assignment command/page provider. The label
   suite also requires the same unavailable logical built-ins.
-- [Legacy pin pages](../../services/kernel/src/library/profile-migration-page.ts) are a maintenance primitive, not
-  the owner migration command/executor required by the original profile suite. The
-  [Library work module](../../services/kernel/src/library/work-module.ts) registers no profile migration workflow,
-  checkpoint/ready transition or recovery boundary.
+- The profile suite still needs its native fixture adapter to publish the unattached legacy destination through the
+  ordinary Definitions API, provision genuine historical facts through the accepted test fixture boundary, invoke
+  the closed migration runtime, and observe stored rows. The runtime and registered worker are available; no
+  production legacy-fact write endpoint or test-side migration engine is authorized.
 
 These are production prerequisites for their existing outcomes. Supplying successful test providers, wrapping
 maintenance pages in a test-side migration engine, or skipping the broader suites would violate native binding.
