@@ -59,6 +59,12 @@ no terminal state setter, exported proof constructor or optimistic cleanup path.
 consumer serializer must add the real durable discharge/transfer transition and its same-home
 verification; a released pre-read or matching stale generation cannot substitute for it.
 
+The retention implementation and its local typing can be handed off independently of this
+unavailable producer. That handoff does not establish terminal custody: both the original
+source and the enrolled retained receipt remain pending. In particular, it provides no
+evidence that a technical undo transfer is usable after T; the existing undo-only source
+read remains the authority for that surviving obligation.
+
 ## Cost and evidence
 
 Reads address the exact original source/claim, one job/control and three fixed participant
