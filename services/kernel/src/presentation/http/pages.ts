@@ -567,13 +567,10 @@ async function pageAnswer(input: {
   }
   let readSession = mergedSession(input.session.ring, input.session.scope, input.probeSession, page.session);
 
-  if (input.finalGuard)
-    readSession = mergedSession(
-      input.session.ring,
-      input.session.scope,
-      readSession,
-      await input.finalGuard(readSession),
-    );
+  if (input.finalGuard) {
+    const guarded = await input.finalGuard(readSession);
+    readSession = mergedSession(input.session.ring, input.session.scope, readSession, guarded);
+  }
   const reads: Record<string, ReadResult> = {};
   for (const [key, descriptor] of Object.entries(plan.reads)) {
     let result = page.results[key];

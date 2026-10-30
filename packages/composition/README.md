@@ -562,27 +562,20 @@ bundled type uses `generic`.
 `{ kind: 'documents', id, context?, properties }`. `Statements` selects its named properties;
 `Summary` selects `schema:abstract`; `MoreStatements` adds the other properties in the already disclosed subject observation.
 The optional Context stays bound to the same selected subject observation; it never falls back to Global.
-The descriptor is orchestration, with the ordinary subject read as a shared dependency.
-It is neither another public endpoint nor another document producer.
-
 After that one bounded subject observation, `pageDocumentReferences` selects the same best rank
 and reader/original language as the generic renderer. The executor admits the entire effective
 plan before reading bodies or other planned lists. Its published maximum is fifteen distinct
 bodies (`MAX_PAGE_DOCUMENTS`): one subject operation plus fifteen `document.get` operations exhausts
 sixteen native reads. Account probes, redirect hops, final selected-Context guards and other reads reduce that allowance.
-The final guard reserves its native read and slot before dependent execution. Each
-body costs one of the same 128 requested slots; orchestration grants no free native calls.
+The final guard reserves its native read and slot; each body costs one of the same 128 requested slots.
 A configuration whose currently selected values exceed either remaining allowance is rejected
-with `/reads: out_of_range`; values are never truncated to fit. Selection examines only the
-standalone subject's bounded current representation, never its history or an all-document scan.
-
+with `/reads: out_of_range`; values are never truncated to fit or selected from subject history.
 The aggregate invokes `GET /v1/documents/{id}` in process and retains its complete existing
 `document` representation in `reads[key].body.documents[candidateId]`, beside the unchanged subject
 references. Admission requires exact id, subject, candidate, language and canonical SHA-256 digest,
 `availability: available`, the owner's 2 MiB canonical byte cap and `@rezics/document` validation.
 That byte cap also bounds the possible JSON node count and depth; the document validator owns
-profile and traversal validity. At most 30 MiB of canonical bodies fit before other page reads
-reduce the allowance. Metadata and the existing subject response add their own bounded bytes.
+profile and traversal validity. At most 30 MiB of canonical bodies fit before other reads reduce the allowance.
 Missing, erased or currently undisclosed bodies are absent. Other owner failures retain their
 status. Every request releases its native owner connection and admission slot before a dependent
 read. Actor, request deadline, cancellation and merged session follow the standalone operations.
