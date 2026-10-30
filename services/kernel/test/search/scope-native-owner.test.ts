@@ -10,10 +10,12 @@ import type { ScopeBasis } from '../../src/search/scope-source.ts';
 test('scope basis has exclusive real indexed and native owner source branches', () => {
   type Native = Extract<ScopeBasis, { nativeOwner: unknown }>;
   type Indexed = Extract<ScopeBasis, { generation: number }>;
-  expectTypeOf<Native['nativeOwner']>().toEqualTypeOf<Readonly<{
-    source: NativeSourceIdentity;
-    observation: CollectionSourceObservation;
-  }>>();
+  expectTypeOf<Native['nativeOwner']>().toEqualTypeOf<
+    Readonly<{
+      source: NativeSourceIdentity;
+      observation: CollectionSourceObservation;
+    }>
+  >();
   expectTypeOf<Native['generation']>().toEqualTypeOf<undefined>();
   expectTypeOf<Native['index']>().toEqualTypeOf<undefined>();
   expectTypeOf<Indexed['generation']>().toEqualTypeOf<number>();
@@ -22,16 +24,22 @@ test('scope basis has exclusive real indexed and native owner source branches', 
 });
 
 test('shared native evaluator cannot replace missing owner evidence with a Boolean branch', async () => {
-  const plan = compileCurrentOwnerFilter({ or: [
-    { owner: { presence: true } },
-    { not: { owner: { presence: true } } },
-  ] });
+  const plan = compileCurrentOwnerFilter({
+    or: [{ owner: { presence: true } }, { not: { owner: { presence: true } } }],
+  });
   const work = new ScopeWork(scopeAllowance(16, 'native-owner-evidence'));
   const result = await evaluateScopeSubjects({
     // These dependencies must remain unused when actual native owner authority is absent.
-    get pool(): Pool { throw new Error('No native evidence was supplied'); },
-    get options(): LeafOptions { throw new Error('No reader authority was supplied'); },
-    plan, basis: 'native-owner', subjects: ['subject'], work,
+    get pool(): Pool {
+      throw new Error('No native evidence was supplied');
+    },
+    get options(): LeafOptions {
+      throw new Error('No reader authority was supplied');
+    },
+    plan,
+    basis: 'native-owner',
+    subjects: ['subject'],
+    work,
     reservation: { rawKeys: 16, native: { points: 16, witnesses: 16, rows: 16, bytes: 8192, emptySeeks: 16 } },
   });
   expect(result.values).toEqual(['not_proven']);

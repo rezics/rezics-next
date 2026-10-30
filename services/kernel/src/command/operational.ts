@@ -54,9 +54,7 @@ export function hasLiveOperationalTransaction(tx: Pick<PoolClient, 'query'>): tx
 }
 
 /** Server-only executor resources. The transaction remains the only usable query client. */
-export function currentOperationalResources(
-  tx: OperationalTransaction,
-): Readonly<Omit<Live, 'client'>> {
+export function currentOperationalResources(tx: OperationalTransaction): Readonly<Omit<Live, 'client'>> {
   const state = live.get(tx);
   if (!state || !hasLiveOperationalTransaction(tx)) throw new TypeError('No live operational transaction');
   return Object.freeze({
@@ -173,7 +171,15 @@ export async function runOperationalTransaction<T>(
                 throw authorization.denied();
               if (!(await fence.run(tx, { partition_no: partition }))) throw unavailable('fenced');
               if (Date.now() >= deadline) throw unavailable('deadline');
-              live.set(tx, { client, pool, workClient: options.workClient, accounts, deadline, partition, mode: options.mode });
+              live.set(tx, {
+                client,
+                pool,
+                workClient: options.workClient,
+                accounts,
+                deadline,
+                partition,
+                mode: options.mode,
+              });
               for (const id of accounts) await fenceOperationalAccount(tx, id);
               const value = await body(tx);
               await authorization?.finalize?.(tx, attempt, evidence);

@@ -32,8 +32,12 @@ test('work context is additive and uses the existing native scope adapter types'
   expectTypeOf<Extract<LeafOptions, { work: MembersPreparationWorkContext }>['nativeT']>().toEqualTypeOf<undefined>();
   expectTypeOf<Extract<LeafOptions, { actor: Actor }>['work']>().toEqualTypeOf<undefined>();
   expectTypeOf<Extract<CollectionSourceContext, { actor: Actor }>['at']>().toEqualTypeOf<AuthoritativeTime>();
-  expectTypeOf<Extract<CollectionSourceContext, { work: MembersPreparationWorkContext }>['actor']>().toEqualTypeOf<undefined>();
-  expectTypeOf<Extract<CollectionSourceContext, { work: MembersPreparationWorkContext }>['at']>().toEqualTypeOf<undefined>();
+  expectTypeOf<
+    Extract<CollectionSourceContext, { work: MembersPreparationWorkContext }>['actor']
+  >().toEqualTypeOf<undefined>();
+  expectTypeOf<
+    Extract<CollectionSourceContext, { work: MembersPreparationWorkContext }>['at']
+  >().toEqualTypeOf<undefined>();
   expectTypeOf<PrepareCollectionSource['work']>().toEqualTypeOf<MembersPreparationWorkContext | undefined>();
   expectTypeOf<CollectionSourceCall['work']>().toEqualTypeOf<MembersPreparationWorkContext | undefined>();
   expectTypeOf<ContainsCollectionSubject['work']>().toEqualTypeOf<MembersPreparationWorkContext | undefined>();
@@ -78,15 +82,17 @@ test('Implement the sole4b native MembersPreparation work-context handoff', asyn
         await expect(
           admitMembersPreparationWork({ ...work, locator: native.locator(f.owner, f.collectionId) }, options),
         ).rejects.toMatchObject({ code: 'semantic_not_ready' });
-        await expect(
-          admitMembersPreparationWork(work, { ...options, deadline: Date.now() - 1 }),
-        ).rejects.toMatchObject({ code: 'semantic_not_ready' });
+        await expect(admitMembersPreparationWork(work, { ...options, deadline: Date.now() - 1 })).rejects.toMatchObject(
+          { code: 'semantic_not_ready' },
+        );
       },
     );
     expect(completed).toBeDefined();
     expect(hasLiveOperationalTransaction(completed!.tx)).toBe(false);
     expect(() => currentOperationalResources(completed!.tx)).toThrow('No live operational transaction');
-    await expect(admitMembersPreparationWork(completed!, options)).rejects.toMatchObject({ code: 'semantic_not_ready' });
+    await expect(admitMembersPreparationWork(completed!, options)).rejects.toMatchObject({
+      code: 'semantic_not_ready',
+    });
     expect(native.db.pool.idleCount).toBe(native.db.pool.totalCount);
   } finally {
     await native.close();

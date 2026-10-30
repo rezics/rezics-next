@@ -158,11 +158,13 @@ export async function evaluateScopeSubjects(
     reservation: ScopeEvaluationReservation;
     work: ScopeWork;
     resume?: ScopeLeafResume | null;
-    owner?: Readonly<{
-      admission: Parameters<typeof readOwnerFilterCandidate>[1];
-      binding: Parameters<typeof readOwnerFilterCandidateClosure>[0];
-      source: Parameters<typeof readOwnerFilterCandidateClosure>[1];
-    }> | undefined;
+    owner?:
+      | Readonly<{
+          admission: Parameters<typeof readOwnerFilterCandidate>[1];
+          binding: Parameters<typeof readOwnerFilterCandidateClosure>[0];
+          source: Parameters<typeof readOwnerFilterCandidateClosure>[1];
+        }>
+      | undefined;
   }>,
 ) {
   const { plan, subjects, work, reservation, basis } = input;
@@ -176,9 +178,12 @@ export async function evaluateScopeSubjects(
       // native point evidence. Its matcher invokes the same shared Boolean plan.
       // Never treat a missing closure as empty private evidence, even beneath OR.
       const owner = input.owner;
-      if (!owner || input.options.work ||
-          owner.binding.input.actor !== input.options.actor ||
-          !isDeepStrictEqual(owner.admission.plan?.leaves, plan.leaves)) {
+      if (
+        !owner ||
+        input.options.work ||
+        owner.binding.input.actor !== input.options.actor ||
+        !isDeepStrictEqual(owner.admission.plan?.leaves, plan.leaves)
+      ) {
         values.push('not_proven');
         continue;
       }
@@ -191,8 +196,13 @@ export async function evaluateScopeSubjects(
           if (closure.closure.subjectId !== subject) throw new TypeError('Foreign native owner closure');
           // Library resolves catalogue evidence as well. An unavailable public branch
           // must never be bypassed by an otherwise true native owner OR branch.
-          if (plan.leaves.some((leaf) => leaf.kind === 'catalogue' &&
-              closure.closure.catalogue.get(currentOwnerClauseKey(leaf))?.state !== 'current'))
+          if (
+            plan.leaves.some(
+              (leaf) =>
+                leaf.kind === 'catalogue' &&
+                closure.closure.catalogue.get(currentOwnerClauseKey(leaf))?.state !== 'current',
+            )
+          )
             return 'not_proven' as const;
           const control = native.reserve({ ...zeroScopeWork(), nativePoints: 1, statements: 3, bytes: 256 });
           control.dispatch();
