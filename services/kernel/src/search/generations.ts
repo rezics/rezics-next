@@ -1,3 +1,15 @@
+import { isDeepStrictEqual } from 'node:util';
+import { withConnection } from '../database/pool.ts';
+import { routeOf } from '../route/route.ts';
+import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
+import type { DiscoveryKey, DiscoveryRegistry, DiscoveryIndexAction, IndexedDiscoveryDocument } from './discovery.ts';
+import type { SubjectListingSource } from './source.ts';
+import type { SubjectDocument } from './document.ts';
+import { nativeDiscoveryRegistry, createDiscoveryProjection, validateAccountPage, validateAccountSnapshot, type DiscoveryProjection, type DiscoveryTarget } from './account-discovery.ts';
+import { discoveryIndexName, discoveryIndexUuid, discoveryAlias, createDiscoveryIndex } from './indices.ts';
+import { discoveryDocumentActions, parseDiscoveryHitIdentity, validateDiscoveryDocument } from './discovery-documents.ts';
+import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
+import { validateObservation } from './indexer.ts';
 import type { Pool } from 'pg';
 import { discardConnection } from '../database/pool.ts';
 import {
@@ -16,7 +28,7 @@ import reconcile from './reconcile.sql';
 import lockRebuild from './rebuild-lock.sql';
 import unlockRebuild from './rebuild-unlock.sql';
 import type { SubjectSource } from './source.ts';
-import { subjectConsumer } from './runner.ts';
+import { subjectConsumer, startDiscoveryIndexing } from './runner.ts';
 
 export { MAX_SUBJECT_GENERATIONS } from './indices.ts';
 export type RebuildReason = 'timeout' | 'mismatch' | 'busy' | 'running' | 'limit';
@@ -338,4 +350,214 @@ export async function rebuildSubjects(options: {
       client.release(discard);
     }
   }
+}
+
+export type DiscoveryGeneration = DiscoveryTarget & { state: string; kinds: string[] };
+export const discoveryConsumer = (prefix: string,generation: number) => subjectConsumer(prefix,generation).replace('subjects','discovery');
+
+export async function discoveryGenerations(pool: Pool,prefix: string): Promise<DiscoveryGeneration[]> {
+  return withConnection(pool,async(client)=>(await client.query<DiscoveryGeneration>(`SELECT prefix,generation::float8 AS generation,index_uuid AS uuid,
+    incarnation::text,state,kinds FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 AND state <> 'retired' ORDER BY generation`,[prefix])).rows);
+}
+
+/** Short allocation transaction registers replay before any native population observation. */
+export async function allocateDiscovery(pool: Pool,prefix: string,registry: DiscoveryRegistry): Promise<void> {
+  discoveryIndexName(prefix,1);
+  await withConnection(pool,async(client)=>{
+    await client.query('BEGIN');
+    try {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,1))',[discoveryAlias(prefix)]);
+      const {rows}=await client.query<{generation:string;state:string}>('SELECT generation::text,state FROM search.discovery_generation WHERE partition_no=0 AND prefix=$1 ORDER BY generation',[prefix]);
+      if (rows.filter((row)=>row.state!=='retired').length>=3) throw new Error('Discovery live generation limit reached');
+      if (rows.some((row)=>!['active','retiring','retired','quarantined'].includes(row.state))) { await client.query('COMMIT'); return; }
+      const generation=Number(BigInt(rows.at(-1)?.generation ?? '0')+1n);
+      const consumer=discoveryConsumer(prefix,generation);
+      await client.query(`INSERT INTO search.discovery_generation(prefix,generation,incarnation,kinds,state) VALUES ($1,$2,$3,$4,'allocated')`,
+        [prefix,generation,Bun.randomUUIDv7(),registry.entries.map(({kind})=>kind).sort()]);
+      await client.query(`INSERT INTO search.discovery_population(partition_no,prefix,generation,owner)
+        SELECT p,$1,$2,owner FROM generate_series(0,4095) p CROSS JOIN unnest(ARRAY['accounts','semantic']) owner`,[prefix,generation]);
+      await client.query(`INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position)
+        SELECT partition_no,$1,epoch,position FROM core.partition ON CONFLICT DO NOTHING`,[consumer]);
+      await client.query('COMMIT');
+    } catch(error) { await client.query('ROLLBACK'); throw error; }
+  });
+}
+
+type Population = { partition:number; owner:'accounts'|'semantic'; after_route:number|null; after_id:string|null;
+  position:string; revision:string; claim_revision:string; indexed:string; census:string; reconcile_position:string|null };
+
+async function populationPage(pool: Pool, projection: DiscoveryProjection,row: Population) {
+  const {registry,target}=projection, partition=row.partition;
+  const account=registry.get('account');
+  if (account.owner!=='accounts') throw new Error('Native Accounts producer is required');
+  let next: {route:number;id:string}|null, keys: DiscoveryKey[], position:bigint;
+  if (row.owner==='accounts') {
+    const after=row.after_id===null ? null : {route:row.after_route!,id:row.after_id};
+    const page=validateAccountPage(await account.source.page(partition,after,100),partition,after,100);
+    keys=page.accounts.map(({id})=>({owner:'accounts',kind:'account',id,route:routeOf(id)!})); next=page.next; position=page.position;
+  } else {
+    const rows=await withConnection(pool,async(client)=>(await client.query<{route:number;id:string;kind:string}>(
+      `SELECT route,subject_id::text AS id,type AS kind FROM semantic.subject WHERE route >= $1 AND route < $2
+       AND ($3::integer IS NULL OR (route,subject_id)>($3,$4::uuid)) ORDER BY route,subject_id LIMIT 257`,
+      [partition*16,(partition+1)*16,row.after_route,row.after_id])).rows);
+    keys=rows.slice(0,256).map((row)=>({owner:'semantic',...row}));
+    const last=keys.at(-1); next=rows.length===257 && last ? {route:last.route,id:last.id}:null;
+    position=0n;
+  }
+  await projection.project(partition,keys);
+  await withConnection(pool,async(client)=>{
+    await client.query(`UPDATE search.discovery_population SET after_route=$5,after_id=$6,complete=$7,position=GREATEST(position,$8)
+      WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4 AND after_id IS NOT DISTINCT FROM $9::uuid AND NOT complete`,
+      [partition,target.prefix,target.generation,row.owner,next?.route ?? null,next?.id ?? null,next===null,position.toString(),row.after_id]);
+  });
+}
+
+/** Validate every indexed identity against current owner truth, not just equal generation counts. */
+async function reconcileDiscoveryPage(pool: Pool,search: OpenSearch,projection: DiscoveryProjection,row: Population): Promise<void> {
+  const {registry,target}=projection, partition=row.partition;
+  const entry=row.owner==='accounts' ? registry.get('account') : registry.entries.find((entry)=>entry.owner==='semantic');
+  if (!entry || entry.owner!==row.owner) throw new Error('Both native discovery producers are required');
+  const census=await entry.source.count(partition);
+  const witness=(await readAccountDiscoveryWitness(pool,[partition])).get(partition);
+  if (!witness) throw new Error('Native Account/claim witness is absent');
+  const indexed=BigInt(row.indexed);
+  const reset=row.reconcile_position===null || BigInt(row.reconcile_position)!==census.position ||
+    BigInt(row.revision)!==witness.revision || BigInt(row.claim_revision)!==witness.claimRevision;
+  const after=reset ? null : row.after_id;
+  const page=await search.request<unknown>('POST',`/${discoveryIndexName(target.prefix,target.generation)}/_search`,{
+    size:100, version:true, query:{bool:{filter:[{term:{partition}},{term:{owner:row.owner}}]}},
+    sort:[{route:'asc'},{id:'asc'}],...(after===null ? {} : {search_after:[row.after_route,after]}),
+  },{query:{allow_partial_search_results:false}});
+  assertCompleteSearch(page.body);
+  if (!record(page.body) || !record(page.body.hits) || !Array.isArray(page.body.hits.hits) || page.body.hits.hits.length>100)
+    throw new Error('Discovery reconciliation page is malformed');
+  const hits=page.body.hits.hits;
+  const keys=hits.map((hit)=>parseDiscoveryHitIdentity(registry,hit));
+  let expected: DiscoveryIndexAction[];
+  if (entry.owner==='accounts') {
+    const snapshot=validateAccountSnapshot(await entry.source.read(partition,keys.map(({id})=>id)),partition,keys.map(({id})=>id),census.position);
+    expected=discoveryDocumentActions(registry,{owner:'accounts',snapshot},keys);
+  } else {
+    const snapshot=await entry.source.read(partition,keys.map(({id})=>id));
+    validateObservation(snapshot,partition,keys.map(({id})=>id),census.position);
+    const counts=await projection.listing.read(partition,snapshot.subjects.map(({id})=>id));
+    expected=discoveryDocumentActions(registry,{owner:'semantic',snapshot},keys,counts);
+    const semantic=expected.filter((action):action is Extract<DiscoveryIndexAction,{op:'index'}> & {document:SubjectDocument & IndexedDiscoveryDocument}=>action.op==='index' && action.document.owner==='semantic');
+    const prepared=await prepareBoundedSortKeys(search,discoveryIndexName(target.prefix,target.generation),semantic);
+    const byId=new Map(prepared.map((action)=>[action.id,action])); expected=expected.map((action)=>byId.get(action.id) ?? action);
+  }
+  let mismatch=false;
+  for (let offset=0;offset<hits.length;offset++) {
+    const hit=hits[offset], action=expected[offset];
+    if (!record(hit) || !action) throw new Error('Discovery reconciliation identity is missing');
+    const current=validateDiscoveryDocument(registry,hit._source);
+    if (BigInt(current.source_position)>census.position || (current.owner==='accounts' && action.op==='index' && action.document.owner==='accounts' && BigInt(current.revision)>BigInt(action.document.revision)))
+      throw new Error('Discovery native high water rewound; quarantine this incarnation');
+    const withoutPosition=({source_position,...body}:IndexedDiscoveryDocument)=>body;
+    if (action.op!=='index' || !isDeepStrictEqual(withoutPosition(current),withoutPosition(action.document))) mismatch=true;
+  }
+  if (mismatch) { await projection.project(partition,keys); return; }
+  const finish=await entry.source.count(partition), end=(await readAccountDiscoveryWitness(pool,[partition])).get(partition);
+  const stable=finish.position===census.position && finish.count===census.count && end?.revision===witness.revision && end.claimRevision===witness.claimRevision;
+  const total=(reset ? 0n:indexed)+BigInt(hits.length), exhausted=hits.length<100;
+  if (!stable) return;
+  if (exhausted && total!==BigInt(census.count)) throw new Error('Discovery identified population does not match native census');
+  const last=keys.at(-1);
+  await withConnection(pool,async(client)=>{
+    await client.query(`UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$8,reconcile_position=$9,
+      revision=$10,claim_revision=$11,certified=$12 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4
+      AND after_id IS NOT DISTINCT FROM $13::uuid`,[partition,target.prefix,target.generation,row.owner,
+      exhausted ? null:last?.route ?? null,exhausted ? null:last?.id ?? null,total.toString(),census.count,census.position.toString(),
+      witness.revision.toString(),witness.claimRevision.toString(),exhausted,row.after_id]);
+  });
+}
+
+/** One bounded maintenance step; failed external work leaves its actual frontier replayable. */
+export async function advanceDiscovery(options: {
+  pool:Pool; search:OpenSearch; prefix:string; registry:DiscoveryRegistry; listing:SubjectListingSource;
+}): Promise<void> {
+  const {pool,search,prefix,registry}=options;
+  let generations=await discoveryGenerations(pool,prefix);
+  if (generations.length===0) { await allocateDiscovery(pool,prefix,registry); generations=await discoveryGenerations(pool,prefix); }
+  const target=generations.find((row)=>!['active','retiring','quarantined'].includes(row.state));
+  if (!target) return;
+  if (!isDeepStrictEqual(target.kinds,registry.entries.map(({kind})=>kind).sort())) throw new Error('Discovery registry changed during population');
+  const index=discoveryIndexName(prefix,target.generation);
+  if (target.state==='allocated') {
+    try { await createDiscoveryIndex(search,prefix,target.generation,target.incarnation); }
+    catch(error) {
+      const {body}=await search.request<Record<string,{mappings?:{_meta?:{incarnation?:string}}}>>('GET',`/${index}/_mapping`);
+      if (body[index]?.mappings?._meta?.incarnation!==target.incarnation) throw error;
+    }
+    const uuid=await discoveryIndexUuid(search,index);
+    await withConnection(pool,(client)=>client.query("UPDATE search.discovery_generation SET index_uuid=$3,state='populating' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='allocated'",[prefix,target.generation,uuid]));
+    return;
+  }
+  const projection=createDiscoveryProjection({...options,target});
+  if (target.state==='populating' || target.state==='reconciling') {
+    const population=await withConnection(pool,async(client)=>(await client.query<Population>(`SELECT partition_no AS partition,owner,after_route,after_id::text,position::text,
+      revision::text,claim_revision::text,indexed::text,census::text,reconcile_position::text FROM search.discovery_population
+      WHERE prefix=$1 AND generation=$2 AND ${target.state==='populating' ? 'NOT complete':'NOT certified'} ORDER BY partition_no,owner LIMIT 1`,[prefix,target.generation])).rows[0]);
+    if (population) {
+      if (target.state==='populating') await populationPage(pool,projection,population);
+      else await reconcileDiscoveryPage(pool,search,projection,population);
+      return;
+    }
+  }
+  if (target.state==='populating') {
+    await withConnection(pool,(client)=>client.query("UPDATE search.discovery_generation SET state='replaying' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='populating'",[prefix,target.generation])); return;
+  }
+  if ((await readFreshness(pool,discoveryConsumer(prefix,target.generation))).behind>0) return;
+  if (target.state==='replaying') {
+    await withConnection(pool,(client)=>client.query("UPDATE search.discovery_generation SET state='reconciling' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='replaying'",[prefix,target.generation])); return;
+  }
+  // A native write after a partition was certified invalidates that partition, including empty populations.
+  const observations=await withConnection(pool,async(client)=>(await client.query<{partition:number;position:string;revision:string;claim_revision:string;head:string;semantic_position:string}>(
+    `SELECT p.partition_no AS partition,p.reconcile_position::text AS position,p.revision::text,p.claim_revision::text,c.position::text AS head,s.reconcile_position::text AS semantic_position
+     FROM search.discovery_population p JOIN core.partition c ON c.partition_no=p.partition_no
+     JOIN search.discovery_population s ON s.partition_no=p.partition_no AND s.prefix=p.prefix AND s.generation=p.generation AND s.owner='semantic' 
+     WHERE p.prefix=$1 AND p.generation=$2 AND p.owner='accounts' ORDER BY p.partition_no`,[prefix,target.generation])).rows);
+  if (observations.length!==4096) throw new Error('Discovery population partitions are incomplete');
+  for (let offset=0;offset<observations.length;offset+=100) {
+    const chunk=observations.slice(offset,offset+100), witnesses=await readAccountDiscoveryWitness(pool,chunk.map(({partition})=>partition));
+    for (const row of chunk) {
+      const witness=witnesses.get(row.partition);
+      if (row.position===row.head && row.semantic_position===row.head && witness?.revision===BigInt(row.revision) && witness.claimRevision===BigInt(row.claim_revision)) continue;
+      await withConnection(pool,(client)=>client.query(`UPDATE search.discovery_population SET certified=false,after_route=NULL,after_id=NULL,reconcile_position=NULL,indexed=0
+        WHERE prefix=$1 AND generation=$2 AND partition_no=$3`,[prefix,target.generation,row.partition])); return;
+    }
+  }
+  if (await discoveryIndexUuid(search,index)!==target.uuid) throw new Error('Discovery incarnation changed before activation');
+  const previous=generations.find((row)=>row.state==='active');
+  await withConnection(pool,(client)=>client.query("UPDATE search.discovery_generation SET state='ready' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='reconciling'",[prefix,target.generation]));
+  await observedWrite(()=>search.request('POST','/_aliases',{actions:[
+    ...(previous ? [{remove:{index:discoveryIndexName(prefix,previous.generation),alias:discoveryAlias(prefix)}}]:[]),
+    {add:{index,alias:discoveryAlias(prefix)}}]}),async()=>{
+      const {body}=await search.request<Record<string,unknown>>('GET',`/_alias/${discoveryAlias(prefix)}`);
+      return Object.keys(body).length===1 && Object.hasOwn(body,index);
+    },'Discovery activation could not be established');
+  await withConnection(pool,async(client)=>{ await client.query('BEGIN'); try {
+    await client.query("UPDATE search.discovery_generation SET state='retiring' WHERE partition_no=0 AND prefix=$1 AND state='active' AND generation<>$2",[prefix,target.generation]);
+    await client.query("UPDATE search.discovery_generation SET state='active',activated_at=clock_timestamp() WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='ready'",[prefix,target.generation]);
+    await client.query('COMMIT');
+  } catch(error) { await client.query('ROLLBACK'); throw error; }});
+}
+
+/** CLI uses the same native factories and lifecycle as the default worker. */
+export async function rebuildDiscovery(options: {
+  pool:Pool; search:OpenSearch; source:SubjectSource; listing:SubjectListingSource; prefix:string; routeKey:Uint8Array;
+}) {
+  const registry=await nativeDiscoveryRegistry(options.pool,options.routeKey,options.source);
+  const previous=(await discoveryGenerations(options.pool,options.prefix)).find((row)=>row.state==='active')?.generation ?? null;
+  await allocateDiscovery(options.pool,options.prefix,registry);
+  const generation=(await discoveryGenerations(options.pool,options.prefix)).at(-1)?.generation;
+  if(generation===undefined) throw new Error('Discovery allocation is absent');
+  const runner=startDiscoveryIndexing(options), deadline=Date.now()+3_600_000;
+  try {
+    for(;;) {
+      await runner.refresh();
+      if((await discoveryGenerations(options.pool,options.prefix)).some((row)=>row.generation===generation && row.state==='active')) return {generation,previous};
+      if(Date.now()>=deadline) throw new RebuildError('timeout',generation);
+    }
+  } finally { await runner.stop(); }
 }

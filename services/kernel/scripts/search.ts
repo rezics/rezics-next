@@ -160,7 +160,7 @@ async function rebuild(): Promise<void> {
   if (!config) throw new ConfigError('OPENSEARCH_URL');
   const { createPool } = await import('../src/database/pool.ts');
   const { createOpenSearch } = await import('../src/search/opensearch.ts');
-  const { RebuildError, rebuildSubjects } = await import('../src/search/generations.ts');
+  const { RebuildError, rebuildSubjects, rebuildDiscovery } = await import('../src/search/generations.ts');
   const { createRatedSubjectSource } = await import('../src/search/rated-source.ts');
   const pool = createPool(databaseUrl);
   try {
@@ -172,7 +172,10 @@ async function rebuild(): Promise<void> {
       // The worker's runner discovers the new generation on its own.
       runner: { async refresh() {} },
     });
-    console.log(JSON.stringify(result));
+    const { subjectListingSource } = await import('../src/library/listing-counts.ts');
+    const discovery = await rebuildDiscovery({pool,search:createOpenSearch(config.url),
+      source:createRatedSubjectSource(pool,routeKey).source,listing:subjectListingSource(pool),prefix:config.prefix,routeKey});
+    console.log(JSON.stringify({...result,discovery}));
   } catch (error) {
     if (error instanceof RebuildError) {
       console.error(

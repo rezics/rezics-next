@@ -1,3 +1,9 @@
+import { withConnection } from '../database/pool.ts';
+import { readErasureStatus, resolveLateErasureItem } from '../access/erasure.ts';
+import { nativeDiscoveryRegistry, createDiscoveryProjection, registerRetiredErasure, copyLocator } from './account-discovery.ts';
+import { advanceDiscovery, discoveryGenerations, discoveryConsumer, type DiscoveryGeneration } from './generations.ts';
+import { createDiscoveryIndexer } from './indexer.ts';
+import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { Pool } from 'pg';
 import { startRelays } from '../events/relays.ts';
 import { OpenSearchError, type OpenSearch } from './opensearch.ts';
@@ -29,12 +35,14 @@ export async function startSearchIndexing(options: {
   discoverMs?: number;
   concurrency?: number;
   retireAfterMs?: number;
+  discovery?: {routeKey:Uint8Array};
 }): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
   const discoverMs = options.discoverMs ?? 5000;
   if (!Number.isInteger(discoverMs) || discoverMs < 1) throw new RangeError('discoverMs must be a positive integer');
   const retireAfterMs = options.retireAfterMs ?? 15 * 60_000;
   if (!Number.isFinite(retireAfterMs) || retireAfterMs < 0)
     throw new RangeError('retireAfterMs must be a non-negative finite number');
+  const mixed=options.discovery ? startDiscoveryIndexing({...options,routeKey:options.discovery.routeKey}) : undefined;
   let current: ReturnType<typeof startRelays> | undefined;
   let currentGenerations: number[] | undefined;
   const pendingRetirements = new Set<number>();
@@ -170,7 +178,7 @@ export async function startSearchIndexing(options: {
       paused = true;
       resumeAfter = undefined;
       clearSchedule();
-      const projection = current?.pause();
+      const projection = Promise.all([current?.pause(),mixed?.pause()]);
       // Discovery owns any relay set being replaced. Its successor is born paused;
       // drain both that admitted chain and the current projection before resuming.
       pauseDrain = Promise.all([discovery, projection]).then(async () => {
@@ -188,6 +196,7 @@ export async function startSearchIndexing(options: {
           resumeAfter = undefined;
           paused = false;
           current?.resume();
+          mixed?.resume();
           schedule();
         },
         (error) => {
@@ -203,7 +212,7 @@ export async function startSearchIndexing(options: {
       resumeAfter = undefined;
       clearSchedule();
       const previous = current;
-      const projection = previous?.stop();
+      const projection = Promise.all([previous?.stop(),mixed?.stop()]);
       closing = Promise.all([discovery, projection]).then(async () => {
         if (current && current !== previous) await current.stop();
         current = undefined;
@@ -211,6 +220,93 @@ export async function startSearchIndexing(options: {
       });
       return closing;
     },
-    refresh,
+    async refresh() {await Promise.all([refresh(),mixed?.refresh()]);},
   };
+}
+
+/** Default mixed-family lifecycle. Population and relays share the exact native projection/writer. */
+export function startDiscoveryIndexing(options: {
+  pool:Pool; search:OpenSearch; source:SubjectSource; listing:SubjectListingSource; prefix:string;
+  routeKey:Uint8Array; intervalMs?:number; concurrency?:number;
+}) {
+  const relays=new Map<number,ReturnType<typeof startRelays>>();
+  let stopped=false, paused=false, timer:ReturnType<typeof setTimeout>|undefined;
+  let running=Promise.resolve(), closing:Promise<void>|undefined, delay=options.intervalMs ?? 100;
+  const step=async()=>{
+    if (stopped || paused) return;
+    const registry=await nativeDiscoveryRegistry(options.pool,options.routeKey,options.source);
+    await advanceDiscovery({...options,registry});
+    const generations=await discoveryGenerations(options.pool,options.prefix);
+    delay=generations.some((row)=>!['active','retiring','quarantined'].includes(row.state)) ? 0 : options.intervalMs ?? 100;
+    for (const target of generations) {
+      if (!target.uuid || ['allocated','retired','quarantined','retiring'].includes(target.state)) continue;
+      if (!relays.has(target.generation)) {
+        const projection=createDiscoveryProjection({...options,target,registry});
+        relays.set(target.generation,startRelays(options.pool,[createDiscoveryIndexer(options.pool,projection,discoveryConsumer(options.prefix,target.generation))],{
+          paused,intervalMs:options.intervalMs ?? 100,concurrency:options.concurrency ?? 2,
+        }));
+      }
+    }
+    for (const target of generations.filter((row)=>row.state==='retiring')) {
+      await relays.get(target.generation)?.stop(); relays.delete(target.generation);
+      await retireDiscovery(options.pool,options.search,target,generations.find((row)=>row.state==='active'));
+    }
+    for (const [generation,relay] of relays) if (!generations.some((row)=>row.generation===generation && row.state!=='quarantined')) {
+      await relay.stop(); relays.delete(generation);
+    }
+  };
+  const refresh=()=>{
+    const next=running.then(step); running=next.catch((error)=>{console.error('Discovery maintenance failed',error);});
+    return next;
+  };
+  const schedule=(delay:number)=>{
+    if (stopped || paused) return;
+    timer=setTimeout(()=>{ timer=undefined; void refresh().then(()=>schedule(delay),()=>schedule(options.intervalMs ?? 100)); },delay);
+  };
+  schedule(0);
+  return {
+    refresh,
+    async pause() { paused=true; if(timer!==undefined) clearTimeout(timer); await running; await Promise.all([...relays.values()].map((relay)=>relay.pause())); },
+    resume() { if(stopped || !paused) return; paused=false; for(const relay of relays.values()) relay.resume(); schedule(0); },
+    stop() { if(closing) return closing; stopped=true; paused=true; if(timer!==undefined) clearTimeout(timer);
+      return closing=running.then(async()=>{await Promise.all([...relays.values()].map((relay)=>relay.stop()));relays.clear();}); },
+  };
+}
+
+async function retireDiscovery(pool:Pool,search:OpenSearch,target:DiscoveryGeneration,active:DiscoveryGeneration|undefined) {
+  if (!active) return;
+  const due=await withConnection(pool,async(client)=>(await client.query<{due:boolean}>(
+    `SELECT activated_at < clock_timestamp()-interval '15 minutes' AS due FROM search.discovery_generation
+     WHERE partition_no=0 AND prefix=$1 AND generation=$2`,[active.prefix,active.generation])).rows[0]?.due);
+  if (!due) return;
+  const index=discoveryIndexName(target.prefix,target.generation);
+  await withConnection(pool,async(client)=>{
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[index]);
+    try {
+      try {
+        if(await discoveryIndexUuid(search,index)!==target.uuid) throw new Error('Discovery retirement incarnation mismatch');
+        await search.request('DELETE',`/${index}`);
+      } catch(error) { if(!(error instanceof OpenSearchError && error.status===404)) throw error; }
+    } finally { await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[index]); }
+  });
+  // Reclaim a bounded locator page only after physical deletion. Late erasure items still resolve through Access.
+  const copies=await withConnection(pool,async(client)=>(await client.query<{route:number;id:string;kind:string}>(
+    `SELECT route,source_id::text AS id,kind FROM search.discovery_copy WHERE prefix=$1 AND generation=$2 ORDER BY route,source_id,kind LIMIT 100`,[target.prefix,target.generation])).rows);
+  for(const copy of copies) {
+    if(copy.kind==='account') {
+      const status=await withConnection(pool,(client)=>readErasureStatus(client,copy.id));
+      if(status) {
+        await registerRetiredErasure(pool,target,copy.id);
+        await resolveLateErasureItem({pool},{accountId:copy.id,participant:'search',locator:copyLocator(target)});
+      }
+    }
+    await withConnection(pool,(client)=>client.query('DELETE FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',[copy.route,copy.id,target.prefix,target.generation,copy.kind]));
+  }
+  if(copies.length) return;
+  await withConnection(pool,async(client)=>{await client.query('BEGIN');try {
+    await client.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND generation=$2',[target.prefix,target.generation]);
+    await client.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1',[discoveryConsumer(target.prefix,target.generation)]);
+    await client.query("UPDATE search.discovery_generation SET state='retired' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'",[target.prefix,target.generation]);
+    await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK');throw error;}});
 }

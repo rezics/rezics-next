@@ -263,9 +263,12 @@ export function discoveryBulkBody(
   registry: DiscoveryRegistry,
   index: string,
   actions: readonly DiscoveryIndexAction[],
+  options: { writeAlias?: string; replayDeletes?: boolean } = {},
 ): string {
   if (!/^[a-z0-9][a-z0-9-]{0,47}discovery-g[1-9][0-9]*$/.test(index))
     throw new RangeError('Invalid discovery index name');
+  if (options.writeAlias !== undefined && options.writeAlias !== `${index}-write`)
+    throw new RangeError('Invalid discovery write alias');
   const lines: string[] = [];
   for (const action of actions) {
     nativeVersion(action.version);
@@ -281,7 +284,12 @@ export function discoveryBulkBody(
       )
         throw new TypeError('Discovery action and document disagree');
     }
-    const metadata = JSON.stringify({ _index: index, _id: action.id, version_type: 'external' });
+    const metadata = JSON.stringify({
+      _index: options.writeAlias ?? index,
+      _id: action.id,
+      // A repeated deletion has the same minimized effect, including after a lost response.
+      version_type: action.op === 'delete' && options.replayDeletes ? 'external_gte' : 'external',
+    });
     lines.push(`{"${action.op}":${metadata.slice(0, -1)},"version":${action.version.toString()}}}`);
     if (action.op === 'index') lines.push(JSON.stringify(action.document));
   }

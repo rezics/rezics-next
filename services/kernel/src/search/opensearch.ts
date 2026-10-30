@@ -8,6 +8,8 @@ export type OpenSearch = {
     options?: { query?: SearchQuery; timeoutMs?: number },
   ): Promise<{ status: number; body: T }>;
   bulk<T = unknown>(lines: readonly unknown[], options?: { query?: SearchQuery; timeoutMs?: number }): Promise<T>;
+  /** Exact native bigint NDJSON; optional only for historical Subject-only test transports. */
+  bulkRaw?<T = unknown>(body: string, options?: { query?: SearchQuery; timeoutMs?: number }): Promise<T>;
 };
 
 export class OpenSearchError extends Error {
@@ -134,7 +136,12 @@ export function createOpenSearch(
     let responseBody: unknown;
     if (responseText) {
       try {
-        responseBody = JSON.parse(responseText) as unknown;
+        // Preserve native long receipts outside JavaScript's integer domain. Match strings first so
+        // digits in text/escaped JSON cannot be rewritten. Existing safe-number contracts are unchanged.
+        const exact = responseText.replace(/"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g, (token) =>
+          /^-?\d+$/.test(token) && !Number.isSafeInteger(Number(token)) ? JSON.stringify(token) : token,
+        );
+        responseBody = JSON.parse(exact) as unknown;
       } catch {
         if (response.status < 400) throw new SearchUnavailableError();
         // Non-JSON native errors retain their HTTP classification without retaining a raw response payload.
@@ -145,6 +152,9 @@ export function createOpenSearch(
   }
 
   return {
+    bulkRaw<T = unknown>(body: string, requestOptions?: { query?: SearchQuery; timeoutMs?: number }) {
+      return send<T>('POST', '/_bulk', body, 'application/x-ndjson', requestOptions).then((result) => result.body);
+    },
     request<T = unknown>(
       method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
       path: string,

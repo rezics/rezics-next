@@ -991,3 +991,23 @@ outcomes remain useful evidence; old protocol-specific home-certificate proof is
   pages, history/alias/duplicate axes, source tails, wrong-key outcomes, actual winner refresh, late writes after
   pruning, crash/replay and privacy changes. Performance supplies numeric allowances and captures. Existing
   certificate storage, helper or 256-proof checks do not establish this acceptance.
+
+## Account population
+
+The default starter and rebuild CLI install the actual Accounts source and current-summary readers in the closed
+Discovery registry. Both owners write canonical `discovery-v1` identities into the same `discovery-gN` family;
+legacy Subject callers retain their existing family and ABI. Account documents use only current handle/displayName,
+kind and exact native revision. Summaries remain owner reads. Source census is used only for generation reconciliation.
+
+A generation registers its replay consumer before bounded native enumeration. Independent Account/Subject frontiers
+advance after visible keyed settlement. Reconciliation checks every engine identity against current owner documents
+and both native censuses, then rechecks native Account/claim heads and partition positions before alias publication.
+Incomplete or mismatched generations retain their frontier and never replace the prior alias. Physical UUID and
+allocation incarnation bind every write. A permanent native per-key deletion high water and serialized physical
+writer prevent delayed replay after engine tombstone pruning. Writes require the generation's native write alias.
+
+Account copy locators commit under the Account erasure fence before external writes. Terminal cleanup uses the
+versioned Access late-item/acknowledgement protocol, purges every located generation and reclaims engine segments.
+Retirement drains relays, deletes the physical index, then reclaims locators/checkpoints; allocation names persist.
+These generation observations grant no query/count authorization. Mixed query owners must bracket all participating
+Account and claim partitions with the native witness and use current owner hydration, including for retained reads.

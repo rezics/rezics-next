@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { discoveryIndexDefinition as nativeDiscoveryDefinition } from './discovery-documents.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);
@@ -63,8 +64,34 @@ export function discoveryIndexDefinition(): SubjectIndexDefinition {
 }
 
 /** Allocation only; source exhaustion, replay, exact-key reconciliation and custody precede activation. */
-export async function createDiscoveryIndex(search: OpenSearch, prefix: string, generation: number): Promise<void> {
-  return createIndex(search, prefix, generation, discoveryIndexDefinition());
+export async function createDiscoveryIndex(search: OpenSearch, prefix: string, generation: number, incarnation?: string): Promise<void> {
+  const index = discoveryIndexName(prefix, generation);
+  const definition = nativeDiscoveryDefinition();
+  const response = await search.request<{ acknowledged?: boolean }>('PUT', `/${index}`, {
+    ...definition, mappings: { ...definition.mappings, _meta: {...definition.mappings._meta, incarnation} }, aliases: { [`${index}-write`]: { is_write_index: true } },
+  });
+  if (response.body.acknowledged !== true) throw new SearchUnavailableError('Discovery allocation was not acknowledged');
+}
+
+export function discoveryIndexName(prefix: string, generation: number): string {
+  validatePrefix(prefix);
+  validateGeneration(generation);
+  return `${prefix}discovery-g${generation}`;
+}
+
+export function discoveryAlias(prefix: string): string {
+  validatePrefix(prefix);
+  return `${prefix}discovery`;
+}
+
+export async function discoveryIndexUuid(search: OpenSearch, index: string): Promise<string> {
+  const response = await search.request<unknown>('GET', `/${index}/_settings`);
+  const entry = record(response.body) ? response.body[index] : undefined;
+  const settings = record(entry) ? entry.settings : undefined;
+  const native = record(settings) ? settings.index : undefined;
+  if (response.status !== 200 || !record(native) || typeof native.uuid !== 'string' || !native.uuid)
+    throw new SearchUnavailableError('Discovery physical incarnation is missing');
+  return native.uuid;
 }
 
 async function createIndex(

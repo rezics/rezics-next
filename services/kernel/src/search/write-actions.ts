@@ -1,5 +1,9 @@
 import { bulkLines, type IndexAction, type SearchDocument } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
+import { isDeepStrictEqual } from 'node:util';
+import type { DiscoveryIndexAction, DiscoveryRegistry } from './discovery.ts';
+import { discoveryBulkBody, validateDiscoveryDocument } from './discovery-documents.ts';
+import { assertCompleteSearch } from './complete-search.ts';
 
 /** A bulk write did not establish its required index visibility guarantee. */
 export class IndexWriteError extends Error {
@@ -41,7 +45,8 @@ function completeShards(shards: unknown): boolean {
 function validateBulkResponse(
   response: unknown,
   target: string,
-  actions: readonly IndexAction<SearchDocument>[],
+  actions: readonly Pick<IndexAction<SearchDocument>, 'op' | 'id' | 'version'>[],
+  exact = false,
 ): boolean {
   if (!isRecord(response) || typeof response.errors !== 'boolean' || !Array.isArray(response.items))
     return writeError([response]);
@@ -88,8 +93,9 @@ function validateBulkResponse(
 
     if (
       hasItemError ||
-      !safeInteger(result._version, 1) ||
-      BigInt(result._version) !== action.version ||
+      !(safeInteger(result._version, 1) ||
+        (exact && typeof result._version === 'string' && /^[1-9][0-9]{0,18}$/.test(result._version))) ||
+      BigInt(String(result._version)) !== action.version ||
       !safeInteger(result._seq_no, 0) ||
       !safeInteger(result._primary_term, 1) ||
       !completeShards(result._shards) ||
@@ -111,6 +117,48 @@ function validateBulkResponse(
 
   if (response.errors !== hasConflict) return writeError(items);
   return hasConflict;
+}
+
+/** Native mixed writer. A conflict settles only an identical, actually search-visible keyed winner. */
+export async function writeDiscoveryActions(
+  search: OpenSearch,
+  registry: DiscoveryRegistry,
+  index: string,
+  actions: readonly DiscoveryIndexAction[],
+): Promise<void> {
+  if (actions.length === 0) return;
+  if (!search.bulkRaw) throw new TypeError('Discovery requires the native exact-version transport');
+  const response = await search.bulkRaw<unknown>(
+    discoveryBulkBody(registry, index, actions, { writeAlias: `${index}-write`, replayDeletes: true }),
+    { query: { refresh: 'wait_for', require_alias: true, wait_for_active_shards: 'all' } },
+  );
+  if (!validateBulkResponse(response, index, actions, true)) return;
+  const refreshed = await search.request<RefreshResponse>('POST', `/${index}/_refresh`);
+  validateRefreshResponse(refreshed.status, refreshed.body);
+  if (!isRecord(response) || !Array.isArray(response.items)) return writeError([response]);
+  const receiptItems: unknown[] = response.items;
+  const conflicts = actions.filter((action, offset) => {
+    const item = receiptItems[offset];
+    return isRecord(item) && isRecord(item[action.op]) && item[action.op].status === 409;
+  });
+  const observed = await search.request<unknown>('POST', `/${index}/_search`, {
+    size: conflicts.length, version: true, query: { ids: { values: conflicts.map(({ id }) => id) } },
+  }, { query: { allow_partial_search_results: false } });
+  assertCompleteSearch(observed.body);
+  if (!isRecord(observed.body) || !isRecord(observed.body.hits) || !Array.isArray(observed.body.hits.hits))
+    return writeError([observed.body]);
+  const winners = new Map<string, Record<string, unknown>>();
+  for (const hit of observed.body.hits.hits) {
+    if (!isRecord(hit) || typeof hit._id !== 'string' || hit._index !== index || winners.has(hit._id))
+      return writeError([hit]);
+    winners.set(hit._id, hit);
+  }
+  for (const action of conflicts) {
+    const winner = winners.get(action.id);
+    if (action.op !== 'index' || !winner || String(winner._version) !== action.version.toString() ||
+      !isDeepStrictEqual(validateDiscoveryDocument(registry, winner._source), action.document))
+      return writeError([winner]);
+  }
 }
 
 function validateRefreshResponse(status: number, response: unknown): void {
