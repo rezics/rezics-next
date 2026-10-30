@@ -17,6 +17,7 @@ import readPostAuthor from './read-post-author.sql';
 import readThreadAuthor from './read-thread-author.sql';
 import type { DownloadDecision, DownloadVariant, MediaDependencies } from './media.ts';
 import read from './read-download-media.sql';
+import readWork from './read-download-media-work.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
 import {
   COVER_MEDIA_WORK_DEPENDENCY,
@@ -44,11 +45,18 @@ function selection(variant: string) {
   if (!(width < 320 || [320, 640, 960, 1280, 1920, 2560].includes(width))) return null;
   return { format: match[1]!, width };
 }
-async function point(client: AccessClient, id: string, slot: { format: string; width: number }): Promise<Row | null> {
-  const input = { route: route(id), media_id: id, ...slot };
+async function point(
+  client: AccessClient, id: string, slot: { format: string; width: number }, bounded = false,
+  credit = true, provenance = true,
+): Promise<Row | null> {
+  const input = {
+    route: route(id), media_id: id, ...slot,
+    credit_bytes: credit ? 8192 : 0, provenance_bytes: provenance ? 65536 : 0,
+  };
+  const statement = bounded ? readWork : read;
   const result = await client.query<Row>(
-    read.sql,
-    read.params.map((name) => input[name as keyof typeof input]),
+    statement.sql,
+    statement.params.map((name) => input[name as keyof typeof input]),
   );
   return result.rows.length === 1 ? result.rows[0]! : null;
 }
@@ -181,8 +189,9 @@ async function authorizeDownload(
             action: 'media:read',
             ...mediaEligibilityCallbacks({
               evidence: initial,
-              async verify({ client }) {
-                const current = await point(client, mediaId, slot);
+              media: { kind: 'download', route: r, id: mediaId, ...slot, credit: false, provenance: false },
+              async verify({ client }, reads) {
+                const current = await reads.media((bounded) => point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null));
                 if (!current || !usable(current) || signature(current) !== signature(initial))
                   throw new GrantDeniedError();
                 return true;
@@ -391,10 +400,16 @@ async function authorizeDownload(
           action: 'media:read',
           ...mediaEligibilityCallbacks({
             evidence: initial,
-            async verify({ client }) {
-              const current = await point(client, mediaId, slot);
+            media: {
+              kind: 'download', route: r, id: mediaId, ...slot, ancestors: chain,
+              credit: initial.credit !== null, provenance: initial.provenance !== null,
+            },
+            async verify({ client }, reads) {
+              const current = await reads.media((bounded) => point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null));
               if (!current || !usable(current) || signature(current) !== signature(initial)) throw new GrantDeniedError();
-              const currentChain = await mediaParentChain(client, current.container_id);
+              const currentChain = await mediaParentChain(client, current.container_id, (input) =>
+                reads.ancestor(input, () => parent.run(client, input)),
+              );
               if (signature(currentChain) !== signature(chain)) throw new GrantDeniedError();
               return publiclyVisible;
             },

@@ -129,7 +129,11 @@ export async function mediaParentSnapshot<T>(
 
 /** At most 33 posts and one thread, all on the container's exact route. The
  * board ID is a reference only: even a co-located board is read independently. */
-export async function mediaParentChain(client: AccessClient, containerId: string): Promise<MediaParent[]> {
+export async function mediaParentChain(
+  client: AccessClient,
+  containerId: string,
+  readParent = (input: { route: number; id: string; kind: string }) => parent.run(client, input),
+): Promise<MediaParent[]> {
   const result: MediaParent[] = [];
   const seen = new Set<string>();
   const r = route(containerId);
@@ -140,7 +144,7 @@ export async function mediaParentChain(client: AccessClient, containerId: string
   while (result.length < 34) {
     if (seen.has(id) || route(id) !== r) throw new GrantDeniedError();
     seen.add(id);
-    const rows = await parent.run(client, { route: r, id, kind });
+    const rows = await readParent({ route: r, id, kind });
     const row = existing(rows, id);
     result.push(row);
     if (row.kind === 'thread') {

@@ -585,12 +585,26 @@ records only its dispatched plans, keeps native row charges on empty seeks, and 
 context and result. Failure retains the complete admitted envelope. These receipts never replace the independent
 current image, container, ancestor, board, Realm, Space or source-fence authority.
 
-Metered image callbacks currently refuse before verification IO with a named projection dependency:
-`read-download-media.sql` and `realm-media-read.sql` project ThumbHash and average colour without enforced native
-size bounds for avatar, post and Realm assets. Post credit/provenance are also unconstrained. The cover-only display
-constraint is `NOT VALID`; it does not bound all existing rows. Cover callbacks additionally require the nested
-Semantic subject/Context Access check's own work declaration. No initial-row size is assumed to bound a fresh read.
-Unmetered download and paid-image behavior retain the existing native checks and cache policy.
+Metered avatar, post-image and Realm-image callbacks use separate `read-download-media-work.sql` and
+`realm-media-read-work.sql` projections. Each download point selects only its exact variant; Realm assets select
+at most twelve actual slots, bounded by the native unique slot index. Work-only optional ThumbHash and colour
+fields follow the generator's <=32-byte and `#rrggbb` formats. Malformed historical optional fields become null;
+a signature mismatch still fails closed. Whole credit/provenance must fit the existing import envelope's
+8192/65536 UTF-8 byte limits or the point returns unavailable. Required rights and binding facts are never clipped.
+These are field projection contracts, not Source allowances or assumptions that historical rows passed a constraint.
+The cover-only `NOT VALID` display constraint supplies no historical proof.
+
+Post-image verification also accounts for each actual native ancestor dispatch. Its declaration uses the captured
+chain (at most 33 posts and a thread); changed keys or kinds fail before an undeclared additional seek. The original
+native walker still proves routes, cycles, thread binding and availability. Closed wire projection and parameter
+bytes settle synchronously from the dispatched invocation; rows retain the full native plan charge, including on
+empty seeks. Initial captured rows and independent outer/final reads belong to their enclosing domain owner.
+
+Cover callbacks remain unavailable before verification IO with the precise dependency
+`Semantic subject:read current subject/Context AccessCheck work producer inside Content cover eligibility.verify`:
+`subjectReadEligibility` and its prepared subject/Context check must declare their own nested work first. No nested
+foreign callback runs under zero or estimated work. Unmetered download and paid-image behavior retain the existing
+queries, native checks and cache policy. A work receipt never supplies permission or whole-source readiness.
 
 ## Realm presentation media
 

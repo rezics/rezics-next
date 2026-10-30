@@ -12,7 +12,8 @@ import type { ReadContext } from './model.ts';
 import type { MediaVariant } from './media.ts';
 import { mediaParentSnapshot } from './media-parent.ts';
 import read from './realm-media-read.sql';
-import { mediaEligibilityCallbacks, REALM_MEDIA_WORK_DEPENDENCY } from './media-eligibility-access-work.ts';
+import readWork from './realm-media-read-work.sql';
+import { mediaEligibilityCallbacks } from './media-eligibility-access-work.ts';
 
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 const signature = (value: unknown) => JSON.stringify(value);
@@ -123,9 +124,11 @@ export async function authorizedRealmMedia(
               action: 'media:read',
               ...mediaEligibilityCallbacks({
                 evidence: row,
-                dependency: REALM_MEDIA_WORK_DEPENDENCY,
-                async verify({ client }) {
-                  const current = await read.run(client, { route, media_id: id });
+                media: { kind: 'realm', route, id },
+                async verify({ client }, reads) {
+                  const current = await reads.media((bounded) =>
+                    (bounded ? readWork : read).run(client, { route, media_id: id }),
+                  );
                   if (!current || !usable(current, realmId) || signature(current) !== signature(row))
                     throw new GrantDeniedError();
                   // The available derivative has a media floor; the independent Realm gate is mandatory.
