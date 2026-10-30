@@ -1,4 +1,4 @@
-WITH input AS NOT MATERIALIZED (
+WITH input AS (
   SELECT $1::integer AS route,$2::uuid AS account_id,$3::text AS direction,
          $7::uuid AS catalogue_id,$14::uuid AS verification_receipt_id
 )

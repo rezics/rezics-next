@@ -31,7 +31,7 @@ const approvalEvent = 'com.rezics.access.agent-verification.approved.v1';
 
 type WorkResult =
   | { ok: true }
-  | { ok: false; pending: true }
+  | { ok: false; pending: true; problem?: { type: string; detail: string } }
   | { ok: false; pending?: false; problem: { type: string; detail: string } };
 
 function retryable(error: unknown): boolean {
@@ -77,6 +77,18 @@ function problem(error: Error, type?: string): { type: string; detail: string } 
   return { type: type ?? error.name, detail: error.message.slice(0, 512) };
 }
 
+/** Keep the exact owner source report in bounded private workflow custody while retrying. */
+function pending(error: unknown): WorkResult {
+  return {
+    ok: false,
+    pending: true,
+    problem: problem(
+      error instanceof Error ? error : new Error(String(error)),
+      error instanceof IdentityEpochStoreError ? error.code : undefined,
+    ),
+  };
+}
+
 /** Register the durable, receipt-bound account-agent approval workflow and its outbox effect. */
 export function registerAgentVerificationWork(context: WorkContext): void {
   const reversalWorkflow = 'accounts.agent-verification-reversal';
@@ -90,7 +102,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await deliverAccountIdentity(context.pool, { kind: direction, account: accountId, receipt: receiptId });
         return { ok: true };
       } catch (error) {
-        if (retryable(error)) return { ok: false, pending: true };
+        if (retryable(error)) return pending(error);
         throw error;
       }
     },
@@ -102,7 +114,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await unmergeVerifiedAgent(context.pool, decision);
         return { ok: true };
       } catch (error) {
-        if (retryable(error)) return { ok: false, pending: true };
+        if (retryable(error)) return pending(error);
         throw error;
       }
     },
@@ -177,7 +189,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await recordPendingAgentVerification(context.pool, { ...request, receiptId }, context.clock);
         return { ok: true };
       } catch (error) {
-        if (retryable(error)) return { ok: false, pending: true };
+        if (retryable(error)) return pending(error);
         if (error instanceof AgentVerificationAccountError)
           return { ok: false, problem: problem(error, error.problemType) };
         throw error;
@@ -192,7 +204,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await mergeVerifiedAgent(context.pool, { ...request, receiptId });
         return { ok: true };
       } catch (error) {
-        if (retryable(error)) return { ok: false, pending: true };
+        if (retryable(error)) return pending(error);
         if (error instanceof AccountAgentVerificationError) return { ok: false, problem: problem(error) };
         throw error;
       }
@@ -206,7 +218,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await writeAgentVerificationPage(context.pool, { ...request, receiptId });
         return { ok: true };
       } catch (error) {
-        if (retryable(error)) return { ok: false, pending: true };
+        if (retryable(error)) return pending(error);
         if (error instanceof AgentVerificationPageConflictError)
           return { ok: false, problem: problem(error, error.problemType) };
         throw error;
