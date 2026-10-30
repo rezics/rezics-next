@@ -443,7 +443,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           mapped(() => write().batchRemoveMembers(actor, params.collectionId, body, key)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        return { collection: collectionView(result.value.collection), removed: result.value.removed };
+        return { collection: await written(result.value.collection, actor), removed: result.value.removed };
       },
     )
     .post(
@@ -474,8 +474,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         return {
-          source: collectionView(result.value.source),
-          destination: collectionView(result.value.destination),
+          source: await written(result.value.source, actor),
+          destination: await written(result.value.destination, actor),
           members: result.value.members.map(memberView),
         };
       },

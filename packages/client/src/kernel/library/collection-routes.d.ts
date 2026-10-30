@@ -5327,10 +5327,40 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 200: {
                                     collection: {
                                         id: string;
-                                        curatorAccountId: string;
+                                        curatorAccountId: string | null;
                                         title: string;
                                         description: string | null;
-                                        visibility: "private" | "unlisted" | "public";
+                                        visibility: "private" | "public" | "unlisted";
+                                        presentationKind: string | null;
+                                        presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                        cover?: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                        coverSource: "member" | "none" | "owner" | "pending";
+                                        coverMediaId?: string | null;
                                         revision: number;
                                         memberCount: number;
                                         createdAt: string;
@@ -5473,10 +5503,40 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 200: {
                                     source: {
                                         id: string;
-                                        curatorAccountId: string;
+                                        curatorAccountId: string | null;
                                         title: string;
                                         description: string | null;
-                                        visibility: "private" | "unlisted" | "public";
+                                        visibility: "private" | "public" | "unlisted";
+                                        presentationKind: string | null;
+                                        presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                        cover?: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                        coverSource: "member" | "none" | "owner" | "pending";
+                                        coverMediaId?: string | null;
                                         revision: number;
                                         memberCount: number;
                                         createdAt: string;
@@ -5484,10 +5544,40 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     };
                                     destination: {
                                         id: string;
-                                        curatorAccountId: string;
+                                        curatorAccountId: string | null;
                                         title: string;
                                         description: string | null;
-                                        visibility: "private" | "unlisted" | "public";
+                                        visibility: "private" | "public" | "unlisted";
+                                        presentationKind: string | null;
+                                        presentationKindSource: "empty" | "members" | "owner" | "pending";
+                                        cover?: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                        coverSource: "member" | "none" | "owner" | "pending";
+                                        coverMediaId?: string | null;
                                         revision: number;
                                         memberCount: number;
                                         createdAt: string;

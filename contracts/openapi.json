@@ -31773,11 +31773,159 @@
                     "collection": {
                       "additionalProperties": false,
                       "properties": {
+                        "cover": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "credit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "license": {
+                                  "type": "string"
+                                },
+                                "obligations": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "rightsHolder": {
+                                  "type": "string"
+                                },
+                                "via": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "url"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "rightsHolder",
+                                "via",
+                                "license",
+                                "obligations"
+                              ],
+                              "type": "object"
+                            },
+                            "focalPoint": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "x",
+                                "y"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "height": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "media": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "placeholder": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "color": {
+                                  "type": "string"
+                                },
+                                "thumbhash": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "thumbhash",
+                                "color"
+                              ],
+                              "type": "object"
+                            },
+                            "variants": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "format": {
+                                    "enum": [
+                                      "avif",
+                                      "webp"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "width": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "format",
+                                  "width"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "width": {
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "media",
+                            "width",
+                            "height",
+                            "placeholder",
+                            "variants",
+                            "focalPoint",
+                            "credit"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "coverMediaId": {
+                          "format": "uuid",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "coverSource": {
+                          "enum": [
+                            "owner",
+                            "member",
+                            "none",
+                            "pending"
+                          ],
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string"
                         },
                         "curatorAccountId": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "description": {
                           "type": [
@@ -31790,6 +31938,21 @@
                         },
                         "memberCount": {
                           "type": "integer"
+                        },
+                        "presentationKind": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "presentationKindSource": {
+                          "enum": [
+                            "owner",
+                            "members",
+                            "empty",
+                            "pending"
+                          ],
+                          "type": "string"
                         },
                         "revision": {
                           "maximum": 9007199254740991,
@@ -31817,6 +31980,9 @@
                         "title",
                         "description",
                         "visibility",
+                        "presentationKind",
+                        "presentationKindSource",
+                        "coverSource",
                         "revision",
                         "memberCount",
                         "createdAt",
@@ -32621,11 +32787,159 @@
                     "destination": {
                       "additionalProperties": false,
                       "properties": {
+                        "cover": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "credit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "license": {
+                                  "type": "string"
+                                },
+                                "obligations": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "rightsHolder": {
+                                  "type": "string"
+                                },
+                                "via": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "url"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "rightsHolder",
+                                "via",
+                                "license",
+                                "obligations"
+                              ],
+                              "type": "object"
+                            },
+                            "focalPoint": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "x",
+                                "y"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "height": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "media": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "placeholder": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "color": {
+                                  "type": "string"
+                                },
+                                "thumbhash": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "thumbhash",
+                                "color"
+                              ],
+                              "type": "object"
+                            },
+                            "variants": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "format": {
+                                    "enum": [
+                                      "avif",
+                                      "webp"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "width": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "format",
+                                  "width"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "width": {
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "media",
+                            "width",
+                            "height",
+                            "placeholder",
+                            "variants",
+                            "focalPoint",
+                            "credit"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "coverMediaId": {
+                          "format": "uuid",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "coverSource": {
+                          "enum": [
+                            "owner",
+                            "member",
+                            "none",
+                            "pending"
+                          ],
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string"
                         },
                         "curatorAccountId": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "description": {
                           "type": [
@@ -32638,6 +32952,21 @@
                         },
                         "memberCount": {
                           "type": "integer"
+                        },
+                        "presentationKind": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "presentationKindSource": {
+                          "enum": [
+                            "owner",
+                            "members",
+                            "empty",
+                            "pending"
+                          ],
+                          "type": "string"
                         },
                         "revision": {
                           "maximum": 9007199254740991,
@@ -32665,6 +32994,9 @@
                         "title",
                         "description",
                         "visibility",
+                        "presentationKind",
+                        "presentationKindSource",
+                        "coverSource",
                         "revision",
                         "memberCount",
                         "createdAt",
@@ -32705,11 +33037,159 @@
                     "source": {
                       "additionalProperties": false,
                       "properties": {
+                        "cover": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "credit": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "license": {
+                                  "type": "string"
+                                },
+                                "obligations": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "rightsHolder": {
+                                  "type": "string"
+                                },
+                                "via": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "url"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "rightsHolder",
+                                "via",
+                                "license",
+                                "obligations"
+                              ],
+                              "type": "object"
+                            },
+                            "focalPoint": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "x",
+                                "y"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "height": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "media": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "placeholder": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "color": {
+                                  "type": "string"
+                                },
+                                "thumbhash": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "thumbhash",
+                                "color"
+                              ],
+                              "type": "object"
+                            },
+                            "variants": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "format": {
+                                    "enum": [
+                                      "avif",
+                                      "webp"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "width": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "format",
+                                  "width"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "width": {
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "media",
+                            "width",
+                            "height",
+                            "placeholder",
+                            "variants",
+                            "focalPoint",
+                            "credit"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "coverMediaId": {
+                          "format": "uuid",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "coverSource": {
+                          "enum": [
+                            "owner",
+                            "member",
+                            "none",
+                            "pending"
+                          ],
+                          "type": "string"
+                        },
                         "createdAt": {
                           "type": "string"
                         },
                         "curatorAccountId": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "description": {
                           "type": [
@@ -32722,6 +33202,21 @@
                         },
                         "memberCount": {
                           "type": "integer"
+                        },
+                        "presentationKind": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "presentationKindSource": {
+                          "enum": [
+                            "owner",
+                            "members",
+                            "empty",
+                            "pending"
+                          ],
+                          "type": "string"
                         },
                         "revision": {
                           "maximum": 9007199254740991,
@@ -32749,6 +33244,9 @@
                         "title",
                         "description",
                         "visibility",
+                        "presentationKind",
+                        "presentationKindSource",
+                        "coverSource",
                         "revision",
                         "memberCount",
                         "createdAt",
