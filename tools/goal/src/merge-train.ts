@@ -2019,6 +2019,9 @@ export class MergeTrain {
         const matchingIntegrationChecks = configuredIntegrationChecks.filter((check) =>
           result.changedFiles.some((path) => matchesPath(path, check.paths)),
         );
+        // `clean -fdx` above removed node_modules; remote checks resolve the pinned Bun from it, so every stabilize
+        // landing's first check failed before running (2026-10-29). Control-plane landings install their own.
+        if (!skipDevChecks && !controlPlane && !existsSync(join(trainTree, 'node_modules'))) installShared(trainTree);
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const affectedChecks = skipDevChecks
