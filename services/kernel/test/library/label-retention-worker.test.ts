@@ -17,33 +17,64 @@ let f: NativeProfileFixture;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let worker: ChildProcessWithoutNullStreams | undefined;
 let time = Date.now();
-const origin = time, clock = () => new Date(time), windowMs = 720 * 60 * 60 * 1000;
+const origin = time,
+  clock = () => new Date(time),
+  windowMs = 720 * 60 * 60 * 1000;
 const executor = `label-retention-${crypto.randomUUID()}`;
 const directory = resolve(import.meta.dir, '../../../../.temp', executor);
 const timePath = `${directory}/clock`;
 let output = '';
 const signals = new Set<() => void>();
-const reader = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1, options: '-c default_transaction_read_only=on' });
+const reader = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 1,
+  options: '-c default_transaction_read_only=on',
+});
 beforeAll(async () => {
   mkdirSync(directory, { recursive: true });
   f = await createProfileEntryFixture({ clock, projectLinks: false });
   client = await createWorkClient(process.env.DATABASE_URL!);
 }, 120000);
-afterAll(async () => { await stop(); await client?.close(); await reader.end(); await f?.close(); });
-function tick(value: number) { time = value; writeFileSync(timePath, String(time)); }
+afterAll(async () => {
+  await stop();
+  await client?.close();
+  await reader.end();
+  await f?.close();
+});
+function tick(value: number) {
+  time = value;
+  writeFileSync(timePath, String(time));
+}
 async function waitFor(marker: string) {
   if (output.includes(marker)) return;
   await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => { signals.delete(ready); reject(new Error(`Missing ${marker}: ${output}`)); }, 120000);
-    const ready = () => { if (output.includes(marker)) { clearTimeout(timeout); signals.delete(ready); resolve(); } };
+    const timeout = setTimeout(() => {
+      signals.delete(ready);
+      reject(new Error(`Missing ${marker}: ${output}`));
+    }, 120000);
+    const ready = () => {
+      if (output.includes(marker)) {
+        clearTimeout(timeout);
+        signals.delete(ready);
+        resolve();
+      }
+    };
     signals.add(ready);
   });
 }
 async function start(mode = 'recover') {
-  output = ''; tick(time);
-  worker = spawn(process.execPath, [`${import.meta.dir}/support/label-retention-runtime.ts`, mode, executor, timePath],
-    { cwd: process.cwd(), env: process.env, stdio: 'pipe' });
-  for (const stream of [worker.stdout, worker.stderr]) stream.on('data', (data) => { output += data.toString(); for (const signal of signals) signal(); });
+  output = '';
+  tick(time);
+  worker = spawn(
+    process.execPath,
+    [`${import.meta.dir}/support/label-retention-runtime.ts`, mode, executor, timePath],
+    { cwd: process.cwd(), env: process.env, stdio: 'pipe' },
+  );
+  for (const stream of [worker.stdout, worker.stderr])
+    stream.on('data', (data) => {
+      output += data.toString();
+      for (const signal of signals) signal();
+    });
   await waitFor('worker-ready');
 }
 async function stop(kill = false) {
@@ -52,7 +83,10 @@ async function stop(kill = false) {
   process.stdin.write('release\n');
   await new Promise<void>((resolve) => {
     const timeout = setTimeout(() => process.kill('SIGKILL'), 5000);
-    process.once('exit', () => { clearTimeout(timeout); resolve(); });
+    process.once('exit', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
     process.kill(kill ? 'SIGKILL' : 'SIGTERM');
   });
   worker = undefined;
@@ -60,25 +94,42 @@ async function stop(kill = false) {
 async function rows(accountId: string, id: string) {
   const args = [routeOf(accountId), accountId, id];
   return {
-    labels: (await reader.query('SELECT normalized_name,revision,deleted_at::text,purge_after::text FROM library.personal_label WHERE route=$1 AND account_id=$2 AND label_id=$3', args)).rows,
-    children: (await reader.query('SELECT subject_id,assignment_id,revision,slot_no,deleted_at::text,purge_after::text FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND label_id=$3 ORDER BY subject_id', args)).rows,
+    labels: (
+      await reader.query(
+        'SELECT normalized_name,revision,deleted_at::text,purge_after::text FROM library.personal_label WHERE route=$1 AND account_id=$2 AND label_id=$3',
+        args,
+      )
+    ).rows,
+    children: (
+      await reader.query(
+        'SELECT subject_id,assignment_id,revision,slot_no,deleted_at::text,purge_after::text FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND label_id=$3 ORDER BY subject_id',
+        args,
+      )
+    ).rows,
   };
 }
 async function drain(partition: number, after: string | null = null, limit = 100) {
-  let examined = 0, removed = 0, pages = 0;
+  let examined = 0,
+    removed = 0,
+    pages = 0;
   do {
     const result = await purgeLabelRetentionPage({ pool: f.pool, clock }, { partition, limit, after });
     expect(result.examined).toBeLessThanOrEqual(limit);
     expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(4096);
-    examined += result.examined; removed += result.removed; after = result.next; pages++;
+    examined += result.examined;
+    removed += result.removed;
+    after = result.next;
+    pages++;
     if (pages > 1000) throw new Error('Unbounded retention cursor');
   } while (after);
   return { examined, removed, pages };
 }
 async function segment(partition: number) {
   const root = `label-retention:${crypto.randomUUID()}`;
-  const handle = await client.enqueue({ workflowName: 'library.labelRetentionSegment', workflowID: root, queueName: 'maintenance' },
-    { root, sequence: 0, partition, after: null });
+  const handle = await client.enqueue(
+    { workflowName: 'library.labelRetentionSegment', workflowID: root, queueName: 'maintenance' },
+    { root, sequence: 0, partition, after: null },
+  );
   return { handle, root };
 }
 
@@ -98,7 +149,8 @@ test('default scheduled exact label and assignment purge is child-first replacem
   const deleted = await target.commands.deleteLabel(owner, target.id, target.revision, entryKey());
   const replacement = await label(f, owner, clock, 'Private shared normalized name');
   await assignment(f, owner, replacement.id, subject, clock);
-  const liveBefore = await rows(owner.accountId, replacement.id), otherBefore = await rows(other.accountId, untouched.id);
+  const liveBefore = await rows(owner.accountId, replacement.id),
+    otherBefore = await rows(other.accountId, untouched.id);
   const sourceBefore = await generation(owner.accountId);
   tick(origin + windowMs - 1);
   expect((await drain(4095)).removed).toBe(0);
@@ -111,20 +163,24 @@ test('default scheduled exact label and assignment purge is child-first replacem
     expect(schedule?.workflowName).toBe(LABEL_RETENTION_SWEEP_WORKFLOW);
     expect(schedule?.cronTimezone).toBe('UTC');
     const scheduled = await client.triggerSchedule(LABEL_RETENTION_SCHEDULE);
-    let frontier = await scheduled.getResult({ pollingIntervalMs: 20 }) as { partition: number; after: string | null };
+    let frontier = (await scheduled.getResult({ pollingIntervalMs: 20 })) as {
+      partition: number;
+      after: string | null;
+    };
     for (let sequence = 1; frontier.partition < 4096; sequence++) {
       const continuation = client.retrieveWorkflow(`library.labelRetention:${scheduled.workflowID}:${sequence}`);
-      frontier = await continuation.getResult({ pollingIntervalMs: 20 }) as typeof frontier;
+      frontier = (await continuation.getResult({ pollingIntervalMs: 20 })) as typeof frontier;
     }
     // Also inspect the bounded page outputs through the default registered segment callsite.
     const { handle, root } = await segment(4095);
     await handle.getResult({ pollingIntervalMs: 20 });
     const steps = await client.listWorkflowSteps(root);
-    for (const step of steps ?? []) if (step.name === 'library.labelRetentionPage') {
-      const page = step.output as { examined: number };
-      expect(page.examined).toBeLessThanOrEqual(100);
-      expect(Buffer.byteLength(JSON.stringify(step.output))).toBeLessThanOrEqual(4096);
-    }
+    for (const step of steps ?? [])
+      if (step.name === 'library.labelRetentionPage') {
+        const page = step.output as { examined: number };
+        expect(page.examined).toBeLessThanOrEqual(100);
+        expect(Buffer.byteLength(JSON.stringify(step.output))).toBeLessThanOrEqual(4096);
+      }
     expect(await rows(owner.accountId, target.id)).toEqual({ labels: [], children: [] });
     expect((await rows(owner.accountId, individual.id)).children).toEqual([]);
     expect(await rows(owner.accountId, replacement.id)).toEqual(liveBefore);
@@ -132,7 +188,9 @@ test('default scheduled exact label and assignment purge is child-first replacem
     expect(await generation(owner.accountId)).toEqual(sourceBefore);
     expect((await drain(4095)).removed).toBe(0);
     expect(deleted.value.revision).toBe(2);
-  } finally { await stop(); }
+  } finally {
+    await stop();
+  }
 }, 300000);
 
 test('captured D1 cannot consume restored D3 or a reclaimed slot; original individual expiry and exact timestamps survive stale work', async () => {
@@ -144,7 +202,8 @@ test('captured D1 cannot consume restored D3 or a reclaimed slot; original indiv
   const d1 = await target.commands.deleteLabel(owner, target.id, 1, entryKey());
   tick(origin + windowMs);
   const captured = await purgeLabelRetentionPage({ pool: f.pool, clock }, { partition: 4094, limit: 1, after: null });
-  expect(captured.next).not.toBeNull(); expect(captured.removed).toBe(0);
+  expect(captured.next).not.toBeNull();
+  expect(captured.removed).toBe(0);
   tick(origin + 1000);
   await target.commands.restoreLabel(owner, target.id, d1.value.revision, entryKey());
   await target.commands.deleteLabel(owner, target.id, 3, entryKey());
@@ -194,7 +253,9 @@ test('parked source versus restore and native commit before checkpoint recover o
     expect((await drain(4093)).removed).toBe(0);
     const steps = await client.listWorkflowSteps(crashed.root);
     expect(steps?.some((step) => step.name === 'library.labelRetentionPage')).toBe(true);
-  } finally { await stop(); }
+  } finally {
+    await stop();
+  }
 }, 300000);
 
 test('native rollback is effect free and the current owner fence wins over a captured ordinary purge', async () => {
@@ -208,20 +269,27 @@ test('native rollback is effect free and the current owner fence wins over a cap
   let fail = true;
   await observeRetentionQueries(f.pool, ({ sql, result }) => {
     if (fail && /DELETE FROM library.personal_label AS p/i.test(sql) && result.rows.length) {
-      fail = false; throw new Error('injected pre-commit failure');
+      fail = false;
+      throw new Error('injected pre-commit failure');
     }
   });
   await expect(drain(4092, captured.next)).rejects.toThrow('injected pre-commit failure');
   expect(await rows(owner.accountId, target.id)).toEqual(before);
   await createLifecycleCommands({ pool: f.pool, access: f.access, clock }).tombstone(
-    { actor: owner, deadline: deadlineFor(30000) }, { accountId: owner.accountId, key: entryKey() });
+    { actor: owner, deadline: deadlineFor(30000) },
+    { accountId: owner.accountId, key: entryKey() },
+  );
   expect((await drain(4092, captured.next)).removed).toBe(0);
   expect(await rows(owner.accountId, target.id)).toEqual(before);
 }, 120000);
 
 async function generation(accountId: string) {
-  return (await reader.query('SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2',
-    [routeOf(accountId), accountId])).rows;
+  return (
+    await reader.query('SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2', [
+      routeOf(accountId),
+      accountId,
+    ])
+  ).rows;
 }
 
 test('a captured due parent never releases a reclaimed slot or consumes its replacement definition', async () => {
@@ -241,7 +309,8 @@ test('a captured due parent never releases a reclaimed slot or consumes its repl
   const replacement = await label(f, owner, clock);
   await assignment(f, owner, replacement.id, subject, clock);
   const reclaimed = (await rows(owner.accountId, target.id)).children[0]!;
-  expect(reclaimed.slot_no).toBeNull(); expect(reclaimed.revision).toBe(2);
+  expect(reclaimed.slot_no).toBeNull();
+  expect(reclaimed.revision).toBe(2);
   expect(Date.parse(reclaimed.purge_after) - Date.parse(reclaimed.deleted_at)).toBe(windowMs);
   const before = await rows(owner.accountId, replacement.id);
   tick(origin + windowMs);
@@ -259,11 +328,21 @@ test('exact captured assignment purge loses to restore and a later independent u
   await assignment(f, owner, target.id, subject, clock, 'unassign');
   let release!: () => void, captured!: () => void;
   let once = true;
-  const parked = new Promise<void>((resolve) => { captured = resolve; });
-  const resume = new Promise<void>((resolve) => { release = resolve; });
+  const parked = new Promise<void>((resolve) => {
+    captured = resolve;
+  });
+  const resume = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   await observeRetentionQueries(f.pool, async ({ sql, result }) => {
-    if (once && /FROM library.label_assignment WHERE route=\$1 AND deleted_at IS NOT NULL/i.test(sql) && result.rows.length) {
-      once = false; captured(); await resume;
+    if (
+      once &&
+      /FROM library.label_assignment WHERE route=\$1 AND deleted_at IS NOT NULL/i.test(sql) &&
+      result.rows.length
+    ) {
+      once = false;
+      captured();
+      await resume;
     }
   });
   tick(origin + windowMs);
@@ -272,9 +351,11 @@ test('exact captured assignment purge loses to restore and a later independent u
   tick(origin + 1000);
   await assignment(f, owner, target.id, subject, clock, 'restore');
   await assignment(f, owner, target.id, subject, clock, 'unassign');
-  const before = await rows(owner.accountId, target.id), source = await generation(owner.accountId);
+  const before = await rows(owner.accountId, target.id),
+    source = await generation(owner.accountId);
   tick(origin + windowMs);
-  release(); await running;
+  release();
+  await running;
   expect(await rows(owner.accountId, target.id)).toEqual(before);
   expect(await generation(owner.accountId)).toEqual(source);
   tick(origin + windowMs + 1000);

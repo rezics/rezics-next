@@ -14,19 +14,30 @@ export const libraryWorkModule: WorkModule = {
   },
 };
 
-
 export const LABEL_RETENTION_SWEEP_WORKFLOW = 'library.labelRetentionSweep';
 export const LABEL_RETENTION_SCHEDULE = 'library.labelRetention.every-10-minutes';
 type LabelSweep = { root: string; sequence: number; partition: number; after: string | null };
 
 async function registerLabelRetention({ pool, client, clock }: WorkContext) {
-  const page = DBOS.registerStep(async (partition: number, after: string | null) =>
-    purgeLabelRetentionPage({ pool, clock }, { partition, limit: 100, after }),
-    { name: 'library.labelRetentionPage', ...COMMAND_STEP_RETRIES });
-  const continuation = DBOS.registerStep(async (input: LabelSweep) => {
-    await client.enqueue({ workflowName: 'library.labelRetentionSegment', queueName: 'maintenance',
-      workflowID: `library.labelRetention:${input.root}:${input.sequence}`, workflowIDReusePolicy: 'return-existing' }, input);
-  }, { name: 'library.labelRetentionContinue', ...COMMAND_STEP_RETRIES });
+  const page = DBOS.registerStep(
+    async (partition: number, after: string | null) =>
+      purgeLabelRetentionPage({ pool, clock }, { partition, limit: 100, after }),
+    { name: 'library.labelRetentionPage', ...COMMAND_STEP_RETRIES },
+  );
+  const continuation = DBOS.registerStep(
+    async (input: LabelSweep) => {
+      await client.enqueue(
+        {
+          workflowName: 'library.labelRetentionSegment',
+          queueName: 'maintenance',
+          workflowID: `library.labelRetention:${input.root}:${input.sequence}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        input,
+      );
+    },
+    { name: 'library.labelRetentionContinue', ...COMMAND_STEP_RETRIES },
+  );
   const segment = async (input: LabelSweep) => {
     let { partition, after } = input;
     for (let n = 0; n < 100 && partition < 4096; n++) {
@@ -37,8 +48,17 @@ async function registerLabelRetention({ pool, client, clock }: WorkContext) {
     return { partition, after };
   };
   DBOS.registerWorkflow(segment, { name: 'library.labelRetentionSegment' });
-  DBOS.registerWorkflow(async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }),
-    { name: LABEL_RETENTION_SWEEP_WORKFLOW });
-  await client.applySchedules([{ scheduleName: LABEL_RETENTION_SCHEDULE, workflowName: LABEL_RETENTION_SWEEP_WORKFLOW,
-    schedule: '*/10 * * * *', cronTimezone: 'UTC', automaticBackfill: false, queueName: 'maintenance' }]);
+  DBOS.registerWorkflow(async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }), {
+    name: LABEL_RETENTION_SWEEP_WORKFLOW,
+  });
+  await client.applySchedules([
+    {
+      scheduleName: LABEL_RETENTION_SCHEDULE,
+      workflowName: LABEL_RETENTION_SWEEP_WORKFLOW,
+      schedule: '*/10 * * * *',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+      queueName: 'maintenance',
+    },
+  ]);
 }
