@@ -1,10 +1,16 @@
-import { recordAccountIdentitySource, probeAccountIdentityPublication, readOriginalAgentIdentityDecision, publishedAccountIdentityUndo, accountIdentityUnavailable } from './agent-verification-identity.ts';
+import {
+  recordAccountIdentitySource,
+  probeAccountIdentityPublication,
+  readOriginalAgentIdentityDecision,
+  publishedAccountIdentityUndo,
+  accountIdentityUnavailable,
+} from './agent-verification-identity.ts';
 import { accountAgentId } from '../semantic/agents.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
-import { runCommand,noEffect } from '../command/command.ts';
+import { runCommand, noEffect } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';
@@ -689,9 +695,13 @@ export async function recordPendingAgentVerification(
   const route = routeOf(input.accountId);
   if (route === null) throw new AgentVerificationAccountError('The account route is invalid');
   const accountKind = input.accountKind === 'actor' ? 'actor' : 'organization';
-  const decision = await readOriginalAgentIdentityDecision(pool,input.id,input.receiptId);
-  if (decision.account_id !== input.accountId || decision.account_kind !== input.accountKind ||
-      decision.requested_by !== input.requestedBy || decision.catalogue_subject_id !== input.catalogueSubjectId)
+  const decision = await readOriginalAgentIdentityDecision(pool, input.id, input.receiptId);
+  if (
+    decision.account_id !== input.accountId ||
+    decision.account_kind !== input.accountKind ||
+    decision.requested_by !== input.requestedBy ||
+    decision.catalogue_subject_id !== input.catalogueSubjectId
+  )
     throw accountIdentityUnavailable(`mismatched original Global decision ${input.id}:${input.receiptId}`);
   const accepted = await activeRelease(pool);
   if (!accepted) throw accountIdentityUnavailable('accepted Global release is unavailable');
@@ -738,10 +748,21 @@ export async function recordPendingAgentVerification(
       );
       if (!recorded) throw new AgentVerificationAccountError('The account could not record pending verification');
       await recordAccountIdentitySource(tx, {
-        account:input.accountId,accountKind,catalogue:input.catalogueSubjectId,
-        receipt:{ kind:'account-agent.verify',account:input.accountId,receipt:input.receiptId },
-        intent:{ kind:'merge',redirected:accountAgentId(input.accountId),survivor:input.catalogueSubjectId,release:accepted.digest },
-        requestedBy:input.requestedBy,decidedBy:decision.decided_by,requestId:input.id,pendingReceipt:transactionId,decision,
+        account: input.accountId,
+        accountKind,
+        catalogue: input.catalogueSubjectId,
+        receipt: { kind: 'account-agent.verify', account: input.accountId, receipt: input.receiptId },
+        intent: {
+          kind: 'merge',
+          redirected: accountAgentId(input.accountId),
+          survivor: input.catalogueSubjectId,
+          release: accepted.digest,
+        },
+        requestedBy: input.requestedBy,
+        decidedBy: decision.decided_by,
+        requestId: input.id,
+        pendingReceipt: transactionId,
+        decision,
       });
       return {
         value: { requestId: input.id, accountId: input.accountId },
@@ -775,7 +796,11 @@ export async function writeAgentVerificationPage(
   pool: Pool,
   input: AgentVerificationWorkflowRequest & { receiptId: string },
 ): Promise<void> {
-  await probeAccountIdentityPublication(pool,{ kind:'account-agent.verify',account:input.accountId,receipt:input.receiptId });
+  await probeAccountIdentityPublication(pool, {
+    kind: 'account-agent.verify',
+    account: input.accountId,
+    receipt: input.receiptId,
+  });
   const route = routeOf(input.catalogueSubjectId);
   if (route === null) throw new AgentVerificationAccountError('The catalogue subject route is invalid');
   await withConnection(pool, async (client) => {
@@ -797,7 +822,11 @@ export async function completeAgentVerification(
   input: AgentVerificationWorkflowRequest & { receiptId: string },
   clock: () => Date,
 ): Promise<void> {
-  await probeAccountIdentityPublication(pool,{ kind:'account-agent.verify',account:input.accountId,receipt:input.receiptId });
+  await probeAccountIdentityPublication(pool, {
+    kind: 'account-agent.verify',
+    account: input.accountId,
+    receipt: input.receiptId,
+  });
   const route = routeOf(input.accountId);
   if (route === null) throw new AgentVerificationAccountError('The account route is invalid');
   const digest = createHash('sha256')
@@ -891,7 +920,11 @@ export async function finishAgentVerification(
   input: AgentVerificationWorkflowRequest & { receiptId: string },
   clock: () => Date,
 ): Promise<void> {
-  await probeAccountIdentityPublication(pool,{ kind:'account-agent.verify',account:input.accountId,receipt:input.receiptId });
+  await probeAccountIdentityPublication(pool, {
+    kind: 'account-agent.verify',
+    account: input.accountId,
+    receipt: input.receiptId,
+  });
   const digest = createHash('sha256')
     .update(JSON.stringify([input.id, input.accountId, input.catalogueSubjectId, input.receiptId, 'approved']))
     .digest();
@@ -1030,13 +1063,23 @@ async function reverse(
           context,
           true,
         );
-  const before = (await runCommand(config.pool,{
-    partition:partitionOf(route),authorization,deadline:context.deadline,clock:config.clock,
-    basis:{ actorAccountId:actor.accountId,clientId:actor.clientId,requestedBy:actor.requestedBy },
-  },async (tx) => noEffect(await accountRead.run(tx as PoolClient,{ route,account_id:input.accountId })))).value;
-  const undo = before?.agentVerified && before.agentVerificationReceiptId && before.agentSubjectId
-    ? await publishedAccountIdentityUndo(config.pool,input.accountId,before.agentVerificationReceiptId)
-    : null;
+  const before = (
+    await runCommand(
+      config.pool,
+      {
+        partition: partitionOf(route),
+        authorization,
+        deadline: context.deadline,
+        clock: config.clock,
+        basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
+      },
+      async (tx) => noEffect(await accountRead.run(tx as PoolClient, { route, account_id: input.accountId })),
+    )
+  ).value;
+  const undo =
+    before?.agentVerified && before.agentVerificationReceiptId && before.agentSubjectId
+      ? await publishedAccountIdentityUndo(config.pool, input.accountId, before.agentVerificationReceiptId)
+      : null;
   return runCommand(
     config.pool,
     {
@@ -1083,19 +1126,34 @@ async function commitReversal(
   );
   if (!previous?.catalogueSubjectId || !previous.verificationReceiptId) throw new AgentVerificationConflictError();
   const verification = undo.source.input;
-  if (verification.receipt.kind !== 'account-agent.verify' || verification.intent.kind !== 'merge' ||
-      verification.receipt.receipt !== previous.verificationReceiptId ||
-      verification.intent.survivor !== previous.catalogueSubjectId)
+  if (
+    verification.receipt.kind !== 'account-agent.verify' ||
+    verification.intent.kind !== 'merge' ||
+    verification.receipt.receipt !== previous.verificationReceiptId ||
+    verification.intent.survivor !== previous.catalogueSubjectId
+  )
     throw new AgentVerificationConflictError();
-  const account = await accountRead.run(tx as PoolClient,{ route:routeOf(accountId)!,account_id:accountId });
+  const account = await accountRead.run(tx as PoolClient, { route: routeOf(accountId)!, account_id: accountId });
   if (!account) throw new AgentVerificationConflictError();
-  await recordAccountIdentitySource(tx,{
-    account:accountId,accountKind:account.kind as 'actor' | 'organization',catalogue:previous.catalogueSubjectId,
-    receipt:{ kind:'account-agent.unverify',account:accountId,receipt:receiptId },
-    intent:{ kind:'unmerge',original:accountAgentId(accountId),undoJob:undo.job,
-      verificationReceipt:previous.verificationReceiptId,release:verification.intent.release },
-    requestedBy,decidedBy:kind === 'revoked' ? requestedBy : null,requestId:null,pendingReceipt:receiptId,
-    verificationReceipt:previous.verificationReceiptId,disposition:kind,reason,
+  await recordAccountIdentitySource(tx, {
+    account: accountId,
+    accountKind: account.kind as 'actor' | 'organization',
+    catalogue: previous.catalogueSubjectId,
+    receipt: { kind: 'account-agent.unverify', account: accountId, receipt: receiptId },
+    intent: {
+      kind: 'unmerge',
+      original: accountAgentId(accountId),
+      undoJob: undo.job,
+      verificationReceipt: previous.verificationReceiptId,
+      release: verification.intent.release,
+    },
+    requestedBy,
+    decidedBy: kind === 'revoked' ? requestedBy : null,
+    requestId: null,
+    pendingReceipt: receiptId,
+    verificationReceipt: previous.verificationReceiptId,
+    disposition: kind,
+    reason,
   });
   const value: AgentVerificationReversal = {
     accountId,
@@ -1122,8 +1180,9 @@ export async function reverseDeletedAccountAgent(pool: Pool, accountId: string):
   if (account?.state !== 'deleted') return;
   if (account.pendingAgentReceiptId !== null) throw new Error('Account agent work is still pending');
   if (!account.agentVerified) return;
-  if (!account.agentVerificationReceiptId) throw accountIdentityUnavailable('deleted account lacks original verification receipt');
-  const undo = await publishedAccountIdentityUndo(pool,accountId,account.agentVerificationReceiptId);
+  if (!account.agentVerificationReceiptId)
+    throw accountIdentityUnavailable('deleted account lacks original verification receipt');
+  const undo = await publishedAccountIdentityUndo(pool, accountId, account.agentVerificationReceiptId);
   await runCommand(
     pool,
     {
@@ -1136,7 +1195,7 @@ export async function reverseDeletedAccountAgent(pool: Pool, accountId: string):
       },
     },
     (tx, { transactionId }) =>
-      commitReversal(tx, accountId, transactionId, accountId, 'revoked', 'Account deleted',undo),
+      commitReversal(tx, accountId, transactionId, accountId, 'revoked', 'Account deleted', undo),
   );
 }
 
@@ -1151,7 +1210,11 @@ export async function unmergeVerifiedAgent(pool: Pool, input: AgentVerificationR
 }
 
 export async function removeAgentVerificationPage(pool: Pool, input: AgentVerificationReversal): Promise<void> {
-  await probeAccountIdentityPublication(pool,{ kind:'account-agent.unverify',account:input.accountId,receipt:input.receiptId });
+  await probeAccountIdentityPublication(pool, {
+    kind: 'account-agent.unverify',
+    account: input.accountId,
+    receipt: input.receiptId,
+  });
   await agentPageDelete.run(pool, {
     route: routeOf(input.catalogueSubjectId)!,
     subject_id: input.catalogueSubjectId,
@@ -1166,7 +1229,11 @@ export async function finishAgentVerificationReversal(
   input: AgentVerificationReversal,
   clock: () => Date,
 ): Promise<void> {
-  await probeAccountIdentityPublication(pool,{ kind:'account-agent.unverify',account:input.accountId,receipt:input.receiptId });
+  await probeAccountIdentityPublication(pool, {
+    kind: 'account-agent.unverify',
+    account: input.accountId,
+    receipt: input.receiptId,
+  });
   await runCommand(
     pool,
     {

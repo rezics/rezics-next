@@ -1,5 +1,9 @@
 import { bindSemanticProducerRoles } from './erasure-producer.ts';
-import { readAccountIdentitySource, assertAccountIdentitySource, type AccountIdentitySource } from '../access/agent-verification-identity.ts';
+import {
+  readAccountIdentitySource,
+  assertAccountIdentitySource,
+  type AccountIdentitySource,
+} from '../access/agent-verification-identity.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -101,7 +105,10 @@ export function identityBindingDigest(input: IdentityAdmissionInput): string {
     .digest('hex');
 }
 /** Only native source reads at the released binding home can attach Accounts custody. */
-export function assertIdentityBindingSource(binding: IdentityReceiptBinding, receipt: IdentityAdmissionInput['receipt']): void {
+export function assertIdentityBindingSource(
+  binding: IdentityReceiptBinding,
+  receipt: IdentityAdmissionInput['receipt'],
+): void {
   identityBindingData(binding);
   if (receipt.kind === 'subject.merge') return;
   const source = accountSources.get(binding);
@@ -139,7 +146,7 @@ function proof(row: BindingRow): IdentityReceiptBinding {
 }
 async function read(tx: CommandTransaction, input: IdentityAdmissionInput) {
   const source = await authorizeIdentityAdmission(tx, input.receipt, undefined, input.intent);
-  if (source) transactionSources.set(tx,source);
+  if (source) transactionSources.set(tx, source);
   const home = identityReceiptPartition(input.receipt);
   if (currentCommand(tx).partition !== home) throw new TypeError('Receipt lookup requires its native binding home');
   const row = (await tx.query<BindingRow>(selectClaim.sql, [home, identityReceiptKey(input.receipt)])).rows[0];
@@ -225,7 +232,7 @@ export async function claimIdentityBinding(
     const existing = await read(tx, input);
     if (existing && existing.state !== 'not-applied') return noEffect(null);
     const source = transactionSources.get(tx);
-    if (source) bindSemanticProducerRoles(tx,source.roles);
+    if (source) bindSemanticProducerRoles(tx, source.roles);
     recordIdentityEpochNativeCommit(tx, 'admission');
     const id = newId(prepared.home * 16);
     registerCommandCallback(tx, async (transactionId) => {
@@ -280,7 +287,7 @@ export async function acceptIdentityBinding(
       throw new TypeError('Obsolete binding generation');
     if (identityBindingData(current).state === 'accepted') return noEffect(null);
     const source = transactionSources.get(tx);
-    if (source) bindSemanticProducerRoles(tx,source.roles);
+    if (source) bindSemanticProducerRoles(tx, source.roles);
     const changed = await tx.query(acceptClaim.sql, [
       data.partition,
       data.key,
@@ -303,19 +310,26 @@ export async function acceptIdentityBinding(
 
 /** Read-only original undo custody. This cannot mint a new binding or a source admission proof. */
 export async function readAccountIdentityUndo(
-  pool:Pool,
-  receipt:Extract<IdentityAdmissionInput['receipt'],{ kind:'account-agent.verify' }>,
+  pool: Pool,
+  receipt: Extract<IdentityAdmissionInput['receipt'], { kind: 'account-agent.verify' }>,
 ) {
-  return (await runCommand(pool,{ partition:identityReceiptPartition(receipt) },async (tx) => {
-    const source = await readAccountIdentitySource(tx,receipt,undefined,true);
-    const row = (await tx.query<BindingRow>(selectClaim.sql,[identityReceiptPartition(receipt),identityReceiptKey(receipt)])).rows[0];
-    if (!row || row.state !== 'accepted' || !row.binding_transaction_id || row.intent_digest !== source.digest)
-      throw new IdentityEpochStoreError('identity_epoch_unavailable','Accounts source: prior verification has no accepted native undo custody');
-    return noEffect({ source,job:{ jobId:row.job_id,epoch:BigInt(row.job_epoch) } });
-  })).value;
+  return (
+    await runCommand(pool, { partition: identityReceiptPartition(receipt) }, async (tx) => {
+      const source = await readAccountIdentitySource(tx, receipt, undefined, true);
+      const row = (
+        await tx.query<BindingRow>(selectClaim.sql, [identityReceiptPartition(receipt), identityReceiptKey(receipt)])
+      ).rows[0];
+      if (!row || row.state !== 'accepted' || !row.binding_transaction_id || row.intent_digest !== source.digest)
+        throw new IdentityEpochStoreError(
+          'identity_epoch_unavailable',
+          'Accounts source: prior verification has no accepted native undo custody',
+        );
+      return noEffect({ source, job: { jobId: row.job_id, epoch: BigInt(row.job_epoch) } });
+    })
+  ).value;
 }
 
-export function identityBindingAccountRoles(binding:IdentityReceiptBinding) {
+export function identityBindingAccountRoles(binding: IdentityReceiptBinding) {
   identityBindingData(binding);
   return accountSources.get(binding)?.roles ?? [];
 }

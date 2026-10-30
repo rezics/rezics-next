@@ -352,7 +352,7 @@ export const identityEpochStore: IdentityEpochStore = {
     const scope = createHash('sha256')
       .update(json([intent, inputs.map((g) => [g.terminal, g.generation, g.version, g.observed_count])]))
       .digest('hex');
-    if (accountSource) bindSemanticProducerRoles(tx,accountSource.roles);
+    if (accountSource) bindSemanticProducerRoles(tx, accountSource.roles);
     recordIdentityEpochNativeCommit(tx, 'admission');
     registerCommandCallback(tx, async (transactionId) => {
       await tx.query(bindingInsert.sql, [

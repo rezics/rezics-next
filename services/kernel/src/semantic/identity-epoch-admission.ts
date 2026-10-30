@@ -399,7 +399,7 @@ export async function admitBoundIdentityEpoch(
   )
     throw stale();
   const roles = identityBindingAccountRoles(input.binding);
-  if (roles.length) bindSemanticProducerRoles(tx,roles);
+  if (roles.length) bindSemanticProducerRoles(tx, roles);
   recordIdentityEpochNativeCommit(tx, 'admission');
   registerCommandCallback(tx, async (transactionId) => {
     await tx.query(insertJob.sql, [

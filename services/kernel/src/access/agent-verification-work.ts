@@ -29,28 +29,41 @@ import {
 const workflowName = 'accounts.agent-verification';
 const approvalEvent = 'com.rezics.access.agent-verification.approved.v1';
 
-type WorkResult = { ok: true } | { ok: false; pending: true } | { ok: false; pending?: false; problem: { type: string; detail: string } };
+type WorkResult =
+  | { ok: true }
+  | { ok: false; pending: true }
+  | { ok: false; pending?: false; problem: { type: string; detail: string } };
 
 function retryable(error: unknown): boolean {
-  return classifyUnavailability(error) !== undefined || (error instanceof IdentityEpochStoreError &&
-    ['identity_epoch_unavailable','identity_epoch_busy','identity_effect_stale','identity_participants_incomplete'].includes(error.code));
+  return (
+    classifyUnavailability(error) !== undefined ||
+    (error instanceof IdentityEpochStoreError &&
+      [
+        'identity_epoch_unavailable',
+        'identity_epoch_busy',
+        'identity_effect_stale',
+        'identity_participants_incomplete',
+      ].includes(error.code))
+  );
 }
 
 /** Invoked by the workflow, never from inside a registered step or a held native checkout. */
-async function redrive<T extends WorkResult>(attempt: () => Promise<T>): Promise<Exclude<T,{ pending:true }>> {
+async function redrive<T extends WorkResult>(attempt: () => Promise<T>): Promise<Exclude<T, { pending: true }>> {
   let backoff = 250;
   for (;;) {
-    let result:T;
-    try { result = await attempt(); }
-    catch (error) {
+    let result: T;
+    try {
+      result = await attempt();
+    } catch (error) {
       if (!retryable(error)) throw error;
       await DBOS.sleep(backoff);
-      backoff = Math.min(30_000,backoff*2);
+      backoff = Math.min(30_000, backoff * 2);
       continue;
     }
-    if (result === undefined || !('pending' in result) || !result.pending) return result as Exclude<T,{ pending:true }>;
+    if (result === undefined || !('pending' in result) || !result.pending)
+      return result as Exclude<T, { pending: true }>;
     await DBOS.sleep(backoff);
-    backoff = Math.min(30_000,backoff*2);
+    backoff = Math.min(30_000, backoff * 2);
   }
 }
 
@@ -62,16 +75,30 @@ function problem(error: Error, type?: string): { type: string; detail: string } 
 export function registerAgentVerificationWork(context: WorkContext): void {
   const reversalWorkflow = 'accounts.agent-verification-reversal';
   const publication = DBOS.registerStep(
-    async (accountId:string,receiptId:string,direction:'account-agent.verify'|'account-agent.unverify'):Promise<WorkResult> => {
-      try { await deliverAccountIdentity(context.pool,{ kind:direction,account:accountId,receipt:receiptId }); return { ok:true }; }
-      catch (error) { if (retryable(error)) return { ok:false,pending:true }; throw error; }
+    async (
+      accountId: string,
+      receiptId: string,
+      direction: 'account-agent.verify' | 'account-agent.unverify',
+    ): Promise<WorkResult> => {
+      try {
+        await deliverAccountIdentity(context.pool, { kind: direction, account: accountId, receipt: receiptId });
+        return { ok: true };
+      } catch (error) {
+        if (retryable(error)) return { ok: false, pending: true };
+        throw error;
+      }
     },
-    { name:'accounts.agent-verification.publication',retriesAllowed:true,maxAttempts:10 },
+    { name: 'accounts.agent-verification.publication', retriesAllowed: true, maxAttempts: 10 },
   );
   const unmerge = DBOS.registerStep(
     async (decision: AgentVerificationReversal): Promise<WorkResult> => {
-      try { await unmergeVerifiedAgent(context.pool,decision); return { ok:true }; }
-      catch (error) { if (retryable(error)) return { ok:false,pending:true }; throw error; }
+      try {
+        await unmergeVerifiedAgent(context.pool, decision);
+        return { ok: true };
+      } catch (error) {
+        if (retryable(error)) return { ok: false, pending: true };
+        throw error;
+      }
     },
     { name: `${reversalWorkflow}.unmerge`, retriesAllowed: true, maxAttempts: 10 },
   );
@@ -90,10 +117,19 @@ export function registerAgentVerificationWork(context: WorkContext): void {
   DBOS.registerWorkflow(
     async (decision: AgentVerificationReversal) => {
       await redrive(() => unmerge(decision));
-      await redrive(() => publication(decision.accountId,decision.receiptId,'account-agent.unverify'));
-      await redrive(async () => { await removePage(decision); return { ok:true as const }; });
-      await redrive(async () => { await finishReversal(decision); return { ok:true as const }; });
-      await redrive(async () => { await synchronizeAgent(decision); return { ok:true as const }; });
+      await redrive(() => publication(decision.accountId, decision.receiptId, 'account-agent.unverify'));
+      await redrive(async () => {
+        await removePage(decision);
+        return { ok: true as const };
+      });
+      await redrive(async () => {
+        await finishReversal(decision);
+        return { ok: true as const };
+      });
+      await redrive(async () => {
+        await synchronizeAgent(decision);
+        return { ok: true as const };
+      });
     },
     { name: reversalWorkflow },
   );
@@ -135,7 +171,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await recordPendingAgentVerification(context.pool, { ...request, receiptId }, context.clock);
         return { ok: true };
       } catch (error) {
-        if (retryable(error)) return { ok:false,pending:true };
+        if (retryable(error)) return { ok: false, pending: true };
         if (error instanceof AgentVerificationAccountError)
           return { ok: false, problem: problem(error, error.problemType) };
         throw error;
@@ -150,7 +186,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await mergeVerifiedAgent(context.pool, { ...request, receiptId });
         return { ok: true };
       } catch (error) {
-        if (retryable(error)) return { ok:false,pending:true };
+        if (retryable(error)) return { ok: false, pending: true };
         if (error instanceof AccountAgentVerificationError) return { ok: false, problem: problem(error) };
         throw error;
       }
@@ -164,7 +200,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         await writeAgentVerificationPage(context.pool, { ...request, receiptId });
         return { ok: true };
       } catch (error) {
-        if (retryable(error)) return { ok:false,pending:true };
+        if (retryable(error)) return { ok: false, pending: true };
         if (error instanceof AgentVerificationPageConflictError)
           return { ok: false, problem: problem(error, error.problemType) };
         throw error;
@@ -209,7 +245,10 @@ export function registerAgentVerificationWork(context: WorkContext): void {
 
   DBOS.registerWorkflow(
     async (requestId: string, receiptId: string) => {
-      const { request } = await redrive(async () => ({ ok:true as const,request:await readDecision(requestId,receiptId) }));
+      const { request } = await redrive(async () => ({
+        ok: true as const,
+        request: await readDecision(requestId, receiptId),
+      }));
       if (request.state === 'failed') return;
 
       const started = await redrive(() => startVerification(request, receiptId));
@@ -226,7 +265,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         return;
       }
 
-      await redrive(() => publication(request.accountId,receiptId,'account-agent.verify'));
+      await redrive(() => publication(request.accountId, receiptId, 'account-agent.verify'));
       if (request.state === 'approved') return;
 
       const page = await redrive(() => writePage(request, receiptId));
@@ -236,8 +275,14 @@ export function registerAgentVerificationWork(context: WorkContext): void {
         return;
       }
 
-      await redrive(async () => { await complete(request,receiptId); return { ok:true as const }; });
-      await redrive(async () => { await finish(request,receiptId); return { ok:true as const }; });
+      await redrive(async () => {
+        await complete(request, receiptId);
+        return { ok: true as const };
+      });
+      await redrive(async () => {
+        await finish(request, receiptId);
+        return { ok: true as const };
+      });
     },
     { name: workflowName },
   );

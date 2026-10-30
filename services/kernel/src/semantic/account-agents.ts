@@ -52,7 +52,6 @@ class NoAgentChange extends Error {
   }
 }
 
-
 function accountIdOf(account: Account): string {
   const id = typeof account === 'string' ? account : account?.accountId;
   if (typeof id !== 'string' || routeOf(id) === null) throw new TypeError('Account id must be a routed UUID');
@@ -328,17 +327,16 @@ export async function verifyAccountAgent(
 }> {
   const account = accountIdOf(options.account);
   const agentId = accountAgentId(account);
-  if (routeOf(options.catalogue) === null || options.catalogue === agentId)
-    throw new AccountAgentVerificationError();
-  const { deliverAccountIdentity,loadAccountIdentitySource,accountIdentityUnavailable } =
+  if (routeOf(options.catalogue) === null || options.catalogue === agentId) throw new AccountAgentVerificationError();
+  const { deliverAccountIdentity, loadAccountIdentitySource, accountIdentityUnavailable } =
     await import('../access/agent-verification-identity.ts');
-  const receipt = { kind:'account-agent.verify' as const,account,receipt:options.receipt };
-  const source = await loadAccountIdentitySource(pool,receipt);
+  const receipt = { kind: 'account-agent.verify' as const, account, receipt: options.receipt };
+  const source = await loadAccountIdentitySource(pool, receipt);
   if (source.input.intent.kind !== 'merge' || source.input.intent.survivor !== options.catalogue)
     throw accountIdentityUnavailable('caller catalogue does not match original verification');
-  const node = await readAgentSubject(pool,agentId);
-  const catalogue = await readAgentSubject(pool,options.catalogue);
-  const before = await accountAgentForNode(pool,agentId);
+  const node = await readAgentSubject(pool, agentId);
+  const catalogue = await readAgentSubject(pool, options.catalogue);
+  const before = await accountAgentForNode(pool, agentId);
   if (!node || !catalogue || catalogue.redirect || !before || before.account !== account || before.agent_id !== agentId)
     throw new AccountAgentVerificationError('The account agent and catalogue must be visible and complete');
   if (node.type !== 'schema:Person' && node.type !== 'schema:Organization')
@@ -349,15 +347,23 @@ export async function verifyAccountAgent(
     if (before.subject !== options.catalogue || before.receipt_id !== options.receipt)
       throw new AccountAgentVerificationError('The account agent is already verified to another catalogue subject');
   } else {
-    if (node.redirect || before.subject !== agentId || (await accountAgentsForSubjects(pool,[options.catalogue])).has(options.catalogue))
+    if (
+      node.redirect ||
+      before.subject !== agentId ||
+      (await accountAgentsForSubjects(pool, [options.catalogue])).has(options.catalogue)
+    )
       throw new AccountAgentVerificationError('The catalogue subject is already linked or the account agent is merged');
   }
-  await deliverAccountIdentity(pool,receipt);
-  const mapping = await accountAgentForNode(pool,agentId);
-  if (!mapping?.verified || mapping.account !== account || mapping.subject !== options.catalogue ||
-      mapping.receipt_id !== options.receipt)
+  await deliverAccountIdentity(pool, receipt);
+  const mapping = await accountAgentForNode(pool, agentId);
+  if (
+    !mapping?.verified ||
+    mapping.account !== account ||
+    mapping.subject !== options.catalogue ||
+    mapping.receipt_id !== options.receipt
+  )
     throw accountIdentityUnavailable('published verification lacks its actual reciprocal back link');
-  return existingVerification(pool,mapping,agentId);
+  return existingVerification(pool, mapping, agentId);
 }
 
 /** Revoke a verified account-agent link and restore only the inbound links moved by that verification. */
@@ -373,27 +379,41 @@ export async function unverifyAccountAgent(
 }> {
   const account = accountIdOf(options.account);
   const agentId = accountAgentId(account);
-  const { deliverAccountIdentity,loadAccountIdentitySource,accountIdentityUnavailable } =
+  const { deliverAccountIdentity, loadAccountIdentitySource, accountIdentityUnavailable } =
     await import('../access/agent-verification-identity.ts');
-  const receipt = { kind:'account-agent.unverify' as const,account,receipt:options.receipt };
-  const source = await loadAccountIdentitySource(pool,receipt);
+  const receipt = { kind: 'account-agent.unverify' as const, account, receipt: options.receipt };
+  const source = await loadAccountIdentitySource(pool, receipt);
   if (source.input.intent.kind !== 'unmerge') throw accountIdentityUnavailable('caller reversal direction differs');
-  await deliverAccountIdentity(pool,receipt);
-  const mapping = await accountAgentForNode(pool,agentId);
-  const node = await readAgentSubject(pool,agentId);
-  if (!mapping || mapping.verified || mapping.account !== account || mapping.agent_id !== agentId ||
-      mapping.subject !== agentId || !node || node.redirect)
+  await deliverAccountIdentity(pool, receipt);
+  const mapping = await accountAgentForNode(pool, agentId);
+  const node = await readAgentSubject(pool, agentId);
+  if (
+    !mapping ||
+    mapping.verified ||
+    mapping.account !== account ||
+    mapping.agent_id !== agentId ||
+    mapping.subject !== agentId ||
+    !node ||
+    node.redirect
+  )
     throw accountIdentityUnavailable('published reversal lacks its actual restored native back link');
-  const prior = listed(await readAccountAgentRevocation.run(pool,{
-    route:routeOf(agentId)!,subject_id:agentId,receipt_id:options.receipt,
-  }))[0];
+  const prior = listed(
+    await readAccountAgentRevocation.run(pool, {
+      route: routeOf(agentId)!,
+      subject_id: agentId,
+      receipt_id: options.receipt,
+    }),
+  )[0];
   if (!prior?.survivor || prior.verification_receipt_id !== source.input.intent.verificationReceipt)
     throw accountIdentityUnavailable('published reversal lacks exact original revision provenance');
-  const partition = await withReadTransaction(pool,(tx) => readPartition(tx,partitionOf(routeOf(agentId)!)));
+  const partition = await withReadTransaction(pool, (tx) => readPartition(tx, partitionOf(routeOf(agentId)!)));
   if (!partition || partition.writeState !== 'active') throw accountIdentityUnavailable('reversal owner moved');
   return {
-    survivor:prior.survivor,redirected:agentId,revision:prior.revision,subject:await subjectFromRow(pool,node),
-    component:{ partition:partition.partitionNo,epoch:partition.epoch,position:partition.position },
+    survivor: prior.survivor,
+    redirected: agentId,
+    revision: prior.revision,
+    subject: await subjectFromRow(pool, node),
+    component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
   };
 }
 
