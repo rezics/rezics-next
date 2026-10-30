@@ -9,7 +9,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } f
 import type { subjectRoutes } from './subjects.ts';
 import { AuthenticationError, type Access, type AccessFactory } from '../../request/access.ts';
 import { globalReadEligibility } from '../eligibility.ts';
-import { publicContextEligibility } from '../context.ts';
+import { ContextNotFoundError, editorialContextAnchor, publicContextEligibility } from '../context.ts';
 import { routeOf } from '../../route/route.ts';
 import { MAX_BODY_LIMIT } from '../../http/body.ts';
 import type { Resource } from '../../request/access.ts';
@@ -59,7 +59,8 @@ function definitionProblem(error: unknown): never {
       })),
     });
   if (error instanceof DefinitionAccessDeniedError) throw new ProblemError('forbidden');
-  if (error instanceof DefinitionNotFoundError) throw new ProblemError('not_found');
+  if (error instanceof DefinitionNotFoundError || error instanceof ContextNotFoundError)
+    throw new ProblemError('not_found');
   if (error instanceof StaleEditorialHeadError) throw new ProblemError('stale_editorial_head');
   throw error;
 }
@@ -269,7 +270,19 @@ export function definitionRoutes(
         if (params.id !== GLOBAL_CONTEXT && route === null) throw new ProblemError('not_found');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const context = { route: params.id === GLOBAL_CONTEXT ? 0 : route!, id: params.id };
-        const authorization = await authorizeCommand(context, () => new DefinitionAccessDeniedError());
+        const nativeAuthorization = await authorizeCommand(context, () => new DefinitionAccessDeniedError());
+        const anchor = editorialContextAnchor(params.id);
+        const authorization = {
+          ...nativeAuthorization,
+          async authorize(
+            tx: import('../../command/command.ts').CommandTransaction,
+            attempt: import('../../command/command.ts').CommandAttempt,
+            evidence: unknown,
+          ) {
+            await anchor.validate(tx, attempt.time);
+            return nativeAuthorization.authorize(tx, attempt, evidence);
+          },
+        };
         try {
           const result = await admission.run('normal', job, () =>
             publishExtension(pool, {
@@ -326,7 +339,19 @@ export function definitionRoutes(
         if (params.id !== GLOBAL_CONTEXT && route === null) throw new ProblemError('not_found');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const context = { route: params.id === GLOBAL_CONTEXT ? 0 : route!, id: params.id };
-        const authorization = await authorizeCommand(context, () => new DefinitionAccessDeniedError());
+        const nativeAuthorization = await authorizeCommand(context, () => new DefinitionAccessDeniedError());
+        const anchor = editorialContextAnchor(params.id);
+        const authorization = {
+          ...nativeAuthorization,
+          async authorize(
+            tx: import('../../command/command.ts').CommandTransaction,
+            attempt: import('../../command/command.ts').CommandAttempt,
+            evidence: unknown,
+          ) {
+            await anchor.validate(tx, attempt.time);
+            return nativeAuthorization.authorize(tx, attempt, evidence);
+          },
+        };
         try {
           const result = await admission.run('normal', job, () =>
             activateExtension(pool, {
@@ -382,7 +407,11 @@ export function definitionRoutes(
         const check = await authorize(context);
         const active = await admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
-          return activeExtension(pool, params.id);
+          try {
+            return await activeExtension(pool, params.id);
+          } catch (error) {
+            return definitionProblem(error);
+          }
         });
         return {
           context: params.id,

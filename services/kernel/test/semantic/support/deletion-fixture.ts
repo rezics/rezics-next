@@ -23,7 +23,7 @@ export async function createDeletionFixture() {
   const accounts = { owner: newId(21000), editor: newId(21001), stranger: newId(21002), platform: newId(21003) };
   let now = new Date();
   const clock = () => new Date(now);
-  // Refresh JWTs at the domain clock when moving beyond the restoration window.
+  // Credential issue/expiry use wall time; the separate domain clock controls restoration policy.
   // Shared real-Access fixtures create accounts/grants; the native Access below validates these tokens.
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'semantic-deletion', alg: 'ES256' };
@@ -34,7 +34,7 @@ export async function createDeletionFixture() {
     fetch: async () => Response.json({ keys: [jwk] }),
   };
   async function bearer(account: string, scopes: string[]) {
-    const at = Math.floor(clock().getTime() / 1000);
+    const at = Math.floor(Date.now() / 1000);
     return new SignJWT({ client_id: 'web', scope: scopes.join(' '), authn_epoch: 1, auth_time: at, amr: ['pwd'] })
       .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
       .setIssuer(auth.issuer)
@@ -253,7 +253,7 @@ export async function createGrowthDeletionFixture() {
   const account = newId(22000);
   let now = new Date();
   const clock = () => new Date(now);
-  // Refresh JWTs at the domain clock when moving beyond the restoration window.
+  // Credential issue/expiry use wall time; the separate domain clock controls restoration policy.
   // Shared real-Access fixtures create accounts/grants; the native Access below validates these tokens.
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'semantic-deletion', alg: 'ES256' };
@@ -264,7 +264,7 @@ export async function createGrowthDeletionFixture() {
     fetch: async () => Response.json({ keys: [jwk] }),
   };
   async function bearer(account: string, scopes: string[]) {
-    const at = Math.floor(clock().getTime() / 1000);
+    const at = Math.floor(Date.now() / 1000);
     return new SignJWT({ client_id: 'web', scope: scopes.join(' '), authn_epoch: 1, auth_time: at, amr: ['pwd'] })
       .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
       .setIssuer(auth.issuer)

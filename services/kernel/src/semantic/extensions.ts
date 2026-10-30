@@ -9,6 +9,7 @@ import {
 } from '@rezics/definitions/extension';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
+import { ProblemError } from '../http/problem.ts';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import composite from './composite-read.sql';
@@ -62,13 +63,19 @@ async function loadExtension(db: Db, route: number, context: string, digest: str
   return extension;
 }
 
-/** The Context's active extension. A request costs one head probe; the body is read once per digest per process. */
+/** Current availability and head are point probes; the immutable body is read once per digest per process. */
 export async function activeExtension(
   db: Db,
   context: string,
 ): Promise<{ digest: string; head: number; extension: Extension } | null> {
   const route = contextRoute(context);
-  if (route === null) return null;
+  if (route === null || (context !== GLOBAL_CONTEXT && !(await readCommunity.run(db, { route, context_id: context }))))
+    throw new ProblemError('not_found');
+  return storedActiveExtension(db, route, context);
+}
+
+/** Retained definition meaning/birth evidence, never current Context read eligibility. */
+async function storedActiveExtension(db: Db, route: number, context: string) {
   const active = await pointer.run(db, { route, context_id: context });
   // A table function types its columns as nullable; the statement returns no row when there is no head.
   if (!active || active.digest === null || active.head === null) return null;
@@ -106,7 +113,7 @@ async function compose(db: Db, parent: Layer, digest: string, extension: Extensi
 
 /**
  * `base` as `context` sees it: Global's extension, then the Context's own. Without an extension the base comes back
- * unchanged, so a request pays one head probe per extension and nothing else once the digest pair is warm.
+ * unchanged, so a warm request pays each Context's current availability and extension head probes.
  */
 export async function layeredRelease(db: Db, base: Layer, context: string, persist = false): Promise<Layer> {
   let layer = base;
@@ -178,7 +185,9 @@ async function adoptionSources(db: Db, context: string, value: unknown): Promise
   for (const key of Object.keys(terms)) {
     const source = termContext(key);
     if (source === null || source === context || sources.has(source)) continue;
-    const active = await activeExtension(db, source);
+    // A deleted source still proves where an immutable term was born. This does not make that Context readable.
+    const route = contextRoute(source);
+    const active = route === null ? null : await storedActiveExtension(db, route, source);
     if (active) sources.set(source, active.extension);
   }
   return sources;

@@ -63,6 +63,7 @@ export async function readSemanticLifecycle(
     });
     if (!row) return null;
     if (row.account_id !== null) owner = { kind: 'write_basis', accountId };
+    return { target, owner, state: 'active', deletedAt: null, purgeAfter: null, held: false };
   } else {
     const route = routeOf(target.context)!;
     const row = await readContext.run(client, { route, context_id: target.context });
@@ -77,6 +78,13 @@ export async function readSemanticLifecycle(
       }))
     )
       owner = { kind: 'owner_grant', accountId };
+    return {
+      target,
+      owner,
+      state: row.state as LifecycleEvidence['state'],
+      deletedAt: row.deleted_at,
+      purgeAfter: row.purge_after,
+      held: row.held,
+    };
   }
-  return { target, owner, state: 'active', deletedAt: null, purgeAfter: null, held: false };
 }

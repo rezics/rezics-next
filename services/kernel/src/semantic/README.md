@@ -116,6 +116,8 @@ Semantic writes use the route action and authority below. When the authority and
 | Definition activation              | `definitions:activate` | Global Context                             |
 | Extension publication              | `definitions:publish`  | Selected Global or community Context       |
 | Extension activation               | `definitions:activate` | Selected Global or community Context       |
+| Community Context deletion         | `context:delete`       | Current community Context owner and Access |
+| Community Context restoration      | `context:restore`      | Current community Context owner and Access |
 | Community Context creation         | `context:create`       | Global Context parent, with creation proof |
 
 ## Identity references
@@ -130,6 +132,9 @@ The component is an observation of source identity, not authorization evidence o
 
 This boundary does not prepare types or read display metadata. Fresh profile writers use `readItemTypes` independently.
 Full subject display readers retain their existing projection freshness and deadline behavior.
+The HTTP display reader prepares current subject and statement-audience authorization after the freshness wait,
+before checking out the display snapshot. Waiting does not consume short-lived permission evidence or extend its TTL;
+authorization still checks the current native snapshot within the original request deadline.
 
 ## Identity epoch status
 
@@ -735,7 +740,7 @@ pending in the parent CPU contract; these shape limits do not supply that produc
 
 ### Context term resolution
 
-- Touches: `effectiveRelease` / `layeredRelease`: the active release pointer, then the head probe of Global's extension and of the request's Context (`context_extension_activation_pkey(route, context_id, head)`, backward, `LIMIT 1`), each 0/1 row. A digest pair composes once per process (`applyExtension` over the active release and the extension body, which is read on a miss and validated by digest) and later requests find the composed release in memory. A write registers a composed digest once per process (`INSERT ... ON CONFLICT DO NOTHING` into `semantic.release_composite`); reads never write. A stored composed digest resolves through `readRelease`. Grow the Context's terms; the holder's type keeps one term.
+- Touches: `effectiveRelease` / `layeredRelease`: the active release pointer, a current availability point for a community Context, then the head probe of Global's extension and of the request's Context (`context_extension_activation_pkey(route, context_id, head)`, backward, `LIMIT 1`), each 0/1 row. A digest pair composes once per process (`applyExtension` over the active release and the extension body, which is read on a miss and validated by digest) and later requests find the composed release in memory. A write registers a composed digest once per process (`INSERT ... ON CONFLICT DO NOTHING` into `semantic.release_composite`); reads never write. A stored composed digest resolves through `readRelease`. Grow the Context's terms; the holder's type keeps one term.
 - Bound: rows O(1), blocks O(log D) per request; a cold read is linear in the extension size (at most 64 terms) once per digest pair per process. A request touches only the properties of the holder's type, so terms on other types add nothing.
 - Growth check: `test/semantic/custom-relation-types.test.ts`: `a Context's term resolution reads a bounded number of rows however many terms the Context holds`, scales `[1, 8, 64]` terms; a Context without an extension reads the active release itself (`a Context without an extension reads the active release unchanged`).
 
@@ -914,9 +919,9 @@ Global and community Context subject reads return `summary` beside `subject`. Th
 proof or an HTTP surface. The caller owns authorization, branded authoritative time and its RR or command
 snapshot. The reader opens no connection or transaction, performs no writes, follows no redirects and hydrates
 no payload. See [the deletion contract](deletion-contract.md#first-independent-state-and-attribution-slice)
-for its closed shapes and exact pre-IO rejection behavior. Known native identity currently returns
-`active/null/null/false` state; unknown or mismatched locators return null. Later owned commands must extend
-this reader with actual mutable lifecycle state. These greens prove attribution, not deletion.
+for its closed shapes and exact pre-IO rejection behavior. Candidate identity returns `active/null/null/false` until its separate lifecycle commands exist. Context evidence
+reads its actual state, original deletion window and independent held flag from the native Context identity;
+unknown or mismatched locators return null. This metadata still supplies no Access allow decision.
 
 Proposals use the exact revision transaction and partitioned write basis. Compact identity uses its assertion
 fact transaction before and after expansion, with ambiguous/missing author evidence yielding null owner.
@@ -942,12 +947,13 @@ retention adapter and independent implementation briefs against [the deletion po
 Communal subjects and immutable definition releases are not automatically private records owned by their creator.
 Contribution attribution and current community Context resource ownership must establish owner deletion authority.
 
-Implemented behavior is limited to native subject/candidate hide, takedown and moderation restore, terminal
+Implemented behavior includes community Context owner deletion and restoration below, native subject/candidate
+hide, takedown and moderation restore, terminal
 consent-statement retraction, source-fence disclosure, and immediate derived-account-agent name clearing. Name
 clearing removes old labels without retaining name history; it remains a field clear. Native takedown retains
 data, but its free-text scope does not implement least-field/passage/image withholding.
 
-Required work: default owned-record soft deletion with immediate tombstones and suppression, current-owner restore
+Required remaining work: contribution soft deletion with immediate tombstones and suppression, current-owner restore
 within 30 days without rewinding current adoption/visibility, separate platform early/legal purge, legal holds,
 automatic minimal personal/private payload purge and account-erasure de-identification. Account confirmation
 is final in first scope: private cleanup starts at the same native T by bounded durable work, without a 30-day
@@ -960,7 +966,7 @@ creates its deadline. Workflow-history retention does not establish semantic era
 `graph.ts`: omit an unproved number while retaining internal counters. The deletion audit asserts empty inverse
 links and absent count after source revocation with consumers paused.
 
-The implemented first independent slice is the read-only `readSemanticLifecycle(client,{target,accountId,nativeT})`
+The shared state and attribution boundary is the read-only `readSemanticLifecycle(client,{target,accountId,nativeT})`
 state and owner-evidence reader defined in the contract. Native author/write-basis and current Context owner
 grants establish evidence, while Access remains authoritative for actions; provenance grants no ownership or role.
 Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes.
@@ -968,5 +974,54 @@ Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP 
 | Surface                       | Actual pending work and independent acceptance                                                                                                                                                                             |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                         |
-| Owned lifecycle and retention | DELETE/restore/purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.                                                                            |
+| Owned lifecycle and retention | Community Context DELETE/restore is implemented; contribution DELETE/restore, purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.             |
 | Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters. |
+
+### Community Context lifecycle
+
+`DELETE /v1/contexts/:id` and `POST /v1/contexts/:id:restore` use the native command executor, request digest,
+receipt and Session component. DELETE accepts no body or a closed empty object; restore requires a closed empty
+object. Neither route has an If-Match contract. Successful responses contain only
+`{context:{id,state:'deleted'|'active'}}`. A replay returns the original receipt after fresh authorization;
+a fresh request already in the requested state is a genuine noEffect and emits no event.
+
+The existing `semantic.context.owner` role includes `context:delete` and `context:restore` alongside
+`context:accept`, `context:adopt` and `access:grant`. The moderator role remains acceptance-only. Both lifecycle
+actions require real Access authorization on the stable Context anchor and the exact direct current owner grant,
+read through the shared lifecycle reader on the same prepared client at native command T. Creation history and
+individual action grants do not establish ownership. Transferred owners can act; revoked owners cannot execute
+or replay receipts. Global has no personal lifecycle and both actions return 403.
+
+The existing Context row stores `active`, `deleted` or the reserved terminal `purged` state, a monotonic
+`security_revision`, and an independent `held` flag. Each actual active-to-deleted transition installs its deletion
+time and strict 720-hour deadline at command T. Retries and fresh deleted no-ops preserve that original window.
+Restore succeeds only before the deadline; exactly thirty days returns 409. Restore retains the completed window
+for evidence; a later actual deletion starts a new window. SQL compares exact native timestamptz values without
+rounding through JavaScript dates. The internal evidence renders canonical UTC timestamps with microsecond precision.
+
+Deletion immediately excludes the Context from normal point reads and public eligibility, editorial anchors,
+settings/default selection, subject overlays, candidates, relations, links and current extensions. Extension caches
+are consulted only after a current Context point check; a direct Context definition read checks current identity
+even for an explicit read grant. Retained source Context extension heads remain trusted immutable term-birth
+evidence for Global adoption validation; that evidence grants no current Context read or write eligibility. Extension publication/activation checks the active native anchor before receipt
+lookup. Immutable release meanings and adopted Global definitions remain intact for retained historical facts;
+private extension/composed digests do not become public release routes. Restore keeps the same ID, labels, settings,
+defaults, current extension head and adoption history, and respects current subject visibility and candidate moderation.
+
+Only real transitions emit the registered `com.rezics.semantic.record.deleted.v1` or `.restored.v1` identity event,
+with Context kind, ID and monotonic version. Receipts, basis and outbox commit atomically; no subject revision or
+counter is rewound. Ordinary DELETE retains native rows and payload. This capability adds no automatic purge,
+account-terminal cleanup, legal hold commands or takedown deadline. Future retention must remove minimal personal
+or private fields and preserve the nonpersonal identity skeleton unless that skeleton is itself private.
+
+- Touches: Context PK/active index and one direct temporal owner-grant probe on the prepared native client;
+  the ordinary Access evidence/command fence, receipt, basis and outbox; one Context update on a real transition.
+  Readers perform selected Context point checks before current cached extension or overlay selection.
+- Bound: constant point rows and statements per command/read, logarithmic B-tree blocks in Context population or
+  subject history. No dependent-subject enumeration, adoption-history scan, fanout write, cross-home SQL join or
+  source-local permission cache. Restore costs the same bounded point work as delete.
+- Growth check: `test/semantic/growth-context-lifecycle.test.ts` captures every native pool statement across delete,
+  restore, Context/definition and subject-overlay reads at 64/512/4096 history and population scales. Rows and
+  statements remain constant and blocks logarithmic with the ordinary planner, scale and deadline settings.
+  `context-lifecycle.test.ts` preserves the original settings/extensions/decision contracts;
+  `context-lifecycle-command.test.ts` adds receipt/noEffect, rollback, inert denial and state/time evidence.

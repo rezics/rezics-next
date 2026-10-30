@@ -399,13 +399,22 @@ CREATE TABLE semantic.context (
     settings_id text,
     settings_release text,
     defaults jsonb DEFAULT '{}'::jsonb NOT NULL,
+    state text DEFAULT 'active'::text NOT NULL,
+    deleted_at timestamp with time zone,
+    purge_after timestamp with time zone,
+    security_revision bigint DEFAULT 0 NOT NULL,
+    held boolean DEFAULT false NOT NULL,
     CONSTRAINT context_check CHECK ((route = ((get_byte(uuid_send(context_id), 10) * 256) + get_byte(uuid_send(context_id), 11)))),
     CONSTRAINT context_defaults_check CHECK (((jsonb_typeof(defaults) = 'object'::text) AND (NOT jsonb_path_exists(defaults, '$.*?(@ != "inherit" && @ != "suppress")'::jsonpath)))),
+    CONSTRAINT context_global_active CHECK (((kind <> 'global'::text) OR (state = 'active'::text))),
     CONSTRAINT context_kind_check CHECK ((kind = ANY (ARRAY['global'::text, 'community'::text]))),
+    CONSTRAINT context_lifecycle_window CHECK ((((deleted_at IS NULL) AND (purge_after IS NULL) AND (state = 'active'::text)) OR ((deleted_at IS NOT NULL) AND (purge_after IS NOT NULL) AND (purge_after = (deleted_at + '720:00:00'::interval))))),
     CONSTRAINT context_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT context_security_revision_check CHECK ((security_revision >= 0)),
     CONSTRAINT context_settings_id_check CHECK (((settings_id IS NULL) OR (settings_id ~ '^[a-z][a-z0-9-]{0,63}$'::text))),
     CONSTRAINT context_settings_pair_check CHECK (((settings_id IS NULL) = (settings_release IS NULL))),
     CONSTRAINT context_settings_release_check CHECK (((settings_release IS NULL) OR (settings_release ~ '^sha256:[0-9a-f]{64}$'::text))),
+    CONSTRAINT context_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'purged'::text]))),
     CONSTRAINT context_without_settings_defaults_check CHECK (((settings_id IS NOT NULL) OR (defaults = '{}'::jsonb)))
 );
 
@@ -1794,6 +1803,13 @@ CREATE INDEX acceptance_current_rejected ON semantic.acceptance_current USING bt
 --
 
 CREATE INDEX candidate_page ON semantic.candidate USING btree (route, subject_id, slot_id, revision, view_order, candidate_id);
+
+
+--
+-- Name: context_active; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX context_active ON semantic.context USING btree (route, context_id) WHERE (state = 'active'::text);
 
 
 --

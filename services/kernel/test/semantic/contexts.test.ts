@@ -175,7 +175,9 @@ test('Context creators receive the owner actions, while the moderator role grant
 
   const roles = resourceRoleCatalogue(access)!;
   expect(roles.types.get('semantic.context')).toEqual({ owner: 'semantic.context.owner', standing: [] });
-  expect(roles.roles.get('semantic.context.owner')).toEqual(['context:accept', 'context:adopt', 'access:grant'].sort());
+  expect(roles.roles.get('semantic.context.owner')).toEqual(
+    ['context:accept', 'context:adopt', 'access:grant', 'context:delete', 'context:restore'].sort(),
+  );
   expect(roles.roles.get('semantic.context.moderator')).toEqual(['context:accept']);
 
   await admin.query(

@@ -2,6 +2,9 @@ import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { definitionRoutes } from './definitions.ts';
 import { AuthenticationError, type AccountActor, type Resource } from '../../request/access.ts';
+import { customMethod } from '../../http/custom-method.ts';
+import { changeContextLifecycle, ContextLifecycleConflictError } from '../context-lifecycle.ts';
+import { ContextNotFoundError } from '../context.ts';
 import { routeOf } from '../../route/route.ts';
 import { SubjectInputError } from '../item.ts';
 import {
@@ -42,6 +45,36 @@ const ContextSchema = t.Object(
 );
 const contextResponse = t.Object({ context: ContextSchema }, { additionalProperties: false });
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
+
+const emptyBody = t.Object({}, { additionalProperties: false });
+const lifecycleResponse = t.Object(
+  {
+    context: t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        state: t.Union([t.Literal('deleted'), t.Literal('active')]),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+const lifecycleResponses = {
+  200: withHeaders(lifecycleResponse, { [SESSION_HEADER]: t.String() }),
+  400: problemSchema('invalid_request'),
+  401: unauthorized,
+  403: problemSchema('forbidden'),
+  404: problemSchema('not_found'),
+  409: problemSchema('conflict'),
+  422: problemSchema('idempotency_conflict'),
+  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+};
+function lifecycleProblem(error: unknown): never {
+  if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+  if (error instanceof ContextNotFoundError) throw new ProblemError('not_found');
+  if (error instanceof ContextLifecycleConflictError) throw new ProblemError('conflict');
+  throw error;
+}
 
 function contextRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -139,6 +172,84 @@ function contextRoutes(
           if (error instanceof ContextAccessDeniedError || error instanceof GrantDeniedError)
             throw new ProblemError('forbidden');
           throw error;
+        }
+      },
+    )
+    .delete(
+      '/v1/contexts/:id',
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: t.Optional(emptyBody),
+        response: lifecycleResponses,
+        detail: {
+          operationId: 'context.delete',
+          'x-exposure': 'public',
+          'x-action': 'context:delete',
+          'x-resource-types': ['semantic.context'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          const result = await admission.run('normal', job, () =>
+            changeContextLifecycle(dependencies.pool, {
+              context: params.id,
+              state: 'deleted',
+              actor,
+              access: dependencies.access(),
+              idempotencyKey: key,
+              digest: requestDigest('context.delete', actor, { params, body: {} }),
+              deadline: job.deadline,
+              clock: dependencies.clock,
+            }),
+          );
+          session.record(result.component);
+          return { context: result.context };
+        } catch (error) {
+          return lifecycleProblem(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/contexts/:id', 'restore'),
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: emptyBody,
+        response: lifecycleResponses,
+        detail: {
+          operationId: 'context.restore',
+          'x-exposure': 'public',
+          'x-action': 'context:restore',
+          'x-resource-types': ['semantic.context'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          const result = await admission.run('normal', job, () =>
+            changeContextLifecycle(dependencies.pool, {
+              context: params.id,
+              state: 'active',
+              actor,
+              access: dependencies.access(),
+              idempotencyKey: key,
+              digest: requestDigest('context.restore', actor, { params, body: {} }),
+              deadline: job.deadline,
+              clock: dependencies.clock,
+            }),
+          );
+          session.record(result.component);
+          return { context: result.context };
+        } catch (error) {
+          return lifecycleProblem(error);
         }
       },
     )

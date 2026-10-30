@@ -25,7 +25,7 @@
     "commerce.offer.owner": ["offer:read", "offer:manage", "order:create"],
     "commerce.offer.standing": ["order:create"],
     "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"],
-    "semantic.context.owner": ["context:accept", "context:adopt", "access:grant"],
+    "semantic.context.owner": ["context:accept", "context:adopt", "access:grant", "context:delete", "context:restore"],
     "semantic.context.moderator": ["context:accept"],
     "library.collection.owner": ["collection:read", "collection:update", "collection:delete"],
     "semantic.zone.owner": [
