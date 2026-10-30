@@ -179,7 +179,9 @@ test('queued distinct simple statements retain their native plan rows and query 
   );
 
   expect(result.value.map(({ rows }) => rows[0]?.queued)).toEqual([71, 72]);
-  expect(nativePlanEntries(result.capture).map(({ owner, queryText, plan }) => [owner, queryText, plan['Actual Rows']])).toEqual([
+  expect(
+    nativePlanEntries(result.capture).map(({ owner, queryText, plan }) => [owner, queryText, plan['Actual Rows']]),
+  ).toEqual([
     [0, 'SELECT 71 AS queued', 1],
     [1, 'SELECT 72 AS queued', 1],
   ]);
@@ -252,15 +254,17 @@ test('nested plans from failed and successful same-SQL producers keep their own 
   const database = db!;
   await database.admin.query('ALTER SEQUENCE growth_capture_test.failure_sequence RESTART WITH 1');
   const query = 'SELECT growth_capture_test.fail_after_nested($1::integer) AS result';
-  const result = await capture(database, () =>
-    withConnection(database.pool, async (client) => {
-      const failed = client.query<{ result: number }>(query, [99]).then(
-        () => null,
-        (error: Error & { code?: string }) => error.code ?? 'unknown',
-      );
-      const successful = client.query<{ result: number }>(query, [2]).then(({ rows }) => rows[0]?.result);
-      return Promise.all([failed, successful]);
-    }),
+  const result = await capture(
+    database,
+    () =>
+      withConnection(database.pool, async (client) => {
+        const failed = client.query<{ result: number }>(query, [99]).then(
+          () => null,
+          (error: Error & { code?: string }) => error.code ?? 'unknown',
+        );
+        const successful = client.query<{ result: number }>(query, [2]).then(({ rows }) => rows[0]?.result);
+        return Promise.all([failed, successful]);
+      }),
     { includeBackends: true },
   );
 
@@ -606,7 +610,9 @@ test('separate databases keep foreground, background, error, backend, plan and b
     ]);
 
     const primaryOccurrences = statementOccurrences(primary.capture);
-    expect(primaryOccurrences.statements.map(({ backend, error, plans }) => [backend, error?.code ?? null, plans])).toEqual([
+    expect(
+      primaryOccurrences.statements.map(({ backend, error, plans }) => [backend, error?.code ?? null, plans]),
+    ).toEqual([
       [primary.capture.statementBackends![0], null, [0]],
       [primary.capture.statementBackends![1], '42P01', []],
       [primary.capture.statementBackends![2], null, [1]],

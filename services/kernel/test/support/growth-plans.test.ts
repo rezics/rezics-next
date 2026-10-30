@@ -325,13 +325,17 @@ test('catalog projection keeps native occurrence links, documents, errors and ba
   expect(raw.plans).toEqual(beforePlans);
 
   const rawOccurrences = statementOccurrences(raw).statements;
-  expect(rawOccurrences.map(({ index, error, plans, backend }) => [index, error?.code ?? null, plans, backend])).toEqual([
+  expect(
+    rawOccurrences.map(({ index, error, plans, backend }) => [index, error?.code ?? null, plans, backend]),
+  ).toEqual([
     [0, null, [0], raw.statementBackends![0]],
     [1, null, [1], raw.statementBackends![1]],
     [2, '42P01', [], raw.statementBackends![2]],
     [3, null, [2], raw.statementBackends![3]],
   ]);
-  expect(statementOccurrences(projected).statements.map(({ index, error, plans }) => [index, error?.code ?? null, plans])).toEqual([
+  expect(
+    statementOccurrences(projected).statements.map(({ index, error, plans }) => [index, error?.code ?? null, plans]),
+  ).toEqual([
     [0, null, [0]],
     [1, '42P01', []],
     [2, null, [1]],
