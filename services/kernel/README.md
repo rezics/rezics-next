@@ -644,8 +644,8 @@ only for lists that have not yet moved.
 
 ## Cost
 
-| Operation    | Touches                  | Bound                                                                           | Growth check                   |
-| ------------ | ------------------------ | ------------------------------------------------------------------------------- | ------------------------------ |
+| Operation    | Touches                                                                          | Bound                                                                                                                          | Growth check                                                    |
+| ------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
 | HTTP ingress | One request's capped wire bytes, decoded JSON text and object member-name scopes | O(limit) time and memory per request; iterative duplicate guard without a depth cap; reserved total at most the ingress budget | `test/http/body-limit.test.ts`, `test/http/strict-json.test.ts` |
 
 ## HTTP ingress body bounds
