@@ -46,16 +46,16 @@ The raw log is `.temp/goal/checks/worker-check-2026-10-30T07-49-48.840Z-2efc00bb
 its `concurrent CLI native evidence` JSON contains the observations below. There were eight ordinary CLI
 invocations in one process and one native application world; no process-death child was required.
 
-| Invocation | Source | Actual result |
-| --- | --- | --- |
-| Initial work | A | code 0, one new record |
-| Initial work and edition | A | code 0, one new and one unchanged record |
-| Held acquisition | A | code 130 after signal, no EOF, no Auth or public requests |
-| Same-source competitor | A | code 5, zero consumed bytes, no Auth or public requests |
-| Independent edition | B | code 0, one new record while A remained held |
-| Complete work and edition | B | code 0, one new and one unchanged record |
-| Refresh late reference | B | code 0, two unchanged records |
-| Reopened owner | A | code 0, one changed and one unchanged record |
+| Invocation                | Source | Actual result                                             |
+| ------------------------- | ------ | --------------------------------------------------------- |
+| Initial work              | A      | code 0, one new record                                    |
+| Initial work and edition  | A      | code 0, one new and one unchanged record                  |
+| Held acquisition          | A      | code 130 after signal, no EOF, no Auth or public requests |
+| Same-source competitor    | A      | code 5, zero consumed bytes, no Auth or public requests   |
+| Independent edition       | B      | code 0, one new record while A remained held              |
+| Complete work and edition | B      | code 0, one new and one unchanged record                  |
+| Refresh late reference    | B      | code 0, two unchanged records                             |
+| Reopened owner            | A      | code 0, one changed and one unchanged record              |
 
 `oldAReceipts` retains nine receipts, all present unchanged in the thirteen `currentReceipts`.
 The first work creation receipt has transaction `01a18be2-89a8-7792-a694-e9e497bdb77d`,
