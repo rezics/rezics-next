@@ -1292,5 +1292,22 @@
   "statements_recorded": "Registro en REZICS (UTC)",
   "statements_order_source": "ID del pedido de origen",
   "statements_offer_source": "ID de la oferta de origen",
-  "statements_transaction": "ID de transacción de saldo del proveedor"
+  "statements_transaction": "ID de transacción de saldo del proveedor",
+  "public_account_heading": "Cuenta",
+  "public_account_automated": "Cuenta automatizada",
+  "public_account_verified": "Identidad verificada: {name}",
+  "public_account_operator_unavailable": "Operador no disponible",
+  "public_account_denied": "No tienes acceso a esta página.",
+  "public_account_preparing": "Esta página se está preparando. Vuelve a intentarlo en unos instantes.",
+  "public_account_unavailable": "No se pudo cargar esta página. Vuelve a intentarlo.",
+  "public_account_retry": "Volver a intentar",
+  "public_account_realms": "Realms",
+  "public_account_more": "Más páginas de la cuenta",
+  "public_account_cursor_expired": "Este enlace ha caducado o no es válido. Empieza desde la primera página.",
+  "public_account_start_again": "Primera página",
+  "public_account_realm_owner": "Propietario",
+  "public_account_realm_member": "Miembro",
+  "public_account_realms_more": "No hay Realms visibles en esta página. Continúa a la siguiente.",
+  "public_account_realms_empty": "No hay Realms públicos que mostrar.",
+  "public_account_next": "Página siguiente"
 }

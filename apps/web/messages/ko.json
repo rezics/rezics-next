@@ -1292,5 +1292,22 @@
   "statements_recorded": "REZICS 기록 시각 (UTC)",
   "statements_order_source": "원본 주문 ID",
   "statements_offer_source": "원본 제안 ID",
-  "statements_transaction": "제공자 잔액 거래 ID"
+  "statements_transaction": "제공자 잔액 거래 ID",
+  "public_account_heading": "계정",
+  "public_account_automated": "자동화 계정",
+  "public_account_verified": "{name}(으)로 인증됨",
+  "public_account_operator_unavailable": "운영자를 표시할 수 없습니다",
+  "public_account_denied": "이 페이지를 볼 권한이 없습니다.",
+  "public_account_preparing": "페이지를 준비 중입니다. 잠시 후 다시 시도해 주세요.",
+  "public_account_unavailable": "페이지를 불러오지 못했습니다. 다시 시도해 주세요.",
+  "public_account_retry": "다시 시도",
+  "public_account_realms": "영역",
+  "public_account_more": "다른 계정 페이지",
+  "public_account_cursor_expired": "페이지 링크가 만료되었거나 올바르지 않습니다. 첫 페이지부터 확인해 주세요.",
+  "public_account_start_again": "첫 페이지",
+  "public_account_realm_owner": "소유자",
+  "public_account_realm_member": "구성원",
+  "public_account_realms_more": "이 페이지에 표시할 영역이 없습니다. 다음 페이지를 확인해 주세요.",
+  "public_account_realms_empty": "공개 영역이 없습니다.",
+  "public_account_next": "다음 페이지"
 }

@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { View } from '@rezics/composition';
+import type { AccountView } from '../../accounts/public-profile/page-read';
 import { personalRead, publicRead } from '../../kernel/query';
 import { readAgentPage, readAgentReader } from './agent-actions';
 
@@ -12,7 +12,7 @@ export const agentPageQuery = (handle: string, locale: string, search?: string) 
   });
 
 /** One public named view and its overview, with an optional bounded continuation. */
-export const agentViewQuery = (handle: string, locale: string, view: View, cursor?: string, search?: string) =>
+export const agentViewQuery = (handle: string, locale: string, view: AccountView, cursor?: string, search?: string) =>
   queryOptions({
     ...publicRead,
     queryKey: ['agent-view', handle, locale, view, cursor ?? null, search ?? ''],

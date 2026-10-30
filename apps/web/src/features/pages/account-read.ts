@@ -11,10 +11,11 @@ export type AccountProfile = {
   bio: string | null;
   links: { label: string; url: string }[];
   avatar: CoverSummary | null;
+  subject: { id: string; label: string; type: string } | null;
   verified: boolean;
   automated: boolean;
   operatorId: string | null;
-  publicViews: { posts: boolean; reviews: boolean; collections: boolean };
+  publicViews: { posts: boolean; reviews: boolean; collections: boolean; realms: boolean };
 };
 
 /** The profile in an account read's body, when the read returned an active account with its presentation. */
@@ -36,13 +37,30 @@ export function accountOf(body: unknown): AccountProfile | undefined {
         : [],
     ),
     avatar: isRecord(account.avatar) ? (account.avatar as unknown as CoverSummary) : null,
-    verified: account.verified === true,
+    subject:
+      isRecord(account.subject) &&
+      typeof account.subject.id === 'string' &&
+      account.subject.id &&
+      typeof account.subject.label === 'string' &&
+      account.subject.label &&
+      typeof account.subject.type === 'string'
+        ? { id: account.subject.id, label: account.subject.label, type: account.subject.type }
+        : null,
+    verified:
+      account.verified === true &&
+      isRecord(account.subject) &&
+      typeof account.subject.id === 'string' &&
+      !!account.subject.id &&
+      typeof account.subject.label === 'string' &&
+      !!account.subject.label &&
+      typeof account.subject.type === 'string',
     automated: account.automated === true,
     operatorId: typeof account.operatorId === 'string' ? account.operatorId : null,
     publicViews: {
       posts: views.posts !== false,
       reviews: views.reviews !== false,
       collections: views.collections !== false,
+      realms: views.realms === true,
     },
   };
 }
@@ -50,5 +68,7 @@ export function accountOf(body: unknown): AccountProfile | undefined {
 /** Whether the account lets everyone see this activity view; every other view is not the account's to hide. */
 export function viewIsPublic(profile: AccountProfile | undefined, view: string): boolean {
   if (!profile) return true;
-  return view === 'posts' || view === 'reviews' || view === 'collections' ? profile.publicViews[view] : true;
+  return view === 'posts' || view === 'reviews' || view === 'collections' || view === 'realms'
+    ? profile.publicViews[view]
+    : true;
 }

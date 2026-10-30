@@ -1293,5 +1293,22 @@
   "statements_recorded": "REZICS 入账时间（UTC）",
   "statements_order_source": "来源订单 ID",
   "statements_offer_source": "来源商品方案 ID",
-  "statements_transaction": "支付商余额交易 ID"
+  "statements_transaction": "支付商余额交易 ID",
+  "public_account_heading": "账号",
+  "public_account_automated": "自动化账号",
+  "public_account_verified": "已认证为 {name}",
+  "public_account_operator_unavailable": "运营者暂不可用",
+  "public_account_denied": "你无权查看此页面。",
+  "public_account_preparing": "页面正在准备中，请稍后重试。",
+  "public_account_unavailable": "无法加载此页面，请重试。",
+  "public_account_retry": "重试",
+  "public_account_realms": "领域",
+  "public_account_more": "更多账号视图",
+  "public_account_cursor_expired": "此分页链接已过期或无效，请从第一页开始。",
+  "public_account_start_again": "第一页",
+  "public_account_realm_owner": "所有者",
+  "public_account_realm_member": "成员",
+  "public_account_realms_more": "此页没有可见的领域，可继续查看下一页。",
+  "public_account_realms_empty": "暂无公开领域。",
+  "public_account_next": "下一页"
 }

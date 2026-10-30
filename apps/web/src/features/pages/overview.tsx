@@ -40,7 +40,7 @@ import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
 export type { Count } from '../count';
 
 /** What one node's read returned: its planned descriptor and body, or the fact that it did not succeed. */
-export type Section = { ok: false } | { ok: true; read: PageRead; body: Record<string, unknown>; sources?: Sources };
+export type Section = { ok: false; status?: number } | { ok: true; read: PageRead; body: Record<string, unknown>; sources?: Sources };
 
 export type OverviewValue = {
   locale: string;

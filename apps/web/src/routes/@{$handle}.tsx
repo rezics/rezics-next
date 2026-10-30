@@ -1,5 +1,6 @@
+import { PublicAccountState } from '../accounts/public-profile/view';
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, redirect, useLocation } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths } from '../features/pages/agent-page';
@@ -7,7 +8,7 @@ import { canonicalRedirect, keepSearch } from '../subject/subject-href';
 import { agentPath } from '../features/pages/agent';
 import { agentPageQuery, agentReaderQuery } from '../features/pages/agent-queries';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
-import { SubjectPage } from '../features/pages/subject';
+import { PublicProfilePage } from '../accounts/public-profile/page';
 import { personalRead } from '../kernel/query';
 import { useSession } from '../session/query';
 import { defaultReader } from '../subject/reader';
@@ -39,6 +40,7 @@ export const Route = createFileRoute('/@{$handle}')({
         headers: { 'Cache-Control': 'private, no-store' },
       });
     }
+    if (page.kind === 'state') return page;
     const canonicalHandle = page.page.account?.handle;
     if (!canonicalHandle) throw notFound();
     if (canonicalHandle !== params.handle) {
@@ -47,15 +49,16 @@ export const Route = createFileRoute('/@{$handle}')({
     return { ...page, paths: agentPagePaths(canonicalHandle) };
   },
   head: ({ loaderData }) =>
-    loaderData
+    loaderData?.kind === 'page'
       ? agentPageHead(loaderData.overview, getLocale(), publicOrigin(), loaderData.paths, loaderData.view)
-      : { meta: [{ title: m.not_found_heading() }] },
+      : { meta: [{ title: m.public_account_heading() }, { name: 'robots', content: 'noindex, nofollow' }] },
   component: AgentRoute,
 });
 
 function AgentRoute() {
   const { handle } = Route.useParams();
   const locale = getLocale();
+  const router = useRouter();
   const { searchStr } = useLocation();
   const { data } = useSuspenseQuery(agentPageQuery(handle, locale, searchStr));
   const { state: session } = useSession();
@@ -66,8 +69,9 @@ function AgentRoute() {
   if (data.kind === 'redirect') {
     throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
   }
+  if (data.kind === 'state') return <PublicAccountState state={data.state} retry={() => void router.invalidate()} />;
   return (
-    <SubjectPage
+    <PublicProfilePage
       page={data.page}
       locale={locale}
       messages={subjectPageMessages()}
@@ -78,6 +82,7 @@ function AgentRoute() {
       tabs={data.tabs}
       tabLabels={viewTabLabels()}
       base={`/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`}
+      publicRealms={data.publicRealms}
       renderJsonLd={false}
     />
   );

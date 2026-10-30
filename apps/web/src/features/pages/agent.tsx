@@ -6,6 +6,15 @@ import { accountOf } from './account-read';
 import { pageContext, type SubjectPageData } from './subject';
 import { isRecord } from './shared';
 
+export class AgentReadError extends Error {
+  constructor(
+    message: string,
+    public state: 'denied' | 'preparing' | 'unavailable',
+  ) {
+    super(message);
+  }
+}
+
 export type AgentPageLoad =
   | { kind: 'missing' }
   | {
@@ -21,11 +30,11 @@ const LIST_READS = new Set(['accountPosts', 'accountThreads', 'accountCollection
 
 function problemError(value: unknown): Error {
   const code = isRecord(value) && typeof value.code === 'string' && value.code ? value.code : 'internal_error';
-  return new Error(code);
+  return new AgentReadError(code, 'unavailable');
 }
 
 /** The address of an agent's page, or of one of its views. */
-export function agentPath(locale: string, handle: string, view?: View): string {
+export function agentPath(locale: string, handle: string, view?: View | 'realms'): string {
   return accountHref(locale, handle, view);
 }
 
@@ -34,7 +43,7 @@ export async function formerHandleRedirect(
   client: KernelClient,
   handle: string,
   locale: string,
-  view?: View,
+  view?: View | 'realms',
   search = '',
 ) {
   const result = await client.accounts.get({ query: { handle } });
@@ -52,11 +61,11 @@ export async function formerHandleRedirect(
 export async function loadAgentPage(
   client: KernelClient,
   handle: string,
-  view?: View,
+  view?: View | 'realms',
   locale = 'en',
 ): Promise<AgentPageLoad> {
   const result = await client.pages.$read.post({
-    target: { account: handle, ...(view ? { view } : {}) },
+    target: { account: handle, ...(view && view !== 'realms' ? { view } : {}) },
     languages: requestLanguages(locale),
   });
   if (result.status === 404 || result.status === 400) return { kind: 'missing' };
@@ -85,6 +94,8 @@ export async function loadAgentPage(
       },
     };
   }
+  if (result.status === 401 || result.status === 403) throw new AgentReadError('denied', 'denied');
+  if (result.status === 202) throw new AgentReadError('preparing', 'preparing');
   throw problemError(result.error?.value);
 }
 

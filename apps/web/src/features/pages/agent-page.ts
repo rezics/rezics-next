@@ -8,22 +8,27 @@ import { pageHead, type PagePaths } from '../../shell/head';
 import { accountOf, type AccountProfile } from './account-read';
 import { agentPath } from './agent';
 import { pageContext, type SubjectPageData } from './subject';
+import type { AccountView } from '../../accounts/public-profile/page-read';
 import { isRecord, pageText, webUrl } from './shared';
 
 export type AgentPage = SubjectPageData & { account: NonNullable<SubjectPageData['account']> };
 
 /** Only named views have a path; the overview is the agent's base address. */
-export function agentPathView(value: unknown): View | undefined {
-  return typeof value === 'string' && isView(value) && value !== 'overview' ? value : undefined;
+export function agentPathView(value: unknown): AccountView | undefined {
+  return value === 'realms'
+    ? value
+    : typeof value === 'string' && isView(value) && value !== 'overview'
+      ? value
+      : undefined;
 }
 
 /** A named route exists only when the public overview exposed that tab. */
-export function agentViewAvailable(tabs: readonly { view: string }[], view: View): boolean {
+export function agentViewAvailable(tabs: readonly { view: string }[], view: AccountView): boolean {
   return tabs.some((tab) => tab.view === view);
 }
 
 /** Every locale points to the matching agent page or matching view. */
-export function agentPagePaths(handle: string, view?: View): PagePaths {
+export function agentPagePaths(handle: string, view?: AccountView): PagePaths {
   return Object.fromEntries(
     locales.map((locale) => [locale, agentPath(locale, handle, view).slice(`/${locale}`.length)]),
   ) as PagePaths;
@@ -126,7 +131,7 @@ export function agentPageHead(
   locale: Locale,
   origin: string,
   paths: PagePaths = agentPagePaths(page.account.handle),
-  _view?: View,
+  _view?: AccountView,
   cursor?: string,
 ) {
   const profile = profileRead(page);

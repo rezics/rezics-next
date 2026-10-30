@@ -1293,5 +1293,22 @@
   "statements_recorded": "REZICS recording time (UTC)",
   "statements_order_source": "Source order ID",
   "statements_offer_source": "Source offer ID",
-  "statements_transaction": "Provider balance transaction ID"
+  "statements_transaction": "Provider balance transaction ID",
+  "public_account_heading": "Account",
+  "public_account_automated": "Automated account",
+  "public_account_verified": "Verified as {name}",
+  "public_account_operator_unavailable": "Operator unavailable",
+  "public_account_denied": "This view is not available to you.",
+  "public_account_preparing": "This page is being prepared. Try again shortly.",
+  "public_account_unavailable": "This page could not be loaded. Please try again.",
+  "public_account_retry": "Try again",
+  "public_account_realms": "Realms",
+  "public_account_more": "More account views",
+  "public_account_cursor_expired": "This page link has expired or is invalid. Start from the first page.",
+  "public_account_start_again": "First page",
+  "public_account_realm_owner": "Owner",
+  "public_account_realm_member": "Member",
+  "public_account_realms_more": "No visible Realms on this page. Continue to see more.",
+  "public_account_realms_empty": "No public Realms to show.",
+  "public_account_next": "Next page"
 }

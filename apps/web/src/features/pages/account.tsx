@@ -1,3 +1,5 @@
+import { PublicAccountState } from '../../accounts/public-profile/view';
+import { readFailure } from '../../accounts/public-profile/read';
 import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
@@ -11,6 +13,7 @@ import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValu
 import { isRecord, linkClass, linkColor, webUrl } from './shared';
 import { threadHref as canonicalThreadHref, threadTitle } from '../../threads/thread-href';
 import { DocumentValue, readableDocument } from './values';
+import { subjectHref } from '../../subject/subject-href';
 import { FollowTargetControl } from '../../library/follow-target-control';
 
 function dateText(value: unknown, locale: string): string | null {
@@ -80,14 +83,33 @@ export function AccountIdentity(props: Record<string, unknown>) {
           )}
           {profile.bio && <p className="max-w-prose leading-7 text-pretty whitespace-pre-line">{profile.bio}</p>}
           {value.subject ? <FollowTargetControl targetId={value.subject} /> : null}
+          {profile.verified && profile.subject && (
+            <p className="text-sm" data-slot="agent-verified">
+              <value.link
+                href={subjectHref({ id: profile.subject.id, label: profile.subject.label }, value.locale).href}
+              >
+                {m.public_account_verified({ name: profile.subject.label }, { locale: value.locale as never })}
+              </value.link>
+            </p>
+          )}
+          {profile.automated && (
+            <p data-slot="agent-automation" className="text-sm font-medium">
+              {m.public_account_automated({}, { locale: value.locale as never })}
+            </p>
+          )}
           {profile.automated && value.operator && (
             <p data-slot="agent-operator" className="text-sm text-muted-foreground">
               {m.agent_operated_by({}, { locale: value.locale as never })}{' '}
-              <value.link
-                href={`/${encodeURIComponent(value.locale)}/@${encodeURIComponent(value.operator.handle ?? '')}`}
-              >
-                {value.operator.displayName || value.operator.handle}
-              </value.link>
+              {value.operator.handle ? (
+                <value.link href={`/${encodeURIComponent(value.locale)}/@${encodeURIComponent(value.operator.handle)}`}>
+                  {value.operator.displayName || value.operator.handle}
+                </value.link>
+              ) : (
+                <span>
+                  {value.operator.displayName ||
+                    m.public_account_operator_unavailable({}, { locale: value.locale as never })}
+                </span>
+              )}
             </p>
           )}
           {links.length > 0 && (
@@ -132,8 +154,14 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
   if (!viewIsPublic(value.profile, spec.view)) return null;
   const id = String(props.id);
   const title = spec.title(value.locale);
-  if (!section.ok || section.read.kind !== spec.kind)
-    return <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />;
+  if (!section.ok)
+    return (
+      <section data-slot={spec.slot} className={sectionClass}>
+        <h2 className="text-2xl font-semibold">{title}</h2>
+        <PublicAccountState state={readFailure(section.status ?? 503)} />
+      </section>
+    );
+  if (section.read.kind !== spec.kind) return <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />;
   const listed = spec.items(section.body);
   if (!Array.isArray(listed)) return <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />;
   const limit = typeof props.limit === 'number' ? props.limit : listed.length;
@@ -146,7 +174,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
     </ul>
   );
   if (paged) {
-    if (items.length === 0)
+    if (items.length === 0 && !next)
       return (
         <section data-slot={spec.slot} aria-labelledby={`${id}-title`} className={sectionClass}>
           <h2 id={`${id}-title`} className="sr-only">

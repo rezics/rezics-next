@@ -1292,5 +1292,22 @@
   "statements_recorded": "REZICS-Buchungszeitpunkt (UTC)",
   "statements_order_source": "Quellbestellungs-ID",
   "statements_offer_source": "Quellangebots-ID",
-  "statements_transaction": "Anbieter-Saldotransaktions-ID"
+  "statements_transaction": "Anbieter-Saldotransaktions-ID",
+  "public_account_heading": "Konto",
+  "public_account_automated": "Automatisiertes Konto",
+  "public_account_verified": "Als {name} bestätigt",
+  "public_account_operator_unavailable": "Betreiber nicht verfügbar",
+  "public_account_denied": "Du kannst diese Seite nicht ansehen.",
+  "public_account_preparing": "Diese Seite wird vorbereitet. Versuche es in Kürze erneut.",
+  "public_account_unavailable": "Diese Seite konnte nicht geladen werden. Bitte versuche es erneut.",
+  "public_account_retry": "Erneut versuchen",
+  "public_account_realms": "Realms",
+  "public_account_more": "Weitere Kontoseiten",
+  "public_account_cursor_expired": "Dieser Seitenlink ist abgelaufen oder ungültig. Beginne auf der ersten Seite.",
+  "public_account_start_again": "Erste Seite",
+  "public_account_realm_owner": "Eigentümer",
+  "public_account_realm_member": "Mitglied",
+  "public_account_realms_more": "Auf dieser Seite sind keine Realms sichtbar. Gehe zur nächsten Seite.",
+  "public_account_realms_empty": "Keine öffentlichen Realms vorhanden.",
+  "public_account_next": "Nächste Seite"
 }

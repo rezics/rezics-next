@@ -1292,5 +1292,22 @@
   "statements_recorded": "REZICS 記録日時（UTC）",
   "statements_order_source": "元注文 ID",
   "statements_offer_source": "元オファー ID",
-  "statements_transaction": "決済事業者の残高取引 ID"
+  "statements_transaction": "決済事業者の残高取引 ID",
+  "public_account_heading": "アカウント",
+  "public_account_automated": "自動アカウント",
+  "public_account_verified": "{name} として認証済み",
+  "public_account_operator_unavailable": "運営者を表示できません",
+  "public_account_denied": "このページを表示する権限がありません。",
+  "public_account_preparing": "ページを準備中です。しばらくしてから再試行してください。",
+  "public_account_unavailable": "ページを読み込めませんでした。もう一度お試しください。",
+  "public_account_retry": "再試行",
+  "public_account_realms": "レルム",
+  "public_account_more": "その他のアカウントページ",
+  "public_account_cursor_expired": "このページリンクは期限切れか無効です。最初のページからご覧ください。",
+  "public_account_start_again": "最初のページ",
+  "public_account_realm_owner": "所有者",
+  "public_account_realm_member": "メンバー",
+  "public_account_realms_more": "このページに表示できるレルムはありません。次のページをご覧ください。",
+  "public_account_realms_empty": "公開レルムはありません。",
+  "public_account_next": "次のページ"
 }

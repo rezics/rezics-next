@@ -747,7 +747,7 @@ export function PageData({
             body: result.body,
             ...(prepared.get(key)?.sources ? { sources: prepared.get(key)!.sources! } : {}),
           }
-        : { ok: false },
+        : { ok: false, status: result?.status },
     );
   }
   const profile = Object.entries(plan.reads).flatMap(([key, planned]) =>

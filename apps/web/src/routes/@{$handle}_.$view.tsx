@@ -1,5 +1,6 @@
+import { PublicAccountState, PublicRealmsPage } from '../accounts/public-profile/view';
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, redirect, useLocation } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths, agentPathView, agentViewAvailable } from '../features/pages/agent-page';
@@ -7,7 +8,7 @@ import { canonicalRedirect, keepSearch } from '../subject/subject-href';
 import { agentPath } from '../features/pages/agent';
 import { agentReaderQuery, agentViewQuery } from '../features/pages/agent-queries';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
-import { SubjectPage } from '../features/pages/subject';
+import { PublicProfilePage } from '../accounts/public-profile/page';
 import { personalRead } from '../kernel/query';
 import { useSession } from '../session/query';
 import { defaultReader } from '../subject/reader';
@@ -22,6 +23,7 @@ const publicOrigin = createIsomorphicFn()
   );
 
 const viewLabel = {
+  realms: () => m.public_account_realms(),
   overview: () => m.subject_overview(),
   editions: () => m.subject_editions(),
   contents: () => m.subject_contents(),
@@ -41,7 +43,7 @@ const viewLabel = {
 export const Route = createFileRoute('/@{$handle}_/$view')({
   staticData: { publicCache: true },
   validateSearch: (search: Record<string, unknown>): { cursor?: string } => ({
-    ...(typeof search.cursor === 'string' && search.cursor.length <= 2048 ? { cursor: search.cursor } : {}),
+    ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
   }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
   // readAgentPage(...) is called by the public view query factory; this loader only seeds its query cache.
@@ -61,7 +63,8 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
         headers: { 'Cache-Control': 'private, no-store' },
       });
     }
-    if (!agentViewAvailable(page.tabs, view) && !page.overview.views?.includes(view))
+    if (page.kind === 'state') return page;
+    if (view !== 'realms' && !agentViewAvailable(page.tabs, view) && !page.overview.views?.includes(view))
       throw redirect(canonicalRedirect(agentPath(locale, page.handle), location.searchStr, location.hash, 302));
     const canonicalHandle = page.page.account?.handle;
     if (!canonicalHandle) throw notFound();
@@ -73,7 +76,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     return { ...page, paths: agentPagePaths(canonicalHandle, view) };
   },
   head: ({ loaderData }) =>
-    loaderData
+    loaderData?.kind === 'page'
       ? agentPageHead(
           loaderData.overview,
           getLocale(),
@@ -82,7 +85,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
           loaderData.view,
           loaderData.cursor,
         )
-      : { meta: [{ title: m.not_found_heading() }] },
+      : { meta: [{ title: m.public_account_heading() }, { name: 'robots', content: 'noindex, nofollow' }] },
   component: AgentViewRoute,
 });
 
@@ -92,6 +95,7 @@ function AgentViewRoute() {
   if (!view || view === 'overview') throw notFound();
   const { cursor } = Route.useSearch();
   const locale = getLocale();
+  const router = useRouter();
   const { searchStr } = useLocation();
   const { data } = useSuspenseQuery(agentViewQuery(handle, locale, view, cursor, searchStr));
   const { state: session } = useSession();
@@ -102,8 +106,19 @@ function AgentViewRoute() {
   if (data.kind === 'redirect') {
     throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
   }
+  if (data.kind === 'state') return <PublicAccountState state={data.state} retry={() => void router.invalidate()} />;
+  if (view === 'realms')
+    return (
+      <PublicRealmsPage
+        handle={data.page.account!.handle}
+        title={data.title}
+        locale={locale}
+        result={data.realms ?? { state: 'unavailable' }}
+        retry={() => void router.invalidate()}
+      />
+    );
   return (
-    <SubjectPage
+    <PublicProfilePage
       page={data.page}
       locale={locale}
       messages={subjectPageMessages()}
@@ -120,6 +135,7 @@ function AgentViewRoute() {
         label: viewLabel[view](),
         href: `/${encodeURIComponent(locale)}/@${encodeURIComponent(handle)}`,
       }}
+      publicRealms={data.publicRealms}
       renderJsonLd={false}
     />
   );
