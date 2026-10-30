@@ -347,9 +347,10 @@ export async function loadCopyDetail(
   try {
     const authorization = await bearer(request, sessionEnv);
     if (typeof authorization !== 'string') return { ok: false, reason: 'forbidden' };
+    const language = request.headers.get('accept-language');
     const result = await client.copies({ copyId: id }).get({
       query: { view: 'FULL', ...nativeCopyPresentationQuery() },
-      headers: { authorization },
+      headers: { authorization, ...(language ? { 'accept-language': language } : {}) },
     });
     // The native point read also conceals denied rows as 404. It is no deletion evidence.
     if ([401, 403, 404].includes(result.status)) return { ok: false, reason: 'forbidden' };

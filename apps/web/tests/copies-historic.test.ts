@@ -3,7 +3,13 @@ import { createElement, Fragment, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { copyStatusChange, loadCopiesPage, loadCopyDetail, saveCopy, type CopyItem } from '../src/library/copies-read';
-import { nativeCopyPresentation, nativeCopyPresentationQuery, type NativeCopy } from '../src/library/copies-server';
+import {
+  nativeCopyPresentation,
+  nativeCopyPresentationQuery,
+  type CopyDetailQuery,
+  type NativeCopy,
+  type NativeCopyPresentation,
+} from '../src/library/copies-server';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('../src/library/copies-actions', () => ({
@@ -38,6 +44,17 @@ const native = {
   disposedOn: null,
   note: 'First copy',
 } satisfies NativeCopy;
+const presentation = {
+  meaning: 'known',
+  kindLabel: 'Original print label',
+  kindLabelLanguage: 'en',
+  statusLabel: 'Separately accepted shelf label',
+  statusLabelLanguage: 'en',
+  statusEditing: {
+    state: 'supported',
+    statuses: [{ id: 'loan', label: 'Currently on loan', labelLanguage: 'en' }],
+  },
+} satisfies NativeCopyPresentation;
 const copy = (extra: Partial<CopyItem> = {}): CopyItem => ({
   ...native,
   subject: null,
@@ -46,7 +63,7 @@ const copy = (extra: Partial<CopyItem> = {}): CopyItem => ({
 });
 const request = () =>
   new Request('https://site.test/en/library/copies', {
-    headers: { authorization: 'Bearer current-viewer' },
+    headers: { authorization: 'Bearer current-viewer', 'accept-language': 'ja,en;q=0.8' },
   });
 function transport(respond: (req: Request) => Response | Promise<Response>) {
   const calls: Request[] = [];
@@ -97,28 +114,214 @@ test('raw list keeps two same-edition identities and original facts, with no poi
 });
 
 test('one explicit inspection reads the actual credential-bound point DTO once and preserves its observed revision', async () => {
-  const { client, calls } = transport(() => json({ copy: { ...native, revision: 12 } }));
+  const { client, calls } = transport(() => json({ copy: { ...native, revision: 12, presentation } }));
   const result = await loadCopyDetail(client, request(), {}, { id });
   expect(result).toMatchObject({ ok: true, copy: { id, revision: 12, kind: 'print', status: 'shelf' } });
   expect(calls).toHaveLength(1);
   expect(new URL(calls[0]!.url).pathname).toBe(`/v1/copies/${id}`);
   expect(calls[0]!.headers.get('authorization')).toBe('Bearer current-viewer');
+  expect(calls[0]!.headers.get('accept-language')).toBe('ja,en;q=0.8');
   expect(new URL(calls[0]!.url).searchParams.get('view')).toBe('FULL');
-  // This base's closed generated schema has no presentation query. No fabricated positive binding.
-  expect(nativeCopyPresentationQuery()).toBeUndefined();
-  expect(result.ok && result.copy.meaning).toBe('unavailable');
+  expect(new URL(calls[0]!.url).searchParams.get('presentation')).toBe('FULL');
+  const query = { view: 'FULL', ...nativeCopyPresentationQuery() } satisfies CopyDetailQuery;
+  expect(query).toEqual({ view: 'FULL', presentation: 'FULL' });
+  expect(result.ok && result.copy).toMatchObject(presentation);
 });
 
-test('undeclared presentation additions cannot manufacture accepted meaning or current editing support', () => {
-  const untyped = {
-    ...native,
-    presentation: {
+test('declared native presentation binds accepted kind and status labels separately from current choices', () => {
+  const declared = { ...native, presentation } satisfies NativeCopy;
+  expect(nativeCopyPresentation(declared)).toEqual(presentation);
+  const html = form(
+    { ...copy(), ...nativeCopyPresentation(declared) },
+    {
+      profile: {
+        kinds: [{ id: 'print', label: 'Renamed today', statuses: [{ id: 'shelf', label: 'Changed today' }] }],
+      },
+    },
+  );
+  expect(html).toContain('Original print label');
+  expect(html).toContain('Separately accepted shelf label');
+  expect(html).toContain('Currently on loan');
+  expect(html).not.toContain('Renamed today');
+  expect(html).not.toContain('Changed today');
+});
+
+test('absent native presentation keeps raw detail available without accepted meaning or editing support', async () => {
+  const { client, calls } = transport(() => json({ copy: native }));
+  const result = await loadCopyDetail(client, request(), {}, { id });
+  expect(result).toMatchObject({
+    ok: true,
+    copy: {
+      id,
+      kind: 'print',
+      status: 'shelf',
+      revision: 8,
+      meaning: 'unavailable',
+      statusEditing: { state: 'unavailable' },
+    },
+  });
+  expect(result.ok && result.copy.kindLabel).toBeUndefined();
+  expect(result.ok && result.copy.statusLabel).toBeUndefined();
+  expect(calls).toHaveLength(1);
+});
+
+test('undeclared presentation additions cannot manufacture accepted meaning or current editing support', async () => {
+  for (const undeclared of [
+    { ...presentation, acceptingType: 'Book' },
+    { ...presentation, kind_profile_pin: { releaseDigest: 'private' } },
+    { ...presentation, statusEditing: { ...presentation.statusEditing, allow: true } },
+    {
+      ...presentation,
+      statusEditing: {
+        state: 'supported',
+        statuses: [{ ...presentation.statusEditing.statuses[0], profileId: 'private' }],
+      },
+    },
+  ]) {
+    const { client, calls } = transport(() => json({ copy: { ...native, presentation: undeclared } }));
+    const result = await loadCopyDetail(client, request(), {}, { id });
+    expect(result.ok && result.copy).toMatchObject({ meaning: 'unavailable', statusEditing: { state: 'unavailable' } });
+    expect(result.ok && result.copy.kindLabel).toBeUndefined();
+    expect(result.ok && result.copy.statusLabel).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain('private');
+    expect(calls).toHaveLength(1);
+  }
+});
+
+test('malformed or wrong-shape native presentation is unavailable without inventing current meaning', async () => {
+  const malformed: unknown[] = [
+    null,
+    [],
+    'known',
+    {},
+    {
       meaning: 'known',
       kindLabel: 'Invented',
       statusEditing: { state: 'supported', statuses: [{ id: 'grant', label: 'Access' }] },
     },
-  };
-  expect(nativeCopyPresentation(untyped)).toEqual({ meaning: 'unavailable', statusEditing: { state: 'unavailable' } });
+    { ...presentation, meaning: 'physical' },
+    { ...presentation, kindLabel: 42 },
+    { ...presentation, kindLabelLanguage: undefined },
+    { ...presentation, statusLabelLanguage: 42 },
+    { ...presentation, statusEditing: null },
+    { ...presentation, statusEditing: { state: 'supported' } },
+    { ...presentation, statusEditing: { state: 'supported', statuses: [] } },
+    { ...presentation, statusEditing: { state: 'supported', statuses: 'loan' } },
+    { ...presentation, statusEditing: { state: 'supported', statuses: [null] } },
+    {
+      ...presentation,
+      statusEditing: { state: 'supported', statuses: [{ id: 'loan', label: 'On loan' }] },
+    },
+    { ...presentation, statusEditing: { state: 'unsupported', statuses: presentation.statusEditing.statuses } },
+    { ...presentation, statusEditing: { state: 'allowed' } },
+  ];
+  for (const invalid of malformed) {
+    const { client, calls } = transport(() => json({ copy: { ...native, presentation: invalid } }));
+    const result = await loadCopyDetail(client, request(), {}, { id });
+    expect(result.ok && result.copy).toMatchObject({
+      id,
+      kind: 'print',
+      status: 'shelf',
+      revision: 8,
+      meaning: 'unavailable',
+      statusEditing: { state: 'unavailable' },
+    });
+    expect(result.ok && result.copy.kindLabel).toBeUndefined();
+    expect(result.ok && result.copy.statusLabel).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  }
+});
+
+test('source-unavailable and retired current advice do not erase independently accepted labels', async () => {
+  for (const state of ['unavailable', 'unsupported'] as const) {
+    const detail = { ...native, presentation: { ...presentation, statusEditing: { state } } } satisfies NativeCopy;
+    const { client, calls } = transport(() => json({ copy: detail }));
+    const result = await loadCopyDetail(client, request(), {}, { id });
+    expect(result.ok && result.copy).toMatchObject({
+      meaning: 'known',
+      kindLabel: presentation.kindLabel,
+      statusLabel: presentation.statusLabel,
+      statusEditing: { state },
+    });
+    expect(result.ok && copyStatusChange(result.copy, 'loan')).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  }
+});
+
+test('native unknown historic kinds and missing releases retain raw facts without current profile inference', async () => {
+  for (const meaning of ['unknown', 'unavailable'] as const) {
+    const historic = {
+      ...native,
+      kind: 'legacy-unspecified',
+      status: 'owned',
+      presentation: { meaning, statusEditing: { state: 'unavailable' } },
+    } satisfies NativeCopy;
+    const { client, calls } = transport(() => json({ copy: historic }));
+    const result = await loadCopyDetail(client, request(), {}, { id });
+    expect(result.ok && result.copy).toMatchObject({ kind: 'legacy-unspecified', status: 'owned', meaning });
+    expect(result.ok && result.copy.kindLabel).toBeUndefined();
+    expect(result.ok && result.copy.statusLabel).toBeUndefined();
+    const html =
+      result.ok &&
+      form(result.copy, {
+        profile: { kinds: [{ id: 'physical', label: 'Physical', statuses: [{ id: 'owned', label: 'Owned today' }] }] },
+      });
+    expect(html).toContain('legacy-unspecified');
+    expect(html).not.toContain('Physical');
+    expect(html).not.toContain('Owned today');
+    expect(calls).toHaveLength(1);
+  }
+});
+
+test('unknown and unavailable presentation cannot supply labels or establish status-write support', () => {
+  for (const meaning of ['unknown', 'unavailable'] as const) {
+    const detail = { ...native, presentation: { ...presentation, meaning } } satisfies NativeCopy;
+    expect(nativeCopyPresentation(detail)).toEqual({ meaning, statusEditing: { state: 'unavailable' } });
+  }
+});
+
+test('private native pins and source identities never enter serialized copy detail', async () => {
+  const { client, calls } = transport(() =>
+    json({
+      copy: {
+        ...native,
+        presentation,
+        kind_profile_pin: {
+          releaseDigest: 'private-kind-digest',
+          acceptingType: 'PrivateType',
+          profileId: 'private-kind',
+        },
+        status_profile_pin: { releaseDigest: 'private-status-digest', profileId: 'private-status' },
+        library_profile_pin: { releaseDigest: 'private-compatibility-digest' },
+      },
+    }),
+  );
+  const result = await loadCopyDetail(client, request(), {}, { id });
+  expect(result.ok && result.copy).toMatchObject(presentation);
+  const serialized = JSON.stringify(result);
+  for (const privateValue of [
+    'profile_pin',
+    'releaseDigest',
+    'acceptingType',
+    'profileId',
+    'PrivateType',
+    'private-',
+    subjectId,
+  ]) {
+    expect(serialized).not.toContain(privateValue);
+  }
+  expect(calls).toHaveLength(1);
+});
+
+test('unauthenticated and mismatched native point reads cannot provide detail authority', async () => {
+  const { client, calls } = transport(() => json({ copy: { ...native, id: 'another-copy', presentation } }));
+  expect(await loadCopyDetail(client, new Request('https://site.test/en/library/copies'), {}, { id })).toEqual({
+    ok: false,
+    reason: 'forbidden',
+  });
+  expect(calls).toHaveLength(0);
+  expect(await loadCopyDetail(client, request(), {}, { id })).toEqual({ ok: false, reason: 'unavailable' });
+  expect(calls).toHaveLength(1);
 });
 
 test('denied or concealed point reads clear detail authority without treating them as deletion', async () => {
