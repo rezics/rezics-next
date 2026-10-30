@@ -10,12 +10,13 @@ import {
   utimesSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { hostname } from 'node:os';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   processTreeCpuTicks,
   runWorkerCheck,
+  resolveRepositoryBun,
   scopeRootTypecheck,
   startWorkerCheck,
   waitWorkerCheck,
@@ -23,7 +24,36 @@ import {
 import { checkClass, recordPeak } from './check-memory.ts';
 
 const dirs: string[] = [];
+const repository = join(import.meta.dir, '..');
 const inheritedCheckEnvironment = { ...process.env };
+
+async function needsStack(argv: readonly string[], cwd = repository): Promise<boolean> {
+  const worker = (await import('./worker-check.ts')) as unknown as {
+    workerCheckNeedsStack?: (command: readonly string[], directory?: string) => boolean;
+  };
+  if (typeof worker.workerCheckNeedsStack !== 'function') throw new Error('workerCheckNeedsStack is not exported');
+  return worker.workerCheckNeedsStack(argv, cwd);
+}
+
+function restoreWorkerEnvironment(old: NodeJS.ProcessEnv): void {
+  for (const key of [
+    'REZICS_CHECK_MEMORY',
+    'REZICS_CHECK_MEMORY_DIR',
+    'REZICS_CHECK_MEMORY_GIB',
+    'REZICS_CHECK_SCOPE',
+    'WORKER_REMOTE_EVENTS',
+    'WORKER_REMOTE_ARGS',
+    'WORKER_REMOTE_MODE',
+    'KERNEL_CHECK_REMOTE',
+    'KERNEL_CHECK_ON_REMOTE',
+    'WORKER_WRAPPER_MARKER',
+    'WRAPPER_KEEP',
+    'WRAPPER_REMOVE',
+  ]) {
+    if (old[key] === undefined) delete process.env[key];
+    else process.env[key] = old[key];
+  }
+}
 
 function cleanTestEnvironment(environment: Record<string, string | undefined>): Record<string, string | undefined> {
   const clean = { ...environment };
@@ -578,7 +608,9 @@ function workerFixture(): {
   remoteArgs: string;
   localMarker: string;
 } {
-  const root = mkdtempSync('/tmp/worker-check-remote-test-');
+  const temporary = join(import.meta.dir, '../.temp');
+  mkdirSync(temporary, { recursive: true });
+  const root = mkdtempSync(join(temporary, 'worker-check-remote-test-'));
   dirs.push(root);
   const memory = join(root, 'memory');
   const scripts = join(root, 'scripts');
@@ -635,6 +667,174 @@ function localCommand(marker: string): string[] {
     `require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.env.REZICS_CHECK_MEMORY_LEASE ?? 'missing')`,
   ];
 }
+
+test('stack-free placement: explicit pure file tests lint and pure type commands default local without a remote slot', async () => {
+  expect(await needsStack(['bun', 'test', 'services/importer/tests/media-fence-evidence.test.ts'])).toBe(false);
+  expect(await needsStack(['bun', 'test', 'services/importer/tests/media-fence-evidence.test.ts', '-t', 'fence']))
+    .toBe(false);
+  expect(await needsStack(['bun', 'x', 'oxlint', '.'])).toBe(false);
+  expect(await needsStack(['bun', 'x', 'oxfmt', '--check', '.'])).toBe(false);
+  expect(await needsStack(['bun', 'check', '--no-script', '-p', 'packages/filter/tsconfig.json'])).toBe(false);
+  expect(await needsStack(['tsc', '--noEmit', '-p', 'packages/filter/tsconfig.json'])).toBe(false);
+});
+
+test('stack-free placement: native kernel Auth Web isolated and real compiler-database routes retain stack placement', async () => {
+  expect(await needsStack(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/http/body-limit.test.ts']))
+    .toBe(true);
+  expect(await needsStack(['bun', 'run', '--cwd=services/auth', 'check'])).toBe(true);
+  expect(await needsStack(['bun', 'run', '--cwd', 'apps/auth', 'test'])).toBe(true);
+  expect(await needsStack(['bun', 'run', '--cwd', 'apps/web', 'check'])).toBe(true);
+  expect(await needsStack(['bun', 'test', 'apps/web/tests/auth-binding.host.test.ts'])).toBe(true);
+  expect(await needsStack(['bun', 'apps/web/scripts/check.ts', '--auth-binding-host'])).toBe(true);
+  expect(await needsStack(['bun', 'apps/auth/scripts/isolated.ts', 'bun', 'test'])).toBe(true);
+  expect(await needsStack(['bun', 'scripts/typecheck.ts'])).toBe(true);
+  expect(await needsStack(['bun', 'test', 'scripts/typecheck.test.ts'])).toBe(true);
+  expect(await needsStack(['bun', 'test', 'scripts/remote-check.test.ts'])).toBe(true);
+});
+
+test('stack-free placement: cwd and env wrappers retain command meaning and ambiguous shell or discovery remains conservative', async () => {
+  const importerFile = 'services/importer/tests/media-fence-evidence.test.ts';
+  const absoluteImporterFile = join(repository, importerFile);
+  expect(await needsStack(['env', 'WRAPPER_KEEP=yes', 'bun', 'test', absoluteImporterFile, '-t', 'fence'])).toBe(false);
+  expect(await needsStack(['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', 'bun', 'test', importerFile])).toBe(
+    false,
+  );
+  expect(await needsStack(['bun', 'test', 'test/native.test.ts'], join(repository, 'services/kernel'))).toBe(true);
+  expect(await needsStack(['bun', 'run', '--cwd=services/kernel', 'check'])).toBe(true);
+  expect(await needsStack(['sh', '-c', 'bun test services/importer/tests/media-fence-evidence.test.ts'])).toBe(true);
+  expect(await needsStack(['bun', 'test'])).toBe(true);
+  expect(await needsStack(['bun', 'run', 'scripts/unknown-check.ts'])).toBe(true);
+
+  const fixture = workerFixture();
+  const marker = join(fixture.root, 'wrapper-marker');
+  const file = join(fixture.root, 'services/importer/tests/wrapper.test.ts');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    `import { appendFileSync } from 'node:fs';\nimport { expect, test } from 'bun:test';\ntest('selected wrapper case', () => { expect(process.env.WRAPPER_KEEP).toBe('yes'); expect(process.env.WRAPPER_REMOVE).toBeUndefined(); appendFileSync(process.env.WORKER_WRAPPER_MARKER!, 'selected\\n'); });\ntest('unselected wrapper case', () => appendFileSync(process.env.WORKER_WRAPPER_MARKER!, 'unselected\\n'));\n`,
+  );
+  const old = { ...process.env };
+  try {
+    workerEnv(fixture);
+    process.env.WRAPPER_REMOVE = 'remove-me';
+    process.env.WORKER_WRAPPER_MARKER = marker;
+    const command = [
+      'env',
+      '-u',
+      'WRAPPER_REMOVE',
+      'WRAPPER_KEEP=yes',
+      'bun',
+      'test',
+      'services/importer/tests/wrapper.test.ts',
+      '--test-name-pattern',
+      'selected wrapper case',
+    ];
+    expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
+    expect(readFileSync(marker, 'utf8')).toBe('selected\n');
+    expect(existsSync(fixture.remoteEvents)).toBe(false);
+    expect(
+      resolveRepositoryBun(['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', 'bun', 'test'], fixture.root, '/pinned/bun'),
+    ).toEqual(['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', '/pinned/bun', 'test']);
+  } finally {
+    restoreWorkerEnvironment(old);
+  }
+});
+
+test('stack-free placement: a real managed local check completes while every fake remote slot is unavailable with truthful result and memory ownership', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  const hosts = join(fixture.root, 'hosts.json');
+  const marker = join(fixture.root, 'local-marker');
+  const file = 'services/importer/tests/media-fence-evidence.test.ts';
+  const testFile = join(fixture.root, file);
+  mkdirSync(dirname(testFile), { recursive: true });
+  writeFileSync(
+    testFile,
+    `import { writeFileSync } from 'node:fs';\nimport { expect, test } from 'bun:test';\ntest('local importer evidence', () => { const lease = process.env.REZICS_CHECK_MEMORY_LEASE; expect(lease).toBeTruthy(); writeFileSync(${JSON.stringify(marker)}, lease!); console.log('local importer evidence ran'); });\n`,
+  );
+  writeFileSync(hosts, JSON.stringify({ hosts: [{ name: 'busy', slots: 0 }] }));
+  const command = ['bun', 'test', file];
+  const commandClass = checkClass(command, fixture.root);
+  const holder = await acquireStackSlot('held local memory slot', {
+    REZICS_STACK_SLOTS: '1',
+    REZICS_STACK_LEASE_DIR: fixture.memory,
+  });
+  let waiting: Promise<number> | undefined;
+  try {
+    workerEnv(fixture, hosts);
+    process.env.REZICS_CHECK_MEMORY_GIB = '1';
+    process.env.WORKER_REMOTE_MODE = 'queued';
+    const id = startWorkerCheck(command, fixture.root);
+    const resultDirectory = join(fixture.root, '.temp/goal/checks/results');
+    const recordFile = join(resultDirectory, `${id}.json`);
+    const recordLog = join(fixture.root, JSON.parse(readFileSync(recordFile, 'utf8')).log as string);
+    const report: string[] = [];
+    waiting = waitWorkerCheck(id, fixture.root, 10_000, {
+      pollMs: 10,
+      stallMs: 5_000,
+      write: (line) => report.push(line),
+    });
+    await untilRecorded(() => readFileSync(recordLog, 'utf8').includes(`${commandClass} waiting (1/1 held, 0 ahead)`));
+    expect(existsSync(marker)).toBe(false);
+    await holder.release();
+    expect(await waiting).toBe(0);
+    const record = JSON.parse(readFileSync(recordFile, 'utf8')) as {
+      id: string;
+      argv: string[];
+      status: string;
+      exitCode: number;
+      log: string;
+    };
+    expect(record).toMatchObject({ id, argv: command, status: 'finished', exitCode: 0 });
+    expect(readFileSync(marker, 'utf8')).not.toBe('missing');
+    expect(report.join('')).toContain('check: exit status 0');
+    expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('local importer evidence ran');
+    expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('waiting (1/1 held, 0 ahead)');
+    expect(readFileSync(join(fixture.root, record.log), 'utf8')).not.toContain('remote-check:');
+    expect(existsSync(fixture.remoteEvents)).toBe(false);
+  } finally {
+    await holder.release();
+    if (waiting) await waiting.catch(() => undefined);
+    restoreWorkerEnvironment(old);
+  }
+});
+
+test('stack-free placement: native command still reaches existing remote admission and explicit local and already-remote behavior remain compatible', async () => {
+  const fixture = workerFixture();
+  const old = { ...process.env };
+  const hosts = join(fixture.root, 'hosts.json');
+  const marker = join(fixture.root, 'local-marker');
+  const file = 'services/kernel/test/native-placement.test.ts';
+  const testFile = join(fixture.root, file);
+  mkdirSync(dirname(testFile), { recursive: true });
+  writeFileSync(
+    testFile,
+    `import { writeFileSync } from 'node:fs';\nimport { expect, test } from 'bun:test';\ntest('native placement fixture', () => { expect(process.env.REZICS_CHECK_MEMORY_LEASE).toBeTruthy(); writeFileSync(${JSON.stringify(marker)}, 'local'); });\n`,
+  );
+  writeFileSync(hosts, JSON.stringify({ hosts: [{ name: 'available', slots: 1 }] }));
+  const command = ['bun', 'test', file];
+  const commandClass = checkClass(command, fixture.root);
+  try {
+    workerEnv(fixture, hosts);
+    for (let index = 0; index < 3; index += 1) recordPeak(fixture.memory, commandClass, 2 * 2 ** 30);
+    expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
+    expect(readFileSync(fixture.remoteEvents, 'utf8')).toBe('remote\n');
+    expect(existsSync(marker)).toBe(false);
+
+    rmSync(fixture.remoteEvents);
+    expect(await runWorkerCheck(['--local', ...command], fixture.root, false)).toBe(0);
+    expect(existsSync(marker)).toBe(true);
+    expect(existsSync(fixture.remoteEvents)).toBe(false);
+
+    rmSync(marker);
+    process.env.KERNEL_CHECK_ON_REMOTE = '1';
+    expect(await runWorkerCheck(command, fixture.root, false)).toBe(0);
+    expect(readFileSync(marker, 'utf8')).toBe('local');
+    expect(existsSync(fixture.remoteEvents)).toBe(false);
+  } finally {
+    restoreWorkerEnvironment(old);
+  }
+});
 
 test('worker checks at least 2 GiB run remotely and record the remote peak under their class', async () => {
   const fixture = workerFixture();
