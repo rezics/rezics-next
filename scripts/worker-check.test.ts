@@ -724,6 +724,7 @@ test('stack-free placement: cwd and env wrappers retain command meaning and ambi
   expect(
     await needsStack(['bun', 'test', importerFile, '--test-name-pattern', 'services/kernel/test/native.test.ts']),
   ).toBe(false);
+  expect(await needsStack(['bun', 'test', importerFile, '-t', 'services/kernel/test/native.test.ts'])).toBe(false);
   expect(await needsStack(['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', 'bun', 'test', importerFile])).toBe(
     false,
   );
@@ -827,7 +828,7 @@ test('stack-free placement: a real managed local check completes while every fak
       log: string;
     };
     expect(record).toMatchObject({ id, argv: command, status: 'finished', exitCode: 0 });
-    expect(readFileSync(marker, 'utf8')).not.toBe('missing');
+    expect(readFileSync(marker, 'utf8')).toMatch(/^\d+\/4$/);
     expect(report.join('')).toContain('check: exit status 0');
     expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('local importer evidence ran');
     expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('waiting (4/4 held, 0 ahead)');
