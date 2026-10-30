@@ -84,7 +84,8 @@ export async function readCurrentExposure(
         typeof row.open !== 'boolean' ||
         typeof row.at !== 'string' ||
         row.at.length > 64 ||
-        /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)$/.exec(row.at)?.[0] !== row.at ||
+        /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)$/.exec(row.at)?.[0] !==
+          row.at ||
         !Number.isFinite(Date.parse(row.at)) ||
         (at !== undefined && row.at !== at)
       )
