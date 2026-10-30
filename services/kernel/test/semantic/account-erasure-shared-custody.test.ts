@@ -130,17 +130,20 @@ test('actual Semantic and Zone minimization plus shared receiving custody permit
         `SELECT configuration,mounts,owner_id,state,restore_until FROM zones.zone WHERE route=$1 AND zone_id=$2`,
         [routeOf(zone), zone],
       );
-      expect(row.rows).toEqual([{ configuration: null, mounts: [], owner_id: null, state: 'purged', restore_until: null }]);
+      expect(row.rows).toEqual([
+        { configuration: null, mounts: [], owner_id: null, state: 'purged', restore_until: null },
+      ]);
     }
     const retained = await f.call(undefined, 'GET', `/v1/subjects/${subject}`);
     expect(retained.status, JSON.stringify(retained.body)).toBe(200);
     expect(JSON.stringify(retained.body)).toContain(publicValue);
     expect(JSON.stringify(retained.body)).not.toContain(author.handle);
-    const ack = () => f.db.admin.query(
-      `SELECT xmin::text AS commit, outcome, retained FROM access.erasure_acknowledgement
+    const ack = () =>
+      f.db.admin.query(
+        `SELECT xmin::text AS commit, outcome, retained FROM access.erasure_acknowledgement
       WHERE route=$1 AND account_id=$2 AND participant='semantic'`,
-      [routeOf(author.accountId), author.accountId],
-    );
+        [routeOf(author.accountId), author.accountId],
+      );
     const original = await ack();
     expect(original.rows).toHaveLength(1);
     await worker.crash();
@@ -150,7 +153,8 @@ test('actual Semantic and Zone minimization plus shared receiving custody permit
     worker = await accountErasureWorker(f.db.url);
     expect((await ack()).rows).toEqual(original.rows);
     const late = await f.call(author, 'POST', '/v1/subjects', {
-      type: 'schema:Person', labels: { en: 'Late private producer' },
+      type: 'schema:Person',
+      labels: { en: 'Late private producer' },
     });
     expect([401, 403]).toContain(late.status);
     expect((await ack()).rows).toEqual(original.rows);

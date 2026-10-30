@@ -59,13 +59,9 @@ export async function readSemanticErasureCustody(pool: Pool, accountId: string):
   const context = { deadline: Date.now() + 5_000 } as const;
   const source = await readSubjectErasureSourceProof({ pool }, barrier, context);
   if (!source) return { state: 'pending', reason: 'producer-contract-unavailable' };
-  const semantic = await readHistoryOwnerCoverage(
-    { pool }, barrier, 'semantic', context,
-  );
+  const semantic = await readHistoryOwnerCoverage({ pool }, barrier, 'semantic', context);
   if (semantic.state !== 'complete') return { state: 'pending', reason: 'producer-contract-unavailable' };
-  const zones = await readHistoryOwnerCoverage(
-    { pool }, barrier, 'zones', context,
-  );
+  const zones = await readHistoryOwnerCoverage({ pool }, barrier, 'zones', context);
   if (zones.state !== 'complete') return { state: 'pending', reason: 'producer-contract-unavailable' };
   // Coverage alone does not prove that each original receipt/outbox/work artifact and its receiving
   // copies were minimized. The exact artifact list is an Accounts-owned producer output not present
