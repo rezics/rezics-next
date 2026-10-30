@@ -28,6 +28,7 @@ import { createSearchService } from '../../src/search/service.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 import {
   audience,
   governance,
@@ -139,6 +140,7 @@ export async function createContentUserCasesDriver(): Promise<ContentUserCasesDr
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
       workClient,
+      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       clock: () => new Date(fixtureTime),
       content: { cursorNow: () => fixtureTime },
       access: () => system.access,
