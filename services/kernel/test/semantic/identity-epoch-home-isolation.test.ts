@@ -71,8 +71,8 @@ async function isolated<T>(matches: RegExp, partition: number, operation: () => 
     client.query = async function (...args: unknown[]) {
       const statement = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text;
       if (statement && matches.test(statement)) {
-        await query.call(client, `SET LOCAL ROLE ${role}`);
-        await query.call(client, "SELECT set_config('identity_test.home',$1,true)", [String(partition)]);
+        await Reflect.apply(query, client, [`SET LOCAL ROLE ${role}`]);
+        await Reflect.apply(query, client, ["SELECT set_config('identity_test.home',$1,true)", [String(partition)]]);
         invocations++;
       }
       return Reflect.apply(query, client, args);
