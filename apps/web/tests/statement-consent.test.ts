@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
@@ -9,10 +9,12 @@ import {
   readConsentPublic,
   type ConsentCommand,
 } from '../src/features/catalogue/statement-consent';
-import { StatementConsentPage } from '../src/features/catalogue/statement-consent-view';
 import { relationFields } from '../src/subject/relation-candidates';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import type { Release } from '@rezics/definitions';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { StatementConsentPage } = await import('../src/features/catalogue/statement-consent-view');
 
 const command = (
   fixture: ReturnType<typeof consentFixture>,
