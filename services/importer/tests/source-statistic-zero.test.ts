@@ -219,3 +219,28 @@ test('facts fence suppresses positive publication but allows removal of the exac
     await f.close();
   }
 });
+
+test('other registered sources never derive a clear from source rating fields', async () => {
+  for (const [sourceKind, path, id] of [
+    ['bangumi', 'bangumi/subject.json', '424242'],
+    ['wikidata', 'wikidata/entity.json', 'Q571'],
+    ['openlibrary', 'open-library/work.json', '/works/OL900000001W'],
+  ] as const) {
+    const source = createSourceRegistration(sourceKind);
+    const payload = await Bun.file(new URL(`../../../specs/fixtures/imports/${path}`, import.meta.url)).json();
+    const result = source.convert(
+      {
+        external_id: id,
+        record_revision: '7',
+        record: {
+          ...payload,
+          c_votecount: 0,
+          c_average: null,
+        },
+      },
+      { source: source.source },
+    );
+    expect(result.sourceStatisticClear).toBeUndefined();
+    expect(result.sourceStatistic).toBeUndefined();
+  }
+});

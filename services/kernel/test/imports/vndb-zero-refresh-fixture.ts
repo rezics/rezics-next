@@ -278,9 +278,11 @@ export async function runJourney() {
     const replay = await capture.replay(pending[0]!);
     const revokedReplay = {
       status: replay.status,
-      storedSuccess: replay.status === 403 && replay.receipt === null ? null : replay.response,
+      storedSuccess: replay.receipt,
     };
     expect(replay.status).toBe(403);
+    expect(JSON.stringify(replay.response)).not.toContain('sourceRecordId');
+    expect(JSON.stringify(replay.response)).not.toContain('removed');
     await support.setStatisticGrant(true);
     // Reopen same durable state, before the replacement source stream is read.
     const resumed = await invoke(null, 0, false, true);

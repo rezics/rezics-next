@@ -686,10 +686,12 @@ export class Importer {
     }
     const statisticOnly =
       (statisticWritten ||
-        (registration.sourceKind === 'vndb' && !conversion?.sourceStatistic && !conversion?.sourceStatisticClear)) &&
-      acknowledged?.state === 'present' &&
-      acknowledged.recordRevision === row.recordRevision &&
-      acknowledged.converter_revision === row.converter_revision &&
+        (registration.sourceKind === 'vndb' &&
+          acknowledged?.state === 'present' &&
+          acknowledged.recordRevision === row.recordRevision &&
+          acknowledged.converter_revision === row.converter_revision &&
+          !conversion?.sourceStatistic &&
+          !conversion?.sourceStatisticClear)) &&
       !skipCover &&
       candidates.length > 0 &&
       retainedCandidates.size === candidates.length &&

@@ -126,7 +126,7 @@ export function captureVndbStatistics(runtime: ApiRuntime) {
   const fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
     const { response, exchange } = await dispatch(request);
-    if (loseResponse && exchange.receipt !== null) {
+    if (loseResponse && exchange.method === 'PUT' && exchange.receipt !== null) {
       loseResponse = false;
       exchange.responseLost = true;
       // Handler and exact receipt observation completed before normal bounded HTTP retry.
@@ -228,6 +228,7 @@ export function captureVndbStatistics(runtime: ApiRuntime) {
         storage.nativeVoteRows += votes.rows.length;
       }
       for (const [key, anchor] of anchors) {
+        // Existing positive-statistic port: clear responses/receipts remain separately captured in exchanges.
         if (anchor.kind !== 'rating.source_statistic.write') continue;
         const row = await receipt(anchor);
         if (!row || identity(row) !== key) throw new Error('Native statistic receipt disappeared');
