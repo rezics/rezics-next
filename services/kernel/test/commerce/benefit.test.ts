@@ -105,7 +105,10 @@ test('fresh sale refuses absent, retargeted or internally mismatched native sour
   const id = authority.benefit.resource.id;
   expect(() => captureContentEditionSaleAuthority(id, null)).toThrow(ContentEditionUnavailableError);
   expect(() =>
-    captureContentEditionSaleAuthority(id, { ...authority, source: { ...authority.source, revisionId: newId(0x2200) } }),
+    captureContentEditionSaleAuthority(id, {
+      ...authority,
+      source: { ...authority.source, revisionId: newId(0x2200) },
+    }),
   ).toThrow(ContentEditionUnavailableError);
   const exact = { ...authority, source: { ...authority.source, revisionId: authority.benefit.version.revisionId } };
   expect(() => captureContentEditionSaleAuthority(newId(0x2200), exact)).toThrow(ContentEditionUnavailableError);

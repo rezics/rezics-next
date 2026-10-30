@@ -2,10 +2,7 @@ import type { Pool } from 'pg';
 import { contentEditionBenefitBinding, copyContentEditionBenefit } from '../access/authenticated-benefit.ts';
 import { AccessUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
 import type { ContentEditionSaleAuthority } from '../content/edition-model.ts';
-import {
-  readContentEditionSaleAuthority,
-  readContentEditionMechanicalSaleAuthority,
-} from '../content/edition-sale.ts';
+import { readContentEditionSaleAuthority, readContentEditionMechanicalSaleAuthority } from '../content/edition-sale.ts';
 import type { ReadContext } from '../content/model.ts';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
