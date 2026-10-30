@@ -191,7 +191,7 @@ export async function realmBoardWorld() {
       record_revision: 'unversioned',
       digest: 'c'.repeat(64),
       converter_revision: 'openlibrary@1',
-      field_group: 'facts',
+      field_group: 'facts' as const,
     };
     const references = [
       {

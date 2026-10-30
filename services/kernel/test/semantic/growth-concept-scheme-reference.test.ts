@@ -2,7 +2,6 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { statementSlotId } from '../../src/semantic/item.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { sourceTuple } from '../../src/semantic/fences.ts';
 import { capture, checkGrowth, costOf, seed } from '../support/growth.ts';
 import { realmBoardWorld } from '../content/realm-board-create-support.ts';
@@ -45,11 +44,12 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
     const key = crypto.randomUUID();
     const initial = await world.board(id, key);
     expect(initial.response.status).toBe(representation === 'absent' ? 403 : 201);
-    const expected = JSON.stringify(initial.value);
+    const stable = ({ request_id: _requestId, ...value }: Record<string, unknown>) => value;
+    const expected = stable(initial.value);
     const operation = async () => {
       const result = await world.board(id, key);
       expect(result.response.status).toBe(initial.response.status);
-      expect(JSON.stringify(result.value)).toBe(expected);
+      expect(stable(result.value)).toEqual(expected);
       return { bytes: Buffer.byteLength(JSON.stringify(result.value)) };
     };
     for (const axis of ['catalogue', 'known-history-and-relations'] as const) {
@@ -62,14 +62,6 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
             [route, id],
           )
         ).rows[0].revision,
-      );
-      const baseHead = Number(
-        (
-          await world.db.admin.query(
-            'SELECT coalesce(max(head),0) AS head FROM semantic.adoption WHERE route=$1 AND subject_id=$2 AND slot_id=$3 AND context_id=$4',
-            [route, id, membershipSlot, GLOBAL_CONTEXT],
-          )
-        ).rows[0].head,
       );
       const report = await checkGrowth(world.db, {
         name: `Native Concept scheme ${representation} ${axis}`,
@@ -161,23 +153,10 @@ test('real Realm caller stays bounded as unrelated catalogue and known Concept h
                       },
                     ];
                 } else {
-                  // Irrelevant property heads never change the native membership selection.
-                  // Compact slots are never given editorial history: a native edit
-                  // would expand them. Their unrelated property history grows instead.
-                  if (selected)
-                    rows['semantic.adoption'] = [
-                      {
-                        route,
-                        subject_id: id,
-                        slot_id: membershipSlot,
-                        context_id: GLOBAL_CONTEXT,
-                        head: baseHead + ordinal + 1,
-                        mode: 'replace',
-                        selection: [],
-                        revision,
-                      },
-                    ];
-                  else
+                  // Expanded membership candidate history is unselected. For a compact
+                  // membership slot, grow an unrelated property's proposal history instead:
+                  // a native editorial write to membership would expand that slot.
+                  if (!selected)
                     rows['semantic.candidate'] = [
                       {
                         ...rows['semantic.candidate']![0],

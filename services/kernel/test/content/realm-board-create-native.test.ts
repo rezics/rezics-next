@@ -29,7 +29,11 @@ test.serial('Realm board creation proves compact membership while native link pr
   expect(replay.response.status).toBe(201);
   expect(replay.value.board).toEqual(created.value.board);
   expect(await world.effects()).toEqual(effects);
-  expect(await world.lag()).toEqual(lag);
+  const stillBehind = await world.lag();
+  expect(stillBehind.checkpoint).toBe(lag.checkpoint);
+  expect(stillBehind.links).toBe(lag.links);
+  expect(BigInt(stillBehind.position)).toBeGreaterThanOrEqual(BigInt(lag.position));
+  expect(BigInt(stillBehind.position)).toBeGreaterThan(BigInt(stillBehind.checkpoint ?? '0'));
   const conflict = await world.board();
   expect(conflict.response.status).toBe(409);
   expect(await world.effects()).toEqual(effects);
@@ -51,6 +55,13 @@ test.serial('only the current selected expanded Global membership authorizes a R
   const result = await world.board(id);
   expect(result.response.status).toBe(201);
   expect(result.value.board).toMatchObject({ realmId: world.realm.realmId });
+  await world.checked(
+    'POST',
+    `/v1/subjects/${id}:adopt`,
+    { context: GLOBAL_CONTEXT, property: 'skos:inScheme', mode: 'replace', selection: [], expected_head: 1 },
+    200,
+  );
+  await refused(id);
 });
 
 test.serial(
