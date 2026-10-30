@@ -237,13 +237,15 @@ export function createSearchWriterGuard(options: {
       locator(value, after);
       return withReadTransaction(options.pool, async (tx) => {
         const target = await retained(tx, value);
+        const frontier = after === null ? '' : 'AND original_id>$3::uuid';
+        const parameters = after === null ? [value.partition, options.index] : [value.partition, options.index, after];
         const rows = (
           await tx.query<CopyRow>(
             `SELECT original_id::text,source_position,visible_transaction_id,
           visible_position,writer_transaction_id,writer_position,writer_token,dispatch_state,owner_epoch,incarnation
           FROM search.identity_writer WHERE partition_no=$1 AND physical_target=$2
-          AND ($3::uuid IS NULL OR original_id>$3) ORDER BY original_id LIMIT 100`,
-            [value.partition, options.index, after],
+          ${frontier} ORDER BY original_id LIMIT 100`,
+            parameters,
           )
         ).rows;
         if (rows.some((row) => row.owner_epoch !== target.owner_epoch || row.incarnation !== target.incarnation))
@@ -269,12 +271,14 @@ export function createSearchWriterGuard(options: {
         const receipt = await native(tx, context.transactionId);
         const target = await retained(tx, value);
         await gate(tx, receipt, target.incarnation, target.write_alias);
+        const frontier = after === null ? '' : 'AND original_id>$3::uuid';
+        const parameters = after === null ? [value.partition, options.index] : [value.partition, options.index, after];
         const rows = (
           await tx.query<CopyRow>(
             `SELECT original_id::text,dispatch_state,owner_epoch,incarnation FROM search.identity_writer
           WHERE partition_no=$1 AND physical_target=$2 AND writer_token IS NOT NULL
-          AND ($3::uuid IS NULL OR original_id>$3) ORDER BY original_id LIMIT 100 FOR UPDATE`,
-            [value.partition, options.index, after],
+          ${frontier} ORDER BY original_id LIMIT 100 FOR UPDATE`,
+            parameters,
           )
         ).rows;
         if (rows.some((row) => row.owner_epoch !== target.owner_epoch || row.incarnation !== target.incarnation))
