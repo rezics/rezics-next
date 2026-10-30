@@ -14,8 +14,8 @@ export function ContextCurationSession({
 }: {
   id: string;
   context: string;
-  property?: string;
-  slot?: CandidateSlot;
+  property?: string | undefined;
+  slot?: CandidateSlot | undefined;
   locale: string;
 }) {
   const { state } = useSession();

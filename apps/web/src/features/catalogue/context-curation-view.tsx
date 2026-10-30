@@ -49,6 +49,9 @@ export function ContextComparisonView({
                   : m.context_inherited({}, options)}
           </p>
           {review.slot && <p className="text-sm text-muted-foreground">{m.context_relation_resolution({}, options)}</p>}
+          {review.slot && review.reading.subject.resolution[property] === 'unresolved' && (
+            <p>{m.context_unresolved({}, options)}</p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             {[
               {

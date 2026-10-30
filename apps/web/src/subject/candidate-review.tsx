@@ -41,7 +41,7 @@ export function CandidateReview({
   initialProperty?: string | undefined;
   exactCandidate?: string;
   context?: string;
-  slot?: CandidateSlot;
+  slot?: CandidateSlot | undefined;
 }) {
   const options = { locale: locale as never };
   const [opened, setOpened] = useState(false);

@@ -97,7 +97,7 @@ function command(input: unknown): CandidateCommand & { context: string } {
     key: value.key,
     head: value.head as number | null,
     operation: value.operation as CandidateCommand['operation'],
-    mode: mode as CandidateCommand['mode'],
+    mode: mode as NonNullable<CandidateCommand['mode']>,
     ...(selection ? { selection } : {}),
   };
 }

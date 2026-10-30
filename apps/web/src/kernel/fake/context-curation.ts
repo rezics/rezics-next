@@ -161,7 +161,19 @@ export function contextFixture(scenario: ContextScenario = 'inherited', locale =
   const address = { id: base.id, context: context.id, property: base.property };
   const transport: CandidateTransport = {
     read: (property, cursor, session) =>
-      readContextCuration(client, 'Bearer fixture', { ...address, property, cursor, session }, release, locale),
+      readContextCuration(
+        client,
+        'Bearer fixture',
+        {
+          id: address.id,
+          context: address.context,
+          ...(property ? { property } : {}),
+          ...(cursor ? { cursor } : {}),
+          ...(session ? { session } : {}),
+        },
+        release,
+        locale,
+      ),
     confirm: (command: CandidateCommand) =>
       confirmContextCuration(client, 'Bearer fixture', { ...command, context: context.id }, release, locale),
   };
