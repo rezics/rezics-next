@@ -456,7 +456,12 @@ export async function stepIdentityEpochBootstrapWork(
       value: partition,
       events: schedule
         ? [{ type: IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED, data: { partition } }]
-        : [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition } }],
+        : [
+            {
+              type: IDENTITY_EPOCH_PROGRESS,
+              data: { partition, generation: ((await readPartition(tx, 0))!.position + 1n).toString() },
+            },
+          ],
     };
   });
   const partition = selected.value;

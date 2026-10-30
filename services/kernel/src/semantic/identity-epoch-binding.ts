@@ -172,7 +172,12 @@ export async function lookupIdentityBinding(
       });
       return {
         value: null,
-        events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+        events: [
+          {
+            type: IDENTITY_EPOCH_PROGRESS,
+            data: { partition: currentCommand(tx).partition, generation: current.generation },
+          },
+        ],
       };
     });
     row = (
@@ -214,7 +219,15 @@ export async function claimIdentityBinding(
     });
     return {
       value: null,
-      events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+      events: [
+        {
+          type: IDENTITY_EPOCH_PROGRESS,
+          data: {
+            partition: currentCommand(tx).partition,
+            generation: (BigInt(existing?.generation ?? '0') + 1n).toString(),
+          },
+        },
+      ],
     };
   });
   const committed = await lookupIdentityBinding(pool, authority, input);
@@ -249,7 +262,12 @@ export async function acceptIdentityBinding(
     if (changed.rowCount !== 1) throw new TypeError('Binding publication did not match immutable job');
     return {
       value: null,
-      events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+      events: [
+        {
+          type: IDENTITY_EPOCH_PROGRESS,
+          data: { partition: currentCommand(tx).partition, generation: data.generation },
+        },
+      ],
     };
   });
 }

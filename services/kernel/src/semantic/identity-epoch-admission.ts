@@ -269,7 +269,12 @@ async function closeUnreservedBinding(
     });
     return {
       value: true,
-      events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+      events: [
+        {
+          type: IDENTITY_EPOCH_PROGRESS,
+          data: { partition: currentCommand(tx).partition, generation: data.generation },
+        },
+      ],
     };
   });
   if (!first.value) return false;
@@ -302,7 +307,12 @@ async function closeUnreservedBinding(
     );
     return {
       value: null,
-      events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+      events: [
+        {
+          type: IDENTITY_EPOCH_PROGRESS,
+          data: { partition: currentCommand(tx).partition, generation: data.generation },
+        },
+      ],
     };
   });
   return true;
@@ -541,7 +551,12 @@ async function deliverHome(
         ]);
         return {
           value: null,
-          events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+          events: [
+            {
+              type: IDENTITY_EPOCH_PROGRESS,
+              data: { partition: currentCommand(tx).partition, generation: ref.epoch.toString() },
+            },
+          ],
         };
       });
     }
@@ -630,7 +645,12 @@ async function validateSources(
       });
       return {
         value: true,
-        events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+        events: [
+          {
+            type: IDENTITY_EPOCH_PROGRESS,
+            data: { partition: currentCommand(tx).partition, generation: ref.epoch.toString() },
+          },
+        ],
       };
     });
     if (!held.value) return false;
@@ -665,7 +685,12 @@ async function validateSources(
       );
       return {
         value: null,
-        events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+        events: [
+          {
+            type: IDENTITY_EPOCH_PROGRESS,
+            data: { partition: currentCommand(tx).partition, generation: ref.epoch.toString() },
+          },
+        ],
       };
     });
   }
@@ -711,7 +736,12 @@ async function releaseSourceHolds(pool: Pool, ref: IdentityJobRef, bases: readon
       return changed.rowCount
         ? {
             value: null,
-            events: [{ type: IDENTITY_EPOCH_PROGRESS, data: { partition: currentCommand(tx).partition } }],
+            events: [
+              {
+                type: IDENTITY_EPOCH_PROGRESS,
+                data: { partition: currentCommand(tx).partition, generation: ref.epoch.toString() },
+              },
+            ],
           }
         : noEffect(null);
     });
