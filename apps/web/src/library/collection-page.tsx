@@ -1187,7 +1187,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
     );
     if (layout === 'grid')
       return (
-        <div key={key} role="listitem" data-slot="collection-member-card" className="min-w-0 space-y-2">
+        <div key={key} role="listitem" data-slot="collection-member-card" className="min-w-0">
           <CoverCard
             href={subjectHref({ id: subject.id, label: title.text }, locale).href}
             title={title.text}
@@ -1199,17 +1199,21 @@ export function CollectionReadMembers<Member extends ReadMember>({
               ratio: collectionMemberRatio(subject, typeRatios, listPresentations),
               ...(presentation ? { listPresentation: presentation } : {}),
             }}
-            secondary={<CollectionMemberDetails member={member} listPresentations={listPresentations} />}
+            state={
+              <div className="space-y-1">
+                <CollectionMemberDetails member={member} listPresentations={listPresentations} />
+                {member.note ? (
+                  <p
+                    data-slot="collection-member-note"
+                    className="line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground"
+                  >
+                    {member.note}
+                  </p>
+                ) : null}
+              </div>
+            }
             menuTrigger={menu}
           />
-          {member.note ? (
-            <p
-              data-slot="collection-member-note"
-              className="line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground"
-            >
-              {member.note}
-            </p>
-          ) : null}
         </div>
       );
     return (
