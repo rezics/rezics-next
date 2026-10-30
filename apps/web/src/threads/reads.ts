@@ -70,7 +70,16 @@ export const readBoardPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadBoardPageWithAuthors(kernelClient(), data);
+    let authorization: string | null = null;
+    if (data.credentialMode === 'session') {
+      try {
+        await prepareSession(getRequest(), env as Partial<SessionEnv>);
+        authorization = viewerCredential(getRequest());
+      } catch {
+        authorization = null;
+      }
+    }
+    return loadBoardPageWithAuthors(kernelClient(), data, authorization);
   });
 
 export const readNewThreadPage = createServerFn({ method: 'GET' })

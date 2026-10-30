@@ -1,18 +1,16 @@
 import { expect, test } from 'bun:test';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createKernelClient, type KernelClient } from '@rezics/client';
+import type { KernelClient } from '@rezics/client';
 import { loadMyRealms } from '../src/community/space';
-import { subjectPageMessages } from '../src/features/pages/route-support';
-import { SubjectViewPage } from '../src/features/pages/subject-frame';
-import { createFakeKernelFetch } from '../src/kernel/fake';
-import fixtures from '../src/kernel/fixtures.json';
-import boardRecording from '../src/kernel/recorded/board.json';
-import realmBoardsRecording from '../src/kernel/recorded/realm-boards.json';
-import subjectPageRecording from '../src/kernel/recorded/subject-page.json';
+import { ExistingReviewNotice, SignInPrompt } from '../src/threads/write-prompts';
+import { loadRealmReviewBoards } from '../src/threads/review-board-choices';
+import { canSubmitThread, reviewThreadHref, selectedReviewSubject } from '../src/threads/review-policy';
+import { loadCurrentReviewVote, selectedVoteCitation, STANDARD_QUESTION_ID } from '../src/threads/review-vote';
 import { startThreadRequest } from '../src/threads/post-writes';
+import { ViewHeadingActions } from '../src/features/pages/view-heading';
 
 const app = join(import.meta.dir, '..');
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
@@ -26,11 +24,6 @@ function snapshot(text: string) {
       content: [{ type: 'paragraph', attrs: { id: 'paragraph' }, content: [{ type: 'text', text }] }],
     },
   } as const;
-}
-
-function source(path: string): string {
-  const fullPath = join(app, path);
-  return existsSync(fullPath) ? readFileSync(fullPath, 'utf8') : '';
 }
 
 test('review writes include one subject and an exact vote citation while discussions keep their old payload', async () => {
@@ -78,83 +71,50 @@ test('review writes include one subject and an exact vote citation while discuss
 });
 
 test('a reviews board requires one picked or preset subject and publishes a review thread', () => {
-  const route = source('src/routes/boards/$id_.new.tsx');
-  const fields = source('src/threads/review-fields.tsx');
-  const actions = source('src/threads/actions.ts');
-  const writes = source('src/threads/post-writes.ts');
+  const choices = [{ id: id(3) }, { id: id(4) }];
 
-  expect(route).toMatch(/board\.purpose\s*===\s*['"]reviews['"]/);
-  expect(route).toMatch(/\{review\s*\?\s*\(/);
-  expect(route).toContain('<ReviewFields');
-  expect(route).toContain('canSubmit={!review || Boolean(subjectId)}');
-  expect(route).toMatch(/subject\??:/);
-  expect(fields).toContain('EntityPicker');
-  expect(fields).toMatch(/value=\{[^}]*subject/);
-  expect(fields).not.toMatch(/multiple\s*=\s*\{?true/);
-  expect(actions).toContain('subjectId');
-  expect(writes).toMatch(/kind:\s*['"]review['"]/);
-  expect(writes).toMatch(/subjectIds:\s*\[input\.subjectId\]/);
+  expect(canSubmitThread('reviews', null)).toBe(false);
+  expect(canSubmitThread('reviews', id(3))).toBe(true);
+  expect(canSubmitThread('discussion', null)).toBe(true);
+  expect(selectedReviewSubject(choices)).toBe(id(3));
+  expect(selectedReviewSubject([])).toBeNull();
 });
 
 test("a review can cite the author's current vote and sends its question, units and revision", () => {
-  const route = source('src/routes/boards/$id_.new.tsx');
-  const fields = source('src/threads/review-fields.tsx');
-  const writes = source('src/threads/post-writes.ts');
+  const vote = { questionId: STANDARD_QUESTION_ID, units: 14, revision: 8 };
 
-  expect(fields).toContain('readCurrentReviewVote');
-  expect(fields).toContain('useEffect');
-  expect(route).toContain('onVoteCitationChange={setVoteCitation}');
-  expect(fields).toMatch(/vote\s*\?\s*\(/);
-  expect(fields).toMatch(/questionId:\s*vote\.questionId/);
-  expect(fields).toMatch(/units:\s*vote\.units/);
-  expect(fields).toMatch(/revision:\s*vote\.revision/);
-  expect(writes).toContain('voteCitation');
-  expect(writes).toContain('input.voteCitation');
+  expect(selectedVoteCitation(vote, true)).toEqual(vote);
+  expect(selectedVoteCitation(vote, false)).toBeUndefined();
+  expect(selectedVoteCitation(null, true)).toBeUndefined();
 });
 
 test('a duplicate live review links to the existing review', () => {
-  const writes = source('src/threads/post-writes.ts');
-  const actions = source('src/threads/actions.ts');
-  const composer = source('src/threads/composer.tsx');
+  const markup = renderToStaticMarkup(createElement(ExistingReviewNotice, { reviewId: id(9) }));
 
-  expect(writes).not.toContain('findExistingReview');
-  expect(actions).toContain('existingReviewId');
-  expect(composer).toContain('href={`/${locale}/threads/${failure.existingReviewId}`}');
-  expect(composer).toContain('thread_review_duplicate');
+  expect(markup).toContain(`href="/en/threads/${id(9)}"`);
+  expect(markup).toContain('You already have a live review for this subject on this board.');
+  expect(markup).toContain('Open your existing review');
 });
 
-test('a second live review returns the id named by the conflict without reading the subject index', async () => {
+test('a review conflict uses the optional native id without reading the subject index', async () => {
   const existingReviewId = id(9);
   const calls: string[] = [];
+  let problem: { code: string; existingThreadId?: string } = { code: 'conflict', existingThreadId: existingReviewId };
   const fakeClient = {
     threads: Object.assign(() => ({}), {
-      post: async () => ({
-        status: 409,
-        headers: new Headers(),
-        error: { value: { code: 'review_exists', existingThreadId } },
-      }),
-    }),
-    subjects: (input: { id: string }) => ({
-      threads: {
-        get: async (request: { query: { place: string; kind: string } }) => {
-          calls.push(`subject:${input.id}`);
-          return {
-            data: {
-              threads: [
-                {
-                  id: existingReviewId,
-                  authorId: 'reader',
-                  boardId: id(1),
-                  kind: 'review',
-                  subjectIds: [id(3)],
-                },
-              ],
-              next: null,
-            },
-          };
-        },
+      post: async () => {
+        calls.push('POST /v1/threads');
+        return { status: 409, headers: new Headers(), error: { value: problem } };
       },
     }),
+    boards: () => {
+      calls.push('unexpected board lookup');
+      throw new Error('Review conflicts must not look up a board');
+    },
+    subjects: () => {
+      calls.push('unexpected subject index lookup');
+      throw new Error('Review conflicts must not scan a subject index');
+    },
   } as unknown as KernelClient;
   const sessionEnv = {
     AUTH_ISSUER: 'https://auth.example.test',
@@ -180,42 +140,96 @@ test('a second live review returns the id named by the conflict without reading 
   );
 
   expect(result).toMatchObject({ ok: false, reason: 'conflict', existingReviewId });
-  expect(calls).toEqual([]);
+  problem = { code: 'conflict' };
+  const noExtension = await startThreadRequest(
+    { boardId: id(1), title: 'Review title', body, idempotencyKey: id(4), kind: 'review', subjectId: id(3) },
+    request,
+    sessionEnv,
+    fakeClient,
+    () => ({ ok: false, reason: 'conflict' }),
+  );
+  expect(noExtension).toEqual({ ok: false, reason: 'conflict' });
+  expect(calls).toEqual(['POST /v1/threads', 'POST /v1/threads']);
 });
 
-test('the subject Reviews view offers board selection to members and a sign-in prompt to visitors', () => {
-  const action = source('src/subject/write-review.tsx');
-  const route = source('src/routes/subjects/$id_.$view.tsx');
+test('members can choose a review board while visitors get a return-to sign-in link', async () => {
+  const realmId = id(6);
+  const pageCursor = 'next review boards';
+  const requests: { realmId: string; query?: Record<string, string | number>; authorization?: string }[] = [];
+  const pages = [
+    {
+      items: [
+        {
+          id: id(7),
+          realmId,
+          title: 'Member reviews',
+          purpose: 'reviews',
+          availability: 'available',
+          visibility: 'protected',
+        },
+        {
+          id: id(8),
+          realmId,
+          title: 'Discussion room',
+          purpose: 'discussion',
+          availability: 'available',
+          visibility: 'published',
+        },
+      ],
+      next: pageCursor,
+    },
+    {
+      items: [
+        {
+          id: id(9),
+          realmId,
+          title: 'Unavailable reviews',
+          purpose: 'reviews',
+          availability: 'unavailable',
+          visibility: 'published',
+        },
+      ],
+      next: null,
+    },
+  ];
+  let page = 0;
+  const client = {
+    realms: ({ realmId: requestedRealm }: { realmId: string }) => ({
+      boards: {
+        get: async (options?: { query?: Record<string, string | number>; headers?: { authorization?: string } }) => {
+          requests.push({
+            realmId: requestedRealm,
+            ...(options?.query ? { query: options.query } : {}),
+            ...(options?.headers?.authorization ? { authorization: options.headers.authorization } : {}),
+          });
+          return { data: pages[page++] };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
+  const choices = await loadRealmReviewBoards(client, [{ realmId, name: 'Reading realm' }], 'Bearer member');
+  const returnTo = `/en/subjects/${id(3)}/reviews?view=reviews`;
+  const signIn = renderToStaticMarkup(
+    createElement(SignInPrompt, { returnTo, label: 'Sign in to write a review', compact: true }),
+  );
 
-  expect(route).toContain('WriteReviewAction');
-  expect(route).toMatch(/view\s*===\s*['"]reviews['"]/);
-  expect(action).toContain('readMyRealmsPage');
-  expect(action).toContain('useEffect');
-  expect(action).toContain('readRealmReviewBoards');
-  expect(action).toContain('SignInPrompt');
-  expect(action).toContain('thread_review_write');
-  expect(action).toMatch(/\?subject=/);
-  expect(action).toContain('thread_review_no_realms');
-  expect(action).toContain('thread_review_no_board');
+  expect(choices).toEqual([{ id: id(7), title: 'Member reviews', realmId, realmName: 'Reading realm' }]);
+  expect(requests).toEqual([
+    { realmId, query: { limit: 100 }, authorization: 'Bearer member' },
+    { realmId, query: { limit: 100, cursor: pageCursor }, authorization: 'Bearer member' },
+  ]);
+  expect(reviewThreadHref('en', id(7), id(3), 'A & B')).toBe(
+    `/en/boards/${id(7)}/new?subject=${id(3)}&subjectTitle=A%20%26%20B`,
+  );
+  expect(signIn).toContain(`href="/auth/sign-in?return_to=${encodeURIComponent(returnTo)}"`);
+  expect(signIn).toContain('Sign in to write a review');
 });
 
 test('the subject Reviews view renders its write action beside the view heading', () => {
   const markup = renderToStaticMarkup(
-    createElement(SubjectViewPage, {
-      page: {
-        subject: id(3),
-        profile: 'test',
-        template: { scope: 'generic', key: 'generic' },
-        document: { root: { props: {} }, content: [] },
-        reads: {},
-      },
-      locale: 'en',
-      messages: subjectPageMessages(),
-      frame: createElement('div', null, 'Kokoro'),
+    createElement(ViewHeadingActions, {
       label: 'Reviews',
       actions: createElement('button', { type: 'button' }, 'Write a review'),
-      view: 'reviews',
-      renderJsonLd: false,
     }),
   );
   const heading = markup.indexOf('Reviews');
@@ -224,57 +238,47 @@ test('the subject Reviews view renders its write action beside the view heading'
   expect(action).toBeGreaterThan(heading);
 });
 
-test('review writing uses one current vote and bounded Realm and board pages', () => {
-  const fields = source('src/threads/review-fields.tsx');
-  const action = source('src/subject/write-review.tsx');
-
-  expect(fields).toContain('STANDARD_QUESTION_ID');
-  expect(fields.match(/\.vote\.get\s*\(/g)).toHaveLength(1);
-  expect(action).toContain('readMyRealmsPage');
-  expect(action.match(/readMyRealmsPage\(\{ data: \{\} \}\)/g)).toHaveLength(1);
-  expect(action).toMatch(/expanded\s*&&\s*realmState\s*===\s*['"]ready['"]/);
-  expect(action).toContain('REALM_PAGE_LIMIT = 20');
-  expect(action).toContain('limit: 100');
-});
-
-test('review writing adds exactly one vote read and one My Realms read', async () => {
-  const requests: string[] = [];
-  const fake = createFakeKernelFetch(fixtures as never);
-  const client = createKernelClient('https://kernel.invalid', {
-    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = new Request(input, init);
-      requests.push(`${request.method} ${new URL(request.url).pathname}`);
-      return fake(request);
-    }) as typeof fetch,
-  });
-  const reviewBoard = realmBoardsRecording.items.find((board) => board.purpose === 'reviews');
-  expect(reviewBoard).toBeDefined();
-  const subjectId = subjectPageRecording.subject;
-  const standardQuestion = '00000000-0000-7000-8000-000000000001';
-
-  await client.boards({ id: boardRecording.board.id }).get();
-  const discussionReads = requests.length;
-  expect(discussionReads).toBe(1);
-  requests.length = 0;
-  await client.boards({ id: reviewBoard!.id }).get();
-  await client
-    .subjects({ id: subjectId })
-    .ratings({ questionId: standardQuestion })
-    .vote.get({ headers: { authorization: 'Bearer reader' } });
-  expect(requests).toHaveLength(discussionReads + 1);
-  expect(requests.at(-1)).toBe(`GET /v1/subjects/${subjectId}/ratings/${standardQuestion}/vote`);
-
-  requests.length = 0;
-  const realms = await loadMyRealms(
-    client,
-    new Request(`https://rezics.test/en/subjects/${subjectId}/reviews`, {
-      headers: { authorization: 'Bearer reader' },
+test('review writing adds one current vote read and one paged My Realms read', async () => {
+  const calls: string[] = [];
+  const subjectId = id(3);
+  const client = {
+    subjects: ({ id: requestedSubject }: { id: string }) => ({
+      ratings: ({ questionId }: { questionId: string }) => ({
+        vote: {
+          get: async (options?: { headers?: { authorization?: string } }) => {
+            calls.push(
+              `GET /v1/subjects/${requestedSubject}/ratings/${questionId}/vote ${options?.headers?.authorization}`,
+            );
+            return { data: { units: 14, revision: 8 } };
+          },
+        },
+      }),
     }),
-    {},
-    {},
-  );
-  expect(realms.signedIn).toBe(true);
-  expect(requests).toEqual(['GET /v1/me/realms']);
+    me: {
+      realms: {
+        get: async (options?: { query?: { cursor?: string } }) => {
+          calls.push(`GET /v1/me/realms${options?.query?.cursor ? `?cursor=${options.query.cursor}` : ''}`);
+          return { status: 200, data: { items: [{ realmId: id(6), name: 'Reading realm' }], next: null } };
+        },
+      },
+    },
+  } as unknown as KernelClient;
+  const vote = await loadCurrentReviewVote(client, subjectId, 'Bearer reader');
+  const request = new Request(`https://rezics.test/en/subjects/${subjectId}/reviews`, {
+    headers: { authorization: 'Bearer reader' },
+  });
+  const realms = await loadMyRealms(client, request, {}, {});
+
+  expect(vote).toEqual({ questionId: STANDARD_QUESTION_ID, units: 14, revision: 8 });
+  expect(realms).toEqual({
+    signedIn: true,
+    realms: [{ realmId: id(6), name: 'Reading realm', description: null }],
+    next: null,
+  });
+  expect(calls).toEqual([
+    `GET /v1/subjects/${subjectId}/ratings/${STANDARD_QUESTION_ID}/vote Bearer reader`,
+    'GET /v1/me/realms',
+  ]);
 });
 
 test('review interface copy is present in all eight locales', () => {
@@ -282,7 +286,10 @@ test('review interface copy is present in all eight locales', () => {
   const files = new Set(readdirSync(join(app, 'messages')));
   for (const locale of locales) {
     expect(files.has(`${locale}.json`)).toBe(true);
-    const messages = JSON.parse(source(`messages/${locale}.json`)) as Record<string, string>;
+    const messages = JSON.parse(readFileSync(join(app, 'messages', `${locale}.json`), 'utf8')) as Record<
+      string,
+      string
+    >;
     expect(messages.thread_review_subject, locale).toBeTruthy();
     expect(messages.thread_review_cite_vote, locale).toBeTruthy();
     expect(messages.thread_review_write, locale).toBeTruthy();

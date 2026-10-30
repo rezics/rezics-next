@@ -24,6 +24,7 @@ function checkRead<T>(result: { error?: unknown; status?: number; data?: T | nul
 export async function loadBoardPageWithAuthors(
   client: KernelClient,
   data: PageInput,
+  authorization?: string | null,
 ): Promise<{ board: Board['board']; realm?: BoardRealm; threads: ThreadPage; authors: PageAuthors; now: string }> {
   const now = new Date().toISOString();
   // Active is the default; New is the kernel's own order and sends no sort.
@@ -34,15 +35,20 @@ export async function loadBoardPageWithAuthors(
   // The Realm read follows the board read, beside the thread list.
   const boardRead = client
     .boards({ id: data.id })
-    .get()
+    .get(authorization ? { headers: { authorization } } : {})
     .then(async (result) => ({
       result,
       realm:
-        result.data?.board.id === data.id ? await readBoardRealm(client, boardRealmId(result.data.board)) : undefined,
+        result.data?.board.id === data.id
+          ? await readBoardRealm(client, boardRealmId(result.data.board), authorization)
+          : undefined,
     }));
   const [{ result: boardResult, realm }, threadsResult] = await Promise.all([
     boardRead,
-    client.boards({ id: data.id }).threads.get(query),
+    client.boards({ id: data.id }).threads.get({
+      ...query,
+      ...(authorization ? { headers: { authorization } } : {}),
+    }),
   ]);
   const board = checkRead<Board>(boardResult, 'board');
   const threads = checkRead<ThreadPage>(threadsResult, 'board threads');

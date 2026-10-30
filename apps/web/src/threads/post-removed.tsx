@@ -36,7 +36,10 @@ export function RemovedPost({
 }) {
   const authorId = 'authorId' in post ? post.authorId : undefined;
   const author = authorId ? authors?.[authorId] : undefined;
-  const canRestorePost = post.availability === 'erased' && 'restorableUntil' in post && Boolean(post.restorableUntil);
+  const erasedPost = post.availability === 'erased';
+  const deleted = erasedPost || ('removed' in post && post.removed === true);
+  const restorableUntil = 'restorableUntil' in post ? post.restorableUntil : undefined;
+  const canRestorePost = erasedPost && Boolean(restorableUntil);
   const owner = (viewerId !== undefined && authorId === viewerId) || canRestorePost;
   const common = {
     id: anchorId,
@@ -47,7 +50,6 @@ export function RemovedPost({
   };
 
   if (post.availability === 'withheld') {
-    const author = authors?.[post.authorId];
     return (
       <li {...common}>
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -55,7 +57,7 @@ export function RemovedPost({
             author={author}
             createdAt={post.createdAt}
             now={now}
-            showAuthor={authors !== null}
+            showAuthor={authors !== null && authorId !== undefined}
             className="min-h-8 flex-1"
           />
         </div>
@@ -72,16 +74,15 @@ export function RemovedPost({
     );
   }
 
-  const deleted = post.availability === 'erased' || ('removed' in post && post.removed === true);
   const reason = deleted ? 'deleted' : 'unavailable';
-  const restorableUntil = owner && deleted && 'restorableUntil' in post ? post.restorableUntil : undefined;
+  const ownedRestorableUntil = owner && deleted ? restorableUntil : undefined;
   return (
     <li {...common}>
       <div className="relative">
         <Tombstone
           shape="post"
           reason={reason}
-          {...(restorableUntil && onRestore ? { restoreUntil: restorableUntil, onRestore } : {})}
+          {...(ownedRestorableUntil && onRestore ? { restoreUntil: ownedRestorableUntil, onRestore } : {})}
           labels={{
             unavailable: m.thread_post_unavailable(),
             deleted: m.thread_post_deleted(),

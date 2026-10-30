@@ -14,6 +14,7 @@ import { ReviewFields } from '../../threads/review-fields';
 import type { VoteCitation } from '../../threads/post-writes';
 import { readNewThreadPage } from '../../threads/reads';
 import { PageHeading } from '../../shell/page-heading';
+import { canSubmitThread } from '../../threads/review-policy';
 
 type NewThreadSearch = { subject?: string; subjectTitle?: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -68,7 +69,7 @@ function NewThreadPage() {
         <PostComposer
           initialKey={idempotencyKey}
           titleRequired
-          canSubmit={!review || Boolean(subjectId)}
+          canSubmit={canSubmitThread(board.purpose, subjectId)}
           boardId={board.id}
           onSubmit={async ({ title, body, idempotencyKey: key, mediaIds }) => {
             const result = await startThread({

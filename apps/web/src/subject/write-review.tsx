@@ -10,10 +10,11 @@ import { SignInPrompt } from '../threads/composer';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { env } from 'cloudflare:workers';
+import { loadRealmReviewBoards, type ReviewBoardChoice } from '../threads/review-board-choices';
+import { reviewThreadHref } from '../threads/review-policy';
 
 export const REALM_PAGE_LIMIT = 20;
 
-type ReviewBoardChoice = { id: string; title: string | null; realmId: string; realmName: string };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const readRealmReviewBoards = createServerFn({ method: 'GET' })
@@ -48,48 +49,8 @@ export const readRealmReviewBoards = createServerFn({ method: 'GET' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     if (!authorization) return [];
-    const client = kernelClient();
-    const reads = await Promise.all(
-      data.realms.map(async (realm) => {
-        const choices: ReviewBoardChoice[] = [];
-        const seen = new Set<string>();
-        let cursor: string | undefined;
-        for (;;) {
-          const result = await client.realms({ realmId: realm.realmId }).boards.get({
-            query: { limit: 100, ...(cursor ? { cursor } : {}) },
-            headers: { authorization },
-          });
-          if (result.status === 404 || result.status === 403) return [];
-          if (result.error || !result.data) throw new Error('Realm board read failed');
-          choices.push(
-            ...result.data.items
-              .filter(
-                (board) =>
-                  board.availability === 'available' &&
-                  board.visibility !== 'taken_down' &&
-                  board.purpose === 'reviews',
-              )
-              .map((board) => ({
-                id: board.id,
-                title: board.title,
-                realmId: board.realmId ?? realm.realmId,
-                realmName: realm.name,
-              })),
-          );
-          const next = result.data.next;
-          if (!next || seen.has(next)) break;
-          seen.add(next);
-          cursor = next;
-        }
-        return choices;
-      }),
-    );
-    return reads.flat();
+    return loadRealmReviewBoards(kernelClient(), data.realms, authorization);
   });
-
-function newReviewHref(locale: string, boardId: string, subjectId: string, subjectTitle: string) {
-  return `/${locale}/boards/${encodeURIComponent(boardId)}/new?subject=${encodeURIComponent(subjectId)}&subjectTitle=${encodeURIComponent(subjectTitle)}`;
-}
 
 export function WriteReviewAction({
   subjectId,
@@ -135,7 +96,7 @@ export function WriteReviewAction({
       setBoardChoices(choices);
       setBoardsState('idle');
       if (choices.length === 1) {
-        window.location.assign(newReviewHref(locale, choices[0]!.id, subjectId, subjectTitle));
+        window.location.assign(reviewThreadHref(locale, choices[0]!.id, subjectId, subjectTitle));
       }
     } catch {
       setBoardsState('failed');
@@ -192,7 +153,7 @@ export function WriteReviewAction({
                     <li key={board.id}>
                       <a
                         className="block rounded-lg border border-border/70 bg-background p-3 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        href={newReviewHref(locale, board.id, subjectId, subjectTitle)}
+                        href={reviewThreadHref(locale, board.id, subjectId, subjectTitle)}
                       >
                         <span className="block">{board.title ?? m.threads_untitled()}</span>
                         <span className="mt-1 block text-xs font-normal text-muted-foreground">{board.realmName}</span>

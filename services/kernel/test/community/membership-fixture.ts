@@ -76,8 +76,8 @@ export type ConsentServer = {
  * certificate. The worker trusts that certificate through NODE_EXTRA_CA_CERTS, so its real
  * `createAuthConsentReader` runs unchanged; the answer callback decides each restoration.
  */
-export async function startConsentServer(answer: ConsentAnswer): Promise<ConsentServer> {
-  const directory = mkdtempSync(join(tmpdir(), 'membership-consent-'));
+export async function startConsentServer(answer: ConsentAnswer, directoryRoot = tmpdir()): Promise<ConsentServer> {
+  const directory = mkdtempSync(join(directoryRoot, 'membership-consent-'));
   const key = join(directory, 'key.pem');
   const certificate = join(directory, 'certificate.pem');
   const generated = spawnSync(

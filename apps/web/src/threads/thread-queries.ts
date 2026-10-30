@@ -61,6 +61,7 @@ export function boardPageQuery(
           id,
           ...(cursor === undefined ? {} : { cursor }),
           ...(sort === undefined ? {} : { sort }),
+          credentialMode,
         },
       }),
   });

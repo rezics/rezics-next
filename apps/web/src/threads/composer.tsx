@@ -12,6 +12,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from './actions';
 import type { DraftMediaState } from './media-state';
 import { imageSources, replyImageLimit, uploadReplyImage, UploadRefusal } from './upload';
+import { ExistingReviewNotice } from './write-prompts';
+export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
 
@@ -254,35 +256,6 @@ function editorLabels(): RichTextEditorLabels {
     imageLimit: m.editor_image_limit(),
     documentError: m.editor_document_error(),
   };
-}
-
-export function SignInPrompt({
-  returnTo,
-  label,
-  compact = false,
-}: {
-  returnTo: string;
-  label?: string;
-  compact?: boolean;
-}) {
-  const href = `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`;
-  const text = label ?? m.account_sign_in();
-  if (compact)
-    return (
-      <a
-        className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 font-medium text-primary underline-offset-4 outline-none hover:bg-muted hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-        href={href}
-      >
-        {text}
-      </a>
-    );
-  return (
-    <p className="rounded-lg border border-border/70 bg-card p-4 text-muted-foreground">
-      <a className="font-medium text-primary underline-offset-4 hover:underline" href={href}>
-        {text}
-      </a>
-    </p>
-  );
 }
 
 export function PostComposer<T>({
@@ -594,15 +567,7 @@ export function PostComposer<T>({
       {failure ? (
         <div className="mt-5 space-y-3" role="alert">
           {failure.existingReviewId ? (
-            <p>
-              {m.thread_review_duplicate()}{' '}
-              <a
-                className="font-medium text-primary underline underline-offset-4"
-                href={`/${locale}/threads/${failure.existingReviewId}`}
-              >
-                {m.thread_review_existing()}
-              </a>
-            </p>
+            <ExistingReviewNotice reviewId={failure.existingReviewId} />
           ) : (
             <>
               <p>{refusalText(failure)}</p>

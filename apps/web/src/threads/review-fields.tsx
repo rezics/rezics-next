@@ -16,11 +16,11 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import type { VoteCitation } from './post-writes';
+import { selectedReviewSubject } from './review-policy';
+import { loadCurrentReviewVote, selectedVoteCitation, type CurrentReviewVote } from './review-vote';
 
-export const STANDARD_QUESTION_ID = '00000000-0000-7000-8000-000000000001';
-
-export type CurrentReviewVote = VoteCitation;
+export { STANDARD_QUESTION_ID } from './review-vote';
+export type { CurrentReviewVote } from './review-vote';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -42,20 +42,7 @@ export const readCurrentReviewVote = createServerFn({ method: 'GET' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     if (!authorization) return null;
-    try {
-      const result = await kernelClient()
-        .subjects({ id: data.subjectId })
-        .ratings({ questionId: STANDARD_QUESTION_ID })
-        .vote.get({ headers: { authorization } });
-      if (result.error || !result.data) return null;
-      return {
-        questionId: STANDARD_QUESTION_ID,
-        units: result.data.units,
-        revision: result.data.revision,
-      };
-    } catch {
-      return null;
-    }
+    return loadCurrentReviewVote(kernelClient(), data.subjectId, authorization);
   });
 
 async function search(text: string, signal: AbortSignal): Promise<EntityPickerSubject[]> {
@@ -92,7 +79,7 @@ export function ReviewFields({
   initialSubjectId?: string;
   initialSubjectTitle?: string;
   onSubjectChange: (subjectId: string | null) => void;
-  onVoteCitationChange: (citation: VoteCitation | undefined) => void;
+  onVoteCitationChange: (citation: CurrentReviewVote | undefined) => void;
 }) {
   const [subject, setSubject] = useState<EntityPickerSubject | null>(() =>
     initialSubjectId ? presetSubject(initialSubjectId, initialSubjectTitle ?? m.thread_review_subject()) : null,
@@ -122,17 +109,12 @@ export function ReviewFields({
   function chooseSubject(items: EntityPickerSubject[]) {
     const next = items[0] ?? null;
     setSubject(next);
-    onSubjectChange(next?.id ?? null);
+    onSubjectChange(selectedReviewSubject(items));
   }
 
   function toggleCitation(checked: boolean) {
     setCitingVote(checked);
-    if (!checked || !vote) {
-      onVoteCitationChange(undefined);
-      return;
-    }
-    const citation = { questionId: vote.questionId, units: vote.units, revision: vote.revision };
-    onVoteCitationChange(citation);
+    onVoteCitationChange(selectedVoteCitation(vote, checked));
   }
 
   return (

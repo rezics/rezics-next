@@ -24,6 +24,8 @@ import { linkClass, linkColor, bestRank, isRecord, PlainLink, type PageLink, typ
 import { loadSubjectPage, pageContext, SubjectPage, type SubjectPageData } from './subject';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
+import { ViewHeadingActions } from './view-heading';
+export { ViewHeading, ViewHeadingActions } from './view-heading';
 
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
 /** The Wikidata time precisions that name a year, a month and a day. */
@@ -230,16 +232,6 @@ export function SubjectFrame({
   );
 }
 
-/** The view's own heading, which follows the frame. */
-export function ViewHeading({ label, count }: { label: string; count?: ReactNode }) {
-  return (
-    <div data-slot="view-heading" className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h1 className="font-serif text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{label}</h1>
-      {count}
-    </div>
-  );
-}
-
 /** A view served by the view route: the frame, the view's heading, then the view's own document. */
 type SubjectViewPageProps = Omit<ComponentProps<typeof SubjectPage>, 'heading' | 'tabs' | 'tabLabels' | 'actions'> & {
   frame: ReactNode;
@@ -252,10 +244,7 @@ export function SubjectViewPage({ frame, label, actions, nextHref, ...page }: Su
   return (
     <div className="flex w-full min-w-0 flex-col gap-8">
       {frame}
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <ViewHeading label={label} />
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-      </div>
+      <ViewHeadingActions label={label} actions={actions} />
       <SubjectPage {...page} />
       {nextHref ? (
         <a data-slot="next-page" href={nextHref} className={buttonVariants({ variant: 'outline' })}>

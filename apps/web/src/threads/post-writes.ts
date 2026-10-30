@@ -2,12 +2,13 @@ import type { KernelClient } from '@rezics/client';
 import type { DocumentSnapshot } from '@rezics/document';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
-import { prepareSession, viewerCredential } from '../session/request.ts';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request.ts';
 import { readDraftMediaStates } from './media-state';
 import type { EditFailure, RevisedPost, WriteFailure } from './actions';
 
 type Refusal = (status: number, headers: HeadersInit | undefined, body?: unknown) => WriteFailure;
 type StartedThread = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>['thread'];
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type StartThreadBase = {
   boardId: string;
@@ -24,7 +25,12 @@ export type StartThreadInput = StartThreadBase &
     | { kind?: undefined; subjectId?: undefined; voteCitation?: undefined }
   );
 
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Reads the optional author-owned review id returned by the native conflict response. */
+export function findExistingReview(problem: unknown): string | undefined {
+  if (!problem || typeof problem !== 'object' || !('existingThreadId' in problem)) return undefined;
+  const id = problem.existingThreadId;
+  return typeof id === 'string' && uuid.test(id) ? id : undefined;
+}
 
 export async function startThreadRequest(
   input: StartThreadInput,
@@ -63,13 +69,11 @@ export async function startThreadRequest(
         failure.media = await readDraftMediaStates(client, authorization, input.mediaIds ?? []);
       }
       if (failure.reason === 'conflict' && input.kind === 'review') {
-        const problem = result.error.value;
-        const existingThreadId =
-          problem && typeof problem === 'object' && 'existingThreadId' in problem
-            ? problem.existingThreadId
-            : undefined;
-        if (typeof existingThreadId === 'string' && uuid.test(existingThreadId))
-          return { ...failure, existingReviewId: existingThreadId };
+        const authorId = sessionSubject(request);
+        if (authorId) {
+          const existingReviewId = findExistingReview(result.error.value);
+          if (existingReviewId) return { ...failure, existingReviewId };
+        }
       }
       return failure;
     }

@@ -24,6 +24,12 @@ export type NativeKernelRequest = {
   idempotencyKey: string | null;
   failure?: { status: number; body: string };
 };
+export type NativeKernelFailureInjection = {
+  method: string;
+  path: string;
+  status: number;
+  body: string;
+};
 export type NativeWebStack = {
   kernelOrigin: string;
   authIssuer: string;
@@ -40,6 +46,10 @@ export type NativeWebStack = {
   /** Flushes kernel requests made by the production Worker into this observer. */
   refreshKernelRequests(): Promise<void>;
   kernelRequests(): readonly NativeKernelRequest[];
+  /** Flush requests made by a browser page into the parent test process. */
+  syncKernelRequests(): Promise<void>;
+  /** Inject a single native HTTP failure at the owned Worker-to-kernel boundary. */
+  injectKernelFailureOnce(failure: NativeKernelFailureInjection): Promise<void>;
   peakMemoryBytes(): number;
   restartWeb(options: { publicOrigin: string; authIssuer?: string }): Promise<void>;
   stop(): Promise<void>;
@@ -264,11 +274,13 @@ async function startStack(): Promise<
   let kernelServer: ReturnType<typeof Bun.serve> | undefined;
   let authServer: ReturnType<typeof Bun.serve> | undefined;
   const activeKernelRequests = new Set<Promise<Response>>();
+  const injectedKernelFailures: NativeKernelFailureInjection[] = [];
   let durableWorker: { pid?: number; stop(): Promise<void> } | undefined;
   let webProcess: WebProcess | undefined;
   let driver: SemanticOutcomeDriver | undefined;
   let postgresContainer: string | undefined;
   let runtimeDirectory: string | undefined;
+  let consentServer: { env: Record<string, string>; close(): Promise<void> } | undefined;
   let closeAuth: (() => Promise<void>) | undefined;
   let closePageWorkflows: (() => Promise<void>) | undefined;
   const originalDatabaseUrl = process.env.DATABASE_URL;
@@ -330,6 +342,8 @@ async function startStack(): Promise<
         }),
         attempt(() => durableWorker?.stop()),
       ]);
+      await attempt(() => consentServer?.close());
+      consentServer = undefined;
       webProcess = undefined;
       kernelServer = undefined;
       durableWorker = undefined;
@@ -481,9 +495,17 @@ async function startStack(): Promise<
     reportStackProgress('Native web stack startup: native kernel and Auth fixtures ready');
 
     authServer = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => auth.service.handler(request) });
+    const { createCurrentConsentReader } = await import('../../../../services/auth/src/current-consent.ts');
+    const { startConsentServer } = await import('../../../../services/kernel/test/community/membership-fixture.ts');
+    const consentReader = createCurrentConsentReader({ database: auth.database });
+    consentServer = await startConsentServer(
+      async (input) => (await consentReader.readCurrentConsent(input))?.scopes ?? null,
+      join(repositoryRoot, '.temp'),
+    );
 
     const workerEnv = {
       ...workerTestEnv({
+        ...consentServer.env,
         AUTH_ISSUER: driver.fixtures.runtime.authIssuer,
         AUTH_AUDIENCE: driver.fixtures.runtime.authAudience,
         AUTH_JWKS_URL: driver.fixtures.runtime.authJwksUrl,
@@ -510,6 +532,17 @@ async function startStack(): Promise<
           idempotencyKey: request.headers.get('idempotency-key'),
         };
         requests.push(observed);
+        const failureIndex = injectedKernelFailures.findIndex(
+          (failure) => failure.method === request.method && failure.path === url.pathname,
+        );
+        if (failureIndex >= 0) {
+          const [failure] = injectedKernelFailures.splice(failureIndex, 1);
+          observed.failure = { status: failure!.status, body: failure!.body };
+          return new Response(failure!.body, {
+            status: failure!.status,
+            headers: { 'content-type': 'application/problem+json' },
+          });
+        }
         const handling = (async () => {
           const response = await sourceApp.handle(request);
           if (!response.ok) observed.failure = { status: response.status, body: await response.clone().text() };
@@ -678,6 +711,20 @@ async function startStack(): Promise<
       kernelRequests() {
         return requests.slice();
       },
+      async syncKernelRequests() {
+        await Promise.allSettled(activeKernelRequests);
+      },
+      injectKernelFailureOnce(failure) {
+        if (
+          !failure.method ||
+          !failure.path.startsWith('/v1/') ||
+          !Number.isInteger(failure.status) ||
+          failure.status < 400 ||
+          failure.status > 599
+        )
+          throw new Error('Native failure injection requires a kernel path and non-success status');
+        injectedKernelFailures.push({ ...failure });
+      },
       peakMemoryBytes() {
         sampleMemory();
         return peakMemory;
@@ -718,7 +765,14 @@ type HostReply =
   | { analysisDatabase: string };
 type HostCall = {
   id: number;
-  method: 'credentials' | 'authPersona' | 'routeAuthPages' | 'restartWeb' | 'observe' | 'stop';
+  method:
+    | 'credentials'
+    | 'authPersona'
+    | 'routeAuthPages'
+    | 'restartWeb'
+    | 'injectKernelFailureOnce'
+    | 'observe'
+    | 'stop';
   argument?: string;
   options?: { publicOrigin: string; authIssuer?: string };
 };
@@ -1008,6 +1062,12 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
         return (await call('routeAuthPages', pageBridge?.url.origin)) as string;
       },
       kernelRequests: () => observation.requests.slice(),
+      async syncKernelRequests() {
+        await call('observe');
+      },
+      async injectKernelFailureOnce(failure) {
+        await call('injectKernelFailureOnce', JSON.stringify(failure));
+      },
       peakMemoryBytes: () => observation.peakMemory,
       async kernel(path, init = {}, persona) {
         lifecycle.assertOpen('send native kernel request');
@@ -1122,6 +1182,9 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         if (method === 'credentials') value = await stack.credentials(argument!);
         else if (method === 'authPersona') value = await stack.authPersona(argument!);
         else if (method === 'routeAuthPages') value = await stack.routeAuthPages(argument);
+        else if (method === 'injectKernelFailureOnce')
+          stack.injectKernelFailureOnce(JSON.parse(argument!) as NativeKernelFailureInjection);
+        else if (method === 'observe') await stack.syncKernelRequests();
         else if (method === 'restartWeb') await stack.restartWeb(options!);
         else if (method === 'stop') await stack.stop();
         send({ id, value, observation: observation() } satisfies HostReply, method === 'stop' ? 0 : undefined);

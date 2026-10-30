@@ -304,6 +304,7 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         assertActive('finish native Auth callback');
         await page.waitForURL((url) => url.origin === new URL(stack.web).origin && url.pathname !== '/auth/callback', {
           timeout: 30_000,
+          waitUntil: 'domcontentloaded',
         });
         try {
           await page.locator('#account-menu-button').waitFor({ state: 'visible' });
