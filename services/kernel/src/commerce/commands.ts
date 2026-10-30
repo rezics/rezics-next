@@ -36,7 +36,11 @@ import checkoutCreate from './command-checkout-create.sql';
 import creationRead from './creation-attempt-read.sql';
 import creationInsert from './creation-attempt-insert.sql';
 import creationRetry from './creation-attempt-retry.sql';
-import { creationRetryUntil, type CheckoutCreationAdmission, type CheckoutCreationAttempt } from './creation-attempt.ts';
+import {
+  creationRetryUntil,
+  type CheckoutCreationAdmission,
+  type CheckoutCreationAttempt,
+} from './creation-attempt.ts';
 
 export class OfferUnavailableError extends Error {
   constructor() {
@@ -353,9 +357,7 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
           taxCode: current.taxCode,
           successUrl: stored?.successUrl ?? configuration.successUrl,
           cancelUrl: stored?.cancelUrl ?? configuration.cancelUrl,
-          expiresAt: stored
-            ? Number(stored.expiresAt)
-            : Math.floor(Date.parse(current.createdAt) / 1000) + 3600,
+          expiresAt: stored ? Number(stored.expiresAt) : Math.floor(Date.parse(current.createdAt) / 1000) + 3600,
           managedPayments: stored?.managedPayments ?? configuration.managedPayments ?? false,
         };
         const attempt: CheckoutCreationAttempt = {

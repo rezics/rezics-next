@@ -18,10 +18,12 @@ export type CheckoutCreationAdmission =
 export const CREATION_SAFE_WINDOW_MS = 23 * 60 * 60 * 1000;
 const PROVIDER_BUDGET_MS = 20_000;
 export function creationRetryUntil(attempt: CheckoutCreationAttempt): number {
-  return Math.min(
-    Date.parse(attempt.firstAttemptAt) + CREATION_SAFE_WINDOW_MS,
-    attempt.request.expiresAt * 1000 - 30 * 60 * 1000,
-  ) - PROVIDER_BUDGET_MS;
+  return (
+    Math.min(
+      Date.parse(attempt.firstAttemptAt) + CREATION_SAFE_WINDOW_MS,
+      attempt.request.expiresAt * 1000 - 30 * 60 * 1000,
+    ) - PROVIDER_BUDGET_MS
+  );
 }
 
 /** Both HTTP replay and durable work use this native admission and the same immutable request. */

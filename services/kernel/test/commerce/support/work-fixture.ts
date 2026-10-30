@@ -128,7 +128,9 @@ export async function workFixture() {
   async function start(offset = 0, checkout: { successUrl?: string; cancelUrl?: string } = {}) {
     child = Bun.spawn([process.execPath, `${import.meta.dir}/work-runtime.ts`], {
       env: {
-        ...process.env, WORK_STRIPE_PORT: String(transport.port), WORK_CLOCK_OFFSET: String(offset),
+        ...process.env,
+        WORK_STRIPE_PORT: String(transport.port),
+        WORK_CLOCK_OFFSET: String(offset),
         WORK_SUCCESS_URL: checkout.successUrl ?? 'https://example.test/success',
         WORK_CANCEL_URL: checkout.cancelUrl ?? 'https://example.test/cancel',
       },
@@ -161,19 +163,32 @@ export async function workFixture() {
     buyer,
     start,
     stop,
-    async checkoutRequest(requestKey: string, options: {
-      successUrl?: string; cancelUrl?: string; stripe?: StripePort; clockOffset?: number;
-    } = {}) {
+    async checkoutRequest(
+      requestKey: string,
+      options: {
+        successUrl?: string;
+        cancelUrl?: string;
+        stripe?: StripePort;
+        clockOffset?: number;
+      } = {},
+    ) {
       const buyerActor = await actor(buyer);
       const realNow = Date.now;
       const clockOffset = options.clockOffset ?? 0;
       if (clockOffset) Date.now = () => realNow() + clockOffset;
       try {
-        return await httpCheckout({
-          pool, commands, stripe: options.stripe ?? providerStripe,
-          successUrl: options.successUrl ?? 'https://example.test/success',
-          cancelUrl: options.cancelUrl ?? 'https://example.test/cancel',
-        }, buyerActor, offer.id, requestKey);
+        return await httpCheckout(
+          {
+            pool,
+            commands,
+            stripe: options.stripe ?? providerStripe,
+            successUrl: options.successUrl ?? 'https://example.test/success',
+            cancelUrl: options.cancelUrl ?? 'https://example.test/cancel',
+          },
+          buyerActor,
+          offer.id,
+          requestKey,
+        );
       } finally {
         Date.now = realNow;
       }

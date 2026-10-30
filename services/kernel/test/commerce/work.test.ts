@@ -381,7 +381,6 @@ test('a session outside commerce and a PaymentIntent without a session write not
   expect((await fixture.client.listWorkflowSteps(id))?.map((step) => step.name)).toEqual(['commerce.resolveCheckout']);
 });
 
-
 test('lost HTTP creation recovers through a restarted durable worker with the identical Session request', async () => {
   const key = Bun.randomUUIDv7();
   fixture.transport.fake.nextCreateFault = 'lost';
@@ -400,7 +399,9 @@ test('lost HTTP creation recovers through a restarted durable worker with the id
     expect(calls.map((r) => r.rawParams)).toEqual([first.rawParams, first.rawParams]);
     expect(calls.every((r) => r.headers.get('idempotency-key') === `order:${order.id}`)).toBe(true);
     expect((await fixture.commands.readOrderForAccount(fixture.buyer, order.id))?.checkoutSessionId).toBe(session.id);
-    expect([...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id)).toHaveLength(1);
+    expect(
+      [...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id),
+    ).toHaveLength(1);
   } finally {
     await fixture.stop();
     await fixture.start();
@@ -413,16 +414,19 @@ test('Expired uncertain intent makes no new provider create and remains unknown 
   await expect(fixture.checkoutRequest(key)).rejects.toBeInstanceOf(StripeUnavailableError);
   const order = await fixture.orderForRequest(key);
   const first = fixture.transport.fake.requests.find((r) => r.params.get('client_reference_id') === order.id)!;
-  const attempt = (await fixture.pool.query(
-    'SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2',
-    [routeOf(order.id), order.id],
-  )).rows;
+  const attempt = (
+    await fixture.pool.query('SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [
+      routeOf(order.id),
+      order.id,
+    ])
+  ).rows;
   await fixture.stop();
   try {
     await fixture.start(25 * 60 * 60 * 1000);
     const id = `expired-creation:${order.id}`;
     const handle = await fixture.client.enqueue(
-      { workflowName: 'commerce.reconcileOrder', queueName: 'workflows', workflowID: id }, order.id,
+      { workflowName: 'commerce.reconcileOrder', queueName: 'workflows', workflowID: id },
+      order.id,
     );
     await expect(handle.getResult()).rejects.toThrow();
     expect((await fixture.client.getWorkflow(id))?.status).toBe('ERROR');
@@ -430,18 +434,23 @@ test('Expired uncertain intent makes no new provider create and remains unknown 
     const calls = fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.rawParams).toBe(first.rawParams);
-    expect([...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id)).toHaveLength(1);
-    expect((await fixture.pool.query(
-      'SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2',
-      [routeOf(order.id), order.id],
-    )).rows).toEqual(attempt);
+    expect(
+      [...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id),
+    ).toHaveLength(1);
+    expect(
+      (
+        await fixture.pool.query('SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [
+          routeOf(order.id),
+          order.id,
+        ])
+      ).rows,
+    ).toEqual(attempt);
     expect(await fixture.entitlements(order.id)).toHaveLength(0);
   } finally {
     await fixture.stop();
     await fixture.start();
   }
 });
-
 
 test('a never-started order outside captured creation validity fails without renewing terms', async () => {
   const order = await fixture.order();
@@ -450,15 +459,22 @@ test('a never-started order outside captured creation validity fails without ren
     await fixture.start(31 * 60 * 1000);
     const id = `unstarted-creation:${order.id}`;
     const handle = await fixture.client.enqueue(
-      { workflowName: 'commerce.reconcileOrder', queueName: 'workflows', workflowID: id }, order.id,
+      { workflowName: 'commerce.reconcileOrder', queueName: 'workflows', workflowID: id },
+      order.id,
     );
     await handle.getResult();
     expect(await fixture.state(order.id)).toMatchObject({ settlement: 'failed' });
-    expect(fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id)).toHaveLength(0);
-    expect((await fixture.pool.query(
-      'SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2',
-      [routeOf(order.id), order.id],
-    )).rows).toHaveLength(0);
+    expect(
+      fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id),
+    ).toHaveLength(0);
+    expect(
+      (
+        await fixture.pool.query('SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [
+          routeOf(order.id),
+          order.id,
+        ])
+      ).rows,
+    ).toHaveLength(0);
   } finally {
     await fixture.stop();
     await fixture.start();
