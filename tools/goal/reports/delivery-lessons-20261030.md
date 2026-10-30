@@ -73,7 +73,7 @@ Installs use the shared dependency store, not per-run downloads.
 - One malformed local configuration note made every command fail for a minute. Local configuration is validated
   before it is saved, not when it is next read.
 
-## 8. Verification after integration must not outrank the work it verifies
+## 7. Verification after integration must not outrank the work it verifies
 
 The dev verifier ran with landing priority and started every check at once. After 34 landings one run started about
 48 kernel checks; landing waiters set ordinary admission to zero on every host, so workers' checks waited about an
@@ -83,7 +83,7 @@ Rule: verification after integration runs at ordinary priority with a small fixe
 takes a share of the hosts, never all of them. Any class that outranks workers' checks needs a bound on how many
 checks it may hold at once.
 
-## 7. Measure what the hour produced
+## 8. Measure what the hour produced
 
 Report the hour's integrated lines, landings, check failures, slot waiting and the queue ages. Exclude generated
 files, recorded responses and fixture JSON, so one generated fixture never makes an hour look productive. When a
