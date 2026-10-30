@@ -1749,6 +1749,8 @@ old writer, including a transaction/lease queued before that cut, cannot insert,
 update or delete native records afterward. Migration and startup retain unknown
 custody for old rows removed before classification. Restart uses the committed
 deployment checkpoint; it does not infer coverage from a newly empty table.
+Old producers lock the admission row without waiting, so a pre-cut repeatable-read
+snapshot fails serialization instead of admitting a writer through stale state.
 A fresh installation closes under that same drained and armed cut. SDK nested
 request cleanup is admitted only for its exact ready, retired native copy.
 
@@ -1783,7 +1785,9 @@ completion means known native work drained; complete inventory/local-copy proof
 still requires the coverage authority. Known copy retirement proceeds even while
 unknown coverage or proof publication is pending. Default recovery needs neither
 the original caller nor final participant acknowledgement. Consent retains its
-original 310-second cutoff. Raw client/contact metadata, foreign committed-result
+original 310-second cutoff. Older obligations revisit the same native phases once;
+their old completion markers cannot publish all-role proof before that recovery.
+Raw client/contact metadata, foreign committed-result
 recovery, external sinks and universal shared history retain the separate gaps
 and owner contracts above; this deployment does not claim a terminal Auth ACK.
 

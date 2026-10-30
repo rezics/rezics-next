@@ -32,6 +32,7 @@ test('fresh native producer coverage retains the producing client owner after a 
 test('deployment refuses a pre-cut writer lease and default recovery keeps opaque historical attribution unknown after expiry', async () => {
   let oldPool: Pool | undefined;
   let oldLease: PoolClient | undefined;
+  let oldSnapshot: PoolClient | undefined;
   const f = await nativeFixture({
     async openPool(url) {
       oldPool = new Pool({ connectionString: url });
@@ -43,6 +44,9 @@ test('deployment refuses a pre-cut writer lease and default recovery keeps opaqu
         VALUES ('typed-before-cut','typed-before-cut','opaque',now()+interval '1 hour',now(),now(),'typed-before-cut-account')`);
       await oldLease.query('COMMIT');
       await oldLease.query('BEGIN');
+      oldSnapshot = await oldPool.connect();
+      await oldSnapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      await oldSnapshot.query('SELECT armed FROM auth_native_role_deployment WHERE singleton');
       return new Pool({ connectionString: url });
     },
   });
@@ -50,6 +54,9 @@ test('deployment refuses a pre-cut writer lease and default recovery keeps opaqu
     await expect(oldLease!.query(`INSERT INTO verification(id,identifier,value,"expiresAt","createdAt","updatedAt")
       VALUES ('old-queued','old-queued','opaque',now()+interval '1 hour',now(),now())`)).rejects.toThrow('Auth native role producer version refused');
     await oldLease!.query('ROLLBACK');
+    await expect(oldSnapshot!.query(`INSERT INTO verification(id,identifier,value,"expiresAt","createdAt","updatedAt")
+      VALUES ('old-snapshot','old-snapshot','opaque',now()+interval '1 hour',now(),now())`)).rejects.toMatchObject({ code: '40001' });
+    await oldSnapshot!.query('ROLLBACK');
     expect((await f.pool.query('SELECT erasure_role_version,erasure_account_id FROM verification WHERE id=$1', ['typed-before-cut'])).rows[0])
       .toEqual({ erasure_role_version: 1, erasure_account_id: 'typed-before-cut-account' });
     // No initiating caller or final participant acknowledgement drives this work.
@@ -61,6 +68,7 @@ test('deployment refuses a pre-cut writer lease and default recovery keeps opaqu
     expect((await f.pool.query('SELECT armed,store_index FROM auth_native_role_deployment WHERE singleton')).rows[0]).toEqual({ armed: true, store_index: 27 });
   } finally {
     oldLease?.release();
+    oldSnapshot?.release();
     await oldPool?.end();
     await f.close();
   }

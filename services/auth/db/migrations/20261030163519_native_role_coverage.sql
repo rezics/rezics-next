@@ -245,7 +245,7 @@ CREATE FUNCTION auth_native_role_user() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -271,7 +271,7 @@ CREATE FUNCTION auth_native_role_auth_client() RETURNS trigger LANGUAGE plpgsql 
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -293,7 +293,7 @@ CREATE FUNCTION auth_native_role_auth_session_opening() RETURNS trigger LANGUAGE
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -328,7 +328,7 @@ CREATE FUNCTION auth_native_role_session() RETURNS trigger LANGUAGE plpgsql AS $
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -363,7 +363,7 @@ CREATE FUNCTION auth_native_role_verification() RETURNS trigger LANGUAGE plpgsql
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -403,7 +403,7 @@ CREATE FUNCTION auth_native_role_oauthrefreshfamily() RETURNS trigger LANGUAGE p
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -444,7 +444,7 @@ CREATE FUNCTION auth_native_role_oauthrefreshtoken() RETURNS trigger LANGUAGE pl
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -485,7 +485,7 @@ CREATE FUNCTION auth_native_role_oauthaccesstoken() RETURNS trigger LANGUAGE plp
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -526,7 +526,7 @@ CREATE FUNCTION auth_native_role_oauthclientassertion() RETURNS trigger LANGUAGE
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -561,7 +561,7 @@ CREATE FUNCTION auth_native_role_auth_recent_oidc_session() RETURNS trigger LANG
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -592,7 +592,7 @@ CREATE FUNCTION auth_native_role_auth_barrier_proof() RETURNS trigger LANGUAGE p
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -628,7 +628,7 @@ CREATE FUNCTION auth_native_role_auth_recovery_establishment() RETURNS trigger L
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -661,7 +661,7 @@ CREATE FUNCTION auth_native_role_auth_registration_stage() RETURNS trigger LANGU
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -691,7 +691,7 @@ CREATE FUNCTION auth_native_role_auth_provisioning_receipt() RETURNS trigger LAN
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -728,7 +728,7 @@ CREATE FUNCTION auth_native_role_account() RETURNS trigger LANGUAGE plpgsql AS $
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -754,7 +754,7 @@ CREATE FUNCTION auth_native_role_passkey() RETURNS trigger LANGUAGE plpgsql AS $
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -780,7 +780,7 @@ CREATE FUNCTION auth_native_role_auth_recovery() RETURNS trigger LANGUAGE plpgsq
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -806,7 +806,7 @@ CREATE FUNCTION auth_native_role_auth_effect_receipt() RETURNS trigger LANGUAGE 
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -840,7 +840,7 @@ CREATE FUNCTION auth_native_role_auth_workflow_request() RETURNS trigger LANGUAG
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT (TG_OP='DELETE' AND pg_trigger_depth()>1 AND EXISTS(SELECT 1 FROM auth_copy_work WHERE workflow_id=OLD.workflow_id AND ready AND retired)) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT (TG_OP='DELETE' AND pg_trigger_depth()>1 AND EXISTS(SELECT 1 FROM auth_copy_work WHERE workflow_id=OLD.workflow_id AND ready AND retired)) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -876,7 +876,7 @@ CREATE FUNCTION auth_native_role_auth_public_key() RETURNS trigger LANGUAGE plpg
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -902,7 +902,7 @@ CREATE FUNCTION auth_native_role_auth_key_assertion() RETURNS trigger LANGUAGE p
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -928,7 +928,7 @@ CREATE FUNCTION auth_native_role_auth_attempt_account() RETURNS trigger LANGUAGE
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -954,7 +954,7 @@ CREATE FUNCTION auth_native_role_auth_consent() RETURNS trigger LANGUAGE plpgsql
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -987,7 +987,7 @@ CREATE FUNCTION auth_native_role_auth_client_reduction_progress() RETURNS trigge
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -1020,7 +1020,7 @@ CREATE FUNCTION auth_native_role_auth_client_reduction() RETURNS trigger LANGUAG
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -1053,7 +1053,7 @@ CREATE FUNCTION auth_native_role_auth_client_coverage() RETURNS trigger LANGUAGE
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
@@ -1086,7 +1086,7 @@ CREATE FUNCTION auth_native_role_oauthclientresource() RETURNS trigger LANGUAGE 
 DECLARE fresh boolean; covered boolean:=true; source_version smallint; source_owner text;
 BEGIN
   fresh:=current_setting('auth.native_role_producer',true)='1';
-  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed) THEN
+  IF NOT COALESCE(fresh,false) AND NOT EXISTS(SELECT 1 FROM auth_native_role_deployment WHERE singleton AND NOT armed FOR KEY SHARE NOWAIT) THEN
     RAISE EXCEPTION 'Auth native role producer version refused' USING ERRCODE='55000';
   END IF;
   IF TG_OP='DELETE' THEN
