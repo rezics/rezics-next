@@ -11,6 +11,15 @@ const subject = ({ id, label, locale }: Subject) => subjectHref({ id, label }, l
 
 /** Shared destinations for standalone native entries and their grouped navigation. No capability decisions. */
 export const catalogueEntries = {
+  literary: ({
+    id,
+    label,
+    locale,
+  }: Locale & { id?: string | undefined; label?: string | undefined }): CatalogueEntry => ({
+    group: id ? 'edit' : 'create',
+    label: m.literary_title({}, options(locale)),
+    href: id ? `${subject({ id, label: label ?? '', locale })}/literary` : `/${locale}/catalogue/literary`,
+  }),
   addon: ({
     id,
     label,

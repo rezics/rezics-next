@@ -431,3 +431,33 @@ The real-route story IDs are:
 
 Use the locale, theme and phone390/desktop1280 viewport globals. They are declared request examples; native
 acceptance and normal Web captures remain separate verification.
+
+## Browser flow: book and book-series works
+
+The existing create entry and the Book or BookSeries subject’s Contribute menu offer **Book and book-series work editor**.
+`/{locale}/catalogue/literary` reuses the common initial-terms form; the work reader offers
+`/{locale}/subjects/{id}/{slug}/literary`. These pages consume effective emitted `schema:Book` and
+`schema:BookSeries` properties, constraints, units and relation metadata. Labels and descriptions keep their actual
+metadata language and the existing fallback. They do not publish definitions or change a subject's Type.
+
+Creation sends only entered multilingual terms and explicitly added initial scalar facts through ordinary
+`POST /v1/subjects`. Each fact can carry its own citation. No number, language, classification or relation is
+inferred from another field. The form retains independent drafts across Type choices. Native rejection refreshes
+metadata while retaining the draft; uncertain delivery retains the exact command and key. The returned subject ID
+is reread before offering its canonical current-reader link. A created identity with an unavailable reader is
+shown as created, with a separate read retry.
+
+The current work groups identity/original names, bibliography/declared quantities, creator/series/classification
+relations and admitted original text. Bibliography reuses the multi-field editor and its independent results and
+keys; relations reuse the native target picker and qualified-slot editor; original text reuses authored fields,
+per-document language, licence and evidence. Opening a relation or authored section starts its bounded read and
+keeps its editor mounted when collapsed. Corrections create candidates for exact native review, not immediate
+publication. The names link uses the existing native terms adapter and its actual result; an unavailable write remains
+unavailable, and no `schema:name` proposal substitutes for a title-map edit.
+
+ISBN and page counts remain edition facts. Book word count uses the released exact unitless quantity, without
+page conversion, text-coverage inference or trusted whole-work evidence. BookSeries part count uses only its
+released volume/chapter units; membership is contributed on each member, without deriving totals. Unsupported
+conveniences are omitted, including a BookSeries author field when only contributor/publisher are emitted.
+Initial authored text and relations are entered after creation through the existing integrated editors. These
+ordinary forms submit no ingestion Source envelope and infer no prose, cover or rights permission.

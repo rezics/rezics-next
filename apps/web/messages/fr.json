@@ -3103,5 +3103,16 @@
   "manga_created": "Créé avec les faits initiaux natifs. Ouvrez la lecture actuelle.",
   "manga_terms_help": "Les noms et descriptions utilisent l’éditeur de termes existant. Son écriture native peut être indisponible ; une déclaration de titre ne modifie pas les noms.",
   "manga_relation_help": "Utilisez l’éditeur de relations partagé pour proposer des liens ou crédits et comparer leur emplacement natif exact. La révision et la sélection publique restent distinctes.",
-  "manga_classification_help": "Les classifications actuelles sont affichées ici. L’éditeur partagé ne propose pas encore de modifications de classification."
+  "manga_classification_help": "Les classifications actuelles sont affichées ici. L’éditeur partagé ne propose pas encore de modifications de classification.",
+  "literary_title": "Modifier les livres et séries de livres",
+  "literary_intro": "Décrivez l’œuvre littéraire et indiquez les sources de chaque fait. Les propositions sont examinées avant de pouvoir modifier la lecture actuelle.",
+  "literary_grain": "Distinguez l’œuvre de ses éditions : l’ISBN et le nombre de pages appartiennent à l’édition concernée. Un nombre de mots est une affirmation éditoriale, pas une preuve de couverture intégrale du texte.",
+  "literary_identity": "Identité de l’œuvre et noms originaux",
+  "literary_bibliography": "Bibliographie et quantités déclarées",
+  "literary_initial_help": "Ajoutez uniquement les faits connus. Les faits non saisis restent absents. Après la création, modifiez les créateurs, les liens de série et vos textes sous l’identité de l’œuvre.",
+  "literary_remove_fact": "Retirer le fait initial",
+  "literary_relations": "Créateurs, séries et classifications",
+  "literary_relations_help": "Choisissez une cible existante et son emplacement de relation exact. L’appartenance à une série se propose sur chaque œuvre membre ; aucun total n’est déduit.",
+  "literary_terms_help": "Les noms, descriptions et alias utilisent l’éditeur multilingue existant. Si l’API native manque, la fonction reste indisponible. Une déclaration de nom ne modifie pas la table des titres.",
+  "literary_authored_help": "Rédigez un texte original avec sa langue, ses sources et sa licence. Les documents existants sont conservés."
 }

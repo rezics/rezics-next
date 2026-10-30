@@ -1,3 +1,4 @@
+import { LiteraryProfileEntry } from './literary-profile-entry';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -41,6 +42,7 @@ export function CreateSubjectForm({
     scope: string;
     hideHeading?: boolean;
     control?: (pointer: string) => string | undefined;
+    errorLabel?: (id: string) => string | undefined;
     type?: string;
     intro?: string;
     href?: string;
@@ -236,6 +238,7 @@ export function CreateSubjectForm({
               </Button>
             </div>
           )}
+          {!profile && <LiteraryProfileEntry locale={locale} />}
           {!profile && <GameProfileEntry locale={locale} />}
           {!profile && <RecipeEditorEntry locale={locale} />}
           {!profile && <CharacterProfileEntry locale={locale} />}
@@ -377,6 +380,7 @@ export function CreateSubjectForm({
                     <ul className="list-inside list-disc">
                       {[...new Set(errors.map((error) => control(error.pointer)))].map((id) => (
                         <li key={id}>
+                          {profile?.errorLabel?.(id) ? <a className="underline" href={`#${id}`}>{profile.errorLabel(id)}</a> : <>
                           <a className="underline" href={`#${id}`}>
                             {profile?.control?.(errors.find((error) => control(error.pointer) === id)?.pointer ?? '')
                               ? errors.find((error) => control(error.pointer) === id)?.pointer
@@ -390,6 +394,7 @@ export function CreateSubjectForm({
                                       ? m.catalogue_create_aliases({}, options)
                                       : m.catalogue_create_label({}, options)}
                           </a>
+                          </>}
                         </li>
                       ))}
                     </ul>

@@ -3103,5 +3103,16 @@
   "manga_created": "已建立並寫入初始事實。查看目前條目。",
   "manga_terms_help": "名稱與描述由現有名稱編輯器處理。原生寫入功能可能尚未提供；標題陳述不會修改名稱對應。",
   "manga_relation_help": "使用下方共用關係編輯器提出系列歸屬或創作署名修改，並比較精確的原生關係。審核與公開選用是不同的操作。",
-  "manga_classification_help": "此處顯示目前分類。共用關係編輯器尚未支援分類提案。"
+  "manga_classification_help": "此處顯示目前分類。共用關係編輯器尚未支援分類提案。",
+  "literary_title": "書籍與叢書作品編輯",
+  "literary_intro": "描述文學作品，並為每項事實提供依據。提案須經審核，才可能改變目前顯示的內容。",
+  "literary_grain": "請區分作品與版本：ISBN 和頁數屬於實際版本。作品字數是編目主張，不證明文本的完整涵蓋。",
+  "literary_identity": "作品身分與原文名稱",
+  "literary_bibliography": "書目資訊與明確數量",
+  "literary_initial_help": "只新增確知的事實，未填寫的事實維持缺省。建立後可在作品身分下編輯創作者、系列關係及原創文本。",
+  "literary_remove_fact": "移除初始事實",
+  "literary_relations": "創作者、系列與分類",
+  "literary_relations_help": "選擇既有對象及準確的關係槽位。叢書成員關係應在各成員作品上提出，不推算成員總數。",
+  "literary_terms_help": "名稱、描述及別名使用既有多語言名稱編輯器。原生名稱介面未提供時會顯示無法使用；名稱陳述不等於修改標題對應。",
+  "literary_authored_help": "撰寫原創文本，並提供其語言、依據和授權。既有文件維持完整。"
 }

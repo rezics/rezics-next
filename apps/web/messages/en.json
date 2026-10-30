@@ -3455,5 +3455,16 @@
   "manga_created": "Created with native initial facts. Open its current reading.",
   "manga_terms_help": "Names and descriptions use the existing terms editor. Its native write producer may be unavailable; a title statement is not a title-map update.",
   "manga_relation_help": "Use the shared relation editor below to propose membership or credit changes and compare the exact native slot. Review and public selection remain separate.",
-  "manga_classification_help": "Current classifications are shown here. The shared relation editor does not yet offer classification proposals."
+  "manga_classification_help": "Current classifications are shown here. The shared relation editor does not yet offer classification proposals.",
+  "literary_title": "Book and book-series work editor",
+  "literary_intro": "Describe the literary work, then contribute evidence for each fact. Proposals await review before they can change the current reading.",
+  "literary_grain": "Keep editions separate: ISBN and page counts belong to the actual edition. A work word count is an editorial assertion, not proof of complete word coverage.",
+  "literary_identity": "Work identity and original names",
+  "literary_bibliography": "Bibliography and stated quantities",
+  "literary_initial_help": "Add only facts you know. Leave unentered facts absent. After creation, use the creator, series and original-text editors below the work identity.",
+  "literary_remove_fact": "Remove initial fact",
+  "literary_relations": "Creators, series and classifications",
+  "literary_relations_help": "Use an existing target and its exact relation slot. Book-series membership is contributed on each member work; no member count is inferred.",
+  "literary_terms_help": "Names, descriptions and aliases use the existing multilingual terms editor. A missing native terms producer remains unavailable; a name statement is not a title-map edit.",
+  "literary_authored_help": "Write original text with its own language, evidence and licence. Existing documents remain intact."
 }

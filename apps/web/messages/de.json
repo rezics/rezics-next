@@ -3103,5 +3103,16 @@
   "manga_created": "Mit nativen Ausgangsfakten erstellt. Öffne die aktuelle Ansicht.",
   "manga_terms_help": "Namen und Beschreibungen verwenden den vorhandenen Begriffs-Editor. Die native Schreibfunktion kann fehlen; eine Titelaussage ändert keine Namen.",
   "manga_relation_help": "Nutze den gemeinsamen Beziehungseditor für Zugehörigkeit und Mitwirkende. Prüfung und öffentliche Auswahl bleiben getrennt.",
-  "manga_classification_help": "Aktuelle Klassifikationen werden hier angezeigt. Der gemeinsame Beziehungseditor bietet noch keine Klassifikationsvorschläge."
+  "manga_classification_help": "Aktuelle Klassifikationen werden hier angezeigt. Der gemeinsame Beziehungseditor bietet noch keine Klassifikationsvorschläge.",
+  "literary_title": "Bücher und Buchreihen bearbeiten",
+  "literary_intro": "Beschreiben Sie das literarische Werk und belegen Sie jede Angabe. Vorschläge werden geprüft, bevor sie die aktuelle Ansicht ändern können.",
+  "literary_grain": "Trennen Sie Werk und Ausgabe: ISBN und Seitenzahl gehören zur jeweiligen Ausgabe. Eine Wortzahl ist eine redaktionelle Aussage und kein Nachweis vollständiger Textabdeckung.",
+  "literary_identity": "Werkidentität und Originalnamen",
+  "literary_bibliography": "Bibliografie und angegebene Mengen",
+  "literary_initial_help": "Fügen Sie nur bekannte Fakten hinzu. Nicht eingegebene Angaben bleiben aus. Nach dem Anlegen können Sie Urheber, Reihenbezüge und eigene Texte unter der Werkidentität bearbeiten.",
+  "literary_remove_fact": "Anfängliche Angabe entfernen",
+  "literary_relations": "Urheber, Reihen und Klassifikationen",
+  "literary_relations_help": "Wählen Sie ein vorhandenes Ziel und dessen genaue Beziehungsstelle. Die Zugehörigkeit zu einer Buchreihe wird am Mitgliedswerk vorgeschlagen; eine Anzahl wird nicht abgeleitet.",
+  "literary_terms_help": "Namen, Beschreibungen und Aliasse verwenden den bestehenden mehrsprachigen Editor. Fehlt die native Schnittstelle, bleibt die Funktion nicht verfügbar. Eine Namensaussage ändert nicht die Titelzuordnung.",
+  "literary_authored_help": "Verfassen Sie eigene Texte mit Sprache, Beleg und Lizenz. Vorhandene Dokumente bleiben erhalten."
 }

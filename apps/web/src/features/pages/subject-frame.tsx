@@ -1,3 +1,4 @@
+import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { EditorialEntry } from '../catalogue/editorial-entry';
 import { AddonProfileEntry } from '../catalogue/addon-profile-entry';
@@ -289,6 +290,9 @@ export function SubjectFrame({
               )}
               {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
               <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
+              {(frame.type === 'schema:Book' || frame.type === 'schema:BookSeries') && (
+                <LiteraryProfileEntry id={frame.id} label={title} type={frame.type} locale={locale} />
+              )}
               <CreateSubjectEntry locale={locale} />
               {frame.type === 'wd:Q2620972' && (
                 <StoryArcProfileEntry id={frame.id} label={title} locale={locale} realm={realm} />
