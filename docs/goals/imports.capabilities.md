@@ -781,8 +781,9 @@ successor. Original receipts/media and an independent editor selection remain ob
 The [scenario/evidence notes](../research/imports-audit/cli-midrun-authority-resume.md) name the command, observation
 sources and limits. The historical missing-caller red remains qualified; this binding is registered and exposed,
 with one native provider child (`bangumi`, seventeen records) passing one test and 4,330 assertions at
-`7599ec7013d8a85f3efc9b78ba27212c9a8b00d4`. Its receipt retains a fixture typing diagnostic corrected afterwards;
-the corrected managed receipt and promotion remain pending. Compiler/local protocol proof is not a native pass.
+`72f22215978b429a77e33a34e0dd7e75d909d787`, with no TypeScript diagnostics in the corrected managed log.
+The evidence notes retain the raw receipt and earlier fixture typing correction. Promotion remains pending;
+compiler/local protocol proof alone is not a native pass.
 This slice adds no growth series and preserves the existing rights, deferred surface and Cost boundaries.
 
 ```sh

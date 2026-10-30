@@ -2,7 +2,7 @@
 
 The frozen [native outcome](../../../services/kernel/test/imports/cli-midrun-authority-resume.test.ts)
 is bound by its [caller](../../../services/kernel/test/imports/cli-midrun-authority-resume-fixture.ts).
-The missing-caller red is historical evidence. The first connected native run passed; its receipt and limits are recorded below. Promotion remains separate.
+The missing-caller red is historical evidence. The corrected connected native run passed; its receipt and limits are recorded below. Promotion remains separate.
 
 One `openApiRuntime({batchRecords:8,maxFields:64,maxRecordBytes:65536})` owns the application, Auth, Access and
 registered worker. The caller consumes the actual `identitySupport`, `openApiObserver` and runtime `mediaBoundary`
@@ -73,11 +73,11 @@ production defect has been reached by the local proof. There are no changes outs
 
 ## Native receipt
 
-The managed command above tested code revision `7599ec7013d8a85f3efc9b78ba27212c9a8b00d4` and exited 0.
+The final managed command above tested code revision `72f22215978b429a77e33a34e0dd7e75d909d787` and exited 0.
 The unchanged frozen outcome passed: one test, 4,330 assertions, one provider child (`bangumi`) with seventeen
-records. Raw evidence is line 78 of `.temp/goal/checks/worker-check-2026-10-30T08-55-40.742Z-2f0a4b66.log`;
-lines 81–84 record the test result and line 97 the exit status. The locally extracted raw object is
-`.temp/goal/cli-midrun-authority-resume/native-passed-evidence.json`.
+records. Raw evidence is line 65 of `.temp/goal/checks/worker-check-2026-10-30T09-27-24.380Z-137fe8f4.log`;
+lines 68–71 record the test result and line 84 the exit status. The locally extracted raw object is
+`.temp/goal/cli-midrun-authority-resume/native-corrected-evidence.json`. The final log contains no TypeScript diagnostics.
 
 The run observed sixteen held requests and sixteen native 403 responses, sixteen exact pending envelopes,
 and 54 unchanged original receipt rows. Revoked replay returned 403 without success disclosure. Recovery consumed
@@ -94,9 +94,12 @@ For record `930001`, initial/refreshed/successor source digests were respectivel
 `60c613790a6c599dcdcc6e7c04d90b8c5f680574139d5ddc5aced4e5587d659d`.
 The raw object retains all seventeen rows and exact input-byte SHA-256 values for every acquired generation.
 
-The first native run also printed TS2769 at fixture line 487: the equality assertion's expected rows were typed
+The earlier run at `7599ec7013d8a85f3efc9b78ba27212c9a8b00d4` passed the native assertions but printed TS2769
+at fixture line 487 (`.temp/goal/checks/worker-check-2026-10-30T08-55-40.742Z-2f0a4b66.log:66`):
+the equality assertion's expected rows were typed
 as possibly undefined while the actual baseline rows were nullable. The fixture now requires each sealed staged
 row to exist before comparing it with the completed baseline. This preserves the outcome assertion and corrects
-its typing; it introduces no production change. A corrected managed receipt is pending. No native outcome
-assertion or production defect was reached. This receipt proves the connected journey, not root regression,
+its typing; it introduces no production change. The corrected managed run passed with 4,330 assertions and no
+TypeScript diagnostics. No native outcome assertion or production defect failed. This receipt proves the connected
+journey, not root regression,
 all-provider coverage, main promotion or a new growth measurement.

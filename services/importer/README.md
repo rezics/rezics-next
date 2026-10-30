@@ -683,9 +683,10 @@ The frozen [native journey](../kernel/test/imports/cli-midrun-authority-resume.t
 Bangumi records after a metadata-only baseline, real account-key Auth, native Access/public writes, the media worker
 and an independent community selection. It schedules actual outgoing requests before forwarding to Access and
 retains exact native denial bodies. See [scenario, evidence and limits](../../docs/research/imports-audit/cli-midrun-authority-resume.md).
-The first managed native run passed one test and 4,330 assertions; the evidence notes retain its exact revision
-and a fixture typing diagnostic corrected afterwards. The corrected managed receipt is pending. Binding and the
-importer-local protocol proof alone do not establish native success or main promotion.
+The corrected managed native run passed one test and 4,330 assertions at
+`72f22215978b429a77e33a34e0dd7e75d909d787`, with no TypeScript diagnostics. The evidence notes retain its raw
+receipt and the earlier fixture typing correction. This proves the connected journey; main promotion and native
+growth evidence remain separate.
 
 ```sh
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-midrun-authority-resume.test.ts
