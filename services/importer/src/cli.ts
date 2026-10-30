@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite';
+import { constants } from 'node:fs';
 import { open, type FileHandle } from 'node:fs/promises';
 import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions } from './importer.ts';
@@ -216,7 +217,8 @@ async function openDump(path: string, handleCount: { value: number }): Promise<F
   if (path === '-') return undefined;
   let handle: FileHandle;
   try {
-    handle = await open(path, 'r');
+    // Reach the descriptor check even for a FIFO with no writer; regular-file reads are unchanged.
+    handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch {
     throw new InputFailure();
   }

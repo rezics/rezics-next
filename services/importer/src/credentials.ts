@@ -59,7 +59,8 @@ function base64url(value: Uint8Array | string): string {
 async function readAccountKey(path: string, observer?: CredentialsObserver): Promise<AccountKey> {
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    // Do not wait for a FIFO writer before checking the opened descriptor's file type.
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch {
     inputFailure();
   }
