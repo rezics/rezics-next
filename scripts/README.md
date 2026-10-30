@@ -9,6 +9,8 @@ Physical worker check runs are recorded as JSON under the main checkout's
 revision, start/end timestamps, exit and terminal status, and available slot wait, phase, memory, swap, pressure and
 CPU measurements. Entries are first written with `terminalStatus: "running"` and atomically replaced at completion;
 ledger write failures are warnings and do not change a check result.
+Set `REZICS_CHECK_LEDGER_DIR` to override the directory for both recording and `summary`; relative paths resolve
+from the main checkout, and test suites use temporary directories.
 
 Commands may append phase markers to the file named by `REZICS_CHECK_PHASES`, one per line:
 `<phase name>\t<start|end>\t<CLOCK_MONOTONIC nanoseconds>`. Paired markers are returned as phase durations; malformed

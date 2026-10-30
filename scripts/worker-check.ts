@@ -683,7 +683,7 @@ export async function runWorkerCheck(
       terminalStatus: 'running',
       slotWaitSeconds,
     };
-    writeLedger(ledger, checkout);
+    writeLedger(ledger, checkout, console.warn, env);
   };
   const endLedger = (code: number, cause?: string): void => {
     if (!ledger) return;
@@ -691,7 +691,7 @@ export async function runWorkerCheck(
     ledger.exitStatus = code;
     ledger.terminalStatus = cause ? 'infrastructure-failure' : code === 0 ? 'passed' : 'failed';
     if (cause) ledger.infrastructureCause = cause;
-    writeLedger(ledger, checkout);
+    writeLedger(ledger, checkout, console.warn, env);
   };
   const directory = memoryLeaseDirectory(env);
   const capacity = checkMemoryCapacity(env);
@@ -1147,7 +1147,7 @@ export async function runWorkerCheck(
   endLedger(signalNumber === undefined ? code : 128 + signalNumber);
   if (ledger) {
     ledger.phases = { ...(ledger.phases ?? {}), command: (performance.now() - physicalStarted) / 1000 };
-    writeLedger(ledger, checkout);
+    writeLedger(ledger, checkout, console.warn, env);
   }
   return signalNumber === undefined ? code : 128 + signalNumber;
 }

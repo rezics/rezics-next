@@ -29,6 +29,7 @@ import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
 
 const dirs: string[] = [];
 const repository = join(import.meta.dir, '..');
+let suiteRoot: string;
 const inheritedCheckEnvironment = { ...process.env };
 
 async function needsStack(argv: readonly string[], cwd = repository): Promise<boolean> {
@@ -83,7 +84,7 @@ function cleanTestEnvironment(environment: Record<string, string | undefined>): 
   const clean = { ...environment };
   for (const key of Object.keys(clean)) {
     if (
-      key.startsWith('REZICS_CHECK_') ||
+      (key.startsWith('REZICS_CHECK_') && key !== 'REZICS_CHECK_LEDGER_DIR') ||
       key.startsWith('REZICS_STACK_') ||
       key === 'KERNEL_CHECK_REMOTE' ||
       key === 'KERNEL_CHECK_ON_REMOTE'
@@ -103,8 +104,14 @@ beforeAll(() => {
     )
       delete process.env[key];
   }
+  const temporary = join(import.meta.dir, '../.temp');
+  mkdirSync(temporary, { recursive: true });
+  suiteRoot = mkdtempSync(join(temporary, 'worker-check-test-'));
+  process.env.REZICS_CHECK_LEDGER_DIR = join(suiteRoot, 'check-ledger');
 });
 afterAll(() => {
+  rmSync(suiteRoot, { recursive: true, force: true });
+  for (const directory of dirs.splice(0)) rmSync(directory, { recursive: true, force: true });
   for (const key of Object.keys(process.env)) {
     if (
       key.startsWith('REZICS_CHECK_') ||
@@ -144,7 +151,7 @@ test('nested worker checks start with default placement environment', () => {
 });
 
 test('critical priority: worker-check rereads task-priority and overrides inherited priority each check', async () => {
-  const directory = mkdtempSync(join(import.meta.dir, '.worker-priority-'));
+  const directory = mkdtempSync(join(suiteRoot, 'worker-priority-'));
   dirs.push(directory);
   mkdirSync(join(directory, '.temp/goal'), { recursive: true });
   const file = join(directory, '.temp/goal/task-priority');
@@ -175,7 +182,7 @@ test('critical priority: worker-check rereads task-priority and overrides inheri
 });
 
 test('critical priority: invalid task priority names its file and missing priority reports normal once', async () => {
-  const directory = mkdtempSync(join(import.meta.dir, '.worker-priority-errors-'));
+  const directory = mkdtempSync(join(suiteRoot, 'worker-priority-errors-'));
   dirs.push(directory);
   mkdirSync(join(directory, '.temp/goal'), { recursive: true });
   const file = join(directory, '.temp/goal/task-priority');
@@ -220,25 +227,31 @@ test('critical priority: invalid task priority names its file and missing priori
 });
 
 test('ledger records each physical worker execution with logical id and rerun number', async () => {
-  const root = mkdtempSync(join(repository, '.temp/worker-check-ledger-'));
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-ledger-'));
   dirs.push(root);
   process.env.REZICS_CHECK_MEMORY = 'off';
   process.env.REZICS_CHECK_SCOPE = 'off';
-  const result = await runWorkerCheck(['true'], root, false, undefined, 60_000, 'logical-1', 1);
-  expect(result).toBe(0);
-  const ledgerRoot = join(root, '.temp/check-ledger');
-  const day = readdirSync(ledgerRoot)[0]!;
-  const entry = JSON.parse(readFileSync(join(ledgerRoot, day, readdirSync(join(ledgerRoot, day))[0]!), 'utf8'));
-  expect(entry.logicalCheckId).toBe('logical-1');
-  expect(entry.rerunNumber).toBe(1);
-  expect(entry.terminalStatus).toBe('passed');
-  expect(entry.exitStatus).toBe(0);
+  const previousLedger = process.env.REZICS_CHECK_LEDGER_DIR;
+  process.env.REZICS_CHECK_LEDGER_DIR = join(root, '.temp/check-ledger');
+  try {
+    const result = await runWorkerCheck(['true'], root, false, undefined, 60_000, 'logical-1', 1);
+    expect(result).toBe(0);
+    const ledgerRoot = join(root, '.temp/check-ledger');
+    const day = readdirSync(ledgerRoot)[0]!;
+    const entry = JSON.parse(readFileSync(join(ledgerRoot, day, readdirSync(join(ledgerRoot, day))[0]!), 'utf8'));
+    expect(entry.logicalCheckId).toBe('logical-1');
+    expect(entry.rerunNumber).toBe(1);
+    expect(entry.terminalStatus).toBe('passed');
+    expect(entry.exitStatus).toBe(0);
+  } finally {
+    process.env.REZICS_CHECK_LEDGER_DIR = previousLedger;
+  }
 });
 
 function withQuietAdmission<T>(run: () => Promise<T>): Promise<T> {
   const old = { ...process.env };
   process.env.REZICS_CHECK_MEMORY = 'off';
-  process.env.REZICS_CHECK_MEMORY_DIR = '/tmp/worker-check-test-memory';
+  process.env.REZICS_CHECK_MEMORY_DIR = join(suiteRoot, 'memory');
   process.env.REZICS_CHECK_SCOPE = 'off';
   return run().finally(() => {
     for (const key of ['REZICS_CHECK_MEMORY', 'REZICS_CHECK_MEMORY_DIR', 'REZICS_CHECK_SCOPE']) {
@@ -361,7 +374,7 @@ test('typecheck scope: commands other than root typecheck get no TYPECHECK_CHANG
 });
 
 test('worker-check keeps exit status and writes a log plus failure summary with admission disabled', async () => {
-  const directory = mkdtempSync(join(repository, '.temp/worker-check-test-'));
+  const directory = mkdtempSync(join(suiteRoot, 'worker-check-test-'));
   dirs.push(directory);
   const old = { ...process.env };
   process.env.REZICS_CHECK_MEMORY = 'off';
@@ -401,7 +414,7 @@ test('worker-check keeps exit status and writes a log plus failure summary with 
 });
 
 test('a queued memory lease writes its waiting line repeatedly into the check log', async () => {
-  const directory = mkdtempSync(join(repository, '.temp/worker-check-lease-wait-'));
+  const directory = mkdtempSync(join(suiteRoot, 'worker-check-lease-wait-'));
   dirs.push(directory);
   const leaseDirectory = join(directory, 'leases');
   const holder = await acquireStackSlot('holder', { REZICS_STACK_SLOTS: '1', REZICS_STACK_LEASE_DIR: leaseDirectory });
@@ -437,7 +450,7 @@ test('a queued memory lease writes its waiting line repeatedly into the check lo
 });
 
 test('a timed out wait can wait again by id and receives the same check result', async () => {
-  const directory = mkdtempSync(join(repository, '.temp/worker-check-rewait-'));
+  const directory = mkdtempSync(join(suiteRoot, 'worker-check-rewait-'));
   dirs.push(directory);
   await withQuietAdmission(async () => {
     const marker = `${directory}/runs`;
@@ -462,7 +475,7 @@ test('a timed out wait can wait again by id and receives the same check result',
 });
 
 test('a queued check timeout prints the latest waiting line and its log path', async () => {
-  const root = mkdtempSync(join(repository, '.temp/worker-check-queued-wait-'));
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-queued-wait-'));
   dirs.push(root);
   const log = '.temp/goal/checks/queued.log';
   mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -477,7 +490,7 @@ test('a queued check timeout prints the latest waiting line and its log path', a
 });
 
 test('a finished check result remains readable by id after its worker session ends', async () => {
-  const directory = mkdtempSync(join(repository, '.temp/worker-check-finished-'));
+  const directory = mkdtempSync(join(suiteRoot, 'worker-check-finished-'));
   dirs.push(directory);
   await withQuietAdmission(async () => {
     const id = startWorkerCheck(['bun', '-e', 'console.error("finished failure marker"); process.exit(9)'], directory);
@@ -529,7 +542,7 @@ function writeRunningRecord(
 }
 
 test('worker-check --wait reruns once when the runner is gone but its result still says running', async () => {
-  const root = mkdtempSync(join(repository, '.temp/worker-check-dead-runner-'));
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-dead-runner-'));
   dirs.push(root);
   const log = '.temp/goal/checks/dead-runner.log';
   mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -549,7 +562,7 @@ test('worker-check --wait reruns once when the runner is gone but its result sti
 });
 
 test('a check whose log has been silent for 10 minutes is stopped and rerun once with host and log reported', async () => {
-  const root = mkdtempSync(join(repository, '.temp/worker-check-stalled-runner-'));
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-stalled-runner-'));
   dirs.push(root);
   const log = '.temp/goal/checks/stalled.log';
   mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -582,7 +595,7 @@ test('a check whose log has been silent for 10 minutes is stopped and rerun once
 });
 
 test('a second interrupted runner finishes as infrastructure failure without a third run', async () => {
-  const root = mkdtempSync(join(repository, '.temp/worker-check-second-runner-'));
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-second-runner-'));
   dirs.push(root);
   const log = '.temp/goal/checks/second.log';
   mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -606,7 +619,7 @@ test('an unrelated local pid and a runner recorded on another host are not treat
     ['00000000-0000-4000-8000-000000000004', process.pid, hostname()],
     ['00000000-0000-4000-8000-000000000005', 2_000_000_000, hostname() + '-elsewhere'],
   ] as const) {
-    const root = mkdtempSync(join(repository, '.temp/worker-check-unrelated-runner-'));
+    const root = mkdtempSync(join(suiteRoot, 'worker-check-unrelated-runner-'));
     dirs.push(root);
     const log = '.temp/goal/checks/live.log';
     mkdirSync(join(root, '.temp/goal/checks'), { recursive: true });
@@ -632,9 +645,7 @@ function workerFixture(): {
   remoteArgs: string;
   localMarker: string;
 } {
-  const temporary = join(import.meta.dir, '../.temp');
-  mkdirSync(temporary, { recursive: true });
-  const root = mkdtempSync(join(temporary, 'worker-check-remote-test-'));
+  const root = mkdtempSync(join(suiteRoot, 'worker-check-remote-test-'));
   dirs.push(root);
   const memory = join(root, 'memory');
   const scripts = join(root, 'scripts');

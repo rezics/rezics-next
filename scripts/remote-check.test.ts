@@ -276,7 +276,7 @@ test('a cached Bun whose revision does not match is not used, and the run downlo
 // A fake ssh answers each kind of remote script by what it contains, so the tests see which host was chosen, what ran
 // there and what was released, without a network.
 const fakeSsh = `#!/usr/bin/env bun
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
 const positionals: string[] = [];
@@ -705,7 +705,8 @@ if (script.includes('/proc/loadavg')) {
   const hang = Boolean(config.hang && runNumber < (config.hangRuns ?? Number.POSITIVE_INFINITY));
   if (hang && config.memoryHeadroomOnHang !== undefined) updateConfig({ memoryHeadroom: config.memoryHeadroomOnHang });
   const fakeStartedAt = config.runDurationMs === undefined ? undefined : Number(readFileSync(dir + '/clock', 'utf8'));
-  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], fakeStartedAt, slotHeld: slotHeld() });
+  const releaseFile = config.controlledRuns ? dir + '/' + hostKey + '.release-run.' + process.pid : undefined;
+  log({ kind: 'run', script, identity: args[args.indexOf('-i') + 1], fakeStartedAt, slotHeld: slotHeld(), releaseFile });
   const host = address.slice(address.indexOf('@') + 1).replace(/\\.test$/, '');
   const statusFile = dir + '/' + hostKey + '.status';
   if (runNumber < (config.transportFailures ?? 0)) {
@@ -724,7 +725,19 @@ if (script.includes('/proc/loadavg')) {
   }
   if (config.stdout) console.log(config.stdout);
   if (config.stderr) console.error(config.stderr);
-  if (hang) {
+  if (releaseFile) {
+    await new Promise<void>((resolve) => {
+      const released = () => {
+        if (!existsSync(releaseFile)) return;
+        watcher.close();
+        resolve();
+      };
+      const watcher = watch(dir, released);
+      released();
+    });
+    log({ kind: 'run-complete', releaseFile });
+    process.exit(result);
+  } else if (hang) {
     if (!config.silentHang) console.log('started');
     process.on('SIGTERM', () => {
       if (config.memoryHeadroomAfterHang !== undefined) updateConfig({ memoryHeadroom: config.memoryHeadroomAfterHang });
@@ -882,6 +895,7 @@ type HostConfig = {
   silentHang?: boolean;
   hangRuns?: number;
   runDurationMs?: number;
+  controlledRuns?: boolean;
   present?: readonly string[];
   ordinaryBusySlots?: number[];
   base?: string;
@@ -899,7 +913,7 @@ function cleanTestEnvironment(environment: Record<string, string | undefined>): 
   const clean = { ...environment };
   for (const key of Object.keys(clean)) {
     if (
-      key.startsWith('REZICS_CHECK_') ||
+      (key.startsWith('REZICS_CHECK_') && key !== 'REZICS_CHECK_LEDGER_DIR') ||
       key.startsWith('REZICS_STACK_') ||
       key === 'KERNEL_CHECK_REMOTE' ||
       key === 'KERNEL_CHECK_ON_REMOTE'
@@ -921,6 +935,7 @@ beforeAll(() => {
   }
   mkdirSync(join(repository, '.temp'), { recursive: true });
   root = mkdtempSync(join(repository, '.temp/remote-check-test-'));
+  process.env.REZICS_CHECK_LEDGER_DIR = join(root, 'check-ledger');
   mkdirSync(join(root, 'bin'));
   writeFileSync(join(root, 'bin/package.json'), JSON.stringify({ type: 'commonjs' }));
   for (const [name, source] of [
@@ -1562,10 +1577,6 @@ async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<voi
   const deadline = Date.now() + timeoutMs;
   while (!condition() && Date.now() < deadline) await Bun.sleep(10);
   expect(condition(), condition.toString()).toBe(true);
-}
-
-async function waitForCondition(condition: () => boolean): Promise<void> {
-  while (!condition()) await Bun.sleep(10);
 }
 
 async function kernelCheck(
@@ -3377,6 +3388,36 @@ test('a multi-slot reservation blocks new runs when existing work already fills 
   }
 });
 
+// These barriers control command completion independently of admission and marker registration.
+async function admissionBarrier(events: () => Event[], condition: (trace: Event[]) => boolean): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!condition(events()) && Date.now() < deadline) await Bun.sleep(10);
+  expect(condition(events()), JSON.stringify(events())).toBe(true);
+}
+
+function releaseControlledRun(event: Event): void {
+  expect(typeof event.releaseFile).toBe('string');
+  writeFileSync(String(event.releaseFile), 'release\n');
+}
+
+function admissionTrace(events: () => Event[]): void {
+  // Keep the observed events in the check log after the suite removes its temporary fixture.
+  console.error(
+    'admission trace: ' +
+      JSON.stringify(
+        events().map(({ script, ...event }) => ({
+          ...event,
+          ...(typeof script === 'string'
+            ? {
+                command: script.match(/echo [a-z0-9-]+/g),
+                waiter: script.match(/# REMOTE_CHECK_MULTI_SLOT_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1],
+              }
+            : {}),
+        })),
+      ),
+  );
+}
+
 test('while a multi-slot run waits for a host, runs there use only the slots it leaves free', async () => {
   const { env, events } = scenario({
     b: {
@@ -3384,55 +3425,83 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
       memoryHeadroom: 20e9,
       slots: 6,
       cpuQuotaPercent: 1200,
-      hang: true,
-      hangRuns: 4,
+      controlledRuns: true,
     },
   });
   const workspaceDirectory = workspace();
+  const runEvent = (command: string) =>
+    events().find((event) => event.kind === 'run' && String(event.script).includes('echo ' + command));
   let multi: ReturnType<typeof startRemote> | undefined;
   const singles: ReturnType<typeof startRemote>[] = [];
   try {
     for (let index = 0; index < 4; index += 1) {
-      singles.push(startRemote(env, workspaceDirectory, ['sh', '-c', `echo single-${index}`]));
+      singles.push(startRemote(env, workspaceDirectory, ['sh', '-c', `echo single-${index}`], ['--max-ms', '10000']));
     }
-    await waitFor(
-      () => events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script))).length === 4,
+    await admissionBarrier(events, () => [0, 1, 2, 3].every((index) => runEvent(`single-${index}`)));
+    const initialMarkers = new Set(
+      events()
+        .filter((event) => event.kind === 'multi-marker')
+        .map((event) => event.id),
     );
-    multi = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo multi-run'], ['--slots', '2']);
-    await waitFor(() => events().some((event) => event.kind === 'multi-marker'));
+    multi = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo multi-run'], ['--slots', '2', '--max-ms', '10000']);
+    await admissionBarrier(events, (trace) =>
+      trace.some((event) => event.kind === 'multi-marker' && !initialMarkers.has(event.id)),
+    );
+    const marker = events().find((event) => event.kind === 'multi-marker' && !initialMarkers.has(event.id))!;
+    expect(marker.slots).toBe(2);
     const blockedSingle = startRemote(
       { ...env, GOAL_CHECK_WAIT_FILE: join(env.FAKE_DIR!, 'blocked-single-wait-ms') },
       workspaceDirectory,
       ['sh', '-c', 'echo blocked-single'],
+      ['--max-ms', '10000'],
     );
     singles.push(blockedSingle);
-    await waitFor(() => existsSync(join(env.FAKE_DIR!, 'blocked-single-wait-ms')));
-    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(
-      false,
+    await admissionBarrier(
+      events,
+      (trace) =>
+        existsSync(join(env.FAKE_DIR!, 'blocked-single-wait-ms')) &&
+        trace.some(
+          (event) => event.kind === 'probe' && event.multiWaitingId === marker.id && event.ordinarySlotsUsed === 4,
+        ),
     );
-    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run'))).toBe(
-      false,
-    );
+    expect(runEvent('blocked-single')).toBeUndefined();
+    expect(runEvent('multi-run')).toBeUndefined();
+    expect(multi.child.exitCode).toBeNull();
+    expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(4);
 
-    singles[0]!.child.kill('SIGTERM');
-    await singles[0]!.child.exited;
-    singles[1]!.child.kill('SIGTERM');
-    await singles[1]!.child.exited;
-    await waitFor(() =>
-      events().some((event) => event.kind === 'run' && String(event.script).includes('echo multi-run')),
+    // Releasing one holder lets the two-slot waiter fill all five ordinary slots.
+    releaseControlledRun(runEvent('single-0')!);
+    expect(await singles[0]!.child.exited).toBe(0);
+    await admissionBarrier(
+      events,
+      (trace) =>
+        Boolean(runEvent('multi-run')) &&
+        trace.some((event) => event.kind === 'probe' && event.multiWaitingSlots === 0 && event.ordinarySlotsUsed === 5),
     );
-    expect(await multi.child.exited).toBe(0);
+    expect(multi.child.exitCode).toBeNull();
+    for (const single of singles.slice(1)) expect(single.child.exitCode).toBeNull();
     expect(events().filter((event) => event.kind === 'run' && /echo single-/.test(String(event.script)))).toHaveLength(
       4,
     );
-    // Once the multi-slot command is terminal its slots are free, independently of returns/cleanup.
-    await waitFor(() =>
-      events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single')),
+    const grants = events().filter((event) => event.kind === 'slot' && event.granted);
+    expect(grants.map((event) => event.requested)).toEqual([1, 1, 1, 1, 2, 2]);
+    expect(grants.slice(-2).every((event) => String(event.script).includes('WAITER_ID ' + marker.id))).toBe(true);
+    expect(runEvent('blocked-single')).toBeUndefined();
+
+    releaseControlledRun(runEvent('multi-run')!);
+    expect(await multi.child.exited).toBe(0);
+    await admissionBarrier(events, () => Boolean(runEvent('blocked-single')));
+    const trace = events();
+    const completedAt = trace.findIndex(
+      (event) => event.kind === 'run-complete' && event.releaseFile === runEvent('multi-run')!.releaseFile,
     );
-    expect(await blockedSingle.child.exited).toBe(0);
-    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo blocked-single'))).toBe(
-      true,
-    );
+    expect(completedAt).toBeGreaterThanOrEqual(0);
+    expect(
+      trace.findIndex((event) => event.kind === 'run' && event.releaseFile === runEvent('blocked-single')!.releaseFile),
+    ).toBeGreaterThan(completedAt);
+    for (const command of ['single-1', 'single-2', 'single-3', 'blocked-single'])
+      releaseControlledRun(runEvent(command)!);
+    for (const single of singles.slice(1)) expect(await single.child.exited).toBe(0);
   } finally {
     for (const run of [...singles, multi]) {
       if (!run) continue;
@@ -3445,8 +3514,9 @@ test('while a multi-slot run waits for a host, runs there use only the slots it 
       await run.child.exited;
       await Promise.all([run.stdout, run.stderr]);
     }
+    admissionTrace(events);
   }
-});
+}, 30_000);
 
 test('a multi-slot waiter that stops waiting releases its reservation', async () => {
   const { env, events } = scenario({
@@ -3534,7 +3604,6 @@ test('a waiting gate keeps priority over a waiting multi-slot run on the same ho
 });
 
 test('multi-slot waiters on one host start in the order they began waiting', async () => {
-  const durationMs = 10;
   const { env, events } = scenario({
     b: {
       available: 20e9,
@@ -3542,51 +3611,86 @@ test('multi-slot waiters on one host start in the order they began waiting', asy
       memoryMaxGiB: 20,
       slots: 6,
       cpuQuotaPercent: 1200,
-      runDurationMs: durationMs,
+      controlledRuns: true,
     },
   });
   const workspaceDirectory = workspace();
+  const runEvent = (command: string) =>
+    events().find((event) => event.kind === 'run' && String(event.script).includes('echo ' + command));
   const holders = [
-    startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder-one'], ['--slots', '2']),
-    startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder-two'], ['--slots', '2']),
+    startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder-one'], ['--slots', '2', '--max-ms', '10000']),
+    startRemote(env, workspaceDirectory, ['sh', '-c', 'echo holder-two'], ['--slots', '2', '--max-ms', '10000']),
   ];
   let older: ReturnType<typeof startRemote> | undefined;
   let younger: ReturnType<typeof startRemote> | undefined;
   try {
-    await waitFor(
-      () => events().filter((event) => event.kind === 'run' && /echo holder-/.test(String(event.script))).length === 2,
+    await admissionBarrier(events, () => Boolean(runEvent('holder-one') && runEvent('holder-two')));
+    expect(
+      events()
+        .filter((event) => event.kind === 'slot' && event.granted)
+        .map((event) => event.requested),
+    ).toEqual([2, 2, 2, 2]);
+    // Initial holders can briefly register markers after an acquisition race. Those are not our waiters.
+    const initialMarkers = new Set(
+      events()
+        .filter((event) => event.kind === 'multi-marker')
+        .map((event) => event.id),
     );
-    const holderRuns = events().filter((event) => event.kind === 'run' && /echo holder-/.test(String(event.script)));
-    const latestHolderFinish = Math.max(...holderRuns.map((event) => Number(event.fakeStartedAt) + durationMs));
-
-    older = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo older'], ['--slots', '2']);
-    await waitForCondition(() => events().filter((event) => event.kind === 'multi-marker').length === 1);
-    const olderMarker = events().find((event) => event.kind === 'multi-marker')!;
-    younger = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo younger'], ['--slots', '2']);
-    await waitForCondition(() => events().filter((event) => event.kind === 'multi-marker').length === 2);
-    const youngerMarker = events().find((event) => event.kind === 'multi-marker' && event.id !== olderMarker.id)!;
-    await waitForCondition(() =>
-      events().some(
-        (event) => event.kind === 'probe' && event.multiWaitingId === olderMarker.id && event.multiWaitingSlots === 2,
+    older = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo older'], ['--slots', '2', '--max-ms', '10000']);
+    await admissionBarrier(events, (trace) =>
+      trace.some((event) => event.kind === 'multi-marker' && !initialMarkers.has(event.id)),
+    );
+    const olderMarker = events().find((event) => event.kind === 'multi-marker' && !initialMarkers.has(event.id))!;
+    younger = startRemote(env, workspaceDirectory, ['sh', '-c', 'echo younger'], ['--slots', '2', '--max-ms', '10000']);
+    await admissionBarrier(events, (trace) =>
+      trace.some(
+        (event) => event.kind === 'multi-marker' && !initialMarkers.has(event.id) && event.id !== olderMarker.id,
       ),
     );
-
-    writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestHolderFinish));
-    await waitForCondition(
-      () =>
-        events().some((event) => event.kind === 'run' && String(event.script).includes('echo older')) &&
-        events().some((event) => event.kind === 'run' && String(event.script).includes('echo younger')),
+    const youngerMarker = events().find(
+      (event) => event.kind === 'multi-marker' && !initialMarkers.has(event.id) && event.id !== olderMarker.id,
+    )!;
+    expect(olderMarker.id).not.toBe(youngerMarker.id);
+    expect([olderMarker.slots, youngerMarker.slots]).toEqual([2, 2]);
+    expect(Number(olderMarker.sequence)).toBeLessThan(Number(youngerMarker.sequence));
+    await admissionBarrier(events, (trace) =>
+      trace.some(
+        (event) =>
+          event.kind === 'probe' &&
+          event.multiWaitingId === olderMarker.id &&
+          event.multiWaitingSlots === 2 &&
+          event.ordinarySlotsUsed === 4,
+      ),
     );
+    expect(runEvent('older')).toBeUndefined();
+    expect(runEvent('younger')).toBeUndefined();
+
+    // Release each original holder separately; no command can finish by a shared clock tick.
+    releaseControlledRun(runEvent('holder-one')!);
+    expect(await holders[0]!.child.exited).toBe(0);
+    await admissionBarrier(events, () => Boolean(runEvent('older')));
+    expect(older.child.exitCode).toBeNull();
+    expect(younger.child.exitCode).toBeNull();
+    expect(runEvent('younger')).toBeUndefined();
+    releaseControlledRun(runEvent('holder-two')!);
+    expect(await holders[1]!.child.exited).toBe(0);
+    await admissionBarrier(events, () => Boolean(runEvent('younger')));
+    expect(older.child.exitCode).toBeNull();
+    expect(younger.child.exitCode).toBeNull();
     const grantedWaiterOrder = events()
       .filter((event) => event.kind === 'slot' && event.granted && event.requested === 2)
       .map((event) => String(event.script).match(/# REMOTE_CHECK_MULTI_SLOT_WAITER_ID ([a-zA-Z0-9-]+)/)?.[1])
-      .filter((id): id is string => Boolean(id) && id !== '-');
-    expect([...new Set(grantedWaiterOrder.filter((id) => id === olderMarker.id || id === youngerMarker.id))]).toEqual([
-      String(olderMarker.id),
-      String(youngerMarker.id),
-    ]);
-    writeFileSync(join(env.FAKE_DIR!, 'clock'), String(latestHolderFinish + durationMs));
-    await Promise.all([older.child.exited, younger.child.exited]);
+      .filter((id) => id === olderMarker.id || id === youngerMarker.id);
+    expect(grantedWaiterOrder).toEqual([olderMarker.id, olderMarker.id, youngerMarker.id, youngerMarker.id]);
+    expect(
+      events()
+        .filter((event) => event.kind === 'run' && /echo (?:older|younger)/.test(String(event.script)))
+        .map((event) => (String(event.script).includes('echo older') ? 'older' : 'younger')),
+    ).toEqual(['older', 'younger']);
+    releaseControlledRun(runEvent('older')!);
+    releaseControlledRun(runEvent('younger')!);
+    expect(await older.child.exited).toBe(0);
+    expect(await younger.child.exited).toBe(0);
   } finally {
     for (const run of [younger, older, ...holders]) {
       if (!run) continue;
@@ -3599,6 +3703,7 @@ test('multi-slot waiters on one host start in the order they began waiting', asy
       await run.child.exited;
       await Promise.all([run.stdout, run.stderr]);
     }
+    admissionTrace(events);
   }
 }, 30_000);
 
