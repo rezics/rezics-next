@@ -15,10 +15,11 @@ import { routeOf, partitionOf } from '../route/route.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
 
+import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
 
 /** Lookup hints only. Native records, not possession of this value, establish custody. */
-export type NativeSourceIdentity = Readonly<
+type AccountSourceIdentity = Readonly<
   {
     route: number;
     collectionId: string;
@@ -43,6 +44,7 @@ export type NativeSourceIdentity = Readonly<
       }
   )
 >;
+export type NativeSourceIdentity = AccountSourceIdentity | NativePublicOutputIdentity;
 export type NativeSourceDriver =
   | 'member'
   | 'entry'
@@ -228,12 +230,15 @@ const identityKeys = [
 ] as const;
 const frontierKeys = ['captureId', 'driver', 'after', 'tie', 'sessionId', 'scanned', 'version'] as const;
 function sameIdentity(state: NativeSourceIdentity, identity: NativeSourceIdentity): boolean {
+  if (state.scope === 'public_output' || identity.scope === 'public_output') return false;
   return identityKeys.every((key) => (state[key] ?? undefined) === (identity[key] ?? undefined));
 }
 function sameFrontier(state: NativeSourceFrontier, frontier: NativeSourceFrontier): boolean {
   return frontierKeys.every((key) => state[key] === frontier[key]);
 }
-function validate(identity: NativeSourceIdentity): void {
+function validate(identity: NativeSourceIdentity): asserts identity is AccountSourceIdentity {
+  // Public output custody is supplied by its native producer, never the account predicate.
+  if (identity.scope === 'public_output') throw new Refused('output_authority');
   const accountRoute = routeOf(identity.accountId);
   if (
     !uuid.test(identity.collectionId) ||
@@ -272,6 +277,7 @@ function validate(identity: NativeSourceIdentity): void {
   }
 }
 function parameters(identity: NativeSourceIdentity): Parameters {
+  validate(identity);
   return {
     route: identity.route,
     collection_id: identity.collectionId,
@@ -538,6 +544,7 @@ export function createNativeLibrarySourceCustody({
       return account(input, async (work): Promise<NativeSourceRetirementResult> => {
         if (hasLiveOperationalTransaction(input.client)) throw new Refused('binding');
         live(input);
+        validate(input.identity);
         if (!uuid.test(input.captureId) || !/^(0|[1-9][0-9]{0,18})$/.test(input.sourceGeneration))
           throw new Refused('binding');
         const run = executor(
@@ -899,7 +906,7 @@ export async function retireNativeCollectionCapturePage(
     1,
   );
   if (!capture) return { status: 'retired', removed: 0, work: work.receipt() };
-  if (capture.accountId !== input.accountId || capture.sourceGeneration === null)
+  if (capture.scope === 'public_output' || capture.accountId !== input.accountId || capture.sourceGeneration === null)
     return { status: 'blocked', reason: 'source', work: work.receipt() };
   const result = await work.compose((remaining) =>
     createNativeLibrarySourceCustody({ pool }).retireCapture({

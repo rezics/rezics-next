@@ -420,20 +420,40 @@ keeps its own `CollectionAliasProgress`. Both resume through their original prod
 also consumes actual UTF-8 request/response bytes and the same absolute deadline from this root. There is no copied private fact store,
 second interpreter, replacement client or Boolean authorization callback.
 
-`scope-work-context.ts` adds the server-only `{kind:'members-preparation',tx,locator}` mode to the existing
-`LeafOptions` and Collection Source context unions. It verifies the live Core work-step, same pool and fenced
-owner/partition, real Library `admitStep`, then the exact native `readWorkDefinition(tx,locator)` getter on that
-same client. The getter's `MembersPreparationWorkDefinition` stays in `library/members-preparation.ts`; it retains
-the actual definition/release/order, native Source identity and committed observation. Search checks their
-Collection/owner/incarnation/epoch binding and rejects caller definition/order/release mismatches. The existing
-whole ordered Source adapter repeats these comparisons before and after native operations. Time comes only from
-the live Core attempt. No Actor, transaction or verdict enters a cursor or durable definition.
+`scope-work-context.ts` owns the server-only `ScopeWorkContext` union. Curated Members work uses
+`{kind:'members-preparation',tx,locator}` and its original Library episode getter. Native Kind work instead uses
+`{kind:'collection-kind-preparation',tx,locator}` with the exact `CollectionKindPreparationLocator` and whole
+`CollectionKindWorkDefinition` from `library/collection-kind-work-admission.ts`. A Kind preparation ID never
+becomes a Members episode ID. Both branches require live Core work-step resources, the same pool/client, current
+command time and the exact fenced owner/partition before calling their actual native admission and getter.
+Core liveness is necessary, not permission. The Kind producer owns verification of the COMMITTED preparation or
+repair intent, namespace, current source generation, pinned release, current Type audience, observation, repair
+receipt and source custody. Search also checks the returned source/observation/custody bindings and repeats the
+whole native result comparison before settlement. Neither getter data nor a successful admission scalar grants
+reader access.
 
-The native MembersPreparation reservation/episode implementation is absent in this checkout, so its selected
-getter is published with an explicit unavailable body. Native Source work reads likewise remain unavailable:
-their current metadata/canonical reader bodies open separate reader transactions and cannot be used while the
-Core work client is held. Work mode performs no foreign checkout or retained Search write to substitute for
-those producers. This handoff supplies no erasure participant or acknowledgement, and establishes no native pass.
+Kind dispatch uses the existing Source preparation, plan compiler, evaluator and ledger. It selects the native
+pinned release and exact ID-ordered source; the Kind default predicate remains Library-owned. Private predicates
+stay within the admitted owner/source namespace; a public-output source cannot select private owner leaves.
+A pure owner plan uses the actual native source basis. Mixed public clauses still require the real index and
+separate current public Source capture. Local Source preparation holds no additional checkout when foreign public
+evidence runs. A final same-client native comparison includes the whole audience/episode/source/custody result.
+Kind leaf continuation stays private to the factory-local work handle; it never writes an Actor, transaction,
+permission verdict or native result into retained Search state. Ordinary readers continue to use full current
+source, original/terminal subject and scoped-identity checks.
+
+`library/native-source-output-types.ts` owns the public-output identity and immutable activation locator, re-exported
+by `native-source-custody.ts`. Its public branch has no account ID. Current source generation, immutable activation
+source generation, output generation and canonical decimal Core position remain distinct. The existing account
+custody adapter refuses that branch before account predicates; only the actual public-output producer can prove
+its complete selected output and committed activation. These consuming declarations do not implement activation,
+output storage or frozen custody.
+
+The native Members and Kind episode producers are absent in this checkout and their original adapters explicitly
+report unavailability. Kind dispatch reaches the same native Source adapter; its metadata/canonical readers
+still require their same-client work body. Getter data cannot construct a ready Source or replace current Type
+audience evidence. Native traversal, owner closure, public capture and leaf completeness require their original
+producers; no empty result, sampled evidence or synthetic index stands in for them. Declaration and dispatch coverage do not establish native readiness.
 
 The agreed Semantic scoped observation/public capture declarations are installed with typed unavailable producers
 until their native bodies integrate. `readScopeLeafEvidence` still reports native not-ready; the complete Collection

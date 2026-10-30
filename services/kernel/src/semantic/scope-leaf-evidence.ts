@@ -3,7 +3,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { FactClause } from '../search/disclosure/check.ts';
 import type { IndexedStatement } from '../search/source.ts';
-import { admitMembersPreparationWork, type MembersPreparationWorkContext } from '../search/scope-work-context.ts';
+import { admitScopeWork, type ScopeWorkContext } from '../search/scope-work-context.ts';
 
 export type LeafWork = Readonly<{
   keys: number;
@@ -52,6 +52,10 @@ export type LeafRequest = Readonly<{
   budget: LeafWork;
 }>;
 
+type LeafWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
+  ? Readonly<{ actor?: never; nativeT?: never; work: W }>
+  : never;
+
 export type LeafOptions = Readonly<{
   access: Access;
   routeKey: Uint8Array;
@@ -59,7 +63,7 @@ export type LeafOptions = Readonly<{
 }> &
   (
     | Readonly<{ actor: Actor; nativeT?: AuthoritativeTime; work?: never }>
-    | Readonly<{ actor?: never; nativeT?: never; work: MembersPreparationWorkContext }>
+    | LeafWorkContext
   );
 
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
@@ -103,6 +107,6 @@ export async function readScopeLeafEvidence(
 ): Promise<LeafEvidence> {
   validateBudget(request?.budget);
   validateRevalidation(request);
-  if (options.work) await admitMembersPreparationWork(options.work, { ...options, pool });
+  if (options.work) await admitScopeWork(options.work, { ...options, pool });
   return { state: 'not_ready', usage: emptyUsage };
 }

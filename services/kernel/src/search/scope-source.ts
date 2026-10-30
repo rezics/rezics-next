@@ -45,7 +45,9 @@ import { routeOf } from '../route/route.ts';
 import type { SearchHit } from './query.ts';
 import { readSearchScopeRelease } from './scope-release.ts';
 import { subjectPartition, type RelationFacetMatch, type SubjectSource } from './source.ts';
-import { readMembersPreparationWorkDefinition } from './scope-work-context.ts';
+import { readMembersPreparationWorkDefinition, readCollectionKindPreparationWorkDefinition, readScopeWorkDefinition } from './scope-work-context.ts';
+import type { ScopeLeafResume } from './scope-execution.ts';
+import type { CollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
 
 /** Independent native work reservation; none of these units are candidate keys. */
 export type ScopeNativeBudget = Omit<LeafWork, 'keys'>;
@@ -159,6 +161,8 @@ type ScopeState = {
   publicObservation: IdentityScopeObservation | null;
   collection: SearchScopeCollection | null;
   readOnly: boolean;
+  workDefinition?: CollectionKindWorkDefinition;
+  workResume?: ScopeLeafResume | null;
 };
 
 /** Native service runtime, immutable admission and factory-local handles. Native producers
@@ -195,9 +199,8 @@ export function createSearchScopeSource({
     if (!value || prepared.basis !== value.basis) unavailable();
     return value;
   }
-  function context(): Extract<LeafOptions, { actor: unknown }> {
+  function context(): LeafOptions {
     if (!evidence || Date.now() >= evidence.deadline) unavailable();
-    if (evidence.work) throw new ProblemError('dependency_unavailable');
     return evidence;
   }
   function engineWork(work: ScopeWork): SearchRequestWork {
@@ -212,10 +215,17 @@ export function createSearchScopeSource({
   }
   async function current(value: ScopeState, work: ScopeWork): Promise<void> {
     const options = context();
+    async function currentNativeWork() {
+      if (!options.work) return;
+      const native = await readScopeWorkDefinition(options.work, { ...options, pool });
+      if (!value.workDefinition || !isDeepStrictEqual(native, value.workDefinition)) unavailable();
+    }
+    await currentNativeWork();
     const result = await observations.revalidate({
       key: value.observation.key,
       expected: value.observation,
       deadline: options.deadline,
+      ...(options.work ? { tx: options.work.tx } : {}),
     });
     work.identity(result.work);
     if (result.status !== 'current' || !sameScopeObservation(result.observation, value.observation)) unavailable();
@@ -248,15 +258,18 @@ export function createSearchScopeSource({
       work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1 });
       if ((await discoveryIndexUuid(client, value.basis.index, engineWork(work))) !== value.uuid) unavailable();
     }
+    await currentNativeWork();
   }
   async function ownerContext(value: ScopeState, work: ScopeWork) {
     if (!value.plan.leaves.some((leaf) => leaf.kind === 'owner')) return undefined;
     const reader = context();
+    if (reader.work) return undefined;
     const collection = value.collection;
     const identity = collection?.order.source;
     if (
       !collection ||
       !identity ||
+      identity.scope === 'public_output' ||
       reader.actor.kind !== 'account' ||
       reader.actor.accountId !== identity.accountId ||
       routeOf(reader.actor.accountId) !== identity.route
@@ -310,7 +323,7 @@ export function createSearchScopeSource({
       return receipt;
     },
     async prepare(filter: FilterDocument, options?: ScopePrepareOptions): Promise<PreparedSearchScope> {
-      if (evidence?.work) {
+      if (evidence?.work?.kind === 'members-preparation') {
         const native = await readMembersPreparationWorkDefinition(evidence.work, {
           pool,
           access: evidence.access,
@@ -342,6 +355,19 @@ export function createSearchScopeSource({
         if (!isDeepStrictEqual(final, native)) unavailable();
         throw new ProblemError('dependency_unavailable');
       }
+      const workDefinition = evidence?.work?.kind === 'collection-kind-preparation'
+        ? await readCollectionKindPreparationWorkDefinition(evidence.work, { ...evidence, pool })
+        : undefined;
+      if (workDefinition) {
+        const nativeOrder: SearchScopeOrder = { kind: 'id', source: workDefinition.sourceIdentity };
+        if (
+          (options?.releaseDigest !== undefined && options.releaseDigest !== workDefinition.releaseDigest) ||
+          (options?.order !== undefined && !isDeepStrictEqual(options.order, nativeOrder))
+        ) unavailable();
+        // Kind's default predicate remains Library-owned. Search admits the supplied query
+        // against the native pinned release and exact source, using the ordinary interpreter.
+        options = { ...options, releaseDigest: workDefinition.releaseDigest, order: nativeOrder };
+      }
       const work = new ScopeWork(options?.allowance ?? scopeAllowance(256, 'scope.prepare'));
       function releaseWork() {
         work.consume({
@@ -354,6 +380,10 @@ export function createSearchScopeSource({
       }
       async function selectRelease() {
         releaseWork();
+        if (workDefinition && evidence?.work) {
+          const release = await readRelease(evidence.work.tx, workDefinition.releaseDigest);
+          return release ? { digest: workDefinition.releaseDigest, release } : null;
+        }
         return readSearchScopeRelease(pool, options?.releaseDigest);
       }
       let admitted: FilterDocument;
@@ -391,7 +421,7 @@ export function createSearchScopeSource({
       selected ??= await selectRelease();
       if (!selected) unavailable();
       releaseWork();
-      const nativeRelease = await readRelease(pool, selected.digest);
+      const nativeRelease = await readRelease(evidence?.work?.tx ?? pool, selected.digest);
       if (!nativeRelease || (injectedBody !== undefined && !isDeepStrictEqual(injectedBody, nativeRelease)))
         unavailable();
       // Re-admit with the exact immutable body. A changed current-release callback cannot
@@ -405,6 +435,7 @@ export function createSearchScopeSource({
       admitted = structuredClone(immutable);
       const plan = compileCurrentOwnerFilter(admitted);
       const hasOwner = plan.leaves.some((leaf) => leaf.kind === 'owner');
+      if (hasOwner && workDefinition?.sourceIdentity.scope === 'public_output') unavailable();
       const pureOwner = hasOwner && plan.leaves.every((leaf) => leaf.kind === 'owner');
       if (hasOwner && !options?.order?.source) unavailable();
       const compiled = hasOwner ? null : compileFilter(admitted, { prefix: 'f', relationOverflow: true });
@@ -525,7 +556,7 @@ export function createSearchScopeSource({
           definition: publicDefinition,
           release: selected.digest,
           indexed,
-          actor: reader.actor,
+          ...(reader.work ? { work: reader.work.locator } : { actor: reader.actor }),
           collection: nativeBasis,
           filter: admitted,
         });
@@ -552,11 +583,11 @@ export function createSearchScopeSource({
         sort,
         profile,
         nativeBasis,
-        actor: reader.actor,
+        ...(reader.work ? { work: reader.work.locator } : { actor: reader.actor }),
         ...(indexed ?? { nativeOwner: { source: sort.source, observation: nativeBasis } }),
         ...(publicObservation ? { publicScope: observationDigest(publicObservation) } : {}),
       });
-      if (!options?.readOnly) {
+      if (!options?.readOnly && !workDefinition) {
         work.consume({
           ...zeroScopeWork(),
           statements: 1,
@@ -572,16 +603,16 @@ export function createSearchScopeSource({
           clock,
         }).prepare(identity, reader.deadline, work);
       }
-      work.consume({
+      if (!workDefinition) work.consume({
         ...zeroScopeWork(),
         statements: 1,
         nativeRows: 1,
         bytes: 262144,
       });
-      const observation = await readPreparedScopeObservation(pool, prefix, identity);
+      const observation = workDefinition?.identityObservation ?? await readPreparedScopeObservation(pool, prefix, identity);
       if (
         !observation ||
-        observation.key.scopeId !== identity ||
+        (!workDefinition && observation.key.scopeId !== identity) ||
         !isDeepStrictEqual(
           observation.key.source,
           definition.kind === 'library'
@@ -616,6 +647,7 @@ export function createSearchScopeSource({
         publicObservation,
         collection,
         readOnly: options?.readOnly === true,
+        ...(workDefinition ? { workDefinition, workResume: null } : {}),
       };
       await current(value, work);
       await ownerContext(value, work);
@@ -757,14 +789,14 @@ export function createSearchScopeSource({
           leaf.kind === 'catalogue' && 'values' in leaf.clause ? leaf.clause.values.length : 1,
         ),
       });
-      if (!value.readOnly)
+      if (!value.readOnly && !value.workDefinition)
         work.consume({
           ...zeroScopeWork(),
           statements: 1,
           nativeRows: 1,
           bytes: 4096,
         });
-      const resume = value.readOnly ? null : await store.readLeafProgress(value.basis.query);
+      const resume = value.readOnly ? null : value.workDefinition ? value.workResume ?? null : await store.readLeafProgress(value.basis.query);
       const { resume: nextResume, ...checked } = await evaluateScopeSubjects({
         pool,
         options: context(),
@@ -778,13 +810,11 @@ export function createSearchScopeSource({
       });
       if (!value.readOnly) {
         await current(value, work);
-        work.consume({
-          ...zeroScopeWork(),
-          statements: 1,
-          nativeRows: 1,
-          bytes: 4096,
-        });
-        await store.saveLeafProgress(value.basis.query, nextResume);
+        if (value.workDefinition) value.workResume = nextResume;
+        else {
+          work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 4096 });
+          await store.saveLeafProgress(value.basis.query, nextResume);
+        }
       }
       await current(value, work);
       const used = work.receipt().used;

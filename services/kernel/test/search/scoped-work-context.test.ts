@@ -18,6 +18,7 @@ import { partitionOf } from '../../src/route/route.ts';
 import {
   admitMembersPreparationWork,
   type MembersPreparationWorkContext,
+  type ScopeWorkContext,
 } from '../../src/search/scope-work-context.ts';
 import type { createSearchScopeOrder } from '../../src/search/service-scope-order.ts';
 import type { createSearchScopeSource } from '../../src/search/scope-source.ts';
@@ -38,9 +39,9 @@ test('work context is additive and uses the existing native scope adapter types'
   expectTypeOf<
     Extract<CollectionSourceContext, { work: MembersPreparationWorkContext }>['at']
   >().toEqualTypeOf<undefined>();
-  expectTypeOf<PrepareCollectionSource['work']>().toEqualTypeOf<MembersPreparationWorkContext | undefined>();
-  expectTypeOf<CollectionSourceCall['work']>().toEqualTypeOf<MembersPreparationWorkContext | undefined>();
-  expectTypeOf<ContainsCollectionSubject['work']>().toEqualTypeOf<MembersPreparationWorkContext | undefined>();
+  expectTypeOf<PrepareCollectionSource['work']>().toEqualTypeOf<ScopeWorkContext | undefined>();
+  expectTypeOf<CollectionSourceCall['work']>().toEqualTypeOf<ScopeWorkContext | undefined>();
+  expectTypeOf<ContainsCollectionSubject['work']>().toEqualTypeOf<ScopeWorkContext | undefined>();
   expectTypeOf<Parameters<typeof createSearchScopeOrder>[0]['options']>().toEqualTypeOf<LeafOptions>();
   expectTypeOf<Parameters<typeof createSearchScopeSource>[0]['evidence']>().toEqualTypeOf<LeafOptions | undefined>();
 });

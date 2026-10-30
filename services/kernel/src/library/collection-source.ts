@@ -8,8 +8,8 @@ import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
 import {
-  readMembersPreparationWorkDefinition,
-  type MembersPreparationWorkContext,
+  readScopeWorkDefinition,
+  type ScopeWorkContext,
 } from '../search/scope-work-context.ts';
 import { isDeepStrictEqual } from 'node:util';
 
@@ -43,10 +43,14 @@ export interface WorkReceipt {
   readonly used: WorkDimensions;
 }
 
+type SourceWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
+  ? Readonly<{ actor?: never; at?: never; work: W }>
+  : never;
+
 export type CollectionSourceContext = Readonly<{ deadline: number }> &
   (
     | Readonly<{ actor: Actor; at: AuthoritativeTime; work?: never }>
-    | Readonly<{ actor?: never; at?: never; work: MembersPreparationWorkContext }>
+    | SourceWorkContext
   );
 
 /** Exact structural reference assignable from Semantic's IdentityBasis; no second brand or identity authority. */
@@ -348,7 +352,7 @@ export function createCollectionSource(dependencies: {
       if (input.work) {
         const collectionId = 'collectionId' in input ? input.collectionId : input.source.observation.collectionId;
         if (collectionId !== input.work.locator.collectionId) throw new ProblemError('semantic_not_ready');
-        const native = await readMembersPreparationWorkDefinition(input.work, {
+        const native = await readScopeWorkDefinition(input.work, {
           ...dependencies,
           deadline: input.deadline,
         });
@@ -357,9 +361,9 @@ export function createCollectionSource(dependencies: {
           ('source' in input && !isDeepStrictEqual(input.source.observation, native.observation))
         )
           throw new ProblemError('semantic_not_ready');
-        // The existing native metadata/canonical readers open their own reader transactions.
-        // They cannot be borrowed while this Core client is held, or supplied an invented Actor.
-        // Preserve typed unavailability until their native same-client work body is integrated.
+        // The actual Source metadata/canonical producer still requires its native
+        // same-client work body. Getter data alone cannot construct a ready Source,
+        // authorize current Type audience, or stand in for canonical row evidence.
         throw new ProblemError('dependency_unavailable');
       }
       return await body(l);

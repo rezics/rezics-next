@@ -6,7 +6,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
-import { type MembersPreparationWorkContext } from '../search/scope-work-context.ts';
+import { type ScopeWorkContext } from '../search/scope-work-context.ts';
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
 export interface WorkDimensions {
     readonly candidateKeys: number;
@@ -34,17 +34,16 @@ export interface WorkReceipt {
     readonly reservationId: string;
     readonly used: WorkDimensions;
 }
+type SourceWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
+  ? Readonly<{ actor?: never; at?: never; work: W }>
+  : never;
 export type CollectionSourceContext = Readonly<{
     deadline: number;
 }> & (Readonly<{
     actor: Actor;
     at: AuthoritativeTime;
     work?: never;
-}> | Readonly<{
-    actor?: never;
-    at?: never;
-    work: MembersPreparationWorkContext;
-}>);
+}> | SourceWorkContext);
 /** Exact structural reference assignable from Semantic's IdentityBasis; no second brand or identity authority. */
 export type NativeIdentityBasis = Readonly<{
     digest: string;

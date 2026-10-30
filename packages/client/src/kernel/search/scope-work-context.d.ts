@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { type AuthoritativeTime } from '../command/command.ts';
 import { type OperationalTransaction } from '../command/operational.ts';
 import { type MembersPreparationWorkDefinition, type PreparationLocator } from '../library/members-preparation.ts';
+import type { CollectionKindPreparationLocator, CollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
 import type { Access } from '../request/access.ts';
 /** SERVER ONLY. A native lookup, never an Actor, permission, DTO or persisted cursor value. */
 export type MembersPreparationWorkContext = Readonly<{
@@ -21,3 +22,15 @@ export declare function admitMembersPreparationWork(work: MembersPreparationWork
     access: Access;
     deadline: number;
 }>): Promise<AuthoritativeTime>;
+
+/** SERVER ONLY. Distinct native Kind episode, never an Actor or curated Members locator. */
+export type CollectionKindPreparationWorkContext = Readonly<{
+    kind: 'collection-kind-preparation';
+    tx: OperationalTransaction;
+    locator: CollectionKindPreparationLocator;
+}>;
+export type ScopeWorkContext = MembersPreparationWorkContext | CollectionKindPreparationWorkContext;
+type WorkOptions = Readonly<{ pool: Pool; access: Access; deadline: number }>;
+export declare function readCollectionKindPreparationWorkDefinition(work: CollectionKindPreparationWorkContext, options: WorkOptions): Promise<CollectionKindWorkDefinition>;
+export declare function readScopeWorkDefinition(work: ScopeWorkContext, options: WorkOptions): Promise<MembersPreparationWorkDefinition | CollectionKindWorkDefinition>;
+export declare function admitScopeWork(work: ScopeWorkContext, options: WorkOptions): Promise<AuthoritativeTime>;

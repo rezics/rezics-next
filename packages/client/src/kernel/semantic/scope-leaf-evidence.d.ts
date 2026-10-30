@@ -3,7 +3,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { FactClause } from '../search/disclosure/check.ts';
 import type { IndexedStatement } from '../search/source.ts';
-import { type MembersPreparationWorkContext } from '../search/scope-work-context.ts';
+import { type ScopeWorkContext } from '../search/scope-work-context.ts';
 export type LeafWork = Readonly<{
     keys: number;
     points: number;
@@ -52,6 +52,9 @@ export type LeafRequest = Readonly<{
     revalidate: string | null;
     budget: LeafWork;
 }>;
+type LeafWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
+  ? Readonly<{ actor?: never; nativeT?: never; work: W }>
+  : never;
 export type LeafOptions = Readonly<{
     access: Access;
     routeKey: Uint8Array;
@@ -60,11 +63,7 @@ export type LeafOptions = Readonly<{
     actor: Actor;
     nativeT?: AuthoritativeTime;
     work?: never;
-}> | Readonly<{
-    actor?: never;
-    nativeT?: never;
-    work: MembersPreparationWorkContext;
-}>);
+}> | LeafWorkContext);
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
 /**
  * The native evidence producer is not connected yet. Valid reservations therefore fail closed as

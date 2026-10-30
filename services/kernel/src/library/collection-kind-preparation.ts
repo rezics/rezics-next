@@ -171,6 +171,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
       rows.revision === null ||
       identity.route !== metadata.route ||
       identity.collectionId !== metadata.collectionId ||
+      identity.scope === 'public_output' ||
       identity.accountId !== metadata.curatorAccountId ||
       identity.incarnation !== metadata.incarnation ||
       identity.generation !== metadata.sourceGeneration ||
@@ -403,7 +404,11 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
         )
           return { status: 'stale' as const };
         const identity = row.identity as NativeSourceIdentity;
-        if (identity.accountId !== input.capture.accountId || identity.generation !== input.capture.sourceGeneration)
+        if (
+          identity.scope === 'public_output' ||
+          identity.accountId !== input.capture.accountId ||
+          identity.generation !== input.capture.sourceGeneration
+        )
           return { status: 'stale' as const };
         const at = commandTime(input.tx);
         if (!at) return unavailable();
@@ -454,7 +459,11 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
             );
             if (!row || row.nativeCaptureId !== key.captureId) return unavailable();
             const identity = row.identity as NativeSourceIdentity;
-            if (identity.accountId !== input.accountId || identity.collectionId !== input.collectionId)
+            if (
+              identity.scope === 'public_output' ||
+              identity.accountId !== input.accountId ||
+              identity.collectionId !== input.collectionId
+            )
               return unavailable();
             const at = commandTime(tx);
             if (!at) return unavailable();

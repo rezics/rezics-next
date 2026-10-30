@@ -19,7 +19,7 @@ import type {
 import { type NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import { readMembersPreparationWorkDefinition } from './scope-work-context.ts';
+import { readScopeWorkDefinition } from './scope-work-context.ts';
 
 /** Internal Source locator, never an authority assertion or public Search sort. */
 export type SearchScopeOrder =
@@ -56,19 +56,25 @@ export function createSearchScopeOrder(
     if (!options.nativeT) throw new ProblemError('semantic_not_ready');
     return { actor: options.actor, at: options.nativeT, deadline: options.deadline };
   }
-  async function currentWork(order: SearchScopeOrder, observation?: CollectionSourceObservation) {
+  async function currentWork(
+    order: SearchScopeOrder,
+    observation?: CollectionSourceObservation,
+    expected?: Awaited<ReturnType<typeof readScopeWorkDefinition>>,
+  ) {
     if (!options.work) return;
-    const native = await readMembersPreparationWorkDefinition(options.work, {
+    const native = await readScopeWorkDefinition(options.work, {
       pool,
       access: options.access,
       deadline: options.deadline,
     });
     if (
-      order.kind !== native.definition.sort ||
+      order.kind !== ('definition' in native ? native.definition.sort : 'id') ||
       !isDeepStrictEqual(order.source, native.sourceIdentity) ||
-      (observation !== undefined && !isDeepStrictEqual(observation, native.observation))
+      (observation !== undefined && !isDeepStrictEqual(observation, native.observation)) ||
+      (expected !== undefined && !isDeepStrictEqual(expected, native))
     )
       throw new ProblemError('semantic_not_ready');
+    return native;
   }
   return {
     async prepare(
@@ -83,13 +89,13 @@ export function createSearchScopeOrder(
         throw new ProblemError('unsupported_query');
       if (
         options.work &&
-        (identity.scope !== 'curated' ||
+        ((options.work.kind === 'members-preparation' ? identity.scope !== 'curated' : identity.scope === 'curated') ||
           identity.collectionId !== options.work.locator.collectionId ||
           identity.route !== options.work.locator.route ||
-          identity.accountId !== options.work.locator.ownerAccountId)
+          (identity.scope !== 'public_output' && identity.accountId !== options.work.locator.ownerAccountId))
       )
         throw new ProblemError('semantic_not_ready');
-      await currentWork(order);
+      const admitted = await currentWork(order);
       const result = await native.prepare({ ...context(), collectionId: identity.collectionId, allowance });
       if (
         result.source.observation.collectionId !== identity.collectionId ||
@@ -97,7 +103,7 @@ export function createSearchScopeOrder(
         result.source.observation.route !== identity.route
       )
         throw new ProblemError('semantic_not_ready');
-      await currentWork(order, result.source.observation);
+      await currentWork(order, result.source.observation, admitted);
       return {
         collection: { order, source: result.source, observation: result.source.observation },
         work: result.work,
@@ -111,7 +117,7 @@ export function createSearchScopeOrder(
     ): Promise<RawOrdinalCollectionPrefix> {
       if (collection.order.kind !== 'ordinal') throw new TypeError('Ordinal source required');
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid ordinal limit');
-      await currentWork(collection.order, collection.observation);
+      const admitted = await currentWork(collection.order, collection.observation);
       const page = await native.readRawOrdinalPrefix({
         ...context(),
         source: collection.source,
@@ -120,14 +126,14 @@ export function createSearchScopeOrder(
         allowance,
       });
       if (!isDeepStrictEqual(page.observation, collection.observation)) throw new ProblemError('semantic_not_ready');
-      await currentWork(collection.order, page.observation);
+      await currentWork(collection.order, page.observation, admitted);
       return page;
     },
     async prefix(collection: SearchScopeCollection, afterSubjectId: string | null, allowance: WorkAllowance) {
-      await currentWork(collection.order, collection.observation);
+      const admitted = await currentWork(collection.order, collection.observation);
       const page = await native.prefix({ ...context(), source: collection.source, afterSubjectId, allowance });
       if (!isDeepStrictEqual(page.observation, collection.observation)) throw new ProblemError('semantic_not_ready');
-      await currentWork(collection.order, page.observation);
+      await currentWork(collection.order, page.observation, admitted);
       return page;
     },
     async contains(
@@ -136,7 +142,7 @@ export function createSearchScopeOrder(
       allowance: WorkAllowance,
       progress?: CollectionAliasProgress,
     ) {
-      await currentWork(collection.order, collection.observation);
+      const admitted = await currentWork(collection.order, collection.observation);
       const result = await native.containsSubject({
         ...context(),
         source: collection.source,
@@ -145,7 +151,7 @@ export function createSearchScopeOrder(
         ...(progress ? { progress } : {}),
       });
       if (!isDeepStrictEqual(result.observation, collection.observation)) throw new ProblemError('semantic_not_ready');
-      await currentWork(collection.order, result.observation);
+      await currentWork(collection.order, result.observation, admitted);
       return result;
     },
   };
