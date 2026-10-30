@@ -55,25 +55,28 @@ CREATE INDEX native_source_output_raw ON library.published_log(route,account_id,
 CREATE INDEX native_source_deleted_raw ON library.entry_deleted(route,account_id,deletion_id);
 
 CREATE FUNCTION library.advance_native_source_fence() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE item jsonb; previous jsonb; current_row jsonb; owner uuid; r integer; k text;
+DECLARE item record; step integer; owner uuid; r integer; k text;
 BEGIN
-  IF TG_OP <> 'INSERT' THEN previous := to_jsonb(OLD); END IF;
-  IF TG_OP <> 'DELETE' THEN current_row := to_jsonb(NEW); END IF;
-  IF TG_OP = 'UPDATE' AND previous = current_row THEN RETURN NULL; END IF;
-  -- Both old and new anchors are fenced, including ownership/route changes and retained deletions.
-  FOR item IN SELECT value FROM jsonb_array_elements(jsonb_build_array(previous,current_row))
-  LOOP
-    IF item = 'null'::jsonb THEN CONTINUE; END IF;
-    r := (item->>'route')::integer;
+  -- Both old and new anchors are fenced. Only native key columns enter control metadata.
+  -- Conservatively fence even a no-op UPDATE, without converting business payload to JSON.
+  FOR step IN 1..2 LOOP
+    IF step=1 THEN
+      IF TG_OP='INSERT' THEN CONTINUE; END IF;
+      item := OLD;
+    ELSE
+      IF TG_OP='DELETE' THEN CONTINUE; END IF;
+      item := NEW;
+    END IF;
+    r := item.route;
     IF TG_TABLE_NAME IN ('collection','collection_member') THEN
-      k := 'collection'; owner := (item->>'collection_id')::uuid;
+      k := 'collection'; owner := item.collection_id;
     ELSIF TG_TABLE_NAME IN ('progress_unit','progress_change') THEN
       k := 'account';
       SELECT account_id INTO owner FROM library.progress_session
-        WHERE route=r AND session_id=(item->>'session_id')::uuid;
+        WHERE route=r AND session_id=item.session_id;
       -- Parent deletion already fences the account, including cascading child deletion.
     ELSE
-      k := 'account'; owner := (item->>'account_id')::uuid;
+      k := 'account'; owner := item.account_id;
     END IF;
     IF owner IS NOT NULL THEN
       INSERT INTO library.native_source_fence(route,kind,owner_id,generation) VALUES(r,k,owner,1)

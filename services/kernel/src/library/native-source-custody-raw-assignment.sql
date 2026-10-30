@@ -1,9 +1,13 @@
--- Both mutually exclusive raw branches are owner-indexed before LIMIT; no zero-UUID sentinel omission.
+-- Each mutually exclusive raw branch seeks an owner-indexed native tuple before its limit.
+WITH input AS NOT MATERIALIZED (SELECT :account_route::integer AS route, :account_id::uuid AS account_id, :after::nullable(uuid) AS after_key, :tie::uuid AS tie_key, :limit::integer AS batch_limit)
+SELECT raw.key,raw.tie,raw."subjectId",raw."transactionId"
+FROM input i CROSS JOIN LATERAL (
 (SELECT subject_id::text AS key,label_id::text AS tie,subject_id::text AS "subjectId",transaction_id::text AS "transactionId"
-FROM library.label_assignment WHERE route=:account_route AND account_id=:account_id AND :after::nullable(uuid) IS NULL
-ORDER BY subject_id,label_id LIMIT :limit)
+FROM library.label_assignment WHERE route=i.route AND account_id=i.account_id AND i.after_key IS NULL
+ORDER BY subject_id,label_id LIMIT i.batch_limit)
 UNION ALL
 (SELECT subject_id::text AS key,label_id::text AS tie,subject_id::text AS "subjectId",transaction_id::text AS "transactionId"
-FROM library.label_assignment WHERE route=:account_route AND account_id=:account_id AND :after::nullable(uuid) IS NOT NULL
-AND (subject_id,label_id)>(:after::nullable(uuid),:tie::uuid)
-ORDER BY subject_id,label_id LIMIT :limit);
+FROM library.label_assignment WHERE route=i.route AND account_id=i.account_id AND i.after_key IS NOT NULL
+AND (subject_id,label_id)>(i.after_key,i.tie_key)
+ORDER BY subject_id,label_id LIMIT i.batch_limit)
+) raw ORDER BY raw.key COLLATE "C",raw.tie COLLATE "C";
