@@ -8,7 +8,7 @@ Research accessed on 2026-10-31. This is evidence and a recommendation for Comme
 
 **Documented fact** below means a public product contract, official API/help page, or identified source behavior. **Inference** draws a design lesson from that evidence. **Recommendation** proposes REZICS behavior. **Unknown** means the sources read do not establish it; it is not a claim that a feature is absent. All linked external sources were accessed on the date above. Help pages describe public behavior, not private database schemas. Website material remains under its publisher's terms; no implementation or long passage is proposed for copying.
 
-The source inspection is Ghost, pinned to `75f33df36d963327323f4af2c159dbf345e725ad`, [MIT licence](https://github.com/TryGhost/Ghost/blob/75f33df36d963327323f4af2c159dbf345e725ad/LICENSE). Its reference path is `.reference/commerce-ownership/ghost/` in the main checkout, recorded in that directory's index. It was read, never installed, built or run. Other products were researched through current official documentation; their private source was unavailable.
+The source inspection is Ghost, pinned to `75f33df36d963327323f4af2c159dbf345e725ad`, [MIT licence](https://github.com/TryGhost/Ghost/blob/75f33df36d963327323f4af2c159dbf345e725ad/LICENSE). Its reference path is `.reference/commerce-ownership/ghost/` in the main checkout, recorded in `.reference/INDEX.md`. It was read, never installed, built or run. Other products were researched through current official documentation; their private source was unavailable.
 
 The current worker's Commerce types, routes, settlement and payout contracts and purchase UI were read. No payment-evidence/settlement research report was available in this base. Consequently this report does not resolve Stripe eligibility, fee/tax/FX allocation or the accounting sufficiency of stored evidence. The separate provider-evidence research remains the input for those decisions. No runtime, native, browser, database or performance experiment supports this report.
 
@@ -151,7 +151,7 @@ type BenefitDefinition = {
   creatorAccountId: string;
   targetSubjectId: string; // public identity, not the protected payload
   version: number;
-  kind: 'read' | 'download' | 'use';
+  kind: 'read' | 'download' | 'stream' | 'use';
   target: { owner: string; resourceType: string; resourceId: string };
   action: string; // an action adopted by that target's existing Access owner
   deliveryPolicy: 'fixed-version' | 'update-channel';
@@ -187,7 +187,8 @@ Separate state machines:
 
 ```text
 offer:       active -> delisted                 (new acquisition only)
-order:       pending/unknown -> paid or failed  (provider reconciliation)
+order:       unpaid observations reconcile among pending/unknown/failed
+             any unpaid state -> paid; paid -> paid (refund is separate)
 entitlement: absent -> active <-> revoked       (evidence + current lifecycle)
 delivery:    available <-> unavailable          (target owner, independent)
 use decision at request time:
@@ -211,6 +212,7 @@ Endpoint names marked **proposed** are request/response essentials for owner agr
 | Return/status and purchase history; existing `GET /v1/orders`, `GET /v1/orders/:id` | Keyset history and captured terms; add benefit snapshots, evidence availability and links to entitlement/use pages. Return `pending/unknown` honestly | Buyer home, actor equality and `order:read`, current gate/Access. Redirect has no fulfilment power. Native evidence application changes order and entitlements together in that buyer command. |
 | Owned benefits / purchase detail; existing `GET /v1/entitlements`, `GET /v1/entitlements/:id` | Current active/revoked status, reason, bought benefit/version, subject, order locator and next-use link; proposed bounded benefit-key filter/index | Buyer home, actor equality and existing entitlement read authorization; disclosed subject/target summaries via their owners. Preserve unavailable/revoked entries without leaking hidden target payload. |
 | Read/use page; **proposed** `POST /v1/entitlements/:id/authorizeUse` | Exact benefit/version and action; allow/deny/unavailable plus target-use locator and entitlement/target revisions, decision time and bounded expiry. Result is not a permanent bearer receipt | Buyer home proves current exact entitlement. Existing Access port combines this eligibility with current target-resource decision. Actual Content/use endpoint revalidates; the UI response is only navigation/advice. |
+| Creator benefit editor; **proposed** `POST /v1/benefits`, `POST /v1/benefits/:id/versions` | Subject, kind, exact target/action, fixed-version or channel promise and terms version, plus idempotency header; returns immutable benefit ID/version and validated description | Creator home owns the catalogue/version. Seller-management authority must be adopted through existing Access, with current target-owner selling authority checked separately. A new version cannot mutate an old order snapshot. |
 | Creator offer editor; existing offer create/revise/delist, **proposed** `GET /v1/offers?owned=true` | Keyset owned offers and immutable versions; writes include complete semantic intent and target/benefit references | Creator home, `offer:create` or `offer:manage` on existing root/offer anchors plus seller authority over benefit target. No buyer-history scan. |
 | Creator sales page; **proposed** `GET /v1/creatorOrders` | Keyset sale projection: order locator, offer/version, bought benefits, evidence/settlement/refund status and minimal buyer pseudonym; separate from payout totals | Creator home owns projection fed by stable buyer-order effects; creator-authorized read. Projection lag is visible and cannot authorize buyer content or prove complete provider settlement. |
 | Creator statements / statement detail; existing `/v1/payoutStatements`, `/:id`, `/:id/lines`, `/:id:markPaid` | Current statement/lines and external paid reference; proposed provenance/unknown fields from module map | Creator home, existing `payout_statement:list/read/mark_paid` checks. Statement read is not permission to inspect arbitrary buyer orders. External payout completion needs evidence, not only a button. |
@@ -267,7 +269,7 @@ Let `k <= 100` be a requested page, `b = 1` the initial benefit count, `m <= 256
 | Revocation window — Content, Access, Commerce | At most 60 seconds of newly authorized token lifetime with authoritative renewal; alternative is stricter shared fencing | Disclose offline/in-flight limits; no perpetual access claim. Existing content must remain closed until its delivery gate can uphold the chosen promise. |
 | Creator history/evidence — Commerce plus provider-evidence owner | Minimal private seller projection and additive immutable evidence; alternative is statement-only UI until reconciled source facts exist | Does not invent net/tax/fee allocation, balances or provider eligibility. Use the separate payment research before revising the owner contract. |
 
-Dependencies run from Web to ordinary Commerce/Content APIs; Commerce uses Access and explicit target-owner ports; target delivery uses current Access with Commerce eligibility. Library may link to a purchase or target by disclosed ID, but neither Commerce nor Content reads Library to decide payment/access. Durable effects populate discovery/seller projections and statements through existing runtime boundaries; projections never feed payment or authorization truth back upstream.
+Dependencies run from Web to ordinary Commerce/Content APIs; Commerce uses Access and explicit target-owner ports; target delivery uses current Access with Commerce eligibility. The eligibility port reads current account/source evidence only: it must not recursively evaluate the target policy or call offer authorization. Library may link to a purchase or target by disclosed ID, but neither Commerce nor Content reads Library to decide payment/access. Durable effects populate discovery/seller projections and statements through existing runtime boundaries; projections never feed payment or authorization truth back upstream.
 
 ## Meaningful later outcomes and remaining journey work
 
