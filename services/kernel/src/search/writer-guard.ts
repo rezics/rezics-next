@@ -433,17 +433,15 @@ export async function fenceSearchIdentityWriter(
     ).rows[0];
     if (previous && (previous.owner_epoch !== receipt.epoch || previous.incarnation !== incarnation))
       throw unavailable('Search writer incarnation or home requires native handoff custody');
-    const decode = (row: typeof previous): SearchIdentityWriterFence => {
-      const point = (transactionId: string | null, position: string | null): IdentityNativeReceipt | null =>
-        transactionId === null ? null : { partition, epoch: receipt.epoch, transactionId, position: BigInt(position!) };
-      return {
-        state: row.writer_token === null ? 'closed' : 'draining',
-        gate: point(row.closed_transaction_id, row.closed_position)!,
-        writer: point(row.writer_transaction_id, row.writer_position),
-        settlement: point(row.settled_transaction_id, row.settled_position),
-        sourcePosition: row.source_position === null ? null : BigInt(row.source_position),
-      };
-    };
+    const point = (transactionId: string | null, position: string | null): IdentityNativeReceipt | null =>
+      transactionId === null ? null : { partition, epoch: receipt.epoch, transactionId, position: BigInt(position!) };
+    const decode = (row: typeof previous): SearchIdentityWriterFence => ({
+      state: row.writer_token === null ? 'closed' : 'draining',
+      gate: point(row.closed_transaction_id, row.closed_position)!,
+      writer: row.writer_token === null ? null : point(row.writer_transaction_id, row.writer_position),
+      settlement: point(row.settled_transaction_id, row.settled_position),
+      sourcePosition: row.source_position === null ? null : BigInt(row.source_position),
+    });
     if (previous?.closed_job) {
       if (previous.closed_job !== options.job.jobId || BigInt(previous.closed_epoch) !== options.job.epoch)
         throw unavailable('Search writer is closed for another native identity job');
@@ -466,16 +464,9 @@ export async function fenceSearchIdentityWriter(
       value: {
         state: previous?.writer_token ? ('draining' as const) : ('closed' as const),
         gate: receipt,
-        writer: previous?.writer_transaction_id
-          ? {
-              partition,
-              epoch: receipt.epoch,
-              transactionId: previous.writer_transaction_id,
-              position: BigInt(previous.writer_position),
-            }
-          : null,
-        settlement: null,
-        sourcePosition: null,
+        writer: previous?.writer_token ? point(previous.writer_transaction_id, previous.writer_position) : null,
+        settlement: previous ? point(previous.settled_transaction_id, previous.settled_position) : null,
+        sourcePosition: previous?.source_position == null ? null : BigInt(previous.source_position),
       },
       events: changed(),
     };
