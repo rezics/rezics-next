@@ -1,5 +1,5 @@
+import { type OpenSearch } from './opensearch.ts';
 import { type HitResult, type SearchPlan, type SearchResult } from './query.ts';
-import type { OpenSearch } from './opensearch.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 export type RatingQueryPlan = Pick<SearchPlan, 'query' | 'filter' | 'boost' | 'size' | 'after' | 'overflowProperties' | 'ratingPhase' | 'generation'> & {
     rating: PublicRatingEpoch;

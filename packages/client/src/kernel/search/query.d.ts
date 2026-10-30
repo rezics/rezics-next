@@ -1,7 +1,8 @@
 import type { Facet } from './facets.ts';
-import type { OpenSearch } from './opensearch.ts';
+import { type OpenSearch } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
+export type { RatingQueryPlan } from './rating-query.ts';
 export declare const SEARCH_TEMPLATE = "subjects-search-v2";
 export declare const HIT_TEMPLATE = "subjects-hits-v1";
 export declare const SUGGEST_TEMPLATE = "subjects-suggest-v1";

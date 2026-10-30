@@ -15,6 +15,8 @@ import type { RatingPhase } from './rating-cursor.ts';
 import { searchRatingSubjectHits, searchRatingSubjects } from './rating-query.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 
+export type { RatingQueryPlan } from './rating-query.ts';
+
 // Released templates keep their source and id; changes require a new version of both.
 export const SEARCH_TEMPLATE = 'subjects-search-v2';
 export const HIT_TEMPLATE = 'subjects-hits-v1';
