@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -221,7 +222,12 @@ async function loadOperation(client: AccessClient, operation: DurableOperationAn
     partition_no: partitionOf(operation.route),
     initiator_account_id: row.initiator_account_id,
     creation_command_kind: row.creation_command_kind,
-    creation_idempotency_key: row.creation_idempotency_key,
+    creation_idempotency_keys: nativeReceiptKeyCandidates(
+      client,
+      row.creation_command_kind,
+      row.initiator_account_id,
+      row.creation_idempotency_key,
+    ),
   });
   if (
     !receipt ||

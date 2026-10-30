@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
 import { within, deadlineClient } from '../access/authenticate.ts';
@@ -495,7 +496,12 @@ export function createContentOperationClient({
                 partition_no: partitionOf(route),
                 initiator_account_id: row.initiator_account_id,
                 creation_command_kind: row.creation_command_kind,
-                creation_idempotency_key: row.creation_idempotency_key,
+                creation_idempotency_keys: nativeReceiptKeyCandidates(
+                  pool,
+                  row.creation_command_kind,
+                  row.initiator_account_id,
+                  row.creation_idempotency_key,
+                ),
                 recorded_transaction_id: row.recorded_transaction_id,
                 creation_request_digest: row.creation_request_digest,
                 operation_id: row.operation_id,

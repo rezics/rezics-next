@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
@@ -27,7 +28,12 @@ export async function readWorkflowErasureOperation(
     partition_no: input.partition_no,
     initiator_account_id,
     creation_command_kind: row.creation_command_kind,
-    creation_idempotency_key: row.creation_idempotency_key,
+    creation_idempotency_keys: nativeReceiptKeyCandidates(
+      client,
+      row.creation_command_kind,
+      initiator_account_id,
+      row.creation_idempotency_key,
+    ),
   });
   return {
     ...row,

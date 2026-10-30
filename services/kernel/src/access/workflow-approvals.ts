@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle } from './handle-policy.ts';
 import { accessClock } from './access-clock.ts';
@@ -455,7 +456,12 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           approval_id: approval.approvalId,
           partition_no: partitionOf(subjectRoute),
           actor_id: actor.accountId,
-          idempotency_key: `${subjectRoute}:wf:${hash([actor.accountId, approval.operationKey])}:tombstone`,
+          idempotency_keys: nativeReceiptKeyCandidates(
+            config.pool,
+            'access.account-tombstoned',
+            actor.accountId,
+            `${subjectRoute}:wf:${hash([actor.accountId, approval.operationKey])}:tombstone`,
+          ),
         }),
       ),
     );

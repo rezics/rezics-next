@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -417,8 +418,9 @@ export function createCommerceCommands(config: { pool: Pool; access: Access; roy
         {
           partition: partitionOf(r),
           buyer: order.buyerAccountId,
-          prefix,
-          end: `${prefix}z`,
+          idempotency_keys: [0, 1].flatMap((n) =>
+            nativeReceiptKeyCandidates(pool, 'commerce.checkout.record', order.buyerAccountId, `${prefix}${n}`),
+          ),
         },
       );
       try {

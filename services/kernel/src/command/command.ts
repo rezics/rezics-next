@@ -15,6 +15,8 @@ import { readPartition } from '../partition/partition.ts';
 import { commandPhase, countContentionRetry, measureCommandPhase } from './timing.ts';
 import { enterCommandGate } from './gate.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { bindReceiptKeys, encodeReceiptKey, receiptKeyCandidates, receiptKeysFor } from './receipt-key.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 
 export type CommandEvent = { type: string; subject?: string; data: unknown };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
@@ -104,6 +106,13 @@ export type PrincipalCommandOptions = PrincipalCommandIdentity & {
   clock?: (() => Date) | undefined;
 };
 
+/** Union-valued callers may assemble these fields separately; normalization
+ * checks their correlation before acquiring a connection or reading a receipt. */
+type PrincipalCommandInput = Omit<PrincipalCommandOptions, 'principal' | 'basis'> & {
+  principal: Readonly<CommandPrincipal>;
+  basis: Readonly<{ clientId: string | null; requestedBy: string | null }>;
+};
+
 export type CommandReceipt = {
   actorAccountId: string;
   kind: string;
@@ -188,7 +197,12 @@ const commands = new WeakMap<CommandTransaction, CurrentCommand>();
 // Exact executor object only: copying a query or callback capability conveys no receipt authority.
 const receiptOwners = new WeakMap<
   CommandTransaction,
-  Readonly<{ principal: Readonly<CommandPrincipal>; partition: number; deadline: number }>
+  Readonly<{
+    principal: Readonly<CommandPrincipal>;
+    partition: number;
+    deadline: number;
+    receiptKeys: KeyRing;
+  }>
 >();
 
 function assertReceipt(receipt: PrincipalCommandReceipt): void {
@@ -214,7 +228,7 @@ export async function hasOwnCommandCompletion(
     principal_kind: owner.principal.kind,
     principal_id: owner.principal.id,
     command_kind: receipt.kind,
-    idempotency_key: key,
+    idempotency_keys: receiptKeyCandidates(owner.receiptKeys, receipt.kind, owner.principal, key),
   });
   if (!row) return false;
   if (!Buffer.from(row.requestDigest).equals(digest)) throw new IdempotencyConflictError(owner.partition);
@@ -377,7 +391,7 @@ type NormalizedOptions = Omit<LegacyCommandOptions, 'basis' | 'receipt'> & {
   receipt?: PrincipalCommandReceipt & { principal: Readonly<CommandPrincipal> };
 };
 
-function normalizeOptions(options: LegacyCommandOptions | PrincipalCommandOptions): NormalizedOptions {
+function normalizeOptions(options: LegacyCommandOptions | PrincipalCommandInput): NormalizedOptions {
   if (!('principal' in options)) {
     const { basis, receipt, ...rest } = options;
     if ((basis && 'principal' in basis) || (receipt && 'principal' in receipt))
@@ -459,12 +473,12 @@ export function runCommand<T>(
 ): Promise<CommandOutcome<T>>;
 export function runCommand<T>(
   pool: Pool,
-  options: PrincipalCommandOptions,
+  options: PrincipalCommandInput,
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
 ): Promise<CommandOutcome<T>>;
 export async function runCommand<T>(
   pool: Pool,
-  input: LegacyCommandOptions | PrincipalCommandOptions,
+  input: LegacyCommandOptions | PrincipalCommandInput,
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
 ): Promise<CommandOutcome<T>> {
   commandPhase('command_overhead');
@@ -477,13 +491,17 @@ export async function runCommand<T>(
 
 async function executeCommand<T>(
   pool: Pool,
-  input: LegacyCommandOptions | PrincipalCommandOptions,
+  input: LegacyCommandOptions | PrincipalCommandInput,
   body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>,
 ): Promise<CommandOutcome<T>> {
   const options = normalizeOptions(input);
   const { partition } = options;
   if (options.receipt) assertReceipt(options.receipt);
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095) throw new RangeError('Invalid partition');
+  const receiptKeys = options.principal ? receiptKeysFor(pool) : undefined;
+  const receiptCandidates = options.receipt
+    ? receiptKeyCandidates(receiptKeys!, options.receipt.kind, options.receipt.principal, options.receipt.key)
+    : [];
   const receiptDigest = options.receipt ? Buffer.from(options.receipt.digest) : null;
   const basis = options.basis ? Object.freeze({ ...options.basis }) : null;
   const authorization = options.authorization;
@@ -510,6 +528,7 @@ async function executeCommand<T>(
         commandPhase('transaction_body');
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const tx: CommandTransaction = { query: client.query.bind(client) };
+        if (receiptKeys) bindReceiptKeys(tx, receiptKeys);
         const callbackState: CallbackState = { active: true, callbacks: [] };
         Object.defineProperty(tx, transactionCallbacks, { value: callbackState });
         try {
@@ -530,14 +549,18 @@ async function executeCommand<T>(
             : null;
           commands.set(tx, Object.freeze({ ...attempt, authorization: capability }));
           if (capability && mode === 'execute' && options.principal)
-            receiptOwners.set(tx, Object.freeze({ principal: options.principal, partition, deadline }));
-          if (options.receipt && receiptDigest) {
+            receiptOwners.set(
+              tx,
+              Object.freeze({ principal: options.principal, partition, deadline, receiptKeys: receiptKeys! }),
+            );
+          const receiptInput = options.receipt;
+          if (receiptInput && receiptDigest) {
             const row = await readReceipt.run(client, {
               partition_no: partition,
-              principal_kind: options.receipt.principal.kind,
-              principal_id: options.receipt.principal.id,
-              command_kind: options.receipt.kind,
-              idempotency_key: options.receipt.key,
+              principal_kind: receiptInput.principal.kind,
+              principal_id: receiptInput.principal.id,
+              command_kind: receiptInput.kind,
+              idempotency_keys: receiptCandidates,
             });
             if (row) {
               if (!Buffer.from(row.requestDigest).equals(receiptDigest)) throw new IdempotencyConflictError(partition);
@@ -591,7 +614,7 @@ async function executeCommand<T>(
             const serialized = JSON.stringify({
               principal: options.receipt.principal,
               kind: options.receipt.kind,
-              key: options.receipt.key,
+              key: encodeReceiptKey(receiptKeys!, options.receipt.kind, options.receipt.principal, options.receipt.key),
               digest: receiptDigest.toString('base64'),
               response: response.value,
             });

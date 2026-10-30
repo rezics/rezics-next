@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { accessClock } from './access-clock.ts';
 import { systemClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
@@ -148,7 +149,7 @@ async function verifySnapshot(
     principal_kind: 'account',
     principal_id: native.actorAccountId,
     command_kind: native.kind,
-    idempotency_key: native.key,
+    idempotency_keys: nativeReceiptKeyCandidates(client, native.kind, native.actorAccountId, native.key),
   });
   if (
     !receipt ||
@@ -173,7 +174,12 @@ async function verifySnapshot(
       principal_kind: 'account',
       principal_id: basis.actorAccountId,
       command_kind: 'access.operator.relation-recorded',
-      idempotency_key: `${routeOf(reference.accountId)!}:${input.key}`,
+      idempotency_keys: nativeReceiptKeyCandidates(
+        client,
+        'access.operator.relation-recorded',
+        basis.actorAccountId,
+        `${routeOf(reference.accountId)!}:${input.key}`,
+      ),
     });
     const expected = {
       subjectAccountId: reference.accountId,

@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { PoolClient } from 'pg';
 import readReceipt from '../command/read-receipt.sql';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -43,7 +44,12 @@ export async function readPreparationNativeHeader(
     principal_kind: 'account',
     principal_id: accountId,
     command_kind: 'library.type-preparation.create',
-    idempotency_key: header.creationReceipt.key,
+    idempotency_keys: nativeReceiptKeyCandidates(
+      client,
+      'library.type-preparation.create',
+      accountId,
+      header.creationReceipt.key,
+    ),
   });
   const response = receipt?.response as { metadataCommitment?: unknown; preparationId?: unknown } | null;
   if (

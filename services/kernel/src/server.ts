@@ -12,6 +12,7 @@ import { readContentConfig } from './content/config.ts';
 import type { ContentRuntime } from './content/runtime.ts';
 import type { NativeAuthorErasureWorkflows } from './content/operation-contract.ts';
 import { systemClock } from './clock.ts';
+import { assertReceiptKeyRing, configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
 
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -29,6 +30,7 @@ import { MAX_BODY_LIMIT } from './http/body.ts';
 
 export type KernelRuntimeDefaults = {
   tokens: KeyRing;
+  receiptKeys: KeyRing;
   writeRate: WriteRateLimiter;
   rateAttribution: WriteRateStageOptions;
   clock: () => Date;
@@ -39,6 +41,7 @@ export type KernelRuntimeDefaults = {
 export type KernelRuntimeOverrides = {
   env?: NodeJS.ProcessEnv;
   tokens?: KeyRing;
+  receiptKeys?: KeyRing;
   writeRate?: WriteRateLimiter;
   rateAttribution?: WriteRateStageOptions;
   clock?: () => Date;
@@ -74,6 +77,8 @@ function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefine
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);
+  const receiptKeys = readReceiptKeyRing(env, overrides.receiptKeys);
+  assertReceiptKeyRing(receiptKeys, tokens);
   const writeRate =
     overrides.writeRate ??
     createWriteRateLimiter({
@@ -88,6 +93,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   const access: AccessFactory = auth ? (config: AccessConfig) => createAccess({ ...config, auth }) : createAccess;
   return {
     tokens,
+    receiptKeys,
     writeRate,
     rateAttribution,
     clock: overrides.clock ?? systemClock,
@@ -105,6 +111,7 @@ export type ServerConfig = {
   port: number;
   routeKey: Uint8Array;
   tokens: KeyRing;
+  receiptKeys?: KeyRing;
   commerce: CommerceConfig | null;
   content: ContentRuntime;
   search?: SearchConfig;
@@ -151,6 +158,7 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     port,
     routeKey,
     tokens: defaults.tokens,
+    receiptKeys: defaults.receiptKeys,
     writeRate: defaults.writeRate,
     rateAttribution: defaults.rateAttribution,
     ...(defaults.auth === undefined ? {} : { auth: defaults.auth }),
@@ -183,6 +191,7 @@ async function fillPool(pool: Pool): Promise<void> {
 export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
   const defaults = createKernelRuntimeDefaults({
     tokens: config.tokens,
+    ...(config.receiptKeys === undefined ? {} : { receiptKeys: config.receiptKeys }),
     ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
     ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
     ...(config.auth === undefined ? {} : { auth: config.auth }),
@@ -192,6 +201,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     min: KERNEL_POOL_MAX,
     ...(config.poolIdleTimeoutMillis === undefined ? {} : { idleTimeoutMillis: config.poolIdleTimeoutMillis }),
   });
+  if (defaults.receiptKeys) configureReceiptKeys(pool, defaults.receiptKeys);
   const peers = new WeakMap<Request, string>();
   const searchConfig = config.search;
   const commerce = config.commerce;
@@ -231,6 +241,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       pool,
       routeKey: config.routeKey,
       tokens: defaults.tokens,
+      receiptKeys: defaults.receiptKeys,
       writeRate: defaults.writeRate,
       rateAttribution: defaults.rateAttribution,
       clock: defaults.clock,

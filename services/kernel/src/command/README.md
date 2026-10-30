@@ -32,6 +32,28 @@ and envelope. SQL retries do not authorize reuse of stale external evidence. `no
 wrote no domain data; it cannot hide coordination writes or registered work. Authorization finalizers are not
 a place to conceal domain mutation. Existing replay, receipt, authorization and `noEffect` semantics stay unchanged.
 
+### Receipt storage keys
+
+HTTP and worker startup require `KERNEL_RECEIPT_KEYS`: one to four comma-separated
+`version:base64url` entries, current version first, with distinct integer versions in 0–255
+and at least 32 random bytes per key. Trusted composition may supply the same dedicated
+`receiptKeys` ring directly. Never reuse current or retained `KERNEL_SESSION_KEYS` bytes.
+The receipt ring is independent of ephemeral token defaults; missing configuration fails startup.
+Native test factories explicitly supply fixed dedicated material.
+
+Both normal and no-effect commands store only the current `rk1` HMAC token, framed with
+version, command kind and complete principal kind/id. Caller key validation, digests,
+responses, transaction IDs, positions (including zero) and authorization ordering are unchanged.
+Readers compute at most four retained tokens and one exact raw candidate for pre-cutover rows;
+there is no production backfill or raw write fallback. All seven native receipt consumers
+use this codec. Checkout count probes exactly its two numbered outcomes, never a prefix range.
+Each consumer has constant statement/row bounds and indexed O(log H) receipt access.
+
+Keep every version for the lifetime of its receipts. Retiring a key requires explicitly
+re-keying all receipts using that version first; never silently discard an old key. Pool
+configuration rejects replacing or dropping retained material. This completes receipt-key
+storage privacy only; the other shared-history erasure gaps remain open.
+
 ## Metadata-only own completion
 
 The approved additive interface is:

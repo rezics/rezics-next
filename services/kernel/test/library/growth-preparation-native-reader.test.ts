@@ -4,6 +4,7 @@ import canonicalize from 'canonicalize';
 import type { PoolClient } from 'pg';
 import { bundledRelease, bundledDigest } from '@rezics/definitions/bundled';
 import { mintReadTime, principalCommandIdentity } from '../../src/command/command.ts';
+import { encodeReceiptKey, receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import {
   preparationHeaderCommitment,
@@ -282,6 +283,23 @@ test('preparation creator verification stays bounded behind metadata history', a
     warmups: 1,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(_db, scale, previous) {
+      const sourceKey = encodeReceiptKey(
+        receiptKeysFor(db.pool),
+        header.creationReceipt.commandKind,
+        { kind: 'account', id: header.creationReceipt.principalId },
+        header.creationReceipt.key,
+      );
+      const source = await db.admin.query(
+        `SELECT count(*)::int AS count FROM core.receipt WHERE partition_no=$1 AND principal_kind='account'
+          AND principal_id=$2 AND command_kind=$3 AND idempotency_key=$4`,
+        [partitionOf(route), header.creationReceipt.principalId, header.creationReceipt.commandKind, sourceKey],
+      );
+      expect(source.rows[0]?.count).toBe(1);
+      const unrelatedBefore = await db.admin.query(
+        `SELECT count(*)::int AS count FROM core.receipt WHERE partition_no=$1 AND principal_kind='account'
+          AND principal_id=$2 AND command_kind=$3 AND idempotency_key LIKE 'noise-%'`,
+        [partitionOf(route), header.creationReceipt.principalId, header.creationReceipt.commandKind],
+      );
       await db.admin.query(
         `WITH headers AS (
           INSERT INTO library.type_preparation_header
@@ -313,11 +331,17 @@ test('preparation creator verification stays bounded behind metadata history', a
           accountId,
           preparationId,
           partitionOf(route),
-          header.creationReceipt.key,
+          sourceKey,
           routeOf(header.binding.sourceId),
           header.binding.sourceId,
         ],
       );
+      const unrelatedAfter = await db.admin.query(
+        `SELECT count(*)::int AS count FROM core.receipt WHERE partition_no=$1 AND principal_kind='account'
+          AND principal_id=$2 AND command_kind=$3 AND idempotency_key LIKE 'noise-%'`,
+        [partitionOf(route), header.creationReceipt.principalId, header.creationReceipt.commandKind],
+      );
+      expect((unrelatedAfter.rows[0]?.count ?? 0) - (unrelatedBefore.rows[0]?.count ?? 0)).toBe(scale - previous);
     },
     async operation() {
       expect(await read(db.pool)).toEqual({ ...header, creationCommitment: preparationHeaderCommitment(header) });

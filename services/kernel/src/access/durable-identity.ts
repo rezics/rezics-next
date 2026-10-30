@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { DurableInitiatorUnavailableError } from './durable-initiator.ts';
 import { accessEvidence } from './evidence.ts';
@@ -183,7 +184,7 @@ export async function restoreOperationIdentity(
     principal_kind: 'account',
     principal_id: actor.accountId,
     command_kind: creation.commandKind,
-    idempotency_key: creation.idempotencyKey,
+    idempotency_keys: nativeReceiptKeyCandidates(pool, creation.commandKind, actor.accountId, creation.idempotencyKey),
   });
   const binding = durableInitiatorCommitment(record);
   const response = receipt?.response as { durableInitiator?: unknown } | undefined;

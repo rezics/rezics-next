@@ -19,6 +19,8 @@ import { createOperatorCommands } from '../../src/access/operator.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 import { createCommittedContinuations } from '../../src/access/committed-continuations.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 export type FixtureConfiguration = {
@@ -36,6 +38,7 @@ export async function handleFixture(
 ) {
   // A single resource connection also detects accidental simultaneous anchor checkout.
   const kernel = createPool(config.kernelUrl);
+  configureTestReceiptKeys(kernel);
   kernel.options.max = 1;
   const database = new Pool({ connectionString: config.authUrl });
   const read = (id: string) => withConnection(kernel, (client) => readAccount(client, routeOf(id)!, id));
@@ -67,8 +70,17 @@ export async function handleFixture(
           .digest('hex')}`
       : `wf:${workflow}`;
     const receipt = await kernel.query<{ response: { accountId: string; registrationId: string } }>(
-      "SELECT response FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=$3",
-      [partitionOf(route), '00000000-0000-8000-8000-000000000001', `${route}:${prefix}:pending-account`],
+      "SELECT response FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=ANY($3::text[])",
+      [
+        partitionOf(route),
+        '00000000-0000-8000-8000-000000000001',
+        nativeReceiptKeyCandidates(
+          kernel,
+          'access.actor-pending',
+          '00000000-0000-8000-8000-000000000001',
+          `${route}:${prefix}:pending-account`,
+        ),
+      ],
     );
     if (
       receipt.rows[0]?.response.accountId !== row.account_id ||

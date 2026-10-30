@@ -1,3 +1,4 @@
+import { testReceiptKeys } from './receipt-keys.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { Release } from '@rezics/definitions';
 import { fromPlainText } from '@rezics/document';
@@ -180,6 +181,7 @@ export async function createReleasedDiscoveryFixture(
   const driver = await createSemanticDriver(
     (config) =>
       createKernel({
+        receiptKeys: testReceiptKeys(),
         ...config,
         ...(native ? { search: native.service(config) } : {}),
         writeRate: createWriteRateLimiter({

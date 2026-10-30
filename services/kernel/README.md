@@ -752,6 +752,20 @@ local route and at most 1000 expired rows per tick, with a 48-hour retention bou
 grants capacity only; normal Access and command receipt ordering still apply. Turnstile and front
 controls remain independent.
 
+## Receipt storage configuration
+
+The HTTP server and worker require the same dedicated `KERNEL_RECEIPT_KEYS` ring: current
+`version:base64url` entry first, one to four retained versions (0–255), each with at least
+32 random bytes and no reuse of token-sealing key bytes. Trusted `createKernel` composition
+passes `receiptKeys` explicitly. Missing keys fail startup; ephemeral token defaults never
+supply permanent receipt keys. Normal and no-effect writers persist only current versioned
+HMAC tokens. Central replay and every native completion reader accept original caller keys
+through at most four retained tokens plus a pre-cutover raw lookup candidate. Checkout
+count uses its exact two numbered outcomes. There is no production backfill or raw-writer
+transition. Retiring a version requires re-keying all its receipts first. See the
+[command configuration and retention rule](src/command/README.md#receipt-storage-keys).
+This does not complete the remaining shared-history erasure work.
+
 ## Anonymous command receipts
 
 `src/command/command.ts` exports `CommandPrincipal`, `PrincipalCommandIdentity`, `PrincipalCommandReceipt`,

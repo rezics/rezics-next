@@ -3,13 +3,16 @@ import { dirname, resolve } from 'node:path';
 import { createPool } from '../src/database/pool.ts';
 import { createKernel } from '../src/http/kernel.ts';
 import { formatDocument, openApiDocument } from '../src/http/openapi.ts';
+import { testReceiptKeys } from '../test/support/receipt-keys.ts';
 
 export const CONTRACT = resolve(import.meta.dir, '../../../contracts/openapi.json');
 
 export async function kernelContract(): Promise<string> {
   const pool = createPool('postgres://kernel.invalid/openapi');
   try {
-    return formatDocument(openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32) })));
+    return formatDocument(
+      openApiDocument(createKernel({ pool, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys() })),
+    );
   } finally {
     await pool.end();
   }

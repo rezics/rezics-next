@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { carryExpiry, identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -116,7 +117,12 @@ export async function readApprovedIdentity(
     principal_kind: 'account',
     principal_id: row.actorId,
     command_kind: 'access.workflow-approval.create',
-    idempotency_key: `${row.route}:${row.approvalId}`,
+    idempotency_keys: nativeReceiptKeyCandidates(
+      context.pool,
+      'access.workflow-approval.create',
+      row.actorId,
+      `${row.route}:${row.approvalId}`,
+    ),
   });
   const response = receipt?.response as { reference?: unknown; expiresAt?: unknown } | undefined;
   if (

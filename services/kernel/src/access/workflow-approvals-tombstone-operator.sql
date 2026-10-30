@@ -19,7 +19,7 @@ WITH approval_input AS NOT MATERIALIZED (
     AND receipt.principal_kind = 'account'
     AND receipt.principal_id = :actor_id
     AND receipt.command_kind = 'access.account-tombstoned'
-    AND receipt.idempotency_key = :idempotency_key
+    AND receipt.idempotency_key = ANY(:idempotency_keys::text[])
     AND NOT EXISTS (SELECT 1 FROM approval WHERE consumed_transaction_id IS NOT NULL)
 )
 SELECT fence.prior_operator_account_id AS "priorOperatorAccountId"

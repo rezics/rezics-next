@@ -1,5 +1,7 @@
 import { AuthenticationError } from '../../src/request/access.ts';
 import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { encodeReceiptKey } from '../../src/command/receipt-key.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { QueryConfig } from 'pg';
@@ -20,6 +22,7 @@ import * as store from '../../src/commerce/store.ts';
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
+configureTestReceiptKeys(pool);
 pool.options.max = 1;
 const operator = newId(0x1100);
 const seller = newId(0x2200);
@@ -281,16 +284,22 @@ test('order creation and checkout recording are idempotent and authorized before
   ] as const)
     await commands.recordCheckout(id, outcome);
   expect(await footprint()).toEqual(recorded);
-  expect(
-    (
-      await pool.query(
-        "SELECT actor_account_id,idempotency_key FROM core.receipt WHERE command_kind='commerce.checkout.record' ORDER BY idempotency_key",
+  const rawKeys = [0, 1].map((outcome) => `order:${id}:checkout:${outcome}`);
+  const stored = (
+    await pool.query(
+      "SELECT principal_id::text,idempotency_key FROM core.receipt WHERE principal_kind='account' AND principal_id=$1 AND command_kind='commerce.checkout.record' ORDER BY idempotency_key",
+      [buyer],
+    )
+  ).rows;
+  expect(stored).toEqual(
+    rawKeys
+      .map((raw) =>
+        encodeReceiptKey(testReceiptKeys(), 'commerce.checkout.record', { kind: 'account', id: buyer }, raw),
       )
-    ).rows,
-  ).toEqual([
-    { actor_account_id: buyer, idempotency_key: `order:${id}:checkout:0` },
-    { actor_account_id: buyer, idempotency_key: `order:${id}:checkout:1` },
-  ]);
+      .sort()
+      .map((token) => ({ principal_id: buyer, idempotency_key: token })),
+  );
+  for (const row of stored) expect(rawKeys).not.toContain(row.idempotency_key);
   const rejected = await order();
   await commands.recordCheckout(rejected.id, { kind: 'failed' });
   const rejectedBefore = await footprint();

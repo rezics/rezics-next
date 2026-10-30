@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle, isReservedHandle } from './handle-policy.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { checkAvatarMedia } from '../content/avatar.ts';
@@ -464,7 +465,12 @@ export function createLifecycleInternals(
         route,
         partition_no: partitionOf(route),
         service_id: SERVICE_PRINCIPAL_ID,
-        receipt_key: `${route}:${barrierKey(input.purpose, input.operationKey)}`,
+        receipt_keys: nativeReceiptKeyCandidates(
+          pool,
+          'access.authentication-floor-advanced',
+          SERVICE_PRINCIPAL_ID,
+          `${route}:${barrierKey(input.purpose, input.operationKey)}`,
+        ),
         account_id: input.accountId,
         receipt_id: input.receiptId,
         minimum_authn_epoch: String(input.minimumAuthnEpoch),
@@ -1712,7 +1718,12 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
                 approval_id: null,
                 partition_no: partitionOf(route),
                 actor_id: context.actor.accountId,
-                idempotency_key: `${route}:${input.key}`,
+                idempotency_keys: nativeReceiptKeyCandidates(
+                  pool,
+                  'access.account-tombstoned',
+                  context.actor.accountId,
+                  `${route}:${input.key}`,
+                ),
               }),
             )
           : null;

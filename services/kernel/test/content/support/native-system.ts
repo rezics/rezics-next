@@ -1,3 +1,4 @@
+import { configureTestReceiptKeys, testReceiptKeys } from '../../support/receipt-keys.ts';
 import { registerAccountDeletionRuntime, type AccountDeletionRuntime } from '../../support/account-deletion.ts';
 import {
   createAuthHost,
@@ -100,6 +101,7 @@ async function createNativeContentSystemWithOptions(
   const admin = new Pool({ connectionString: connection('postgres') });
   const authAdmin = new Pool({ connectionString: connection('postgres') });
   const pool = new Pool({ connectionString: connection(appName) });
+  configureTestReceiptKeys(pool);
   const authPool = new Pool({ connectionString: connection(authName) });
   // Auth owns this pool once constructed, including failure during construction.
   // Share its one close operation with the partial-construction cleanup below.
@@ -164,6 +166,7 @@ async function createNativeContentSystemWithOptions(
     // Kernel resolves Access on a live request, after all routes are mounted.
     // This same instance authenticates fixture credentials on this exact pool.
     const kernel = createKernel({
+      receiptKeys: testReceiptKeys(),
       pool,
       routeKey,
       tokens: tokenKeys,

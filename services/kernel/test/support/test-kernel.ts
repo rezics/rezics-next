@@ -1,6 +1,7 @@
+import { configureTestReceiptKeys, testReceiptKeys } from './receipt-keys.ts';
 import type { AuthService } from '@rezics/auth';
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import type { AccessConfig } from '../../src/access/index.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import type { ResourceRoleCatalogue } from '../../src/access/resource-roles.ts';
@@ -55,10 +56,12 @@ function runtimeDefaults(options: KernelRuntimeOverrides & { auth: Authenticatio
   return createKernelRuntimeDefaults({
     ...options,
     tokens: options.tokens ?? testTokens(),
+    receiptKeys: testReceiptKeys(),
   });
 }
 
 export function testAccess(options: TestAccessOptions): Access {
+  configureTestReceiptKeys(options.pool);
   const defaults = runtimeDefaults({ auth: authConfig(options), ...(options.clock ? { clock: options.clock } : {}) });
   const accessFactory = (config: AccessConfig) =>
     defaults.access!({
@@ -90,6 +93,7 @@ type TestRuntimeOptions = {
 export type TestAppOptions = TestRuntimeOptions & { pool: Pool };
 
 export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
+  configureTestReceiptKeys(options.pool);
   const defaults = runtimeDefaults({
     auth: options.auth ?? testAuth,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
@@ -162,6 +166,7 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     requestDeadlineMs: options.requestDeadlineMs ?? TEST_REQUEST_DEADLINE_MS,
     pool: options.pool,
     routeKey: testRouteKey(),
+    receiptKeys: defaults.receiptKeys,
     tokens: defaults.tokens,
     clock: defaults.clock,
     writeRate: defaults.writeRate,
@@ -188,7 +193,7 @@ let mountedActions: ActionCatalogue | undefined;
 function productionActions(): ActionCatalogue {
   mountedActions ??= actionCatalogue(
     testKernel({
-      pool: { options: { connectionString: 'postgres://kernel.invalid/test-catalogue' } } as Pool,
+      pool: new Pool({ connectionString: 'postgres://kernel.invalid/test-catalogue' }),
     }),
   );
   return mountedActions;

@@ -1,3 +1,4 @@
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import {
   createAuthHost,
   createBarrierProofVerifier,
@@ -71,6 +72,7 @@ export async function nativeFixture(
     actions?: ReadonlyMap<string, { anonymous: boolean }>;
   },
 ) {
+  configureTestReceiptKeys(pool);
   const database = existing?.database ?? (await cloneAuthDatabase());
   const pair = existing ? undefined : await generateKeyPair('ES256', { extractable: true });
   const privateKey = existing?.privateKey ?? { ...(await exportJWK(pair!.privateKey)), kid: 'ordinary-native' };

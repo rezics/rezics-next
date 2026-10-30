@@ -1,4 +1,5 @@
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
+import { assertReceiptKeyRing, configureReceiptKeys, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
 import { zoneRoutes } from '../zones/http.ts';
 import type { Elysia } from 'elysia';
@@ -61,6 +62,8 @@ import { declareKernelWriteRates } from './write-rate-routes.ts';
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
+  /** Dedicated durable HMAC configuration, independent of ephemeral token defaults. */
+  receiptKeys?: KeyRing;
   /** Trusted modules mount declarations before composition validation. */
   modules?: readonly ((app: ReturnType<typeof createApp>) => void)[];
   viewerActionResources?: ViewerActionResources;
@@ -264,6 +267,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     return instant;
   };
   const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
+  const receiptKeys = readReceiptKeyRing(process.env, dependencies.receiptKeys);
+  assertReceiptKeyRing(receiptKeys, tokens);
+  configureReceiptKeys(dependencies.pool, receiptKeys);
   let compositionFinished = false;
   const accessFactory = typeof dependencies.access === 'function' ? dependencies.access : createAccess;
   const { resolveAccess, realmRoleReader } = createKernelAccessResolver({

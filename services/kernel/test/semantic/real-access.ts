@@ -1,3 +1,4 @@
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
@@ -31,6 +32,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   actions: readonly string[],
   options: { clock?: () => Date } = {},
 ): Promise<RealAccessFixture<keyof Personas & string>> {
+  configureTestReceiptKeys(admin);
   type Persona = keyof Personas & string;
   const accountById = new Map(Object.entries(accounts).map(([persona, accountId]) => [accountId, persona]));
   const signing = await generateKeyPair('ES256', { extractable: true });
@@ -84,6 +86,10 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
   const access = (config: AccessConfig): Access => {
     const real = createAccess({ ...config, auth });
     return deriveAccess(real, {
+      async authenticate(reference, context) {
+        configureTestReceiptKeys(context.pool);
+        return real.authenticate(reference, context);
+      },
       async authorize(client, actor, action, resource, evidence, time) {
         const check = {
           persona: actor.kind === 'account' ? (accountById.get(actor.accountId) ?? 'unknown') : 'anonymous',

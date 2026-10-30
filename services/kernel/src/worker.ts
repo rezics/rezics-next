@@ -6,11 +6,14 @@ import { KERNEL_WORK_MODULES } from './work/modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
+import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
+import type { KeyRing } from './tokens/seal.ts';
 
 export type WorkerConfig = {
   databaseUrl: string;
   executorId?: string;
   poolSize: number;
+  receiptKeys?: KeyRing;
   /** Trusted service composition only; never read from the environment. */
   clock?: KernelClock;
   /** Trusted composition only. The worker owns and ends the returned runtime pool. */
@@ -18,6 +21,7 @@ export type WorkerConfig = {
 };
 
 export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
+  const receiptKeys = readReceiptKeyRing(env);
   const databaseUrl = env.DATABASE_URL;
   try {
     const url = new URL(databaseUrl ?? '');
@@ -48,6 +52,7 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   return {
     databaseUrl: databaseUrl!,
     poolSize: Number(size),
+    ...(receiptKeys === undefined ? {} : { receiptKeys }),
     ...(executorId === undefined ? {} : { executorId }),
   };
 }
@@ -57,9 +62,11 @@ export async function startWorker(
   modules: readonly WorkModule[] = KERNEL_WORK_MODULES,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
+  const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   const pool = config.kernelPool
     ? await config.kernelPool(config.databaseUrl)
     : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
+  if (receiptKeys) configureReceiptKeys(pool, receiptKeys);
   pool.on('error', () => {});
   let client: Awaited<ReturnType<typeof createWorkClient>>;
   try {

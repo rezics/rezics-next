@@ -13,10 +13,10 @@ import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
-export async function standingFixture(extraActions: readonly string[] = []) {
+export async function standingFixture(extraActions: readonly string[] = [], commandPool?: Pool) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(url);
+  const pool = commandPool ?? createPool(url);
   pool.options.max = 1;
   const reader = new Pool({ connectionString: url, max: 1 });
   const authDatabase = `standing_auth_${process.pid}`;
@@ -205,6 +205,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
         },
       },
       actor: await access.authenticate(token, boundary),
+      bearer: token,
     };
   }
   async function grant(subject: string, action: string, target = resource, valid = '(,)') {
@@ -329,7 +330,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
           await dropTestDatabase(reader, authDatabase);
         } finally {
           try {
-            await pool.end();
+            if (!commandPool) await pool.end();
           } finally {
             await reader.end();
           }
