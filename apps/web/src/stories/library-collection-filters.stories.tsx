@@ -3,7 +3,7 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { CollectionFilterFeedback, CollectionFilters } from '../library/collection-filters';
-import { collectionPageQuery } from '../library/collection';
+import { collectionPageQuery } from '../library/collection-queries';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory, pagePaths } from './page';

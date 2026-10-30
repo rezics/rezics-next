@@ -5,7 +5,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient } from '../kernel/client';
-import { publicRead, readQueryKey } from '../kernel/query';
+import { personalRead, publicRead, readQueryKey } from '../kernel/query';
 import type { ReadCredentialMode } from '../kernel/credential';
 import type { SessionEnv } from '../session/client';
 import { loadEditableCollectionPage, loadDynamicMembers, type CollectionPageResult } from './collection-load';
@@ -26,7 +26,7 @@ function validatePageInput(input: unknown): {
     typeof input !== 'object' ||
     !('id' in input) ||
     typeof input.id !== 'string' ||
-    input.id.length === 0 ||
+    !input.id ||
     input.id.length > 128 ||
     ('cursor' in input && input.cursor !== undefined && typeof input.cursor !== 'string') ||
     ('credentialMode' in input &&
@@ -185,15 +185,39 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
 export function collectionPageQuery(
   id: string,
   cursor: string | undefined,
-  credentialMode: ReadCredentialMode,
+  credentialMode: ReadCredentialMode = 'anonymous',
   search?: Record<string, string | string[]>,
 ) {
+  const preset = credentialMode === 'session' ? personalRead : publicRead;
   return queryOptions({
-    ...publicRead,
+    ...preset,
     queryKey: readQueryKey(['collection-page', id, cursor ?? null, search ?? null], credentialMode),
     queryFn: () =>
       readCollectionPage({
         data: { id, ...(cursor === undefined ? {} : { cursor }), credentialMode, ...(search ? { search } : {}) },
       }),
+  });
+}
+
+export function personalCollectionPageQuery(
+  id: string,
+  cursor?: string,
+  search?: Record<string, string | string[]>,
+) {
+  return queryOptions({
+    ...personalRead,
+    queryKey: readQueryKey(['collection-page', id, cursor ?? null, search ?? null], 'session'),
+    queryFn: async () => {
+      const page = await readCollectionPage({
+        data: {
+          id,
+          ...(cursor === undefined ? {} : { cursor }),
+          credentialMode: 'session',
+          ...(search ? { search } : {}),
+        },
+      });
+      if ('preparing' in page) throw notFound();
+      return page;
+    },
   });
 }

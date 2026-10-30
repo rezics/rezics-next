@@ -135,6 +135,8 @@ export async function loadDynamicMembers(
 }
 
 export type EditableCollectionPage = CollectionPageData & {
+  /** The requested page, retained for its indexing policy. */
+  cursor?: string;
   /** The revision the page was read at; a revisioned write sends it back. */
   revision: number;
   /** The first member page, where a member can move to the top. */
@@ -344,5 +346,6 @@ export async function loadEditableCollectionPage(
     ...(filterStatus ? { filterStatus } : {}),
     ...(input.filterProperties ? { filterProperties: input.filterProperties } : {}),
     ...(input.filterParams ? { filterParams: input.filterParams } : {}),
+    ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
   };
 }

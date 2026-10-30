@@ -482,12 +482,17 @@ test(
     expect(reads.every((call) => call.method === 'GET' && call.view === 'FULL' && call.authorization === null)).toBe(
       true,
     );
+    expect(reads).toHaveLength(2);
     expect(reads.find((call) => call.path.endsWith('/members'))?.limit).toBe(pageLimit);
 
+    calls.length = 0;
     const ownerPage = await readPage(`/en/collections/${night.id}`, await alice());
     expect(ownerPage.status).toBe(200);
-    expect(main(ownerPage.html)).toContain('data-visibility="public"');
-    expect(main(ownerPage.html)).toContain('Public');
+    // Public server renders remain anonymous; curator controls arrive in the browser after hydration.
+    expect(main(ownerPage.html)).not.toContain('data-visibility');
+    const curatorServerReads = calls.filter((call) => call.path.startsWith(`/v1/collections/${night.id}`));
+    expect(curatorServerReads).toHaveLength(2);
+    expect(curatorServerReads.every((call) => call.authorization === null)).toBe(true);
     const other = await readPage(`/en/collections/${night.id}`, await blake());
     expect(other.status).toBe(200);
     expect(main(other.html)).toContain('Night shelf');
@@ -502,8 +507,7 @@ test(
     expect(quietMain).not.toContain('Night shelf');
     expect(quietMain).not.toContain('data-visibility');
     const unlistedOwner = await readPage(`/en/collections/${quiet.id}`, await alice());
-    expect(main(unlistedOwner.html)).toContain('data-visibility="unlisted"');
-    expect(main(unlistedOwner.html)).toContain('Unlisted');
+    expect(main(unlistedOwner.html)).not.toContain('data-visibility');
 
     const deleted = await readPage(`/en/collections/${orphan.id}`);
     expect(deleted.status).toBe(200);
@@ -537,6 +541,7 @@ test(
       limit: pageLimit,
       cursor,
     });
+    expect(calls.filter((call) => call.path.startsWith(`/v1/collections/${long.id}`))).toHaveLength(2);
   },
   timeout,
 );

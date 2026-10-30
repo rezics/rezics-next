@@ -291,6 +291,15 @@ The search route keeps its schema in `search/search-params.ts`; its query key in
 
 **Head**: Every route's `head()` builds tags with `pageHead()` from `apps/web/src/shell/head.ts`: title, description, card, robots and JSON-LD. Canonical and `hreflang` alternates are emitted once for the page by the root, from the leaf route's locale paths.
 
+### Top rated search
+
+- **Touches:** One `POST /v1/subjects:search` with `sort: rating` for each page. An outdated cursor causes one additional first-page search request; the result envelope and facet reads stay the same.
+- **Bound:** One search read per page view, two at most after a stale cursor. The public Global score is displayed only when the result contains a score; a missing figure stays blank.
+- **Presentation:** Relevance remains the default and is omitted from the URL; Top rated preserves the query and filters. The page follows returned facet order and displays no search total, facet value count or count-relation metadata under either sort.
+- **Growth check:** `apps/web/tests/search-rating-sort.test.ts` covers the rating request, the single stale-cursor restart, retained facet retry control, absent count display and result-row targets.
+
+**Collections**: `/collections/{id}` renders anonymously with the collection title, its locale description, the first member's cover (or the default card), and a `CollectionPage`/`ItemList` plus site-curator-collection breadcrumbs. Cursor pages are `noindex, follow`. The route validates `cursor` and declares it in `loaderDeps`. Curator state and controls come from a `personalRead` after hydration; a private collection stays 404 to anonymous readers and is retried with the browser session after a signed-in not-found.
+
 **Statuses**: Loaders end with real statuses: `notFound()` for 404, with unknown, unreadable and removed ids answering alike; `redirect({ statusCode: 301 })` for moved pages and outdated slugs; and the closed page for 403. A page never answers 200 with an error inside.
 
 **Subject URLs**: A subject's canonical path is `/{locale}/subjects/{id}/{slug}`, where `slug` comes from the display label in that locale. Views append their view name; an id without a slug and an outdated slug redirect 301 while retaining the view and search params. Use `apps/web/src/subject/subject-href.ts` for every subject link. The id selects the page, and the loader supplies every locale's slug for canonical and alternate tags.
@@ -745,6 +754,12 @@ Space response at 390 and 1280 pixels.
 - **Bound:** 1 D, 1 K, 0 R and 0 A for each change, independent of the collection's size. The follow state is one more
   kernel read, and the curator's page has none.
 - **Growth check:** `tests/library-collection-editing-cost.test.ts`: `collection editing stays within its bound as the collection grows`
+
+### Collection page
+
+- **Touches:** One anonymous `GET /v1/collections/<id>?view=FULL` and one members page of at most 100 entries. After hydration, a signed-in reader gets one personal collection read to determine curator status; a non-curator public reader may also get the follow read.
+- **Bound:** The anonymous render uses no session read. The hydrated personal read adds at most one collection read and one members page, independent of total collection size.
+- **Growth check:** `tests/library-collection-cost.test.ts` bounds the page reads at increasing member counts; `tests/collection-seo.test.ts` checks the rendered metadata and cursor indexing.
 
 ### My collections and following
 

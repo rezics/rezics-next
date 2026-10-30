@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { Suspense } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { collectionPageQuery } from '../library/collection';
+import { collectionPageQuery } from '../library/collection-queries';
 import { CollectionPage } from '../library/collection-page';
 import { setCollectionStoryMode, type CollectionStoryMode } from '../kernel/fake/collection-page-stories';
 import { m } from '../paraglide/messages.js';
@@ -20,7 +20,7 @@ function CollectionRegion({ mode, visitor }: { mode: CollectionStoryMode; visito
     collectionPageQuery(collectionId, undefined, visitor === 'Signed In' ? 'session' : 'anonymous'),
   );
   if ('preparing' in data) return null;
-  return <CollectionPage page={data} />;
+  return <CollectionPage page={data} cursor={undefined} />;
 }
 
 function renderCollection(mode: CollectionStoryMode, visitor: 'Signed In' | 'Signed Out' = 'Signed In') {

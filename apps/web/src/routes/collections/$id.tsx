@@ -2,12 +2,17 @@ import { createFileRoute } from '@tanstack/react-router';
 import { CollectionPage } from '../../library/collection-page';
 import { DynamicCollectionPage } from '../../library/dynamic-collection-page';
 import type { CollectionPageResult } from '../../library/collection-load';
-import { collectionPageQuery, readDynamicCollectionMembers } from '../../library/collection';
+import { collectionPageQuery, readDynamicCollectionMembers } from '../../library/collection-queries';
+import { collectionPageHead } from '../../library/collection-page';
 import { m } from '../../paraglide/messages.js';
+import * as v from 'valibot';
 
 export const Route = createFileRoute('/collections/$id')({
-  staticData: { sessionReread: true },
   validateSearch: (search: Record<string, unknown>) => {
+    const { cursor } = v.parse(
+      v.object({ cursor: v.fallback(v.optional(v.pipe(v.string(), v.minLength(1))), undefined) }),
+      search,
+    );
     const filters: Record<string, string | string[]> = {};
     for (const [key, value] of Object.entries(search))
       if (
@@ -16,7 +21,7 @@ export const Route = createFileRoute('/collections/$id')({
       )
         filters[key] = value as string | string[];
     return {
-      ...(typeof search.cursor === 'string' ? { cursor: search.cursor } : {}),
+      ...(cursor === undefined ? {} : { cursor }),
       ...(Object.keys(filters).length ? { filters } : {}),
     };
   },
@@ -25,7 +30,10 @@ export const Route = createFileRoute('/collections/$id')({
     context.queryClient.ensureQueryData(
       collectionPageQuery(params.id, deps.cursor, context.credentialMode, deps.filters),
     ),
-  head: ({ loaderData }) => ({ meta: [{ title: loaderData?.title ?? m.not_found_heading() }] }),
+  head: ({ loaderData }) =>
+    loaderData
+      ? collectionPageHead(loaderData, undefined, loaderData.cursor !== undefined)
+      : { meta: [{ title: m.not_found_heading() }] },
   component: CollectionRoute,
 });
 
@@ -42,6 +50,11 @@ function CollectionRoute() {
       }
     />
   ) : (
-    <CollectionPage page={page} />
+    <CollectionPage
+      page={page}
+      cursor={Route.useSearch().cursor}
+      {...(search.filters ? { search: search.filters } : {})}
+      personalLoaded={Route.useRouteContext().credentialMode === 'session'}
+    />
   );
 }

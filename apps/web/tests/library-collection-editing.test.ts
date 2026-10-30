@@ -667,6 +667,7 @@ test(
       });
       expect(await page.getByRole('heading', { level: 1 }).innerText()).toBe('Night reading');
       expect(await mainText(page)).toContain('Stories after dark');
+      await page.locator('[data-visibility="public"]').waitFor();
       expect(await page.locator('[data-visibility="public"]').count()).toBe(1);
       expect(shelves.get(createdId)?.title).toBe('Night reading');
     } finally {
@@ -684,12 +685,48 @@ test(
 );
 
 test(
+  'a private collection is hidden from anonymous readers and opens for its curator after hydration',
+  async () => {
+    resetShelf();
+    shelf.visibility = 'private';
+    shelves.set(shelf.id, shelf);
+
+    const anonymous = await open(`/en/collections/${shelf.id}`, { sub: '' });
+    try {
+      expect(await anonymous.page.getByRole('heading', { name: 'Page not found' }).count()).toBe(1);
+    } finally {
+      await anonymous.page.context().close();
+    }
+
+    resetShelf();
+    shelf.visibility = 'private';
+    shelves.set(shelf.id, shelf);
+    const { page, access } = await open(`/en/collections/${shelf.id}`);
+    try {
+      expect(await page.getByRole('heading', { level: 1 }).innerText()).toBe('Night reading');
+      await page.locator('[data-visibility="private"]').waitFor();
+      await page.getByRole('button', { name: 'More actions' }).waitFor();
+      const reads = calls.filter((call) => call.path === `/v1/collections/${shelf.id}`);
+      expect(reads).toHaveLength(2);
+      expect(reads.map((call) => call.authorization)).toEqual([null, `Bearer ${access}`]);
+      const memberReads = calls.filter((call) => call.path === `/v1/collections/${shelf.id}/members`);
+      expect(memberReads).toHaveLength(2);
+      expect(memberReads.map((call) => call.authorization)).toEqual([null, `Bearer ${access}`]);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
   'the curator edits or deletes their collection, and a stale revision keeps their edit and offers to reload',
   async () => {
     resetShelf();
     const { page, access } = await open(`/en/collections/${shelf.id}`);
     try {
       expect(await page.getByRole('heading', { level: 1 }).innerText()).toBe('Night reading');
+      await page.locator('[data-visibility="public"]').waitFor();
       expect(await page.getByRole('button', { name: 'Follow', exact: true }).count()).toBe(0);
       expect(await page.getByRole('button', { name: 'Move up' }).count()).toBeGreaterThan(0);
       await page.getByRole('button', { name: 'More actions' }).click();
@@ -773,21 +810,11 @@ test(
       const order = await mainText(page);
       expect(order.indexOf('Alpha story')).toBeLessThan(order.indexOf('Beta story'));
       expect(order.indexOf('Beta story')).toBeLessThan(order.indexOf('Gamma story'));
-      expect(await page.getByRole('button', { name: 'More actions' }).isDisabled()).toBe(true);
-      for (const [label, name] of [
-        ['Gamma story', 'Move up'],
-        ['Alpha story', 'Move down'],
-        ['Beta story', 'Move to top'],
-        ['Beta story', 'Save note'],
-        ['Alpha story', 'Remove member'],
-      ] as const) {
-        expect(await memberRow(page, label).getByRole('button', { name }).isDisabled(), `${label} ${name}`).toBe(true);
-      }
-      expect(await memberRow(page, 'Beta story').getByRole('textbox', { name: 'Note' }).isDisabled()).toBe(true);
-      expect(
-        await memberRow(page, 'Alpha story').getByRole('checkbox', { name: 'Remove this member' }).isDisabled(),
-      ).toBe(true);
-      // Nothing on the page can post: every control is a disabled button, and no native form wraps them.
+      // Personal controls are absent until hydration when JavaScript is disabled.
+      expect(await page.getByRole('button', { name: 'More actions' }).count()).toBe(0);
+      expect(await page.locator('[data-member] button').count()).toBe(0);
+      expect(await page.locator('[data-member] textarea').count()).toBe(0);
+      expect(await page.locator('[data-member] input[type="checkbox"]').count()).toBe(0);
       expect(await page.locator('main form').count()).toBe(0);
       expect(await page.locator('main form[method="post" i]').count()).toBe(0);
       expect(writes()).toHaveLength(0);
@@ -898,7 +925,7 @@ test(
     shelves.set(shelf.id, shelf);
     const plain = await open(`/en/collections/${shelf.id}`, { sub: 'blake', javaScript: false });
     try {
-      expect(await plain.page.getByRole('button', { name: 'Follow', exact: true }).isDisabled()).toBe(true);
+      expect(await plain.page.getByRole('button', { name: 'Follow', exact: true }).count()).toBe(0);
     } finally {
       await plain.page.context().close();
     }

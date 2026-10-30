@@ -702,9 +702,9 @@ test(
       expect(text(withTitle(list, 'Zebra story'))).toContain('Book');
       expect(text(withTitle(list, 'Zebra story'))).toContain('First note');
     }
-    // The curator's controls stay on each member.
+    // The server render is anonymous even when the request carries a curator session.
     const owned = await readPage(`/en/collections/${shelfId}`, cookie);
-    expect(text(withTitle(rows(owned.html), 'Zebra story'))).toContain('Move down');
+    expect(text(withTitle(rows(owned.html), 'Zebra story'))).not.toContain('Move down');
 
     const mine = await readPage('/en/library/collections', cookie);
     expect(mine.status).toBe(200);

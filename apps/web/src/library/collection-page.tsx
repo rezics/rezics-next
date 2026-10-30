@@ -1,4 +1,4 @@
-import { Exposure, useOperation } from '../kernel/exposure';
+import { Exposure } from '../kernel/exposure';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { ContentActions } from '@rezics/ui/content-actions';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -30,6 +30,122 @@ import {
   type CollectionWriteResult,
 } from './collection-edit';
 import type { EditableCollectionPage } from './collection-load';
+import { pageHead, type HeadContext } from '../shell/head';
+import { useSession } from '../session/query';
+import { useQuery } from '@tanstack/react-query';
+import { personalCollectionPageQuery } from './collection-queries';
+import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
+import { createIsomorphicFn } from '@tanstack/react-start';
+import { env } from 'cloudflare:workers';
+import { validatePublicOrigin } from '../shell/origin';
+
+const publicOrigin = createIsomorphicFn()
+  .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
+  .client(() =>
+    validatePublicOrigin(new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin),
+  );
+
+export function collectionPageHead(
+  page:
+    | Pick<
+        EditableCollectionPage,
+        'id' | 'title' | 'description' | 'curator' | 'members' | 'memberCount' | 'visibility'
+      >
+    | Pick<DynamicCollectionPageData, 'id' | 'title' | 'description' | 'curator' | 'members'>,
+  suppliedContext?: HeadContext,
+  laterPage = false,
+) {
+  const path = `/collections/${encodeURIComponent(page.id)}`;
+  const context = suppliedContext ?? { origin: publicOrigin(), locale: getLocale(), path };
+  const title = pageText(libraryTitleValue(page.title), context.locale).text;
+  const imageSubject = page.members[0]?.subject;
+  const cover = imageSubject?.cover;
+  const variants = cover && !cover.withheld ? cover.variants : [];
+  const width = variants.length
+    ? [...new Set(variants.map((v) => v.width))].sort((a, b) => Math.abs(a - 1200) - Math.abs(b - 1200))[0]
+    : undefined;
+  const format =
+    width === undefined
+      ? undefined
+      : (variants.find((v) => v.width === width && v.format === 'webp')?.format ??
+        variants.find((v) => v.width === width)?.format);
+  const image =
+    cover && width && format && cover.width > 0
+      ? {
+          url: coverSrc(cover.media, format, width),
+          width,
+          height: Math.round((cover.height * width) / cover.width),
+          alt: imageSubject ? pageText(libraryTitleValue(imageSubject.label), context.locale).text : title,
+        }
+      : undefined;
+  const items = page.members.flatMap((member, index) =>
+    member.subject
+      ? [
+          {
+            '@type': 'ListItem',
+            position: index + 1,
+            url: new URL(
+              subjectHref(
+                {
+                  id: member.subject.id,
+                  label: pageText(libraryTitleValue(member.subject.label), context.locale).text,
+                },
+                context.locale,
+              ).href,
+              context.origin,
+            ).href,
+          },
+        ]
+      : [],
+  );
+  const breadcrumbs = [
+    { '@type': 'ListItem', position: 1, name: 'REZICS', item: context.origin },
+    ...(page.curator?.handle
+      ? [
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: page.curator.displayName || page.curator.handle,
+            item: `${context.origin}/${context.locale}/@${encodeURIComponent(page.curator.handle)}`,
+          },
+        ]
+      : []),
+    {
+      '@type': 'ListItem',
+      position: page.curator?.handle ? 3 : 2,
+      name: title,
+      item: `${context.origin}/${context.locale}${path}`,
+    },
+  ];
+  const description = page.description?.trim() || undefined;
+  return pageHead(
+    {
+      title,
+      ...(description ? { description } : {}),
+      ...(image ? { image } : {}),
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': 'CollectionPage',
+            name: title,
+            ...(description ? { description } : {}),
+            url: `${context.origin}/${context.locale}${path}`,
+            mainEntity: {
+              '@type': 'ItemList',
+              ...('memberCount' in page ? { numberOfItems: page.memberCount } : {}),
+              itemListOrder: 'https://schema.org/ItemListOrderAscending',
+              itemListElement: items,
+            },
+          },
+          { '@type': 'BreadcrumbList', itemListElement: breadcrumbs },
+        ],
+      },
+      ...(laterPage || ('visibility' in page && page.visibility === 'private') ? { robots: 'noindex, follow' } : {}),
+    },
+    context,
+  );
+}
 import type { CollectionMember, CollectionVisibility } from './reads';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
 import { rowRatio, SubjectIdentity } from './subject-row';
@@ -117,10 +233,25 @@ function moveWithin(members: CollectionMember[], memberId: string, after: string
   return [...rest.slice(0, at), moved, ...rest.slice(at)];
 }
 
-export function CollectionPage({ page }: { page: EditableCollectionPage }) {
+export function CollectionPage({
+  page: initialPage,
+  cursor,
+  search,
+  personalLoaded = false,
+}: {
+  page: EditableCollectionPage;
+  cursor: string | undefined;
+  search?: Record<string, string | string[]>;
+  personalLoaded?: boolean;
+}) {
   const router = useRouter();
-  const admitted = useOperation('collection.update');
-  const owner = page.visibility !== null && admitted;
+  const { state: session } = useSession();
+  const personal = useQuery({
+    ...personalCollectionPageQuery(initialPage.id, cursor, search),
+    enabled: typeof window !== 'undefined' && session === 'signed-in' && !personalLoaded,
+  });
+  const page = personal.data ?? initialPage;
+  const owner = page.visibility !== null;
   const [hydrated, setHydrated] = useState(false);
   const [members, setMembers] = useState(page.members);
   const [editing, setEditing] = useState(false);
@@ -186,6 +317,7 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
       }),
     );
     if (result.ok) {
+      await personal.refetch();
       await router.invalidate();
       return;
     }
@@ -248,7 +380,7 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
     );
     if (result.ok) {
       setMembers((current) => current.filter((member) => member.id !== memberId));
-      await router.invalidate();
+      await Promise.all([personal.refetch(), router.invalidate()]);
     } else setFailure(failureText(result));
   }
 
@@ -389,7 +521,7 @@ export function CollectionPage({ page }: { page: EditableCollectionPage }) {
                   href={collectionHref(page.id)}
                   onClick={(event) => {
                     event.preventDefault();
-                    void router.invalidate();
+                    void Promise.all([personal.refetch(), router.invalidate()]);
                   }}
                 >
                   {m.library_collection_reload()}

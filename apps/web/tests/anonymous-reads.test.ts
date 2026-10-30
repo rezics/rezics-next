@@ -334,7 +334,7 @@ test(
 );
 
 test(
-  'a signed-in collection rereads once and restores the curator controls',
+  'a signed-in collection loads curator controls after hydration without rereading on the server',
   async () => {
     const origin = await site();
     reset();
@@ -485,13 +485,9 @@ test('closed and not-found pages return their real status and robots noindex', a
   expect(await missing.text()).toMatch(/name="robots"[^>]*content="noindex"|content="noindex"[^>]*name="robots"/);
 });
 
-test('public community routes omit session rereads while personalized routes retain them', async () => {
-  for (const path of ['spaces/$address', 'realms/$id']) {
+test('public community routes render without session rereads', async () => {
+  for (const path of ['spaces/$address', 'realms/$id', 'boards/$id', 'threads/$id_.$slug', 'collections/$id']) {
     const source = await Bun.file(join(app, `src/routes/${path}.tsx`)).text();
     expect(source).not.toContain('sessionReread: true');
-  }
-  for (const path of ['boards/$id', 'threads/$id_.$slug', 'collections/$id']) {
-    const source = await Bun.file(join(app, `src/routes/${path}.tsx`)).text();
-    expect(source).toContain('sessionReread: true');
   }
 });
