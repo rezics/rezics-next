@@ -3,12 +3,10 @@ import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
 import {
   comparePosition,
   createReactionRelayBase,
-  readPartitionPosition,
   snapshotReactionOperation,
   targetFreshness,
   targetProjectionRows,
   type CallResult,
-  type CreatedRealmTarget,
   type NativePerson,
   type Position,
   type ReactionRelayBase,
