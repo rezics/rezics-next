@@ -26,7 +26,7 @@ const listPresentationFor = (types: readonly string[]) => releasedListPresentati
 const items: Item[] = hits.map((hit) => ({
   id: hit.id,
   type: hit.type,
-  label: { text: hit.labels.en! },
+  label: { text: hit.labels.en!, lang: 'en' },
   notes: [],
   gated: false,
 }));

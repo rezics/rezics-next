@@ -51,7 +51,7 @@ const value: RowValue = {
 const item = (member: ResultHit): Item => ({
   id: member.id,
   type: member.type,
-  label: { text: member.labels.en! },
+  label: { text: member.labels.en!, lang: 'en' },
   summary: member.summary,
   notes: [],
   gated: false,
