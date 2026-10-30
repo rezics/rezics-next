@@ -1,352 +1,50 @@
 import { browserSessionToken } from './session-token';
-import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
-import { join } from 'node:path';
-import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import { slug } from '@rezics/definitions/slug';
-import { chromium, type Browser, type Page, type Request as BrowserRequest } from 'playwright';
-import fixtures from '../src/kernel/fixtures.json';
-import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import { expect, test } from 'bun:test';
+import type { Page, Request as BrowserRequest } from 'playwright';
+import {
+  createSubjectReactionPages,
+  subjectPath,
+  subjectId,
+  session,
+  type Call,
+  type SubjectKind,
+} from './support/reaction-pages';
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
-const clientId = 'rezics-website';
-const session = '__Host-rezics_session';
-const login = '__Host-rezics_login';
-const resource = 'https://api.rezics.test';
-const scopes = ['reaction:set'];
-const subjectId = fixtures.subjects[0]!.id;
-const subjectPath = `/en/subjects/${subjectId}/${slug(fixtures.subjects[0]!.labels.en!)}`;
-
-const clientKeys = await generateKeyPair('ES256', { extractable: true });
-const clientJwk = { ...(await exportJWK(clientKeys.privateKey)), alg: 'ES256', kid: 'website-1' };
-const issuerKeys = await generateKeyPair('ES256', { extractable: true });
-const issuerJwk = { ...(await exportJWK(issuerKeys.publicKey)), alg: 'ES256', kid: 'issuer-1', use: 'sig' };
-
-type Grant = { challenge: string; nonce: string; redirectUri: string; scope: string; sub: string; expiresIn: number };
-type Family = { sub: string; current: string; expiresIn: number; revoked: boolean };
-type Kind = 'like' | 'love' | 'laugh' | 'insightful' | 'sad';
-type Call = { method: string; path: string; body: unknown; key: string | null; authorization: string | null };
-const codes = new Map<string, Grant>();
-const families = new Map<string, Family>();
-const assertions = new Set<string>();
-const accessTokens: string[] = [];
-let counter = 0;
+type Kind = SubjectKind;
 let calls: Call[] = [];
 let counts: Partial<Record<Kind, number>> = {};
 let own: Kind | null = null;
-
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
-const problem = (status: number, code: string) => ({
-  type: `https://rezics.com/problems/${code}`,
-  title: code,
-  status,
-  code,
-  retryable: false,
-  effect_status: 'not_applicable',
-  request_id: randomUUID(),
-});
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function reset(next: Partial<Record<Kind, number>> = { like: 6, love: 3, laugh: 2, insightful: 4, sad: 1 }) {
+function reset(
+  next: Partial<Record<Kind, number>> = { like: 6, love: 3, laugh: 2, insightful: 4, sad: 1 },
+  selected: Kind | null = null,
+) {
   calls = [];
   counts = next;
-  own = null;
+  own = selected;
 }
 
-// The auth provider and the site dev-server setup follow library-subject-slot.test.ts.
-const fake = Bun.serve({
-  port: 0,
-  hostname: '127.0.0.1',
-  async fetch(request) {
-    const url = new URL(request.url);
-    if (url.pathname === '/turnstile.js')
-      return new Response(
-        `
-        window.turnstile = {
-          render(container, options) {
-            const verify = document.createElement('button');
-            verify.type = 'button'; verify.textContent = 'Verify test challenge';
-            verify.onclick = () => options.callback('token-' + crypto.randomUUID());
-            container.append(verify);
-            return '1';
-          },
-          reset() {},
-          remove(id) {}
-        };
-      `,
-        { headers: { 'content-type': 'text/javascript' } },
-      );
-    const issuer = `${url.origin}/auth`;
-    const tokenEndpoint = `${issuer}/token`;
-    const client = async (form: URLSearchParams) => {
-      if (form.get('client_assertion_type') !== 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer') return false;
-      try {
-        const { payload, protectedHeader } = await jwtVerify(form.get('client_assertion') ?? '', clientKeys.publicKey, {
-          issuer: clientId,
-          subject: clientId,
-          audience: issuer,
-          algorithms: ['ES256'],
-          maxTokenAge: '120s',
-        });
-        if (
-          protectedHeader.kid !== clientJwk.kid ||
-          payload.aud !== issuer ||
-          !payload.jti ||
-          assertions.has(payload.jti) ||
-          !payload.exp ||
-          !payload.iat ||
-          payload.exp - payload.iat > 120
-        )
-          return false;
-        assertions.add(payload.jti);
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    const issue = async (family: Family, nonce?: string) => {
-      counter += 1;
-      const access = `access-${counter}`;
-      const refresh = `refresh-${counter}`;
-      family.current = refresh;
-      families.set(refresh, family);
-      accessTokens.push(access);
-      const body: Record<string, unknown> = {
-        access_token: access,
-        token_type: 'Bearer',
-        expires_in: family.expiresIn,
-        refresh_token: refresh,
-        scope: ['openid', 'offline_access', ...scopes].join(' '),
-      };
-      if (nonce !== undefined) {
-        body.id_token = await new SignJWT({ nonce })
-          .setProtectedHeader({ alg: 'ES256', kid: 'issuer-1' })
-          .setIssuer(issuer)
-          .setSubject(family.sub)
-          .setAudience(clientId)
-          .setIssuedAt()
-          .setExpirationTime('5m')
-          .sign(issuerKeys.privateKey);
-      }
-      return json(body);
-    };
-    if (url.pathname === '/auth/.well-known/openid-configuration')
-      return json({
-        issuer,
-        authorization_endpoint: `${issuer}/authorize`,
-        token_endpoint: tokenEndpoint,
-        jwks_uri: `${issuer}/jwks`,
-        revocation_endpoint: `${issuer}/revoke`,
-        end_session_endpoint: `${issuer}/end-session`,
-        response_types_supported: ['code'],
-        code_challenge_methods_supported: ['S256'],
-        id_token_signing_alg_values_supported: ['ES256'],
-        token_endpoint_auth_methods_supported: ['private_key_jwt'],
-        token_endpoint_auth_signing_alg_values_supported: ['ES256'],
-      });
-    if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
-    if (url.pathname === '/auth/token' && request.method === 'POST') {
-      const form = new URLSearchParams(await request.text());
-      if (!(await client(form))) return json({ error: 'invalid_client' }, 401);
-      if (form.get('grant_type') === 'authorization_code') {
-        const code = form.get('code') ?? '';
-        const grant = codes.get(code);
-        codes.delete(code);
-        if (
-          !grant ||
-          form.get('redirect_uri') !== grant.redirectUri ||
-          createHash('sha256')
-            .update(form.get('code_verifier') ?? '')
-            .digest('base64url') !== grant.challenge
-        )
-          return json({ error: 'invalid_grant' }, 400);
-        return issue({ sub: grant.sub, current: '', expiresIn: grant.expiresIn, revoked: false }, grant.nonce);
-      }
-      if (form.get('grant_type') === 'refresh_token') {
-        const family = families.get(form.get('refresh_token') ?? '');
-        if (!family || family.revoked || family.current !== form.get('refresh_token'))
-          return json({ error: 'invalid_grant' }, 400);
-        return issue(family);
-      }
-      return json({ error: 'unsupported_grant_type' }, 400);
-    }
-    if (url.pathname === '/auth/revoke' && request.method === 'POST') return new Response(null, { status: 200 });
-    if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
-    const body =
-      request.method === 'GET' || request.method === 'DELETE'
-        ? null
-        : await request
-            .clone()
-            .json()
-            .catch(() => null);
-    calls.push({
-      method: request.method,
-      path: url.pathname,
-      body,
-      key: request.headers.get('idempotency-key'),
-      authorization: request.headers.get('authorization'),
-    });
-    const subjectRead = createFakeKernelFetch(fixtures as never);
-    if (request.method === 'GET' && url.pathname === `/v1/subjects/${subjectId}`) return subjectRead(request);
-    if (request.method === 'POST' && url.pathname === '/v1/pages:read') return subjectRead(request);
-    if (url.pathname === `/v1/subjects/${subjectId}/reactions` && request.method === 'GET')
-      return json({
-        counts: Object.entries(counts).map(([kind, count]) => ({ kind, count })),
-        watermark: null,
-      });
-    if (url.pathname === `/v1/subjects/${subjectId}/reaction`) {
-      if (request.method === 'GET') {
-        if (!request.headers.get('authorization')) return json(problem(401, 'unauthorized'), 401);
-        return json({ kind: own });
-      }
-      if (request.method === 'PUT') {
-        own = (body as { kind: Kind }).kind;
-        return json({ kind: own });
-      }
-      if (request.method === 'DELETE') {
-        own = null;
-        return new Response(null, { status: 204 });
-      }
-    }
-    if (url.pathname === '/v1/reports' && request.method === 'POST')
-      return json({ reportId: '0192f3a0-6c1e-7b2a-9d4e-0000000000aa' }, 201);
-    return json(problem(404, 'not_found'), 404);
+const { open, signIn, accessTokens } = await createSubjectReactionPages({
+  get calls() {
+    return calls;
+  },
+  set calls(value) {
+    calls = value;
+  },
+  get counts() {
+    return counts;
+  },
+  set counts(value) {
+    counts = value;
+  },
+  get own() {
+    return own;
+  },
+  set own(value) {
+    own = value;
   },
 });
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const port = (probe.address() as { port: number }).port;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-let child: ChildProcess | undefined;
-let started: Promise<string> | undefined;
-function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        TURNSTILE_SITE_KEY: 'subject-test-key',
-        TURNSTILE_SCRIPT_URL: `${fake.url.origin}/turnstile.js`,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) {
-          const page = await fetch(`${origin}${subjectPath}`, {
-            redirect: 'manual',
-            signal: AbortSignal.timeout(90_000),
-          });
-          if (page.status >= 500) throw new Error(`subject page did not compile:\n${output}`);
-          return origin;
-        }
-      } catch {
-        /* wait for Vite */
-      }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
-  return started;
-}
-const cookieValue = (response: Response, name: string) =>
-  response.headers
-    .getSetCookie()
-    .find((line) => line.startsWith(`${name}=`))
-    ?.split(';')[0]
-    ?.slice(name.length + 1);
-async function signIn(returnTo = subjectPath) {
-  const origin = await site();
-  const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
-  const params = new URL(start.headers.get('location')!).searchParams;
-  const code = `code-${randomUUID()}`;
-  codes.set(code, {
-    challenge: params.get('code_challenge')!,
-    nonce: params.get('nonce')!,
-    redirectUri: params.get('redirect_uri')!,
-    scope: params.get('scope')!,
-    sub: 'alice',
-    expiresIn: 3600,
-  });
-  const loginCookie = cookieValue(start, login);
-  const answer = await fetch(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`, {
-    redirect: 'manual',
-    headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
-  });
-  expect([302, 303]).toContain(answer.status);
-  return { origin, session: cookieValue(answer, session)!, access: accessTokens.at(-1)! };
-}
-let browser: Browser | undefined;
-async function open(
-  path: string,
-  options: { signedIn?: boolean; javaScript?: boolean; width?: number } = {},
-): Promise<{ page: Page; access: string | undefined; origin: string }> {
-  const { signedIn = true, javaScript = true, width = 1280 } = options;
-  const auth = signedIn ? await signIn(path) : undefined;
-  const origin = await site();
-  browser ??= await chromium.launch();
-  const context = await browser.newContext({
-    viewport: { width, height: 860 },
-    reducedMotion: 'reduce',
-    javaScriptEnabled: javaScript,
-  });
-  if (auth)
-    await context.addCookies([
-      {
-        name: session,
-        value: auth.session,
-        domain: '127.0.0.1',
-        path: '/',
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-      },
-    ]);
-  const page = await context.newPage();
-  page.setDefaultTimeout(10_000);
-  page.setDefaultNavigationTimeout(120_000);
-  await page.goto(`${origin}${path}`, { waitUntil: javaScript ? 'networkidle' : 'load' });
-  if (javaScript) await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
-  return { page, access: auth?.access, origin };
-}
-afterAll(async () => {
-  await browser?.close();
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      /* dev server already exited */
-    }
-});
-
 const cluster = (page: Page) => page.locator('main header').getByRole('group', { name: 'Reactions' });
 const slotCalls = () => calls.filter((call) => call.method !== 'GET' && call.path.endsWith('/reaction'));
 async function eventually(check: () => boolean | Promise<boolean>) {

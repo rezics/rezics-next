@@ -53,7 +53,6 @@ function CountUnavailablePageStory() {
 const meta = { title: 'Pages/Subjects/Subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-
 async function subjectReady(context: { canvasElement: HTMLElement }) {
   await pageReady(context);
   const canvas = within(context.canvasElement);
@@ -63,6 +62,12 @@ async function subjectReady(context: { canvasElement: HTMLElement }) {
   for (const cover of covers) await expect(cover).toHaveAttribute('data-state', 'placeholder');
 }
 
+const phone390 = {
+  viewports: {
+    phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+  },
+  defaultViewport: 'phone390',
+};
 export const SignedIn: Story = {
   name: 'Member',
   play: subjectReady,
@@ -72,6 +77,22 @@ export const SignedOut: Story = {
   name: 'Signed out',
   play: subjectReady,
   render: () => <PageStory visitor="Signed Out" path={pagePaths.subject} />,
+};
+
+export const OverviewReactionsEnglishPhone: Story = {
+  name: 'Overview / Full Reactions / English / Phone 390',
+  globals: { locale: 'en' },
+  parameters: { viewport: phone390 },
+  play: pageReady,
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
+};
+
+export const OverviewReactionsChinesePhone: Story = {
+  name: 'Overview / Full Reactions / Chinese / Phone 390',
+  globals: { locale: 'zh-Hans' },
+  parameters: { viewport: phone390 },
+  play: pageReady,
+  render: () => <PageStory visitor="Signed In" path={pagePaths.subject} />,
 };
 
 async function heroReady(context: { canvasElement: HTMLElement }, reveal: boolean) {

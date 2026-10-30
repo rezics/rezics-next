@@ -33,6 +33,8 @@ test('reactions hold one kind per person, update optimistically and roll back on
       )
       .sort();
     expect(outcomes).toEqual([
+      'All reactions / Chinese / Phone 390: passed',
+      'All reactions / German / Phone 390: passed',
       'Choose Reaction: passed',
       'Clear Reaction: passed',
       'Counts In Locale: passed',

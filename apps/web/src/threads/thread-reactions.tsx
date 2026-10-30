@@ -1,5 +1,5 @@
 import { Reactions, type ReactionKind } from '@rezics/ui/reactions';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -36,6 +36,15 @@ function refusalText(failure: ReactionFailure): string {
     default:
       return m.reaction_unavailable();
   }
+}
+
+/** Keeps a post's reaction controls inside the width left by its content. */
+export function ThreadPostActions({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 max-w-full items-center gap-1" data-slot="thread-post-actions">
+      {children}
+    </div>
+  );
 }
 
 // The menu stays open for another choice. A click outside it, such as the pressed chip, closes it

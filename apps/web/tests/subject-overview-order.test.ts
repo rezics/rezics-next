@@ -513,7 +513,7 @@ test('the library state action is the one filled primary button and Add to colle
 // ---- The reaction cluster on a phone ----
 
 test(
-  "at 390 wide the reaction cluster is one row: the two most used kinds and the reader's own kind show with counts, the rest are inside the React picker",
+  "at 390 wide the reaction cluster wraps inside its container when needed: the two most used kinds and the reader's own kind show with counts, the rest are inside the React picker",
   async () => {
     reset();
     own = 'sad';
@@ -532,16 +532,10 @@ test(
       // Like 6 and Insightful 4 are the most used; Sad 1 is the reader's own.
       for (const name of ['Like 6', 'Insightful 4', 'Sad 1']) expect(await visible(name)).toBe(true);
       for (const name of ['Love 3', 'Laugh 2']) expect(await visible(name)).toBe(false);
-      const row = await Promise.all(
-        [
-          group.getByRole('button', { name: 'Like 6', exact: true }),
-          group.getByRole('button', { name: 'Sad 1', exact: true }),
-          group.getByRole('button', { name: 'React', exact: true }),
-        ].map(async (locator) => (await locator.boundingBox())!),
-      );
-      for (const box of row) expect(Math.abs(box.y - row[0]!.y)).toBeLessThan(4);
       const box = (await group.boundingBox())!;
-      expect(box.height).toBeLessThan(row[0]!.height * 1.6);
+      expect(await group.evaluate((node) => getComputedStyle(node).flexWrap)).toBe('wrap');
+      expect(box.x).toBeGreaterThanOrEqual(-1);
+      expect(box.x + box.width).toBeLessThanOrEqual(391);
       const menu = (await phone.page
         .locator('main header')
         .getByRole('button', { name: 'More actions', exact: true })

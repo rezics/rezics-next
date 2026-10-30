@@ -27,6 +27,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const phone390 = {
+  viewports: {
+    phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+  },
+  defaultViewport: 'phone390',
+};
+
 const kindNames = ['Upvote', 'Downvote', 'Like', 'Love', 'Laugh', 'Insightful', 'Sad'] as const;
 
 function PendingReactions({
@@ -207,6 +214,85 @@ export const CountsInLocale: Story = {
     await expect(german.getByRole('button', { name: 'Like 12.000' })).toBeVisible();
     await expect(german.getByRole('button', { name: 'Insightful 10.000' })).toBeVisible();
   },
+};
+
+function crowdedPhoneLabels(locale: 'de' | 'zh-Hans') {
+  return locale === 'de'
+    ? {
+        upvote: 'Hochstimmen',
+        downvote: 'Herunterstimmen',
+        like: 'Gefällt mir',
+        love: 'Liebe',
+        laugh: 'Lachen',
+        insightful: 'Erkenntnisreich',
+        sad: 'Traurig',
+        react: 'Reagieren',
+        reactions: 'Reaktionen',
+        choose: 'Eine Reaktion auswählen',
+      }
+    : {
+        upvote: '赞同',
+        downvote: '反对',
+        like: '喜欢',
+        love: '喜爱',
+        laugh: '大笑',
+        insightful: '有见地',
+        sad: '难过',
+        react: '表态',
+        reactions: '回应',
+        choose: '选择回应',
+      };
+}
+
+function crowdedPhone(locale: 'de' | 'zh-Hans') {
+  return (
+    <div className="w-[390px] p-4">
+      <Reactions
+        counts={{ upvote: 90, downvote: 80, like: 70, love: 60, laugh: 50, insightful: 40, sad: 30 }}
+        labels={crowdedPhoneLabels(locale)}
+        locale={locale}
+        onChange={async () => {}}
+        value="sad"
+      />
+    </div>
+  );
+}
+
+async function crowdedPhoneReady({ canvasElement }: { canvasElement: HTMLElement }) {
+  const group = canvasElement.querySelector<HTMLElement>('[data-slot="reactions"]');
+  if (!group) throw new Error('The crowded phone story did not render its reactions row.');
+  const container = group.parentElement;
+  if (!container) throw new Error('The crowded phone story has no width-constrained container.');
+  await expect(group).toHaveAttribute('data-slot', 'reactions');
+  const chips = [...group.querySelectorAll<HTMLElement>('[data-slot="reaction-chip"]')];
+  await expect(chips).toHaveLength(7);
+  const tops = new Set(chips.map((chip) => Math.round(chip.getBoundingClientRect().top)));
+  await expect(tops.size).toBeGreaterThan(1);
+  await expect(getComputedStyle(group).flexWrap).toBe('wrap');
+  const react = group.querySelector<HTMLElement>('button:not([data-slot="reaction-chip"]), a');
+  if (!react) throw new Error('The crowded phone story did not render its react control.');
+  const left = container.getBoundingClientRect().left;
+  const right = container.getBoundingClientRect().right;
+  for (const node of [container, ...chips, react]) {
+    const box = node.getBoundingClientRect();
+    await expect(box.left).toBeGreaterThanOrEqual(left - 1);
+    await expect(box.right).toBeLessThanOrEqual(right + 1);
+  }
+}
+
+export const CrowdedGermanPhone: Story = {
+  name: 'All reactions / German / Phone 390',
+  parameters: { viewport: phone390 },
+  render: () => crowdedPhone('de'),
+  play: crowdedPhoneReady,
+};
+
+export const CrowdedChinesePhone: Story = {
+  name: 'All reactions / Chinese / Phone 390',
+  globals: { locale: 'zh-Hans' },
+  parameters: { viewport: phone390 },
+  render: () => crowdedPhone('zh-Hans'),
+  play: crowdedPhoneReady,
 };
 
 export const SignedOut: Story = {

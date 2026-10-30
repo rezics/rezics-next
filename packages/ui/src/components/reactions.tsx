@@ -219,7 +219,7 @@ export const Reactions = (props: ReactionsProps) => {
     <div
       aria-busy={busy}
       aria-label={labels.reactions}
-      className={cn('flex flex-wrap items-center gap-2', phoneRow && 'max-sm:flex-nowrap')}
+      className="flex min-w-0 flex-wrap items-center gap-2"
       data-slot="reactions"
       role="group"
     >

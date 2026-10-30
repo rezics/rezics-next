@@ -32,7 +32,7 @@ export function SubjectHeaderActions({
   return (
     <>
       <div
-        className="flex min-w-0 flex-nowrap items-start justify-end gap-2 sm:col-start-2 sm:row-start-1"
+        className="flex min-w-0 flex-wrap items-start justify-end gap-2 sm:flex-nowrap sm:col-start-2 sm:row-start-1"
         data-slot="subject-header-actions"
       >
         {reactions ? (

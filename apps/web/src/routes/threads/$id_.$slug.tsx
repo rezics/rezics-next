@@ -27,7 +27,7 @@ import type { PageAuthors } from '../../identity/read';
 import { Byline } from '../../threads/byline';
 import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
-import { ThreadReactions } from '../../threads/thread-reactions';
+import { ThreadPostActions, ThreadReactions } from '../../threads/thread-reactions';
 import { PostHistory } from '../../threads/post-history';
 import {
   erasePost,
@@ -408,7 +408,7 @@ function PostSlot({
   const authorId = 'authorId' in post ? post.authorId : undefined;
   return (
     <li id={anchorId} ref={itemElement} tabIndex={-1} className="scroll-mt-24 py-5 target:bg-muted/50">
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
         <Byline
           author={authorId === undefined ? undefined : authors?.[authorId]}
           createdAt={post.createdAt}
@@ -422,7 +422,7 @@ function PostSlot({
             </time>
           ) : null}
         </Byline>
-        <div className="flex shrink-0 items-center gap-1">
+        <ThreadPostActions>
           <ThreadReactions
             counts={counts}
             returnTo={returnTo}
@@ -451,7 +451,7 @@ function PostSlot({
               verification={verification}
             />
           )}
-        </div>
+        </ThreadPostActions>
       </div>
       {editing ? (
         <InlinePostEditor
