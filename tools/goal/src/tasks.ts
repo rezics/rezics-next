@@ -470,10 +470,6 @@ export class WorkerTasks {
     if (task.state !== 'held' && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
-      const attempt = this.store.attempt(ref);
-      // A held task's waiting attempt is never woken (the wake sweep reads running tasks only), so it can be reshaped too.
-      if (!['pending', 'stopped', 'exited', 'waiting'].includes(attempt.state))
-        throw new Error(`task cannot be held for retry: ${taskId} attempt ${task.currentAttempt} (${attempt.state})`);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       if (!reshaped) throw new Error('a held task can only be retried with --brief');
       if (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager)
@@ -497,13 +493,13 @@ export class WorkerTasks {
               criticalPriority(current.brief, current.taskClass),
               actor,
             );
-            current.state = this.dependenciesMet({ brief: current.brief }) ? 'ready' : 'held';
+            current.state = 'held';
             current.pendingBriefChange = {
               previousBriefHash: current.pendingBriefChange?.previousBriefHash ?? briefHash(task.brief.markdown),
               newBriefHash: briefHash(reshaped.brief.markdown),
             };
           },
-          { abandonPending: true },
+          { reshapeHeld: true },
         );
       } catch (error) {
         rmSync(briefPath, { force: true });
@@ -782,8 +778,10 @@ export class WorkerTasks {
             current.taskClass = nextTaskClass;
             if (changedBrief && briefChange) current.pendingBriefChange = briefChange;
           },
-          { abandonPending: true },
+          { reshapeHeld: true },
         );
+        // A reshape only changes the held contract. The host releases it through the verified dependency-base path.
+        return null;
       }
       // A held task stays held while its dependencies are unmet, reshaped or not; once they are met it starts.
       const currentRunning =
@@ -806,17 +804,6 @@ export class WorkerTasks {
           );
         }
         return null;
-      }
-      if (heldAmendment) {
-        this.store.updateHeldRetryTask({ taskId, attempt: task.currentAttempt }, (current) => {
-          current.state = 'ready';
-        });
-        // Leave the amended task available to stop or reshape while it waits for capacity.
-        lease?.release();
-        lease = undefined;
-        const startOptions = { ...options };
-        delete startOptions.brief;
-        return this.retryTask(taskId, startOptions);
       }
       this.ensureWorktree(task);
       const pools = this.poolPolicies.read();
@@ -898,6 +885,7 @@ export class WorkerTasks {
       );
       const oldSession = old ? attemptSession(old) : null;
       const resumeSession =
+        !briefChange &&
         oldSession &&
         agentAdapter(profile.cli).canResume &&
         old!.pool === pool.name &&
