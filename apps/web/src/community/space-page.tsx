@@ -29,6 +29,7 @@ import { ContainerLifecyclePanel } from './container-lifecycle-controls';
 import type { ContainerLifecycleAdapter } from './container-lifecycle';
 import { RealmAppearancePanel } from './realm-presentation-panel';
 import { RealmClaimPanel } from './realm-claim-panel';
+import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import type { RealmClaimAdapter, RealmClaimRead, RealmClaimSnapshot } from './realm-claim';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
@@ -130,6 +131,7 @@ function Published({
   continuation,
   complete,
   refresh,
+  search,
 }: {
   realm: RealmHome;
   control: ReturnType<typeof usePublicationControls>;
@@ -137,6 +139,7 @@ function Published({
   continuation: React.ReactNode;
   complete: boolean;
   refresh: () => Promise<void>;
+  search?: EntityPickerSearch;
 }) {
   const locale = getLocale();
   const titled: { subject: PublishedSubject; cover: CoverSubject }[] = realm.published.map((subject) => ({
@@ -150,7 +153,7 @@ function Published({
         {m.realm_published_heading()}
       </h2>
       <p className="text-sm text-muted-foreground">{m.realm_publication_global_fallback()}</p>
-      {editable ? <PublicationControls control={control} refresh={refresh} /> : null}
+      {editable ? <PublicationControls control={control} refresh={refresh} search={search} /> : null}
       {titled.length ? (
         <CoverRow ratio={ratio} label={`${m.realm_published_heading()} (${titled.length})`}>
           {titled.map(({ subject, cover }) => (
@@ -207,12 +210,14 @@ export function RealmShelf({
   realm,
   transport,
   frozen = false,
+  search,
 }: {
   realm: RealmHome;
   transport?: RealmShelfTransport;
   frozen?: boolean;
+  search?: EntityPickerSearch;
 }) {
-  const { state, csrfToken } = useSession();
+  const { state, csrfToken, subject: reader } = useSession();
   const boards = useShelfList(
     {
       items: realm.boards,
@@ -247,6 +252,8 @@ export function RealmShelf({
             : previous.items.filter((subject) => subject.id !== target.id),
       })),
     publications.items,
+    !frozen && state === 'signed-in' && Boolean(csrfToken),
+    reader ?? '',
   );
   return (
     <>
@@ -267,6 +274,7 @@ export function RealmShelf({
         editable={!frozen && state === 'signed-in' && Boolean(csrfToken)}
         complete={!publications.next && !publications.failure}
         refresh={() => publications.load(true)}
+        search={search}
         continuation={<ShelfContinuation {...publications} label={m.realm_publications_more()} />}
       />
     </>

@@ -2385,3 +2385,50 @@ Cost: public Realm discovery
   1–100 with default 20. Invalid local input sends no request. Continuations are preserved without automatic walking.
 - Growth check: later use the existing native Community discovery acceptance; the focused local boundary cases in
   `tests/realm-discovery.test.ts` establish adapter/presentation behavior only.
+
+## Realm publication subject choice
+
+The existing Space/Realm `RealmShelf` integrates `community/publication-controls-view.tsx`. Its shared `EntityPicker`
+uses `publicationSubjectSearch` to present Search's existing authorized, private, no-store `/api/search/suggestions`
+response. There is no second query endpoint, subject lookup, prefill or permission producer. The shared picker owns
+its 250 ms debounce, cancellation and failure/retry UI; the consumer checks cancellation again after the source
+returns and retains the existing eight-result bound. Search failure stays unavailable, with the draft intact.
+
+Choosing a disclosed subject shows its real label, type and cover and requires a separate Publish here action.
+Clear selection discards recovery intent and remounts an empty picker. Choosing a subject unmounts the search so a
+late prior query cannot replace the selection. Realm, reader and locale changes reset the draft; current lifecycle
+freezes retire it and prevent in-flight replies from updating the shelf. Native publication still checks current
+subject readability and `realm:publish`, including replay and final disclosure. Suggestions, membership, management
+and Context grants supply no publication or read authority.
+
+Each command captures the exact subject, action, expected head and idempotency key. Uncertain retry uses that same
+intent; a conflict requires an explicit current-head decision with a new key. An unreadable current head offers
+reload. Native denial clears the selected summary. Withdraw/reject keep their existing native commands and receive
+kind-specific confirmation/recovery text. The independent 20-board/12-publication windows and cursors are unchanged.
+
+Web owns ordinary phone390/desktop1280, light/dark review using the existing globals. Actual review IDs are:
+
+- `pages-community-realm-publication--selection`
+- `pages-community-realm-publication--chosen`
+- `patterns-community-realm-publication--selection`
+- `patterns-community-realm-publication--chosen`
+- `patterns-community-realm-publication--clear-selection`
+- `patterns-community-realm-publication--search-unavailable`
+- `patterns-community-realm-publication--frozen`
+
+Pages mount the actual Space route in `AppShell` with its single main. Patterns load the recorded Space/Realm shelf
+through the same source and render `RealmShelf`; only Search failure is constructed. Focused plays cover selection,
+intentional clearing, unavailable versus empty and the frozen surface. They invent no permission or successful
+publication. `tests/publication-subject-picker.test.ts` records the assigned acceptance journey and focused
+retry/conflict/late-response boundaries for integration. Acceptance, native, browser and screenshot execution are
+deferred by the current minimal verification contract.
+
+Source read: the existing review picker, Search suggestions loader, shared EntityPicker, native Community shelf
+contract and the community design's referenced Discourse `lib/guardian/category_guardian.rb` at
+`/home/edge/projects/rezics/rezics-next/.reference/partitioned-sitemap-feeds/discourse/` (read-only). The latter separates
+reading from posting; no external source was copied.
+
+Cost: one existing Search request per settled query or explicit retry, at most eight summaries; selection and clearing
+make no request. Publication sends one native command per explicit action; conflict alone adds one existing point
+read. There are no new per-row reads, refill walks, semantic writes or shelf query changes. Interface typing and
+constructed story responses do not establish native disclosure or growth proof.
