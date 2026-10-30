@@ -77,7 +77,8 @@ async function page(context: WorkContext, input: Locator) {
     const current = await readOwnerIndexFrontier(tx, accountId);
     if (JSON.stringify(current) !== JSON.stringify(input.frontier)) return;
     const next = await stepOwnerIndex(tx, accountId);
-    if (next.phase !== 'ready') await enqueue(tx, { accounts: [accountId], frontier: next, metadata: false });
+    if (next.phase !== 'ready' && JSON.stringify(next) !== JSON.stringify(current))
+      await enqueue(tx, { accounts: [accountId], frontier: next, metadata: false });
   });
 }
 

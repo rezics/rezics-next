@@ -278,9 +278,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       return { ...collectionView(value), coverMediaId: value.coverMediaId };
     const current = await read().readCollection(actor, value.id);
     const cover =
-      current.membershipKind === 'curated' &&
-      current.revision === value.revision &&
-      current.coverMediaId === value.coverMediaId
+      'coverMediaId' in current && current.revision === value.revision && current.coverMediaId === value.coverMediaId
         ? current.cover
         : null;
     return { ...collectionView(value), ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId };
