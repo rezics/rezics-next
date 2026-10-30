@@ -5671,6 +5671,7 @@ test('admission backfill: capacity, memory, gate and express reservations remain
     expect(await express.exited).toBe(0);
     for (const blocker of blockers) blocker.kill();
   }
+});
 
 /** Native production entry, with only systemd/runtime/download endpoints replaced; Python owns real child processes. */
 function preparationFixture() {
