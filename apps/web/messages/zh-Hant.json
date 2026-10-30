@@ -2430,5 +2430,6 @@
   "creator_offers_restart": "第一頁",
   "creator_offers_next": "下一頁",
   "creator_offers_pagination": "報價分頁",
-  "creator_offers_amount_unavailable": "無法取得價格"
+  "creator_offers_amount_unavailable": "無法取得價格",
+  "edition_publication_create_offer": "建立銷售方案"
 }

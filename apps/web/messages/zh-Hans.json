@@ -2431,5 +2431,6 @@
   "creator_offers_restart": "第一页",
   "creator_offers_next": "下一页",
   "creator_offers_pagination": "报价分页",
-  "creator_offers_amount_unavailable": "无法获取价格"
+  "creator_offers_amount_unavailable": "无法获取价格",
+  "edition_publication_create_offer": "创建销售方案"
 }

@@ -2113,8 +2113,11 @@ link and is not sellable. A definite conflict requires a fresh current source/ed
 new intent can use a new edition version. Refresh conceals previous source bytes immediately; an older pending command
 cannot replace the fresh read. Source denial retains the pointer, subject and unresolved intent, while concealing the
 preview. An unknown create result cannot be discarded by a refresh. Once a real command supplies an edition ID, an
-explicit bound current read can resolve its state. Publication supplies the actual edition ID and `/editions/{id}` link;
-the existing Commerce offer editor consumes that ID. No additional offer, order or checkout flow is introduced.
+explicit bound current read can resolve its state. Only the confirmed published section links to the assigned
+`/creator/offers/new?editionId=<published ID>` route, localized with `localizeHref` and carrying the encoded current
+native edition ID. Its separate `/editions/{id}` link opens the reader. Navigation creates no offer or purchase fact;
+the offer editor owns fresh native sale metadata, rights, capture, consent and financial policy checks. The assigned
+route can be developed in parallel; this link does not establish its runtime availability.
 
 The isolated typed wire binding uses configured `KERNEL_ORIGIN`, the existing session/Origin/CSRF boundary and private,
 no-store native transport with read-after-write session headers. It never uses the development fake. Without the native
@@ -2141,8 +2144,10 @@ The reusable EditionPublication Pattern and actual creator-route Pages expose th
 - `pages-content-editionpublication--conflict`
 - `pages-content-editionpublication--uncertain`
 
-Selection and Uncertain are the two focused interaction cases. They exercise the real controller and wire adapter with
-constructed closed producer responses. Pages mount `EditionCreateRoute` in the existing AppShell with one main. Use
+Selection and Uncertain retain their focused interaction cases. Published checks readiness of the localized offer
+link for the confirmed native edition and the separate reader link. These stories exercise the real controller and
+wire adapter with constructed closed producer responses. Pages mount `EditionCreateRoute` in the existing AppShell
+with one main. Use
 existing phone390/desktop1280, light/dark and locale globals; Web owns visual review. English messages use the configured
 base-locale fallback pending localization review. `tests/edition-publication.test.ts` records the assigned boundary
 journey and privacy/late-response case for integration; acceptance, native, browser and visual execution are deferred by

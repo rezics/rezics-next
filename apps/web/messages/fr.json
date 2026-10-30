@@ -2430,5 +2430,6 @@
   "creator_offers_restart": "Première page",
   "creator_offers_next": "Page suivante",
   "creator_offers_pagination": "Pages des offres",
-  "creator_offers_amount_unavailable": "Prix indisponible"
+  "creator_offers_amount_unavailable": "Prix indisponible",
+  "edition_publication_create_offer": "Créer une offre"
 }

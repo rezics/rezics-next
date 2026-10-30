@@ -1,9 +1,9 @@
 import { DocumentBody } from '@rezics/ui/document-body';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { useSession } from '../session/query';
 import { exactRevisionHref } from '../threads/exact-revision-href';
@@ -283,12 +283,20 @@ export function EditionPublication({
           </h2>
           <p className="text-sm">{m.edition_publication_published_help()}</p>
           <p className="font-mono text-sm">{edition.editionId}</p>
-          <a
-            className="inline-flex min-h-11 items-center underline underline-offset-4"
-            href={`/${locale}/editions/${encodeURIComponent(edition.editionId)}`}
-          >
-            {m.edition_publication_open()}
-          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              className={buttonVariants({ className: 'min-h-11' })}
+              href={localizeHref(`/creator/offers/new?editionId=${encodeURIComponent(edition.editionId)}`)}
+            >
+              {m.edition_publication_create_offer()}
+            </a>
+            <a
+              className="inline-flex min-h-11 items-center underline underline-offset-4"
+              href={`/${locale}/editions/${encodeURIComponent(edition.editionId)}`}
+            >
+              {m.edition_publication_open()}
+            </a>
+          </div>
         </section>
       ) : null}
     </article>

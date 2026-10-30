@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../../../paraglide/messages.js';
+import { localizeHref } from '../../../paraglide/runtime.js';
 import { EditionPublicationExample, editionId, fixedText, subjectId } from './edition-publication-fixtures';
 
 const meta = {
@@ -33,7 +34,23 @@ export const Selection: Story = {
   },
 };
 export const Draft: Story = { args: { state: 'draft' } };
-export const Published: Story = { args: { state: 'published' } };
+export const Published: Story = {
+  args: { state: 'published' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: m.edition_publication_published_heading() });
+    const createOffer = canvas.getByRole('link', { name: m.edition_publication_create_offer() });
+    await expect(createOffer).toBeVisible();
+    await expect(createOffer).toHaveAttribute(
+      'href',
+      localizeHref(`/creator/offers/new?editionId=${encodeURIComponent(editionId)}`),
+    );
+    await expect(canvas.getByRole('link', { name: m.edition_publication_open() })).toHaveAttribute(
+      'href',
+      localizeHref(`/editions/${encodeURIComponent(editionId)}`),
+    );
+  },
+};
 export const Refused: Story = { args: { state: 'refused' } };
 export const Conflict: Story = { args: { state: 'conflict' } };
 export const Uncertain: Story = {

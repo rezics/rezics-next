@@ -2430,5 +2430,6 @@
   "creator_offers_restart": "最初のページ",
   "creator_offers_next": "次のページ",
   "creator_offers_pagination": "オファーのページ",
-  "creator_offers_amount_unavailable": "価格を取得できません"
+  "creator_offers_amount_unavailable": "価格を取得できません",
+  "edition_publication_create_offer": "オファーを作成"
 }

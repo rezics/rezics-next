@@ -2430,5 +2430,6 @@
   "creator_offers_restart": "첫 페이지",
   "creator_offers_next": "다음 페이지",
   "creator_offers_pagination": "오퍼 페이지",
-  "creator_offers_amount_unavailable": "가격을 확인할 수 없음"
+  "creator_offers_amount_unavailable": "가격을 확인할 수 없음",
+  "edition_publication_create_offer": "판매 제안 만들기"
 }
