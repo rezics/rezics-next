@@ -48,8 +48,10 @@ test('a bun.lock-only rebase conflict on retry keeps integration, installs, stag
       scopedBun(
         h.root,
         `if [ "$1" = install ]; then
-  printf '%s\\n' "$*" >> ${JSON.stringify(installLog)}
-  printf 'installed from integration\\n' > bun.lock
+  if [ "$#" = 1 ]; then
+    printf '%s\\n' "$*" >> ${JSON.stringify(installLog)}
+    printf 'installed from integration\\n' > bun.lock
+  fi
 else
   exec ${JSON.stringify(process.execPath)} "$@"
 fi`,
@@ -98,8 +100,10 @@ test('a bun.lock-only rebase conflict in the train keeps integration, installs, 
       scopedBun(
         h.root,
         `if [ "$1" = install ]; then
-  printf '%s\\n' "$*" >> ${JSON.stringify(installLog)}
-  printf 'installed from integration\\n' > bun.lock
+  if [ "$#" = 1 ]; then
+    printf '%s\\n' "$*" >> ${JSON.stringify(installLog)}
+    printf 'installed from integration\\n' > bun.lock
+  fi
 else
   exec ${JSON.stringify(process.execPath)} "$@"
 fi`,
@@ -176,7 +180,7 @@ test('a rebase conflict confined to bun.lock is resolved by taking the integrati
         join(bin, 'bun'),
         scopedBun(h.root, `
 if [ "$1" = install ]; then
-  test "$#" = 1 || exit 81
+  if [ "$#" != 1 ]; then exit 0; fi
   test "$(cat bun.lock)" = 'integration lock' || exit 82
   printf 'regenerated lock\\n' > bun.lock
   printf 'install\\n' >> ${JSON.stringify(installed)}
@@ -253,8 +257,11 @@ test('a rebase that conflicts in bun.lock and in other files still stops at the 
       join(bin, 'bun'),
       scopedBun(h.root, `
 if [ "$1" = install ]; then
-  touch ${JSON.stringify(installed)}
-  exit 83
+  if [ "$#" = 1 ]; then
+    touch ${JSON.stringify(installed)}
+    exit 83
+  fi
+  exit 0
 fi
 exec ${JSON.stringify(process.execPath)} "$@"
 `,

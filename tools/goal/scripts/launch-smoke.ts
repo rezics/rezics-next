@@ -554,7 +554,9 @@ Do not pass \`--wait\`, poll, or start another check. Return exactly the require
       const waitingTask = store.task(task.id);
       const waitingAttempt = store.attempt({ taskId: task.id, attempt: waitingTask.currentAttempt });
       if (waitingAttempt.state !== 'waiting')
-        throw new Error(`worker exited as ${waitingAttempt.state}, expected waiting`);
+        throw new Error(
+          `worker exited as ${waitingAttempt.state}, expected waiting (exitCode=${String(waitingAttempt.exitCode)}, failureKind=${waitingAttempt.failureKind ?? 'none'}, reportsSuccess=${reportsSuccess(waitingAttempt.result)})`,
+        );
       if (waitingAttempt.exitCode !== 0)
         throw new Error(`waiting worker exited with code ${String(waitingAttempt.exitCode)}`);
       if (!waitingAttempt.session) throw new Error('waiting attempt did not save its session id');
