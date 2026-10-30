@@ -20,6 +20,7 @@ declare const productEventTypes: {
     readonly "com.rezics.semantic.identity-epoch.bootstrap.v1": Type.TObject<{
         partition: Type.TInteger;
         generation: Type.TString;
+    }>;
     readonly "com.rezics.semantic.record.deleted.v1": Type.TObject<{
         kind: Type.TLiteral<"context">;
         id: Type.TString;
