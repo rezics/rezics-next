@@ -590,6 +590,33 @@ admission; interruption still exits 130. Files and SQLite close on either path.
 The [evidence notes](../../docs/research/imports-audit/cli-file-admission.md) describe
 captured anchors and limits. This caller adds no growth measurement or input cap.
 
+## Rejected cover and valid successor through the CLI
+
+Keep the same source and SQLite state after a corrupt cover is rejected. Metadata import can complete while
+the rejected cover remains explicitly terminal in the media journal and native status. The importer supplies
+no converter media mapping for that object and publishes no cover attachment. Reopening the same input does
+not submit another media job or fetch that URL again, even if the provider has replaced its bytes. A changed
+source cover URL creates a distinct request and media object; only actual availability permits a cover proposal.
+An editor still accepts and selects that proposal through the ordinary API. Cover credit remains
+`LicenseRef-unknown`, independently of the provider's metadata rights.
+
+The [frozen native outcome](../kernel/test/imports/cli-rejected-cover-recovery.test.ts) now has a connected
+account-key caller for two independent records, Bangumi JSONL and an Open Library edition TSV, in one native
+Auth/Access/worker world. It observes corrupt-image rejection, same-state reopen, a genuinely changed source,
+private original equality, encoded AVIF/WebP variants, public selected media and download decisions, immutable
+old journals/receipts, and an independent contributor's adopted title. Registration alone is not a passing
+execution; see the [evidence record and limits](../../docs/research/imports-audit/cli-rejected-cover-recovery.md).
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-rejected-cover-recovery.test.ts
+```
+
+### Complete the rejected-cover operator journey
+
+- Touches: supplied bounded source bytes, exact owner/run/record and native receipt/subject/candidate keys, ordinary Auth/public requests and captured response bodies.
+- Bound: existing input/page/projection/public envelope and retry bounds, O(input bytes+(S+D)(1+q)logR) with bounded q. No catalogue/history scan or invented PostgreSQL units.
+- Growth check: existing local counted ceilings and canonical/derived native suites remain unchanged. This connected outcome adds no growth series or replacement counters.
+
 ## Concurrent ordinary CLI operators
 
 Use the same `--state` path for independent configured `--source-alias` feeds. A live CLI owns its exact alias
