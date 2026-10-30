@@ -55,7 +55,9 @@ beforeAll(async () => {
 
 afterEach(async () => {
   // This file owns its test database. Keep the two checks' growing populations independent.
-  await db?.admin.query(`TRUNCATE library.collection_member, library.collection,
+  // Include the installed source tables that reference Collection, even when empty.
+  await db?.admin.query(`TRUNCATE library.canonical_source_fact, library.canonical_source_state,
+    library.collection_member, library.collection,
     library.subject_collection, library.subject_listing, core.receipt, core.outbox, editorial.write_basis`);
   // DBOS retains input, output and operation rows independently of workflow_status.
   for (const relation of ['operation_outputs', 'workflow_input', 'workflow_output', 'workflow_status'])
