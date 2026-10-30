@@ -71,7 +71,16 @@ function at(root: unknown, path: Path): unknown {
 }
 function converted(d: VndbTablesDriver, row: Awaited<ReturnType<VndbTablesDriver['page']>>['records'][number]) {
   expect(row.key).toBe(row.record.vn.id);
-  expect(row.record.vn).toEqual({ id: row.key, olang: expect.any(String) });
+  expect(Object.keys(row.record.vn).sort()).toEqual(['c_average', 'c_votecount', 'id', 'olang']);
+  expect(typeof row.record.vn.olang).toBe('string');
+  expect(Number.isSafeInteger(row.record.vn.c_votecount)).toBe(true);
+  expect(row.record.vn.c_votecount).toBeGreaterThanOrEqual(0);
+  expect(
+    row.record.vn.c_average === null ||
+      (Number.isSafeInteger(row.record.vn.c_average) &&
+        row.record.vn.c_average >= 0 &&
+        row.record.vn.c_average <= 1000),
+  ).toBe(true);
   expect(row.revision).toBe(row.record.entry_meta.revision);
   expect(row.output).toEqual(d.converter.convert(row.record));
   const located = d.converter.locate(row.output);
@@ -195,7 +204,7 @@ test('the actual VNDB table-file format is grouped into complete source records 
     expect(first.next).toBe('v123');
     const row = first.records[0]!;
     expect(Object.keys(row.record).sort()).toEqual(['entry_meta', 'vn', 'vn_titles']);
-    expect(row.record.vn).toEqual({ id: 'v123', olang: 'en' });
+    expect(row.record.vn).toEqual({ id: 'v123', olang: 'en', c_votecount: 2, c_average: 700 });
     expect(await d.retainedMarkers(['UNLICENSED_DESCRIPTION_SENTINEL', 'cv123', 'Harbor Sentinel'])).toEqual([]);
     expect(row.record.vn_titles).toEqual(
       expect.arrayContaining([

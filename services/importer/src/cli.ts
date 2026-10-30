@@ -1,19 +1,18 @@
 import type { Database } from 'bun:sqlite';
-import { randomUUID } from 'node:crypto';
 import { open, type FileHandle } from 'node:fs/promises';
-import type { SourceId, SourceRecord } from '@rezics/conversion';
+import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import { createSourceRegistration } from './source-registry.ts';
-import { readArchive, type ArchiveEntry } from './archive.ts';
 import {
   DEFAULT_DUMP_CHUNK_BYTES,
   DEFAULT_DUMP_RECORD_BYTES,
   MAX_DUMP_CHUNK_BYTES,
   observeDumpRetention,
 } from './dumps-bytes.ts';
-import { DEFAULT_VNDB_ARCHIVE_BYTES, VndbTablesStore } from './vndb-tables.ts';
+import type { VndbTablesStore } from './vndb-tables.ts';
+import { VndbInputError, VndbMaterialization } from './vndb-materialization.ts';
 import type { SourceRegistration } from './import-contract.ts';
 import type { ImportMediaResolution } from './importer.ts';
 import type { Owner } from './record-bindings.ts';
@@ -25,7 +24,6 @@ import {
   type CredentialsObserver,
 } from './credentials.ts';
 
-const ARCHIVE_METADATA_LIMIT = 4096;
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLIENT = /^[A-Za-z0-9._~-]{1,255}$/;
@@ -711,58 +709,25 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     const decoderModule =
       config.source === 'vndb' ? import.meta.resolve('./vndb-tables.ts') : import.meta.resolve('./dumps.ts');
     if (config.source === 'vndb') {
-      const tableStore = new VndbTablesStore(importer.session.store.database);
-      options.observer?.onVndbStore?.({ importer, store: tableStore });
-      const acquisition = randomUUID();
-      await tableStore.begin(registration.source, acquisition);
-      const entries =
-        options.entries !== undefined
-          ? observedEntries(options.entries, signal, options.observer)
-          : readArchive(
-              ownedChunks(
-                dumpHandle
-                  ? fileChunks(dumpHandle, signal)
-                  : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
-                signal,
-                'dump',
-                options.observer,
-              ),
-              {
-                maxTotalBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
-                maxChunkBytes: DEFAULT_DUMP_CHUNK_BYTES,
-                maxMetadataBytes: ARCHIVE_METADATA_LIMIT,
-                signal,
-                onProgress: (sample) => options.observer?.onInputBuffer?.(sample.retainedBytes),
-              },
-            );
-      try {
-        await tableStore.stage(
-          registration.source,
+      const materialization = new VndbMaterialization(importer, registration);
+      options.observer?.onVndbStore?.({ importer, store: materialization.tables });
+      const acquisition = materialization.begin();
+      if (options.entries !== undefined) {
+        await materialization.stage(acquisition, observedEntries(options.entries, signal, options.observer));
+      } else {
+        await materialization.stageArchive(
           acquisition,
-          entries as unknown as Parameters<VndbTablesStore['stage']>[2],
+          ownedChunks(
+            dumpHandle
+              ? fileChunks(dumpHandle, signal)
+              : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
+            signal,
+            'dump',
+            options.observer,
+          ),
+          { signal, onProgress: (sample) => options.observer?.onInputBuffer?.(sample.retainedBytes) },
         );
-      } catch {
-        // Staging has durably rejected and cleaned the acquisition. Like the
-        // scalar readers, archive admission failures are invalid input, before
-        // any run is sealed or any public effect is attempted.
-        throw new InputFailure();
       }
-      const records = (async function* (): AsyncGenerator<SourceRecord> {
-        let after: string | null = null;
-        for (;;) {
-          const page = tableStore.page(registration.source, acquisition, { after, limit: 16 });
-          options.observer?.onPageRecords?.(page.records.length);
-          for (const row of page.records)
-            yield {
-              source: 'vndb',
-              key: row.key,
-              revision: String(row.revision),
-              payload: row.record,
-            };
-          if (page.next === null) return;
-          after = page.next;
-        }
-      })();
       options.observer?.onCoordinator?.({
         importer,
         registration,
@@ -770,11 +735,12 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         converterModule: converterModule(config.source),
         decoderModule,
       });
-      const run = await importer.runRecords(registration, records, {
+      const run = await materialization.commit(acquisition, {
         ...(config.disappearanceThreshold === undefined
           ? {}
           : { disappearanceThreshold: config.disappearanceThreshold }),
         signal,
+        onPageRecords: (count) => options.observer?.onPageRecords?.(count),
       });
       output = resultFor(run, lastHttpStatus, signal);
     } else {
@@ -808,7 +774,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   } catch (error) {
     const interrupted = signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
     output = {
-      code: interrupted ? 130 : error instanceof InputFailure ? 2 : 1,
+      code: interrupted ? 130 : error instanceof InputFailure || error instanceof VndbInputError ? 2 : 1,
       stdout: '',
       stderr: diagnostic(
         interrupted ? 'Import interrupted; durable state is retained for resume.' : 'Import failed safely.',

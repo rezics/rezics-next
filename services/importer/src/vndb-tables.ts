@@ -42,6 +42,7 @@ type Options = {
   maxChunkBytes?: number;
   maxArchiveBytes?: number;
   maxArchiveEntries?: number;
+  observer?: { onBufferedRows?(rows: number): void; onRowWrite?(): void };
 };
 
 // COPY TO STDOUT, not executable SQL. Official generator/dump evidence and hashes:
@@ -169,6 +170,22 @@ function columns(raw: Uint8Array): Array<string | null> {
 }
 
 export class VndbTablesStore {
+  private bufferedRows = 0;
+
+  private observeRows(rows: number) {
+    this.options.observer?.onBufferedRows?.(this.bufferedRows + rows);
+  }
+
+  private withRows<T>(rows: number, operation: () => T): T {
+    this.bufferedRows += rows;
+    this.observeRows(0);
+    try {
+      return operation();
+    } finally {
+      this.bufferedRows -= rows;
+    }
+  }
+
   private readonly children: number;
   private readonly pageSize: number;
   private readonly maxRows: number;
@@ -180,7 +197,7 @@ export class VndbTablesStore {
   /** Caller owns the real handle and may attach SQL evidence before construction. */
   constructor(
     private readonly db: Database,
-    options: Options = {},
+    private readonly options: Options = {},
   ) {
     check(db instanceof Database);
     this.archiveBytes = bounded(
@@ -312,15 +329,17 @@ export class VndbTablesStore {
               WHERE source=? AND run_id=? AND table_name=? AND sequence>?
               ORDER BY sequence LIMIT ?`)
               .all(source, runId, table, after, BATCH) as { sequence: number; raw: Uint8Array }[];
-            for (const row of rows) {
-              sourceRecords += this.insert(source, runId, table, headers.get(table)!, row.raw);
-              check(sourceRecords <= this.maxSourceRecords);
-              this.db
-                .query(`DELETE FROM vndb_table_spool
+            this.withRows(rows.length, () => {
+              for (const row of rows) {
+                sourceRecords += this.insert(source, runId, table, headers.get(table)!, row.raw);
+                check(sourceRecords <= this.maxSourceRecords);
+                this.db
+                  .query(`DELETE FROM vndb_table_spool
                 WHERE source=? AND run_id=? AND table_name=? AND sequence=?`)
-                .run(source, runId, table, row.sequence);
-              after = row.sequence;
-            }
+                  .run(source, runId, table, row.sequence);
+                after = row.sequence;
+              }
+            });
             if (rows.length < BATCH) break;
           }
         }
@@ -367,6 +386,7 @@ export class VndbTablesStore {
           for (const byte of chunk) {
             if (byte === 10) {
               check(used > 0);
+              this.observeRows(1);
               row(buffer.subarray(0, used));
               used = 0;
             } else {
@@ -435,6 +455,7 @@ export class VndbTablesStore {
       .query(`INSERT INTO vndb_table_rows (source,run_id,table_name,id,id_number,child,payload)
       VALUES (?,?,?,?,?,?,?)`)
       .run(source, run, table, id, Number(id.slice(1)), child, payload);
+    this.options.observer?.onRowWrite?.();
     this.db
       .query(`UPDATE vndb_table_runs SET staged_rows=staged_rows+1,staged_bytes=staged_bytes+?,
       source_records=source_records+? WHERE source=? AND run_id=?`)
@@ -448,6 +469,7 @@ export class VndbTablesStore {
       WHERE source=? AND run_id=? AND table_name='vn_titles' AND id=? AND child>?
       ORDER BY child LIMIT ?`)
       .all(source, run, id, '', this.children + 1) as { payload: string }[];
+    this.observeRows(rows.length);
     check(rows.length > 0 && rows.length <= this.children);
     return rows.map((row) => JSON.parse(row.payload) as Title);
   }
@@ -458,6 +480,7 @@ export class VndbTablesStore {
       WHERE source=? AND run_id=? AND table_name='entry_meta' AND id=? AND child=''`)
       .get(source, run, id) as { payload: string } | null;
     check(row);
+    this.observeRows(1);
     return JSON.parse(row.payload) as Metadata;
   }
 
@@ -473,21 +496,23 @@ export class VndbTablesStore {
           WHERE source=? AND run_id=? AND table_name=? AND (id,child)>(?,?)
           ORDER BY id,child LIMIT ?`)
           .all(source, run, table, id, child, BATCH) as Stored[];
-        for (const row of rows) {
-          if (table === 'vn') {
-            this.titles(source, run, row.id);
-            this.metadata(source, run, row.id);
-          } else {
-            check(
-              this.db
-                .query(`SELECT id FROM vndb_table_rows
+        this.withRows(rows.length, () => {
+          for (const row of rows) {
+            if (table === 'vn') {
+              this.titles(source, run, row.id);
+              this.metadata(source, run, row.id);
+            } else {
+              check(
+                this.db
+                  .query(`SELECT id FROM vndb_table_rows
               WHERE source=? AND run_id=? AND table_name='vn' AND id=? AND child=''`)
-                .get(source, run, row.id),
-            );
+                  .get(source, run, row.id),
+              );
+            }
+            id = row.id;
+            child = row.child;
           }
-          id = row.id;
-          child = row.child;
-        }
+        });
         if (rows.length < BATCH) break;
       }
     }
@@ -512,6 +537,7 @@ export class VndbTablesStore {
       const record: GroupedRecord = { vn, vn_titles: this.titles(source, runId, id), entry_meta };
       return { key: id, revision: entry_meta.revision, record };
     });
+    this.observeRows(rows.length + records.reduce((count, row) => count + row.record.vn_titles.length + 1, 0));
     return { records, next: rows.length > options.limit ? records.at(-1)!.key : null };
   }
 

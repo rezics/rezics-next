@@ -584,3 +584,19 @@ The frozen [concurrent native journey](../kernel/test/imports/concurrent-cli-own
 covers held acquisition, same-alias refusal, independent publication, cancellation/reopening, immutable prior
 identities/receipts, and exact-tuple fence visibility. The importer-local companion proves only pre-effect
 ownership and cleanup. Native execution and growth evidence are separate; this caller introduces no growth series.
+
+## VNDB durable table materialization
+
+`VndbMaterialization` is the CLI's production facade for validated VNDB table
+entries and ustar archives. It stages the complete generation before ordinary
+`Importer.runRecords` publication, enumerating at most 16 grouped records per
+page. `baseline(key)` reads the completed RunStore row and its durable acquisition
+link; it does not maintain a second record baseline. Failed acquisition cannot
+resume publication or replace that baseline. Unchanged publication retains the
+original acquisition, while interrupted sealed work resumes with its own original
+acquisition even if a subsequent invocation supplies a different archive.
+
+The native materialization acceptance binds all fourteen portable table outcomes
+and the account-key CLI publication/reopen/late-invalid journey. Its local SQLite
+row, byte, execution and EQP evidence does not add canonical server growth claims.
+See [the materialization evidence](../../docs/research/imports-audit/vndb-materialization-native.md).
