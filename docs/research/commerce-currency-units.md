@@ -147,11 +147,13 @@ limits. Non-card maxima use 12/10/9/8 digits for IDR/COP/INR/others, subject to 
 
 The pinned [PaymentIntent creation definition](https://github.com/stripe/stripe-node/blob/3af59f7c86a2350a8ea5298473f258d622bd8651/src/resources/PaymentIntents.ts#L3994)
 still documents an eight-digit amount maximum and a USD 0.50/equivalent minimum. **Recommendation:** use
-`99_999_999` provider units as a conservative application ceiling for new checkout totals, not a claim that current
+`99_999_999` provider units as a conservative application ceiling for new base prices, not a claim that current
 Stripe supports no higher amount. Keep tighter applicable provider limits. A price below a known applicable minimum
 is rejected; when FX/configuration prevents a deterministic minimum, do not guess an exchange rate or advertise
 preflight success. Stripe's final Checkout validation remains necessary. Tax-exclusive base price alone cannot
-guarantee that the final taxed payment stays below a ceiling; do not truncate tax or silently reduce the price.
+guarantee that the final taxed payment stays below a provider ceiling; do not truncate tax or silently reduce the
+price. Validate observed totals as exact evidence against the actual provider contract, rather than rejecting a
+valid paid total solely because tax took it above the application base-price cap.
 
 **Fact:** [Managed Payments tax behavior](https://docs.stripe.com/payments/managed-payments/set-up#optional-configure-the-tax-behavior-of-your-prices)
 uses explicit price behavior, otherwise defaults to adding tax, with a configurable default. Ordinary Stripe Tax's
@@ -166,6 +168,12 @@ owner adoption and matching reconciliation/display changes; omission is not a st
 omission does not establish historical exclusivity. This decision supplies no reserve, fee or royalty allocation rule.
 
 ## Small native representation and exports to adopt
+
+**Inference — shared pattern:** Stripe's API source binds amounts to particular fields/currencies; its currency and
+product documentation supplies operation-specific constraints; ECMA supplies presentation behavior. Together they
+support separate unit facts, write admission and locale formatting. None makes a display library, a payout rule or
+an ISO entry the authority for all three. The current integer storage and exact statement-parts formatter are
+compatible foundations once that missing distinction is recorded.
 
 **Recommendation:** use the current TypeScript/SQL stack and add metadata, rather than a generic money engine:
 
