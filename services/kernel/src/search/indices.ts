@@ -135,7 +135,8 @@ export async function subjectGenerations(
   function generationOf(name: unknown): number {
     if (typeof name !== 'string' || name.length > alias.length + 2 + 16) throw unavailable();
     const match = generationPattern.exec(name);
-    if (!match?.[1]) throw unavailable();
+    // `$` can match before a final line terminator; identity requires the whole name.
+    if (!match?.[1] || match[0] !== name) throw unavailable();
     const generation = Number(match[1]);
     if (!Number.isSafeInteger(generation) || generation <= 0) throw unavailable();
     return generation;

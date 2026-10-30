@@ -97,6 +97,17 @@ export function resolveControls(prefix: string): MetadataControl[] {
   change('identical duplicate physical name', (body) => {
     body.indices.push(structuredClone(body.indices[0]!));
   });
+  for (const ending of ['\n', '\r', '\u2028', '\u2029'])
+    change(`nonexact inactive physical name ${JSON.stringify(ending)}`, (body) => {
+      body.indices[1]!.name = second + ending;
+    });
+  change('nonexact duplicate numeric generation', (body) => {
+    body.indices.push({ name: `${first}\n`, attributes: ['open'] });
+  });
+  change('nonexact physical name and matching alias target', (body) => {
+    body.indices[0]!.name = `${first}\n`;
+    body.aliases[0]!.indices = [`${first}\n`];
+  });
   change('contradictory duplicate physical name', (body) => {
     body.indices.push({ name: first, attributes: ['closed'] });
   });
