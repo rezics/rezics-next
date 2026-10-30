@@ -198,7 +198,7 @@ const root = join(import.meta.dir, '..', '..', '..');
 const read = (path: string) => readFile(join(root, path), 'utf8');
 
 test(
-  'phone search filters sit above results and Done closes the sheet and restores focus',
+  'phone search filters follow the page heading, sit above results and Done restores focus',
   async () => {
     const page = await open(
       `/en/search?q=Kokoro&type=${encodeURIComponent(book)}&f.${encodeURIComponent(author)}=${authorOne}`,
@@ -209,11 +209,12 @@ test(
       const filterButton = main.getByRole('button', { name: 'Filters (2)' });
       expect(await filterButton.count()).toBe(1);
       const result = main.getByRole('link', { name: 'Kokoro', exact: true });
-      const queryForm = page.locator('form:visible').filter({ has: page.locator('input[name="q"]:visible') });
-      const queryBox = await queryForm.boundingBox();
+      const headingBox = await main.getByRole('heading', { level: 1 }).boundingBox();
       const filterBox = await filterButton.boundingBox();
       const resultBox = await result.boundingBox();
-      expect(queryBox && filterBox && resultBox && queryBox.y < filterBox.y && filterBox.y < resultBox.y).toBe(true);
+      expect(headingBox && filterBox && resultBox && headingBox.y < filterBox.y && filterBox.y < resultBox.y).toBe(
+        true,
+      );
       expect(await filterButton.evaluate((button) => getComputedStyle(button).borderTopStyle)).toBe('solid');
       expect(await filterButton.locator('svg').count()).toBe(1);
       await filterButton.click();

@@ -398,12 +398,11 @@ test(
       expect(await filterButton.count()).toBe(1);
       const result = main.getByRole('link', { name: 'Kokoro', exact: true });
       expect(await result.isVisible()).toBe(true);
-      const queryForm = page.locator('form:visible').filter({ has: page.locator('input[name="q"]:visible') });
-      const queryBox = await queryForm.boundingBox();
+      const headingBox = await main.getByRole('heading', { level: 1 }).boundingBox();
       const filterBox = await filterButton.boundingBox();
       const mobileResultBox = await result.boundingBox();
       expect(
-        queryBox && filterBox && mobileResultBox && queryBox.y < filterBox.y && filterBox.y < mobileResultBox.y,
+        headingBox && filterBox && mobileResultBox && headingBox.y < filterBox.y && filterBox.y < mobileResultBox.y,
       ).toBe(true);
       expect(await filterButton.evaluate((element) => getComputedStyle(element).borderTopColor)).not.toBe(
         'rgba(0, 0, 0, 0)',
