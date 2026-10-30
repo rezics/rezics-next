@@ -1,4 +1,4 @@
-import type { OwnerTransfer, TransferResult } from './owner-transfer';
+import type { OwnerTransfer, TransferResult } from './owner-transfer.ts';
 import type { KernelClient } from '@rezics/client';
 
 export type AccessSnapshot = NonNullable<Awaited<ReturnType<KernelClient['grants']['get']>>['data']>;

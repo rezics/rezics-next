@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { ResourceAccessPage } from '../../../accounts/resource-access/page';
-import { transferOwner, realmOwnerRole } from '../../../accounts/resource-access/owner-transfer';
+import { transferOwner, realmOwnerRole } from '../../../accounts/resource-access/owner-transfer.ts';
 import type { AccessSnapshot, AccessState, AccessIO } from '../../../accounts/resource-access/data';
 import { m } from '../../../paraglide/messages.js';
 import { snapshot, managerId, readerId } from './fixtures';

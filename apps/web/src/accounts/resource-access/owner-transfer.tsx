@@ -14,7 +14,7 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { m } from '../../paraglide/messages.js';
 import type { AccessIO, AccessSnapshot, Grant, Identity } from './data';
-import { transferableOwner, type OwnerTransfer } from './owner-transfer';
+import { transferableOwner, type OwnerTransfer } from './owner-transfer.ts';
 
 function label(identity: Identity | undefined, id: string) {
   if (!identity || identity.state !== 'active') return id;

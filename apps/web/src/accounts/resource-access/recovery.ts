@@ -1,4 +1,4 @@
-import { parseOwnerTransfer, type OwnerTransfer, type TransferResult } from './owner-transfer';
+import { parseOwnerTransfer, type OwnerTransfer, type TransferResult } from './owner-transfer.ts';
 import type { AccessIO, AccessState, Change, WriteResult } from './data';
 
 export type EditorState = {

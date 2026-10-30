@@ -5,7 +5,7 @@ import {
   transferableOwner,
   transferOwner,
   type OwnerTransfer,
-} from '../src/accounts/resource-access/owner-transfer';
+} from '../src/accounts/resource-access/owner-transfer.ts';
 import type { AccessSnapshot, AccessState, AccessIO } from '../src/accounts/resource-access/data';
 import { snapshot, managerId, readerId } from '../src/stories/pages/accounts-resource-access/fixtures';
 

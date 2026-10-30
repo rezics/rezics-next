@@ -1,4 +1,4 @@
-import { parseOwnerTransfer, transferOwner, type TransferResult } from './owner-transfer';
+import { parseOwnerTransfer, transferOwner, type TransferResult } from './owner-transfer.ts';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
