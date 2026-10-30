@@ -91,6 +91,159 @@ END; $$;
 
 
 --
+-- Name: agent_identity_inventory_copy_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.agent_identity_inventory_copy_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE i core.agent_identity_inventory;
+BEGIN
+ SELECT * INTO i FROM core.agent_identity_inventory WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route
+   AND source_account_id=NEW.source_account_id AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id
+   AND xmin::text=pg_current_xact_id()::text FOR UPDATE;
+ IF NOT FOUND OR i.state<>'declared' OR
+   (NEW.source_digest,NEW.source_epoch,NEW.source_position,NEW.source_transaction_id,NEW.receiver_epoch,NEW.domain_generation)
+   IS DISTINCT FROM (i.source_digest,i.source_epoch,i.source_position,i.source_transaction_id,i.receiver_epoch,i.domain_generation) THEN
+   RAISE EXCEPTION 'Identity copy requires original unsealed producer transaction' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: agent_identity_inventory_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.agent_identity_inventory_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE s access.agent_identity_intent;
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Original identity inventory requires owner discharge' USING ERRCODE='23514'; END IF;
+ IF TG_OP='INSERT' THEN
+   SELECT * INTO s FROM access.agent_identity_intent WHERE route=NEW.source_route AND account_id=NEW.source_account_id
+     AND direction=NEW.source_direction AND receipt_id=NEW.source_receipt_id AND xmin::text=pg_current_xact_id()::text FOR SHARE;
+   IF NOT FOUND OR NEW.state<>'declared' OR NEW.generation<>1 OR
+     (NEW.partition_no,NEW.source_digest,NEW.source_epoch,NEW.source_position,NEW.source_transaction_id,
+      NEW.native_command_kind,NEW.native_principal_id,NEW.native_receipt_key) IS DISTINCT FROM
+     (s.source_partition,s.intent_digest,s.source_epoch,s.source_position,s.source_transaction_id,
+      s.native_command_kind,s.requested_by,s.native_receipt_key) THEN
+     RAISE EXCEPTION 'Inventory requires its original native source writer' USING ERRCODE='23514';
+   END IF;
+   RETURN NEW;
+ END IF;
+ -- The serializer closes once, in the original creation transaction. Late hooks cannot reopen it.
+ PERFORM 1 FROM core.agent_identity_inventory WHERE partition_no=OLD.partition_no AND source_route=OLD.source_route
+   AND source_account_id=OLD.source_account_id AND source_direction=OLD.source_direction AND source_receipt_id=OLD.source_receipt_id
+   AND xmin::text=pg_current_xact_id()::text;
+ IF OLD.state='declared' AND NEW.state='sealed' AND FOUND AND
+   (to_jsonb(NEW)-ARRAY['state','expected_locators','expected_event_types'])=
+   (to_jsonb(OLD)-ARRAY['state','expected_locators','expected_event_types']) THEN RETURN NEW; END IF;
+ -- A real later SDK enrollment must serialize with the SAME inventory lock and invalidate the cut.
+ IF pg_trigger_depth()>1 AND NEW.generation=OLD.generation+1 AND
+   (to_jsonb(NEW)-'generation')=(to_jsonb(OLD)-'generation') THEN RETURN NEW; END IF;
+ RAISE EXCEPTION 'Original identity inventory is immutable' USING ERRCODE='23514';
+END; $$;
+
+
+--
+-- Name: agent_identity_receiving_enrollment(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.agent_identity_receiving_enrollment() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE old_locator bytea; new_locator bytea;
+BEGIN
+ IF TG_TABLE_NAME='history_locator' THEN
+   IF TG_OP<>'INSERT' THEN
+     PERFORM core.agent_identity_touch_receiving(OLD.partition_no,OLD.artifact_type,OLD.locator);
+   END IF;
+   IF TG_OP<>'DELETE' AND (TG_OP='INSERT' OR
+      (NEW.partition_no,NEW.artifact_type,NEW.locator) IS DISTINCT FROM (OLD.partition_no,OLD.artifact_type,OLD.locator)) THEN
+     PERFORM core.agent_identity_touch_receiving(NEW.partition_no,NEW.artifact_type,NEW.locator);
+   END IF;
+ ELSE
+   IF TG_OP<>'INSERT' THEN
+     old_locator:=decode('0102','hex') || substring(int4send(OLD.partition_no) from 3 for 2) || int8send(OLD.position) ||
+       substring(int4send(OLD.event_seq) from 3 for 2);
+     PERFORM core.agent_identity_touch_receiving(OLD.partition_no,'outbox-event/v1',old_locator);
+   END IF;
+   IF TG_OP<>'DELETE' THEN
+     new_locator:=decode('0102','hex') || substring(int4send(NEW.partition_no) from 3 for 2) || int8send(NEW.position) ||
+       substring(int4send(NEW.event_seq) from 3 for 2);
+     IF TG_OP='INSERT' OR (NEW.partition_no,new_locator) IS DISTINCT FROM (OLD.partition_no,old_locator) THEN
+       PERFORM core.agent_identity_touch_receiving(NEW.partition_no,'outbox-event/v1',new_locator);
+     END IF;
+   END IF;
+ END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: agent_identity_sdk_obligation_guard(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.agent_identity_sdk_obligation_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE i core.agent_identity_inventory; s access.agent_identity_intent;
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'SDK obligation requires real receiving discharge' USING ERRCODE='23514'; END IF;
+ SELECT * INTO STRICT i FROM core.agent_identity_inventory WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route
+   AND source_account_id=NEW.source_account_id AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id
+   FOR UPDATE;
+ IF TG_OP='INSERT' THEN
+   SELECT * INTO STRICT s FROM access.agent_identity_intent WHERE route=i.source_route AND account_id=i.source_account_id
+     AND direction=i.source_direction AND receipt_id=i.source_receipt_id AND xmin::text=pg_current_xact_id()::text;
+   IF i.state<>'declared' OR NEW.generation<>i.generation OR NEW.workflow_id<>s.workflow_id OR NEW.delivery_key<>s.delivery_key OR
+      (NEW.handoff_partition,NEW.handoff_epoch,NEW.handoff_position,NEW.handoff_transaction_id,NEW.handoff_event_type) IS DISTINCT FROM
+      (CASE WHEN s.direction='account-agent.verify' THEN s.decision_route ELSE s.source_partition END,
+       CASE WHEN s.direction='account-agent.verify' THEN s.decision_epoch ELSE s.source_epoch END,
+       CASE WHEN s.direction='account-agent.verify' THEN s.decision_position ELSE s.source_position END,
+       CASE WHEN s.direction='account-agent.verify' THEN s.decision_transaction_id ELSE s.source_transaction_id END,
+       CASE WHEN s.direction='account-agent.verify' THEN 'com.rezics.access.agent-verification.approved.v1'
+            ELSE 'com.rezics.access.agent-verification.reversing.v1' END) THEN
+     RAISE EXCEPTION 'SDK obligation requires original receipt and known enqueue handoff' USING ERRCODE='23514';
+   END IF;
+ ELSE
+   IF (to_jsonb(NEW)-'generation') IS DISTINCT FROM (to_jsonb(OLD)-'generation') OR NEW.generation<>OLD.generation+1 THEN
+     RAISE EXCEPTION 'SDK obligation binding is immutable' USING ERRCODE='23514';
+   END IF;
+   UPDATE core.agent_identity_inventory SET generation=generation+1
+     WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route AND source_account_id=NEW.source_account_id
+       AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id;
+ END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
+-- Name: agent_identity_touch_receiving(integer, text, bytea); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.agent_identity_touch_receiving(p_partition integer, p_type text, p_locator bytea) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE r record; n integer:=0;
+BEGIN
+ FOR r IN SELECT source_route,source_account_id,source_direction,source_receipt_id
+   FROM core.agent_identity_history_copy WHERE partition_no=p_partition AND artifact_type=p_type AND locator=p_locator
+   ORDER BY source_route,source_account_id,source_direction,source_receipt_id LIMIT 2
+ LOOP
+   n:=n+1;
+   IF n>1 THEN RAISE EXCEPTION 'Unconverted original identity association fanout' USING ERRCODE='23514'; END IF;
+   UPDATE core.agent_identity_sdk_obligation SET generation=generation+1 WHERE partition_no=p_partition
+     AND source_route=r.source_route AND source_account_id=r.source_account_id
+     AND source_direction=r.source_direction AND source_receipt_id=r.source_receipt_id;
+ END LOOP;
+END; $$;
+
+
+--
 -- Name: guard_agent_identity_work(); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -546,6 +699,71 @@ END; $$;
 
 
 --
+-- Name: validate_agent_identity_inventory(); Type: FUNCTION; Schema: core; Owner: -
+--
+
+CREATE FUNCTION core.validate_agent_identity_inventory() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE i core.agent_identity_inventory; slot record; c core.agent_identity_history_copy; n integer;
+ expected_types text[]; expected_receipt bytea; expected_event bytea; kind_id integer;
+BEGIN
+ SELECT * INTO STRICT i FROM core.agent_identity_inventory WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route
+   AND source_account_id=NEW.source_account_id AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id;
+ IF TG_OP='UPDATE' AND OLD.state='sealed' THEN RETURN NEW; END IF;
+ expected_types:=CASE WHEN i.native_command_kind='access.agent-verification.pending'
+   THEN ARRAY['com.rezics.access.account-updated.v1'] ELSE
+   ARRAY['com.rezics.access.agent-verification.reversing.v1','com.rezics.access.account-updated.v1'] END;
+ kind_id:=CASE i.native_command_kind WHEN 'access.agent-verification.pending' THEN 3
+   WHEN 'access.agent-verification.released' THEN 4 WHEN 'access.agent-verification.revoked' THEN 5
+   WHEN 'access.agent-verification.deleted' THEN 6 ELSE NULL END;
+ IF i.state<>'sealed' OR kind_id IS NULL OR i.expected_event_types IS DISTINCT FROM expected_types OR
+   cardinality(i.expected_locators)<>cardinality(expected_types)+1 OR NOT EXISTS (
+     SELECT 1 FROM core.agent_identity_sdk_obligation o WHERE o.partition_no=i.partition_no AND o.source_route=i.source_route
+       AND o.source_account_id=i.source_account_id AND o.source_direction=i.source_direction AND o.source_receipt_id=i.source_receipt_id
+       AND o.generation=i.generation) THEN
+   RAISE EXCEPTION 'Original identity serializer inventory incomplete' USING ERRCODE='23514';
+ END IF;
+ PERFORM 1 FROM core.partition p,core.history_family_domain d WHERE p.partition_no=i.partition_no AND p.write_state='active'
+   AND p.epoch=i.source_epoch AND p.epoch=i.receiver_epoch AND p.position=i.source_position AND d.singleton
+   AND d.generation=i.domain_generation FOR SHARE OF p,d;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Identity inventory native fence changed' USING ERRCODE='23514'; END IF;
+ -- Match the actual executor codec bytes, including current key version and token.
+ expected_receipt:=decode('0101','hex') || substring(int4send(i.partition_no) from 3 for 2) || decode('01','hex') ||
+   uuid_send(i.native_principal_id) || int4send(kind_id) ||
+   substring(int4send(split_part(i.native_receipt_key,'.',2)::integer) from 3 for 2) ||
+   decode(translate(split_part(i.native_receipt_key,'.',3),'-_','+/') || '=', 'base64');
+ IF i.expected_locators[1] IS DISTINCT FROM expected_receipt THEN
+   RAISE EXCEPTION 'Identity inventory receipt codec mismatch' USING ERRCODE='23514'; END IF;
+ PERFORM 1 FROM core.receipt r WHERE r.partition_no=i.partition_no AND r.transaction_id=i.source_transaction_id
+   AND r.principal_kind=i.native_principal_kind AND r.principal_id=i.native_principal_id AND r.command_kind=i.native_command_kind
+   AND r.idempotency_key=i.native_receipt_key AND r.epoch=i.source_epoch AND r.position=i.source_position
+   AND r.xmin::text=pg_current_xact_id()::text;
+ IF NOT FOUND THEN RAISE EXCEPTION 'Identity inventory lacks original physical receipt' USING ERRCODE='23514'; END IF;
+ FOR slot IN SELECT locator,ordinal FROM unnest(i.expected_locators) WITH ORDINALITY AS e(locator,ordinal) LOOP
+   SELECT * INTO c FROM core.agent_identity_history_copy WHERE partition_no=i.partition_no AND source_route=i.source_route
+     AND source_account_id=i.source_account_id AND source_direction=i.source_direction AND source_receipt_id=i.source_receipt_id
+     AND artifact_type=CASE WHEN slot.ordinal=1 THEN 'command-receipt/v1' ELSE 'outbox-event/v1' END AND locator=slot.locator;
+   IF NOT FOUND THEN
+     RAISE EXCEPTION 'Identity inventory lacks actual expected serializer association' USING ERRCODE='23514'; END IF;
+   IF slot.ordinal>1 THEN
+     expected_event:=decode('0102','hex') || substring(int4send(i.partition_no) from 3 for 2) || int8send(i.source_position) ||
+       substring(int4send((slot.ordinal-2)::integer) from 3 for 2);
+     PERFORM 1 FROM core.outbox o WHERE o.partition_no=i.partition_no AND o.epoch=i.source_epoch
+       AND o.position=i.source_position AND o.event_seq=slot.ordinal-2 AND o.type=expected_types[(slot.ordinal-1)::integer]
+       AND o.xmin::text=pg_current_xact_id()::text;
+     IF NOT FOUND OR slot.locator IS DISTINCT FROM expected_event THEN
+       RAISE EXCEPTION 'Identity inventory lacks actual expected outbox slot' USING ERRCODE='23514'; END IF;
+   END IF;
+ END LOOP;
+ SELECT count(*) INTO n FROM (SELECT 1 FROM core.agent_identity_history_copy WHERE partition_no=i.partition_no AND source_route=i.source_route
+   AND source_account_id=i.source_account_id AND source_direction=i.source_direction AND source_receipt_id=i.source_receipt_id LIMIT 4) c;
+ IF n<>cardinality(i.expected_locators) THEN RAISE EXCEPTION 'Identity inventory has unexpected serializer copies' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END; $$;
+
+
+--
 -- Name: validate_agent_identity_work_source(); Type: FUNCTION; Schema: core; Owner: -
 --
 
@@ -608,6 +826,76 @@ CREATE TABLE core.agent_identity_history_copy (
     CONSTRAINT agent_identity_history_copy_source_position_check CHECK ((source_position > 0)),
     CONSTRAINT agent_identity_history_copy_source_route_check CHECK (((source_route >= 0) AND (source_route <= 65535))),
     CONSTRAINT agent_identity_history_copy_writer_version_check CHECK ((writer_version = 1))
+);
+
+
+--
+-- Name: agent_identity_inventory; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.agent_identity_inventory (
+    partition_no integer NOT NULL,
+    source_route integer NOT NULL,
+    source_account_id uuid NOT NULL,
+    source_direction text NOT NULL COLLATE pg_catalog."C",
+    source_receipt_id uuid NOT NULL,
+    source_digest text NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    source_transaction_id uuid NOT NULL,
+    producer_version integer NOT NULL,
+    conversion_coverage text NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    receiver_epoch integer NOT NULL,
+    domain_generation bigint NOT NULL,
+    native_writer_state text DEFAULT 'closed'::text NOT NULL,
+    native_command_kind text NOT NULL,
+    native_principal_kind text NOT NULL,
+    native_principal_id uuid NOT NULL,
+    native_receipt_key text NOT NULL,
+    state text DEFAULT 'declared'::text NOT NULL,
+    expected_locators bytea[],
+    expected_event_types text[],
+    CONSTRAINT agent_identity_inventory_check CHECK ((partition_no = (source_route / 16))),
+    CONSTRAINT agent_identity_inventory_check1 CHECK ((((state = 'declared'::text) AND (expected_locators IS NULL) AND (expected_event_types IS NULL)) OR ((state = 'sealed'::text) AND ((cardinality(expected_locators) >= 2) AND (cardinality(expected_locators) <= 3)) AND (cardinality(expected_event_types) = (cardinality(expected_locators) - 1))))),
+    CONSTRAINT agent_identity_inventory_conversion_coverage_check CHECK ((conversion_coverage = 'native-receipt-outbox/v1'::text)),
+    CONSTRAINT agent_identity_inventory_domain_generation_check CHECK ((domain_generation > 0)),
+    CONSTRAINT agent_identity_inventory_generation_check CHECK ((generation > 0)),
+    CONSTRAINT agent_identity_inventory_native_principal_kind_check CHECK ((native_principal_kind = 'account'::text)),
+    CONSTRAINT agent_identity_inventory_native_writer_state_check CHECK ((native_writer_state = 'closed'::text)),
+    CONSTRAINT agent_identity_inventory_producer_version_check CHECK ((producer_version = 1)),
+    CONSTRAINT agent_identity_inventory_receiver_epoch_check CHECK ((receiver_epoch > 0)),
+    CONSTRAINT agent_identity_inventory_source_digest_check CHECK ((source_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT agent_identity_inventory_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT agent_identity_inventory_source_position_check CHECK ((source_position > 0)),
+    CONSTRAINT agent_identity_inventory_state_check CHECK ((state = ANY (ARRAY['declared'::text, 'sealed'::text])))
+);
+
+
+--
+-- Name: agent_identity_sdk_obligation; Type: TABLE; Schema: core; Owner: -
+--
+
+CREATE TABLE core.agent_identity_sdk_obligation (
+    partition_no integer NOT NULL,
+    source_route integer NOT NULL,
+    source_account_id uuid NOT NULL,
+    source_direction text NOT NULL COLLATE pg_catalog."C",
+    source_receipt_id uuid NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    workflow_id text NOT NULL,
+    delivery_key text NOT NULL,
+    handoff_partition integer NOT NULL,
+    handoff_epoch integer NOT NULL,
+    handoff_position bigint NOT NULL,
+    handoff_transaction_id uuid NOT NULL,
+    handoff_event_type text NOT NULL,
+    future_writer_state text DEFAULT 'pending-recording-port'::text NOT NULL,
+    CONSTRAINT agent_identity_sdk_obligation_future_writer_state_check CHECK ((future_writer_state = 'pending-recording-port'::text)),
+    CONSTRAINT agent_identity_sdk_obligation_generation_check CHECK ((generation > 0)),
+    CONSTRAINT agent_identity_sdk_obligation_handoff_epoch_check CHECK ((handoff_epoch > 0)),
+    CONSTRAINT agent_identity_sdk_obligation_handoff_partition_check CHECK (((handoff_partition >= 0) AND (handoff_partition <= 4095))),
+    CONSTRAINT agent_identity_sdk_obligation_handoff_position_check CHECK ((handoff_position > 0))
 );
 
 
@@ -1254,6 +1542,22 @@ ALTER TABLE ONLY core.agent_identity_history_copy
 
 
 --
+-- Name: agent_identity_inventory agent_identity_inventory_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_inventory
+    ADD CONSTRAINT agent_identity_inventory_pkey PRIMARY KEY (partition_no, source_route, source_account_id, source_direction, source_receipt_id);
+
+
+--
+-- Name: agent_identity_sdk_obligation agent_identity_sdk_obligation_pkey; Type: CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_sdk_obligation
+    ADD CONSTRAINT agent_identity_sdk_obligation_pkey PRIMARY KEY (partition_no, source_route, source_account_id, source_direction, source_receipt_id);
+
+
+--
 -- Name: agent_identity_work agent_identity_work_pkey; Type: CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -1709,10 +2013,52 @@ CREATE INDEX record_history_source_set_original ON core.record_history_source_se
 
 
 --
+-- Name: history_event_consumer agent_identity_consumer_enrollment; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_consumer_enrollment BEFORE INSERT OR DELETE OR UPDATE ON core.history_event_consumer FOR EACH ROW EXECUTE FUNCTION core.agent_identity_receiving_enrollment();
+
+
+--
 -- Name: agent_identity_history_copy agent_identity_history_copy_guard; Type: TRIGGER; Schema: core; Owner: -
 --
 
 CREATE TRIGGER agent_identity_history_copy_guard BEFORE INSERT OR DELETE OR UPDATE ON core.agent_identity_history_copy FOR EACH ROW EXECUTE FUNCTION core.agent_identity_history_copy_guard();
+
+
+--
+-- Name: agent_identity_history_copy agent_identity_inventory_copy_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_inventory_copy_guard BEFORE INSERT ON core.agent_identity_history_copy FOR EACH ROW EXECUTE FUNCTION core.agent_identity_inventory_copy_guard();
+
+
+--
+-- Name: agent_identity_inventory agent_identity_inventory_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_inventory_guard BEFORE INSERT OR DELETE OR UPDATE ON core.agent_identity_inventory FOR EACH ROW EXECUTE FUNCTION core.agent_identity_inventory_guard();
+
+
+--
+-- Name: agent_identity_inventory agent_identity_inventory_native_commit; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER agent_identity_inventory_native_commit AFTER INSERT OR UPDATE ON core.agent_identity_inventory DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.validate_agent_identity_inventory();
+
+
+--
+-- Name: history_locator agent_identity_role_enrollment; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_role_enrollment BEFORE INSERT OR DELETE OR UPDATE OF partition_no, account_route, account_id, artifact_type, locator, roles, minimizer_version ON core.history_locator FOR EACH ROW EXECUTE FUNCTION core.agent_identity_receiving_enrollment();
+
+
+--
+-- Name: agent_identity_sdk_obligation agent_identity_sdk_obligation_guard; Type: TRIGGER; Schema: core; Owner: -
+--
+
+CREATE TRIGGER agent_identity_sdk_obligation_guard BEFORE INSERT OR DELETE OR UPDATE ON core.agent_identity_sdk_obligation FOR EACH ROW EXECUTE FUNCTION core.agent_identity_sdk_obligation_guard();
 
 
 --
@@ -1963,6 +2309,30 @@ ALTER TABLE ONLY core.agent_identity_history_copy
 
 
 --
+-- Name: agent_identity_inventory agent_identity_inventory_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_inventory
+    ADD CONSTRAINT agent_identity_inventory_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: agent_identity_inventory agent_identity_inventory_source_route_source_account_id_so_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_inventory
+    ADD CONSTRAINT agent_identity_inventory_source_route_source_account_id_so_fkey FOREIGN KEY (source_route, source_account_id, source_direction, source_receipt_id) REFERENCES access.agent_identity_intent(route, account_id, direction, receipt_id);
+
+
+--
+-- Name: agent_identity_sdk_obligation agent_identity_sdk_obligation_partition_no_source_route_so_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
+--
+
+ALTER TABLE ONLY core.agent_identity_sdk_obligation
+    ADD CONSTRAINT agent_identity_sdk_obligation_partition_no_source_route_so_fkey FOREIGN KEY (partition_no, source_route, source_account_id, source_direction, source_receipt_id) REFERENCES core.agent_identity_inventory(partition_no, source_route, source_account_id, source_direction, source_receipt_id);
+
+
+--
 -- Name: agent_identity_work_source agent_identity_work_source_partition_no_fkey; Type: FK CONSTRAINT; Schema: core; Owner: -
 --
 
@@ -2199,887 +2569,3 @@ ALTER TABLE ONLY editorial.write_basis
 --
 
 
-
--- Native preference receipt applicability, independent of DBOS.
-CREATE TABLE core.preference_history_job (
-  job_id uuid PRIMARY KEY,
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  account_route integer NOT NULL,
-  account_id uuid NOT NULL,
-  barrier_id uuid NOT NULL,
-  state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','covered-pending')),
-  cursor bytea CHECK (octet_length(cursor) BETWEEN 1 AND 256),
-  CHECK (barrier_id = account_id),
-  CHECK (partition_no = (account_route >> 4)),
-  FOREIGN KEY (account_route,barrier_id) REFERENCES access.erasure(route,account_id)
-);
-CREATE INDEX history_locator_artifact ON core.history_locator
-  (partition_no,artifact_type,locator,account_route,account_id);
-
-
-ALTER TABLE core.outbox ADD COLUMN payload_state text NOT NULL DEFAULT 'present'
-  CHECK (payload_state IN ('present','minimized'));
-ALTER TABLE core.outbox ADD CONSTRAINT outbox_minimized_payload
-  CHECK (payload_state <> 'minimized' OR (data='{}'::jsonb AND subject IS NULL));
-
--- Extend the existing native job; the default worker no longer starts a preference-only execution.
-ALTER TABLE core.preference_history_job
-  ADD COLUMN scan_partition integer NOT NULL DEFAULT 0 CHECK(scan_partition BETWEEN 0 AND 4096),
-  ADD COLUMN scan_type text COLLATE "C",
-  ADD COLUMN scan_locator bytea CHECK(octet_length(scan_locator) BETWEEN 1 AND 256),
-  ADD COLUMN phase text NOT NULL DEFAULT 'scan' CHECK(phase IN ('scan','pending')),
-  ADD COLUMN applicable boolean NOT NULL DEFAULT false,
-  ADD COLUMN next_run timestamptz NOT NULL DEFAULT now(),
-  ADD COLUMN gap text CHECK(octet_length(gap)<=2048),
-  ADD CONSTRAINT history_job_cursor CHECK((scan_type IS NULL)=(scan_locator IS NULL));
-CREATE INDEX preference_history_runnable ON core.preference_history_job(next_run,job_id) WHERE phase='scan';
-CREATE UNIQUE INDEX preference_history_barrier ON core.preference_history_job(account_route,account_id,barrier_id);
-ALTER TABLE core.history_progress ADD COLUMN coverage_gap text CHECK(octet_length(coverage_gap)<=2048);
-
--- Owner dispositions outlive DBOS history. An effects checkpoint proves enqueue only.
-CREATE TABLE core.history_event_consumer (
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  position bigint NOT NULL CHECK(position>0), event_seq integer NOT NULL CHECK(event_seq BETWEEN 0 AND 999),
-  consumer text COLLATE "C" NOT NULL CHECK(consumer ~ '^[a-z][a-z0-9_]{0,62}$'),
-  workflow_id text NOT NULL CHECK(octet_length(workflow_id)<=256),
-  state text NOT NULL DEFAULT 'open' CHECK(state IN ('open','completed','transferred','suppressed')),
-  PRIMARY KEY(partition_no,position,event_seq,consumer), UNIQUE(workflow_id)
-);
-
-ALTER TABLE core.history_work
-  ADD COLUMN owner text CHECK(owner ~ '^[a-z][a-z0-9_.-]{0,95}$'),
-  ADD COLUMN request jsonb CHECK(octet_length(request::text)<=65536),
-  ADD COLUMN scope jsonb CHECK(octet_length(scope::text)<=16384),
-  ADD COLUMN source_partition integer CHECK(source_partition BETWEEN 0 AND 4095),
-  ADD COLUMN source_transaction uuid,
-  ADD COLUMN admitted boolean NOT NULL DEFAULT false,
-  ADD COLUMN absence_verified boolean NOT NULL DEFAULT false;
-CREATE INDEX history_work_source ON core.history_work(source_partition,work_id);
-
-
--- Native jobs contain account/barrier progress. Cleanup never copies those values into DBOS.
-ALTER TABLE core.preference_history_job
-  DROP CONSTRAINT preference_history_job_phase_check,
-  ADD CONSTRAINT preference_history_job_phase_check CHECK(phase IN ('scan','verify','pending','complete')),
-  ADD COLUMN barrier_version integer,
-  ADD COLUMN barrier_at text,
-  ADD COLUMN registry_digest text,
-  ADD COLUMN verify_partition integer NOT NULL DEFAULT 0 CHECK(verify_partition BETWEEN 0 AND 4096);
-CREATE INDEX history_job_pending ON core.preference_history_job(job_id) WHERE phase='pending';
-ALTER TABLE core.history_progress ADD COLUMN applicable boolean NOT NULL DEFAULT false;
-CREATE INDEX history_progress_pending ON core.history_progress(account_route,account_id,barrier_id,store_kind,partition_no)
-  WHERE state='pending';
-
--- A consumer transition or a supported owner explicitly redrives only the affected native job.
-CREATE FUNCTION core.history_wake_account(p_route integer,p_account uuid) RETURNS void LANGUAGE sql AS $$
- UPDATE core.preference_history_job SET phase='scan',scan_partition=0,scan_type=NULL,scan_locator=NULL,
-   verify_partition=0,gap=NULL,next_run=now()
- WHERE account_route=p_route AND account_id=p_account AND phase='pending';
-$$;
-CREATE FUNCTION core.history_consumer_changed() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE r record; k bytea;
-BEGIN
- IF OLD.state=NEW.state THEN RETURN NEW; END IF;
- k:=decode('0102','hex') || int2send(NEW.partition_no::smallint) || int8send(NEW.position) || int2send(NEW.event_seq::smallint);
- FOR r IN SELECT account_route,account_id FROM core.history_locator
-   WHERE partition_no=NEW.partition_no AND artifact_type='outbox-event/v1' AND locator=k
-   ORDER BY account_route,account_id LIMIT 64
- LOOP PERFORM core.history_wake_account(r.account_route,r.account_id); END LOOP;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER history_consumer_changed AFTER UPDATE OF state ON core.history_event_consumer
- FOR EACH ROW EXECUTE FUNCTION core.history_consumer_changed();
-
-
-CREATE TABLE core.history_registry (
-  singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
-  generation bigint NOT NULL DEFAULT 1 CHECK(generation>0),
-  digest text NOT NULL CHECK(digest ~ '^[0-9a-f]{64}$'),
-  gaps jsonb NOT NULL CHECK(jsonb_typeof(gaps)='array' AND octet_length(gaps::text)<=4096)
-);
-ALTER TABLE core.preference_history_job ADD COLUMN registry_generation bigint NOT NULL DEFAULT 0;
-CREATE INDEX history_registry_redrive ON core.preference_history_job(registry_generation,job_id);
-DROP INDEX core.preference_history_runnable;
-CREATE INDEX preference_history_runnable ON core.preference_history_job(next_run,job_id)
-  WHERE phase IN ('scan','verify');
--- Proof rows are issued only by physical minimizers. A later account sharing an already
--- minimized copy receives its own barrier proof without reintroducing the payload.
-CREATE TABLE core.history_receiving_proof (
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  account_route integer NOT NULL, account_id uuid NOT NULL,
-  artifact_type text COLLATE "C" NOT NULL, locator bytea NOT NULL,
-  barrier_version integer NOT NULL CHECK(barrier_version>0), barrier_at text NOT NULL,
-  partition_epoch integer NOT NULL CHECK(partition_epoch>0),
-  role_digest bytea NOT NULL CHECK(octet_length(role_digest)=32),
-  PRIMARY KEY(partition_no,account_route,account_id,artifact_type,locator,partition_epoch),
-  FOREIGN KEY(partition_no,account_route,account_id,artifact_type,locator)
-    REFERENCES core.history_locator(partition_no,account_route,account_id,artifact_type,locator)
-);
--- Custody evidence can only move forward. A proof cannot outlive a rewritten source scope.
-CREATE FUNCTION core.history_receiving_proof_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- RAISE EXCEPTION 'history receiving proof is immutable' USING ERRCODE='23514';
-END; $$;
-CREATE TRIGGER history_receiving_proof_immutable BEFORE UPDATE OR DELETE ON core.history_receiving_proof
- FOR EACH ROW EXECUTE FUNCTION core.history_receiving_proof_immutable();
-
--- Work readiness and Auth's committed copy proof are dependency changes, not timer guesses.
-CREATE FUNCTION core.history_work_changed() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE r record; k bytea;
-BEGIN
- IF (OLD.owner_ready,OLD.absence_verified) IS NOT DISTINCT FROM (NEW.owner_ready,NEW.absence_verified) THEN RETURN NEW; END IF;
- k:=decode('0103','hex') || convert_to(NEW.work_id::text,'UTF8');
- FOR r IN SELECT account_route,account_id FROM core.history_locator
-   WHERE partition_no=NEW.partition_no AND artifact_type='durable-work/v1' AND locator=k
-   ORDER BY account_route,account_id LIMIT 64
- LOOP PERFORM core.history_wake_account(r.account_route,r.account_id); END LOOP;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER history_work_changed AFTER UPDATE OF owner_ready,absence_verified ON core.history_work
- FOR EACH ROW EXECUTE FUNCTION core.history_work_changed();
-CREATE FUNCTION core.history_auth_changed() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF NEW.phase='copies-erased' THEN PERFORM core.history_wake_account(NEW.route,NEW.account_id); END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER history_auth_changed AFTER INSERT ON access.auth_history_proof
- FOR EACH ROW EXECUTE FUNCTION core.history_auth_changed();
-
--- A native marker is permanent even after the SDK's deduplication rows disappear.
-CREATE FUNCTION core.history_payload_irreversible() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_TABLE_NAME='receipt' THEN
-   IF OLD.payload_state='minimized' AND (NEW.payload_state<>'minimized' OR NEW.response<>'null'::jsonb) THEN
-     RAISE EXCEPTION 'minimized history payload is sealed' USING ERRCODE='23514';
-   END IF;
- ELSE
-   IF OLD.payload_state='minimized' AND
-     (NEW.payload_state<>'minimized' OR NEW.data<>'{}'::jsonb OR NEW.subject IS NOT NULL) THEN
-     RAISE EXCEPTION 'minimized history payload is sealed' USING ERRCODE='23514';
-   END IF;
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER history_receipt_irreversible BEFORE UPDATE ON core.receipt
- FOR EACH ROW EXECUTE FUNCTION core.history_payload_irreversible();
-CREATE TRIGGER history_outbox_irreversible BEFORE UPDATE ON core.outbox
- FOR EACH ROW EXECUTE FUNCTION core.history_payload_irreversible();
-CREATE FUNCTION core.history_retirement_irreversible() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF OLD.state='retired' AND (NEW.state<>'retired' OR NEW.request IS NOT NULL OR NEW.scope IS NOT NULL
-   OR NEW.request_digest<>OLD.request_digest OR NEW.owner IS DISTINCT FROM OLD.owner
-   OR (OLD.absence_verified AND NOT NEW.absence_verified)) THEN
-   RAISE EXCEPTION 'retired history work is sealed' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER history_retirement_irreversible BEFORE UPDATE ON core.history_work
- FOR EACH ROW EXECUTE FUNCTION core.history_retirement_irreversible();
-
--- Resource-led ownership, independent of the existing account-role union and its barrier proofs.
--- A converted command proves only its own copies. No historical completeness is inferred.
-CREATE TABLE core.record_history_locator (
-  source_key text COLLATE "C" NOT NULL CHECK(octet_length(source_key) BETWEEN 1 AND 256),
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  artifact_type text COLLATE "C" NOT NULL CHECK(artifact_type IN ('command-receipt/v1','outbox-event/v1','durable-work/v1')),
-  locator bytea NOT NULL CHECK(octet_length(locator) BETWEEN 1 AND 256),
-  original_transaction uuid NOT NULL,
-  original_position bigint CHECK(original_position>=0),
-  producer_version integer NOT NULL CHECK(producer_version=1),
-  coverage text NOT NULL DEFAULT 'partial' CHECK(coverage='partial'),
-  state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','minimized')),
-  next_attempt timestamptz NOT NULL DEFAULT now(),
-  gap text CHECK(octet_length(gap)<=256),
-  PRIMARY KEY(source_key,partition_no,artifact_type,locator)
-);
-CREATE INDEX record_history_copy ON core.record_history_locator(partition_no,artifact_type,locator,source_key);
-CREATE INDEX record_history_original ON core.record_history_locator(partition_no,original_transaction)
-  WHERE original_position IS NULL;
-CREATE INDEX record_history_pending ON core.record_history_locator(source_key,next_attempt,partition_no,artifact_type,locator)
-  WHERE state='pending';
-CREATE FUNCTION core.record_history_preserve_copy() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'record history association is immutable' USING ERRCODE='23514'; END IF;
- IF (NEW.source_key,NEW.partition_no,NEW.artifact_type,NEW.locator,NEW.original_transaction,NEW.producer_version,NEW.coverage)
-   IS DISTINCT FROM
-   (OLD.source_key,OLD.partition_no,OLD.artifact_type,OLD.locator,OLD.original_transaction,OLD.producer_version,OLD.coverage)
-   OR (OLD.original_position IS NOT NULL AND NEW.original_position IS DISTINCT FROM OLD.original_position)
-   OR (OLD.state='minimized' AND NEW.state<>'minimized') THEN
-   RAISE EXCEPTION 'record history association is immutable' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER record_history_preserve_copy BEFORE UPDATE OR DELETE ON core.record_history_locator
- FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_copy();
-
--- Native restart locator only, never an authority, source JSON snapshot, actor or account barrier.
-CREATE TABLE core.record_history_purge (
-  source_key text COLLATE "C" NOT NULL,
-  deletion_generation uuid NOT NULL,
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  reference_kind text NOT NULL DEFAULT 'contribution' CHECK(reference_kind IN ('contribution','context','zone')),
-  resource_id uuid,
-  subject_id uuid, candidate_id uuid, revision integer CHECK(revision>0),
-  document_id uuid,
-  CONSTRAINT record_history_purge_reference CHECK(
-    (reference_kind='contribution' AND resource_id IS NULL
-      AND subject_id IS NOT NULL AND candidate_id IS NOT NULL AND revision IS NOT NULL AND revision>0)
-    OR (reference_kind IN ('context','zone') AND resource_id IS NOT NULL
-      AND subject_id IS NULL AND candidate_id IS NULL AND revision IS NULL AND document_id IS NULL)
-  ),
-  gap text NOT NULL DEFAULT 'record-original-producer-coverage-unsealed' CHECK(octet_length(gap)<=256),
-  next_run timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY(source_key,deletion_generation)
-);
-CREATE INDEX record_history_purge_runnable ON core.record_history_purge(next_run,source_key,deletion_generation);
-
--- Native selected-family coverage.
--- One local physical database domain. Routing/restore and definition changes serialize with
--- final verification. Remote databases cannot be represented by this local certificate.
-CREATE TABLE core.history_family_domain (
-  singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
-  generation bigint NOT NULL DEFAULT 1 CHECK(generation>0)
-);
-INSERT INTO core.history_family_domain(singleton) VALUES(true);
-CREATE TABLE core.history_family_definition (
-  family text PRIMARY KEY CHECK(family IN ('access','commerce','community','content','library','rating','semantic','zones','imports')),
-  version integer NOT NULL CHECK(version>0),
-  digest text NOT NULL CHECK(digest ~ '^[0-9a-f]{64}$'),
-  registry_digest text NOT NULL CHECK(registry_digest ~ '^[0-9a-f]{64}$'),
-  sources jsonb NOT NULL CHECK(jsonb_typeof(sources)='array' AND jsonb_array_length(sources) BETWEEN 1 AND 100),
-  admit_cursor uuid,
-  admission_complete boolean NOT NULL DEFAULT false
-);
-CREATE TABLE core.history_family_fence (
-  account_route integer NOT NULL, account_id uuid NOT NULL,
-  revision bigint NOT NULL DEFAULT 1 CHECK(revision>0),
-  PRIMARY KEY(account_route,account_id),
-  FOREIGN KEY(account_route,account_id) REFERENCES access.erasure(route,account_id)
-);
--- The producer owner supplies these from its actual immutable historical source inventory,
--- after enrolling all original/receiving roles and fencing its late writers. A registry entry,
--- a terminal Source page, and a participant ACK cannot insert these on the owner's behalf.
-CREATE TABLE core.history_family_enrollment (
-  family text NOT NULL REFERENCES core.history_family_definition(family),
-  account_route integer NOT NULL, account_id uuid NOT NULL,
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  artifact_type text COLLATE "C" NOT NULL CHECK(artifact_type IN ('command-receipt/v1','outbox-event/v1','durable-work/v1')),
-  producer text NOT NULL CHECK(producer ~ '^[a-z][a-z0-9_.-]{0,95}$'),
-  producer_version integer NOT NULL CHECK(producer_version>0),
-  definition_digest text NOT NULL CHECK(definition_digest ~ '^[0-9a-f]{64}$'),
-  barrier_version integer NOT NULL CHECK(barrier_version>0), barrier_at text NOT NULL,
-  partition_epoch integer NOT NULL CHECK(partition_epoch>0),
-  source_cut bytea NOT NULL CHECK(octet_length(source_cut) BETWEEN 1 AND 256),
-  PRIMARY KEY(family,account_route,account_id,partition_no,artifact_type,producer),
-  FOREIGN KEY(account_route,account_id) REFERENCES access.erasure(route,account_id),
-  FOREIGN KEY(partition_no,account_route,account_id)
-    REFERENCES core.history_seal(partition_no,account_route,account_id)
-);
-CREATE TABLE core.history_family_coverage (
-  family text NOT NULL REFERENCES core.history_family_definition(family),
-  account_route integer NOT NULL, account_id uuid NOT NULL,
-  barrier_version integer NOT NULL CHECK(barrier_version>0), barrier_at text NOT NULL,
-  definition_digest text NOT NULL, domain_generation bigint NOT NULL, fence_revision bigint NOT NULL,
-  partition_cursor integer NOT NULL DEFAULT -1 CHECK(partition_cursor BETWEEN -1 AND 4095),
-  current_partition integer CHECK(current_partition BETWEEN 0 AND 4095),
-  artifact_type text COLLATE "C", locator bytea CHECK(octet_length(locator) BETWEEN 1 AND 256),
-  phase text NOT NULL DEFAULT 'scan' CHECK(phase IN ('scan','pending','complete')),
-  gap text CHECK(octet_length(gap)<=256),
-  proof_id uuid,
-  next_run timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY(family,account_route,account_id),
-  FOREIGN KEY(account_route,account_id) REFERENCES access.erasure(route,account_id),
-  CHECK((artifact_type IS NULL)=(locator IS NULL)),
-  CHECK((phase='complete')=(proof_id IS NOT NULL)),
-  CHECK((phase='pending')=(gap IS NOT NULL))
-);
-CREATE INDEX history_family_runnable ON core.history_family_coverage(next_run,family,account_route,account_id)
-  WHERE phase='scan';
--- Exact physical key watches are installed under the physical source's SHARE lock. They contain
--- opaque native keys only, never payloads. A changed physical source invalidates its role union.
-CREATE TABLE core.history_family_watch (
-  partition_no integer NOT NULL, artifact_type text COLLATE "C" NOT NULL, locator bytea NOT NULL,
-  source_key jsonb NOT NULL CHECK(octet_length(source_key::text)<=1024),
-  PRIMARY KEY(partition_no,artifact_type,locator)
-);
-CREATE UNIQUE INDEX history_family_watch_source ON core.history_family_watch(partition_no,artifact_type,source_key);
-CREATE INDEX history_locator_family_page ON core.history_locator(partition_no,account_route,account_id,artifact_type,locator);
-CREATE FUNCTION core.history_family_domain_changed() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_LEVEL='ROW' AND TG_OP='UPDATE' THEN
-  IF OLD IS NOT DISTINCT FROM NEW THEN RETURN NULL; END IF;
- END IF;
- UPDATE core.history_family_domain SET generation=generation+1 WHERE singleton;
- RETURN NULL;
-END; $$;
-CREATE TRIGGER history_family_route_changed AFTER INSERT OR UPDATE OF node,write_state,moved_to,epoch OR DELETE ON core.partition
- FOR EACH STATEMENT EXECUTE FUNCTION core.history_family_domain_changed();
-CREATE TRIGGER history_family_definition_changed AFTER INSERT OR UPDATE OF version,digest,sources,registry_digest OR DELETE ON core.history_family_definition
- FOR EACH ROW EXECUTE FUNCTION core.history_family_domain_changed();
-CREATE TRIGGER history_family_registry_changed AFTER INSERT OR UPDATE OR DELETE ON core.history_registry
- FOR EACH ROW EXECUTE FUNCTION core.history_family_domain_changed();
-CREATE FUNCTION core.history_family_touch(p_route integer,p_account uuid) RETURNS void LANGUAGE plpgsql AS $$
-BEGIN
- -- Before erasure there is no issuer or aggregate to invalidate.
- IF EXISTS(SELECT 1 FROM access.erasure WHERE route=p_route AND account_id=p_account) THEN
-  INSERT INTO core.history_family_fence(account_route,account_id) VALUES(p_route,p_account)
-   ON CONFLICT(account_route,account_id) DO UPDATE SET revision=core.history_family_fence.revision+1;
-  UPDATE core.history_family_coverage SET phase='scan',gap=NULL,proof_id=NULL,next_run=now()
-   WHERE account_route=p_route AND account_id=p_account;
- END IF;
-END; $$;
-CREATE FUNCTION core.history_family_touch_artifact(p_partition integer,p_type text,p_locator bytea) RETURNS void LANGUAGE plpgsql AS $$
-DECLARE r record; n integer:=0;
-BEGIN
- FOR r IN SELECT account_route,account_id FROM core.history_locator
-  WHERE partition_no=p_partition AND artifact_type=p_type AND locator=p_locator
-  ORDER BY account_route,account_id LIMIT 65
- LOOP
-  n:=n+1;
-  IF n>64 THEN RAISE EXCEPTION 'history role union exceeds native bound' USING ERRCODE='23514'; END IF;
-  PERFORM core.history_family_touch(r.account_route,r.account_id);
- END LOOP;
-END; $$;
-CREATE FUNCTION core.history_family_scope_changed() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='UPDATE' AND OLD IS NOT DISTINCT FROM NEW THEN RETURN NULL; END IF;
- IF TG_OP<>'INSERT' THEN PERFORM core.history_family_touch(OLD.account_route,OLD.account_id); END IF;
- IF TG_OP='INSERT' OR (TG_OP='UPDATE' AND (NEW.account_route,NEW.account_id) IS DISTINCT FROM (OLD.account_route,OLD.account_id)) THEN
-  PERFORM core.history_family_touch(NEW.account_route,NEW.account_id);
- END IF;
- IF TG_TABLE_NAME IN ('history_locator','history_receiving_proof') THEN
-  IF TG_OP<>'INSERT' THEN
-   PERFORM core.history_family_touch_artifact(OLD.partition_no,OLD.artifact_type,OLD.locator);
-  END IF;
-  IF TG_OP<>'DELETE' THEN
-   PERFORM core.history_family_touch_artifact(NEW.partition_no,NEW.artifact_type,NEW.locator);
-  END IF;
- END IF;
- RETURN NULL;
-END; $$;
-CREATE TRIGGER history_family_locator_changed AFTER INSERT OR UPDATE OR DELETE ON core.history_locator
- FOR EACH ROW EXECUTE FUNCTION core.history_family_scope_changed();
-CREATE TRIGGER history_family_receiving_changed AFTER INSERT ON core.history_receiving_proof
- FOR EACH ROW EXECUTE FUNCTION core.history_family_scope_changed();
-CREATE TRIGGER history_family_enrollment_changed AFTER INSERT OR UPDATE OR DELETE ON core.history_family_enrollment
- FOR EACH ROW EXECUTE FUNCTION core.history_family_scope_changed();
-CREATE TRIGGER history_family_seal_changed AFTER INSERT OR UPDATE OR DELETE ON core.history_seal
- FOR EACH ROW EXECUTE FUNCTION core.history_family_scope_changed();
-CREATE FUNCTION core.history_family_physical_changed() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE k jsonb; t text; r record;
-BEGIN
- IF TG_TABLE_NAME='receipt' THEN
-  t:='command-receipt/v1'; k:=jsonb_build_array(OLD.principal_kind,OLD.principal_id,OLD.command_kind,OLD.idempotency_key);
- ELSIF TG_TABLE_NAME='outbox' THEN
-  t:='outbox-event/v1'; k:=jsonb_build_array(OLD.position::text,OLD.event_seq);
- ELSE
-  t:='durable-work/v1'; k:=jsonb_build_array(OLD.work_id);
- END IF;
- FOR r IN SELECT l.account_route,l.account_id FROM core.history_family_watch w
-   JOIN core.history_locator l USING(partition_no,artifact_type,locator)
-   WHERE w.partition_no=OLD.partition_no AND w.artifact_type=t AND w.source_key=k
-   ORDER BY l.account_route,l.account_id LIMIT 65
- LOOP PERFORM core.history_family_touch(r.account_route,r.account_id); END LOOP;
- RETURN NULL;
-END; $$;
-CREATE TRIGGER history_family_receipt_changed AFTER UPDATE OR DELETE ON core.receipt
- FOR EACH ROW EXECUTE FUNCTION core.history_family_physical_changed();
-CREATE TRIGGER history_family_outbox_changed AFTER UPDATE OR DELETE ON core.outbox
- FOR EACH ROW EXECUTE FUNCTION core.history_family_physical_changed();
-CREATE TRIGGER history_family_work_changed AFTER UPDATE OR DELETE ON core.history_work
- FOR EACH ROW EXECUTE FUNCTION core.history_family_physical_changed();
-CREATE FUNCTION core.history_family_consumer_changed() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE r record; p integer; k bytea;
-BEGIN
- IF TG_OP='DELETE' THEN
-  p:=OLD.partition_no; k:=decode('0102','hex')||int2send(p::smallint)||int8send(OLD.position)||int2send(OLD.event_seq::smallint);
- ELSE
-  p:=NEW.partition_no; k:=decode('0102','hex')||int2send(p::smallint)||int8send(NEW.position)||int2send(NEW.event_seq::smallint);
- END IF;
- FOR r IN SELECT account_route,account_id FROM core.history_locator
-  WHERE partition_no=p AND artifact_type='outbox-event/v1' AND locator=k
-  ORDER BY account_route,account_id LIMIT 65
- LOOP PERFORM core.history_family_touch(r.account_route,r.account_id); END LOOP;
- RETURN NULL;
-END; $$;
-CREATE TRIGGER history_family_consumer_changed AFTER INSERT OR UPDATE OR DELETE ON core.history_event_consumer
- FOR EACH ROW EXECUTE FUNCTION core.history_family_consumer_changed();
--- Enrollment is replaceable only by invalidating the account fence. The worker still checks
--- every version, original root and native seal; no source marker directly issues a capability.
-CREATE TRIGGER history_family_watch_immutable BEFORE UPDATE OR DELETE ON core.history_family_watch
- FOR EACH ROW EXECUTE FUNCTION core.history_receiving_proof_immutable();
-CREATE INDEX history_family_stale ON core.history_family_coverage(domain_generation,family,account_route,account_id) WHERE phase<>'scan';
-CREATE FUNCTION core.history_family_validate_enrollment() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE e record; s record; d record; h record;
-BEGIN
- SELECT version,at::text INTO STRICT e FROM access.erasure
-  WHERE route=NEW.account_route AND account_id=NEW.account_id FOR SHARE;
- SELECT phase,barrier_id INTO STRICT s FROM core.history_seal WHERE partition_no=NEW.partition_no
-  AND account_route=NEW.account_route AND account_id=NEW.account_id FOR SHARE;
- SELECT digest,sources INTO STRICT d FROM core.history_family_definition WHERE family=NEW.family FOR SHARE;
- SELECT epoch,write_state INTO STRICT h FROM core.partition WHERE partition_no=NEW.partition_no FOR SHARE;
- IF h.epoch<>NEW.partition_epoch OR h.write_state<>'active' OR e.version<>NEW.barrier_version OR e.at<>NEW.barrier_at OR s.phase='open' OR s.barrier_id<>NEW.account_id
-   OR d.digest<>NEW.definition_digest OR NOT EXISTS(
-     SELECT 1 FROM jsonb_to_recordset(d.sources) AS p("artifactType" text,producer text,version integer)
-     WHERE p."artifactType"=NEW.artifact_type AND p.producer=NEW.producer AND p.version=NEW.producer_version)
- THEN RAISE EXCEPTION 'history family enrollment does not match native source' USING ERRCODE='23514'; END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER history_family_validate_enrollment BEFORE INSERT OR UPDATE ON core.history_family_enrollment
- FOR EACH ROW EXECUTE FUNCTION core.history_family_validate_enrollment();
-CREATE FUNCTION core.history_family_preserve_locator() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE sealed boolean;
-BEGIN
- SELECT phase<>'open' INTO sealed FROM core.history_seal WHERE partition_no=OLD.partition_no
-  AND account_route=OLD.account_route AND account_id=OLD.account_id FOR SHARE;
- IF TG_OP='DELETE' THEN
-  IF sealed OR OLD.state='minimized' THEN
-   RAISE EXCEPTION 'sealed history role is irreversible' USING ERRCODE='23514';
-  END IF;
-  RETURN OLD;
- END IF;
- IF (sealed AND (OLD.partition_no,OLD.account_route,OLD.account_id,OLD.artifact_type,OLD.locator,OLD.roles,OLD.minimizer_version)
-   IS DISTINCT FROM (NEW.partition_no,NEW.account_route,NEW.account_id,NEW.artifact_type,NEW.locator,NEW.roles,NEW.minimizer_version))
-   OR (OLD.state='minimized' AND (NEW.state<>'minimized' OR NEW.proof_barrier IS DISTINCT FROM OLD.proof_barrier))
- THEN RAISE EXCEPTION 'sealed history role is irreversible' USING ERRCODE='23514'; END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER history_family_preserve_locator BEFORE UPDATE OR DELETE ON core.history_locator
- FOR EACH ROW EXECUTE FUNCTION core.history_family_preserve_locator();
-CREATE FUNCTION core.history_family_admit(p_family text,p_route integer,p_account uuid) RETURNS void LANGUAGE sql AS $$
- INSERT INTO core.history_family_fence(account_route,account_id) VALUES(p_route,p_account) ON CONFLICT DO NOTHING;
- INSERT INTO core.history_family_coverage(family,account_route,account_id,barrier_version,barrier_at,
-   definition_digest,domain_generation,fence_revision)
- SELECT p_family,e.route,e.account_id,e.version,e.at::text,d.digest,g.generation,f.revision
- FROM access.erasure e,core.history_family_definition d,core.history_family_domain g,core.history_family_fence f
- WHERE e.route=p_route AND e.account_id=p_account AND d.family=p_family AND g.singleton
-  AND f.account_route=e.route AND f.account_id=e.account_id ON CONFLICT DO NOTHING;
-$$;
-CREATE FUNCTION core.history_family_job_admitted() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE d record;
-BEGIN
- FOR d IN SELECT family FROM core.history_family_definition ORDER BY family LIMIT 9
- LOOP PERFORM core.history_family_admit(d.family,NEW.account_route,NEW.account_id); END LOOP;
- RETURN NULL;
-END; $$;
-CREATE TRIGGER history_family_job_admitted AFTER INSERT ON core.preference_history_job
- FOR EACH ROW EXECUTE FUNCTION core.history_family_job_admitted();
-
--- Owner-issued binary identity/revision; no Semantic member rows or authority are stored here.
-CREATE TABLE core.record_history_source_set (
-  source_partition integer NOT NULL REFERENCES core.partition(partition_no),
-  set_locator bytea NOT NULL CHECK(octet_length(set_locator) BETWEEN 1 AND 256),
-  set_revision bytea NOT NULL CHECK(octet_length(set_revision) BETWEEN 1 AND 256),
-  original_transaction uuid NOT NULL,
-  original_position bigint CHECK(original_position>=0),
-  member_count integer NOT NULL CHECK(member_count BETWEEN 1 AND 512),
-  producer_version integer NOT NULL CHECK(producer_version=1),
-  PRIMARY KEY(source_partition,set_locator,set_revision),
-  UNIQUE(source_partition,original_transaction)
-);
-CREATE INDEX record_history_source_set_original ON core.record_history_source_set(source_partition,original_transaction)
- WHERE original_position IS NULL;
-CREATE TABLE core.record_history_source_set_copy (
-  source_partition integer NOT NULL,
-  set_locator bytea NOT NULL CHECK(octet_length(set_locator) BETWEEN 1 AND 256),
-  set_revision bytea NOT NULL CHECK(octet_length(set_revision) BETWEEN 1 AND 256),
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  artifact_type text COLLATE "C" NOT NULL CHECK(artifact_type IN ('command-receipt/v1','outbox-event/v1','durable-work/v1')),
-  locator bytea NOT NULL CHECK(octet_length(locator) BETWEEN 1 AND 256),
-  original_transaction uuid NOT NULL,
-  original_position bigint CHECK(original_position>=0),
-  producer_version integer NOT NULL CHECK(producer_version=1),
-  state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','minimized')),
-  next_attempt timestamptz NOT NULL DEFAULT now(),
-  gap text CHECK(octet_length(gap)<=256),
-  PRIMARY KEY(source_partition,set_locator,set_revision,partition_no,artifact_type,locator),
-  UNIQUE(partition_no,artifact_type,locator)
-);
-CREATE INDEX record_history_source_set_copy_original ON core.record_history_source_set_copy(partition_no,original_transaction)
- WHERE original_position IS NULL;
-CREATE INDEX record_history_source_set_copy_pending
- ON core.record_history_source_set_copy(source_partition,set_locator,set_revision,next_attempt,partition_no,artifact_type,locator)
- WHERE state='pending' OR gap='record-source-native-release-pending';
-CREATE FUNCTION core.record_history_preserve_source_set() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'record history source set is immutable' USING ERRCODE='23514'; END IF;
- IF (to_jsonb(NEW)-ARRAY['original_position','state','next_attempt','gap'])
-   IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['original_position','state','next_attempt','gap'])
-   OR (OLD.original_position IS NOT NULL AND NEW.original_position IS DISTINCT FROM OLD.original_position)
-   OR (to_jsonb(OLD)->>'state'='minimized' AND to_jsonb(NEW)->>'state'<>'minimized') THEN
-   RAISE EXCEPTION 'record history source set is immutable' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER record_history_preserve_source_set BEFORE UPDATE OR DELETE ON core.record_history_source_set
- FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_source_set();
-CREATE TRIGGER record_history_preserve_source_set_copy BEFORE UPDATE OR DELETE ON core.record_history_source_set_copy
- FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_source_set();
-CREATE INDEX record_history_receiving_pending ON core.record_history_locator(source_key,next_attempt,partition_no,artifact_type,locator)
- WHERE state='pending' OR gap='record-source-native-release-pending';
--- Resumable native member-to-set discovery, not a copy of a member vector.
-ALTER TABLE core.record_history_purge ADD COLUMN set_frontier bytea CHECK(set_frontier IS NULL OR octet_length(set_frontier) BETWEEN 1 AND 256),
- ADD COLUMN set_inventory_sealed boolean NOT NULL DEFAULT false;
-CREATE TABLE core.record_history_purge_set (
- source_key text COLLATE "C" NOT NULL,
- deletion_generation uuid NOT NULL,
- source_partition integer NOT NULL,
- set_locator bytea NOT NULL,
- set_revision bytea NOT NULL,
- original_transaction uuid NOT NULL,
- member_count integer NOT NULL CHECK(member_count BETWEEN 1 AND 512),
- next_attempt timestamptz NOT NULL DEFAULT now(),
- PRIMARY KEY(source_key,deletion_generation,source_partition,set_locator,set_revision),
- FOREIGN KEY(source_key,deletion_generation) REFERENCES core.record_history_purge(source_key,deletion_generation)
-);
-CREATE INDEX record_history_purge_set_runnable
- ON core.record_history_purge_set(source_key,deletion_generation,next_attempt,source_partition,set_locator,set_revision);
-CREATE FUNCTION core.record_history_preserve_purge_set() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' OR (to_jsonb(NEW)-'next_attempt') IS DISTINCT FROM (to_jsonb(OLD)-'next_attempt') THEN
-   RAISE EXCEPTION 'record history native set enrollment is immutable' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER record_history_preserve_purge_set BEFORE UPDATE OR DELETE ON core.record_history_purge_set
- FOR EACH ROW EXECUTE FUNCTION core.record_history_preserve_purge_set();
--- Preserve provisional rows and their copy keys; only new native rows carry a structured revision.
-ALTER TABLE core.record_history_source_set
- ALTER COLUMN member_count DROP NOT NULL,
- DROP CONSTRAINT record_history_source_set_member_count_check,
- ADD CHECK(member_count BETWEEN 0 AND 512),
- ADD COLUMN native_revision integer CHECK(native_revision>0),
- ADD COLUMN snapshot_digest text CHECK(snapshot_digest<>''),
- ADD COLUMN metadata_state text NOT NULL DEFAULT 'legacy' CHECK(metadata_state IN ('legacy','building','native-snapshot')),
- ADD CHECK (
-   (metadata_state='legacy' AND native_revision IS NULL AND snapshot_digest IS NULL AND member_count IS NOT NULL)
-   OR (metadata_state='building' AND native_revision IS NOT NULL AND snapshot_digest IS NULL AND member_count IS NULL)
-   OR (metadata_state='native-snapshot' AND native_revision IS NOT NULL AND snapshot_digest IS NOT NULL AND member_count IS NOT NULL)
- );
-ALTER TABLE core.record_history_purge_set
- DROP CONSTRAINT record_history_purge_set_member_count_check,
- ADD CHECK(member_count BETWEEN 0 AND 512),
- ADD COLUMN native_revision integer CHECK(native_revision>0),
- ADD COLUMN snapshot_digest text CHECK(snapshot_digest<>''),
- ADD CHECK((native_revision IS NULL)=(snapshot_digest IS NULL));
-ALTER TABLE core.record_history_purge
- ADD COLUMN native_set_frontier text,
- ADD COLUMN native_set_index_complete boolean NOT NULL DEFAULT false;
-
-CREATE OR REPLACE FUNCTION core.record_history_preserve_source_set() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'record history source set is immutable' USING ERRCODE='23514'; END IF;
- -- The one allowed enrichment is an exact native immutable snapshot after Source seal.
- IF to_jsonb(OLD)->>'metadata_state'='building' AND to_jsonb(NEW)->>'metadata_state'='native-snapshot' THEN
-  IF (to_jsonb(NEW)-ARRAY['original_position','metadata_state','snapshot_digest','member_count'])
-     IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['original_position','metadata_state','snapshot_digest','member_count'])
-     OR (OLD.original_position IS NOT NULL AND NEW.original_position IS DISTINCT FROM OLD.original_position) THEN
-   RAISE EXCEPTION 'record history source set is immutable' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
- END IF;
- IF (to_jsonb(NEW)-ARRAY['original_position','state','next_attempt','gap'])
-   IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['original_position','state','next_attempt','gap'])
-   OR (OLD.original_position IS NOT NULL AND NEW.original_position IS DISTINCT FROM OLD.original_position)
-   OR (to_jsonb(OLD)->>'state'='minimized' AND to_jsonb(NEW)->>'state'<>'minimized') THEN
-   RAISE EXCEPTION 'record history source set is immutable' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-
--- Exact retained Access reversal receipt locator.
-CREATE UNIQUE INDEX agent_identity_reversal_original ON core.receipt(partition_no,transaction_id)
-WHERE principal_kind='account' AND command_kind IN
- ('access.agent-verification.released','access.agent-verification.revoked','access.agent-verification.deleted');
-
-
--- Original Accounts ownership only. No historical enrollment, inventory seal or Source authority.
-CREATE TABLE core.agent_identity_history_copy (
-  partition_no integer NOT NULL REFERENCES core.partition(partition_no) CHECK(partition_no BETWEEN 0 AND 4095),
-  source_route integer NOT NULL CHECK(source_route BETWEEN 0 AND 65535),
-  source_account_id uuid NOT NULL,
-  source_direction text COLLATE "C" NOT NULL CHECK(source_direction IN ('account-agent.verify','account-agent.unverify')),
-  source_receipt_id uuid NOT NULL,
-  source_digest text NOT NULL CHECK(source_digest ~ '^[0-9a-f]{64}$'),
-  source_epoch integer NOT NULL CHECK(source_epoch>0),
-  source_position bigint NOT NULL CHECK(source_position>0),
-  source_transaction_id uuid NOT NULL,
-  artifact_type text COLLATE "C" NOT NULL CHECK(artifact_type IN ('command-receipt/v1','outbox-event/v1')),
-  locator bytea NOT NULL CHECK(octet_length(locator) BETWEEN 1 AND 256),
-  writer_version integer NOT NULL CHECK(writer_version=1),
-  receiver_epoch integer NOT NULL CHECK(receiver_epoch>0),
-  domain_generation bigint NOT NULL CHECK(domain_generation>0),
-  PRIMARY KEY(partition_no,source_route,source_account_id,source_direction,source_receipt_id,artifact_type,locator),
-  CHECK(source_route=get_byte(uuid_send(source_account_id),10)*256+get_byte(uuid_send(source_account_id),11)),
-  CHECK(partition_no=source_route/16),
-  FOREIGN KEY(partition_no,source_route,source_account_id,artifact_type,locator)
-    REFERENCES core.history_locator(partition_no,account_route,account_id,artifact_type,locator)
-);
--- The exact receiving artifact invalidates all associated sources without searching owners.
-CREATE INDEX agent_identity_history_copy_receiver ON core.agent_identity_history_copy
-  (partition_no,artifact_type,locator,source_route,source_account_id,source_direction,source_receipt_id);
-
-CREATE FUNCTION core.agent_identity_history_copy_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE r record; n integer := 0; phase text;
-BEGIN
- IF TG_OP<>'INSERT' THEN
-   RAISE EXCEPTION 'Original Agent identity copy requires native retention discharge' USING ERRCODE='23514';
- END IF;
- -- SHARE the restore/routing generation and exact home through native COMMIT.
- PERFORM 1 FROM core.history_family_domain WHERE singleton AND generation=NEW.domain_generation FOR SHARE;
- IF NOT FOUND THEN RAISE EXCEPTION 'Agent identity history domain changed' USING ERRCODE='23514'; END IF;
- PERFORM 1 FROM core.partition WHERE partition_no=NEW.partition_no AND write_state='active'
-   AND epoch=NEW.receiver_epoch AND epoch=NEW.source_epoch AND position=NEW.source_position FOR SHARE;
- IF NOT FOUND THEN RAISE EXCEPTION 'Agent identity history home changed' USING ERRCODE='23514'; END IF;
- -- Every technical association is enrolled under the actual copy's complete native role union.
- FOR r IN SELECT account_route,account_id,state FROM core.history_locator
-   WHERE partition_no=NEW.partition_no AND artifact_type=NEW.artifact_type AND locator=NEW.locator
-   ORDER BY account_route,account_id LIMIT 65 FOR SHARE
- LOOP
-   n:=n+1;
-   IF n>64 OR r.state<>'pending' THEN
-     RAISE EXCEPTION 'Agent identity history role union unavailable' USING ERRCODE='23514';
-   END IF;
-   SELECT s.phase INTO STRICT phase FROM core.history_seal s
-     WHERE s.partition_no=NEW.partition_no AND s.account_route=r.account_route AND s.account_id=r.account_id FOR SHARE;
-   IF phase<>'open' THEN RAISE EXCEPTION 'history account partition is sealed' USING ERRCODE='23514'; END IF;
- END LOOP;
- IF n=0 THEN RAISE EXCEPTION 'Agent identity history role union unavailable' USING ERRCODE='23514'; END IF;
- PERFORM core.history_family_touch_artifact(NEW.partition_no,NEW.artifact_type,NEW.locator);
- RETURN NEW;
-END; $$;
-CREATE TRIGGER agent_identity_history_copy_guard BEFORE INSERT OR UPDATE OR DELETE ON core.agent_identity_history_copy
- FOR EACH ROW EXECUTE FUNCTION core.agent_identity_history_copy_guard();
-
--- Only newly converted ORIGINAL native writers enroll. Historical rows are deliberately untouched.
-CREATE TABLE core.agent_identity_inventory (
- partition_no integer NOT NULL REFERENCES core.partition(partition_no),
- source_route integer NOT NULL, source_account_id uuid NOT NULL,
- source_direction text COLLATE "C" NOT NULL, source_receipt_id uuid NOT NULL,
- source_digest text NOT NULL CHECK(source_digest ~ '^[0-9a-f]{64}$'),
- source_epoch integer NOT NULL CHECK(source_epoch>0), source_position bigint NOT NULL CHECK(source_position>0),
- source_transaction_id uuid NOT NULL,
- producer_version integer NOT NULL CHECK(producer_version=1),
- conversion_coverage text NOT NULL CHECK(conversion_coverage='native-receipt-outbox/v1'),
- generation bigint NOT NULL DEFAULT 1 CHECK(generation>0),
- receiver_epoch integer NOT NULL CHECK(receiver_epoch>0), domain_generation bigint NOT NULL CHECK(domain_generation>0),
- native_writer_state text NOT NULL DEFAULT 'closed' CHECK(native_writer_state='closed'),
- native_command_kind text NOT NULL, native_principal_kind text NOT NULL CHECK(native_principal_kind='account'),
- native_principal_id uuid NOT NULL, native_receipt_key text NOT NULL,
- state text NOT NULL DEFAULT 'declared' CHECK(state IN ('declared','sealed')),
- expected_locators bytea[], expected_event_types text[],
- PRIMARY KEY(partition_no,source_route,source_account_id,source_direction,source_receipt_id),
- FOREIGN KEY(source_route,source_account_id,source_direction,source_receipt_id)
-   REFERENCES access.agent_identity_intent(route,account_id,direction,receipt_id),
- CHECK(partition_no=source_route/16),
- CHECK((state='declared' AND expected_locators IS NULL AND expected_event_types IS NULL) OR
-       (state='sealed' AND cardinality(expected_locators) BETWEEN 2 AND 3 AND
-        cardinality(expected_event_types)=cardinality(expected_locators)-1))
-);
-CREATE TABLE core.agent_identity_sdk_obligation (
- partition_no integer NOT NULL, source_route integer NOT NULL, source_account_id uuid NOT NULL,
- source_direction text COLLATE "C" NOT NULL, source_receipt_id uuid NOT NULL,
- generation bigint NOT NULL DEFAULT 1 CHECK(generation>0),
- workflow_id text NOT NULL, delivery_key text NOT NULL,
- handoff_partition integer NOT NULL CHECK(handoff_partition BETWEEN 0 AND 4095),
- handoff_epoch integer NOT NULL CHECK(handoff_epoch>0), handoff_position bigint NOT NULL CHECK(handoff_position>0),
- handoff_transaction_id uuid NOT NULL, handoff_event_type text NOT NULL,
- -- These are real outstanding duties, not invented SDK coordinates or an absence certificate.
- future_writer_state text NOT NULL DEFAULT 'pending-recording-port' CHECK(future_writer_state='pending-recording-port'),
- PRIMARY KEY(partition_no,source_route,source_account_id,source_direction,source_receipt_id),
- FOREIGN KEY(partition_no,source_route,source_account_id,source_direction,source_receipt_id)
-   REFERENCES core.agent_identity_inventory(partition_no,source_route,source_account_id,source_direction,source_receipt_id)
-);
-
-CREATE FUNCTION core.agent_identity_inventory_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE s access.agent_identity_intent;
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Original identity inventory requires owner discharge' USING ERRCODE='23514'; END IF;
- IF TG_OP='INSERT' THEN
-   SELECT * INTO s FROM access.agent_identity_intent WHERE route=NEW.source_route AND account_id=NEW.source_account_id
-     AND direction=NEW.source_direction AND receipt_id=NEW.source_receipt_id AND xmin::text=pg_current_xact_id()::text FOR SHARE;
-   IF NOT FOUND OR NEW.state<>'declared' OR NEW.generation<>1 OR
-     (NEW.partition_no,NEW.source_digest,NEW.source_epoch,NEW.source_position,NEW.source_transaction_id,
-      NEW.native_command_kind,NEW.native_principal_id,NEW.native_receipt_key) IS DISTINCT FROM
-     (s.source_partition,s.intent_digest,s.source_epoch,s.source_position,s.source_transaction_id,
-      s.native_command_kind,s.requested_by,s.native_receipt_key) THEN
-     RAISE EXCEPTION 'Inventory requires its original native source writer' USING ERRCODE='23514';
-   END IF;
-   RETURN NEW;
- END IF;
- -- The serializer closes once, in the original creation transaction. Late hooks cannot reopen it.
- PERFORM 1 FROM core.agent_identity_inventory WHERE partition_no=OLD.partition_no AND source_route=OLD.source_route
-   AND source_account_id=OLD.source_account_id AND source_direction=OLD.source_direction AND source_receipt_id=OLD.source_receipt_id
-   AND xmin::text=pg_current_xact_id()::text;
- IF OLD.state='declared' AND NEW.state='sealed' AND FOUND AND
-   (to_jsonb(NEW)-ARRAY['state','expected_locators','expected_event_types'])=
-   (to_jsonb(OLD)-ARRAY['state','expected_locators','expected_event_types']) THEN RETURN NEW; END IF;
- -- A real later SDK enrollment must serialize with the SAME inventory lock and invalidate the cut.
- IF pg_trigger_depth()>1 AND NEW.generation=OLD.generation+1 AND
-   (to_jsonb(NEW)-'generation')=(to_jsonb(OLD)-'generation') THEN RETURN NEW; END IF;
- RAISE EXCEPTION 'Original identity inventory is immutable' USING ERRCODE='23514';
-END; $$;
-CREATE TRIGGER agent_identity_inventory_guard BEFORE INSERT OR UPDATE OR DELETE ON core.agent_identity_inventory
- FOR EACH ROW EXECUTE FUNCTION core.agent_identity_inventory_guard();
-
-CREATE FUNCTION core.agent_identity_sdk_obligation_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE i core.agent_identity_inventory; s access.agent_identity_intent;
-BEGIN
- IF TG_OP='DELETE' THEN RAISE EXCEPTION 'SDK obligation requires real receiving discharge' USING ERRCODE='23514'; END IF;
- SELECT * INTO STRICT i FROM core.agent_identity_inventory WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route
-   AND source_account_id=NEW.source_account_id AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id
-   FOR UPDATE;
- IF TG_OP='INSERT' THEN
-   SELECT * INTO STRICT s FROM access.agent_identity_intent WHERE route=i.source_route AND account_id=i.source_account_id
-     AND direction=i.source_direction AND receipt_id=i.source_receipt_id AND xmin::text=pg_current_xact_id()::text;
-   IF i.state<>'declared' OR NEW.generation<>i.generation OR NEW.workflow_id<>s.workflow_id OR NEW.delivery_key<>s.delivery_key OR
-      (NEW.handoff_partition,NEW.handoff_epoch,NEW.handoff_position,NEW.handoff_transaction_id,NEW.handoff_event_type) IS DISTINCT FROM
-      (CASE WHEN s.direction='account-agent.verify' THEN s.decision_route ELSE s.source_partition END,
-       CASE WHEN s.direction='account-agent.verify' THEN s.decision_epoch ELSE s.source_epoch END,
-       CASE WHEN s.direction='account-agent.verify' THEN s.decision_position ELSE s.source_position END,
-       CASE WHEN s.direction='account-agent.verify' THEN s.decision_transaction_id ELSE s.source_transaction_id END,
-       CASE WHEN s.direction='account-agent.verify' THEN 'com.rezics.access.agent-verification.approved.v1'
-            ELSE 'com.rezics.access.agent-verification.reversing.v1' END) THEN
-     RAISE EXCEPTION 'SDK obligation requires original receipt and known enqueue handoff' USING ERRCODE='23514';
-   END IF;
- ELSE
-   IF (to_jsonb(NEW)-'generation') IS DISTINCT FROM (to_jsonb(OLD)-'generation') OR NEW.generation<>OLD.generation+1 THEN
-     RAISE EXCEPTION 'SDK obligation binding is immutable' USING ERRCODE='23514';
-   END IF;
-   UPDATE core.agent_identity_inventory SET generation=generation+1
-     WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route AND source_account_id=NEW.source_account_id
-       AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id;
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER agent_identity_sdk_obligation_guard BEFORE INSERT OR UPDATE OR DELETE ON core.agent_identity_sdk_obligation
- FOR EACH ROW EXECUTE FUNCTION core.agent_identity_sdk_obligation_guard();
-
-CREATE FUNCTION core.agent_identity_inventory_copy_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE i core.agent_identity_inventory;
-BEGIN
- SELECT * INTO i FROM core.agent_identity_inventory WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route
-   AND source_account_id=NEW.source_account_id AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id
-   AND xmin::text=pg_current_xact_id()::text FOR UPDATE;
- IF NOT FOUND OR i.state<>'declared' OR
-   (NEW.source_digest,NEW.source_epoch,NEW.source_position,NEW.source_transaction_id,NEW.receiver_epoch,NEW.domain_generation)
-   IS DISTINCT FROM (i.source_digest,i.source_epoch,i.source_position,i.source_transaction_id,i.receiver_epoch,i.domain_generation) THEN
-   RAISE EXCEPTION 'Identity copy requires original unsealed producer transaction' USING ERRCODE='23514';
- END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER agent_identity_inventory_copy_guard BEFORE INSERT ON core.agent_identity_history_copy
- FOR EACH ROW EXECUTE FUNCTION core.agent_identity_inventory_copy_guard();
-
--- This deferred validator runs on the final row, after every serializer hook and the physical fence.
--- Its finite expected slots are producer vocabulary, not a count/EOF or transaction-wide discovery.
-CREATE FUNCTION core.validate_agent_identity_inventory() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE i core.agent_identity_inventory; slot record; c core.agent_identity_history_copy; n integer;
- expected_types text[]; expected_receipt bytea; expected_event bytea; kind_id integer;
-BEGIN
- SELECT * INTO STRICT i FROM core.agent_identity_inventory WHERE partition_no=NEW.partition_no AND source_route=NEW.source_route
-   AND source_account_id=NEW.source_account_id AND source_direction=NEW.source_direction AND source_receipt_id=NEW.source_receipt_id;
- IF TG_OP='UPDATE' AND OLD.state='sealed' THEN RETURN NEW; END IF;
- expected_types:=CASE WHEN i.native_command_kind='access.agent-verification.pending'
-   THEN ARRAY['com.rezics.access.account-updated.v1'] ELSE
-   ARRAY['com.rezics.access.agent-verification.reversing.v1','com.rezics.access.account-updated.v1'] END;
- kind_id:=CASE i.native_command_kind WHEN 'access.agent-verification.pending' THEN 3
-   WHEN 'access.agent-verification.released' THEN 4 WHEN 'access.agent-verification.revoked' THEN 5
-   WHEN 'access.agent-verification.deleted' THEN 6 ELSE NULL END;
- IF i.state<>'sealed' OR kind_id IS NULL OR i.expected_event_types IS DISTINCT FROM expected_types OR
-   cardinality(i.expected_locators)<>cardinality(expected_types)+1 OR NOT EXISTS (
-     SELECT 1 FROM core.agent_identity_sdk_obligation o WHERE o.partition_no=i.partition_no AND o.source_route=i.source_route
-       AND o.source_account_id=i.source_account_id AND o.source_direction=i.source_direction AND o.source_receipt_id=i.source_receipt_id
-       AND o.generation=i.generation) THEN
-   RAISE EXCEPTION 'Original identity serializer inventory incomplete' USING ERRCODE='23514';
- END IF;
- PERFORM 1 FROM core.partition p,core.history_family_domain d WHERE p.partition_no=i.partition_no AND p.write_state='active'
-   AND p.epoch=i.source_epoch AND p.epoch=i.receiver_epoch AND p.position=i.source_position AND d.singleton
-   AND d.generation=i.domain_generation FOR SHARE OF p,d;
- IF NOT FOUND THEN RAISE EXCEPTION 'Identity inventory native fence changed' USING ERRCODE='23514'; END IF;
- -- Match the actual executor codec bytes, including current key version and token.
- expected_receipt:=decode('0101','hex') || substring(int4send(i.partition_no) from 3 for 2) || decode('01','hex') ||
-   uuid_send(i.native_principal_id) || int4send(kind_id) ||
-   substring(int4send(split_part(i.native_receipt_key,'.',2)::integer) from 3 for 2) ||
-   decode(translate(split_part(i.native_receipt_key,'.',3),'-_','+/') || '=', 'base64');
- IF i.expected_locators[1] IS DISTINCT FROM expected_receipt THEN
-   RAISE EXCEPTION 'Identity inventory receipt codec mismatch' USING ERRCODE='23514'; END IF;
- PERFORM 1 FROM core.receipt r WHERE r.partition_no=i.partition_no AND r.transaction_id=i.source_transaction_id
-   AND r.principal_kind=i.native_principal_kind AND r.principal_id=i.native_principal_id AND r.command_kind=i.native_command_kind
-   AND r.idempotency_key=i.native_receipt_key AND r.epoch=i.source_epoch AND r.position=i.source_position
-   AND r.xmin::text=pg_current_xact_id()::text;
- IF NOT FOUND THEN RAISE EXCEPTION 'Identity inventory lacks original physical receipt' USING ERRCODE='23514'; END IF;
- FOR slot IN SELECT locator,ordinal FROM unnest(i.expected_locators) WITH ORDINALITY AS e(locator,ordinal) LOOP
-   SELECT * INTO c FROM core.agent_identity_history_copy WHERE partition_no=i.partition_no AND source_route=i.source_route
-     AND source_account_id=i.source_account_id AND source_direction=i.source_direction AND source_receipt_id=i.source_receipt_id
-     AND artifact_type=CASE WHEN slot.ordinal=1 THEN 'command-receipt/v1' ELSE 'outbox-event/v1' END AND locator=slot.locator;
-   IF NOT FOUND THEN
-     RAISE EXCEPTION 'Identity inventory lacks actual expected serializer association' USING ERRCODE='23514'; END IF;
-   IF slot.ordinal>1 THEN
-     expected_event:=decode('0102','hex') || substring(int4send(i.partition_no) from 3 for 2) || int8send(i.source_position) ||
-       substring(int4send((slot.ordinal-2)::integer) from 3 for 2);
-     PERFORM 1 FROM core.outbox o WHERE o.partition_no=i.partition_no AND o.epoch=i.source_epoch
-       AND o.position=i.source_position AND o.event_seq=slot.ordinal-2 AND o.type=expected_types[(slot.ordinal-1)::integer]
-       AND o.xmin::text=pg_current_xact_id()::text;
-     IF NOT FOUND OR slot.locator IS DISTINCT FROM expected_event THEN
-       RAISE EXCEPTION 'Identity inventory lacks actual expected outbox slot' USING ERRCODE='23514'; END IF;
-   END IF;
- END LOOP;
- SELECT count(*) INTO n FROM (SELECT 1 FROM core.agent_identity_history_copy WHERE partition_no=i.partition_no AND source_route=i.source_route
-   AND source_account_id=i.source_account_id AND source_direction=i.source_direction AND source_receipt_id=i.source_receipt_id LIMIT 4) c;
- IF n<>cardinality(i.expected_locators) THEN RAISE EXCEPTION 'Identity inventory has unexpected serializer copies' USING ERRCODE='23514'; END IF;
- RETURN NEW;
-END; $$;
-CREATE CONSTRAINT TRIGGER agent_identity_inventory_native_commit AFTER INSERT OR UPDATE ON core.agent_identity_inventory
- DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION core.validate_agent_identity_inventory();
-
--- Artifact-leading seeks bind later role/consumer enrollment to the same native generation.
--- They take the inventory write lock before admission returns, excluding every live source hold.
-CREATE FUNCTION core.agent_identity_touch_receiving(p_partition integer,p_type text,p_locator bytea)
-RETURNS void LANGUAGE plpgsql AS $$
-DECLARE r record; n integer:=0;
-BEGIN
- FOR r IN SELECT source_route,source_account_id,source_direction,source_receipt_id
-   FROM core.agent_identity_history_copy WHERE partition_no=p_partition AND artifact_type=p_type AND locator=p_locator
-   ORDER BY source_route,source_account_id,source_direction,source_receipt_id LIMIT 2
- LOOP
-   n:=n+1;
-   IF n>1 THEN RAISE EXCEPTION 'Unconverted original identity association fanout' USING ERRCODE='23514'; END IF;
-   UPDATE core.agent_identity_sdk_obligation SET generation=generation+1 WHERE partition_no=p_partition
-     AND source_route=r.source_route AND source_account_id=r.source_account_id
-     AND source_direction=r.source_direction AND source_receipt_id=r.source_receipt_id;
- END LOOP;
-END; $$;
-CREATE FUNCTION core.agent_identity_receiving_enrollment() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE old_locator bytea; new_locator bytea;
-BEGIN
- IF TG_TABLE_NAME='history_locator' THEN
-   IF TG_OP<>'INSERT' THEN
-     PERFORM core.agent_identity_touch_receiving(OLD.partition_no,OLD.artifact_type,OLD.locator);
-   END IF;
-   IF TG_OP<>'DELETE' AND (TG_OP='INSERT' OR
-      (NEW.partition_no,NEW.artifact_type,NEW.locator) IS DISTINCT FROM (OLD.partition_no,OLD.artifact_type,OLD.locator)) THEN
-     PERFORM core.agent_identity_touch_receiving(NEW.partition_no,NEW.artifact_type,NEW.locator);
-   END IF;
- ELSE
-   IF TG_OP<>'INSERT' THEN
-     old_locator:=decode('0102','hex') || substring(int4send(OLD.partition_no) from 3 for 2) || int8send(OLD.position) ||
-       substring(int4send(OLD.event_seq) from 3 for 2);
-     PERFORM core.agent_identity_touch_receiving(OLD.partition_no,'outbox-event/v1',old_locator);
-   END IF;
-   IF TG_OP<>'DELETE' THEN
-     new_locator:=decode('0102','hex') || substring(int4send(NEW.partition_no) from 3 for 2) || int8send(NEW.position) ||
-       substring(int4send(NEW.event_seq) from 3 for 2);
-     IF TG_OP='INSERT' OR (NEW.partition_no,new_locator) IS DISTINCT FROM (OLD.partition_no,old_locator) THEN
-       PERFORM core.agent_identity_touch_receiving(NEW.partition_no,'outbox-event/v1',new_locator);
-     END IF;
-   END IF;
- END IF;
- IF TG_OP='DELETE' THEN RETURN OLD; END IF;
- RETURN NEW;
-END; $$;
-CREATE TRIGGER agent_identity_role_enrollment BEFORE INSERT OR DELETE OR
- UPDATE OF partition_no,account_route,account_id,artifact_type,locator,roles,minimizer_version ON core.history_locator
- FOR EACH ROW EXECUTE FUNCTION core.agent_identity_receiving_enrollment();
-CREATE TRIGGER agent_identity_consumer_enrollment BEFORE INSERT OR UPDATE OR DELETE ON core.history_event_consumer
- FOR EACH ROW EXECUTE FUNCTION core.agent_identity_receiving_enrollment();

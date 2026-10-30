@@ -435,6 +435,23 @@ export async function recordAgentIdentityWorkSource(
      VALUES($1,$2,$3,$4,$5)`,
     [command.partition, source.key, initialCustodyId ?? randomUUID(), source, domain.generation],
   );
+  // Enroll this actual source-side SDK intent under the original inventory's lock. Its
+  // native trigger advances the cut generation; this grants no future-writer closure.
+  const obligation = await tx.query(
+    `UPDATE core.agent_identity_sdk_obligation SET generation=generation+1
+     WHERE partition_no=$1 AND source_route=$2 AND source_account_id=$3
+       AND source_direction=$4 AND source_receipt_id=$5 AND workflow_id=$6 AND delivery_key=$7`,
+    [
+      command.partition,
+      routeOf(receipt.account),
+      receipt.account,
+      receipt.kind,
+      receipt.receipt,
+      source.workflowId,
+      source.key,
+    ],
+  );
+  if (obligation.rowCount !== 1) throw new TypeError('Identity SDK intent lacks its native inventory obligation');
 }
 
 /** Released immutable Source -> original command association. No receiver is checked out here.

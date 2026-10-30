@@ -3331,9 +3331,12 @@ A separate durable SDK obligation is created with each original source, bound to
 workflow/delivery key and known approval/reversal enqueue handoff tuple. It contains no invented SDK work ID or
 opaque receiver coordinates. `agent_identity_sdk_obligation` retains `pending-recording-port`; absence of a future
 SDK mapping cannot certify absence of a copy. Later enrollment must advance that obligation's generation; its
-native trigger takes the inventory lock and advances the cut generation, invalidating old proofs. Artifact-leading
+native trigger takes the inventory lock and advances the cut generation, invalidating old proofs. The genuine
+original command's SDK source-intent recording advances this obligation through that same trigger, matching its
+exact original workflow and delivery key. The later receiver handoff resolves the already-recorded intent and keeps
+the SDK creation transaction unchanged; it does not seal future SDK writers. Artifact-leading
 role and event-consumer enrollment hooks take that same lock and advance the generation before admission returns. The actual SDK
-recording/mapping owner supplies the enrollment body and future-writer closure. Until then verification may return
+recording/mapping owner supplies the separate future-writer closure. Until then verification may return
 `native: 'verified'` but always remains pending specifically for `agent-identity-sdk-recording-port-unavailable`.
 Native physical minimizers may act on a sealed native association subject to their independent owner readiness;
 source, technical linkage, SDK obligation, Account-root and Semantic consumer custody remain mandatory. This module
