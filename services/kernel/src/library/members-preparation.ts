@@ -2,9 +2,15 @@ import type { FilterDocument, FilterRelease } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import type { KernelClock } from '../clock.ts';
-import type { OperationalTransaction } from '../command/operational.ts';
+import {
+  currentOperationalResources,
+  hasLiveOperationalTransaction,
+  type OperationalTransaction,
+} from '../command/operational.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { WorkClient } from '../work/client.ts';
+import type { NativeSourceIdentity } from './native-source-custody.ts';
+import type { CollectionSourceObservation } from './collection-source.ts';
 
 /** Internal admitted meaning, never an HTTP DTO or an execution/disclosure certificate. */
 export type PreparationDefinition = Readonly<{
@@ -17,6 +23,12 @@ export type PreparationLocator = Readonly<{
   ownerAccountId: string;
   collectionId: string;
   episodeId: string;
+}>;
+/** Exact retained native episode inputs. Data only; never admission or disclosure authority. */
+export type MembersPreparationWorkDefinition = Readonly<{
+  definition: PreparationDefinition;
+  sourceIdentity: NativeSourceIdentity;
+  observation: CollectionSourceObservation;
 }>;
 export type PreparationIntent = Readonly<{
   queue: 'workflows';
@@ -46,6 +58,11 @@ export interface MembersPreparation {
   touch(actor: Actor, locator: PreparationLocator, options?: { deadline?: number }): Promise<boolean>;
   /** Called inside the registered step's fenced operational transaction; locks survive to its commit. */
   admitStep(tx: OperationalTransaction, locator: PreparationLocator): Promise<boolean>;
+  /** Read-only on the SAME live admitted Core client; null for an obsolete or unbound episode. */
+  readWorkDefinition(
+    tx: OperationalTransaction,
+    locator: PreparationLocator,
+  ): Promise<MembersPreparationWorkDefinition | null>;
 }
 
 /** Specification only. Construction succeeds; each independently exercisable operation fails literally. */
@@ -55,7 +72,7 @@ export function createMembersPreparation(_config: {
   access: Access;
   clock?: KernelClock;
 }): MembersPreparation {
-  return {
+  const service: MembersPreparation = {
     async reserve() {
       throw new ProblemError('dependency_unavailable');
     },
@@ -65,5 +82,20 @@ export function createMembersPreparation(_config: {
     async admitStep() {
       throw new ProblemError('dependency_unavailable');
     },
+    async readWorkDefinition(tx, locator) {
+      if (!hasLiveOperationalTransaction(tx)) return null;
+      const resources = currentOperationalResources(tx);
+      if (
+        resources.pool !== _config.pool ||
+        resources.workClient !== _config.workClient ||
+        resources.mode !== 'work-step'
+      )
+        return null;
+      if ((await service.admitStep(tx, locator)) !== true) return null;
+      // The native reservation/episode producer is absent in this checkout. Do not infer a
+      // definition or committed Source binding from the caller's locator, or open another client.
+      throw new ProblemError('dependency_unavailable');
+    },
   };
+  return service;
 }

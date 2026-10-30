@@ -7,7 +7,11 @@ import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
-import { admitMembersPreparationWork, type MembersPreparationWorkContext } from '../search/scope-work-context.ts';
+import {
+  readMembersPreparationWorkDefinition,
+  type MembersPreparationWorkContext,
+} from '../search/scope-work-context.ts';
+import { isDeepStrictEqual } from 'node:util';
 
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
 export interface WorkDimensions {
@@ -344,9 +348,18 @@ export function createCollectionSource(dependencies: {
       if (input.work) {
         const collectionId = 'collectionId' in input ? input.collectionId : input.source.observation.collectionId;
         if (collectionId !== input.work.locator.collectionId) throw new ProblemError('semantic_not_ready');
-        await admitMembersPreparationWork(input.work, { ...dependencies, deadline: input.deadline });
-        // The native Source currently exposes only Actor reads. Admission alone supplies neither
-        // the episode's immutable definition nor a same-client work reader. Never borrow that reader.
+        const native = await readMembersPreparationWorkDefinition(input.work, {
+          ...dependencies,
+          deadline: input.deadline,
+        });
+        if (
+          native.sourceIdentity.collectionId !== collectionId ||
+          ('source' in input && !isDeepStrictEqual(input.source.observation, native.observation))
+        )
+          throw new ProblemError('semantic_not_ready');
+        // The existing native metadata/canonical readers open their own reader transactions.
+        // They cannot be borrowed while this Core client is held, or supplied an invented Actor.
+        // Preserve typed unavailability until their native same-client work body is integrated.
         throw new ProblemError('dependency_unavailable');
       }
       return await body(l);

@@ -420,6 +420,21 @@ keeps its own `CollectionAliasProgress`. Both resume through their original prod
 also consumes actual UTF-8 request/response bytes and the same absolute deadline from this root. There is no copied private fact store,
 second interpreter, replacement client or Boolean authorization callback.
 
+`scope-work-context.ts` adds the server-only `{kind:'members-preparation',tx,locator}` mode to the existing
+`LeafOptions` and Collection Source context unions. It verifies the live Core work-step, same pool and fenced
+owner/partition, real Library `admitStep`, then the exact native `readWorkDefinition(tx,locator)` getter on that
+same client. The getter's `MembersPreparationWorkDefinition` stays in `library/members-preparation.ts`; it retains
+the actual definition/release/order, native Source identity and committed observation. Search checks their
+Collection/owner/incarnation/epoch binding and rejects caller definition/order/release mismatches. The existing
+whole ordered Source adapter repeats these comparisons before and after native operations. Time comes only from
+the live Core attempt. No Actor, transaction or verdict enters a cursor or durable definition.
+
+The native MembersPreparation reservation/episode implementation is absent in this checkout, so its selected
+getter is published with an explicit unavailable body. Native Source work reads likewise remain unavailable:
+their current metadata/canonical reader bodies open separate reader transactions and cannot be used while the
+Core work client is held. Work mode performs no foreign checkout or retained Search write to substitute for
+those producers. This handoff supplies no erasure participant or acknowledgement, and establishes no native pass.
+
 The agreed Semantic scoped observation/public capture declarations are installed with typed unavailable producers
 until their native bodies integrate. `readScopeLeafEvidence` still reports native not-ready; the complete Collection
 Source body and Library current owner-leaf authorization/evidence remain integration dependencies. Owner filters
