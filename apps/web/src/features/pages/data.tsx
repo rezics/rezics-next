@@ -150,6 +150,12 @@ export function usePageLocale(): string {
   return useContext(PageContext).locale;
 }
 
+/** Layout-only editor previews use the selected language without acquiring page data or read authority. */
+export function PageLocaleProvider({ locale, children }: { locale: string; children: ReactNode }) {
+  const context = useContext(PageContext);
+  return <PageContext.Provider value={{ ...context, locale }}>{children}</PageContext.Provider>;
+}
+
 export function usePageMessages(): PageMessages {
   return useContext(PageContext).messages;
 }

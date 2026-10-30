@@ -2835,3 +2835,53 @@ Cost: one existing Search request per settled query or explicit retry, at most e
 make no request. Publication sends one native command per explicit action; conflict alone adds one existing point
 read. There are no new per-row reads, refill walks, semantic writes or shelf query changes. Interface typing and
 constructed story responses do not establish native disclosure or growth proof.
+
+## Per-view presentation authoring
+
+`/curate/presentation` edits each locally defined view of the active generic, structural-base, type and route
+templates using the same Puck registry, schema-derived fields and layout renderers. The closed native view list
+supplies the order; missing views are not materialized, so native route/type/nearest-base/generic fallback stays
+intact. Route templates retain their overview-only contract. Adding a type or route template starts with a copy
+of the current generic overview. No subject labels, private data or extra page reads populate these controls.
+
+Each template/view keeps both its composition and its raw Puck editing data in memory. Switching selections retains
+unfinished language fields, node IDs and uncommitted edits. The selected locale controls the preview; editing one
+language preserves the others. Publish sends the complete profile through the existing typed `publishProfile`/BFF
+boundary and native immutable publish/activate API. Composition and whole-profile validation retain native JSON
+pointers, closed appearance/slots, Heading levels 1–4 and the 16-read/128-output-slot refusal. The delivered
+`CurationPublication` and `CurationPublicationRecovery` own publication intent, retry and unknown-outcome recovery.
+A stale head retains every view draft until explicit review chooses to keep it at the reviewed head or load the
+active profile. Retrying an original publication advances its exact snapshot; later per-view edits remain dirty.
+Local discard restores the last loaded or confirmed snapshot. Closing the editor retains its raw draft. Reload
+replaces drafts only after a successful read and asks before losing unpublished changes; while an original
+publication remains unresolved, reload inspects its active head without replacing drafts or the publication intent.
+The editor opens by choosing a template/view or the selected template's button. The delivered published-page
+preview stays in its own region, with its existing Context and prepared BFF read. Inspecting or closing that preview
+does not replace the selected editor, pass draft documents to the public read, or alter publication recovery.
+
+The interface and Puck controls use the eight shared message catalogues and interface typography. Preview data
+components are explicitly labelled placeholders, with no authority or synthetic source data. Drafts are local to
+the mounted editor; navigation does not persist them.
+
+Behavior story IDs for Web's shared phone390/desktop1280, locale and theme globals:
+
+- `pages-curate-presentation-view-editor--authoring`
+- `pages-curate-presentation-view-editor--retained-view-draft`
+- `pages-curate-presentation-view-editor--stale-profile`
+- `pages-curate-presentation-view-editor--native-validation`
+- `pages-curate-presentation-view-editor--discard-confirmation`
+- `pages-curate-presentation-view-editor--reload-unavailable`
+
+`tests/presentation-view-editor.test.ts` covers independent view edits, native resolution, raw drafts, language
+preservation, discard, pointers and budget refusal. `tests/presentation-view-editor-publication.test.ts` covers
+draft confirmation and explicit current-head review through the delivered publication helper. Stories mount the actual editor in `AppShell`; their inert
+profile and failure responses are constructed behavior inputs, not native publication or visual evidence.
+Source read: the existing composition/profile/view/schema code, Puck 0.23's installed public types, existing Web
+editor/converters/BFF/session integration, delivered publication helper/recovery UI, published preview panel and
+resolution stories, UI control index and shared story shell. No external reference-project
+source is named for this authoring surface, and none was used. Native freshness/recovery obligations remain in
+their original acceptance contract for the later integration gate; no harness or authority was added here.
+
+Cost: changing a selection or field makes no request. Local draft conversion/validation is bounded by the existing
+composition/profile limits. Reload uses the existing active/profile reads; explicit publication uses the existing
+immutable profile POST and activation POST. There are no new descriptors, grants, private reads or background walks.

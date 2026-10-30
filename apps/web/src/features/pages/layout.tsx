@@ -51,7 +51,7 @@ const PageHostContext = createContext<{ actions: ReactNode; personal: ReactNode;
 });
 
 const headingClass = {
-  1: 'font-serif text-4xl in-data-[heading-scale=lg]:text-5xl',
+  1: 'text-4xl in-data-[heading-scale=lg]:text-5xl',
   2: 'text-2xl leading-snug in-data-[heading-scale=lg]:text-3xl',
   3: 'text-xl leading-snug in-data-[heading-scale=lg]:text-2xl',
   4: 'text-lg leading-snug in-data-[heading-scale=lg]:text-xl',

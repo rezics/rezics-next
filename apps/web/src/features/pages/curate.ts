@@ -1,9 +1,13 @@
 import type { KernelClient } from '@rezics/client';
 import {
   templateViews,
+  VIEWS,
+  isView,
   type CompositionDocument,
+  type GenericTemplate,
   type PresentationProfile,
   type TemplateBody,
+  type View,
 } from '@rezics/composition';
 
 export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type' | 'route'; key: string };
@@ -35,41 +39,61 @@ function replace<T>(list: T[], keyOf: (entry: T) => string, key: string, entry: 
   return next;
 }
 
-/** The body of a template whose overview is `document`; the other views of an existing template stay. */
-function bodyWith(existing: TemplateBody | undefined, document: CompositionDocument): TemplateBody {
-  return existing?.views ? { views: { ...existing.views, overview: document } } : { document };
-}
-
-/** The overview document of a template: the one the editor edits. */
-export function overviewOf(profile: PresentationProfile, template: Template): CompositionDocument | undefined {
+function templateBody(profile: PresentationProfile, template: Template): TemplateBody | GenericTemplate | undefined {
   switch (template.scope) {
     case 'generic':
-      return templateViews(profile.generic).overview;
-    case 'base': {
-      const entry = profile.bases.find((item) => item.base === template.key);
-      return entry && templateViews(entry).overview;
-    }
-    case 'type': {
-      const entry = profile.types.find((item) => item.type === template.key);
-      return entry && templateViews(entry).overview;
-    }
-    case 'route': {
-      const entry = profile.routes.find((item) => item.route === template.key);
-      return entry && templateViews(entry).overview;
-    }
+      return profile.generic;
+    case 'base':
+      return profile.bases.find((item) => item.base === template.key);
+    case 'type':
+      return profile.types.find((item) => item.type === template.key);
+    case 'route':
+      return profile.routes.find((item) => item.route === template.key);
   }
 }
 
-export function withTemplate(
+/** Only locally defined documents are editable; missing views retain native fallback resolution. */
+export function templateViewNames(profile: PresentationProfile, template: Template): View[] {
+  const body = templateBody(profile, template);
+  const views = body && templateViews(body);
+  return VIEWS.filter((view) => views?.[view] !== undefined);
+}
+
+export function viewOf(profile: PresentationProfile, template: Template, view: View): CompositionDocument | undefined {
+  const body = templateBody(profile, template);
+  return body && templateViews(body)[view];
+}
+
+export function overviewOf(profile: PresentationProfile, template: Template): CompositionDocument | undefined {
+  return viewOf(profile, template, 'overview');
+}
+
+/** Keep the shorthand for overview-only templates and every sibling document of a multi-view template. */
+function bodyWith(existing: TemplateBody | undefined, document: CompositionDocument, view: View): TemplateBody {
+  if (existing?.views) return { views: { ...existing.views, [view]: document } };
+  if (view === 'overview') return { document };
+  if (!existing?.document) throw new TypeError('A template requires an overview');
+  return { views: { overview: existing.document, [view]: document } };
+}
+
+export function withView(
   profile: PresentationProfile,
   template: Template,
+  view: View,
   document: CompositionDocument,
 ): PresentationProfile {
+  if (!isView(view) || (template.scope === 'route' && view !== 'overview'))
+    throw new TypeError('Unsupported template view');
   switch (template.scope) {
     case 'generic':
       return {
         ...profile,
-        generic: 'views' in profile.generic ? { views: { ...profile.generic.views, overview: document } } : document,
+        generic:
+          'views' in profile.generic
+            ? { views: { ...profile.generic.views, [view]: document } }
+            : view === 'overview'
+              ? document
+              : { views: { overview: profile.generic, [view]: document } },
       };
     case 'base':
       return {
@@ -79,6 +103,7 @@ export function withTemplate(
           ...bodyWith(
             profile.bases.find((entry) => entry.base === template.key),
             document,
+            view,
           ),
         }),
       };
@@ -90,6 +115,7 @@ export function withTemplate(
           ...bodyWith(
             profile.types.find((entry) => entry.type === template.key),
             document,
+            view,
           ),
         }),
       };
@@ -101,10 +127,29 @@ export function withTemplate(
           ...bodyWith(
             profile.routes.find((entry) => entry.route === template.key),
             document,
+            view,
           ),
         }),
       };
   }
+}
+
+export function withTemplate(profile: PresentationProfile, template: Template, document: CompositionDocument) {
+  return withView(profile, template, 'overview', document);
+}
+
+/** Native validation uses array positions, never a label or a template key in place of a JSON pointer. */
+export function viewPointer(profile: PresentationProfile, template: Template, view: View): string {
+  const body = templateBody(profile, template);
+  const root =
+    template.scope === 'generic'
+      ? '/generic'
+      : template.scope === 'base'
+        ? `/bases/${profile.bases.findIndex((entry) => entry.base === template.key)}`
+        : template.scope === 'type'
+          ? `/types/${profile.types.findIndex((entry) => entry.type === template.key)}`
+          : `/routes/${profile.routes.findIndex((entry) => entry.route === template.key)}`;
+  return body && 'views' in body ? `${root}/views/${view}` : template.scope === 'generic' ? root : `${root}/document`;
 }
 
 export function curationFailure(status: number, body: unknown, headers?: HeadersInit): CurationFailure {

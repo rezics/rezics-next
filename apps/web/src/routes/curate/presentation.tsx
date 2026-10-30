@@ -4,12 +4,13 @@ import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
 import { readCuration } from '../../features/pages/curate-actions';
 import { CurationView } from '../../features/pages/curate-view';
+import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/curate/presentation')({
   beforeLoad: requireSignedIn,
   loader: () => readCuration(),
   head: ({ match }) =>
-    pageHead({ title: 'Curate presentation', robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
+    pageHead({ title: m.curation_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: PresentationCurationPage,
 });
 
