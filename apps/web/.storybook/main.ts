@@ -45,9 +45,9 @@ const config: StorybookConfig = {
       order: [
         'Overview',
         'Pages',
-        ['Library', 'Subjects', 'Discovery', 'Community', 'Commerce', 'Account'],
+        ['Library', 'Subjects', 'Discovery', 'Community', 'Commerce', 'Account', 'Catalogue', 'Zones', 'Imports', '*'],
         'Patterns',
-        ['Library', 'Subjects', 'Discovery', 'Community', 'Commerce', 'Account'],
+        ['Library', 'Subjects', 'Discovery', 'Community', 'Commerce', 'Account', 'Catalogue', 'Zones', 'Imports', '*'],
         'Components',
         '*',
       ],

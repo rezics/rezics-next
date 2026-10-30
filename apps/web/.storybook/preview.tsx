@@ -26,7 +26,15 @@ const preview: Preview = {
     locale: { description: 'Locale', toolbar: { title: 'Locale', items: [...locales] } },
   },
   initialGlobals: { theme: 'light', locale: 'en' },
-  parameters: { a11y: { test: 'error' } },
+  parameters: {
+    a11y: { test: 'error' },
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
+      },
+    },
+  },
   decorators: [
     (Story, context) => {
       setFakeAdmitted(

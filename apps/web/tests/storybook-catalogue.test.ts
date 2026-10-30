@@ -12,6 +12,57 @@ let server: ReturnType<typeof Bun.serve>;
 type Entry = { id: string; title: string; name: string; type: string; importPath?: string; tags?: string[] };
 type Index = { entries: Record<string, Entry> };
 
+const productAreas = [
+  'Library',
+  'Subjects',
+  'Discovery',
+  'Community',
+  'Commerce',
+  'Account',
+  'Catalogue',
+  'Zones',
+  'Imports',
+  'Accounts',
+  'Subject',
+  'Settings',
+  'Following',
+  'Navigation',
+  'Search',
+];
+// Supplied shared folders keep their canonical IDs instead of acquiring an artificial product area.
+const sharedFolders = new Set([
+  'Patterns/Appeal Resolution',
+  'Patterns/Collection Editor',
+  'Patterns/Collection Preview',
+  'Patterns/Collection Row',
+  'Patterns/Header Search',
+  'Patterns/Moderation Queue',
+  'Patterns/Phone Shell',
+  'Patterns/Realm Participation',
+  'Patterns/Reporter status',
+  'Patterns/Subject Community',
+  'Patterns/Type Presentation',
+  'Pages/Moderation appeals',
+  'Pages/Reporter status',
+  'Pages/Subject Sources',
+]);
+
+function hasCatalogueTitle(title: string): boolean {
+  if (sharedFolders.has(title)) return true;
+  const [tier, area, name, child, extra] = title.split('/');
+  return (
+    (tier === 'Pages' || tier === 'Patterns') &&
+    productAreas.includes(area ?? '') &&
+    Boolean(name?.trim()) &&
+    extra === undefined &&
+    (child === undefined ||
+      (tier === 'Pages' &&
+        area === 'Account' &&
+        name === 'Management' &&
+        ['Account', 'Accounts', 'Organization'].includes(child)))
+  );
+}
+
 function readIndex(path: string): Index {
   return JSON.parse(readFileSync(path, 'utf8')) as Index;
 }
@@ -78,7 +129,7 @@ describe('Storybook catalogue', () => {
     await page.goto(`${server.url}index.html?path=/docs/${docsId('Overview')}`);
     const tree = page.locator('#storybook-explorer-tree');
     await tree.waitFor();
-    for (let index = 0; index < 30; index++) {
+    for (let index = 0; index < Object.keys(web.entries).length; index++) {
       const expand = tree.getByLabel('Expand').first();
       if (!(await expand.count())) break;
       await expand.click();
@@ -96,30 +147,23 @@ describe('Storybook catalogue', () => {
       ['Commerce', 'Account'],
     ])
       expect(at(after!)).toBeGreaterThan(at(before!));
+    for (const area of ['Catalogue', 'Zones', 'Imports']) expect(at(area)).toBeGreaterThan(at('Account'));
     await page.close();
   }, 120_000);
 
-  test('keeps page and pattern stories in their product areas with compact titles', async () => {
+  test('keeps complete page and pattern folders with compact canonical titles', async () => {
     const stories = Object.values(readIndex(resolve(output, 'index.json')).entries).filter(
       (entry) => entry.type === 'story',
     );
-    const pageAreas = ['Library', 'Subjects', 'Discovery', 'Community', 'Commerce', 'Account'];
     const pages = stories.filter((entry) => entry.title.startsWith('Pages/'));
     const patterns = stories.filter((entry) => entry.title.startsWith('Patterns/'));
     expect(pages.length).toBeGreaterThan(0);
-    expect(
-      pages.every((entry) => {
-        const [, area, page, extra] = entry.title.split('/');
-        return pageAreas.includes(area ?? '') && Boolean(page) && extra === undefined;
-      }),
-    ).toBe(true);
+    for (const entry of pages) expect(hasCatalogueTitle(entry.title), entry.title).toBe(true);
     expect(patterns.length).toBeGreaterThan(0);
-    expect(
-      patterns.every((entry) => {
-        const [, area, pattern, extra] = entry.title.split('/');
-        return pageAreas.includes(area ?? '') && Boolean(pattern) && extra === undefined;
-      }),
-    ).toBe(true);
+    for (const entry of patterns) expect(hasCatalogueTitle(entry.title), entry.title).toBe(true);
+    expect(new Set(stories.map((entry) => `${entry.title}\0${entry.name}`)).size).toBe(stories.length);
+    for (const title of ['Patterns/Unknown shared folder', 'Pages/Unknown/Page', 'Patterns/Library/Entry/Empty'])
+      expect(hasCatalogueTitle(title), title).toBe(false);
     expect(pages.some((entry) => entry.title === 'Pages/Discovery/Search')).toBe(true);
     expect(pages.some((entry) => entry.title === 'Pages/Discovery/Search Empty')).toBe(false);
     expect(pages.some((entry) => entry.title === 'Pages/Discovery/Search Typed')).toBe(false);
@@ -138,29 +182,78 @@ describe('Storybook catalogue', () => {
     await page.goto(`${server.url}index.html?path=/docs/${docsId('Overview')}`);
     const tree = page.locator('#storybook-explorer-tree');
     await tree.waitFor();
-    for (let index = 0; index < 30; index++) {
+    for (let index = 0; index < stories.length; index++) {
       const expand = tree.getByLabel('Expand').first();
       if (!(await expand.count())) break;
       await expand.click();
     }
     const visibleCounts = new Map<string, number>();
+    const requiredCounts = new Map<string, number>();
+    const visibleIds = new Set(
+      await tree
+        .locator('[data-item-id]')
+        .evaluateAll((items) => items.map((item) => item.getAttribute('data-item-id'))),
+    );
     for (const entry of stories) {
       if (!entry.title.startsWith('Pages/') && !entry.title.startsWith('Patterns/')) continue;
-      if (!(await tree.locator(`[data-item-id="${entry.id}"]`).count())) continue;
-      visibleCounts.set(entry.title, (visibleCounts.get(entry.title) ?? 0) + 1);
+      if (entry.tags?.includes('dev')) requiredCounts.set(entry.title, (requiredCounts.get(entry.title) ?? 0) + 1);
+      if (visibleIds.has(entry.id)) visibleCounts.set(entry.title, (visibleCounts.get(entry.title) ?? 0) + 1);
     }
-    expect([...visibleCounts].filter(([, count]) => count > 8)).toEqual([]);
+    expect([...visibleCounts].sort()).toEqual([...requiredCounts].sort());
     await page.close();
+  }, 120_000);
+
+  test('indexes every actual Collection editor state under its supplied canonical folder', () => {
+    const index = readIndex(resolve(output, 'index.json'));
+    const states = [
+      'details',
+      'members',
+      'selection',
+      'reordering',
+      'note',
+      'save-pending',
+      'save-error',
+      'dynamic-rule',
+      'presentation',
+      'removal-and-undo',
+      'expired-undo',
+      'selection-unavailable',
+      'selected-removal',
+      'selected-move',
+    ];
+    for (const state of states) {
+      const id = `patterns-collection-editor--${state}`;
+      expect(index.entries[id], id).toMatchObject({ id, type: 'story', title: 'Patterns/Collection Editor' });
+      expect(index.entries[id]!.importPath).toEndWith('src/stories/library-collection-editor.stories.tsx');
+      expect(index.entries[id]!.tags).toContain('dev');
+    }
   });
+
+  test('opens the actual Collection Details editor at both viewport globals using the same ID', async () => {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    for (const [viewport, width] of [
+      ['phone390', 390],
+      ['desktop1280', 1280],
+    ] as const) {
+      await page.goto(
+        `${server.url}index.html?path=/story/patterns-collection-editor--details&globals=locale:en;theme:light;viewport.value:${viewport};viewport.isRotated:!false`,
+      );
+      const frame = page.frameLocator('#storybook-preview-iframe');
+      await frame.getByRole('textbox', { name: 'Title', exact: true }).waitFor();
+      expect(await frame.locator('header').count()).toBe(0);
+      expect(await frame.locator('html').evaluate((element) => element.ownerDocument.defaultView?.innerWidth)).toBe(
+        width,
+      );
+    }
+    await page.close();
+  }, 120_000);
 
   test('renders patterns without the site shell and honors a phone-only viewport global', async () => {
     const stories = Object.values(readIndex(resolve(output, 'index.json')).entries).filter(
       (entry) => entry.type === 'story',
     );
     const pattern = stories.find((entry) => entry.title === 'Patterns/Account/Shell' && entry.name === 'Member');
-    const phone = stories.find(
-      (entry) => entry.title === 'Patterns/Discovery/Search filters' && entry.name === 'Filter sheet open',
-    );
+    const phone = stories.find((entry) => entry.id === 'pages-discovery-search--active-facet');
     expect(pattern).toBeDefined();
     expect(phone).toBeDefined();
     expect(
@@ -172,8 +265,12 @@ describe('Storybook catalogue', () => {
     await frame.locator('main').waitFor();
     expect(await frame.locator('header').count()).toBe(0);
     expect(await frame.locator('nav').count()).toBe(0);
-    await page.goto(`${server.url}index.html?path=/story/${phone!.id}`);
+    await page.goto(
+      `${server.url}index.html?path=/story/${phone!.id}&globals=viewport.value:phone390;viewport.isRotated:!false`,
+    );
     const phoneFrame = page.frameLocator('#storybook-preview-iframe');
+    await phoneFrame.locator('main').waitFor();
+    await phoneFrame.getByRole('button', { name: /^Filters \(\d+\)$/ }).click();
     const filterSheet = phoneFrame.getByRole('dialog');
     await filterSheet.waitFor();
     expect(await phoneFrame.getByRole('checkbox', { name: 'Fable' }).isChecked()).toBe(true);

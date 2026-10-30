@@ -79,6 +79,41 @@ test('page story cells accept planned dependencies and reject incomplete or unre
   expect(isStoryCell('', hasStoryExport)).toBe(false);
 });
 
+test('Collection editing, reordering, following and privacy keep their actual owning exports at both widths', () => {
+  const outcomes = {
+    editing: 'library-collection-editor.stories.tsx#Details',
+    reordering: 'library-collection-editor.stories.tsx#Reordering',
+    following: 'library-collection-patterns.stories.tsx#FollowingEnabled',
+    private: 'collection.stories.tsx#PrivateCurator',
+    unlisted: 'collection.stories.tsx#UnlistedVisitor',
+    public: 'collection.stories.tsx#PublicVisitor',
+    curated: 'collection.stories.tsx#Curator',
+    'one page': 'collection.stories.tsx#OnePage',
+    'many pages': 'collection.stories.tsx#ManyPages',
+    notes: 'collection.stories.tsx#NotesAndDuplicates',
+    'duplicate occurrences': 'collection.stories.tsx#NotesAndDuplicates',
+  };
+  for (const [state, target] of Object.entries(outcomes)) {
+    const rows = cells.filter(
+      ([, route, rowState]) => route.trim() === 'apps/web/src/routes/collections/$id.tsx' && rowState.trim() === state,
+    );
+    expect(rows, state).toHaveLength(1);
+    const reference = `apps/web/src/stories/${target}`;
+    expect(
+      rows[0]!.slice(4).map((cell) => cell.trim()),
+      state,
+    ).toEqual([reference, reference]);
+    const [file, exportName] = reference.split('#');
+    const source = readFileSync(join(root, file!), 'utf8');
+    const story = source.match(new RegExp(`export const ${exportName}\\b[\\s\\S]*?(?=\\nexport const|$)`))?.[0];
+    expect(story, `${reference} retains its behavior play`).toMatch(/\bplay\s*:/);
+  }
+  const editor = readFileSync(join(stories, 'library-collection-editor.stories.tsx'), 'utf8');
+  expect(editor).toContain("title: 'Patterns/Collection Editor'");
+  expect(editor).toContain("from '../library/collection-page'");
+  expect(editor).toContain('<CollectionPage');
+});
+
 test('complex route sections include the required control and state rows', () => {
   const requirements = [
     'tracked entries list in grid, list and table',

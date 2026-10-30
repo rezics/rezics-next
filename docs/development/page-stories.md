@@ -96,7 +96,7 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 
 | Route                                          | State              | Viewer    | Desktop                                                                        | Phone                                                                        |
 | ---------------------------------------------- | ------------------ | --------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| apps/web/src/routes/boards/$id_.moderation.tsx | open reports       | moderator | apps/web/src/stories/moderation-reports.stories.tsx#OpenEnglishLightDesktop    | apps/web/src/stories/moderation-reports.stories.tsx#OpenEnglishLightPhone    |
+| apps/web/src/routes/boards/$id_.moderation.tsx | open reports       | moderator | apps/web/src/stories/moderation-reports.stories.tsx#OpenReports    | apps/web/src/stories/moderation-reports.stories.tsx#OpenReports    |
 | apps/web/src/routes/boards/$id_.moderation.tsx | pending appeal     | moderator | apps/web/src/stories/moderation-appeals.stories.tsx#PendingEnglishLightDesktop | apps/web/src/stories/moderation-appeals.stories.tsx#PendingEnglishLightPhone |
 | apps/web/src/routes/boards/$id_.moderation.tsx | empty appeal queue | moderator | apps/web/src/stories/moderation-appeals.stories.tsx#EmptyEnglishLightDesktop   | apps/web/src/stories/moderation-appeals.stories.tsx#EmptyEnglishLightPhone   |
 
@@ -104,7 +104,7 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 
 | Route                                   | State                   | Viewer    | Desktop                                             | Phone   |
 | --------------------------------------- | ----------------------- | --------- | --------------------------------------------------- | ------- |
-| apps/web/src/routes/boards/$id_.new.tsx | populated               | anonymous | apps/web/src/stories/composer.stories.tsx#NewThread | missing |
+| apps/web/src/routes/boards/$id_.new.tsx | populated               | anonymous | apps/web/src/stories/composer.stories.tsx#NewThreadEmpty | missing |
 | apps/web/src/routes/boards/$id_.new.tsx | populated               | member    | missing                                             | missing |
 | apps/web/src/routes/boards/$id_.new.tsx | populated               | suspended | missing                                             | missing |
 | apps/web/src/routes/boards/$id_.new.tsx | empty                   | anonymous | missing                                             | missing |
@@ -140,7 +140,7 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 | apps/web/src/routes/collections/$id.tsx | error                     | member                          | apps/web/src/stories/collection.stories.tsx#RestartAfterEpochChange                           | apps/web/src/stories/collection.stories.tsx#RestartAfterEpochChange                        |
 | apps/web/src/routes/collections/$id.tsx | error                     | suspended                       | planned: suspended-session fixture                                                            | planned: suspended-session fixture                                                         |
 | apps/web/src/routes/collections/$id.tsx | curated                   | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#PrivateCurator                                    | apps/web/src/stories/collection.stories.tsx#PrivateCurator                                 |
-| apps/web/src/routes/collections/$id.tsx | dynamic                   | member or visitor as applicable | apps/web/src/stories/library-collection-dynamic.stories.tsx#EverythingEnglishLightDesktop1280 | apps/web/src/stories/library-collection-dynamic.stories.tsx#EverythingEnglishLightPhone390 |
+| apps/web/src/routes/collections/$id.tsx | dynamic                   | member or visitor as applicable | apps/web/src/stories/library-collection-dynamic.stories.tsx#Everything | apps/web/src/stories/library-collection-dynamic.stories.tsx#Everything |
 | apps/web/src/routes/collections/$id.tsx | private                   | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#PrivateCurator                                    | apps/web/src/stories/collection.stories.tsx#PrivateCurator                                 |
 | apps/web/src/routes/collections/$id.tsx | unlisted                  | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#UnlistedVisitor                                   | apps/web/src/stories/collection.stories.tsx#UnlistedVisitor                                |
 | apps/web/src/routes/collections/$id.tsx | public                    | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#PublicVisitor                                     | apps/web/src/stories/collection.stories.tsx#PublicVisitor                                  |
@@ -151,12 +151,12 @@ Story cells use the exact `apps/web/src/stories/<file>#<export>` reference, `mis
 | apps/web/src/routes/collections/$id.tsx | many pages                | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#ManyPages                                         | apps/web/src/stories/collection.stories.tsx#ManyPages                                      |
 | apps/web/src/routes/collections/$id.tsx | notes                     | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates                                | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates                             |
 | apps/web/src/routes/collections/$id.tsx | duplicate occurrences     | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates                                | apps/web/src/stories/collection.stories.tsx#NotesAndDuplicates                             |
-| apps/web/src/routes/collections/$id.tsx | editing                   | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#Editing                                           | apps/web/src/stories/collection.stories.tsx#Editing                                        |
-| apps/web/src/routes/collections/$id.tsx | reordering                | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#Reordering                                        | apps/web/src/stories/collection.stories.tsx#Reordering                                     |
-| apps/web/src/routes/collections/$id.tsx | following                 | member or visitor as applicable | apps/web/src/stories/collection.stories.tsx#Following                                         | apps/web/src/stories/collection.stories.tsx#Following                                      |
-| apps/web/src/routes/collections/$id.tsx | Everything                | member or visitor as applicable | apps/web/src/stories/library-collection-dynamic.stories.tsx#EverythingEnglishLightDesktop1280 | apps/web/src/stories/library-collection-dynamic.stories.tsx#EverythingEnglishLightPhone390 |
-| apps/web/src/routes/collections/$id.tsx | state                     | member or visitor as applicable | apps/web/src/stories/library-collection-dynamic.stories.tsx#StateEnglishLightDesktop1280      | apps/web/src/stories/library-collection-dynamic.stories.tsx#StateEnglishLightPhone390      |
-| apps/web/src/routes/collections/$id.tsx | Liked                     | member or visitor as applicable | apps/web/src/stories/library-collection-dynamic.stories.tsx#LikedEnglishLightDesktop1280      | apps/web/src/stories/library-collection-dynamic.stories.tsx#LikedEnglishLightPhone390      |
+| apps/web/src/routes/collections/$id.tsx | editing                   | member or visitor as applicable | apps/web/src/stories/library-collection-editor.stories.tsx#Details                                           | apps/web/src/stories/library-collection-editor.stories.tsx#Details                                        |
+| apps/web/src/routes/collections/$id.tsx | reordering                | member or visitor as applicable | apps/web/src/stories/library-collection-editor.stories.tsx#Reordering                                        | apps/web/src/stories/library-collection-editor.stories.tsx#Reordering                                     |
+| apps/web/src/routes/collections/$id.tsx | following                 | member or visitor as applicable | apps/web/src/stories/library-collection-patterns.stories.tsx#FollowingEnabled                                         | apps/web/src/stories/library-collection-patterns.stories.tsx#FollowingEnabled                                      |
+| apps/web/src/routes/collections/$id.tsx | Everything                | member or visitor as applicable | apps/web/src/stories/library-collection-dynamic.stories.tsx#Everything | apps/web/src/stories/library-collection-dynamic.stories.tsx#Everything |
+| apps/web/src/routes/collections/$id.tsx | state                     | member or visitor as applicable | apps/web/src/stories/library-collection-dynamic.stories.tsx#State      | apps/web/src/stories/library-collection-dynamic.stories.tsx#State      |
+| apps/web/src/routes/collections/$id.tsx | Liked                     | member or visitor as applicable | apps/web/src/stories/library-collection-dynamic.stories.tsx#Liked      | apps/web/src/stories/library-collection-dynamic.stories.tsx#Liked      |
 | apps/web/src/routes/collections/$id.tsx | property filters          | member or visitor as applicable | apps/web/src/stories/library-collection-filters.stories.tsx#Reference                         | apps/web/src/stories/library-collection-filters.stories.tsx#Reference                      |
 | apps/web/src/routes/collections/$id.tsx | concept selected          | member or visitor as applicable | apps/web/src/stories/library-collection-filters.stories.tsx#ConceptSelected                   | apps/web/src/stories/library-collection-filters.stories.tsx#ConceptSelected                |
 | apps/web/src/routes/collections/$id.tsx | quantity range            | member or visitor as applicable | apps/web/src/stories/library-collection-filters.stories.tsx#WordRangeApplied                  | apps/web/src/stories/library-collection-filters.stories.tsx#WordRangeApplied               |
@@ -493,8 +493,8 @@ snapshots therefore use the Space stories below.
 
 | Route                          | State                   | Viewer                          | Desktop                                           | Phone   |
 | ------------------------------ | ----------------------- | ------------------------------- | ------------------------------------------------- | ------- |
-| apps/web/src/routes/search.tsx | populated               | anonymous                       | apps/web/src/stories/search.stories.tsx#SignedOut | missing |
-| apps/web/src/routes/search.tsx | populated               | member                          | apps/web/src/stories/search.stories.tsx#SignedIn  | missing |
+| apps/web/src/routes/search.tsx | populated               | anonymous                       | apps/web/src/stories/search-rating.stories.tsx#SignedOut | missing |
+| apps/web/src/routes/search.tsx | populated               | member                          | apps/web/src/stories/search-rating.stories.tsx#SignedIn  | missing |
 | apps/web/src/routes/search.tsx | populated               | suspended                       | missing                                           | missing |
 | apps/web/src/routes/search.tsx | empty                   | anonymous                       | missing                                           | missing |
 | apps/web/src/routes/search.tsx | empty                   | member                          | missing                                           | missing |
@@ -777,8 +777,8 @@ certify native authorization. The native fixture retains its real response captu
 
 | Route                               | State                   | Viewer    | Desktop                                           | Phone   |
 | ----------------------------------- | ----------------------- | --------- | ------------------------------------------------- | ------- |
-| apps/web/src/routes/threads/$id.tsx | populated               | anonymous | apps/web/src/stories/thread.stories.tsx#SignedOut | missing |
-| apps/web/src/routes/threads/$id.tsx | populated               | member    | apps/web/src/stories/thread.stories.tsx#SignedIn  | missing |
+| apps/web/src/routes/threads/$id.tsx | populated               | anonymous | apps/web/src/stories/thread-reading.stories.tsx#SignedOut | missing |
+| apps/web/src/routes/threads/$id.tsx | populated               | member    | apps/web/src/stories/thread-reading.stories.tsx#Populated  | missing |
 | apps/web/src/routes/threads/$id.tsx | populated               | suspended | missing                                           | missing |
 | apps/web/src/routes/threads/$id.tsx | empty                   | anonymous | missing                                           | missing |
 | apps/web/src/routes/threads/$id.tsx | empty                   | member    | missing                                           | missing |
@@ -797,8 +797,8 @@ certify native authorization. The native fixture retains its real response captu
 
 | Route                                      | State                   | Viewer    | Desktop                                           | Phone   |
 | ------------------------------------------ | ----------------------- | --------- | ------------------------------------------------- | ------- |
-| apps/web/src/routes/threads/$id_.$slug.tsx | populated               | anonymous | apps/web/src/stories/thread.stories.tsx#SignedOut | missing |
-| apps/web/src/routes/threads/$id_.$slug.tsx | populated               | member    | apps/web/src/stories/thread.stories.tsx#SignedIn  | missing |
+| apps/web/src/routes/threads/$id_.$slug.tsx | populated               | anonymous | apps/web/src/stories/thread-reading.stories.tsx#SignedOut | missing |
+| apps/web/src/routes/threads/$id_.$slug.tsx | populated               | member    | apps/web/src/stories/thread-reading.stories.tsx#Populated  | missing |
 | apps/web/src/routes/threads/$id_.$slug.tsx | populated               | suspended | missing                                           | missing |
 | apps/web/src/routes/threads/$id_.$slug.tsx | empty                   | anonymous | missing                                           | missing |
 | apps/web/src/routes/threads/$id_.$slug.tsx | empty                   | member    | missing                                           | missing |
@@ -815,94 +815,6 @@ certify native authorization. The native fixture retains its real response captu
 
 ## Missing cells — Collections
 
-- apps/web/src/routes/collections/$id.tsx — populated — anonymous — phone
-- apps/web/src/routes/collections/$id.tsx — populated — member — phone
-- apps/web/src/routes/collections/$id.tsx — populated — suspended — desktop
-- apps/web/src/routes/collections/$id.tsx — populated — suspended — phone
-- apps/web/src/routes/collections/$id.tsx — empty — anonymous — desktop
-- apps/web/src/routes/collections/$id.tsx — empty — anonymous — phone
-- apps/web/src/routes/collections/$id.tsx — empty — member — desktop
-- apps/web/src/routes/collections/$id.tsx — empty — member — phone
-- apps/web/src/routes/collections/$id.tsx — empty — suspended — desktop
-- apps/web/src/routes/collections/$id.tsx — empty — suspended — phone
-- apps/web/src/routes/collections/$id.tsx — long content — anonymous — desktop
-- apps/web/src/routes/collections/$id.tsx — long content — anonymous — phone
-- apps/web/src/routes/collections/$id.tsx — long content — member — desktop
-- apps/web/src/routes/collections/$id.tsx — long content — member — phone
-- apps/web/src/routes/collections/$id.tsx — long content — suspended — desktop
-- apps/web/src/routes/collections/$id.tsx — long content — suspended — phone
-- apps/web/src/routes/collections/$id.tsx — preparing / unavailable — anonymous — desktop
-- apps/web/src/routes/collections/$id.tsx — preparing / unavailable — anonymous — phone
-- apps/web/src/routes/collections/$id.tsx — preparing / unavailable — member — desktop
-- apps/web/src/routes/collections/$id.tsx — preparing / unavailable — member — phone
-- apps/web/src/routes/collections/$id.tsx — preparing / unavailable — suspended — desktop
-- apps/web/src/routes/collections/$id.tsx — preparing / unavailable — suspended — phone
-- apps/web/src/routes/collections/$id.tsx — error — anonymous — desktop
-- apps/web/src/routes/collections/$id.tsx — error — anonymous — phone
-- apps/web/src/routes/collections/$id.tsx — error — member — desktop
-- apps/web/src/routes/collections/$id.tsx — error — member — phone
-- apps/web/src/routes/collections/$id.tsx — error — suspended — desktop
-- apps/web/src/routes/collections/$id.tsx — error — suspended — phone
-- apps/web/src/routes/collections/$id.tsx — curated — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — curated — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — dynamic — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — dynamic — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — private — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — private — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — unlisted — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — unlisted — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — public — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — public — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — curator — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — curator — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — reader — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — reader — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — empty — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — empty — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — one page — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — one page — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — many pages — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — many pages — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — notes — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — notes — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — duplicate occurrences — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — duplicate occurrences — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — editing — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — editing — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — reordering — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — reordering — member or visitor as applicable — phone
-- apps/web/src/routes/collections/$id.tsx — following — member or visitor as applicable — desktop
-- apps/web/src/routes/collections/$id.tsx — following — member or visitor as applicable — phone
-- apps/web/src/routes/collections/new.tsx — populated — member — desktop
-- apps/web/src/routes/collections/new.tsx — populated — member — phone
-- apps/web/src/routes/collections/new.tsx — populated — owner or curator — desktop
-- apps/web/src/routes/collections/new.tsx — populated — owner or curator — phone
-- apps/web/src/routes/collections/new.tsx — populated — suspended — desktop
-- apps/web/src/routes/collections/new.tsx — populated — suspended — phone
-- apps/web/src/routes/collections/new.tsx — empty — member — desktop
-- apps/web/src/routes/collections/new.tsx — empty — member — phone
-- apps/web/src/routes/collections/new.tsx — empty — owner or curator — desktop
-- apps/web/src/routes/collections/new.tsx — empty — owner or curator — phone
-- apps/web/src/routes/collections/new.tsx — empty — suspended — desktop
-- apps/web/src/routes/collections/new.tsx — empty — suspended — phone
-- apps/web/src/routes/collections/new.tsx — long content — member — desktop
-- apps/web/src/routes/collections/new.tsx — long content — member — phone
-- apps/web/src/routes/collections/new.tsx — long content — owner or curator — desktop
-- apps/web/src/routes/collections/new.tsx — long content — owner or curator — phone
-- apps/web/src/routes/collections/new.tsx — long content — suspended — desktop
-- apps/web/src/routes/collections/new.tsx — long content — suspended — phone
-- apps/web/src/routes/collections/new.tsx — preparing / unavailable — member — desktop
-- apps/web/src/routes/collections/new.tsx — preparing / unavailable — member — phone
-- apps/web/src/routes/collections/new.tsx — preparing / unavailable — owner or curator — desktop
-- apps/web/src/routes/collections/new.tsx — preparing / unavailable — owner or curator — phone
-- apps/web/src/routes/collections/new.tsx — preparing / unavailable — suspended — desktop
-- apps/web/src/routes/collections/new.tsx — preparing / unavailable — suspended — phone
-- apps/web/src/routes/collections/new.tsx — error — member — desktop
-- apps/web/src/routes/collections/new.tsx — error — member — phone
-- apps/web/src/routes/collections/new.tsx — error — owner or curator — desktop
-- apps/web/src/routes/collections/new.tsx — error — owner or curator — phone
-- apps/web/src/routes/collections/new.tsx — error — suspended — desktop
-- apps/web/src/routes/collections/new.tsx — error — suspended — phone
 
 ## Missing cells — subject page
 
@@ -1524,8 +1436,6 @@ certify native authorization. The native fixture retains its real response captu
 - apps/web/src/routes/orders/$id.tsx — error — member — phone
 - apps/web/src/routes/orders/$id.tsx — error — suspended — desktop
 - apps/web/src/routes/orders/$id.tsx — error — suspended — phone
-- apps/web/src/routes/realms/$id.tsx — populated — anonymous — phone
-- apps/web/src/routes/realms/$id.tsx — populated — member — phone
 - apps/web/src/routes/realms/$id.tsx — populated — suspended — desktop
 - apps/web/src/routes/realms/$id.tsx — populated — suspended — phone
 - apps/web/src/routes/realms/$id.tsx — empty — anonymous — desktop
@@ -1553,7 +1463,6 @@ certify native authorization. The native fixture retains its real response captu
 - apps/web/src/routes/realms/$id.tsx — error — suspended — desktop
 - apps/web/src/routes/realms/$id.tsx — error — suspended — phone
 - apps/web/src/routes/realms/index.tsx — populated — anonymous — phone
-- apps/web/src/routes/realms/index.tsx — populated — member — phone
 - apps/web/src/routes/realms/index.tsx — populated — suspended — desktop
 - apps/web/src/routes/realms/index.tsx — populated — suspended — phone
 - apps/web/src/routes/realms/index.tsx — empty — anonymous — desktop
