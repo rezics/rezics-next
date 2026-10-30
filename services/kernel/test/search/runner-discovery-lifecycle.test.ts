@@ -294,7 +294,7 @@ for (const history of [64, 512, 4096]) {
   test(`pause drains discovery admitted before its boundary and paused replacement stays idle at history ${history}`, async () => {
     await fixture(async (f) => {
       await createSubjectIndex(native, prefix, 2);
-      f.runner.resume();
+      await f.idleResume();
       const held = f.holdRequest('GET', resolvePath, 'discovery');
       const refresh = f.runner.refresh();
       await bounded(held.reached, 'discovery admitted');
