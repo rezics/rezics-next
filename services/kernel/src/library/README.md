@@ -1173,9 +1173,12 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   the current shared API. Shared occurrence reporting for those invocations is a prerequisite; raw plan counts
   must not stand in for executions. The authored steady-plan assertions and storage/correctness cases remain
   unchanged, and no new calibrated pass is claimed.
-  The focused acceptance run stopped before native test execution with TypeScript `TS2339` on the raw client's
-  `processID` property. The probe now uses the same checked native-property narrowing as the shared harness.
-  That fix has no new native receipt; the missing warm-up occurrence binding above remains required.
+  The probe uses the same checked native-property narrowing for `processID` as the shared harness; that repair
+  still has no new native receipt. The latest local kernel workspace type check failed on the unchanged source
+  head with `TS2769` at `specs/viewer-actions-surfaces-outcomes.test.ts:139`: spreading `refs[index]` makes the
+  required resource identity optional under unchecked-index protection. This pre-existing frozen acceptance
+  assertion remains unchanged. Native acceptance is deferred under the current minimal verification instruction;
+  neither local typing nor shared occurrence-custody delivery establishes a calibrated native pass.
 
 ### Follow read
 
