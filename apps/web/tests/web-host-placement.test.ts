@@ -120,10 +120,7 @@ test('discovers a newly added host file and routes every selected file exactly o
 
   expect(authRuns).toBe(1);
   expect(nativeRuns).toEqual([['tests/check-fresh.host.test.ts', 'tests/new-unrelated.host.test.ts']]);
-  expect([...selected].sort()).toEqual([
-    'tests/auth-binding.host.test.ts',
-    ...nativeRuns[0]!,
-  ].sort());
+  expect([...selected].sort()).toEqual(['tests/auth-binding.host.test.ts', ...nativeRuns[0]!].sort());
 });
 
 test('the explicit Auth-only entry stays focused and propagates a lane failure', async () => {
@@ -163,21 +160,24 @@ test('Auth and native host failures remain nonzero and the Auth lane cleanup run
   let nativeRun = false;
 
   await expect(
-    runWebHostTests({}, {
-      directory,
-      runAuthBinding: async () => {
-        try {
-          throw new Error('auth lane failed');
-        } finally {
-          cleanup = true;
-        }
+    runWebHostTests(
+      {},
+      {
+        directory,
+        runAuthBinding: async () => {
+          try {
+            throw new Error('auth lane failed');
+          } finally {
+            cleanup = true;
+          }
+        },
+        runNative: async (files) => {
+          nativeRun = true;
+          expect(files).toEqual(['tests/native-failure.host.test.ts']);
+          throw new Error('native host test failed');
+        },
       },
-      runNative: async (files) => {
-        nativeRun = true;
-        expect(files).toEqual(['tests/native-failure.host.test.ts']);
-        throw new Error('native host test failed');
-      },
-    }),
+    ),
   ).rejects.toThrow(/auth lane failed[\s\S]*native host test failed/);
 
   expect(cleanup).toBe(true);
