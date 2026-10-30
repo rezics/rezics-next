@@ -222,31 +222,71 @@ export function createSubjectIndexer(options: {
 
 /** The shared relay captures both owners in one 64-envelope checkpoint obligation. */
 export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjection, consumer: string): Relay {
-  return { consumer, run(partition) {
-    return projectBatch(pool,{consumer,partition,apply:async(envelopes)=>{
-      const subjects=new Set<string>(), accounts=new Set<string>();
-      for (const envelope of envelopes) for (const event of envelope.events) {
-        if (!event.subject || subjectPartition(event.subject)!==partition) continue;
-        if (event.type.startsWith('com.rezics.subject.') || event.type==='com.rezics.library.subject.listed.v1') subjects.add(event.subject);
-        if (event.type==='com.rezics.rating.public_figure.changed.v1') {
-          const data=event.data;
-          if (record(data) && data.questionId===STANDARD_QUESTION_ID && data.populationId===GLOBAL_CONTEXT.id && data.subjectId===event.subject)
-            subjects.add(event.subject);
-        }
-        if (['com.rezics.access.account-discovery-changed.v1','com.rezics.access.account-updated.v1','com.rezics.access.account-tombstoned.v1'].includes(event.type)) accounts.add(event.subject);
-      }
-      const keys: DiscoveryKey[]=[...accounts].map((id)=>({owner:'accounts',kind:'account',id,route:routeOf(id)!}));
-      const ids=[...subjects];
-      for (let offset=0;offset<ids.length;offset+=256) {
-        const chunk=ids.slice(offset,offset+256);
-        const rows=await withConnection(pool,async(client)=>(await client.query<{id:string;route:number;kind:string}>(
-          `SELECT subject_id::text AS id,route,type AS kind FROM semantic.subject WHERE route >= $1 AND route < $2 AND subject_id=ANY($3::uuid[])
+  return {
+    consumer,
+    run(partition) {
+      return projectBatch(pool, {
+        consumer,
+        partition,
+        apply: async (envelopes) => {
+          const subjects = new Set<string>(),
+            accounts = new Set<string>();
+          for (const envelope of envelopes)
+            for (const event of envelope.events) {
+              if (!event.subject || subjectPartition(event.subject) !== partition) continue;
+              if (event.type.startsWith('com.rezics.subject.') || event.type === 'com.rezics.library.subject.listed.v1')
+                subjects.add(event.subject);
+              if (event.type === 'com.rezics.rating.public_figure.changed.v1') {
+                const data = event.data;
+                if (
+                  record(data) &&
+                  data.questionId === STANDARD_QUESTION_ID &&
+                  data.populationId === GLOBAL_CONTEXT.id &&
+                  data.subjectId === event.subject
+                )
+                  subjects.add(event.subject);
+              }
+              if (
+                [
+                  'com.rezics.access.account-discovery-changed.v1',
+                  'com.rezics.access.account-updated.v1',
+                  'com.rezics.access.account-tombstoned.v1',
+                ].includes(event.type)
+              )
+                accounts.add(event.subject);
+            }
+          const keys: DiscoveryKey[] = [...accounts].map((id) => ({
+            owner: 'accounts',
+            kind: 'account',
+            id,
+            route: routeOf(id)!,
+          }));
+          const ids = [...subjects];
+          for (let offset = 0; offset < ids.length; offset += 256) {
+            const chunk = ids.slice(offset, offset + 256);
+            const rows = await withConnection(
+              pool,
+              async (client) =>
+                (
+                  await client.query<{ id: string; route: number; kind: string }>(
+                    `SELECT subject_id::text AS id,route,type AS kind FROM semantic.subject WHERE route >= $1 AND route < $2 AND subject_id=ANY($3::uuid[])
            UNION SELECT source_id::text,route,kind FROM search.discovery_copy WHERE prefix=$4 AND generation=$5
            AND route >= $1 AND route < $2 AND source_id=ANY($3::uuid[]) AND kind <> 'account'`,
-          [partition*16,(partition+1)*16,chunk,projection.target.prefix,projection.target.generation])).rows);
-        keys.push(...rows.map((row):DiscoveryKey=>({owner:'semantic',...row})));
-      }
-      await projection.project(partition,keys,envelopes.at(-1)?.position ?? 0n);
-    }});
-  }};
+                    [
+                      partition * 16,
+                      (partition + 1) * 16,
+                      chunk,
+                      projection.target.prefix,
+                      projection.target.generation,
+                    ],
+                  )
+                ).rows,
+            );
+            keys.push(...rows.map((row): DiscoveryKey => ({ owner: 'semantic', ...row })));
+          }
+          await projection.project(partition, keys, envelopes.at(-1)?.position ?? 0n);
+        },
+      });
+    },
+  };
 }

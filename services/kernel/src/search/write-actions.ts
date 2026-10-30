@@ -93,8 +93,10 @@ function validateBulkResponse(
 
     if (
       hasItemError ||
-      !(safeInteger(result._version, 1) ||
-        (exact && typeof result._version === 'string' && /^[1-9][0-9]{0,18}$/.test(result._version))) ||
+      !(
+        safeInteger(result._version, 1) ||
+        (exact && typeof result._version === 'string' && /^[1-9][0-9]{0,18}$/.test(result._version))
+      ) ||
       BigInt(String(result._version)) !== action.version ||
       !safeInteger(result._seq_no, 0) ||
       !safeInteger(result._primary_term, 1) ||
@@ -142,9 +144,16 @@ export async function writeDiscoveryActions(
     const receipt = isRecord(item) ? item[action.op] : undefined;
     return isRecord(receipt) && receipt.status === 409;
   });
-  const observed = await search.request<unknown>('POST', `/${index}/_search`, {
-    size: conflicts.length, version: true, query: { ids: { values: conflicts.map(({ id }) => id) } },
-  }, { query: { allow_partial_search_results: false } });
+  const observed = await search.request<unknown>(
+    'POST',
+    `/${index}/_search`,
+    {
+      size: conflicts.length,
+      version: true,
+      query: { ids: { values: conflicts.map(({ id }) => id) } },
+    },
+    { query: { allow_partial_search_results: false } },
+  );
   assertCompleteSearch(observed.body);
   if (!isRecord(observed.body) || !isRecord(observed.body.hits) || !Array.isArray(observed.body.hits.hits))
     return writeError([observed.body]);
@@ -156,8 +165,12 @@ export async function writeDiscoveryActions(
   }
   for (const action of conflicts) {
     const winner = winners.get(action.id);
-    if (action.op !== 'index' || !winner || String(winner._version) !== action.version.toString() ||
-      !isDeepStrictEqual(validateDiscoveryDocument(registry, winner._source), action.document))
+    if (
+      action.op !== 'index' ||
+      !winner ||
+      String(winner._version) !== action.version.toString() ||
+      !isDeepStrictEqual(validateDiscoveryDocument(registry, winner._source), action.document)
+    )
       return writeError([winner]);
   }
 }

@@ -64,13 +64,21 @@ export function discoveryIndexDefinition(): SubjectIndexDefinition {
 }
 
 /** Allocation only; source exhaustion, replay, exact-key reconciliation and custody precede activation. */
-export async function createDiscoveryIndex(search: OpenSearch, prefix: string, generation: number, incarnation?: string): Promise<void> {
+export async function createDiscoveryIndex(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+  incarnation?: string,
+): Promise<void> {
   const index = discoveryIndexName(prefix, generation);
   const definition = nativeDiscoveryDefinition();
   const response = await search.request<{ acknowledged?: boolean }>('PUT', `/${index}`, {
-    ...definition, mappings: { ...definition.mappings, _meta: {...definition.mappings._meta, incarnation} }, aliases: { [`${index}-write`]: { is_write_index: true } },
+    ...definition,
+    mappings: { ...definition.mappings, _meta: { ...definition.mappings._meta, incarnation } },
+    aliases: { [`${index}-write`]: { is_write_index: true } },
   });
-  if (response.body.acknowledged !== true) throw new SearchUnavailableError('Discovery allocation was not acknowledged');
+  if (response.body.acknowledged !== true)
+    throw new SearchUnavailableError('Discovery allocation was not acknowledged');
 }
 
 export function discoveryIndexName(prefix: string, generation: number): string {

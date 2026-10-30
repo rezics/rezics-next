@@ -40,7 +40,7 @@ export const searchWorkModule: WorkModule = {
         listing: subjectListingSource(context.pool),
         prefix: config.prefix,
         concurrency: 2,
-        discovery: {routeKey},
+        discovery: { routeKey },
       }),
     );
   },

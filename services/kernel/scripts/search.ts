@@ -173,9 +173,15 @@ async function rebuild(): Promise<void> {
       runner: { async refresh() {} },
     });
     const { subjectListingSource } = await import('../src/library/listing-counts.ts');
-    const discovery = await rebuildDiscovery({pool,search:createOpenSearch(config.url),
-      source:createRatedSubjectSource(pool,routeKey).source,listing:subjectListingSource(pool),prefix:config.prefix,routeKey});
-    console.log(JSON.stringify({...result,discovery}));
+    const discovery = await rebuildDiscovery({
+      pool,
+      search: createOpenSearch(config.url),
+      source: createRatedSubjectSource(pool, routeKey).source,
+      listing: subjectListingSource(pool),
+      prefix: config.prefix,
+      routeKey,
+    });
+    console.log(JSON.stringify({ ...result, discovery }));
   } catch (error) {
     if (error instanceof RebuildError) {
       console.error(
