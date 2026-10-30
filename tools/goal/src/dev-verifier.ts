@@ -927,7 +927,11 @@ async function reconcile(
     }
     const suspects = suspectsFor(options.settings, options.store, base, target, check);
     const result = await proveExistingOrReintroduced(options, check, finding.assertion, suspects, selection);
-    proof.push({ finding, status: result.status, cleanIndex: result.cleanIndex });
+    proof.push({
+      finding,
+      status: result.status,
+      ...(result.cleanIndex !== undefined ? { cleanIndex: result.cleanIndex } : {}),
+    });
   }
   for (const item of proof) {
     if (item.status === 'new') {
