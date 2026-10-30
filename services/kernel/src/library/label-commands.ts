@@ -18,11 +18,12 @@ import {
 } from './command-support.ts';
 import { LibraryConflictError } from './entries.ts';
 import page from './label-catalogue-page.sql';
+import prefixPage from './label-catalogue-prefix.sql';
 import * as store from './label-store.ts';
 
 type Label = { id: string; name: string; revision: number };
 type LabelValue = { label: { id: string; revision: number } };
-type ListOptions = { limit?: number; cursor?: string };
+type ListOptions = { limit?: number; cursor?: string; q?: string };
 type Client = Pick<PoolClient, 'query'>;
 
 function account(actor: Actor, action: string): AccountActor {
@@ -227,7 +228,16 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
     actor: Actor,
     options: ListOptions = {},
   ): Promise<{ labels: Label[]; next: string | null }> {
-    const parsed = object(options, ['limit', 'cursor']);
+    const parsed = object(options, ['limit', 'cursor', 'q']);
+    let q = '';
+    if (parsed.q !== undefined) {
+      try {
+        q = store.normalizePersonalLabelPrefix(parsed.q);
+      } catch (error) {
+        if (error instanceof TypeError || error instanceof RangeError) throw new ProblemError('invalid_request');
+        throw error;
+      }
+    }
     const limit = parsed.limit === undefined ? 20 : parsed.limit;
     if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100)
       throw new RangeError('Page limit must be an integer from 1 to 100');
@@ -237,7 +247,7 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
       const binding = {
         route: 'library_label.list',
         viewer: owner.accountId,
-        query: { owner: owner.accountId, limit },
+        query: { owner: owner.accountId, limit, ...(q ? { q, version: 1 } : {}) },
       };
       const now = clock();
       let after = '00000000-0000-0000-0000-000000000000';
@@ -257,10 +267,29 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
           throw new ProblemError('stale_cursor');
         after = cursor.after[0];
       }
-      const rows = await page.run(
-        { query: client.query.bind(client) },
-        { route, account_id: owner.accountId, after_label_id: after, limit },
-      );
+      let afterName = q;
+      if (q && after !== '00000000-0000-0000-0000-000000000000') {
+        const last = await store.readPersonalLabel(client, route, owner.accountId, after);
+        if (!last || !last.name.startsWith(q)) throw new ProblemError('stale_cursor');
+        afterName = last.name;
+      }
+      const rows = q
+        ? await prefixPage.run(
+            { query: client.query.bind(client) },
+            {
+              route,
+              account_id: owner.accountId,
+              prefix: q,
+              upper: store.personalLabelPrefixEnd(q),
+              after_name: afterName,
+              after_label_id: after,
+              limit,
+            },
+          )
+        : await page.run(
+            { query: client.query.bind(client) },
+            { route, account_id: owner.accountId, after_label_id: after, limit },
+          );
       const last = rows.at(-1);
       return {
         labels: rows.filter((row) => row.deletedAt === null).map(visible),

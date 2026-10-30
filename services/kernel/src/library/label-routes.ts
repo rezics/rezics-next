@@ -1,0 +1,282 @@
+import { t } from 'elysia';
+import type { Pool } from 'pg';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import type { KernelClock } from '../clock.ts';
+import { customMethod } from '../http/custom-method.ts';
+import { ProblemError, problemSchema } from '../http/problem.ts';
+import { defineRateLimit } from '../http/rate-limit.ts';
+import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
+import type { Access } from '../request/access.ts';
+import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { LibraryNotFoundError } from './command-support.ts';
+import { LibraryConflictError } from './entries.ts';
+import { createPersonalLabelCommands } from './label-commands.ts';
+import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
+import { normalizePersonalLabelName, normalizePersonalLabelPrefix } from './label-store.ts';
+
+const closed = { additionalProperties: false } as const;
+const id = t.String({ format: 'uuid' });
+const revision = t.Integer({ minimum: 1, maximum: 2147483646 });
+const identity = t.Object({ id, revision: t.Integer({ minimum: 1, maximum: 2147483647 }) }, closed);
+const labelResult = t.Object({ label: identity }, closed);
+const assignmentResult = t.Object({ assignment: identity }, closed);
+const deleted = t.Object({ deleted: t.Literal(true) }, closed);
+const params = t.Object({ id }, closed);
+const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+const page = {
+  cursor: t.Optional(t.String({ maxLength: 4096 })),
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+};
+const expected = t.Object({ subjectId: id, assignmentId: id, revision }, closed);
+const failures = {
+  400: problemSchema('invalid_request', 'invalid_cursor'),
+  401: problemSchema('authentication_required', 'invalid_credentials'),
+  403: problemSchema('forbidden', 'platform_closed'),
+  404: problemSchema('not_found'),
+  409: problemSchema(
+    'conflict',
+    'stale_cursor',
+    'library_label_capacity',
+    'library_label_restore_stale',
+    'library_label_restore_expired',
+    'library_label_restore_occupied',
+    'library_label_restore_capacity',
+  ),
+  422: problemSchema('idempotency_conflict'),
+  503: problemSchema(
+    'index_not_ready',
+    'dependency_unavailable',
+    'overloaded',
+    'partition_unavailable',
+    'transaction_retry_exhausted',
+    'deadline_exceeded',
+    'semantic_not_ready',
+  ),
+};
+function detail(operation: string, action = 'library_entry:update', write = true) {
+  return {
+    operationId: `library_label.${operation}`,
+    'x-action': action,
+    'x-exposure': 'gate:personal_library',
+    security: [{ bearerAuth: [] }],
+    ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
+  };
+}
+function undoHeader(name: string) {
+  return {
+    200: { description: 'Deleted', headers: { [name]: { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } } } },
+  };
+}
+function queryFields(request: Request, allowed: string[]) {
+  for (const key of new URL(request.url).searchParams.keys())
+    if (!allowed.includes(key)) throw new ProblemError('invalid_request');
+}
+// Only the input normalizer's documented errors are client errors, never a command/programming TypeError.
+function name(value: unknown, prefix = false) {
+  try {
+    (prefix ? normalizePersonalLabelPrefix : normalizePersonalLabelName)(value);
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError) throw new ProblemError('invalid_request');
+    throw error;
+  }
+}
+async function command<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+    if (error instanceof LibraryNotFoundError) throw new ProblemError('not_found');
+    if (error instanceof LibraryConflictError) throw new ProblemError('conflict');
+    throw error;
+  }
+}
+
+/** Transport maps native outcomes directly; no private point reads precede receipts. */
+export function personalLabelRoutes(
+  app: ReturnType<typeof definitionRoutes>,
+  deps: { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock },
+) {
+  const labels = createPersonalLabelCommands(deps);
+  const assignments = () => createLabelAssignmentCommands({ ...deps, access: deps.access() });
+  return app
+    .get(
+      '/v1/libraryLabels',
+      {
+        query: t.Object({ ...page, q: t.Optional(t.String()) }, closed),
+        transform: ({ request }) => queryFields(request, ['cursor', 'limit', 'q']),
+        response: {
+          200: t.Object(
+            {
+              labels: t.Array(t.Object({ id, name: t.String(), revision: identity.properties.revision }, closed)),
+              next: t.Union([t.String(), t.Null()]),
+            },
+            closed,
+          ),
+          ...failures,
+        },
+        detail: detail('list', 'library_entry:list', false),
+      },
+      async ({ actor, query, admission, job }) => {
+        if (query.q !== undefined) name(query.q, true);
+        return admission.run('normal', job, () => command(() => labels.listLabels(actor, query)));
+      },
+    )
+    .post(
+      '/v1/libraryLabels',
+      {
+        headers,
+        body: t.Object({ name: t.String() }, closed),
+        transform: ({ request }) => queryFields(request, []),
+        response: { 201: labelResult, ...failures },
+        detail: detail('create'),
+      },
+      async ({ actor, body, headers, admission, job, session, set }) => {
+        name(body.name);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () => command(() => labels.createLabel(actor, body, key)));
+        session.record(result);
+        set.status = 201;
+        return result.value;
+      },
+    )
+    .patch(
+      '/v1/libraryLabels/:id',
+      {
+        params,
+        headers,
+        body: t.Object({ name: t.String(), revision }, closed),
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: labelResult, ...failures },
+        detail: detail('rename'),
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        name(body.name);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(() => labels.renameLabel(actor, params.id, body, key)),
+        );
+        session.record(result);
+        return result.value;
+      },
+    )
+    .delete(
+      '/v1/libraryLabels/:id',
+      {
+        params,
+        headers,
+        query: t.Object({ revision }, closed),
+        transform: ({ request }) => queryFields(request, ['revision']),
+        response: { 200: deleted, ...failures },
+        detail: { ...detail('delete'), responses: undoHeader('Library-Label-Revision') },
+      },
+      async ({ actor, params, query, headers, admission, job, session, set }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(() => labels.deleteLabel(actor, params.id, query.revision, key)),
+        );
+        session.record(result);
+        set.headers['Library-Label-Revision'] = String(result.value.revision);
+        return { deleted: true as const };
+      },
+    )
+    .post(
+      customMethod('/v1/libraryLabels/:id', 'restore'),
+      {
+        params,
+        headers,
+        body: t.Object({ revision }, closed),
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: labelResult, ...failures },
+        detail: detail('restore'),
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(() => labels.restoreLabel(actor, params.id, body.revision, key)),
+        );
+        session.record(result);
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/libraryLabels/:id', 'assign'),
+      {
+        params,
+        headers,
+        body: t.Object({ subjectId: id }, closed),
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: assignmentResult, ...failures },
+        detail: detail('assign'),
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(() => assignments().assignLabel(actor, params.id, body, key)),
+        );
+        session.record(result);
+        return result.value;
+      },
+    )
+    .post(
+      customMethod('/v1/libraryLabels/:id', 'unassign'),
+      {
+        params,
+        headers,
+        body: expected,
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: deleted, ...failures },
+        detail: { ...detail('unassign'), responses: undoHeader('Library-Label-Assignment-Revision') },
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(() => assignments().unassignLabel(actor, params.id, body, key)),
+        );
+        session.record(result);
+        set.headers['Library-Label-Assignment-Revision'] = String(result.value.revision);
+        return { deleted: true as const };
+      },
+    )
+    .post(
+      customMethod('/v1/libraryLabels/:id', 'restoreAssignment'),
+      {
+        params,
+        headers,
+        body: expected,
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: assignmentResult, ...failures },
+        detail: detail('assignment_restore'),
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          command(() => assignments().restoreAssignment(actor, params.id, body, key)),
+        );
+        session.record(result);
+        return result.value;
+      },
+    )
+    .get(
+      '/v1/libraryLabelAssignments',
+      {
+        query: t.Object({ ...page, labelId: t.Optional(id), subjectId: t.Optional(id) }, closed),
+        transform: ({ request }) => queryFields(request, ['labelId', 'subjectId', 'cursor', 'limit']),
+        response: {
+          200: t.Object(
+            {
+              assignments: t.Array(
+                t.Object({ id, labelId: id, subjectId: id, revision: identity.properties.revision }, closed),
+              ),
+              next: t.Union([t.String(), t.Null()]),
+            },
+            closed,
+          ),
+          ...failures,
+        },
+        detail: detail('assignment_list', 'library_entry:read', false),
+      },
+      ({ actor, query, admission, job }) =>
+        admission.run('normal', job, () => command(() => assignments().listAssignments(actor, query))),
+    );
+}

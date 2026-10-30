@@ -19,19 +19,40 @@ export type LabelRecord = {
 };
 
 /** Version 1: preserve case and format characters, and count Unicode scalars after NFC. */
-export function normalizePersonalLabelName(input: unknown): string {
+function normalize(input: unknown, allowEmpty: boolean): string {
   if (typeof input !== 'string') throw new TypeError('A personal label name must be a string');
   const name = input
     .normalize('NFC')
     .replace(/\p{White_Space}+/gu, ' ')
     .replace(/^ | $/g, '');
-  if (name.length === 0 || /[\p{Cc}\p{Cs}]/u.test(name))
+  if ((!allowEmpty && name.length === 0) || /[\p{Cc}\p{Cs}]/u.test(name))
     throw new TypeError('A personal label name must be nonempty and contain no controls or lone surrogates');
   let scalars = 0;
   for (const _scalar of name) {
     if (++scalars > 100) throw new RangeError('A personal label name is at most 100 Unicode scalars');
   }
   return name;
+}
+
+export function normalizePersonalLabelName(input: unknown): string {
+  return normalize(input, false);
+}
+
+export function normalizePersonalLabelPrefix(input: unknown): string {
+  return normalize(input, true);
+}
+
+/** Exclusive C-order upper bound, incrementing scalars and skipping surrogate code points. */
+export function personalLabelPrefixEnd(prefix: string): string | null {
+  const scalars = [...prefix];
+  for (let i = scalars.length - 1; i >= 0; i--) {
+    let point = scalars[i]!.codePointAt(0)!;
+    if (point === 0x10ffff) continue;
+    point++;
+    if (point === 0xd800) point = 0xe000;
+    return scalars.slice(0, i).join('') + String.fromCodePoint(point);
+  }
+  return null;
 }
 
 function queryClient(client: Client): Client {
