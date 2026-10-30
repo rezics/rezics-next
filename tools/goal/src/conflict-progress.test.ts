@@ -44,12 +44,6 @@ function resetWorkerBranch(worktree: string, commit: string): void {
   git(worktree, ['reset', '--hard', commit]);
 }
 
-function recordWorkerBranchHead(worktree: string, branch: string): string {
-  if (git(worktree, ['branch', '--show-current']) !== branch)
-    git(worktree, ['update-ref', `refs/heads/${branch}`, 'HEAD']);
-  return git(worktree, ['rev-parse', '--verify', `${branch}^{commit}`]);
-}
-
 function advanceMain(h: ReturnType<typeof integrationHarness>, file: string, content: string): string {
   mkdirSync(dirname(join(h.root, file)), { recursive: true });
   writeFileSync(join(h.root, file), content);
@@ -147,17 +141,25 @@ test('Identical redacted failure fingerprints on different files/heads or with n
   try {
     const fileA = 'tools/goal/src/storybook-entry.ts';
     const fileB = 'tools/goal/src/storybook-layout.ts';
-    const task = await startWorker(h, job, fileA);
+    const task = h.dispatch(`${fileA}, ${fileB}`, [], ['true'], 'control-plane');
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({
+        branch: task.branch,
+        fileA,
+        fileB,
+        contentA: `worker version for ${fileA}\n`,
+        contentB: 'worker adds the Storybook layout\n',
+      }),
+    );
+    installProgressWorker(h);
+    await job.start(task.id);
+    await job.drain();
     const firstTarget = advanceMain(h, fileA, 'main Storybook entry reorganization\n');
     const first = await runTrain(h, job, { sameRedactedFingerprint: true });
     const firstSource = first[0]!.rebaseConflict!.workerCommit;
 
-    const revisedContent = `${readFileSync(join(task.worktree, fileA), 'utf8')}worker follow-up\n`;
-    writePlan(task.worktree, fileA, revisedContent);
-    writeFileSync(join(task.worktree, fileA), revisedContent);
-    git(task.worktree, ['add', '--', fileA]);
-    git(task.worktree, ['commit', '-m', 'Worker updates Storybook entry']);
-    const secondSource = recordWorkerBranchHead(task.worktree, task.branch);
+    const secondSource = h.head(task.branch);
     const second = await runTrain(h, job, { sameRedactedFingerprint: true });
 
     expect(first[0]!.rebaseConflict?.targetHead).toBe(firstTarget);
@@ -167,15 +169,7 @@ test('Identical redacted failure fingerprints on different files/heads or with n
       expect(h.store.record({ taskId: task.id, attempt })?.firstFailure).toBe(REPEATED_REDACTED_FINGERPRINT);
     expect(h.store.task(task.id).currentAttempt).toBe(3);
 
-    const newBase = h.head('main');
-    git(task.worktree, ['reset', '--hard', newBase]);
-    const revisedLayout = 'worker adds the Storybook layout\n';
-    mkdirSync(dirname(join(task.worktree, fileB)), { recursive: true });
-    writePlan(task.worktree, fileB, revisedLayout);
-    writeFileSync(join(task.worktree, fileB), revisedLayout);
-    git(task.worktree, ['add', '--', fileB]);
-    git(task.worktree, ['commit', '-m', 'Worker adds Storybook layout']);
-    const thirdSource = recordWorkerBranchHead(task.worktree, task.branch);
+    const thirdSource = h.head(task.branch);
     const thirdTarget = advanceMain(h, fileB, 'main Storybook layout reorganization\n');
     const third = await runTrain(h, job, { sameRedactedFingerprint: true });
 
@@ -400,6 +394,45 @@ if (count === 0) {
   writeFileSync(plan.file, plan.content);
   spawnSync('git', ['add', '--', plan.file]);
   spawnSync('git', ['commit', '-qm', 'Complete fixture']);
+}
+console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
+`,
+  );
+}
+
+function installProgressWorker(h: ReturnType<typeof integrationHarness>): void {
+  writeFileSync(
+    h.settings.pools[0]!.command,
+    `#!/usr/bin/env bun
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { spawnSync } from 'node:child_process';
+const plan = JSON.parse(readFileSync('.temp/worker-plan.json', 'utf8'));
+let count = 0;
+try { count = Number(readFileSync('.temp/worker-attempt-count', 'utf8')); } catch {}
+writeFileSync('.temp/worker-attempt-count', String(count + 1));
+const run = (args) => spawnSync('git', args, { encoding: 'utf8' });
+if (count === 0) {
+  writeFileSync(plan.fileA, plan.contentA);
+  run(['add', '--', plan.fileA]);
+  run(['commit', '-qm', 'Complete fixture']);
+} else if (count === 1) {
+  run(['rebase', '--abort']);
+  const head = run(['rev-parse', 'HEAD']).stdout.trim();
+  run(['checkout', '-B', plan.branch, head]);
+  writeFileSync(plan.fileA, readFileSync(plan.fileA, 'utf8') + 'worker follow-up\n');
+  run(['add', '--', plan.fileA]);
+  run(['commit', '-qm', 'Worker updates Storybook entry']);
+} else if (count === 2) {
+  run(['rebase', '--abort']);
+  const base = run(['rev-parse', 'main']).stdout.trim();
+  run(['checkout', '-B', plan.branch, base]);
+  mkdirSync(dirname(plan.fileB), { recursive: true });
+  writeFileSync(plan.fileB, plan.contentB);
+  run(['add', '--', plan.fileB]);
+  run(['commit', '-qm', 'Worker adds Storybook layout']);
 }
 console.log(JSON.stringify({type:'thread.started',thread_id:'fixture-session'}));
 console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
