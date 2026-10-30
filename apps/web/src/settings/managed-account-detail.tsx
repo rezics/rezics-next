@@ -246,7 +246,7 @@ export function ManagedAccountDetailCard({
             <ManagedAccountActions
               accountId={detail.account.id}
               nativeAccountKind={detail.account.kind}
-              operated={detail.relation !== null}
+              operated={detail.operated}
               self={detail.self}
             />
             <Button type="button" variant="outline" disabled={busy} onClick={() => void reader.load()}>

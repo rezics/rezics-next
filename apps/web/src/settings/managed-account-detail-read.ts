@@ -176,7 +176,7 @@ type SectionState<T> = {
   failure?: DetailFailure | undefined;
 };
 export type DetailSnapshot = {
-  detail?: Pick<ManagementDetail, 'account' | 'self' | 'role' | 'operator'> | undefined;
+  detail?: (Pick<ManagementDetail, 'account' | 'self' | 'role' | 'operator'> & { operated: boolean }) | undefined;
   pending: boolean;
   failure?: DetailFailure | undefined;
   members: SectionState<ManagementDetail['members']>;
@@ -262,7 +262,13 @@ export class ManagedAccountReader {
     // An authority loss observed by either feed invalidates other in-flight pages as well.
     if (restricted) this.generation++;
     this.publish({
-      detail: { account: detail.account, self: detail.self, role: detail.role, operator: detail.operator },
+      detail: {
+        account: detail.account,
+        self: detail.self,
+        role: detail.role,
+        operator: detail.operator,
+        operated: detail.relation !== null,
+      },
       pending: false,
       members:
         !section || section === 'members' || detail.members.state === 'denied'
