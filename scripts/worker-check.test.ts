@@ -57,9 +57,11 @@ function restoreWorkerEnvironment(old: NodeJS.ProcessEnv): void {
 
 function stopOwnedWorkerCheck(id: string, cwd: string): void {
   try {
-    const record = JSON.parse(
-      readFileSync(join(cwd, '.temp/goal/checks/results', `${id}.json`), 'utf8'),
-    ) as { status?: string; runnerPid?: number; runnerHost?: string };
+    const record = JSON.parse(readFileSync(join(cwd, '.temp/goal/checks/results', `${id}.json`), 'utf8')) as {
+      status?: string;
+      runnerPid?: number;
+      runnerHost?: string;
+    };
     if (record.status === 'running' && record.runnerHost === hostname() && record.runnerPid) {
       try {
         process.kill(-record.runnerPid, 'SIGTERM');
@@ -687,8 +689,9 @@ function localCommand(marker: string): string[] {
 
 test('stack-free placement: explicit pure file tests lint and pure type commands default local without a remote slot', async () => {
   expect(await needsStack(['bun', 'test', 'services/importer/tests/media-fence-evidence.test.ts'])).toBe(false);
-  expect(await needsStack(['bun', 'test', 'services/importer/tests/media-fence-evidence.test.ts', '-t', 'fence']))
-    .toBe(false);
+  expect(await needsStack(['bun', 'test', 'services/importer/tests/media-fence-evidence.test.ts', '-t', 'fence'])).toBe(
+    false,
+  );
   expect(await needsStack(['bun', 'x', 'oxlint', '.'])).toBe(false);
   expect(await needsStack(['bun', 'x', 'oxfmt', '--check', '.'])).toBe(false);
   expect(await needsStack(['bun', 'run', 'lint'])).toBe(false);
@@ -700,8 +703,9 @@ test('stack-free placement: explicit pure file tests lint and pure type commands
 });
 
 test('stack-free placement: native kernel Auth Web isolated and real compiler-database routes retain stack placement', async () => {
-  expect(await needsStack(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/http/body-limit.test.ts']))
-    .toBe(true);
+  expect(await needsStack(['bun', 'run', '--cwd', 'services/kernel', 'check', 'test/http/body-limit.test.ts'])).toBe(
+    true,
+  );
   expect(await needsStack(['bun', 'run', '--cwd=services/auth', 'check'])).toBe(true);
   expect(await needsStack(['bun', 'run', '--cwd', 'apps/auth', 'test'])).toBe(true);
   expect(await needsStack(['bun', 'run', '--cwd', 'apps/web', 'check'])).toBe(true);
@@ -755,7 +759,11 @@ test('stack-free placement: cwd and env wrappers retain command meaning and ambi
     expect(readFileSync(marker, 'utf8')).toBe('selected\n');
     expect(existsSync(fixture.remoteEvents)).toBe(false);
     expect(
-      resolveRepositoryBun(['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', 'bun', 'test'], fixture.root, '/pinned/bun'),
+      resolveRepositoryBun(
+        ['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', 'bun', 'test'],
+        fixture.root,
+        '/pinned/bun',
+      ),
     ).toEqual(['env', '-u', 'WRAPPER_REMOVE', 'WRAPPER_KEEP=yes', '/pinned/bun', 'test']);
   } finally {
     restoreWorkerEnvironment(old);

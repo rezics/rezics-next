@@ -358,7 +358,9 @@ function splitEnvironmentCommand(argv: readonly string[]): EnvironmentCommand | 
 }
 
 function pathSegments(path: string): string[] {
-  return resolve(path).split(/[\\/]+/).filter(Boolean);
+  return resolve(path)
+    .split(/[\\/]+/)
+    .filter(Boolean);
 }
 
 function hasPathPair(path: string, parent: string, child: string): boolean {
@@ -401,8 +403,12 @@ function projectNeedsNativeStack(args: readonly string[], cwd: string): boolean 
   if (isNativeStackPath(cwd)) return true;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
-    const project = argument === '-p' || argument === '--project' ? args[index + 1] :
-      argument.startsWith('--project=') ? argument.slice('--project='.length) : undefined;
+    const project =
+      argument === '-p' || argument === '--project'
+        ? args[index + 1]
+        : argument.startsWith('--project=')
+          ? argument.slice('--project='.length)
+          : undefined;
     if (project && isNativeStackPath(resolve(cwd, project))) return true;
   }
   return false;
@@ -413,8 +419,8 @@ function pureCompilerOrTool(command: string, args: readonly string[], cwd: strin
   if (name === 'oxlint' || name === 'oxfmt') return true;
   if (name === 'tsc') return args.includes('--noEmit') && !projectNeedsNativeStack(args, cwd);
   if (name === 'check') {
-    const hasProject = args.some((argument, index) =>
-      argument === '-p' || argument === '--project' || argument.startsWith('--project='),
+    const hasProject = args.some(
+      (argument, index) => argument === '-p' || argument === '--project' || argument.startsWith('--project='),
     );
     return args.includes('--no-script') && hasProject && !projectNeedsNativeStack(args, cwd);
   }
@@ -512,8 +518,7 @@ function classifyWorkerCommand(argv: readonly string[], cwd: string, depth = 0):
       if (!tool) return true;
       return !pureCompilerOrTool(tool, rest.slice(1), directory);
     }
-    if (operation === 'check' || operation === 'lint')
-      return !pureCompilerOrTool(operation, rest, directory);
+    if (operation === 'check' || operation === 'lint') return !pureCompilerOrTool(operation, rest, directory);
     if (operation === 'fmt') return false;
     if (operation && (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(operation) || operation.endsWith('.ts'))) {
       return true;
