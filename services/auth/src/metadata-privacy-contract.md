@@ -59,6 +59,17 @@ and bounded, validated public key material belong in the mechanical path. An own
 an adopted typed producer and its full native party scope before release. Public-client secrets remain secrets
 and use the existing client drain; they never become retained skeleton fields.
 
+### Disclosure at current T
+
+Mechanical discovery/consent responses expose only their existing configured fields. A future contact read needs
+current native authorization for that exact client and must check all stored party and producer-client fences
+before selecting the value; ownership or an old approval is insufficient. An erased related party's contact is
+unreadable at T while physical cleanup continues. Do not add contacts, private descriptors or arbitrary metadata
+to discovery, consent, profile, token claims, exceptions or logs. Auth retains no new public profile authority.
+Historical fields without complete typed custody are unavailable to personal readers, even for a living owner,
+until the adopted scrub or typed source replacement completes. Reassert service-controlled labels from actual
+configuration before exposing unproven historical labels. Closing only a writer does not satisfy the read fence.
+
 ### Contacts and other personal metadata
 
 `auth_client.contacts` is not a source of identity truth. A new personal contact must be one typed contact value
@@ -195,6 +206,18 @@ client column and raw key. Add the same finite roles to `initialRoles`, native s
 `erasure-native.ts`; reuse that obligation's applicability/cursor, not another coverage table. Index nullable roles
 consistently with the query predicates. Add exact source/child indexes before adding deletion guards. An FK alone
 neither bounds a cascade nor discovers a foreign role.
+
+### Native phase upgrade
+
+Adding role entries changes the current array-derived phase numbers in `erasure-native.ts`. Do not splice them
+into a deployed inventory and reinterpret saved progress. The implementation must version the finite native
+phase inventory, translate each existing phase to the same store/role and preserve its independent raw boundary
+in a bounded deployment page. Existing user-deletion/consent tail states retain their actual committed status and
+original cutoff. Append missing-role discovery under the same obligation/barrier; a prior `native_completed_at`
+is not coverage of those roles. Such obligations must become schedulable for the newly required phases without
+resetting their finished old phases, applicability or T. Reject old producer/page versions before this cutover.
+The ordinal v2 marker still protects existing consent cursors; it does not prove metadata-role coverage. No
+account-ID cursor, full owner rewalk or new completion flag substitutes for this translation.
 
 ### Write, replace, rollback and replay order
 
