@@ -1,4 +1,7 @@
 import definitions from '../recorded/definitions-release.json';
+import type { FakeRoute } from '../fake-modules.ts';
+
+export const routes: FakeRoute[] = [];
 
 type RecordedState = { id: string; role?: string };
 type RecordedRelease = {
