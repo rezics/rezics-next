@@ -5638,7 +5638,7 @@ test('admission backfill: ordinary execution starts in capacity the priority hea
           event.granted &&
           String(event.script).includes('# REMOTE_CHECK_MEMORY_RESERVATION_BYTES 4294967296'),
       )!;
-    expect(grant.actualAdmissionLimit).toBe(2);
+    expect(grant.actualAdmissionLimit).toBe(3); // Ordinary admission capacity, separate from the per-request cap.
     expect(grant.script).toContain('memory_reserved + landing_waiting_slots * landing_waiting_memory_bytes');
     expect(
       totalReservation.events().some((event) => event.kind === 'slot' && event.reason === 'held-priority-grant'),
