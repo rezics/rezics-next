@@ -5,7 +5,12 @@ import { derivedId, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 import transitionAcquire from './realm-membership-transition-acquire.sql';
-import { first, createRealmMembershipTransitions, type RealmMembershipTransition, type RealmTransitionAuthority } from './realm-membership-transition.ts';
+import {
+  first,
+  createRealmMembershipTransitions,
+  type RealmMembershipTransition,
+  type RealmTransitionAuthority,
+} from './realm-membership-transition.ts';
 import accountRead from './lifecycle-account.sql';
 import read from './membership-inverse-20261025093747-read.sql';
 import reserve from './membership-inverse-20261025093747-reserve.sql';
