@@ -345,11 +345,14 @@ function NodeEditor({
                       ...(ranged
                         ? {
                             range:
-                              metadata.datatype === 'quantity' && metadata.units?.[0]
-                                ? { unit: metadata.units[0] }
-                                : {},
+                              'range' in value.statement
+                                ? value.statement.range
+                                : metadata.datatype === 'quantity' && metadata.units?.[0]
+                                  ? { unit: metadata.units[0] }
+                                  : {},
                           }
-                        : { in: [''] }),
+                        : { in: 'in' in value.statement ? value.statement.in : [''] }),
+                      ...(value.statement.qualifiers ? { qualifiers: value.statement.qualifiers } : {}),
                     },
                   });
                 }}
@@ -390,15 +393,21 @@ function NodeEditor({
                   )}
                 </EditorField>
               ))}
-              {definition?.datatype === 'time' ? (
+              {definition?.datatype === 'time' && (
                 <p className="text-sm text-muted-foreground">{m.refinement_year_hint()}</p>
-              ) : (
+              )}
+              {(definition?.datatype !== 'time' || range.unit !== undefined) && (
                 <EditorField context={context} pointer={`${pointer}/statement/range/unit`} label={m.refinement_unit()}>
                   {(props) => (
                     <NativeSelect
                       {...props}
                       value={range.unit ?? ''}
-                      onChange={(event) => replaceStatement({ range: { ...range, unit: event.currentTarget.value } })}
+                      onChange={(event) => {
+                        const next = { ...range };
+                        if (event.currentTarget.value) next.unit = event.currentTarget.value;
+                        else delete next.unit;
+                        replaceStatement({ range: next });
+                      }}
                     >
                       <NativeSelectOption value="">{m.condition_choose_value()}</NativeSelectOption>
                       {range.unit && !definition?.units?.includes(range.unit) && (

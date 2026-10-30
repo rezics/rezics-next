@@ -419,9 +419,17 @@ export function SearchPage({
     [data?.conditionMetadata],
   );
   const localIssues = admit?.(draft.condition, committedState) ?? [];
-  const issues = [...(data?.problem?.errors ?? []), ...(attempted ? localIssues : [])];
+  const issues = [
+    ...(data?.problem?.errors ?? []),
+    ...(attempted || draft.condition !== data?.condition ? localIssues : []),
+  ];
   const editedState = conditionSearchState(committedState, draft.condition, draft.languages);
-  const editableData = data ? { ...data, queryState: editedState, condition: draft.condition } : data;
+  // Pending fields can be incomplete. Result navigation consumes only an admitted tree.
+  const navigationState = localIssues.length ? committedState : editedState;
+  const editableData = data ? { ...data, queryState: navigationState, condition: navigationState.condition } : data;
+  const editing =
+    JSON.stringify([draft.condition, editedState.languages]) !==
+    JSON.stringify([committedState.condition, committedState.languages]);
   const number = new Intl.NumberFormat(locale);
   const activeFilterCount =
     (type ? 1 : 0) +
@@ -461,7 +469,16 @@ export function SearchPage({
     [activeFilterCount, openFilters],
   );
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
-  const results = renderResults(query, result, locale, type, selectedFacets, editableData);
+  const results = renderResults(
+    query,
+    result,
+    locale,
+    type,
+    selectedFacets,
+    editableData,
+    !editing,
+    localIssues.length > 0,
+  );
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     setAttempted(true);
     if (!localIssues.length) return;
@@ -665,9 +682,15 @@ function renderResults(
   type: string | undefined,
   selectedFacets: Record<string, string[]>,
   data: SearchPageData | undefined,
+  continuationAllowed = true,
+  invalid = false,
 ) {
   if (!result && !data?.discovery) return null;
-  const next = data?.discovery?.status === 'ready' ? data.discovery.page.next : result?.next;
+  const next = continuationAllowed
+    ? data?.discovery?.status === 'ready'
+      ? data.discovery.page.next
+      : result?.next
+    : undefined;
   return (
     <>
       {data?.sort === 'rating' && (
@@ -682,6 +705,7 @@ function renderResults(
           type={type}
           facets={selectedFacets}
           state={data?.queryState}
+          disabled={invalid}
         />
       </div>
       {data?.staleCursorRestarted && (

@@ -12,6 +12,7 @@ export function SearchSort({
   type,
   facets,
   state,
+  disabled = false,
 }: {
   sort: 'relevance' | 'rating';
   locale: string;
@@ -19,6 +20,7 @@ export function SearchSort({
   type?: string | undefined;
   facets: Record<string, string[]>;
   state?: SearchLoaderDeps | undefined;
+  disabled?: boolean;
 }) {
   return (
     <form method="get" action={`/${locale}/search`} className="flex items-center justify-end gap-2">
@@ -28,6 +30,7 @@ export function SearchSort({
         </FieldLabel>
         <NativeSelect
           id="search-sort"
+          disabled={disabled}
           value={sort}
           className="h-9 rounded-md border border-input bg-background px-2 text-sm"
           onChange={(event) => {
