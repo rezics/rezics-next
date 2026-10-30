@@ -100,6 +100,775 @@ END $$;
 
 
 --
+-- Name: auth_erasure_admit(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_admit(owner_id text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF owner_id IS NULL OR owner_id='' THEN RETURN; END IF;
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended('auth-erasure:'||owner_id,0));
+  IF EXISTS (SELECT 1 FROM auth_erasure WHERE account_id=owner_id)
+    AND NOT EXISTS (SELECT 1 FROM auth_erasure WHERE account_id=owner_id
+      AND id::text=current_setting('auth.erasure_obligation',true)) THEN
+    RAISE EXCEPTION 'Auth erasure fence' USING ERRCODE='55000';
+  END IF;
+END $$;
+
+
+--
+-- Name: auth_erasure_admit_client(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_admit_client(client text) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE owner_id text; fenced boolean;
+BEGIN
+  IF client IS NULL THEN RETURN; END IF;
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended('auth-client:'||client,0));
+  SELECT "userId",erasure_fenced INTO owner_id,fenced FROM auth_client WHERE client_id=client;
+  IF EXISTS (SELECT 1 FROM auth_erased_client WHERE client_id=client
+      AND obligation_id::text IS DISTINCT FROM current_setting('auth.erasure_obligation',true)) THEN
+    RAISE EXCEPTION 'Auth erased client fence' USING ERRCODE='55000';
+  END IF;
+  PERFORM auth_erasure_admit(owner_id);
+  IF fenced AND NOT EXISTS (SELECT 1 FROM auth_erasure WHERE account_id=owner_id
+      AND id::text=current_setting('auth.erasure_obligation',true)) THEN
+    RAISE EXCEPTION 'Auth client erasure fence' USING ERRCODE='55000';
+  END IF;
+END $$;
+
+
+--
+-- Name: auth_erasure_client_empty(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_client_empty() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM session WHERE "clientId"=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM "oauthAccessToken" WHERE "clientId"=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM "oauthRefreshToken" WHERE "clientId"=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM "oauthRefreshFamily" WHERE "clientId"=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM "oauthClientResource" WHERE "clientId"=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_consent WHERE client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_client_coverage WHERE client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_client_reduction WHERE client_id=OLD.client_id)
+    OR EXISTS (SELECT 1 FROM auth_client_reduction_progress WHERE client_id=OLD.client_id) THEN
+    RAISE EXCEPTION 'Auth native client children remain' USING ERRCODE='55000';
+  END IF;
+  RETURN OLD;
+END $$;
+
+
+--
+-- Name: auth_erasure_establishment_roles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_establishment_roles() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  SELECT erasure_client_id,erasure_source_client_id,erasure_human_id,erasure_operator_id
+    INTO NEW.erasure_client_id,NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
+    FROM auth_barrier_proof WHERE reference=NEW.reference;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_account(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_account() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."userId");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."userId");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_attempt_account(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_attempt_account() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_barrier_proof(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_barrier_proof() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
+  PERFORM auth_erasure_admit(OLD."account_id");
+  PERFORM auth_erasure_admit(OLD."erasure_human_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(OLD."erasure_client_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  PERFORM auth_erasure_admit(NEW."erasure_human_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(NEW."erasure_client_id");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_client(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_client() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."userId");
+  PERFORM auth_erasure_admit_client(OLD.client_id);
+  END IF;
+  PERFORM auth_erasure_admit(NEW."userId");
+  PERFORM auth_erasure_admit_client(NEW.client_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_client_coverage(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_client_coverage() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD."client_id");
+  END IF;
+  PERFORM auth_erasure_admit_client(NEW."client_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_client_reduction(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_client_reduction() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD."client_id");
+  END IF;
+  PERFORM auth_erasure_admit_client(NEW."client_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_client_reduction_progress(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_client_reduction_progress() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD."client_id");
+  END IF;
+  PERFORM auth_erasure_admit_client(NEW."client_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_consent(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_consent() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  PERFORM auth_erasure_admit_client(OLD."client_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  PERFORM auth_erasure_admit_client(NEW."client_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_effect_receipt(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_effect_receipt() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  PERFORM auth_erasure_admit(OLD."acting_human_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(OLD."client_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  PERFORM auth_erasure_admit(NEW."acting_human_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(NEW."client_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_key_assertion(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_key_assertion() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_provisioning_receipt(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_provisioning_receipt() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE source_stage text;
+BEGIN
+  IF TG_OP='INSERT' THEN
+    -- The stage's unique native account binding establishes these roles in the
+    -- credential/receipt transaction. No encrypted payload or request JSON walk.
+    source_stage:=NEW.erasure_stage_id;
+    IF source_stage IS NOT NULL THEN
+      SELECT registration_id,erasure_creator_id,erasure_operator_id
+      INTO NEW.erasure_stage_id,NEW.erasure_creator_id,NEW.erasure_operator_id
+      FROM auth_registration_stage WHERE registration_id=source_stage AND account_id=NEW.account_id FOR KEY SHARE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'Auth source registration missing' USING ERRCODE='55000'; END IF;
+    ELSE
+      SELECT registration_id,erasure_creator_id,erasure_operator_id
+      INTO NEW.erasure_stage_id,NEW.erasure_creator_id,NEW.erasure_operator_id
+      FROM auth_registration_stage WHERE account_id=NEW.account_id FOR KEY SHARE;
+    END IF;
+  END IF;
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  PERFORM auth_erasure_admit(OLD.erasure_creator_id);
+  PERFORM auth_erasure_admit(OLD.erasure_operator_id);
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  PERFORM auth_erasure_admit(NEW.erasure_creator_id);
+  PERFORM auth_erasure_admit(NEW.erasure_operator_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_public_key(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_public_key() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_recent_oidc_session(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_recent_oidc_session() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  PERFORM auth_erasure_admit(OLD."erasure_human_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(OLD."erasure_client_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  PERFORM auth_erasure_admit(NEW."erasure_human_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(NEW."erasure_client_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_recovery(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_recovery() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_recovery_establishment(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_recovery_establishment() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
+  PERFORM auth_erasure_admit(OLD."account_id");
+  PERFORM auth_erasure_admit(OLD.erasure_human_id);
+  PERFORM auth_erasure_admit(OLD.erasure_operator_id);
+  PERFORM auth_erasure_admit_client(OLD.erasure_client_id);
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  PERFORM auth_erasure_admit(NEW.erasure_human_id);
+  PERFORM auth_erasure_admit(NEW.erasure_operator_id);
+  PERFORM auth_erasure_admit_client(NEW.erasure_client_id);
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_registration_stage(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_registration_stage() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND NEW.erasure_release_at IS NOT NULL
+    AND (to_jsonb(NEW)-'erasure_release_at')=(to_jsonb(OLD)-'erasure_release_at') THEN RETURN NEW; END IF;
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."account_id");
+  PERFORM auth_erasure_admit(OLD."erasure_creator_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."account_id");
+  PERFORM auth_erasure_admit(NEW."erasure_creator_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_auth_session_opening(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_auth_session_opening() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."subject_account_id");
+  PERFORM auth_erasure_admit(OLD."acting_human_id");
+  PERFORM auth_erasure_admit(OLD."operator_account_id");
+  PERFORM auth_erasure_admit_client(OLD."erasure_client_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."subject_account_id");
+  PERFORM auth_erasure_admit(NEW."acting_human_id");
+  PERFORM auth_erasure_admit(NEW."operator_account_id");
+  PERFORM auth_erasure_admit_client(NEW."erasure_client_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_oauthaccesstoken(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_oauthaccesstoken() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
+  PERFORM auth_erasure_admit(OLD."userId");
+  PERFORM auth_erasure_admit(OLD."erasure_human_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(OLD."clientId");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."userId");
+  PERFORM auth_erasure_admit(NEW."erasure_human_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(NEW."clientId");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_oauthclientassertion(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_oauthclientassertion() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD."erasure_client_id");
+  END IF;
+  PERFORM auth_erasure_admit_client(NEW."erasure_client_id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_oauthclientresource(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_oauthclientresource() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD."clientId");
+  END IF;
+  PERFORM auth_erasure_admit_client(NEW."clientId");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_oauthrefreshfamily(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_oauthrefreshfamily() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
+  PERFORM auth_erasure_admit(OLD."erasure_account_id");
+  PERFORM auth_erasure_admit(OLD."erasure_human_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(OLD."clientId");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."erasure_account_id");
+  PERFORM auth_erasure_admit(NEW."erasure_human_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(NEW."clientId");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_oauthrefreshtoken(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_oauthrefreshtoken() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
+  PERFORM auth_erasure_admit(OLD."userId");
+  PERFORM auth_erasure_admit(OLD."erasure_human_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(OLD."clientId");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."userId");
+  PERFORM auth_erasure_admit(NEW."erasure_human_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(NEW."clientId");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_passkey(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_passkey() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."userId");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."userId");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_request(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_request() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND NEW.request IS NOT DISTINCT FROM OLD.request
+     AND NEW.digest IS NOT DISTINCT FROM OLD.digest
+     AND (NEW.erasure_subject_id,NEW.erasure_human_id,NEW.erasure_operator_id,NEW.erasure_client_id,NEW.erasure_member_id,NEW.erasure_previous_operator_id)
+       IS NOT DISTINCT FROM (OLD.erasure_subject_id,OLD.erasure_human_id,OLD.erasure_operator_id,OLD.erasure_client_id,OLD.erasure_member_id,OLD.erasure_previous_operator_id)
+     AND NEW.terminal_at IS NOT NULL THEN RETURN NEW; END IF;
+  IF TG_OP='UPDATE' THEN
+    PERFORM auth_erasure_admit(OLD.erasure_member_id);
+    PERFORM auth_erasure_admit(OLD.erasure_previous_operator_id);
+    PERFORM auth_erasure_admit(OLD.erasure_subject_id);
+    PERFORM auth_erasure_admit(OLD.erasure_human_id);
+    PERFORM auth_erasure_admit(OLD.erasure_operator_id);
+    PERFORM auth_erasure_admit_client(OLD.erasure_client_id);
+  END IF;
+  PERFORM auth_erasure_admit(NEW.erasure_member_id);
+  PERFORM auth_erasure_admit(NEW.erasure_previous_operator_id);
+  PERFORM auth_erasure_admit(NEW.erasure_subject_id);
+  PERFORM auth_erasure_admit(NEW.erasure_human_id);
+  PERFORM auth_erasure_admit(NEW.erasure_operator_id);
+  PERFORM auth_erasure_admit_client(NEW.erasure_client_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_session(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_session() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."userId");
+  PERFORM auth_erasure_admit(OLD."erasure_human_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(OLD."clientId");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."userId");
+  PERFORM auth_erasure_admit(NEW."erasure_human_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(NEW."clientId");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_user(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_user() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit(OLD."id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."id");
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_guard_verification(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_guard_verification() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+  PERFORM auth_erasure_admit_client(OLD.erasure_source_client_id);
+  PERFORM auth_erasure_admit(OLD."erasure_account_id");
+  PERFORM auth_erasure_admit(OLD."erasure_human_id");
+  PERFORM auth_erasure_admit(OLD."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(OLD."erasure_client_id");
+  END IF;
+  PERFORM auth_erasure_admit(NEW."erasure_account_id");
+  PERFORM auth_erasure_admit(NEW."erasure_human_id");
+  PERFORM auth_erasure_admit(NEW."erasure_operator_id");
+  PERFORM auth_erasure_admit_client(NEW."erasure_client_id");
+  PERFORM auth_erasure_admit_client(NEW.erasure_source_client_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_opening_roles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_opening_roles() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  SELECT "clientId" INTO NEW.erasure_client_id FROM session WHERE id=NEW.session_id;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_opening_session(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_opening_session() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  UPDATE session SET erasure_human_id=NEW.acting_human_id,erasure_operator_id=NEW.operator_account_id WHERE id=NEW.session_id;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_proof_roles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_proof_roles() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.purpose='consent-reduction' AND NEW.evidence->>0='consent-v1' THEN
+    NEW.erasure_session_id:=NEW.evidence->>3;
+    NEW.erasure_client_id:=NEW.evidence->>8;
+    NEW.erasure_source_client_id:=NEW.evidence->>4;
+    SELECT erasure_human_id,erasure_operator_id INTO NEW.erasure_human_id,NEW.erasure_operator_id
+      FROM session WHERE id=NEW.erasure_session_id;
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_recent_roles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_recent_roles() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  SELECT "clientId",erasure_human_id,erasure_operator_id
+    INTO NEW.erasure_client_id,NEW.erasure_human_id,NEW.erasure_operator_id FROM session WHERE id=NEW.session_id;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_session_roles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_session_roles() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  SELECT acting_human_id,operator_account_id INTO NEW.erasure_human_id,NEW.erasure_operator_id
+    FROM auth_session_opening WHERE session_id=NEW.id;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_token_roles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_token_roles() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  SELECT "clientId",erasure_human_id,erasure_operator_id
+    INTO NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
+    FROM session WHERE id=NEW."sessionId" FOR KEY SHARE;
+  IF NEW."sessionId" IS NOT NULL AND NOT FOUND THEN
+    RAISE EXCEPTION 'Auth source session missing' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: auth_erasure_user_empty(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_user_empty() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM account WHERE "userId"=OLD.id)
+    OR EXISTS (SELECT 1 FROM session WHERE "userId"=OLD.id)
+    OR EXISTS (SELECT 1 FROM passkey WHERE "userId"=OLD.id)
+    OR EXISTS (SELECT 1 FROM auth_client WHERE "userId"=OLD.id)
+    OR EXISTS (SELECT 1 FROM "oauthAccessToken" WHERE "userId"=OLD.id)
+    OR EXISTS (SELECT 1 FROM "oauthRefreshToken" WHERE "userId"=OLD.id)
+    OR EXISTS (SELECT 1 FROM auth_public_key WHERE account_id=OLD.id)
+    OR EXISTS (SELECT 1 FROM auth_key_assertion WHERE account_id=OLD.id)
+    OR EXISTS (SELECT 1 FROM auth_recovery WHERE account_id=OLD.id)
+    OR EXISTS (SELECT 1 FROM auth_barrier_proof WHERE account_id=OLD.id)
+    OR EXISTS (SELECT 1 FROM auth_session_opening WHERE subject_account_id=OLD.id)
+    OR EXISTS (SELECT 1 FROM auth_provisioning_receipt WHERE owner_id=OLD.id) THEN
+    RAISE EXCEPTION 'Auth native user children remain' USING ERRCODE='55000';
+  END IF;
+  RETURN OLD;
+END $$;
+
+
+--
+-- Name: auth_erasure_verification_roles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.auth_erasure_verification_roles() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND OLD.erasure_account_id IS NOT NULL AND
+     (NEW.erasure_account_id,NEW.erasure_client_id,NEW.erasure_session_id,NEW.erasure_source_client_id) IS DISTINCT FROM
+     (OLD.erasure_account_id,OLD.erasure_client_id,OLD.erasure_session_id,OLD.erasure_source_client_id) THEN
+    RAISE EXCEPTION 'Auth verification attribution is immutable';
+  END IF;
+  IF NEW.erasure_session_id IS NOT NULL THEN
+    SELECT "clientId",erasure_human_id,erasure_operator_id
+      INTO NEW.erasure_source_client_id,NEW.erasure_human_id,NEW.erasure_operator_id
+      FROM session WHERE id=NEW.erasure_session_id FOR KEY SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Auth source session missing' USING ERRCODE='55000'; END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: auth_passkey_used(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -287,6 +1056,16 @@ CREATE TABLE public.account (
 
 
 --
+-- Name: auth_attempt_account; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_attempt_account (
+    account_id text NOT NULL,
+    key text NOT NULL
+);
+
+
+--
 -- Name: auth_attempt_counter; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -315,6 +1094,11 @@ CREATE TABLE public.auth_barrier_proof (
     created_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     applied_at timestamp with time zone,
+    erasure_source_client_id text,
+    erasure_client_id text,
+    erasure_session_id text,
+    erasure_human_id text,
+    erasure_operator_id text,
     CONSTRAINT auth_barrier_proof_account_id_check CHECK (((length(account_id) >= 1) AND (length(account_id) <= 1024))),
     CONSTRAINT auth_barrier_proof_check CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '00:05:00'::interval)))),
     CONSTRAINT auth_barrier_proof_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
@@ -370,7 +1154,8 @@ CREATE TABLE public.auth_client (
     "dpopBoundAccessTokens" boolean DEFAULT false,
     "referenceId" text,
     metadata jsonb,
-    display_name text
+    display_name text,
+    erasure_fenced boolean DEFAULT false NOT NULL
 );
 
 
@@ -449,7 +1234,8 @@ CREATE TABLE public.auth_consent (
 
 CREATE TABLE public.auth_consent_erasure (
     account_id text NOT NULL,
-    due_at timestamp with time zone NOT NULL
+    due_at timestamp with time zone NOT NULL,
+    after_client text DEFAULT ''::text NOT NULL
 );
 
 
@@ -476,8 +1262,50 @@ CREATE TABLE public.auth_effect_receipt (
     committed_result jsonb,
     committed_at timestamp with time zone,
     opening_reference text,
+    erasure_operator_id text,
     CONSTRAINT auth_credential_stage CHECK (((((operation_key IS NULL) AND (effect_reference IS NULL) AND (effect_digest IS NULL) AND (stage_version IS NULL) AND (stage_ciphertext IS NULL) AND (committed_result IS NULL) AND (committed_at IS NULL) AND (opening_receipt_id IS NULL)) OR ((operation_key IS NOT NULL) AND (effect_reference IS NOT NULL) AND (effect_digest ~ '^[a-f0-9]{64}$'::text) AND (stage_version = 1) AND (stage_ciphertext IS NOT NULL) AND (acting_human_id IS NOT NULL) AND (client_id IS NOT NULL) AND (scopes IS NOT NULL) AND (purpose = ANY (ARRAY['set-password'::text, 'remove-password'::text, 'add-key'::text, 'remove-key'::text, 'add-passkey'::text, 'remove-passkey'::text])) AND ((credential_row_id IS NULL) = (credential_row_version IS NULL)) AND (((committed_at IS NULL) AND (committed_result IS NULL) AND (opening_receipt_id IS NULL)) OR ((committed_at IS NOT NULL) AND (opening_receipt_id IS NOT NULL) AND (committed_result = jsonb_build_object('receiptId', receipt_id, 'replayed', false)))))) IS TRUE)),
     CONSTRAINT auth_effect_receipt_minimum_authn_epoch_check CHECK ((minimum_authn_epoch >= 0))
+);
+
+
+--
+-- Name: auth_erased_client; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_erased_client (
+    client_id text NOT NULL,
+    obligation_id bigint NOT NULL
+);
+
+
+--
+-- Name: auth_erasure; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_erasure (
+    id bigint NOT NULL,
+    account_id text NOT NULL,
+    barrier integer NOT NULL,
+    version integer NOT NULL,
+    applicable boolean DEFAULT false NOT NULL,
+    inventory_coverage text DEFAULT 'unknown'::text NOT NULL,
+    inventory_completed_at timestamp with time zone,
+    phase integer DEFAULT 0 NOT NULL,
+    after_key text DEFAULT ''::text NOT NULL,
+    client_id text,
+    client_phase integer DEFAULT 0 NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    accepted_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    user_deleted_at timestamp with time zone,
+    native_completed_at timestamp with time zone,
+    consent_due_at timestamp with time zone,
+    consent_completed_at timestamp with time zone,
+    pending_code text DEFAULT 'native'::text NOT NULL,
+    CONSTRAINT auth_erasure_after_key_check CHECK ((octet_length(after_key) <= 1024)),
+    CONSTRAINT auth_erasure_barrier_check CHECK ((barrier >= 0)),
+    CONSTRAINT auth_erasure_client_id_check CHECK ((octet_length(client_id) <= 1024)),
+    CONSTRAINT auth_erasure_inventory_coverage_check CHECK ((inventory_coverage = ANY (ARRAY['unknown'::text, 'covered'::text]))),
+    CONSTRAINT auth_erasure_version_check CHECK ((version = 1))
 );
 
 
@@ -495,6 +1323,20 @@ CREATE TABLE public.auth_erasure_cursor_cutover (
     CONSTRAINT auth_erasure_cursor_cutover_phase_check CHECK ((phase = ANY (ARRAY['users'::text, 'consents'::text, 'coverage'::text, 'reduction'::text, 'done'::text]))),
     CONSTRAINT auth_erasure_cursor_cutover_singleton_check CHECK (singleton),
     CONSTRAINT auth_erasure_cursor_cutover_writer_version_check CHECK ((writer_version = 2))
+);
+
+
+--
+-- Name: auth_erasure_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.auth_erasure ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.auth_erasure_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -524,6 +1366,9 @@ CREATE TABLE public.auth_provisioning_receipt (
     owner_id text,
     credential_id text,
     provisioning_kind text,
+    erasure_creator_id text,
+    erasure_operator_id text,
+    erasure_stage_id text,
     CONSTRAINT auth_provisioning_evidence_complete CHECK ((((registration_id IS NULL) AND (reservation_id IS NULL) AND (authn_epoch IS NULL) AND (expires_at IS NULL) AND (owner_id IS NULL) AND (credential_id IS NULL) AND (provisioning_kind IS NULL)) OR ((registration_id IS NOT NULL) AND (reservation_id IS NOT NULL) AND (authn_epoch IS NOT NULL) AND ((authn_epoch >= 1) AND (authn_epoch <= '9007199254740991'::bigint)) AND (expires_at IS NOT NULL) AND (owner_id IS NOT NULL) AND (owner_id = account_id) AND (credential_id IS NOT NULL) AND (provisioning_kind IS NOT NULL) AND (provisioning_kind = ANY (ARRAY['password'::text, 'credentialless'::text])))))
 );
 
@@ -547,7 +1392,10 @@ CREATE TABLE public.auth_public_key (
 CREATE TABLE public.auth_recent_oidc_session (
     session_id text NOT NULL,
     account_id text NOT NULL,
-    expires_at timestamp with time zone NOT NULL
+    expires_at timestamp with time zone NOT NULL,
+    erasure_client_id text,
+    erasure_human_id text,
+    erasure_operator_id text
 );
 
 
@@ -581,6 +1429,10 @@ CREATE TABLE public.auth_recovery_establishment (
     effect_commitment text NOT NULL,
     establishment_id text NOT NULL,
     authn_epoch integer NOT NULL,
+    erasure_source_client_id text,
+    erasure_client_id text,
+    erasure_human_id text,
+    erasure_operator_id text,
     CONSTRAINT auth_recovery_establishment_authn_epoch_check CHECK ((authn_epoch > 0)),
     CONSTRAINT auth_recovery_establishment_credential_fingerprint_check CHECK ((credential_fingerprint ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT auth_recovery_establishment_effect_commitment_check CHECK ((effect_commitment ~ '^[0-9a-f]{64}$'::text))
@@ -605,7 +1457,10 @@ CREATE TABLE public.auth_registration_stage (
     expired_at timestamp with time zone,
     pending_reference text,
     automated_reference text,
-    creation_binding jsonb
+    creation_binding jsonb,
+    erasure_release_at timestamp with time zone,
+    erasure_creator_id text,
+    erasure_operator_id text
 );
 
 
@@ -619,7 +1474,8 @@ CREATE TABLE public.auth_session_opening (
     acting_human_id text NOT NULL,
     operator_account_id text NOT NULL,
     receipt_id text NOT NULL,
-    opened_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    opened_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    erasure_client_id text
 );
 
 
@@ -685,7 +1541,14 @@ CREATE SEQUENCE public.auth_traversal_ordinal
 CREATE TABLE public.auth_workflow_request (
     workflow_id text NOT NULL,
     digest bytea NOT NULL,
-    request jsonb NOT NULL
+    request jsonb NOT NULL,
+    erasure_subject_id text,
+    erasure_human_id text,
+    erasure_operator_id text,
+    erasure_client_id text,
+    erasure_member_id text,
+    erasure_previous_operator_id text,
+    terminal_at timestamp with time zone
 );
 
 
@@ -723,7 +1586,10 @@ CREATE TABLE public."oauthAccessToken" (
     "createdAt" timestamp with time zone NOT NULL,
     revoked timestamp with time zone,
     confirmation jsonb,
-    scopes jsonb NOT NULL
+    scopes jsonb NOT NULL,
+    erasure_source_client_id text,
+    erasure_human_id text,
+    erasure_operator_id text
 );
 
 
@@ -733,7 +1599,8 @@ CREATE TABLE public."oauthAccessToken" (
 
 CREATE TABLE public."oauthClientAssertion" (
     id text NOT NULL,
-    "expiresAt" timestamp with time zone NOT NULL
+    "expiresAt" timestamp with time zone NOT NULL,
+    erasure_client_id text
 );
 
 
@@ -759,7 +1626,11 @@ CREATE TABLE public."oauthRefreshFamily" (
     "clientId" text NOT NULL,
     revoked boolean NOT NULL,
     sequence integer NOT NULL,
-    "expiresAt" timestamp with time zone NOT NULL
+    "expiresAt" timestamp with time zone NOT NULL,
+    erasure_source_client_id text,
+    erasure_account_id text,
+    erasure_human_id text,
+    erasure_operator_id text
 );
 
 
@@ -787,7 +1658,10 @@ CREATE TABLE public."oauthRefreshToken" (
     acr text,
     amr jsonb,
     confirmation jsonb,
-    scopes jsonb NOT NULL
+    scopes jsonb NOT NULL,
+    erasure_source_client_id text,
+    erasure_human_id text,
+    erasure_operator_id text
 );
 
 
@@ -861,6 +1735,8 @@ CREATE TABLE public.session (
     "authnEpoch" integer NOT NULL,
     "authTime" integer NOT NULL,
     "authMethods" text NOT NULL,
+    erasure_human_id text,
+    erasure_operator_id text,
     CONSTRAINT session_authentication CHECK ((("authnEpoch" >= 0) AND ("authTime" >= 0) AND ("authMethods" = ANY (ARRAY['pwd'::text, 'pop'::text, 'private_key_jwt'::text, 'operator'::text]))))
 );
 
@@ -893,7 +1769,13 @@ CREATE TABLE public.verification (
     value text NOT NULL,
     "expiresAt" timestamp with time zone NOT NULL,
     "createdAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    "updatedAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+    "updatedAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    erasure_source_client_id text,
+    erasure_account_id text,
+    erasure_client_id text,
+    erasure_session_id text,
+    erasure_human_id text,
+    erasure_operator_id text
 );
 
 
@@ -903,6 +1785,14 @@ CREATE TABLE public.verification (
 
 ALTER TABLE ONLY public.account
     ADD CONSTRAINT account_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_attempt_account auth_attempt_account_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_attempt_account
+    ADD CONSTRAINT auth_attempt_account_pkey PRIMARY KEY (account_id, key);
 
 
 --
@@ -1010,11 +1900,35 @@ ALTER TABLE ONLY public.auth_effect_receipt
 
 
 --
+-- Name: auth_erased_client auth_erased_client_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_erased_client
+    ADD CONSTRAINT auth_erased_client_pkey PRIMARY KEY (client_id);
+
+
+--
+-- Name: auth_erasure auth_erasure_account_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_erasure
+    ADD CONSTRAINT auth_erasure_account_id_key UNIQUE (account_id);
+
+
+--
 -- Name: auth_erasure_cursor_cutover auth_erasure_cursor_cutover_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.auth_erasure_cursor_cutover
     ADD CONSTRAINT auth_erasure_cursor_cutover_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: auth_erasure auth_erasure_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_erasure
+    ADD CONSTRAINT auth_erasure_pkey PRIMARY KEY (id);
 
 
 --
@@ -1377,6 +2291,13 @@ CREATE UNIQUE INDEX auth_credential_reference ON public.auth_effect_receipt USIN
 
 
 --
+-- Name: auth_erasure_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_erasure_pending ON public.auth_erasure USING btree (revision, id) WHERE (native_completed_at IS NULL);
+
+
+--
 -- Name: auth_provisioning_receipt_credential_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1430,6 +2351,524 @@ CREATE UNIQUE INDEX auth_user_ordinal ON public."user" USING btree (traversal_or
 --
 
 CREATE INDEX auth_workflow_request_automated_registration ON public.auth_workflow_request USING btree (((request ->> 'registrationId'::text))) WHERE ((request ->> 'kind'::text) = 'automated'::text);
+
+
+--
+-- Name: erasure_account_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_account_0 ON public.account USING btree ("userId", id);
+
+
+--
+-- Name: erasure_auth_barrier_proof_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_barrier_proof_0 ON public.auth_barrier_proof USING btree (account_id, reference);
+
+
+--
+-- Name: erasure_auth_barrier_proof_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_barrier_proof_1 ON public.auth_barrier_proof USING btree (erasure_client_id, reference);
+
+
+--
+-- Name: erasure_auth_barrier_proof_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_barrier_proof_2 ON public.auth_barrier_proof USING btree (erasure_session_id, reference);
+
+
+--
+-- Name: erasure_auth_barrier_proof_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_barrier_proof_3 ON public.auth_barrier_proof USING btree (erasure_human_id, reference);
+
+
+--
+-- Name: erasure_auth_barrier_proof_4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_barrier_proof_4 ON public.auth_barrier_proof USING btree (erasure_operator_id, reference);
+
+
+--
+-- Name: erasure_auth_barrier_proof_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_barrier_proof_source_client ON public.auth_barrier_proof USING btree (erasure_source_client_id, reference);
+
+
+--
+-- Name: erasure_auth_client_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_client_0 ON public.auth_client USING btree ("userId", client_id);
+
+
+--
+-- Name: erasure_auth_client_reduction_progress_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_client_reduction_progress_0 ON public.auth_client_reduction_progress USING btree (client_id, operation_id);
+
+
+--
+-- Name: erasure_auth_effect_receipt_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_effect_receipt_0 ON public.auth_effect_receipt USING btree (account_id, receipt_id);
+
+
+--
+-- Name: erasure_auth_effect_receipt_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_effect_receipt_1 ON public.auth_effect_receipt USING btree (acting_human_id, receipt_id);
+
+
+--
+-- Name: erasure_auth_effect_receipt_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_effect_receipt_2 ON public.auth_effect_receipt USING btree (client_id, receipt_id);
+
+
+--
+-- Name: erasure_auth_effect_receipt_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_effect_receipt_3 ON public.auth_effect_receipt USING btree (erasure_operator_id, receipt_id);
+
+
+--
+-- Name: erasure_auth_provisioning_receipt_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_provisioning_receipt_0 ON public.auth_provisioning_receipt USING btree (account_id, idempotency_key);
+
+
+--
+-- Name: erasure_auth_provisioning_receipt_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_provisioning_receipt_1 ON public.auth_provisioning_receipt USING btree (owner_id, idempotency_key);
+
+
+--
+-- Name: erasure_auth_provisioning_receipt_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_provisioning_receipt_2 ON public.auth_provisioning_receipt USING btree (credential_id, idempotency_key);
+
+
+--
+-- Name: erasure_auth_recent_oidc_session_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recent_oidc_session_0 ON public.auth_recent_oidc_session USING btree (account_id, session_id);
+
+
+--
+-- Name: erasure_auth_recent_oidc_session_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recent_oidc_session_1 ON public.auth_recent_oidc_session USING btree (erasure_client_id, session_id);
+
+
+--
+-- Name: erasure_auth_recent_oidc_session_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recent_oidc_session_2 ON public.auth_recent_oidc_session USING btree (erasure_human_id, session_id);
+
+
+--
+-- Name: erasure_auth_recent_oidc_session_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recent_oidc_session_3 ON public.auth_recent_oidc_session USING btree (erasure_operator_id, session_id);
+
+
+--
+-- Name: erasure_auth_recovery_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recovery_0 ON public.auth_recovery USING btree (account_id, proof_hash);
+
+
+--
+-- Name: erasure_auth_recovery_establishment_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recovery_establishment_0 ON public.auth_recovery_establishment USING btree (account_id, reference);
+
+
+--
+-- Name: erasure_auth_recovery_establishment_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recovery_establishment_1 ON public.auth_recovery_establishment USING btree (receipt_id, reference);
+
+
+--
+-- Name: erasure_auth_recovery_establishment_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recovery_establishment_2 ON public.auth_recovery_establishment USING btree (erasure_client_id, reference);
+
+
+--
+-- Name: erasure_auth_recovery_establishment_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_recovery_establishment_source_client ON public.auth_recovery_establishment USING btree (erasure_source_client_id, reference);
+
+
+--
+-- Name: erasure_auth_registration_stage_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_registration_stage_0 ON public.auth_registration_stage USING btree (account_id, registration_id);
+
+
+--
+-- Name: erasure_auth_registration_stage_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_registration_stage_1 ON public.auth_registration_stage USING btree (erasure_creator_id, registration_id);
+
+
+--
+-- Name: erasure_auth_registration_stage_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_registration_stage_2 ON public.auth_registration_stage USING btree (erasure_operator_id, registration_id);
+
+
+--
+-- Name: erasure_auth_session_opening_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_session_opening_0 ON public.auth_session_opening USING btree (subject_account_id, session_id);
+
+
+--
+-- Name: erasure_auth_session_opening_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_session_opening_1 ON public.auth_session_opening USING btree (acting_human_id, session_id);
+
+
+--
+-- Name: erasure_auth_session_opening_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_session_opening_2 ON public.auth_session_opening USING btree (operator_account_id, session_id);
+
+
+--
+-- Name: erasure_auth_session_opening_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_auth_session_opening_3 ON public.auth_session_opening USING btree (erasure_client_id, session_id);
+
+
+--
+-- Name: erasure_establishment_human; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_establishment_human ON public.auth_recovery_establishment USING btree (erasure_human_id, reference);
+
+
+--
+-- Name: erasure_establishment_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_establishment_operator ON public.auth_recovery_establishment USING btree (erasure_operator_id, reference);
+
+
+--
+-- Name: erasure_oauthaccesstoken_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthaccesstoken_0 ON public."oauthAccessToken" USING btree ("userId", id);
+
+
+--
+-- Name: erasure_oauthaccesstoken_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthaccesstoken_1 ON public."oauthAccessToken" USING btree ("clientId", id);
+
+
+--
+-- Name: erasure_oauthaccesstoken_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthaccesstoken_2 ON public."oauthAccessToken" USING btree ("sessionId", id);
+
+
+--
+-- Name: erasure_oauthaccesstoken_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthaccesstoken_3 ON public."oauthAccessToken" USING btree ("refreshId", id);
+
+
+--
+-- Name: erasure_oauthaccesstoken_4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthaccesstoken_4 ON public."oauthAccessToken" USING btree ("authorizationCodeId", id);
+
+
+--
+-- Name: erasure_oauthaccesstoken_5; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthaccesstoken_5 ON public."oauthAccessToken" USING btree (erasure_human_id, id);
+
+
+--
+-- Name: erasure_oauthaccesstoken_6; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthaccesstoken_6 ON public."oauthAccessToken" USING btree (erasure_operator_id, id);
+
+
+--
+-- Name: erasure_oauthaccesstoken_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthaccesstoken_source_client ON public."oauthAccessToken" USING btree (erasure_source_client_id, id);
+
+
+--
+-- Name: erasure_oauthclientassertion_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthclientassertion_0 ON public."oauthClientAssertion" USING btree (erasure_client_id, id);
+
+
+--
+-- Name: erasure_oauthclientresource_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthclientresource_0 ON public."oauthClientResource" USING btree ("clientId", id);
+
+
+--
+-- Name: erasure_oauthrefreshfamily_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshfamily_0 ON public."oauthRefreshFamily" USING btree ("clientId", id);
+
+
+--
+-- Name: erasure_oauthrefreshfamily_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshfamily_1 ON public."oauthRefreshFamily" USING btree (erasure_account_id, id);
+
+
+--
+-- Name: erasure_oauthrefreshfamily_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshfamily_2 ON public."oauthRefreshFamily" USING btree (erasure_human_id, id);
+
+
+--
+-- Name: erasure_oauthrefreshfamily_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshfamily_3 ON public."oauthRefreshFamily" USING btree (erasure_operator_id, id);
+
+
+--
+-- Name: erasure_oauthrefreshfamily_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshfamily_source_client ON public."oauthRefreshFamily" USING btree (erasure_source_client_id, id);
+
+
+--
+-- Name: erasure_oauthrefreshtoken_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshtoken_0 ON public."oauthRefreshToken" USING btree ("userId", id);
+
+
+--
+-- Name: erasure_oauthrefreshtoken_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshtoken_1 ON public."oauthRefreshToken" USING btree ("clientId", id);
+
+
+--
+-- Name: erasure_oauthrefreshtoken_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshtoken_2 ON public."oauthRefreshToken" USING btree ("sessionId", id);
+
+
+--
+-- Name: erasure_oauthrefreshtoken_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshtoken_3 ON public."oauthRefreshToken" USING btree ("authorizationCodeId", id);
+
+
+--
+-- Name: erasure_oauthrefreshtoken_4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshtoken_4 ON public."oauthRefreshToken" USING btree (erasure_human_id, id);
+
+
+--
+-- Name: erasure_oauthrefreshtoken_5; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshtoken_5 ON public."oauthRefreshToken" USING btree (erasure_operator_id, id);
+
+
+--
+-- Name: erasure_oauthrefreshtoken_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_oauthrefreshtoken_source_client ON public."oauthRefreshToken" USING btree (erasure_source_client_id, id);
+
+
+--
+-- Name: erasure_provisioning_creator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_provisioning_creator ON public.auth_provisioning_receipt USING btree (erasure_creator_id, idempotency_key);
+
+
+--
+-- Name: erasure_provisioning_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_provisioning_operator ON public.auth_provisioning_receipt USING btree (erasure_operator_id, idempotency_key);
+
+
+--
+-- Name: erasure_request_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_client ON public.auth_workflow_request USING btree (erasure_client_id, workflow_id);
+
+
+--
+-- Name: erasure_request_human; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_human ON public.auth_workflow_request USING btree (erasure_human_id, workflow_id);
+
+
+--
+-- Name: erasure_request_member; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_member ON public.auth_workflow_request USING btree (erasure_member_id, workflow_id);
+
+
+--
+-- Name: erasure_request_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_operator ON public.auth_workflow_request USING btree (erasure_operator_id, workflow_id);
+
+
+--
+-- Name: erasure_request_previous_operator; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_previous_operator ON public.auth_workflow_request USING btree (erasure_previous_operator_id, workflow_id);
+
+
+--
+-- Name: erasure_request_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_request_subject ON public.auth_workflow_request USING btree (erasure_subject_id, workflow_id);
+
+
+--
+-- Name: erasure_session_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_session_0 ON public.session USING btree ("userId", id);
+
+
+--
+-- Name: erasure_session_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_session_1 ON public.session USING btree ("clientId", id);
+
+
+--
+-- Name: erasure_session_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_session_2 ON public.session USING btree (erasure_human_id, id);
+
+
+--
+-- Name: erasure_session_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_session_3 ON public.session USING btree (erasure_operator_id, id);
+
+
+--
+-- Name: erasure_verification_0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_verification_0 ON public.verification USING btree (erasure_account_id, id);
+
+
+--
+-- Name: erasure_verification_1; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_verification_1 ON public.verification USING btree (erasure_client_id, id);
+
+
+--
+-- Name: erasure_verification_2; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_verification_2 ON public.verification USING btree (erasure_session_id, id);
+
+
+--
+-- Name: erasure_verification_3; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_verification_3 ON public.verification USING btree (erasure_human_id, id);
+
+
+--
+-- Name: erasure_verification_4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_verification_4 ON public.verification USING btree (erasure_operator_id, id);
+
+
+--
+-- Name: erasure_verification_source_client; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX erasure_verification_source_client ON public.verification USING btree (erasure_source_client_id, id);
 
 
 --
@@ -1671,6 +3110,272 @@ CREATE TRIGGER auth_user_cursor_version BEFORE INSERT OR DELETE OR UPDATE ON pub
 
 
 --
+-- Name: auth_barrier_proof erasure_attribution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_attribution BEFORE INSERT ON public.auth_barrier_proof FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_proof_roles();
+
+
+--
+-- Name: auth_recent_oidc_session erasure_attribution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_attribution BEFORE INSERT ON public.auth_recent_oidc_session FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_recent_roles();
+
+
+--
+-- Name: auth_recovery_establishment erasure_attribution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_attribution BEFORE INSERT ON public.auth_recovery_establishment FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_establishment_roles();
+
+
+--
+-- Name: auth_session_opening erasure_attribution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_attribution BEFORE INSERT ON public.auth_session_opening FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_opening_roles();
+
+
+--
+-- Name: oauthAccessToken erasure_attribution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_attribution BEFORE INSERT ON public."oauthAccessToken" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_token_roles();
+
+
+--
+-- Name: oauthRefreshToken erasure_attribution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_attribution BEFORE INSERT ON public."oauthRefreshToken" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_token_roles();
+
+
+--
+-- Name: session erasure_attribution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_attribution BEFORE INSERT ON public.session FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_session_roles();
+
+
+--
+-- Name: verification erasure_attribution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_attribution BEFORE INSERT OR UPDATE ON public.verification FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_verification_roles();
+
+
+--
+-- Name: account erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.account FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_account();
+
+
+--
+-- Name: auth_attempt_account erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_attempt_account FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_attempt_account();
+
+
+--
+-- Name: auth_barrier_proof erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_barrier_proof FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_barrier_proof();
+
+
+--
+-- Name: auth_client erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_client FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_client();
+
+
+--
+-- Name: auth_client_coverage erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_client_coverage FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_client_coverage();
+
+
+--
+-- Name: auth_client_reduction erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_client_reduction FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_client_reduction();
+
+
+--
+-- Name: auth_client_reduction_progress erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_client_reduction_progress FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_client_reduction_progress();
+
+
+--
+-- Name: auth_consent erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_consent FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_consent();
+
+
+--
+-- Name: auth_effect_receipt erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_effect_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_effect_receipt();
+
+
+--
+-- Name: auth_key_assertion erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_key_assertion FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_key_assertion();
+
+
+--
+-- Name: auth_provisioning_receipt erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_provisioning_receipt FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_provisioning_receipt();
+
+
+--
+-- Name: auth_public_key erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_public_key FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_public_key();
+
+
+--
+-- Name: auth_recent_oidc_session erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_recent_oidc_session FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_recent_oidc_session();
+
+
+--
+-- Name: auth_recovery erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_recovery FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_recovery();
+
+
+--
+-- Name: auth_recovery_establishment erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_recovery_establishment FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_recovery_establishment();
+
+
+--
+-- Name: auth_registration_stage erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_registration_stage FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_registration_stage();
+
+
+--
+-- Name: auth_session_opening erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_session_opening FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_auth_session_opening();
+
+
+--
+-- Name: auth_workflow_request erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.auth_workflow_request FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_request();
+
+
+--
+-- Name: oauthAccessToken erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public."oauthAccessToken" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_oauthaccesstoken();
+
+
+--
+-- Name: oauthClientAssertion erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public."oauthClientAssertion" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_oauthclientassertion();
+
+
+--
+-- Name: oauthClientResource erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public."oauthClientResource" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_oauthclientresource();
+
+
+--
+-- Name: oauthRefreshFamily erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public."oauthRefreshFamily" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_oauthrefreshfamily();
+
+
+--
+-- Name: oauthRefreshToken erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public."oauthRefreshToken" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_oauthrefreshtoken();
+
+
+--
+-- Name: passkey erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.passkey FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_passkey();
+
+
+--
+-- Name: session erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.session FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_session();
+
+
+--
+-- Name: user erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public."user" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_user();
+
+
+--
+-- Name: verification erasure_fence; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_fence BEFORE INSERT OR UPDATE ON public.verification FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_guard_verification();
+
+
+--
+-- Name: auth_session_opening erasure_opening_session; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_opening_session AFTER INSERT ON public.auth_session_opening FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_opening_session();
+
+
+--
+-- Name: auth_client erasure_zero_children; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_zero_children BEFORE DELETE ON public.auth_client FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_client_empty();
+
+
+--
+-- Name: user erasure_zero_children; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER erasure_zero_children BEFORE DELETE ON public."user" FOR EACH ROW EXECUTE FUNCTION public.auth_erasure_user_empty();
+
+
+--
 -- Name: session session_capacity; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1745,6 +3450,14 @@ ALTER TABLE ONLY public.auth_client
 
 ALTER TABLE ONLY public.auth_consent
     ADD CONSTRAINT auth_consent_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.auth_client(client_id) ON DELETE CASCADE;
+
+
+--
+-- Name: auth_erased_client auth_erased_client_obligation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_erased_client
+    ADD CONSTRAINT auth_erased_client_obligation_id_fkey FOREIGN KEY (obligation_id) REFERENCES public.auth_erasure(id);
 
 
 --
