@@ -145,6 +145,15 @@ async function fixture() {
         })(),
       );
     },
+    async resume() {
+      return importer.runRecords(
+        registration,
+        (async function* () {
+          throw new Error('Sealed recovery consumed replacement source records');
+          yield record(9, 900);
+        })(),
+      );
+    },
     async reopen() {
       await importer.close();
       importer = open();
@@ -193,11 +202,11 @@ test('uncertain and denied zero retain complete baseline; reopened sealed run re
     const pending = f.writes.at(-1)!;
     await f.reopen();
     f.fail('denied');
-    expect((await f.run(record(0, null))).status).toBe('bulk-failed');
+    expect((await f.resume()).status).toBe('bulk-failed');
     expect(f.baseline()).toEqual(baseline);
     expect(f.writes.at(-1)).toEqual(pending);
     f.fail(null);
-    expect((await f.run(record(0, null))).status).toBe('committed');
+    expect((await f.resume()).status).toBe('committed');
     expect(f.writes.at(-1)).toEqual(pending);
     expect(f.batches.flatMap((b) => b.commands).filter((c) => c.op === 'retract')).toEqual([]);
   } finally {

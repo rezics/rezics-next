@@ -95,7 +95,9 @@ intent, including `0/null` and `0/0`. The ordinary seven-scope CLI calls the ins
 with strict `{sourceRecordId, count: 0, asOf}` and expects 204 with ordinary session continuity.
 It removes only that subject/source/record binding. It uses the existing bounded write coordinator,
 keyed POST retry budget and run-derived identity; reopening a sealed run reuses the original bytes/key
-before reading replacement input. An uncertain or denied clear preserves the previous complete baseline.
+before reading replacement source records. The native archive admission gate still validates a supplied
+archive first; it cannot replace the sealed projection or its clear command. An uncertain or denied clear
+preserves the previous complete baseline.
 Both missing fields mean UNKNOWN and send no statistic request; a partial pair remains invalid. A positive
 count with unavailable mean also sends no statistic request. No mean, vote, mapping or revision is invented.
 For the same native/converter revision, the statistic-refresh completion proof requires an existing

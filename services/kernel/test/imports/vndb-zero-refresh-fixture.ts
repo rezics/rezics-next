@@ -137,18 +137,17 @@ export async function runJourney() {
       expect(response.status, await response.clone().text()).toBe(200);
       return response.json();
     }
-    const invoke = async (average: number | null, count: number, loss = false, replacement = false) => {
+    const invoke = async (average: number | null, count: number, loss = false) => {
       const exchanges = capture.begin();
       const abort = new AbortController();
+      let sourceRecords = 0;
       const result = await runImportCli(argv, {
         signal: abort.signal,
-        stdin: replacement
-          ? (async function* () {
-              throw new Error('Sealed resume consumed replacement archive');
-              yield new Uint8Array();
-            })()
-          : archive(false, { v123: { count, average }, v124: { count: 4, average: 800 } }),
+        stdin: archive(false, { v123: { count, average }, v124: { count: 4, average: 800 } }),
         observer: {
+          onPageRecords(count) {
+            sourceRecords += count;
+          },
           onVndbStore({ store }) {
             const page = store.page.bind(store);
             store.page = (...args) => {
@@ -177,7 +176,7 @@ export async function runJourney() {
           return response;
         }) as typeof fetch,
       });
-      return { ...result, exchanges };
+      return { ...result, exchanges, sourceRecords };
     };
     const initial = await invoke(700, 2);
     expect(initial.code).toBe(0);
@@ -296,8 +295,10 @@ export async function runJourney() {
     expect(JSON.stringify(replay.response)).not.toContain('sourceRecordId');
     expect(JSON.stringify(replay.response)).not.toContain('removed');
     await support.setStatisticGrant(true);
-    // Reopen same durable state, before the replacement source stream is read.
-    const resumed = await invoke(null, 0, false, true);
+    // Preserve the existing native archive admission gate. The valid replacement archive has
+    // positive votes, but its grouped SourceRecord stream must remain unread during sealed replay.
+    const resumed = await invoke(900, 5);
+    expect(resumed.sourceRecords).toBe(0);
     const resumedClears = statisticRequests(resumed.exchanges);
     const resumedClearBytes = resumedClears.map((e) => e.body),
       resumedClearKeys = resumedClears.map((e) => e.idempotencyKey);
