@@ -1,0 +1,24 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as ThreadReading from './thread-reading.stories';
+
+<Meta of={ThreadReading} />
+
+# Thread reading
+
+The delivered reading region combines the real route's community breadcrumb, title and native post component with
+one reply composer. Posts use the shared document measure, site media routes, batch author summaries and restrained
+reaction, share, reply and overflow controls. Deleted and withheld slots retain their relationship and position.
+
+The desktop About region renders only a nonempty summary from the already supplied Realm read. The current source
+has no rules or community image, so neither is invented. Without a summary there is one centered reading column.
+Phone cards use the available width. Revision details and history keep the native recorded references and licence;
+only the signed-in author receives a current-vote comparison.
+
+Pattern and Page stories reuse `ThreadReading` and the route's native post/header regions. Page stories add only
+`AppShell`. Content comes from the existing thread, owned-thread, Realm-thread and history API recordings. Deleted
+and withheld examples replace a current post with an explicit null-body lifecycle response; they do not substitute
+an earlier revision. Loading, unavailable and current denial use the application's existing state components.
+Selected/cancelled parent, own edit, history and report states are reached through play interactions.
+
+Use the same IDs with the `phone390` and `desktop1280` viewport globals, and locale/theme globals. These stories are
+review inputs, not native authorization or visual proof. Exact revision pages belong to their separate route.

@@ -1920,5 +1920,12 @@
   "moderation_queue_retry_hint": "草稿已保留。重試同一操作以確認結果。",
   "moderation_queue_back": "返回看板",
   "moderation_queue_post_scope": "此貼文的檢舉",
-  "moderation_queue_board_scope": "審核此看板及其討論中的檢舉。"
+  "moderation_queue_board_scope": "審核此看板及其討論中的檢舉。",
+  "thread_reading_about": "關於此社群",
+  "thread_reading_share": "分享",
+  "thread_reading_link_copied": "已複製連結",
+  "thread_reading_share_failed": "無法複製連結，請再試一次。",
+  "thread_reading_preparing": "正在準備回覆功能…",
+  "thread_reading_participation_unavailable": "回覆功能暫時無法使用，請重新整理後再試。",
+  "thread_reading_empty_page": "此頁沒有可閱讀的貼文，請繼續前往下一頁。"
 }

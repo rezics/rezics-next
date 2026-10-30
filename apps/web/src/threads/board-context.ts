@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 
 /** The Realm a board belongs to, named for the reader. */
-export type BoardRealm = { id: string; title: string };
+export type BoardRealm = { id: string; title: string; summary?: string };
 
 /**
  * The Realm identifier a board view carries: `null` for a board outside every Realm. It is read structurally, because
@@ -25,7 +25,9 @@ export async function readBoardRealm(
   try {
     const result = await client.realms({ realmId }).get(authorization ? { headers: { authorization } } : {});
     const realm = result.error ? undefined : result.data?.realm;
-    return realm && realm.realmId === realmId && realm.title ? { id: realm.realmId, title: realm.title } : undefined;
+    return realm && realm.realmId === realmId && realm.title
+      ? { id: realm.realmId, title: realm.title, ...(realm.summary ? { summary: realm.summary } : {}) }
+      : undefined;
   } catch {
     return undefined;
   }

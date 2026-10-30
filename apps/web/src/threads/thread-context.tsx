@@ -1,7 +1,9 @@
 import { Link } from '@tanstack/react-router';
 import { ChevronRightIcon } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { m } from '../paraglide/messages.js';
 import type { BoardRealm } from './board-context';
+import { initials } from './initials';
 
 const linkClass = 'rounded-sm hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring';
 
@@ -9,9 +11,11 @@ const linkClass = 'rounded-sm hover:text-foreground hover:underline focus-visibl
 export function BoardContext({
   realm,
   board,
+  prominent = false,
 }: {
   realm?: BoardRealm | undefined;
   board?: { id: string; title: string | null } | undefined;
+  prominent?: boolean;
 }) {
   if (!realm && !board) return null;
   return (
@@ -19,6 +23,11 @@ export function BoardContext({
       aria-label={m.board_context_label()}
       className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground"
     >
+      {prominent ? (
+        <Avatar aria-hidden="true" size="sm">
+          <AvatarFallback>{initials(realm?.title ?? board?.title ?? '')}</AvatarFallback>
+        </Avatar>
+      ) : null}
       {realm ? (
         <Link to="/realms/$id" params={{ id: realm.id }} className={linkClass}>
           {realm.title}

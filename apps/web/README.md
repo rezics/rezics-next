@@ -1771,3 +1771,25 @@ Native acceptance and Web/Root screenshot review follow integration; local typin
 The journey adds no reads to the existing two-resource snapshot and viewer-action batch. Each explicit selection
 performs one current point read. Rendering is linear in the fixed four steps and supplied labels, without catalogue
 scans, counts, membership probes, additional per-card requests or new continuations.
+
+## Thread reading
+
+The slug route composes `threads/thread-reading.tsx` with its existing native post/header regions. The region keeps
+one composer across parent selection and cancellation, uses the shared document measure and site media route, and
+keeps reactions, reports, edits, history and restoration on their current command paths. A successful reply renders
+the returned post and refreshes the existing private personal read. Current revision bodies are never filled from
+history. Recorded citations remain revision-specific; a current-vote comparison is supplied only to the signed-in
+author. Fragment targets and signed post-page continuation remain owned by the route and its navigation producer.
+
+Community context uses the existing board/Realm read and batch author summaries. Desktop shows About only when the
+supplied Realm has a nonempty summary; otherwise the reading column stays centered. No rules or community image is
+available in that source, so the region supplies neither. Author initials and unknown/deleted identity labels are
+honest fallbacks. Phone post cards take the available width. A disclosure-filtered empty page keeps its continuation
+without claiming the whole thread is empty. Rendering is linear in the returned page, with no new data requests.
+
+`Patterns/Community/Thread reading` has its complete docs and behavior folder in `src/stories/patterns/thread-reading`.
+`Pages/Community/Thread reading` reuses those states and interactions inside `AppShell`. Both tiers use the same
+`phone390` and `desktop1280` viewport globals, plus locale/theme globals. Story suffixes are `populated`, `community`,
+`selected-parent`, `cancelled-parent`, `deleted-post`, `withheld-post`, `own-edit`, `history`, `report`, `loading`,
+`unavailable` and `current-denial`; the respective ID prefixes are `patterns-community-thread-reading--` and
+`pages-community-thread-reading--`. These are review inputs; typing alone establishes no native or visual pass.

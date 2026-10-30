@@ -1920,5 +1920,12 @@
   "moderation_queue_retry_hint": "Dein Entwurf bleibt erhalten. Wiederhole dieselbe Aktion, um das Ergebnis zu bestätigen.",
   "moderation_queue_back": "Zurück zum Board",
   "moderation_queue_post_scope": "Meldungen zu diesem Beitrag",
-  "moderation_queue_board_scope": "Meldungen für dieses Board und seine Diskussionen prüfen."
+  "moderation_queue_board_scope": "Meldungen für dieses Board und seine Diskussionen prüfen.",
+  "thread_reading_about": "Über diese Community",
+  "thread_reading_share": "Teilen",
+  "thread_reading_link_copied": "Link kopiert",
+  "thread_reading_share_failed": "Der Link konnte nicht kopiert werden. Bitte erneut versuchen.",
+  "thread_reading_preparing": "Antwortfunktion wird vorbereitet…",
+  "thread_reading_participation_unavailable": "Die Antwortfunktion ist nicht verfügbar. Bitte neu laden.",
+  "thread_reading_empty_page": "Auf dieser Seite gibt es keine lesbaren Beiträge. Weiter zur nächsten Seite."
 }

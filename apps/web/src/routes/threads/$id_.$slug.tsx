@@ -1,51 +1,38 @@
-import { useSession } from '../../session/query';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { RemovedPost } from '../../threads/post-removed';
+import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
+import { csrfHeaders, draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
+import { erasePost, restorePost as restorePostAction, revisePost, type WriteFailure } from '../../threads/actions';
+import type { ThreadSubject } from '../../threads/subjects';
+import type { VoteCitation } from '../../threads/post-writes';
+import { RevisionProvenance } from '../../threads/revision-provenance-view';
+import { PostHistory } from '../../threads/post-history';
+import { ThreadPostActions, ThreadReactions } from '../../threads/thread-reactions';
+import { Byline } from '../../threads/byline';
+import type { VerificationConfig } from '../../report/turnstile';
+import { PostActions } from '../../report/content-actions';
+import type { ThreadPost } from '../../threads/reads';
+import type { PageAuthors } from '../../identity/read';
+import { Share2Icon } from 'lucide-react';
+import type { ReactionKind } from '@rezics/ui/reactions';
+import { undoToast } from '@rezics/ui/undo-toast';
+import { Button } from '@rezics/ui/shadcn/button';
+import { ListRow } from '@rezics/ui/list-row';
 import { DocumentBody, type DocumentMentions } from '@rezics/ui/document-body';
 import { ContentActions } from '@rezics/ui/content-actions';
-import { ListRow } from '@rezics/ui/list-row';
-import { undoToast } from '@rezics/ui/undo-toast';
-import type { ReactionKind } from '@rezics/ui/reactions';
+import { useSession } from '../../session/query';
 import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
-import { PostActions } from '../../report/content-actions';
-import type { VerificationConfig } from '../../report/turnstile';
 import { getLocale } from '../../paraglide/runtime.js';
-import type { ThreadPost } from '../../threads/reads';
 import { threadPageQuery, threadPersonalQuery } from '../../threads/thread-queries';
 import { threadPageHead } from '../../threads/thread-head';
-import {
-  rememberThreadSlug,
-  rememberedThreadSlug,
-  sameThreadSlug,
-  slugMatches,
-  threadLocation,
-  threadTitle,
-} from '../../threads/thread-href';
-import type { PageAuthors } from '../../identity/read';
-import { Byline } from '../../threads/byline';
+import { rememberThreadSlug, rememberedThreadSlug, sameThreadSlug, slugMatches, threadLocation, threadTitle } from '../../threads/thread-href';
 import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
-import { ThreadPostActions, ThreadReactions } from '../../threads/thread-reactions';
-import { PostHistory } from '../../threads/post-history';
-import { RevisionProvenance } from '../../threads/revision-provenance-view';
-import type { VoteCitation } from '../../threads/post-writes';
-import type { ThreadSubject } from '../../threads/subjects';
-import {
-  erasePost,
-  restorePost as restorePostAction,
-  replyToThread,
-  revisePost,
-  type RevisedPost,
-  type WriteFailure,
-} from '../../threads/actions';
-import { csrfHeaders, draftFetch, InlinePostEditor, SignInPrompt } from '../../threads/composer';
-import { ReplyButton, ReplyContext, type ReplyParents } from '../../threads/reply-context';
-import { ThreadReplyComposer } from '../../threads/reply-context-composer';
+import { ThreadReading, type ThreadReadingPage } from '../../threads/thread-reading';
 import { PageHeading } from '../../shell/page-heading';
-import { RemovedPost } from '../../threads/post-removed';
 
 function threadSearch(search: Record<string, unknown>): { cursor?: string } {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
@@ -78,28 +65,19 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   component: ThreadPage,
 });
 
+export function ThreadReadingHeader({ page, title }: { page: ThreadReadingPage; title: string | null }) {
+  return (
+    <header className="min-h-8 scroll-mt-24 space-y-3 px-1">
+      <BoardContext realm={page.realm} board={page.board} prominent />
+      {title ? <PageHeading>{title}</PageHeading> : null}
+      <ThreadSubjects subjects={page.subjects} />
+    </header>
+  );
+}
+
 function ThreadPage() {
-  const {
-    thread,
-    board,
-    realm,
-    posts: loadedPosts,
-    verification,
-    authors,
-    subjects,
-    provenanceSubjects,
-    mentions,
-    now,
-  } = Route.useLoaderData();
-  const [posts, setPosts] = useState(loadedPosts);
-  const [currentMentions, setCurrentMentions] = useState(mentions);
-  const [displayTitle, setDisplayTitle] = useState(thread.title);
-  const [replyTarget, setReplyTarget] = useState<{ parentId: string | null; focusRequest: number }>({
-    parentId: null,
-    focusRequest: 0,
-  });
-  const [replyPending, setReplyPending] = useState(false);
-  const replyParents = useMemo(() => new Map(posts.posts.map((post) => [post.id, post])), [posts.posts]);
+  const page = Route.useLoaderData();
+  const [postIds, setPostIds] = useState(() => page.posts.posts.map((post) => post.id));
   const { state: session } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -107,35 +85,18 @@ function ThreadPage() {
   const id = Route.useParams().id;
   const cursor = Route.useSearch().cursor;
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
-  const postIds = posts.posts.map((post) => post.id);
   const personalQuery = useQuery({
     ...threadPersonalQuery(id, cursor, postIds),
     enabled: session === 'signed-in',
   });
   const personal = session === 'signed-in' ? personalQuery.data : undefined;
-
-  useEffect(() => setPosts(loadedPosts), [loadedPosts]);
-  useEffect(() => setCurrentMentions(mentions), [mentions]);
-  useEffect(() => setDisplayTitle(thread.title), [thread.id, thread.title]);
-  useEffect(() => setReplyTarget({ parentId: null, focusRequest: 0 }), [id]);
-
-  function selectReplyParent(parentId: string | null) {
-    if (replyPending) return;
-    setReplyTarget((current) => ({ parentId, focusRequest: current.focusRequest + 1 }));
-  }
+  useEffect(() => setPostIds(page.posts.posts.map((post) => post.id)), [page.posts]);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('post-')) document.getElementById(hash)?.scrollIntoView();
     else if (!hash) window.scrollTo(0, 0);
-  }, [id, location.hash, loadedPosts]);
-
-  function updatePost(post: ThreadPost) {
-    setPosts((current) => ({
-      ...current,
-      posts: current.posts.map((item) => (item.id === post.id ? post : item)),
-    }));
-  }
+  }, [id, location.hash, page.posts]);
 
   async function refreshThreadQueries() {
     await Promise.all([
@@ -145,127 +106,46 @@ function ThreadPage() {
   }
 
   async function refreshThreadPage() {
-    const page = await queryClient.fetchQuery({
+    const updated = await queryClient.fetchQuery({
       ...threadPageQuery(id, cursor, session === 'signed-in' ? 'session' : 'anonymous'),
       staleTime: 0,
     });
-    if ('redirect' in page) return;
-    setPosts(page.posts);
-    setCurrentMentions(page.mentions);
-    setDisplayTitle(page.thread.title);
-    rememberThreadSlug(page.thread.id, page.thread.title);
-    const destination = threadLocation(getLocale(), { id: page.thread.id, title: page.thread.title }, cursor);
+    if ('redirect' in updated) return;
+    rememberThreadSlug(updated.thread.id, updated.thread.title);
+    const destination = threadLocation(getLocale(), { id: updated.thread.id, title: updated.thread.title }, cursor);
     if (new URL(destination, window.location.origin).pathname !== location.pathname)
-      await router.navigate({ to: destination as never });
+      await router.navigate({ to: destination });
+    return updated;
   }
 
   return (
-    <article className="max-w-4xl space-y-6 text-foreground">
-      <header className="space-y-3">
-        <BoardContext realm={realm} board={board} />
-        {displayTitle ? <PageHeading>{displayTitle}</PageHeading> : null}
-        <ThreadSubjects subjects={subjects} />
-      </header>
-      <section className="space-y-6" aria-labelledby="thread-posts-heading">
-        <h2 id="thread-posts-heading" className="text-xl font-semibold">
-          {m.thread_posts_heading()}
-        </h2>
-        {posts.posts.length ? (
-          <ol id={`thread-${thread.id}`} className="scroll-mt-24">
-            {posts.posts.map((post) => {
-              const firstPost = post.id === thread.firstPost.id;
-              return (
-                <PostSlot
-                  key={post.id}
-                  anchorId={`post-${post.id}`}
-                  onChange={updatePost}
-                  replyParents={replyParents}
-                  replyPending={replyPending}
-                  onReply={() => selectReplyParent(post.id)}
-                  post={post}
-                  authors={authors}
-                  mentions={currentMentions}
-                  subjects={provenanceSubjects}
-                  currentVote={personal?.reviewVotes[post.id]}
-                  review={firstPost && thread.kind === 'review'}
-                  now={now}
-                  counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
-                  returnTo={returnTo}
-                  signedIn={session === 'signed-in'}
-                  personalReady={session !== 'signed-in' || personal !== undefined}
-                  target={firstPost ? { kind: 'thread', id: thread.id } : { kind: 'post', id: post.id }}
-                  value={(personal?.reactions[firstPost ? thread.id : post.id] as ReactionKind | null) ?? null}
-                  verification={verification}
-                  viewerId={personal?.viewerId ?? undefined}
-                  onMutation={refreshThreadQueries}
-                  onPageRefresh={refreshThreadPage}
-                  onOpeningPostChange={(restored) => {
-                    const title = restored ? thread.title : null;
-                    setDisplayTitle(title);
-                    rememberThreadSlug(thread.id, title);
-                  }}
-                />
-              );
-            })}
-          </ol>
-        ) : (
-          <p className="text-muted-foreground">{m.thread_posts_empty()}</p>
-        )}
-        {posts.next && (
-          <nav aria-label={m.thread_posts_heading()}>
-            <a
-              href={threadLocation(getLocale(), { id: thread.id, title: threadTitle(thread) }, posts.next)}
-              className={buttonVariants({ variant: 'outline', size: 'lg' })}
-            >
-              {m.threads_next_page()}
-            </a>
-          </nav>
-        )}
-      </section>
-      <div className="min-h-[22rem]">
-        {session === 'signed-in' && personal ? (
-          <ThreadReplyComposer
-            key={id}
-            initialKey={personal.idempotencyKey}
-            containerId={id}
-            parentId={replyTarget.parentId}
-            parents={replyParents}
-            focusRequest={replyTarget.focusRequest}
-            pending={replyPending}
-            onPendingChange={setReplyPending}
-            onCancel={() => selectReplyParent(null)}
-            onSubmit={async ({ body, idempotencyKey: key, mediaIds, parentId }) => {
-              const result = await replyToThread({
-                data: {
-                  threadId: id,
-                  body,
-                  idempotencyKey: key,
-                  ...(parentId === undefined ? {} : { parentId }),
-                  ...(mediaIds.length > 0 ? { mediaIds } : {}),
-                },
-                headers: csrfHeaders(),
-                fetch: draftFetch(body),
-              });
-              return result.ok ? { ok: true as const, value: result.post } : result;
-            }}
-            onSuccess={(post) => {
-              setPosts((current) => ({
-                ...current,
-                posts: current.posts.some((item) => item.id === post.id)
-                  ? current.posts.map((item) => (item.id === post.id ? post : item))
-                  : [...current.posts, post],
-              }));
-              setReplyTarget((current) => ({ ...current, parentId: null }));
-              void refreshThreadQueries();
-            }}
-          />
-        ) : session === 'signed-out' ? (
-          <SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />
-        ) : null}
-      </div>
-    </article>
+    <ThreadReading
+      key={id}
+      page={page}
+      Post={ThreadReadingPost}
+      signedOut={<SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />}
+      personal={personal}
+      session={session}
+      returnTo={returnTo}
+      renderHeader={(title) => <ThreadReadingHeader page={page} title={title} />}
+      onMutation={refreshThreadQueries}
+      onPageRefresh={refreshThreadPage}
+      onPostIdsChange={setPostIds}
+    />
   );
 }
+
+function SharePost({ onCopyLink }: { onCopyLink: () => Promise<void> }) {
+  const [message, setMessage] = useState('');
+  return <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <Button type="button" variant="ghost" size="sm" onClick={async () => {
+      try { await onCopyLink(); setMessage(m.thread_reading_link_copied()); }
+      catch { setMessage(m.thread_reading_share_failed()); }
+    }}><Share2Icon aria-hidden="true" />{m.thread_reading_share()}</Button>
+    {message ? <span role="status" className="text-xs text-muted-foreground">{message}</span> : null}
+  </div>;
+}
+
 
 function fullDateTime(value: string): string {
   const date = new Date(value);
@@ -276,7 +156,7 @@ function postDeleteFailureText(failure: WriteFailure): string {
   return failure.reason === 'closed' ? m.thread_write_closed() : m.thread_delete_failure();
 }
 
-function PostSlot({
+export function ThreadReadingPost({
   post,
   authors,
   mentions,
@@ -463,14 +343,14 @@ function PostSlot({
 
   const authorId = 'authorId' in post ? post.authorId : undefined;
   return (
-    <ListRow id={anchorId} ref={itemElement} tabIndex={-1} className="scroll-mt-24 py-5 target:bg-muted/50">
-      <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
+    <ListRow id={anchorId} ref={itemElement} tabIndex={-1} className="min-w-0 scroll-mt-24 rounded-xl bg-card px-4 py-5 target:ring-2 target:ring-ring sm:p-6">
+      <div className="mb-4 flex min-w-0 flex-wrap items-start justify-between gap-3">
         <Byline
           author={authorId === undefined ? undefined : authors?.[authorId]}
           createdAt={post.createdAt}
           now={now}
-          showAuthor={authors !== null && authorId !== undefined}
-          className="min-h-8 flex-1"
+          showAuthor={authorId !== undefined}
+          className="min-h-8 min-w-0 flex-1 basis-48"
         >
           {post.revisedAt && new Date(post.revisedAt).getTime() > new Date(post.createdAt).getTime() ? (
             <time dateTime={post.revisedAt} title={fullDateTime(post.revisedAt)}>
@@ -526,8 +406,8 @@ function PostSlot({
             });
             return result;
           }}
-          onSuccess={(updated: RevisedPost) => {
-            onChange(updated as ThreadPost);
+          onSuccess={(updated) => {
+            onChange(updated);
             setEditing(false);
             void onMutation();
           }}
@@ -535,26 +415,29 @@ function PostSlot({
       ) : (
         <>
           <DocumentBody
-            className="mx-0!"
+            className="mx-0! w-full overflow-x-auto [overflow-wrap:anywhere] [&_img]:rounded-lg"
             document={post.body}
             mentions={mentions}
             locale={getLocale()}
             labels={{ revealSpoiler: m.thread_reveal_spoiler() }}
           />
+          <div className="mt-4">
           <RevisionProvenance
             revision={post}
             subjects={subjects}
             currentVote={ownsPost ? (currentVote ?? null) : null}
             review={review}
           />
-          {post.revisionId ? (
-            <PostHistory postId={post.id} {...(viewerId ? { viewerId } : {})} review={review} />
-          ) : null}
-          {signedIn && personalReady ? (
-            <div className="mt-3 flex justify-end">
-              <ReplyButton disabled={replyPending} onReply={onReply} />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            {post.revisionId ? (
+              <PostHistory postId={post.id} {...(viewerId ? { viewerId } : {})} review={review} />
+            ) : <span />}
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+              <SharePost onCopyLink={copyLink} />
+              {signedIn && personalReady ? <ReplyButton disabled={replyPending} onReply={onReply} /> : null}
             </div>
-          ) : null}
+          </div>
         </>
       )}
     </ListRow>

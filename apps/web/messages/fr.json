@@ -1920,5 +1920,12 @@
   "moderation_queue_retry_hint": "Votre brouillon est conservé. Réessayez la même action pour confirmer son résultat.",
   "moderation_queue_back": "Retour au forum",
   "moderation_queue_post_scope": "Signalements de cette publication",
-  "moderation_queue_board_scope": "Examinez les signalements de ce forum et de ses discussions."
+  "moderation_queue_board_scope": "Examinez les signalements de ce forum et de ses discussions.",
+  "thread_reading_about": "À propos de cette communauté",
+  "thread_reading_share": "Partager",
+  "thread_reading_link_copied": "Lien copié",
+  "thread_reading_share_failed": "Impossible de copier le lien. Réessayez.",
+  "thread_reading_preparing": "Préparation de la réponse…",
+  "thread_reading_participation_unavailable": "La réponse est indisponible. Actualisez la page pour réessayer.",
+  "thread_reading_empty_page": "Aucune publication lisible sur cette page. Passez à la page suivante."
 }

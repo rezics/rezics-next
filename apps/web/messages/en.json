@@ -1921,5 +1921,12 @@
   "moderation_queue_retry_hint": "Your draft is kept. Retry the same action to confirm its outcome.",
   "moderation_queue_back": "Back to board",
   "moderation_queue_post_scope": "Reports for this post",
-  "moderation_queue_board_scope": "Review reports for this board and its discussions."
+  "moderation_queue_board_scope": "Review reports for this board and its discussions.",
+  "thread_reading_about": "About this community",
+  "thread_reading_share": "Share",
+  "thread_reading_link_copied": "Link copied",
+  "thread_reading_share_failed": "Could not copy the link. Try again.",
+  "thread_reading_preparing": "Preparing reply controls…",
+  "thread_reading_participation_unavailable": "Reply controls are unavailable. Refresh to try again.",
+  "thread_reading_empty_page": "No readable posts on this page. Continue to the next page."
 }

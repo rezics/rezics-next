@@ -1920,5 +1920,12 @@
   "moderation_queue_retry_hint": "Se conserva tu borrador. Reintenta la misma acción para confirmar el resultado.",
   "moderation_queue_back": "Volver al foro",
   "moderation_queue_post_scope": "Denuncias de esta publicación",
-  "moderation_queue_board_scope": "Revisa las denuncias de este foro y sus conversaciones."
+  "moderation_queue_board_scope": "Revisa las denuncias de este foro y sus conversaciones.",
+  "thread_reading_about": "Acerca de esta comunidad",
+  "thread_reading_share": "Compartir",
+  "thread_reading_link_copied": "Enlace copiado",
+  "thread_reading_share_failed": "No se pudo copiar el enlace. Inténtalo de nuevo.",
+  "thread_reading_preparing": "Preparando las respuestas…",
+  "thread_reading_participation_unavailable": "Las respuestas no están disponibles. Actualiza la página.",
+  "thread_reading_empty_page": "No hay publicaciones legibles en esta página. Continúa a la siguiente."
 }

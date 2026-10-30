@@ -1920,5 +1920,12 @@
   "moderation_queue_retry_hint": "下書きは保持されています。同じ操作を再試行して結果を確認してください。",
   "moderation_queue_back": "掲示板に戻る",
   "moderation_queue_post_scope": "この投稿への通報",
-  "moderation_queue_board_scope": "この掲示板とその議論への通報を確認します。"
+  "moderation_queue_board_scope": "この掲示板とその議論への通報を確認します。",
+  "thread_reading_about": "このコミュニティについて",
+  "thread_reading_share": "共有",
+  "thread_reading_link_copied": "リンクをコピーしました",
+  "thread_reading_share_failed": "リンクをコピーできませんでした。もう一度お試しください。",
+  "thread_reading_preparing": "返信機能を準備しています…",
+  "thread_reading_participation_unavailable": "返信機能を利用できません。再読み込みしてください。",
+  "thread_reading_empty_page": "このページに閲覧できる投稿はありません。次のページに進んでください。"
 }

@@ -1921,5 +1921,12 @@
   "moderation_queue_retry_hint": "草稿已保留。重试同一操作以确认结果。",
   "moderation_queue_back": "返回版块",
   "moderation_queue_post_scope": "此帖子的举报",
-  "moderation_queue_board_scope": "审核此版块及其讨论中的举报。"
+  "moderation_queue_board_scope": "审核此版块及其讨论中的举报。",
+  "thread_reading_about": "关于此社群",
+  "thread_reading_share": "分享",
+  "thread_reading_link_copied": "已复制链接",
+  "thread_reading_share_failed": "无法复制链接，请重试。",
+  "thread_reading_preparing": "正在准备回复功能…",
+  "thread_reading_participation_unavailable": "回复功能暂时不可用，请刷新后重试。",
+  "thread_reading_empty_page": "此页没有可阅读的帖子，请继续前往下一页。"
 }
