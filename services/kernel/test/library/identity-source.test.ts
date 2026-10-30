@@ -20,9 +20,13 @@ test('Library member filtering consumes the current native mapping and preserves
   const mapping = await resolveSubject({ pool: fixture.pool, access: fixture.access }, actor, created.subject.id);
 
   expect(mapping).toEqual({ subjectId: created.subject.id, requestedSubjectId: null });
-  expect(await readableSubjects({ pool: fixture.pool, access: fixture.access }, actor, [created.subject.id])).toEqual([
-    created.subject.id,
-  ]);
+  expect(await resolveSubject({ pool: fixture.pool, access: fixture.access }, actor, 'not-a-subject-id')).toBeNull();
+  expect(
+    await readableSubjects({ pool: fixture.pool, access: fixture.access }, actor, [
+      'not-a-subject-id',
+      created.subject.id,
+    ]),
+  ).toEqual([created.subject.id]);
 });
 
 test('a historical root is unavailable before bootstrap while a hooked birth already resolves', async () => {
