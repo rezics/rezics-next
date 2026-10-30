@@ -42,7 +42,7 @@ const request = () =>
 describe('Platform Realm claim review and genuine native approval journey', () => {
   test('uses the actual generated approval method, explicit confirmation, exact receipt and fresh queue', async () => {
     const calls: Request[] = [];
-    let current = pending;
+    let current: RealmClaimReviewRead = pending;
     let reads = 0;
     const client = createKernelClient('https://kernel.example.test', {
       fetch: async (url, init) => {
@@ -85,7 +85,7 @@ describe('Platform Realm claim review and genuine native approval journey', () =
 
   test('an uncertain applied approval recovers with the same key even after its row leaves the queue', async () => {
     const intents: unknown[] = [];
-    let current = pending;
+    let current: RealmClaimReviewRead = pending;
     const control = createRealmClaimReview(
       realmId,
       pending,
@@ -108,7 +108,7 @@ describe('Platform Realm claim review and genuine native approval journey', () =
   });
 
   test('current denial conceals the queue and prevents uncertain replay until a fresh admitted read', async () => {
-    let current = pending;
+    let current: RealmClaimReviewRead = pending;
     let posts = 0;
     const control = createRealmClaimReview(
       realmId,

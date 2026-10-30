@@ -148,6 +148,12 @@ export function RealmClaimReviewView({
                     </dd>
                   </div>
                   <div>
+                    <dt className="text-muted-foreground">{m.realm_claim_orphaned_at()}</dt>
+                    <dd>
+                      <OriginalDate value={receipt.orphanedAt} />
+                    </dd>
+                  </div>
+                  <div>
                     <dt className="text-muted-foreground">{m.realm_review_approved_at()}</dt>
                     <dd>
                       <OriginalDate value={receipt.approvedAt} />

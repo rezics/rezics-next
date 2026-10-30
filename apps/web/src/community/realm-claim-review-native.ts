@@ -5,6 +5,7 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import {
   realmClaimApprovalReceipt,
+  realmClaimReviewPage,
   validateRealmClaimApproval,
   validateRealmClaimReviewRead,
   type RealmClaimApprovalInput,
@@ -24,7 +25,10 @@ export async function readRealmClaimReview(
   try {
     const stale = await prepareSession(request, env);
     if (stale || !viewerCredential(request)) return { kind: 'signed-out' };
-    return await read(input);
+    const result = await read(input);
+    if (result.kind !== 'ready') return result;
+    const page = realmClaimReviewPage(result.page, input.realmId);
+    return page ? { kind: 'ready', page } : { kind: 'unavailable' };
   } catch (error) {
     return { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }
@@ -42,10 +46,11 @@ export async function approveRealmClaimReview(
     const stale = await prepareSession(request, env);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { kind: 'signed-out' };
+    const headers = { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) };
     const result = await client
       .realms({ realmId: input.realmId })
       .claimRequests({ requestId: input.requestId })
-      .$approve.post({}, { headers: { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) } });
+      .$approve.post({}, { headers });
     if (isPlatformClosedProblem(result.status, result.error?.value)) return { kind: 'closed' };
     if (result.status === 401) return { kind: 'signed-out' };
     if (result.status === 403 || result.status === 404) return { kind: 'denied' };
