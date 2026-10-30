@@ -27,9 +27,16 @@ export type CandidateScenario =
   | 'invalid';
 
 /** A small native-shaped fake for the review region; it changes public facts only after adoption. */
-export function candidateFixture(scenario: CandidateScenario = 'ready', locale = 'en') {
+export function candidateFixture(
+  scenario: CandidateScenario = 'ready',
+  locale = 'en',
+  field: keyof typeof definitions.release.properties = candidateProperty,
+) {
   const publicRead = structuredClone(recording) as unknown as SubjectRead;
   const id = publicRead.subject.id;
+  const multiple = scenario === 'multiple' || scenario === 'stale-selection';
+  const property = multiple ? 'schema:inLanguage' : field;
+  const definition = definitions.release.properties[property];
   const candidate: Candidate = {
     id: `${id.slice(0, -3)}888`,
     release: publicRead.subject.release,
@@ -50,7 +57,7 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
     statement: {
       id: `${id.slice(0, -3)}888`,
       rank: 'normal',
-      property: { id: candidateProperty, data_type: 'time' },
+      property: { id: property, data_type: definition.datatype },
       value: {
         type: 'value',
         content: { time: '+1946-04-06T00:00:00Z', precision: 11, calendar: 'http://www.wikidata.org/entity/Q1985727' },
@@ -70,8 +77,6 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
       rezics: { release: publicRead.subject.release, revision: 2 },
     },
   };
-  const multiple = scenario === 'multiple' || scenario === 'stale-selection';
-  const property = multiple ? 'schema:inLanguage' : candidateProperty;
   const candidates = [candidate];
   if (multiple) {
     candidate.decision = 'accepted';
@@ -101,8 +106,8 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
   const fields = [
     {
       id: property,
-      label: pickText(definitions.release.properties[property as typeof candidateProperty].labels, locale).text,
-      multivalued: multiple,
+      label: pickText(definition.labels, locale).text,
+      multivalued: definition.multivalued,
     },
   ];
   const calls: {
@@ -189,6 +194,7 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
       return json(result);
     }
     if (request.method === 'POST' && url.pathname === `/v1/subjects/${id}:adopt`) {
+      if (body?.property !== property) return json({ code: 'invalid_request' }, 400);
       if (staleSelection) {
         staleSelection = false;
         adoptionHead++;
@@ -199,7 +205,7 @@ export function candidateFixture(scenario: CandidateScenario = 'ready', locale =
       const previous = publicRead.subject.statements[property] ?? [];
       if (
         !Array.isArray(selection) ||
-        selection.length > (multiple ? 32 : 1) ||
+        selection.length > (definition.multivalued ? 32 : 1) ||
         new Set(selection.map((entry) => entry.candidate)).size !== selection.length ||
         selection.some((entry) => entry.rank !== 'normal' && entry.rank !== 'preferred')
       )

@@ -110,7 +110,20 @@ export function AuthoredField({
     setBusy(true);
     setProposalBody(undefined);
     try {
-      const next = await transport.read(nextProperty || undefined, session.current);
+      // Refresh both authorities while comparison is open. A public reload cannot stand in for
+      // the candidate document read, or silently discard its independently authorized preview.
+      const comparison =
+        proposed && reviewing && nextProperty === property
+          ? await transport.review(property, proposed.candidate, undefined, session.current)
+          : undefined;
+      const next: AuthoredRead = comparison
+        ? (comparison.current ??
+          (comparison.comparison.ok ? { ok: false, reason: 'unavailable' } : comparison.comparison))
+        : await transport.read(nextProperty || undefined, session.current);
+      if (comparison) {
+        setProposalBody(comparison.body);
+        if (comparison.comparison.ok) session.current = comparison.comparison.session ?? session.current;
+      }
       dispatch({ type: 'read', read: next, reviewDraft });
       if (!next.ok) {
         setCurrent(undefined);

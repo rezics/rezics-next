@@ -1,7 +1,7 @@
 import { createKernelClient } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
-import { candidateFixture, candidateProperty } from './subject-candidates';
+import { candidateFixture } from './subject-candidates';
 import { selectCandidate } from '../../subject/candidates';
 import {
   authoredStatement,
@@ -27,7 +27,7 @@ export const authoredProperty = 'schema:abstract';
 
 /** Declared samples for isolated stories, layered on the existing review fake; never a runtime success fallback. */
 export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = 'en') {
-  const base = candidateFixture();
+  const base = candidateFixture('ready', locale, authoredProperty);
   const release = structuredClone(definitions.release) as Release;
   if (scenario === 'empty')
     release.types[base.publicRead.subject.type]!.properties = release.types[
@@ -140,13 +140,7 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
       }
       return json(receipt, 201);
     }
-    const result = await base.fetcher(request);
-    // The existing fake's selection slot is scalar; retain its head/replay behavior for this document slot.
-    if (path === `/v1/subjects/${base.id}:adopt` && result.status === 200)
-      base.publicRead.subject.statements[authoredProperty] = structuredClone(
-        base.publicRead.subject.statements[candidateProperty] ?? [],
-      );
-    return result;
+    return base.fetcher(request);
   }) as typeof fetch;
   const client = createKernelClient('https://authored.test', { fetch: fetcher });
   const transport: AuthoredTransport = {
