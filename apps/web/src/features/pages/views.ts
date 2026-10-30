@@ -1,4 +1,4 @@
-import { isView, planReads, platformRegistry, VIEWS, type CompositionDocument, type View } from '@rezics/composition';
+import { isView, planReads, platformRegistry, VIEWS, type CompositionDocument, type View, type SelectedContext, type PageContinuation } from '@rezics/composition';
 import { accountOf, viewIsPublic, type AccountProfile } from './account-read';
 import { countFromLinks, sumCounts, type Count } from '../count';
 import { bestRank, isRecord, type Stmt } from './shared';
@@ -63,6 +63,8 @@ export function previewedView(node: Node): View | undefined {
 /** The account's public profile when the page's account read succeeded. */
 function accountProfile(page: {
   subject: string | null;
+  context?: SelectedContext | undefined;
+  continuation?: PageContinuation | undefined;
   account?: { id: string; handle: string } | undefined;
   document: unknown;
   reads: Record<string, Read>;
@@ -71,6 +73,8 @@ function accountProfile(page: {
   const plan = planReads(platformRegistry, page.document as CompositionDocument, {
     subject: page.subject,
     account: page.account,
+    ...(page.context ? { context: page.context } : {}),
+    ...(page.continuation ? { continuation: page.continuation } : {}),
   });
   const key = Object.entries(plan.reads).find(([, read]) => read.kind === 'account')?.[0];
   const result = key === undefined ? undefined : page.reads[key];
@@ -112,6 +116,13 @@ function previewCount(
       items: Math.min(body.links.length, previewLimit(node, read)),
       ...(mappedCount ? { count: mappedCount } : {}),
     };
+  }
+  if (read.kind === 'subjectThreads' && Array.isArray(body.threads)) return { items: body.threads.length };
+  if (read.kind === 'relations' && Array.isArray(body.relations)) {
+    const count = isRecord(body.count) && typeof body.count.value === 'number'
+      ? countFromLinks({ value: body.count.value, exact: body.count.exact === true }, body.relations.length)
+      : undefined;
+    return { items: Math.min(body.relations.length, previewLimit(node, read)), ...(count ? { count } : {}) };
   }
   if (read.kind === 'search' && Array.isArray(body.subjects)) {
     return { items: body.subjects.length };
@@ -166,6 +177,8 @@ function previewCount(
  */
 export function subjectTabs(page: {
   subject: string | null;
+  context?: SelectedContext | undefined;
+  continuation?: PageContinuation | undefined;
   account?: { id: string; handle: string } | undefined;
   document: unknown;
   reads: Record<string, Read>;
@@ -173,7 +186,11 @@ export function subjectTabs(page: {
 }): ViewTab[] {
   const defined = new Set((page.views ?? ['overview', 'discussion', 'details']).filter(isView));
   const document = page.document as CompositionDocument;
-  const plan = planReads(platformRegistry, document, { subject: page.subject, account: page.account ?? null });
+  const plan = planReads(platformRegistry, document, {
+    subject: page.subject, account: page.account ?? null,
+    ...(page.context ? { context: page.context } : {}),
+    ...(page.continuation ? { continuation: page.continuation } : {}),
+  });
   const profile = accountProfile(page);
   // A view the overview previews from an account's data has data only when the preview returned some.
   const driven = new Set<View>();
@@ -205,7 +222,7 @@ export function subjectTabs(page: {
     sum.previews += 1;
     const key = Object.hasOwn(plan.nodes, node.props.id as string) ? plan.nodes[node.props.id as string] : undefined;
     const planned = key === undefined ? undefined : plan.reads[key];
-    if (planned) openReads.add(view);
+    if (planned && (planned.kind !== 'subjectThreads' || (key !== undefined && page.reads[key]?.status === 200))) openReads.add(view);
     const counted = previewCount(node, planned, key === undefined ? undefined : page.reads[key]);
     if (counted) {
       sum.counted += 1;
