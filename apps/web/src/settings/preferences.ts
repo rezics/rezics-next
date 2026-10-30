@@ -1,10 +1,11 @@
 import type { KernelClient } from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
-import { readLibraryResult, type CollectionVisibility } from '../library/reads';
+import type { CollectionVisibility } from '../library/reads';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { securityHrefFromIssuer } from './account-safety-links';
+import { collectionPrivacyFailure, readCollectionPrivacyResult } from './collection-privacy-data';
 
 export type SpoilerLevel = 0 | 1 | 2;
 export type Suitability = 'blur' | 'show';
@@ -55,7 +56,7 @@ export type OwnedCollection = { id: string; title: string; visibility: Collectio
 export type OwnedCollectionsPage = { collections: OwnedCollection[]; next: string | null };
 export type CollectionVisibilityWrite =
   | { ok: true; collection: OwnedCollection }
-  | { ok: false; reason: 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
+  | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
 
 function ownedCollection(value: {
   id: string;
@@ -76,12 +77,12 @@ export async function readOwnedCollections(
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
-  if (!authorization || !accountId) throw new Error('Sign in required');
+  if (!authorization || !accountId) throw new Error('Collection privacy forbidden');
   const result = await client.accounts({ accountId }).collections.get({
     query: { limit: 20, ...(cursor ? { cursor } : {}) },
     headers: { authorization },
   });
-  const page = readLibraryResult(result);
+  const page = readCollectionPrivacyResult(result);
   return { collections: page.collections.map(ownedCollection), next: page.next };
 }
 
@@ -105,10 +106,11 @@ export async function changeCollectionVisibility(
       return { ok: true, collection: ownedCollection(result.data.collection) };
     if (result.status === 409) return { ok: false, reason: 'conflict' };
     if (result.status === 400 || result.status === 422) return { ok: false, reason: 'invalid' };
+    if (failureDetails(result.error, result.status).code === 'platform_closed') return { ok: false, reason: 'closed' };
     if (result.status === 401 || result.status === 403) return { ok: false, reason: 'forbidden' };
     return { ok: false, reason: 'unavailable' };
-  } catch {
-    return { ok: false, reason: 'unavailable' };
+  } catch (error) {
+    return { ok: false, reason: collectionPrivacyFailure(error) };
   }
 }
 
@@ -120,11 +122,11 @@ export async function reloadOwnedCollection(
 ): Promise<OwnedCollection> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
-  if (!authorization || !sessionSubject(request)) throw new Error('Sign in required');
+  if (!authorization || !sessionSubject(request)) throw new Error('Collection privacy forbidden');
   const result = await client
     .collections({ collectionId })
     .get({ query: { view: 'FULL' }, headers: { authorization } });
-  return ownedCollection(readLibraryResult(result).collection);
+  return ownedCollection(readCollectionPrivacyResult(result).collection);
 }
 
 export type NotificationChange = {

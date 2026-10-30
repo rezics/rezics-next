@@ -23,6 +23,7 @@ import {
   type SettingsPage,
 } from './preferences';
 import type { CollectionVisibility } from '../library/reads';
+import { collectionPrivacyRead, type CollectionPrivacyRead } from './collection-privacy-data';
 
 /** One bounded owner read for one page, made only by the browser query. */
 export const readOwnedCollectionsPage = createServerFn({ method: 'GET' })
@@ -30,9 +31,11 @@ export const readOwnedCollectionsPage = createServerFn({ method: 'GET' })
     if (cursor !== null && (typeof cursor !== 'string' || cursor.length > 2048)) throw new Error('Invalid cursor');
     return cursor as string | null;
   })
-  .handler(async ({ data }): Promise<OwnedCollectionsPage> => {
+  .handler(async ({ data }): Promise<CollectionPrivacyRead<OwnedCollectionsPage>> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return readOwnedCollections(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return collectionPrivacyRead(() =>
+      readOwnedCollections(kernelClient(), getRequest(), env as Partial<SessionEnv>, data),
+    );
   });
 
 export const saveCollectionVisibility = createServerFn({ method: 'POST' })
@@ -65,9 +68,11 @@ export const readOwnedCollection = createServerFn({ method: 'GET' })
     if (typeof id !== 'string' || !id) throw new Error('Invalid collection id');
     return id;
   })
-  .handler(async ({ data }): Promise<OwnedCollection> => {
+  .handler(async ({ data }): Promise<CollectionPrivacyRead<OwnedCollection>> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return reloadOwnedCollection(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return collectionPrivacyRead(() =>
+      reloadOwnedCollection(kernelClient(), getRequest(), env as Partial<SessionEnv>, data),
+    );
   });
 
 export const readSettingsPage = createServerFn({ method: 'GET' }).handler(async (): Promise<SettingsPage> => {
