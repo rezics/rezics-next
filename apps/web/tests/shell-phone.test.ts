@@ -466,6 +466,7 @@ test.serial(
         const page = await open(pages('en')[0]!, { viewport: phone, storageState: session });
         const tabs = page.getByRole('navigation', { name: own.shell_phone_tabs!, exact: true });
         const inbox = tabs.locator('a[href="/en/inbox"]');
+        await inbox.waitFor();
         const unknown = inbox.getByRole('img', { name: own.inbox_unread_unavailable!, exact: true });
         if (count === null) {
           await unknown.waitFor();

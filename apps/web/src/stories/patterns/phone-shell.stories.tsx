@@ -174,11 +174,11 @@ export const DesktopPersonalNavigation: Story = {
   play: async (context) => {
     await pageReady(context);
     const navigation = within(within(context.canvasElement).getByRole('navigation', { name: m.shell_navigation() }));
-    await expect(await navigation.findByRole('link', { name: m.nav_library(), exact: true })).toHaveAttribute(
+    await expect(await navigation.findByRole('link', { name: m.nav_library() })).toHaveAttribute(
       'href',
       `/${getLocale()}/library`,
     );
-    await expect(navigation.getByRole('link', { name: m.nav_inbox(), exact: true })).toHaveAttribute(
+    await expect(navigation.getByRole('link', { name: m.nav_inbox() })).toHaveAttribute(
       'href',
       `/${getLocale()}/inbox`,
     );
@@ -192,11 +192,10 @@ export const DesktopPersonalUnavailable: Story = {
     const navigation = within(within(context.canvasElement).getByRole('navigation', { name: m.shell_navigation() }));
     const library = await navigation.findByRole('link', {
       name: `${m.nav_library()}: ${m.library_subject_unavailable()}`,
-      exact: true,
     });
     await expect(library).toHaveAttribute('aria-disabled', 'true');
     await expect(library).not.toHaveAttribute('href');
-    await expect(navigation.getByRole('link', { name: m.nav_inbox(), exact: true })).toHaveAttribute(
+    await expect(navigation.getByRole('link', { name: m.nav_inbox() })).toHaveAttribute(
       'href',
       `/${getLocale()}/inbox`,
     );
