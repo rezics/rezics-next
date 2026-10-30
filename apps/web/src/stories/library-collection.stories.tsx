@@ -133,8 +133,8 @@ export const OwnerMenu: Story = {
     await variantReady(context, variants.CuratorPublicMany.title);
     const canvas = within(context.canvasElement);
     await expect(canvas.queryByRole('textbox', { name: m.library_collection_title() })).toBeNull();
-    await expect(canvas.getByRole('button', { name: m.reaction_like(), exact: true })).toBeDisabled();
-    const menu = canvas.getByRole('button', { name: m.library_collection_actions(), exact: true });
+    await expect(canvas.getByRole('button', { name: m.reaction_like() })).toBeDisabled();
+    const menu = canvas.getByRole('button', { name: m.library_collection_actions() });
     await userEvent.click(menu);
     const body = within(context.canvasElement.ownerDocument.body);
     await expect(await body.findByText(m.library_collection_edit(), { exact: true })).toBeVisible();
@@ -199,7 +199,7 @@ export const AnotherReader: Story = {
   play: async (context) => {
     await variantReady(context, variants.ReaderPublicMany.title);
     const canvas = within(context.canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_actions(), exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_actions() }));
     const body = within(context.canvasElement.ownerDocument.body);
     await expect(await body.findByText(m.report_action(), { exact: true })).toBeVisible();
     await expect(body.queryByText(m.library_collection_edit(), { exact: true })).toBeNull();
