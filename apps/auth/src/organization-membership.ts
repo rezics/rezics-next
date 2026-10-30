@@ -80,7 +80,14 @@ export function membershipProfile(
   if (!record(source) || !text(source.AUTH_PAGE_MANAGEMENT_CLIENT_ID) || !record(source.AUTH_PAGE_MANAGEMENT_SCOPES))
     return null;
   const scopes = source.AUTH_PAGE_MANAGEMENT_SCOPES.membership;
-  if (!Array.isArray(scopes) || scopes.length !== 1 || scopes[0] !== 'organization:membership') return null;
+  if (
+    source.AUTH_PAGE_MANAGEMENT_CLIENT_ID === 'login' ||
+    source.AUTH_PAGE_MANAGEMENT_CLIENT_ID === contract.AUTH_PAGE_OPERATION_CLIENT_ID ||
+    !Array.isArray(scopes) ||
+    scopes.length !== 1 ||
+    scopes[0] !== 'organization:membership'
+  )
+    return null;
   return { client_id: source.AUTH_PAGE_MANAGEMENT_CLIENT_ID, scope: ['organization:membership'] };
 }
 export function membershipSessionMatches(session: AccountSessionResult, accountId: string): boolean {
@@ -99,6 +106,9 @@ export function membershipSessionMatches(session: AccountSessionResult, accountI
  * omits membership reservation IDs: removal/role CAS must stay unavailable until
  * its owner supplies members.items[].reservationId from current native membership.
  * relation.version/reservationId describe an operator and are NEVER member proof.
+ * The shared owner must also preserve an authenticated native management read
+ * before/after step-up: the installed read requires account:read, whereas this
+ * mutation profile must remain exactly organization:membership. Do not widen it.
  */
 export function parseMembershipPage(body: unknown, organizationId: string): MembershipPage {
   const unavailable = { kind: 'unavailable' } as const;

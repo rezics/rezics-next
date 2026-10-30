@@ -353,6 +353,12 @@ export function OrganizationMembersPage({ organizationId }: { organizationId: st
                 effect,
               })}
             </p>
+            <p className="break-all">{m.auth_members_initiator({ account: command.accountId })}</p>
+            {command.operation.reservationId ? (
+              <p className="break-all">
+                {m.auth_members_reservation({ reservation: command.operation.reservationId })}
+              </p>
+            ) : null}
             <p>{m.auth_members_authority()}</p>
             {reauth ? (
               <form onSubmit={(event) => void authenticate(event)} className="space-y-4">

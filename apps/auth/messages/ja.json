@@ -224,5 +224,6 @@
   "auth_members_submit": "Submit confirmed change",
   "auth_members_retry_exact": "Retry the same command",
   "auth_members_reauthenticate": "Sign in again",
-  "auth_members_close": "Close current readback"
+  "auth_members_close": "Close current readback",
+  "auth_members_initiator": "Initiating account: {account}"
 }
