@@ -171,10 +171,21 @@ function installArchiveGuard() {
   Bun.plugin({
     name: 'construction-archive-boundary',
     setup(build) {
+      let resolving = false;
       // Check custody during resolution, leaving historical onLoad hooks free
       // to supply their verified original bytes at the same module paths.
       build.onResolve({ filter: /.*/ }, ({ path, importer, resolveDir }) => {
-        const resolved = Bun.resolveSync(path, resolveDir || (importer ? dirname(importer) : process.cwd()));
+        // Bun.resolveSync invokes runtime resolve hooks too. Returning the
+        // original specifier on reentry delegates that inner lookup to Bun;
+        // the outer call checks its final resolved path before any load.
+        if (resolving) return { path };
+        let resolved: string;
+        try {
+          resolving = true;
+          resolved = Bun.resolveSync(path, resolveDir || (importer ? dirname(importer) : process.cwd()));
+        } finally {
+          resolving = false;
+        }
         if (!isAbsolute(resolved)) return { path: resolved };
         const actual = realpathSync(resolved);
         if (!inside(root, actual) && !external.some((directory) => inside(directory, actual)))
