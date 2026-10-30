@@ -1,3 +1,4 @@
+type TrendingProblem = { type: unknown; title: unknown; status: number; code: unknown; retryable: unknown; effect_status: "not_applicable" | "not_applied"; request_id: string; detail?: string; errors?: { pointer: string; code: never }[] };
 import { type SubjectSummary } from '../../semantic/summaries.ts';
 import type { Resource, AccessCheck } from '../../request/access.ts';
 import type { Pool } from 'pg';
@@ -74,6 +75,22 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, ac
     };
 } & {
     v1: {
+        trendingSearches: {
+            get: {
+                body: unknown;
+                params: {};
+                query: { language: string; limit?: number };
+                headers: unknown;
+                response: {
+                    200: { trendingSearches: { query: string; display: string }[]; next: null };
+                    400: TrendingProblem;
+                    401: TrendingProblem;
+                    403: TrendingProblem;
+                    503: TrendingProblem;
+                };
+                error: never;
+            };
+        };
         subjects: {
             $search: {
                 post: {

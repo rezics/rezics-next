@@ -2252,5 +2252,8 @@
   "zone_editor_copy_failed": "无法复制，请使用上方阅读链接。",
   "zone_editor_leave": "离开此页并舍弃尚未保存的本地编辑？",
   "zone_editor_stay": "继续编辑",
-  "zone_editor_discard": "舍弃并离开"
+  "zone_editor_discard": "舍弃并离开",
+  "trending_loading": "正在加载热门搜索…",
+  "trending_unavailable": "热门搜索暂时不可用。",
+  "trending_empty": "暂无热门搜索。"
 }

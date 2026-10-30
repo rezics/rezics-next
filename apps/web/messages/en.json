@@ -2289,5 +2289,8 @@
   "zone_editor_copy_failed": "Could not copy. Use the reader link above.",
   "zone_editor_leave": "Leave this page and discard unsaved local edits?",
   "zone_editor_stay": "Keep editing",
-  "zone_editor_discard": "Discard and leave"
+  "zone_editor_discard": "Discard and leave",
+  "trending_loading": "Loading trending searches…",
+  "trending_unavailable": "Trending searches are unavailable right now.",
+  "trending_empty": "No trending searches yet."
 }

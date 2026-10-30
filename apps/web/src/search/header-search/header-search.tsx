@@ -240,6 +240,8 @@ export function HeaderSearchView({
             {!query.trim() && (
               <RecentPanel
                 recent={recent}
+                language={locale}
+                global={!scope}
                 history={history}
                 discovery={discovery}
                 onSelect={onRecent}
@@ -471,10 +473,7 @@ export function HeaderSearch({
       id={id}
       history={history}
       discovery={discovery}
-      onQuery={(query) => {
-        dispatch({ type: 'query', query });
-        input.current?.focus();
-      }}
+      onQuery={(query) => submitQuery(query, undefined)}
       onRecent={(entry) => {
         dispatch({ type: 'sync-scope', scope: entry.scope });
         dispatch({ type: 'query', query: entry.query });

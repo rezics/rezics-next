@@ -1,4 +1,5 @@
-import { ChevronRight, Clock, TrendingUp, UserRound, X } from 'lucide-react';
+import { CurrentTrendingSearches } from './trending-section';
+import { ChevronRight, Clock, UserRound, X } from 'lucide-react';
 import { useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { RecentEntry, RecentHistory } from './recent-history';
@@ -18,7 +19,11 @@ export function RecentPanel({
   onSelect,
   discovery,
   onQuery,
+  language = 'en',
+  global = true,
 }: {
+  language?: string;
+  global?: boolean;
   history?: RecentHistory | undefined;
   recent?: React.ReactNode;
   onSelect?: ((entry: RecentEntry) => void) | undefined;
@@ -112,22 +117,7 @@ export function RecentPanel({
           )}
         </section>
       )}
-      {discovery?.trendingQueries?.length ? (
-        <section className="space-y-2 pt-5">
-          <h3 className="px-2 text-sm font-semibold">{m.header_search_trending_searches()}</h3>
-          {discovery.trendingQueries.slice(0, 8).map((query) => (
-            <button
-              type="button"
-              key={query}
-              className={`${control} w-full text-start`}
-              onClick={() => onQuery?.(query)}
-            >
-              <TrendingUp aria-hidden="true" className="size-4" />
-              {query}
-            </button>
-          ))}
-        </section>
-      ) : null}
+      {global ? <CurrentTrendingSearches language={language} onSelect={onQuery} /> : null}
       {realms(m.header_search_trending_communities(), discovery?.trendingRealms)}
       {realms(m.header_search_popular_realms(), discovery?.popularRealms)}
     </div>

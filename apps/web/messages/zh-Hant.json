@@ -2251,5 +2251,8 @@
   "zone_editor_copy_failed": "無法複製，請使用上方閱讀連結。",
   "zone_editor_leave": "離開此頁並捨棄尚未儲存的本機編輯？",
   "zone_editor_stay": "繼續編輯",
-  "zone_editor_discard": "捨棄並離開"
+  "zone_editor_discard": "捨棄並離開",
+  "trending_loading": "正在載入熱門搜尋…",
+  "trending_unavailable": "熱門搜尋暫時無法使用。",
+  "trending_empty": "目前沒有熱門搜尋。"
 }

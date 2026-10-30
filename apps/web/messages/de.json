@@ -2251,5 +2251,8 @@
   "zone_editor_copy_failed": "Kopieren fehlgeschlagen. Nutze den Leselink oben.",
   "zone_editor_leave": "Seite verlassen und ungespeicherte Änderungen verwerfen?",
   "zone_editor_stay": "Weiter bearbeiten",
-  "zone_editor_discard": "Verwerfen und verlassen"
+  "zone_editor_discard": "Verwerfen und verlassen",
+  "trending_loading": "Beliebte Suchanfragen werden geladen…",
+  "trending_unavailable": "Beliebte Suchanfragen sind derzeit nicht verfügbar.",
+  "trending_empty": "Noch keine beliebten Suchanfragen."
 }

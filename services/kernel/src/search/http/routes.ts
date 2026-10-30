@@ -1,3 +1,4 @@
+import { createTrendingSearchesService } from '../trending-searches.ts';
 import { chooseLabel } from '../../semantic/language.ts';
 import { compileKinds } from '../query.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../../semantic/summaries.ts';
@@ -226,8 +227,56 @@ export function searchRoutes<App>(
     };
   }
 
+  const trending = createTrendingSearchesService({ pool, clock });
   const routed = (app as ReturnType<typeof createApp>)
     .model('PublicFigure', PublicFigureSchema)
+    .get(
+      '/v1/trendingSearches',
+      {
+        query: t.Object(
+          {
+            language: t.String({ minLength: 2, maxLength: 35 }),
+            limit: t.Optional(t.IntegerString({ minimum: 1, maximum: 10 })),
+          },
+          object,
+        ),
+        response: {
+          200: t.Object(
+            {
+              trendingSearches: t.Array(t.Object({ query: t.String(), display: t.String() }, object), { maxItems: 10 }),
+              next: t.Null(),
+            },
+            object,
+          ),
+          400: problemSchema('invalid_request'),
+          401: unauthorized,
+          403: problemSchema('forbidden'),
+          503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'search.trendingSearches',
+          'x-exposure': 'gate:search',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ query, authorize, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
+        });
+        return admission.run('normal', job, async () => {
+          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
+          const outcome = await trending.read(query.language, query.limit);
+          if (outcome.status !== 'ready')
+            throw new ProblemError('semantic_not_ready', {
+              headers: { 'retry-after': '1', 'cache-control': 'private, no-store' },
+            });
+          return outcome.page;
+        });
+      },
+    )
     .post(
       customMethod('/v1/subjects', 'search'),
       {
@@ -301,6 +350,7 @@ export function searchRoutes<App>(
             body.languages,
             active,
           );
+          await trending.submitted(actor, body);
           return publicBases(page, body.languages ?? [], active) satisfies SearchHttpResponse;
         });
       },

@@ -18,6 +18,68 @@ sampled, count-ordered preview with unsafe count metadata. Count removal is sepa
 continuation, admission, Source/privacy integration and preparation remain **UNIMPLEMENTED**. This specification
 adoption supplies no runtime or native acceptance evidence.
 
+## Trending searches
+
+The selected read is `GET /v1/trendingSearches`, with a language and a limit from 1 through 10, returning only
+`{ trendingSearches: [{ query, display }], next: null }`. Search owns terms; Content owns Realm discovery.
+Until this operation is delivered, Web must not infer a trends endpoint or fabricate trends.
+
+The aggregation window is the preceding seven days at authoritative request time. Publication requires at least
+ten distinct currently eligible signed-in Accounts for each term. Each Account contributes at most once per term
+per UTC day; multiple days never make one Account count as multiple contributors. Caller input cannot change the
+window or threshold. Expiry, Account erasure/opt-out and source withdrawal must remove or minimise contributions
+through registered owner work, with current native barriers preventing late replay from restoring removed data.
+
+Only an explicitly submitted, unscoped, positive literal search that exactly matches a currently publicly
+disclosed catalogue label or alias is eligible. A Concept qualifies through that same current catalogue authority.
+The displayed term comes from that public source; the returned query must parse as a literal of the same term
+under the closed Search grammar. Advanced, negated, owner, Realm, private and scoped searches, autocomplete
+keystrokes and private recent-history text never contribute. Arbitrary free text is excluded; a PII regex does not
+establish public meaning or privacy. No IP/device identifier or sensitive query text belongs in storage, outbox
+events or telemetry. Contributor identities and counts are never public response fields.
+
+Native maintained window/cohort/rank state must bound candidate, SQL, Access and byte work within the existing
+Search budgets. Publication must revalidate both the current public label/source and ten distinct contributors'
+current native eligibility and reduction state, including the shared scoped observation. Missing, changed,
+withdrawn, erased, opted-out or uncertain evidence omits the term; a stored count or index checkpoint cannot
+establish eligibility. Per-read query-log scans, cross-partition authoritative joins and unbounded grouping are
+not admitted execution plans.
+
+The route, typed client, shared-shell consumer, private native projection and bounded cleanup commands are
+implemented. Publication and ingestion currently return `preparing` (`semantic_not_ready` at HTTP) because the
+actual registered native identity/definition and Account reduction/opt-out binding is absent. This is an explicit
+provisional composition adapter, not an empty successful response or a qualified-publication claim. No Source
+implementation is copied or replaced. The existing
+[Source factory](../semantic/public-filter-source-contract.ts) and
+[consumer operations](public-filter-consumer-contract.ts) are the agreed signature handoff; their diagnostic
+status and reader-only types cannot substitute for the missing
+[runtime binding](../semantic/public-filter-source-contract.md#required-integration-schedule-not-yet-frozen).
+Activation must replace the adapter with that actual owner binding, current native Account and catalogue reads,
+and the shared scoped observation covering the maintained population/order, including excluded terms. No callback
+Boolean can activate it. Account tombstone and subject withdrawal events already register bounded minimisation;
+they are eventual cleanup, not current publication permission. An Account opt-out owner hook must invoke the same
+withdrawal command before activation. There is no new public writer or opt-out authority.
+
+Search retains at most sixteen contributors per term and ranks that bounded sample by distinct current eligible
+contributors, with a digest tie break. Excess contributors are not recorded. The retained per-Account timestamp
+is the first submission of its latest UTC day; repeating a submission that day cannot extend the window. The
+projection retains only the source-derived public label, language, source key and private member keys/timestamps,
+not submitted query strings. Withdrawals retain only minimal identity barriers to reject late deliveries;
+restoration alone never clears those barriers. A future native restoration admission must revalidate the actual
+owner state before allowing fresh contributions; old contributions never return.
+
+- Touches: one Search-owned native home, maintained term/member indexes, ordinary command executor/events,
+  existing worker effects, one typed API/BFF call per Search opening, and the existing Search frame.
+- Bound: a rank seek examines ten terms (no expiry predicate that could scan expired history), followed by ten
+  exact member probes of at most sixteen rows. Reduction handles at most 160 private keys and ten labels, returns
+  at most ten pairs and emits no counts. Labels are at most 256 UTF-8 bytes and must round-trip the closed grammar.
+  One write locks one term and touches at most sixteen members. Each cleanup transaction removes at most ten terms
+  and their 160 members, or ten Account members; indexed barriers block replay before subsequent pages.
+  Current Source/Account/Access/dependency costs still require the real owner binding within existing caps;
+  these storage bounds do not establish publication feasibility or raise Search budgets.
+- Verification: focused projection/reduction/consumer cases and actual-shell preparing/unavailable stories.
+  Qualified native publication and visual review remain integration work, not evidence supplied by these stories.
+
 ## Deletion lifecycle
 
 [Deletion](../../../../docs/deletion.md) governs user-owned data; [first public scope](../../../../docs/scope.md)

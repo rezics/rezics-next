@@ -2251,5 +2251,8 @@
   "zone_editor_copy_failed": "コピーできませんでした。上の閲覧リンクを使用してください。",
   "zone_editor_leave": "このページを離れ、未保存の編集を破棄しますか？",
   "zone_editor_stay": "編集を続ける",
-  "zone_editor_discard": "破棄して移動"
+  "zone_editor_discard": "破棄して移動",
+  "trending_loading": "急上昇の検索を読み込み中…",
+  "trending_unavailable": "急上昇の検索は現在利用できません。",
+  "trending_empty": "急上昇の検索はまだありません。"
 }

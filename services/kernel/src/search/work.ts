@@ -4,6 +4,7 @@ import { runCommand, noEffect } from '../command/command.ts';
 import { acknowledgeErasure, readErasureStatus } from '../access/erasure.ts';
 import { routeOf, partitionOf, PARTITIONS } from '../route/route.ts';
 import './recent-searches.ts';
+import { trendingSearchStore } from './trending-searches.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
@@ -137,6 +138,43 @@ export const searchWorkModule: WorkModule = {
         automaticBackfill: false,
       },
     ]);
+    const trends = trendingSearchStore(context.pool, context.clock);
+    context.addEffects([
+      {
+        name: 'search_trending_withdrawal',
+        types: ['com.rezics.access.account-tombstoned.v1', 'com.rezics.subject.visibility_changed.v1'],
+        async run(event) {
+          const data = event.data as { accountId?: string; id?: string; visibility?: string };
+          if (data.accountId) {
+            while ((await trends.withdraw('account', data.accountId)).value === 'progress') {
+              /* bounded committed pages */
+            }
+          } else if (data.id && data.visibility !== 'visible') {
+            while ((await trends.withdraw('source', data.id)).value === 'progress') {
+              /* bounded committed pages */
+            }
+          }
+        },
+      },
+    ]);
+    context.addService(() => {
+      let stopped = false;
+      let running: Promise<unknown> = Promise.resolve();
+      const timer = setInterval(() => {
+        running = running
+          .then(() => (stopped ? undefined : trends.expire()))
+          .catch(() => {
+            /* retry next bounded tick */
+          });
+      }, 60_000);
+      return {
+        async stop() {
+          stopped = true;
+          clearInterval(timer);
+          await running;
+        },
+      };
+    });
     const config = readSearchConfig(context.env);
     if (!config) return;
     const routeKey = readMembershipRouteKey(context.env);

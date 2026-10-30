@@ -2251,5 +2251,8 @@
   "zone_editor_copy_failed": "Copie impossible. Utilisez le lien ci-dessus.",
   "zone_editor_leave": "Quitter la page et abandonner les modifications non enregistrées ?",
   "zone_editor_stay": "Continuer à modifier",
-  "zone_editor_discard": "Abandonner et quitter"
+  "zone_editor_discard": "Abandonner et quitter",
+  "trending_loading": "Chargement des recherches populaires…",
+  "trending_unavailable": "Les recherches populaires sont indisponibles pour le moment.",
+  "trending_empty": "Aucune recherche populaire pour le moment."
 }

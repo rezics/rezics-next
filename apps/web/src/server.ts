@@ -28,6 +28,7 @@ import {
   type SitemapStepRunner,
   type SitemapWorkflowBinding,
 } from './sitemap/export.ts';
+import { trendingResponse } from './search/trending.ts';
 import { suggestionResponse } from './search/suggestions.ts';
 import { limitRead, readLimitKey, type ReadRateLimitEnv } from './rate-limit/read.ts';
 import { orderStatusResponse } from './checkout/order.server.ts';
@@ -421,7 +422,8 @@ async function fetchRequest(request: Request): Promise<Response> {
     !isMedia &&
     !isServerFn &&
     !url.pathname.startsWith('/auth/') &&
-    url.pathname !== '/api/search/suggestions'
+    url.pathname !== '/api/search/suggestions' &&
+    url.pathname !== '/api/search/trending'
   ) {
     const redirect = await pageRedirect(request, url);
     if (redirect) return redirect;
@@ -438,7 +440,7 @@ async function fetchRequest(request: Request): Promise<Response> {
         mediaSessionError = error;
       }
       subject = sessionSubject(request);
-    } else if (isServerFn || url.pathname === '/api/search/suggestions') {
+    } else if (isServerFn || url.pathname === '/api/search/suggestions' || url.pathname === '/api/search/trending') {
       const identity = await readSessionState(request, sessionEnv);
       if (identity.state === 'signed-in') subject = identity.subject;
     }
@@ -483,6 +485,7 @@ async function fetchRequest(request: Request): Promise<Response> {
     }
     return authRequest(request, sessionEnv);
   }
+  if (url.pathname === '/api/search/trending') return trendingResponse(request, sessionEnv);
   if (url.pathname === '/api/search/suggestions') {
     return suggestionResponse(request, sessionEnv);
   }

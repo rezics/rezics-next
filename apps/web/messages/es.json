@@ -2251,5 +2251,8 @@
   "zone_editor_copy_failed": "No se pudo copiar. Usa el enlace de arriba.",
   "zone_editor_leave": "¿Salir y descartar los cambios sin guardar?",
   "zone_editor_stay": "Seguir editando",
-  "zone_editor_discard": "Descartar y salir"
+  "zone_editor_discard": "Descartar y salir",
+  "trending_loading": "Cargando búsquedas populares…",
+  "trending_unavailable": "Las búsquedas populares no están disponibles ahora.",
+  "trending_empty": "Aún no hay búsquedas populares."
 }
