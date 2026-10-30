@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import { changesFailure, type DetailRead, type NativeRevisionDetail } from './subject-changes';
+import { termFields } from './subject-terms';
 
 export type RevisionDetailPort = (
   client: KernelClient,
@@ -28,6 +29,13 @@ const detailSchema = v.strictObject({
   revision: v.strictObject({ revision: positive, kind: v.string(), release: v.string() }),
   change: v.variant('kind', [
     v.strictObject({ kind: v.literal('record') }),
+    v.strictObject({
+      kind: v.literal('terms'),
+      fields: v.pipe(
+        v.array(v.strictObject({ field: v.picklist(termFields), languages: v.array(v.string()) })),
+        v.maxLength(3),
+      ),
+    }),
     v.strictObject({ kind: v.literal('candidate'), ...candidate }),
     v.strictObject({ kind: v.literal('decision'), ...candidate, head: positive, verdict }),
     v.strictObject({

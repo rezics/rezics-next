@@ -44,7 +44,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Explicit multilingual edits through the declared terms port and native-shaped read/ETag seam. Samples establish neither runtime availability nor native or visual acceptance. Select locale, theme and viewport with toolbar globals.',
+          'Explicit multilingual edits through the generated native terms client and a read/ETag sample seam. Samples establish neither runtime availability nor native or visual acceptance. Select locale, theme and viewport with toolbar globals.',
       },
     },
   },

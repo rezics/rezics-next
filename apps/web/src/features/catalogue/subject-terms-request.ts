@@ -10,26 +10,9 @@ import {
   isTermsCommand,
   type TermsCommand,
   type TermsFailure,
-  type TermsPatch,
   type TermsRead,
   type TermsResult,
 } from './subject-terms';
-
-type Endpoint = ReturnType<KernelClient['subjects']>;
-/** Declared producer port over Eden's existing runtime; no new client export or successful fallback. */
-type DeclaredTermsEndpoint = Endpoint & {
-  terms: {
-    patch: (
-      patch: TermsPatch,
-      options: { headers: Record<string, string>; fetch: { redirect: 'manual' } },
-    ) => Promise<{
-      status: number;
-      data: { subject: string; revision: number } | null;
-      error: { value: unknown } | null;
-      headers: HeadersInit;
-    }>;
-  };
-};
 
 function refusal(status: number, body?: unknown): TermsFailure {
   const code = body && typeof body === 'object' ? Reflect.get(body, 'code') : undefined;
@@ -65,7 +48,7 @@ export async function readSubjectTerms(
   try {
     const result = await client.subjects({ id }).get({
       headers: { ...(authorization ? { authorization } : {}), ...(session ? { 'rezics-session-token': session } : {}) },
-      fetch: { redirect: 'manual' },
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     if (result.status === 404) return { state: 'concealed' };
     if (result.status === 401 || result.status === 403) return { state: 'denied' };
@@ -73,7 +56,9 @@ export async function readSubjectTerms(
       result.status !== 200 ||
       !result.data ||
       result.data.subject.id !== id ||
-      result.data.subject.context !== candidateContext
+      result.data.subject.context !== candidateContext ||
+      !Number.isSafeInteger(result.data.subject.revision) ||
+      result.data.subject.revision < 1
     )
       return { state: 'unavailable' };
     const headers = new Headers(result.headers);
@@ -110,29 +95,32 @@ export async function patchSubjectTerms(
     const stale = await prepareSession(request, env);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'signed-out' };
-    const endpoint = client.subjects({ id: command.id }) as DeclaredTermsEndpoint;
-    const result = await endpoint.terms.patch(command.patch, {
-      headers: {
-        authorization,
-        'if-match': command.etag,
-        'idempotency-key': command.key,
-        ...(command.session ? { 'rezics-session-token': command.session } : {}),
-      },
-      fetch: { redirect: 'manual' },
+    const requestHeaders = {
+      authorization,
+      'if-match': command.etag,
+      'idempotency-key': command.key,
+      ...(command.session ? { 'rezics-session-token': command.session } : {}),
+    };
+    const result = await client.subjects({ id: command.id }).terms.patch(command.patch, {
+      headers: requestHeaders,
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
-    // A 404 on this not-yet-served port must not be represented as success or an empty subject.
-    if (result.status !== 200 || !result.data)
-      return result.status === 404 ? { ok: false, reason: 'unavailable' } : refusal(result.status, result.error?.value);
-    const { subject: id, revision } = result.data;
-    if (id !== command.id || !Number.isSafeInteger(revision) || revision < 1)
+    if (result.status !== 200) return refusal(result.status, result.error?.value);
+    if (!result.data || typeof result.data !== 'object' || Object.keys(result.data).length !== 2)
       return { ok: false, reason: 'unavailable' };
-    const session = new Headers(result.headers).get('rezics-session-token') ?? command.session;
+    const { subject: id, revision } = result.data;
+    const headers = new Headers(result.headers);
+    if (id !== command.id || !Number.isSafeInteger(revision) || revision < 1 || headers.get('etag') !== `"${revision}"`)
+      return { ok: false, reason: 'unavailable' };
+    const session = headers.get('rezics-session-token') ?? command.session;
+    const reader = await readSubjectTerms(client, id, locale, authorization, session);
     return {
       ok: true,
       id,
       revision,
       ...(session ? { session } : {}),
-      reader: await readSubjectTerms(client, id, locale, authorization),
+      reader:
+        reader.state === 'ready' && reader.snapshot.subject.revision < revision ? { state: 'unavailable' } : reader,
     };
   } catch (error) {
     if (error instanceof MediaProblem && error.problem.status === 403) return { ok: false, reason: 'denied' };

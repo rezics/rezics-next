@@ -25,13 +25,13 @@ type NativeCandidate = Extract<NativeRevisionDetail['change'], { kind: 'candidat
 type NativeDecision = Extract<NativeRevisionDetail['change'], { kind: 'decision' }>;
 type NativeAdoption = Extract<NativeRevisionDetail['change'], { kind: 'adoption' }>;
 
-/** Presentation port, NOT a declaration of the producer's wire DTO or its tag spellings.
+/** Presentation of the generated native response.
  * Only an adapter of the published closed producer response may supply these values.
  * Historical values, actors, sources, tokens and write bases are deliberately absent.
  */
 export type ChangeSummary =
   | { kind: 'limited' }
-  | { kind: 'terms'; fields: ('label' | 'description' | 'alias')[]; languages: string[] }
+  | Extract<NativeRevisionDetail['change'], { kind: 'terms' }>
   | (Pick<NativeCandidate, 'kind' | 'candidate' | 'property'> & Partial<Pick<NativeCandidate, 'context' | 'reading'>>)
   | (Pick<NativeDecision, 'kind' | 'candidate' | 'property' | 'context'> & {
       decision: NativeDecision['verdict'];

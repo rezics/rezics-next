@@ -1,3 +1,10 @@
+# Catalogue editing
+
+The adopted [catalogue editorial journey](research/catalogue-editorial-journey-design.md) connects a correction
+to the current Subject reader and explains an individual change without inventing a historical Item. Imports
+owns browser binding. Semantic owns these native contracts. Subject creation, proposal, acceptance and adoption
+keep their existing APIs and authority. A selected scalar `schema:name` statement is independent of labels.
+
 ## Browser flow: multilingual subject terms
 
 The subject header and compact subject frame offer **Edit names and descriptions** at
@@ -15,6 +22,10 @@ The session BFF preserves identity, CSRF, concurrency, idempotency and native se
 freezes the payload, ETag and key for retry. Stale revisions or conflicting keys require reload, comparison and an
 explicit new confirmation. A successful write is followed by a native read of the same returned ID; only that read
 supplies current terms and the canonical reader address. Failed or concealed rereads never publish a local preview.
+The generated client supplies the PATCH body type. A successful response must contain exactly the requested Subject
+and positive revision with its matching strong ETag; its returned Session is passed to the immediate current read.
+A served 404 is the uniform missing/concealed outcome. Source integration and type validity alone establish neither
+native execution nor visual acceptance.
 
 Semantic owns the native terms API. An unavailable operation remains unavailable in the browser; it never becomes
 a successful local preview or a substitute catalogue mutation.
@@ -173,8 +184,9 @@ independent results and exact candidate IDs awaiting review, separate from accep
 current reader. Uncertain attempts retain their commands and keys. Metadata, denial, stale and unavailable states
 remain visible. Missing controls confer no additional native capability.
 
-Names and descriptions link the existing terms adapter. Its pending native producer, binding and deduplication
-remain Semantic-owned; this profile never substitutes `schema:name` proposals for terms writes. Authored text
+Names and descriptions link the existing terms adapter. Its generated native binding is integrated.
+Native authority and deduplication remain Semantic-owned; this profile never substitutes `schema:name` proposals
+for terms writes. Authored text
 uses the existing document/licence editor. Ordinary forms do not submit ingestion Source metadata, infer rights,
 copy provider prose or covers, publish profiles, or change Library progress.
 
@@ -234,13 +246,6 @@ as emitted. Creating an arc creates no parent statement. The arc's own series, p
 admitted relationships open the existing relationship workspace. Acceptance and adoption use current heads and
 the actual reader; an unselected adoption stays pending. Other slots and their evidence remain intact. Ordinary
 forms submit no ingestion Source metadata, and existing source-or-consent and disclosure decisions remain native.
-
-# Catalogue editing
-
-The adopted [catalogue editorial journey](research/catalogue-editorial-journey-design.md) connects a correction
-to the current Subject reader and explains an individual change without inventing a historical Item. Imports
-owns browser binding. Semantic owns these native contracts. Subject creation, proposal, acceptance and adoption
-keep their existing APIs and authority. A selected scalar `schema:name` statement is independent of labels.
 
 ## Ordinary multilingual correction
 
@@ -364,7 +369,10 @@ the native selection bounds. No second history or personal-payload store is intr
 binds this read in the existing Changes browser and selected-value explanation, through their private/no-store
 session BFF. Runtime validation rejects mismatched identities, unknown tags, extra fields, nonpositive heads and
 selection beyond 32. Candidate and decision readings describe the current native Context; adoption mode and selection
-describe only the recorded adoption. The terms tag now uses the same mounted native detail response.
+describe only the recorded adoption. The terms tag now uses the same mounted native detail response. The browser
+keeps each field with its own language list and uses translated field labels and language names. Its closed parser
+retains the native three-field bound; Changes and Why this value share the adapter and explanation. A terms change
+cannot be presented as the origin of a selected scalar statement.
 Own-contribution withdrawal and restore
 now bind the generated candidate `delete` and `$restoreDeleted.post` methods. Their closed
 `{subject, candidate, deleted}` result must match both requested UUIDs and the requested deletion state before

@@ -94,6 +94,7 @@ import type { NativeRevisionDetail } from '../src/features/catalogue/subject-cha
 import { readValueExplanation } from '../src/features/catalogue/value-explanation';
 import release from '../src/kernel/recorded/definitions-release.json';
 import { m } from '../src/paraglide/messages.js';
+import { languageName } from '../src/subject/language';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -272,7 +273,7 @@ test('unsupported, malformed and mismatched native detail never becomes a guesse
   for (const body of [
     { ...dto, subject: crypto.randomUUID() },
     { ...dto, revision: { ...dto.revision, revision: 6 } },
-    { ...dto, change: { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] } },
+    { ...dto, change: { kind: 'unknown', fields: [{ field: 'labels', languages: ['en'] }] } },
     {
       ...dto,
       change: {
@@ -302,4 +303,79 @@ test('unsupported, malformed and mismatched native detail never becomes a guesse
   fixture.respond({ ...dto, change: { ...adoption, selection: [{ candidate: crypto.randomUUID(), rank: 'normal' }] } });
   const otherSelection = await fixture.value();
   expect(otherSelection.kind === 'ready' && otherSelection.page.change).toEqual({ kind: 'unavailable' });
+});
+
+test('The actual native terms revision explains each field and its own languages without historical values or actors', async () => {
+  const { ChangeExplanation, SubjectChangesPage } = await import('../src/features/catalogue/subject-changes-page');
+  const fixture = nativeDetailFixture();
+  const changes: NativeRevisionDetail['change'][] = [
+    { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] },
+    {
+      kind: 'terms',
+      fields: [
+        { field: 'labels', languages: ['en', 'fr'] },
+        { field: 'descriptions', languages: ['ja'] },
+        { field: 'aliases', languages: ['de'] },
+      ],
+    },
+  ];
+  const list = await fixture.transport.list();
+  for (const change of changes) {
+    fixture.respond({ ...fixture.dto, revision: { ...fixture.dto.revision, kind: 'terms' }, change });
+    const result = await fixture.transport.detail(5, 'prior-session');
+    expect(result).toMatchObject({ kind: 'ready', detail: { summary: change }, session: 'native-detail-session' });
+    if (result.kind !== 'ready' || change.kind !== 'terms') throw new Error('Expected native terms detail');
+    const html = renderToStaticMarkup(createElement(ChangeExplanation, { detail: result.detail, locale: 'en' }));
+    expect(html).toContain(m.changes_terms());
+    const labels = { labels: m.changes_name(), descriptions: m.changes_description(), aliases: m.changes_aliases() };
+    for (const entry of change.fields) {
+      const languages = entry.languages.map((tag) => languageName(tag, 'en')).join(' · ');
+      expect(html).toContain(`>${labels[entry.field]}</dt><dd>${languages}</dd>`);
+    }
+    const state = changesState(
+      changesState(changesState({}, { type: 'list', result: list, more: false }), {
+        type: 'detail-start',
+        revision: 5,
+      }),
+      { type: 'detail', result },
+    );
+    expect(renderToStaticMarkup(createElement(SubjectChangesPage, { state, locale: 'en' }))).toContain(html);
+    expect(html).not.toContain(m.changes_current());
+    for (const privateText of [
+      fixture.dto.revision.release,
+      fixture.selected.id,
+      '9780156012195',
+      'Bearer story',
+      'native-detail-session',
+    ])
+      expect(html).not.toContain(privateText);
+    expect(Object.keys(result.detail.summary)).toEqual(['kind', 'fields']);
+  }
+  expect(fixture.calls.filter((call) => call.path.endsWith('/revisions/5'))).toHaveLength(2);
+  fixture.respond({ code: 'not_found', actor: 'PRIVATE ACTOR', payload: 'PRIVATE OLD TEXT' }, 404);
+  expect(await fixture.transport.detail(5)).toEqual({ kind: 'missing' });
+  fixture.conceal();
+  expect(await fixture.transport.detail(5)).toEqual({ kind: 'missing', scope: 'subject' });
+});
+
+test('native terms detail keeps the producer field bound and strict field/language shape without opening unknown schemas', async () => {
+  const fixture = nativeDetailFixture();
+  const field = { field: 'labels', languages: ['en'] };
+  // The delivered schema permits empty metadata arrays and at most three field entries.
+  for (const fields of [[], [field], [{ field: 'aliases', languages: [] }]]) {
+    fixture.respond({ ...fixture.dto, change: { kind: 'terms', fields } });
+    expect((await fixture.transport.detail(5)).kind).toBe('ready');
+  }
+  for (const change of [
+    { kind: 'terms', fields: [field, field, field, field] },
+    { kind: 'terms', fields: [{ field: 'label', languages: ['en'] }] },
+    { kind: 'terms', fields: [{ field: 'labels', languages: 'en' }] },
+    { kind: 'terms', fields: [{ field: 'labels', languages: [null] }] },
+    { kind: 'terms', fields: [{ field: 'labels', languages: ['en'], actor: 'PRIVATE ACTOR' }] },
+    { kind: 'terms', fields: [field], payload: 'PRIVATE OLD TEXT' },
+    { kind: 'terms', fields: [field], languages: ['en'] },
+  ]) {
+    fixture.respond({ ...fixture.dto, change });
+    expect(await fixture.transport.detail(5)).toEqual({ kind: 'unavailable' });
+  }
 });

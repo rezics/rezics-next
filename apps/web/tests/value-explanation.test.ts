@@ -1,9 +1,12 @@
 import { expect, mock, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { valueExplanationFixture, valueCursor, valueLastCursor } from '../src/kernel/fake/value-explanation';
 import { readValueExplanation, type ValueRead } from '../src/features/catalogue/value-explanation';
 import { m } from '../src/paraglide/messages.js';
+import { readSubjectRevisionDetail } from '../src/features/catalogue/subject-changes-detail';
+import type { NativeRevisionDetail } from '../src/features/catalogue/subject-changes';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ValueExplanationPage } = await import('../src/features/catalogue/value-explanation-page');
@@ -53,6 +56,40 @@ test('Explain why a currently selected value is being read through existing curr
       scenario === 'review-denied' ? m.value_metadata_denied() : m.value_metadata_unavailable(),
     );
   }
+});
+
+test('a native terms revision cannot masquerade as the origin of a currently selected statement', async () => {
+  const fixture = valueExplanationFixture();
+  const dto: NativeRevisionDetail = {
+    subject: fixture.id,
+    revision: { revision: fixture.selected.rezics.revision, kind: 'terms', release: fixture.selected.rezics.release },
+    change: { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] },
+  };
+  const calls: Request[] = [];
+  const native = createKernelClient('https://native-value.test', {
+    fetch: (async (input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      calls.push(request);
+      return Response.json(dto, { headers: { 'rezics-session-token': 'revision-session' } });
+    }) as typeof fetch,
+  });
+  let nativeDetail: Awaited<ReturnType<typeof readSubjectRevisionDetail>> | undefined;
+  const result = await readValueExplanation(fixture.client, fixture.address, {
+    authorization: 'Bearer value-viewer',
+    detail: async (_client, input) => {
+      nativeDetail = await readSubjectRevisionDetail(native, input);
+      return nativeDetail;
+    },
+  });
+  expect(nativeDetail?.kind === 'ready' && nativeDetail.detail.summary).toEqual(dto.change);
+  expect(result.kind === 'ready' && result.page.change).toEqual({ kind: 'unavailable' });
+  expect(html(result)).toContain('9780156012195');
+  expect(html(result)).toContain(m.value_change_unavailable());
+  expect(html(result)).not.toContain(m.changes_terms());
+  expect(calls).toHaveLength(1);
+  expect(new URL(calls[0]!.url).pathname).toBe(`/v1/subjects/${fixture.id}/revisions/2`);
+  expect(calls[0]!.headers.get('authorization')).toBe('Bearer value-viewer');
+  expect(calls[0]!.headers.get('rezics-session-token')).toBe('value-session');
 });
 
 test('current unresolved, concealed, changed and unknown values remain different without private or history fallback', async () => {

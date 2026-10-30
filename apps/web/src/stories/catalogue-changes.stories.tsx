@@ -10,9 +10,7 @@ import { m } from '../paraglide/messages.js';
 import { pageText } from '../features/pages/shared';
 import { sourceDefinitions } from '../kernel/fake/catalogue-sources';
 
-/** Preserve the existing presentation outcomes and plays. The terms sample is future consumer copy;
- * the bound native read serves record/candidate/decision/adoption only, never terms.
- */
+/** Isolated presentation samples use the delivered terms field/language structure, without native proof. */
 function ChangesStory({
   scenario = 'ready',
   limited = false,
@@ -39,7 +37,13 @@ function ChangesStory({
                 summary: limited
                   ? { kind: 'limited' }
                   : input.revision === 2
-                    ? { kind: 'terms', fields: ['label', 'description'], languages: ['fr', 'en'] }
+                    ? {
+                        kind: 'terms',
+                        fields: [
+                          { field: 'labels', languages: ['fr'] },
+                          { field: 'descriptions', languages: ['en'] },
+                        ],
+                      }
                     : {
                         kind: 'candidate',
                         candidate: '00000000-0000-8000-8000-000000000005',

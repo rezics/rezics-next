@@ -1,15 +1,10 @@
-import type { SubjectRead } from '@rezics/client';
+import type { KernelClient, SubjectRead } from '@rezics/client';
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
 
 export const termFields = ['labels', 'descriptions', 'aliases'] as const;
 export type TermField = (typeof termFields)[number];
 export type Terms = Pick<SubjectRead['subject'], TermField>;
-/** Temporary declared producer body. Replace with the generated PATCH body when Semantic publishes it. */
-export type TermsPatch = {
-  labels?: Record<string, string | null>;
-  descriptions?: Record<string, string | null>;
-  aliases?: Record<string, string[] | null>;
-};
+export type TermsPatch = Parameters<ReturnType<KernelClient['subjects']>['terms']['patch']>[0];
 export type TermsSnapshot = {
   subject: Pick<SubjectRead['subject'], 'id' | 'type' | 'revision' | TermField>;
   etag: string;
@@ -48,7 +43,7 @@ export function patchedTerms(terms: Terms, patch: TermsPatch): Terms {
   const next = structuredClone({ labels: terms.labels, descriptions: terms.descriptions, aliases: terms.aliases });
   for (const field of termFields) {
     for (const [language, value] of Object.entries(patch[field] ?? {})) {
-      if (value === null) delete next[field][language];
+      if (value === null || (Array.isArray(value) && value.length === 0)) delete next[field][language];
       else
         Object.defineProperty(next[field], language, { value, enumerable: true, configurable: true, writable: true });
     }
@@ -75,7 +70,7 @@ export function hasTermsPatch(patch: TermsPatch): boolean {
   return termFields.some((field) => Object.keys(patch[field] ?? {}).length > 0);
 }
 
-/** Closed declared wire shape; current eligibility and resulting-state validation remain native. */
+/** Closed native wire shape; current eligibility and resulting-state validation remain native. */
 export function isTermsCommand(value: TermsCommand): boolean {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (

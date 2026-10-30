@@ -19,14 +19,14 @@ export type TermsScenario =
   | 'stale'
   | 'conflict'
   | 'invalid'
-  | 'unserved'
+  | 'write-concealed'
   | 'uncertain'
   | 'saving'
   | 'concealed'
   | 'read-unavailable'
   | 'reader-denied';
 
-/** Declared samples only: this isolated request seam never serves successful mutations in the app fake. */
+/** Native-shaped samples only: this isolated request seam is not native execution proof. */
 export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale = 'en') {
   let active = scenario;
   let lost = false;
@@ -56,12 +56,12 @@ export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale 
     authorization: string | null;
     session: string | null;
   }[] = [];
-  const json = (body: unknown, status = 200) =>
+  const json = (body: unknown, status = 200, revision = subject.revision) =>
     new Response(JSON.stringify(body), {
       status,
       headers: {
         'content-type': 'application/json',
-        etag: `"${subject.revision}"`,
+        etag: `"${revision}"`,
         'rezics-session-token': patched ? 'terms-write' : 'terms-read',
       },
     });
@@ -91,7 +91,7 @@ export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale 
       if (request.method === 'PATCH' && path === `/v1/subjects/${termsSubjectId}/terms`) {
         if (active === 'saving') return new Promise<Response>(() => {});
         if (active === 'denied') return json({ code: 'forbidden' }, 403);
-        if (active === 'unserved') return json({ code: 'not_found' }, 404);
+        if (active === 'write-concealed') return json({ code: 'not_found' }, 404);
         if (active === 'invalid') return json({ code: 'invalid_request' }, 422);
         if (active === 'conflict') return json({ code: 'idempotency_conflict' }, 422);
         if (active === 'stale') {
@@ -99,7 +99,8 @@ export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale 
           subject = { ...subject, revision: 8, labels: { ...subject.labels, en: 'Another editor’s title' } };
           return json({ code: 'precondition_failed' }, 412);
         }
-        if (receipts.has(key!)) return json(receipts.get(key!));
+        const retained = receipts.get(key!);
+        if (retained) return json(retained, 200, retained.revision);
         subject = { ...subject, ...patchedTerms(subject, body as TermsPatch), revision: subject.revision + 1 };
         patched = true;
         const receipt = { subject: subject.id, revision: subject.revision };

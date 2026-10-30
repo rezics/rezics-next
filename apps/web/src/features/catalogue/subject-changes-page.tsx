@@ -4,6 +4,7 @@ import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
 import { viewTabLabels } from '../pages/route-support';
 import { languageName } from '../../subject/language';
 import { candidateContext } from '../../subject/candidates';
+import type { TermField } from './subject-terms';
 import { m } from '../../paraglide/messages.js';
 import {
   changesState,
@@ -60,10 +61,10 @@ export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; lo
       : value === 'preferred'
         ? m.candidate_rank_preferred({}, o)
         : m.changes_rank_deprecated({}, o);
-  const field = (kind: 'label' | 'description' | 'alias') =>
-    kind === 'label'
+  const field = (kind: TermField) =>
+    kind === 'labels'
       ? m.changes_name({}, o)
-      : kind === 'description'
+      : kind === 'descriptions'
         ? m.changes_description({}, o)
         : m.changes_aliases({}, o);
   return (
@@ -84,19 +85,17 @@ export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; lo
                 : m.changes_adopted_detail({}, o)}
       </p>
       {summary.kind === 'terms' && (
-        <dl className="space-y-2 text-sm">
-          <div>
-            <dt className="text-muted-foreground">{m.changes_fields({}, o)}</dt>
-            <dd>{summary.fields.map(field).join(' · ')}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">{m.changes_languages({}, o)}</dt>
-            <dd>
-              {summary.languages
-                .map((tag) => languageName(tag, locale) ?? m.subject_value_unlabelled({}, o))
-                .join(' · ')}
-            </dd>
-          </div>
+        <dl className="space-y-2 text-sm" aria-label={m.changes_fields({}, o)}>
+          {summary.fields.map((entry, index) => (
+            <div key={index}>
+              <dt className="text-muted-foreground">{field(entry.field)}</dt>
+              <dd>
+                {entry.languages
+                  .map((tag) => languageName(tag, locale) ?? m.subject_value_unlabelled({}, o))
+                  .join(' · ')}
+              </dd>
+            </div>
+          ))}
         </dl>
       )}
       {detail.propertyLabel?.text && (
