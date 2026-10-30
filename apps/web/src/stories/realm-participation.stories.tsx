@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { useState } from 'react';
-import { RealmParticipationView } from '../community/realm-membership';
+import { RealmParticipationView } from '../community/realm-participation';
 import { refreshRealmMembership } from '../community/realm-membership-queries';
 import type { MemberState } from '../community/space';
 import { FollowControl } from '../library/follow-control';

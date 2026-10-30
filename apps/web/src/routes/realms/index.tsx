@@ -21,6 +21,9 @@ export const Route = createFileRoute('/realms/')({
 });
 
 function MyRealms() {
-  const { data = Route.useLoaderData() } = useQuery(myRealmsQuery(Route.useSearch().cursor));
+  const initial = Route.useLoaderData();
+  const { data = initial, isError, error } = useQuery(myRealmsQuery(Route.useSearch().cursor));
+  if (isError) throw error;
+  if (!data) throw new Error('Realm list is unavailable');
   return <MyRealmsPageView page={data} />;
 }

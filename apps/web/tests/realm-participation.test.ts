@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { RealmParticipationView } from '../src/community/realm-membership';
+import { RealmParticipationView } from '../src/community/realm-participation';
 import { refreshRealmMembership } from '../src/community/realm-membership-queries';
 import { loadRealmMembership, requestRealmMembership } from '../src/community/space';
 import { readFollowRecord, writeFollowRecord } from '../src/library/follow-records';

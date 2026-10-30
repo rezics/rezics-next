@@ -1,116 +1,14 @@
 import { useSession } from '../session/query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Badge } from '@rezics/ui/shadcn/badge';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
-import type { MemberState, MembershipResult, RealmHome } from './space';
+import type { RealmHome } from './space';
+import { RealmParticipationView, type MembershipProblem, type MembershipRefreshState } from './realm-participation';
 import { changeRealmMembership } from './space-actions';
 import { realmMembershipQuery, refreshRealmMembership } from './realm-membership-queries';
-
-type Problem = Exclude<MembershipResult, { outcome: 'accepted' }> | null;
-type Refresh = 'checking' | 'pending' | 'unavailable' | null;
-
-/** Realm standing has no shadcn equivalent; compose its Badge and Button controls. */
-export function RealmParticipationView({
-  state,
-  visibility,
-  busy = false,
-  ready = true,
-  refresh = null,
-  problem = null,
-  onChange,
-  onRetry,
-}: {
-  state: MemberState | 'loading' | 'unavailable';
-  visibility: RealmHome['visibility'];
-  busy?: boolean;
-  ready?: boolean;
-  refresh?: Refresh;
-  problem?: Problem;
-  onChange: (action: 'join' | 'leave') => void;
-  onRetry: () => void;
-}) {
-  const pending = state === 'pending';
-  return (
-    <section
-      aria-label={m.realm_membership_label()}
-      data-member-state={state}
-      aria-busy={busy || refresh === 'checking'}
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        {state === 'member' ? (
-          <>
-            <Badge>{m.realm_state_member()}</Badge>
-            <Button
-              size="lg"
-              type="button"
-              variant="outline"
-              className="h-11 px-6 text-base text-foreground"
-              disabled={!ready || busy}
-              onClick={() => onChange('leave')}
-            >
-              {m.realm_leave()}
-            </Button>
-          </>
-        ) : null}
-        {state === 'none' && visibility === 'public' ? (
-          <Button
-            size="lg"
-            type="button"
-            className="h-11 px-6 text-base"
-            disabled={!ready || busy}
-            onClick={() => onChange('join')}
-          >
-            {m.realm_join()}
-          </Button>
-        ) : null}
-        {pending ? <Badge variant="secondary">{m.realm_state_pending()}</Badge> : null}
-        {state === 'unavailable' || (pending && refresh !== 'checking') ? (
-          <Button type="button" variant="outline" disabled={busy} onClick={onRetry}>
-            {m.realm_membership_retry()}
-          </Button>
-        ) : null}
-      </div>
-      {state === 'loading' ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.realm_membership_loading()}
-        </p>
-      ) : null}
-      {pending ? (
-        <p role="status" className="max-w-prose text-sm text-muted-foreground">
-          {refresh === 'checking'
-            ? m.realm_membership_checking()
-            : refresh === 'unavailable'
-              ? m.realm_membership_pending_unavailable()
-              : m.realm_membership_still_pending()}
-        </p>
-      ) : null}
-      {state === 'unavailable' ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.realm_membership_unavailable()}
-        </p>
-      ) : null}
-      {state === 'banned' ? (
-        <p role="status" className="max-w-prose">
-          {m.realm_banned()}
-        </p>
-      ) : null}
-      {problem ? (
-        <p role="alert" className="max-w-prose text-sm text-destructive">
-          {problem.outcome === 'closed' ? m.realm_change_closed() : (problem.detail ?? m.realm_change_failed())}
-        </p>
-      ) : null}
-      {visibility === 'protected' ? (
-        <p data-visibility="protected" className="max-w-prose text-sm text-muted-foreground">
-          {state === 'member' ? m.realm_protected_note() : m.realm_protected_admission()}
-        </p>
-      ) : null}
-    </section>
-  );
-}
 
 /** Membership changes affect participation; following always addresses the carrying Space separately. */
 export function RealmMembership({
@@ -150,7 +48,7 @@ export function RealmMembership({
       </section>
     );
   }
-  return <PersonalMembership key={realm.id} realm={realm} csrfToken={csrfToken} spaceId={spaceId} />;
+  return <PersonalMembership key={realm.id} realm={realm} csrfToken={csrfToken} {...(spaceId ? { spaceId } : {})} />;
 }
 
 function PersonalMembership({
@@ -167,8 +65,8 @@ function PersonalMembership({
   const query = useQuery({ ...realmMembershipQuery(realm.id), enabled: personalRead.enabled });
   const [pending, setPending] = useState<{ target?: 'member' | 'none'; cycle: number } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<Problem>(null);
-  const [refresh, setRefresh] = useState<Refresh>(null);
+  const [problem, setProblem] = useState<MembershipProblem>(null);
+  const [refresh, setRefresh] = useState<MembershipRefreshState>(null);
   const inFlight = useRef(false);
   const attempt = useRef<{ action: 'join' | 'leave'; idempotencyKey: string } | null>(null);
   const viewer = query.data;
