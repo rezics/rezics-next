@@ -101,6 +101,7 @@ export function EditorialContextWorkspace({
     running.current = true;
     setBusy(true);
     setFailure(undefined);
+    setNotice(undefined);
     setConfirmation(undefined);
     setReading(undefined);
     try {
@@ -226,67 +227,69 @@ export function EditorialContextWorkspace({
           </a>
         </div>
       )}
-      {currentId && (
+      {currentId && !pending && (
         <a className={buttonVariants({ variant: 'outline' })} href={createHref ?? `/${locale}/contexts/new`}>
           {m.editorial_create({}, o)}
         </a>
       )}
-      <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
-        {currentId && <p className="text-sm text-muted-foreground">{m.editorial_authority({}, o)}</p>}
-        {confirmation && (
-          <p>{confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}</p>
-        )}
-        <div className="flex flex-wrap gap-3">
-          {pending ? (
-            <>
-              {!restoreBlocked && (
-                <Button disabled={busy} onClick={() => void submit(pending.operation)}>
-                  {m.editorial_retry({}, o)}
-                </Button>
-              )}
-              {!uncertain && (
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => {
-                    setPending(undefined);
-                    setFailure(undefined);
-                    if (currentId) void refresh();
-                  }}
-                >
-                  {m.editorial_revise({}, o)}
-                </Button>
-              )}
-            </>
-          ) : (
-            eligibleAttempt && (
+      {(currentId || pending) && (
+        <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6">
+          {currentId && <p className="text-sm text-muted-foreground">{m.editorial_authority({}, o)}</p>}
+          {confirmation && (
+            <p>{confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}</p>
+          )}
+          <div className="flex flex-wrap gap-3">
+            {pending ? (
               <>
-                <Button
-                  variant={action === 'delete' ? 'destructive' : 'default'}
-                  disabled={busy}
-                  onClick={() => (confirmation ? void submit(action) : setConfirmation(action))}
-                >
-                  {confirmation
-                    ? m.contribution_confirm({}, o)
-                    : action === 'delete'
-                      ? m.editorial_delete({}, o)
-                      : m.editorial_restore({}, o)}
-                </Button>
-                {confirmation && (
-                  <Button variant="outline" onClick={() => setConfirmation(undefined)}>
-                    {m.candidate_cancel({}, o)}
+                {!restoreBlocked && (
+                  <Button disabled={busy} onClick={() => void submit(pending.operation)}>
+                    {m.editorial_retry({}, o)}
+                  </Button>
+                )}
+                {!uncertain && (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setPending(undefined);
+                      setFailure(undefined);
+                      if (currentId) void refresh();
+                    }}
+                  >
+                    {m.editorial_revise({}, o)}
                   </Button>
                 )}
               </>
-            )
-          )}
-          {currentId && !pending && (
-            <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
-              {m.candidate_reload({}, o)}
-            </Button>
-          )}
+            ) : (
+              eligibleAttempt && (
+                <>
+                  <Button
+                    variant={action === 'delete' ? 'destructive' : 'default'}
+                    disabled={busy}
+                    onClick={() => (confirmation ? void submit(action) : setConfirmation(action))}
+                  >
+                    {confirmation
+                      ? m.contribution_confirm({}, o)
+                      : action === 'delete'
+                        ? m.editorial_delete({}, o)
+                        : m.editorial_restore({}, o)}
+                  </Button>
+                  {confirmation && (
+                    <Button variant="outline" onClick={() => setConfirmation(undefined)}>
+                      {m.candidate_cancel({}, o)}
+                    </Button>
+                  )}
+                </>
+              )
+            )}
+            {currentId && !pending && (
+              <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
+                {m.candidate_reload({}, o)}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       {active && !busy && children?.(active.id)}
     </section>
   );
