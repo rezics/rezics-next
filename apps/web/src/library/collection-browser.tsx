@@ -236,6 +236,8 @@ export function CollectionPreview({ collection, menu }: { collection: Collection
           <PreviewStrip members={members} />
         ) : collection.preview.state === 'loaded' && collection.memberCount === 0 ? (
           <p className="text-sm text-muted-foreground">{m.library_collection_empty()}</p>
+        ) : collection.preview.state === 'loaded' && collection.preview.emptyConfirmed ? (
+          <p className="text-sm text-muted-foreground">{m.library_collection_preview_no_visible_members()}</p>
         ) : (
           <p role="status" data-preview-state={collection.preview.state} className="text-sm text-muted-foreground">
             {collection.preview.state === 'preparing'

@@ -2359,5 +2359,6 @@
   "library_collection_preview_preparing": "正在準備預覽…",
   "library_navigation_loading": "正在載入你的收藏集…",
   "library_collections_denied": "你目前的存取權限無法查看收藏集。",
-  "library_collections_unavailable": "暫時無法載入你的收藏集，請重試。"
+  "library_collections_unavailable": "暫時無法載入你的收藏集，請重試。",
+  "library_collection_preview_no_visible_members": "沒有可預覽的可見項目。"
 }

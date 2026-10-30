@@ -2415,5 +2415,6 @@
   "library_collection_preview_preparing": "Preparing preview…",
   "library_navigation_loading": "Loading your Collections…",
   "library_collections_denied": "Your Collections are not available with your current access.",
-  "library_collections_unavailable": "Your Collections are unavailable right now. Try again."
+  "library_collections_unavailable": "Your Collections are unavailable right now. Try again.",
+  "library_collection_preview_no_visible_members": "No visible items to preview."
 }

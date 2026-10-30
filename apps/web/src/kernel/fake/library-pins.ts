@@ -1,6 +1,9 @@
 import type { KernelRecording } from '../fake.ts';
 import type { FakeRoute } from '../fake-modules.ts';
 import collectionsRecording from '../recorded/library-collections.json';
+import collectionRecording from '../recorded/library-collection.json';
+import membersRecording from '../recorded/library-collection-members.json';
+import type { CollectionPreview } from '../../library/collection-preview';
 
 export type LibraryNavigationStoryState = {
   pinCount: number;
@@ -11,6 +14,7 @@ export type LibraryNavigationStoryState = {
   builtins: 'none' | 'everything' | 'everything-liked';
   collectionCount: number;
   collectionTitles?: readonly string[];
+  previews?: 'recorded' | 'pending' | 'unavailable';
   conflict?: boolean;
 };
 
@@ -51,7 +55,17 @@ function builtins() {
       : [];
 }
 
-function ownerCollections(): KernelRecording {
+function previewFields(collectionId: string): Partial<CollectionPreview> {
+  if (!state.previews || state.previews === 'unavailable') return {};
+  if (state.previews === 'pending' || collectionId !== collectionRecording.collection.id)
+    return { previewStatus: 'pending', previewMembers: [] };
+  return {
+    previewStatus: 'ready',
+    previewMembers: membersRecording.members.slice(0, 3).map(({ subjectId, subject }) => ({ subjectId, subject })),
+  };
+}
+
+function ownerCollections(preview: boolean, limit: number): KernelRecording {
   if (state.collectionsUnavailable)
     return { status: 503, type: 'https://rezics.com/problems/unavailable', code: 'unavailable' };
   if (state.collectionsError)
@@ -63,8 +77,15 @@ function ownerCollections(): KernelRecording {
       title: state.collectionTitles?.[index] ?? collection.title,
       curatorAccountId: 'story-viewer',
       curator: { ...collection.curator, id: 'story-viewer' },
+      ...(preview ? previewFields(collection.id) : {}),
     }));
-  return { status: 200, collections: [...builtins(), ...recorded], next: null };
+  const dynamic = builtins().map((collection) => ({
+    ...collection,
+    ...(preview && state.previews && state.previews !== 'unavailable'
+      ? { previewStatus: 'pending', previewMembers: [] }
+      : {}),
+  }));
+  return { status: 200, collections: [...dynamic, ...recorded].slice(0, limit), next: null };
 }
 
 function openApi(): KernelRecording {
@@ -160,7 +181,11 @@ function ownerCollectionRecord(request: Request): KernelRecording | undefined {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.pathname !== '/v1/collections' || !url.searchParams.has('curatorAccountId'))
     return undefined;
-  return ownerCollections();
+  const preview = url.searchParams.get('preview');
+  const limit = Number(url.searchParams.get('limit') ?? 20);
+  if (preview !== null && (preview !== '3' || url.searchParams.get('view') !== 'FULL' || limit > 20))
+    return { status: 400, code: 'invalid_request' };
+  return ownerCollections(preview === '3', limit);
 }
 
 function builtinCollectionRecord(request: Request): KernelRecording | undefined {

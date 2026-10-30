@@ -13,10 +13,10 @@ export const Route = createFileRoute('/library/collections')({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
     layout: search.layout === 'previews' ? ('previews' as const) : ('rows' as const),
   }),
-  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
+  loaderDeps: ({ search }) => ({ cursor: search.cursor, layout: search.layout }),
   loader: async ({ deps }) => {
     const [page, pins] = await Promise.all([
-      readMineCollectionsPage({ data: { cursor: deps.cursor } }),
+      readMineCollectionsPage({ data: { cursor: deps.cursor, layout: deps.layout } }),
       readLibraryPinsPage({ data: 100 }),
     ]);
     return { page, pins };

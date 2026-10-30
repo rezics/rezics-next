@@ -2359,5 +2359,6 @@
   "library_collection_preview_preparing": "Préparation de l’aperçu…",
   "library_navigation_loading": "Chargement de vos collections…",
   "library_collections_denied": "Votre accès actuel ne permet pas de consulter vos collections.",
-  "library_collections_unavailable": "Vos collections sont indisponibles pour le moment. Réessayez."
+  "library_collections_unavailable": "Vos collections sont indisponibles pour le moment. Réessayez.",
+  "library_collection_preview_no_visible_members": "Aucun élément visible à prévisualiser."
 }

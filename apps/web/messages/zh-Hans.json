@@ -2360,5 +2360,6 @@
   "library_collection_preview_preparing": "正在准备预览…",
   "library_navigation_loading": "正在加载你的收藏集…",
   "library_collections_denied": "你当前的访问权限无法查看收藏集。",
-  "library_collections_unavailable": "暂时无法加载你的收藏集，请重试。"
+  "library_collections_unavailable": "暂时无法加载你的收藏集，请重试。",
+  "library_collection_preview_no_visible_members": "没有可预览的可见条目。"
 }

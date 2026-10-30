@@ -2359,5 +2359,6 @@
   "library_collection_preview_preparing": "Vorschau wird vorbereitet…",
   "library_navigation_loading": "Deine Sammlungen werden geladen…",
   "library_collections_denied": "Deine Sammlungen sind mit deinem aktuellen Zugriff nicht verfügbar.",
-  "library_collections_unavailable": "Deine Sammlungen sind gerade nicht verfügbar. Versuche es erneut."
+  "library_collections_unavailable": "Deine Sammlungen sind gerade nicht verfügbar. Versuche es erneut.",
+  "library_collection_preview_no_visible_members": "Keine sichtbaren Einträge für die Vorschau."
 }

@@ -5,16 +5,20 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { loadMineCollectionsPage, type MineCollectionsPage } from './mine-collections';
 
-function validateInput(input: unknown): { cursor?: string } {
+function validateInput(input: unknown): { cursor?: string; layout?: 'rows' | 'previews' } {
   if (
     !input ||
     typeof input !== 'object' ||
     ('cursor' in input &&
       input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || input.cursor.length > 4096))
+      (typeof input.cursor !== 'string' || input.cursor.length > 4096)) ||
+    ('layout' in input && input.layout !== undefined && input.layout !== 'rows' && input.layout !== 'previews')
   )
-    throw new Error('Invalid collection cursor');
-  return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};
+    throw new Error('Invalid collection page input');
+  return {
+    ...('cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {}),
+    ...('layout' in input && (input.layout === 'rows' || input.layout === 'previews') ? { layout: input.layout } : {}),
+  };
 }
 
 export const readMineCollectionsPage = createServerFn({ method: 'GET' })

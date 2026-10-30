@@ -2359,5 +2359,6 @@
   "library_collection_preview_preparing": "Preparando vista previa…",
   "library_navigation_loading": "Cargando tus colecciones…",
   "library_collections_denied": "Tus colecciones no están disponibles con tu acceso actual.",
-  "library_collections_unavailable": "Tus colecciones no están disponibles ahora. Inténtalo de nuevo."
+  "library_collections_unavailable": "Tus colecciones no están disponibles ahora. Inténtalo de nuevo.",
+  "library_collection_preview_no_visible_members": "No hay elementos visibles para la vista previa."
 }

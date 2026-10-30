@@ -4,6 +4,7 @@ import { completePendingCollectionCreate, setCollectionStoryMode } from '../kern
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
+import collectionRecording from '../kernel/recorded/library-collection.json';
 
 const meta = { title: 'Pages/Library/Collections', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -76,6 +77,67 @@ export const ManyCollections: Story = {
     await collectionsReady(context);
     await expect(within(context.canvasElement).getByText('Books I come back to')).toBeVisible();
     await expect(within(context.canvasElement).getByText('To read this winter')).toBeVisible();
+  },
+};
+
+export const PreviewMembers: Story = {
+  render: () =>
+    render('many', `${pagePaths['library-collections']}?layout=previews`, {
+      pinCount: 1,
+      builtins: 'none',
+      collectionCount: 2,
+      previews: 'recorded',
+    }),
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    const first = await canvas.findByRole('link', { name: 'Snow Country' });
+    const preview = first.closest('article')!;
+    expect(preview.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(3);
+    expect(within(preview).queryByRole('link', { name: 'Kokoro' })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_layout_list() }));
+    await expect((await canvas.findAllByRole('link', { name: m.library_collection_open() }))[0]!).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.library_collection_previews() }));
+    await expect(await canvas.findByRole('link', { name: 'Snow Country' })).toBeVisible();
+  },
+};
+
+export const PreviewPending: Story = {
+  render: () =>
+    render('many', `${pagePaths['library-collections']}?layout=previews`, {
+      pinCount: 0,
+      builtins: 'none',
+      collectionCount: 2,
+      previews: 'pending',
+    }),
+  play: async (context) => {
+    await pageReady(context);
+    const heading = await within(context.canvasElement).findByRole('link', {
+      name: new RegExp(collectionRecording.collection.title),
+    });
+    const preview = heading.closest('article')!;
+    await expect(within(preview).getByRole('status')).toHaveTextContent(m.library_collection_preview_preparing());
+    expect(preview.querySelector('[data-slot="cover-card"]')).toBeNull();
+    expect(within(preview).queryByText(m.library_collection_empty())).toBeNull();
+  },
+};
+
+export const PreviewUnavailable: Story = {
+  render: () =>
+    render('many', `${pagePaths['library-collections']}?layout=previews`, {
+      pinCount: 0,
+      builtins: 'none',
+      collectionCount: 2,
+      previews: 'unavailable',
+    }),
+  play: async (context) => {
+    await pageReady(context);
+    const heading = await within(context.canvasElement).findByRole('link', {
+      name: new RegExp(collectionRecording.collection.title),
+    });
+    const preview = heading.closest('article')!;
+    await expect(within(preview).getByRole('status')).toHaveTextContent(m.library_collection_preview_unavailable());
+    expect(within(preview).queryByText(m.library_collection_empty())).toBeNull();
   },
 };
 
