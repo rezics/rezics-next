@@ -865,6 +865,11 @@ suite, under the current worker instruction. No native/database acceptance or pr
 Local receipts: at `38a64a4718`, `bun test services/importer/tests/source-statistic-zero.test.ts` returned
 `5 pass`, `0 fail`, `63 expect() calls` (1.75 seconds). At `a80a255d5c`,
 `bun run --cwd services/importer typecheck` returned `No type errors in 163 files`.
+At `7c9b6845a9`, `bun run --cwd services/kernel typecheck` exited 0 after the compiler and
+`$ bun scripts/construct.ts`; its raw completion line was `remote-check: command 124.375 s on c`.
+The official workspace command supplied its compiler database/check-host placement; no native acceptance
+command was run. Its earlier unresolved conversion-package imports were corrected to the adjacent fixtures'
+existing relative source paths before this successful check.
 The ordinary VNDB archive admission gate remains intact: recovery validates its supplied native archive,
 then replays the sealed run without consuming the replacement grouped source records. The native caller
 supplies a distinct positive replacement to distinguish replay from a newly converted zero.
