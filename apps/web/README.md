@@ -1163,9 +1163,16 @@ with exactly one native page; an empty page with a next cursor remains sparse. F
 There is no refill, total count, per-account profile lookup or polling.
 
 The generated client in this checkout has the actual approval method but no queue GET. The isolated consumer-local
-`realm-claim-review-unavailable.ts` binding therefore returns unavailable, never an empty queue or approval access.
-When the native list module is delivered, replace that binding with its generated authenticated reader; native
-selection and admission remain authoritative. The local declaration does not implement or copy the producer.
+transport in `community/realm-claim-review-native.ts` now connects the default session read to the declared
+`GET /v1/realms/{realmId}/claimRequests?limit=20&cursor=…` at the configured `KERNEL_ORIGIN`. Each invocation prepares
+the actual request session and supplies its current bearer. The original opaque cursor is encoded unchanged and
+returned rows must match the scoped Realm. One page, query or explicit retry sends at most one GET, with no-store
+and no redirect following; the BFF response remains private, no-store. Missing configuration, malformed responses,
+503 and stale/invalid cursor 400 responses remain unavailable and conceal the prior page. A 401 is signed out;
+403/404 are denied, except the native `platform_closed` refusal, which stays closed. There is no cursor reset or
+automatic retry. Replace this local transport with the original generated reader when delivered. Native sparse
+selection, current/final DIRECT Global `realm:approve_claim` admission and original orphan episode remain producer
+authority; a pending row supplies no approval permission. This connection implements no producer or native proof.
 
 Review request refreshes the same page and compares the exact original source before opening an inline confirmation.
 Confirm sends the existing generated `claimRequests({requestId}).$approve.post` method, which resolves to
@@ -1186,6 +1193,12 @@ the actual AppShell and integrated review source, with existing phone390/desktop
 Fixtures are explicitly declared response examples, not native recordings or claims of authority. The focused
 acceptance file is `tests/realm-claim-review.test.ts`; acceptance, native and visual proof run after integration.
 No external reference-project source was required.
+
+The added transport cases cover the default current-session GET, exact cursor/Realm scope, sparse continuation,
+native failures and malformed disclosure. Local verification uses only `bun run --cwd apps/web typecheck`.
+Web's review sources remain `src/stories/realm-claim-review.stories.tsx` and
+`src/stories/patterns/realm-claim-review/realm-claim-review.stories.tsx`, using the IDs above at normal 390/1280 widths
+in light/dark. This transport change adds no renderer or story export and claims no visual approval.
 
 ### Space and Realm lifecycle controls
 

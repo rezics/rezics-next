@@ -10,24 +10,44 @@ import {
   validateRealmClaimReviewRead,
   type RealmClaimApprovalInput,
   type RealmClaimApprovalResult,
-  type RealmClaimReviewAdapter,
   type RealmClaimReviewRead,
 } from './realm-claim-review';
-import { unavailableRealmClaimReview } from './realm-claim-review-unavailable';
 
+export type RealmClaimReviewEnv = Partial<SessionEnv> & { KERNEL_ORIGIN?: string };
+
+/** Consumer-local transport for the declared GET, until the original generated reader is delivered. */
 export async function readRealmClaimReview(
   request: Request,
-  env: Partial<SessionEnv>,
+  env: RealmClaimReviewEnv,
   input: { realmId: string; cursor?: string },
-  read: RealmClaimReviewAdapter['read'] = unavailableRealmClaimReview,
+  fetcher: typeof fetch = globalThis.fetch,
 ): Promise<RealmClaimReviewRead> {
   input = validateRealmClaimReviewRead(input);
   try {
     const stale = await prepareSession(request, env);
-    if (stale || !viewerCredential(request)) return { kind: 'signed-out' };
-    const result = await read(input);
-    if (result.kind !== 'ready') return result;
-    const page = realmClaimReviewPage(result.page, input.realmId);
+    const authorization = viewerCredential(request);
+    if (stale || !authorization) return { kind: 'signed-out' };
+    if (!env.KERNEL_ORIGIN) return { kind: 'unavailable' };
+    const url = new URL(`/v1/realms/${input.realmId}/claimRequests`, env.KERNEL_ORIGIN);
+    url.searchParams.set('limit', '20');
+    if (input.cursor !== undefined) url.searchParams.set('cursor', input.cursor);
+    const response = await fetcher(url, {
+      method: 'GET',
+      headers: { authorization, accept: 'application/json' },
+      cache: 'no-store',
+      credentials: 'omit',
+      redirect: 'error',
+    });
+    if (response.status === 401) return { kind: 'signed-out' };
+    if (response.status === 404) return { kind: 'denied' };
+    if (response.status === 403) {
+      const problem: unknown = await response.json().catch(() => null);
+      return { kind: isPlatformClosedProblem(response.status, problem) ? 'closed' : 'denied' };
+    }
+    // A stale/invalid cursor (400), unavailable producer or unexpected response discloses no old page.
+    if (response.status !== 200) return { kind: 'unavailable' };
+    const body: unknown = await response.json();
+    const page = realmClaimReviewPage(body, input.realmId);
     return page ? { kind: 'ready', page } : { kind: 'unavailable' };
   } catch (error) {
     return { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
