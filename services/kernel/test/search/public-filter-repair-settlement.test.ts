@@ -104,7 +104,9 @@ test('native repair settlement guards late dispatch, lost wait_for response, ori
     const gate = n.native.arm('refresh', 'disconnect_after');
     const dispatch = untilDispatch(n, captured.repair, gate.reached);
     try {
-      expect(await gate.reached).toEqual({ kind: 'bulk_wait_for', stage: 'after_response' });
+      expect(await Promise.race([gate.reached, dispatch.then(() => {
+        throw new Error('Repair ended before the native completion hold');
+      })])).toEqual({ kind: 'bulk_wait_for', stage: 'after_response' });
       // Engine visibility has happened, but producer custody has not received native completion.
       expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
       const uncertain = await n.f.db.pool.query(`SELECT writer_token,dispatch_state FROM search.identity_writer
@@ -137,7 +139,9 @@ test('native repair settlement guards late dispatch, lost wait_for response, ori
     const pending = n.native.arm('write');
     const late = writer.write(home(n.book!), [n.book!], 0n);
     try {
-      await pending.reached;
+      await Promise.race([pending.reached, late.then(() => {
+        throw new Error('Ordinary writer ended before the native dispatch hold');
+      })]);
       expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
     } finally { pending.release(); }
     await late;
@@ -153,7 +157,9 @@ test('native settlement refuses uncertain writes before send and refuses physica
     const gate = n.native.arm('write', 'disconnect_before');
     const pending = untilDispatch(n, captured.repair, gate.reached);
     try {
-      expect(await gate.reached).toEqual({ kind: 'bulk_wait_for', stage: 'before_send' });
+      expect(await Promise.race([gate.reached, pending.then(() => {
+        throw new Error('Repair ended before the native dispatch hold');
+      })])).toEqual({ kind: 'bulk_wait_for', stage: 'before_send' });
       expect((await n.read(query.queried, query.execution)).status).not.toBe('settled');
     } finally { gate.release(); }
     await pending;
