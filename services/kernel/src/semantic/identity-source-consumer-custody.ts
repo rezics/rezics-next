@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import canonicalize from 'canonicalize';
 import type { CommandTransaction } from '../command/command.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
 import type { IdentityJobRef, IdentityNativeReceipt, IdentityReceipt } from './identity-epoch-contract.ts';
@@ -44,7 +45,7 @@ export type IdentitySourceConsumerCustody = Readonly<{
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = /^[0-9a-f]{64}$/;
-const json = serializeIdentityValue;
+const json = (value: unknown): string => canonicalize(JSON.parse(serializeIdentityValue(value)))!;
 const locator = Symbol('identity-source-consumer-custody-locator');
 type LocalProof = IdentitySourceConsumerCustody & Readonly<{ [locator]: IdentityNativeReceipt }>;
 
