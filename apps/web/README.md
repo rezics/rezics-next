@@ -1119,7 +1119,8 @@ eligibility. Pending means submission awaiting a platform decision, never approv
 A lost reply retains the same intent and key for explicit retry. Current denial preserves the intent but removes
 the retry action; conflict requires a fresh native read and explicit review before a new intent. Refresh does not
 rebase a saved intent or replace its key. Request references are selectable and copyable when current admission
-still permits their display. No claimant list, approval control, staff flag or second ownership source is added.
+still permits their display. No claimant list, approval control, staff flag or second ownership source is added to
+the home panel.
 An updated native page payload replaces the displayed source while preserving its saved intent and requiring
 current personal admission again.
 
@@ -1135,6 +1136,43 @@ story reuses AppShell and the same Space page and controls. Explicit transport f
 recording; they do not prove native approval or visual acceptance. New messages use English base-locale fallback.
 No external reference-project source was needed. Native, browser, regression and visual proof remain integration
 work under the minimal verification policy.
+
+### Platform Realm claim review
+
+`/realms/{id}/claims` renders `community/realm-claim-review-page.tsx` inside the existing AppShell main. The direct
+route requires a server session and is private, no-store and noindex. No home navigation link is inferred from a
+role, membership or orphan date: the current home response supplies no permission-bearing review link.
+
+The declared native `RealmClaimReviewPage` contains only `{claimRequests,next}`. Its pending rows carry
+`realmId`, `requestId`, `claimantAccountId`, `state`, `orphanedAt`, `claimEligibleAt` and `requestedAt`. The consumer
+rejects extra disclosure, malformed identifiers and more than 20 rows. Each next action replaces the visible page
+with exactly one native page; an empty page with a next cursor remains sparse. Failed reads remain unavailable.
+There is no refill, total count, per-account profile lookup or polling.
+
+The generated client in this checkout has the actual approval method but no queue GET. The isolated consumer-local
+`realm-claim-review-unavailable.ts` binding therefore returns unavailable, never an empty queue or approval access.
+When the native list module is delivered, replace that binding with its generated authenticated reader; native
+selection and admission remain authoritative. The local declaration does not implement or copy the producer.
+
+Review request refreshes the same page and compares the exact original source before opening an inline confirmation.
+Confirm sends the existing generated `claimRequests({requestId}).$approve.post` method, which resolves to
+`POST /v1/realms/{realmId}/claimRequests/{requestId}:approve`. The BFF prepares the current session, enforces the
+existing CSRF policy and quotes the saved idempotency key. It supplies no actor, role, ownership proof or permission
+engine. Accounts' existing command alone decides current Global authority and installs the grant.
+
+Only the exact native `{claim:{realmId,requestId,claimantAccountId,state:'owned',orphanedAt,approvedAt}}` receipt
+matching the selected claimant and original episode renders success. A lost reply preserves the same intent and
+key. Explicit retry first reads current access, then replays the same command even if its applied request has left
+the queue. Current denial conceals identifiers and retry; conflict requires a fresh queue and deliberate review.
+Success refreshes the first queue page before allowing deliberate review of further actions. No second claimant is
+automatically approved. Failed refresh after an approval withholds the receipt presentation and further actions.
+
+Story IDs are `pages-community-realm-claim-review--pending`, `--empty`, `--sparse`, `--denied`, `--conflict`,
+`--uncertain-retry`, `--success`, and the corresponding `patterns-community-realm-claim-review--…` IDs. Pages use
+the actual AppShell and integrated review source, with existing phone390/desktop1280 and light/dark globals.
+Fixtures are explicitly declared response examples, not native recordings or claims of authority. The focused
+acceptance file is `tests/realm-claim-review.test.ts`; acceptance, native and visual proof run after integration.
+No external reference-project source was required.
 
 ### Space and Realm lifecycle controls
 
