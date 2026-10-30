@@ -18,6 +18,10 @@ export default {
       API_RESOURCE: { type: 'text', value: process.env.API_RESOURCE ?? '' },
       WEBSITE_SCOPES: { type: 'text', value: process.env.WEBSITE_SCOPES ?? '' },
       WEBSITE_CLIENT_ID: { type: 'text', value: process.env.WEBSITE_CLIENT_ID ?? '' },
+      NATIVE_MEDIA_STORAGE_TOKEN: {
+        type: 'text',
+        value: process.env.WEB_TEST_STATE_DIR ? (process.env.NATIVE_MEDIA_STORAGE_TOKEN ?? '') : '',
+      },
       WEBSITE_CLIENT_KEY: { type: 'secret' },
       READS_10S: { type: 'rate-limit', namespace: '1001', simple: { limit: 100, period: 10 } },
       READS_60S: { type: 'rate-limit', namespace: '1002', simple: { limit: 300, period: 60 } },

@@ -29,6 +29,7 @@ export type NativeKernelRequest = {
   idempotencyKey: string | null;
   body?: string;
   failure?: { status: number; body: string };
+  authorizationDecision?: { status: number; body: string };
 };
 export type NativeKernelFailureInjection = {
   method: string;
@@ -87,6 +88,7 @@ export type NativeWebStack = {
   /** Inject a single native HTTP failure at the owned Worker-to-kernel boundary. */
   injectKernelFailureOnce(failure: NativeKernelFailureInjection): Promise<void>;
   webOutput(): string;
+  flushKernelRequests(): Promise<void>;
   peakMemoryBytes(): number;
   restartWeb(options: { publicOrigin: string; authIssuer?: string }): Promise<void>;
   stop(): Promise<void>;
@@ -309,7 +311,15 @@ function errorDetails(error: unknown): string {
 async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{ pid?: number; stop(): Promise<void> }> {
   const child = spawn(
     process.execPath,
-    ['--preload', 'reylo/register', '--preload', './test/support/fixture-event-types.ts', 'src/worker.ts'],
+    [
+      '--preload',
+      'reylo/register',
+      '--preload',
+      resolve(webRoot, 'tests/native/native-media-storage-fetch.ts'),
+      '--preload',
+      './test/support/fixture-event-types.ts',
+      'src/worker.ts',
+    ],
     {
       cwd: resolve(repositoryRoot, 'services/kernel'),
       env: { ...process.env, ...environment },
@@ -690,6 +700,9 @@ async function startStack(): Promise<
       join(repositoryRoot, '.temp'),
     );
 
+    const webPort = await freePort();
+    const webOrigin = testWebsiteTls ? `https://${nativeWebsiteHost}:${webPort}` : `http://127.0.0.1:${webPort}`;
+    const nativeMediaStorageToken = randomBytes(32).toString('base64url');
     const testWriteRateOverrides = process.env.NATIVE_WEB_STACK_WRITE_RATE_OVERRIDES;
     const workerEnv = {
       ...workerTestEnv({
@@ -699,6 +712,8 @@ async function startStack(): Promise<
         AUTH_JWKS_URL: driver.fixtures.runtime.authJwksUrl,
         KERNEL_ROUTE_KEY: driver.fixtures.runtime.routeKey,
         KERNEL_SESSION_KEYS: driver.fixtures.runtime.sessionKeys,
+        NATIVE_MEDIA_STORAGE_ORIGIN: webOrigin,
+        NATIVE_MEDIA_STORAGE_TOKEN: nativeMediaStorageToken,
         ...(testWriteRateOverrides ? { KERNEL_WRITE_RATE_OVERRIDES: testWriteRateOverrides } : {}),
       }),
       DATABASE_URL: driver.fixtures.runtime.databaseUrl,
@@ -740,6 +755,8 @@ async function startStack(): Promise<
               status: response.status,
               body: await response.clone().text(),
             };
+          if (url.pathname.includes(':authorizeDownload'))
+            observed.authorizationDecision = { status: response.status, body: await response.clone().text() };
           return response;
         })();
         activeKernelRequests.add(handling);
@@ -752,8 +769,6 @@ async function startStack(): Promise<
     });
     kernelServer = server;
     const kernelOrigin = server.url.origin;
-    const webPort = await freePort();
-    const webOrigin = testWebsiteTls ? `https://${nativeWebsiteHost}:${webPort}` : `http://127.0.0.1:${webPort}`;
     const { actionCatalogue } = await import('../../../../services/kernel/src/http/request.ts');
     const actionScopes = [...actionCatalogue(sourceApp).keys()];
     governorScopes = [...actionScopes.filter((scope) => scope !== 'media:complete'), 'gate:any'];
@@ -787,6 +802,7 @@ async function startStack(): Promise<
       }),
       WEBSITE_SCOPES: scopes.join(' '),
       ...(testIssuer ? { AUTH_TEST_LOOPBACK_ORIGIN: authServer.url.origin } : {}),
+      NATIVE_MEDIA_STORAGE_TOKEN: nativeMediaStorageToken,
     };
     const webCookies = new Map<string, Promise<string | undefined>>();
     let webStateDirectory: string | undefined;
@@ -966,6 +982,12 @@ async function startStack(): Promise<
       },
       async syncKernelRequests() {
         await Promise.allSettled(activeKernelRequests);
+      },
+      async refreshKernelRequests() {
+        await this.syncKernelRequests();
+      },
+      async flushKernelRequests() {
+        await this.syncKernelRequests();
       },
       async injectKernelFailureOnce(failure) {
         if (
@@ -1404,6 +1426,9 @@ export async function startNativeWebStack(options: NativeWebStackOptions = {}): 
         await call('injectKernelFailureOnce', JSON.stringify(failure));
       },
       webOutput: () => observation.webOutput,
+      async flushKernelRequests() {
+        await call('observe');
+      },
       peakMemoryBytes: () => observation.peakMemory,
       async kernel(path, init = {}, persona) {
         lifecycle.assertOpen('send native kernel request');

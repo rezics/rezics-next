@@ -339,6 +339,8 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
       assertActive('open native Auth sign-in page');
       await page.goto(signInUrl.href, { waitUntil: 'domcontentloaded' });
       await hydrate(page);
+      const webOrigin = new URL(stack.web).origin;
+      let callbackResponse: Promise<PlaywrightResponse> | undefined;
       if (signup) {
         assertActive('open native Auth sign-up page');
         const signupLink = page.getByRole('link', { name: /create an account|sign up/i }).first();
@@ -349,11 +351,26 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         await page.getByLabel('Handle', { exact: true }).fill(`newcomer-${crypto.randomUUID().slice(0, 8)}`);
         await page.getByLabel('Email', { exact: true }).fill(email);
         await page.getByLabel('Password', { exact: true }).fill(formPassword);
+        callbackResponse = page.waitForResponse(
+          (response) => {
+            const url = new URL(response.url());
+            return url.origin === webOrigin && url.pathname === '/auth/callback';
+          },
+          { timeout: 30_000 },
+        );
         await page.getByRole('button', { name: 'Create an account', exact: true }).click();
       } else {
         await page.getByLabel(/email/i).fill(email);
         await page.locator('input[name="password"]').fill(formPassword);
         assertActive('submit native Auth sign-in form');
+        if (persona !== 'suspended')
+          callbackResponse = page.waitForResponse(
+            (response) => {
+              const url = new URL(response.url());
+              return url.origin === webOrigin && url.pathname === '/auth/callback';
+            },
+            { timeout: 30_000 },
+          );
         await Promise.all([
           page.waitForResponse((response) => new URL(response.url()).pathname === '/signin'),
           page.getByRole('button', { name: 'Sign in', exact: true }).click(),
@@ -364,7 +381,8 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
         // before returning a usable served web page. Its account control proves
         // that the web app has read the real session through its server function.
         assertActive('finish native Auth callback');
-        await page.waitForURL((url) => url.origin === new URL(stack.web).origin && url.pathname !== '/auth/callback', {
+        await callbackResponse;
+        await page.waitForURL((url) => url.origin === webOrigin && !url.pathname.startsWith('/auth/'), {
           timeout: 30_000,
           waitUntil: 'domcontentloaded',
         });

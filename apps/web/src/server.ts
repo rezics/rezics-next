@@ -238,8 +238,122 @@ const fetchHandler = createStartHandler((options) => {
   return defaultStreamHandler(options);
 });
 
+const nativeMediaStoragePath = '/_native/media-storage';
+const mediaKeyPattern =
+  /^m\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/i;
+const mediaPrefixPattern = /^m\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/$/i;
+
+function xml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+/** Native acceptance bridges the kernel's real S3 adapter to this Worker-owned local R2 bucket. */
+async function nativeMediaStorageRequest(request: Request): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname !== nativeMediaStoragePath && !url.pathname.startsWith(`${nativeMediaStoragePath}/`)) return;
+  const nativeEnv = env as Partial<{ MEDIA: R2Bucket; NATIVE_MEDIA_STORAGE_TOKEN: string }>;
+  const token = nativeEnv.NATIVE_MEDIA_STORAGE_TOKEN;
+  const media = nativeEnv.MEDIA;
+  if (!token || request.headers.get('x-native-media-storage-key') !== token)
+    return new Response(null, { status: 404, headers: { 'cache-control': 'no-store' } });
+  if (!media) return new Response(null, { status: 503, headers: { 'cache-control': 'no-store' } });
+
+  let path: string[];
+  try {
+    path = url.pathname.slice(nativeMediaStoragePath.length).split('/').filter(Boolean).map(decodeURIComponent);
+  } catch {
+    return new Response(null, { status: 404, headers: { 'cache-control': 'no-store' } });
+  }
+  if (path[0] !== 'content-media') return new Response(null, { status: 404 });
+  const key = path.slice(1).join('/');
+  if (key && (key.length > 1024 || !mediaKeyPattern.test(key))) return new Response(null, { status: 404 });
+
+  if (request.method === 'GET' && !key) {
+    const prefix = url.searchParams.get('prefix') ?? '';
+    const maxKeys = Number(url.searchParams.get('max-keys') ?? '1000');
+    const cursor = url.searchParams.get('continuation-token') ?? undefined;
+    if (
+      url.searchParams.get('list-type') !== '2' ||
+      url.searchParams.get('encoding-type') !== 'url' ||
+      !mediaPrefixPattern.test(prefix) ||
+      !Number.isInteger(maxKeys) ||
+      maxKeys < 1 ||
+      maxKeys > 1000
+    )
+      return new Response(null, { status: 400 });
+    try {
+      const result = await media.list({ prefix, limit: maxKeys, ...(cursor ? { cursor } : {}) });
+      const entries = result.objects
+        .map(
+          ({ key: objectKey, size }) =>
+            `<Contents><Key>${encodeURIComponent(objectKey)}</Key><Size>${size}</Size></Contents>`,
+        )
+        .join('');
+      const continuation =
+        result.truncated && result.cursor ? `<NextContinuationToken>${xml(result.cursor)}</NextContinuationToken>` : '';
+      const body =
+        `<ListBucketResult><EncodingType>url</EncodingType><Prefix>${encodeURIComponent(prefix)}</Prefix>` +
+        `<KeyCount>${result.objects.length}</KeyCount><IsTruncated>${result.truncated}</IsTruncated>${entries}${continuation}</ListBucketResult>`;
+      return new Response(body, {
+        status: 200,
+        headers: { 'content-type': 'application/xml', 'cache-control': 'no-store' },
+      });
+    } catch {
+      return new Response(null, { status: 503 });
+    }
+  }
+
+  if (!key) return new Response(null, { status: 404 });
+  if (request.method === 'GET') {
+    try {
+      const object = await media.get(key);
+      if (!object)
+        return new Response('<Error><Code>NoSuchKey</Code></Error>', {
+          status: 404,
+          headers: { 'content-type': 'application/xml', 'cache-control': 'no-store' },
+        });
+      const headers = new Headers({
+        'content-length': String(object.size),
+        'cache-control': 'no-store',
+      });
+      if (object.httpMetadata?.contentType) headers.set('content-type', object.httpMetadata.contentType);
+      return new Response(object.body, { status: 200, headers });
+    } catch {
+      return new Response(null, { status: 503 });
+    }
+  }
+  if (request.method === 'PUT') {
+    try {
+      if (!request.body) return new Response(null, { status: 400 });
+      const contentType = request.headers.get('content-type');
+      await media.put(key, request.body, {
+        ...(contentType ? { httpMetadata: { contentType } } : {}),
+      });
+      return new Response(null, { status: 200, headers: { 'cache-control': 'no-store' } });
+    } catch {
+      return new Response(null, { status: 503 });
+    }
+  }
+  if (request.method === 'DELETE') {
+    try {
+      await media.delete(key);
+      return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+    } catch {
+      return new Response(null, { status: 503 });
+    }
+  }
+  return new Response(null, { status: 405, headers: { allow: 'GET, PUT, DELETE' } });
+}
+
 async function fetchRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
+  const nativeStorage = await nativeMediaStorageRequest(request);
+  if (nativeStorage) return nativeStorage;
   // Crawler files read no session and make no kernel request.
   if (url.pathname === '/robots.txt') return fetchHandler(request);
   const publicEnv = env as Partial<SitemapEnv> & { PUBLIC_ORIGIN?: string };
