@@ -114,6 +114,28 @@ const timestamp = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 64 && Number.isFinite(Date.parse(value));
 const instant = (value: Date | string | null) => (value === null ? null : new Date(value).getTime());
 
+/** A timeout can refuse work, never certify authority. Late owner replies are
+ * ignored; no Auth checkout is held while these trusted reads are outstanding. */
+async function boundedRead<T>(
+  deadline: number | undefined,
+  read: () => Promise<T>,
+  pending: AuthRestorePendingCode,
+): Promise<T> {
+  if (deadline === undefined) return read();
+  if (Date.now() >= deadline) fail(pending);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new AuthRestoreAdmissionError(pending)), Math.max(1, deadline - Date.now()));
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function inventoryFor(
   database: Pool,
   restored: AuthRestoredGeneration,
@@ -128,11 +150,11 @@ async function inventoryFor(
   if (!restored.databaseOwner) fail('database-owner-unavailable');
   let result: Awaited<ReturnType<AuthRestoreDatabaseOwner['verifyRestoredDatabase']>>;
   try {
-    result = await restored.databaseOwner.verifyRestoredDatabase({
-      database,
-      generation: restored.generation,
+    result = await boundedRead(
       deadline,
-    });
+      () => restored.databaseOwner!.verifyRestoredDatabase({ database, generation: restored.generation, deadline }),
+      'restore-lineage-unavailable',
+    );
   } catch {
     return fail('restore-lineage-unavailable');
   }
@@ -204,7 +226,11 @@ async function importProgress(
 ): Promise<string> {
   let progress: Awaited<ReturnType<AuthRestoreDatabaseOwner['recoverCommittedNativeProgress']>>;
   try {
-    progress = await restored.databaseOwner!.recoverCommittedNativeProgress({ inventory, accountId, deadline });
+    progress = await boundedRead(
+      deadline,
+      () => restored.databaseOwner!.recoverCommittedNativeProgress({ inventory, accountId, deadline }),
+      'original-progress-unavailable',
+    );
   } catch {
     return fail('original-progress-unavailable');
   }
@@ -560,7 +586,7 @@ const sameObligation = (a: AuthErasureObligation, b: AuthErasureObligation) =>
 async function sourceCall<T>(deadline: number, call: () => Promise<T>): Promise<T> {
   if (Date.now() >= deadline) fail('source-consumer-pending');
   try {
-    const result = await call();
+    const result = await boundedRead(deadline, call, 'source-consumer-pending');
     if (Date.now() >= deadline) fail('source-consumer-pending');
     return result;
   } catch (error) {
