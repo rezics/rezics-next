@@ -61,34 +61,41 @@ export function SubjectOffersView({
   onRestart?: () => void;
   onRetry?: () => void;
 }) {
+  const language = locales.find((candidate) => candidate === locale);
+  if (!language) return null;
   const preparing = page.kind === 'preparing' || (page.kind === 'ready' && page.projectionState === 'preparing');
   return (
-    <section className="mt-6 flex min-w-0 flex-col gap-3" aria-label={m.subject_purchase_heading({}, { locale })}>
-      <h2 className="text-lg font-semibold">{m.subject_purchase_heading({}, { locale })}</h2>
-      <p className="max-w-prose text-sm text-muted-foreground">{m.subject_purchase_discovery({}, { locale })}</p>
+    <section
+      className="mt-6 flex min-w-0 flex-col gap-3"
+      aria-label={m.subject_purchase_heading({}, { locale: language })}
+    >
+      <h2 className="text-lg font-semibold">{m.subject_purchase_heading({}, { locale: language })}</h2>
+      <p className="max-w-prose text-sm text-muted-foreground">
+        {m.subject_purchase_discovery({}, { locale: language })}
+      </p>
       {page.kind === 'pending' || preparing ? (
         <p role="status" className="text-sm text-muted-foreground">
           {page.kind === 'pending'
-            ? m.subject_purchase_pending({}, { locale })
-            : m.subject_purchase_preparing({}, { locale })}
+            ? m.subject_purchase_pending({}, { locale: language })
+            : m.subject_purchase_preparing({}, { locale: language })}
         </p>
       ) : null}
       {page.kind === 'denied' || page.kind === 'unavailable' || page.kind === 'cursor-error' ? (
         <Alert role="alert">
           <AlertDescription>
             {page.kind === 'denied'
-              ? m.subject_purchase_denied({}, { locale })
+              ? m.subject_purchase_denied({}, { locale: language })
               : page.kind === 'cursor-error'
-                ? m.subject_purchase_cursor_error({}, { locale })
-                : m.subject_purchase_unavailable({}, { locale })}
+                ? m.subject_purchase_cursor_error({}, { locale: language })
+                : m.subject_purchase_unavailable({}, { locale: language })}
           </AlertDescription>
         </Alert>
       ) : null}
       {page.kind === 'ready' && page.offers.length === 0 && !preparing ? (
         <Empty>
           <EmptyHeader>
-            <EmptyTitle>{m.subject_purchase_empty({}, { locale })}</EmptyTitle>
-            <EmptyDescription>{m.subject_purchase_discovery({}, { locale })}</EmptyDescription>
+            <EmptyTitle>{m.subject_purchase_empty({}, { locale: language })}</EmptyTitle>
+            <EmptyDescription>{m.subject_purchase_discovery({}, { locale: language })}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : null}
@@ -102,26 +109,30 @@ export function SubjectOffersView({
               <ListRow key={offer.id} className="flex min-w-0 flex-col gap-2 p-3">
                 <h3 className="break-words font-semibold [overflow-wrap:anywhere]">{offer.title}</h3>
                 <p className="text-sm">
-                  {price ?? m.subject_purchase_price_unknown({}, { locale })}
-                  {price && offer.taxBehavior === 'exclusive' ? ` · ${m.commerce_before_tax({}, { locale })}` : ''}
+                  {price ?? m.subject_purchase_price_unknown({}, { locale: language })}
+                  {price && offer.taxBehavior === 'exclusive'
+                    ? ` · ${m.commerce_before_tax({}, { locale: language })}`
+                    : ''}
                 </p>
                 {benefit.kind === 'mapped' ? (
                   <>
-                    <p className="text-sm text-muted-foreground">{m.benefit_fixed_version({}, { locale })}</p>
-                    <p className="text-sm text-muted-foreground">{m.benefit_acquisition({}, { locale })}</p>
+                    <p className="text-sm text-muted-foreground">{m.benefit_fixed_version({}, { locale: language })}</p>
+                    <p className="text-sm text-muted-foreground">{m.benefit_acquisition({}, { locale: language })}</p>
                     <p className="break-words text-sm [overflow-wrap:anywhere]">
-                      {m.benefit_licence({}, { locale })}: {benefit.terms.source.licence}
+                      {m.benefit_licence({}, { locale: language })}: {benefit.terms.source.licence}
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm text-muted-foreground">{m.benefit_terms_unavailable({}, { locale })}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {m.benefit_terms_unavailable({}, { locale: language })}
+                  </p>
                 )}
                 <span className="text-sm underline underline-offset-4">
-                  {m.subject_purchase_review({}, { locale })}
+                  {m.subject_purchase_review({}, { locale: language })}
                 </span>
                 {href ? (
                   <ListRowLink href={href}>
-                    {m.subject_purchase_review_offer({ title: offer.title }, { locale })}
+                    {m.subject_purchase_review_offer({ title: offer.title }, { locale: language })}
                   </ListRowLink>
                 ) : null}
               </ListRow>
@@ -132,17 +143,17 @@ export function SubjectOffersView({
       <div className="flex flex-wrap gap-2">
         {page.kind === 'ready' && page.next && onNext ? (
           <Button type="button" variant="outline" className="min-h-11" onClick={() => onNext(page.next!)}>
-            {m.subject_purchase_next({}, { locale })}
+            {m.subject_purchase_next({}, { locale: language })}
           </Button>
         ) : null}
         {onRestart ? (
           <Button type="button" variant="outline" className="min-h-11" onClick={onRestart}>
-            {m.subject_purchase_restart({}, { locale })}
+            {m.subject_purchase_restart({}, { locale: language })}
           </Button>
         ) : null}
         {(page.kind === 'unavailable' || page.kind === 'preparing' || preparing) && onRetry ? (
           <Button type="button" variant="outline" className="min-h-11" onClick={onRetry}>
-            {m.subject_purchase_retry({}, { locale })}
+            {m.subject_purchase_retry({}, { locale: language })}
           </Button>
         ) : null}
       </div>
@@ -220,13 +231,15 @@ export function SubjectOffersRegion(context: SubjectPurchaseContext) {
 
 /** The shared seam mounts this only after hydration and sign-in. No native bounded owned-benefit batch exists. */
 export function SubjectOwnedBenefitsRegion({ locale }: SubjectPurchaseContext) {
+  const language = locales.find((candidate) => candidate === locale);
+  if (!language) return null;
   const href = purchaseHref('/entitlements', locale);
   return href ? (
     <div className="mt-4 flex min-w-0 flex-col gap-1 text-sm">
       <a href={href} className="inline-flex min-h-11 items-center underline underline-offset-4">
-        {m.subject_purchase_records({}, { locale })}
+        {m.subject_purchase_records({}, { locale: language })}
       </a>
-      <p className="max-w-prose text-muted-foreground">{m.subject_purchase_records_hint({}, { locale })}</p>
+      <p className="max-w-prose text-muted-foreground">{m.subject_purchase_records_hint({}, { locale: language })}</p>
     </div>
   ) : null;
 }
