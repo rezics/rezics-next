@@ -18,7 +18,7 @@ async function observe(pool: Pool, subjectId: string, full: boolean) {
     const stamp = { partition, epoch: owner.epoch, position: owner.position };
     const identity = version ? { sourceId: subjectId, partition, epoch: owner.epoch, ...version } : null;
     // Metadata revalidation never invokes the full Type reader.
-    const type = full ? (await readItemTypes(client, [subjectId])).get(subjectId) ?? null : null;
+    const type = full ? ((await readItemTypes(client, [subjectId])).get(subjectId) ?? null) : null;
     return { stamp, identity, type };
   });
 }

@@ -6,7 +6,12 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { ShelfTypeKeys, ShelfTypeResolution, ShelfWrite } from './shelf-contract.ts';
 import { enterShelfWrite, NIL_SHELF_GENERATION } from './shelf-counter-owner.ts';
 import { createNativeTypePreparationPorts } from './type-preparation.ts';
-import type { TypePreparationContinuationDependencies, TypePreparationDependencies, TypePreparationPorts, TypePreparationEvidence } from './type-preparation-contract.ts';
+import type {
+  TypePreparationContinuationDependencies,
+  TypePreparationDependencies,
+  TypePreparationPorts,
+  TypePreparationEvidence,
+} from './type-preparation-contract.ts';
 import root from './shelf-type-key-root.sql';
 import edge from './shelf-type-key-edge.sql';
 import value from './shelf-type-key-value.sql';
@@ -20,8 +25,9 @@ import progress from './shelf-type-key-progress.sql';
 import publish from './shelf-type-key-publish.sql';
 import finish from './shelf-type-key-finish.sql';
 
-type Admission = { kind: 'preparation'; evidence: TypePreparationEvidence } |
-  { kind: 'maintenance'; page: ShelfDerivedPage; reservationId: string };
+type Admission =
+  | { kind: 'preparation'; evidence: TypePreparationEvidence }
+  | { kind: 'maintenance'; page: ShelfDerivedPage; reservationId: string };
 const admitted = new WeakMap<ShelfWrite['client'], Admission>();
 const edges = new WeakMap<ShelfWrite['client'], number>();
 
@@ -29,15 +35,25 @@ const edges = new WeakMap<ShelfWrite['client'], number>();
  * The token is scoped to this callback and exact live command, never carried in workflow JSON.
  */
 async function withShelfTypePreparation<T>(
-  write: ShelfWrite, evidence: TypePreparationEvidence, body: () => Promise<T>,
+  write: ShelfWrite,
+  evidence: TypePreparationEvidence,
+  body: () => Promise<T>,
 ): Promise<T> {
   const command = currentCommand(write.client);
-  if (command.authorization?.mode !== 'execute' || command.partition !== partitionOf(write.route) ||
-      evidence.binding.accountId !== write.accountId || routeOf(evidence.preparationId) !== write.route)
+  if (
+    command.authorization?.mode !== 'execute' ||
+    command.partition !== partitionOf(write.route) ||
+    evidence.binding.accountId !== write.accountId ||
+    routeOf(evidence.preparationId) !== write.route
+  )
     throw new TypeError('Type allocation requires the admitted preparation owner transaction');
   if (admitted.has(write.client)) throw new TypeError('Nested type preparation admission');
   admitted.set(write.client, { kind: 'preparation', evidence });
-  try { return await body(); } finally { admitted.delete(write.client); }
+  try {
+    return await body();
+  } finally {
+    admitted.delete(write.client);
+  }
 }
 function owner(route: number, accountId: string) {
   partitionOf(route);
@@ -64,31 +80,46 @@ async function admission(write: ShelfWrite) {
   if (gate.epoch !== proof.evidence.binding.ownerEpoch) throw new Error('Type preparation owner epoch changed');
   // Post-publication retirement retains the active build. New ordinary reservations must belong to it.
   // The proven-empty nil generation cannot identify a reservation, so only that initial namespace uses its fence.
-  const generationId = gate.generationId && gate.generationId !== NIL_SHELF_GENERATION
-    ? gate.generationId : gate.fenceId;
+  const generationId =
+    gate.generationId && gate.generationId !== NIL_SHELF_GENERATION ? gate.generationId : gate.fenceId;
   return { fenceId: gate.fenceId, generationId, reservationId: proof.evidence.reservationId };
 }
 
 /** Only the native runner's live WeakMap page can enter the shared dictionary core during rebuilding. */
-export async function withShelfDerivedTypePreparation<T>(tx: CommandTransaction, page: ShelfDerivedPage,
-  reservationId: string | null, body: () => Promise<T>): Promise<T> {
+export async function withShelfDerivedTypePreparation<T>(
+  tx: CommandTransaction,
+  page: ShelfDerivedPage,
+  reservationId: string | null,
+  body: () => Promise<T>,
+): Promise<T> {
   const native = await readShelfDerivedAllocation(tx, page);
   if (admitted.has(tx)) throw new TypeError('Nested type preparation admission');
   admitted.set(tx, { kind: 'maintenance', page, reservationId: reservationId ?? newId(native.owner.route) });
-  try { return await body(); } finally { admitted.delete(tx); }
+  try {
+    return await body();
+  } finally {
+    admitted.delete(tx);
+  }
 }
 
 export function createShelfTypeKeys(): ShelfTypeKeys {
   async function lookup(client: ShelfWrite['client'], route: number, accountId: string, fullType: string) {
-    const args = owner(route, accountId), bytes = exactBytes(fullType);
-    const found = await root.run(client, { ...args, full_type: fullType, digest: createHash('sha256').update(bytes).digest() });
+    const args = owner(route, accountId),
+      bytes = exactBytes(fullType);
+    const found = await root.run(client, {
+      ...args,
+      full_type: fullType,
+      digest: createHash('sha256').update(bytes).digest(),
+    });
     if (!found) return null;
     if (found.equal) return found.typeId;
-    let nodeId = found.nodeId, terminal: string | null = null;
+    let nodeId = found.nodeId,
+      terminal: string | null = null;
     for (let offset = 0; offset < bytes.length; offset += 256) {
       const next = await edge.run(client, { ...args, parent_id: nodeId, chunk: bytes.subarray(offset, offset + 256) });
       if (!next) return null;
-      nodeId = next.nodeId; terminal = next.typeId;
+      nodeId = next.nodeId;
+      terminal = next.typeId;
     }
     if (!terminal) return null;
     return (await value.run(client, { ...args, type_id: terminal, full_type: fullType }))?.typeId ?? null;
@@ -101,11 +132,15 @@ export function createShelfTypeKeys(): ShelfTypeKeys {
     const saved = await reservation.run(write.client, args);
     if (!saved || saved.fenceId !== native.fenceId || saved.generationId !== native.generationId)
       throw new Error('Type reservation is missing or retired');
-    const start = BigInt(saved.offset), length = BigInt(saved.length);
-    let offset = start, nodeId = saved.nodeId;
+    const start = BigInt(saved.offset),
+      length = BigInt(saved.length);
+    let offset = start,
+      nodeId = saved.nodeId;
     const remainingEdges = 100 - (edges.get(write.client) ?? 0);
-    const page = remainingEdges > 0 && offset < length
-      ? await chunk.run(write.client, { ...args, offset: Number(offset), length: remainingEdges * 256 }) : null;
+    const page =
+      remainingEdges > 0 && offset < length
+        ? await chunk.run(write.client, { ...args, offset: Number(offset), length: remainingEdges * 256 })
+        : null;
     if (remainingEdges > 0 && offset < length && !page?.chunk?.length)
       throw new Error('Native type reservation page is missing');
     while (page?.chunk && offset < length && (edges.get(write.client) ?? 0) < 100) {
@@ -118,13 +153,23 @@ export function createShelfTypeKeys(): ShelfTypeKeys {
         next = await edge.run(write.client, { ...args, parent_id: nodeId, chunk: piece });
       }
       if (!next) throw new Error('Native trie UUID allocation exhausted');
-      nodeId = next.nodeId; offset += BigInt(piece.length);
+      nodeId = next.nodeId;
+      offset += BigInt(piece.length);
     }
-    const updated = await progress.run(write.client, { ...args, node_id: nodeId, previous_offset: start.toString(), next_offset: offset.toString() });
+    const updated = await progress.run(write.client, {
+      ...args,
+      node_id: nodeId,
+      previous_offset: start.toString(),
+      next_offset: offset.toString(),
+    });
     if (!updated) throw new Error('Type reservation checkpoint changed');
     if (offset < length) return { done: false, reservation: { reservationId } };
     for (let attempt = 0; attempt < 3; attempt++) {
-      const result = await publish.run(write.client, { ...args, node_id: nodeId, type_id: attempt === 0 ? saved.candidateId : newId(write.route) });
+      const result = await publish.run(write.client, {
+        ...args,
+        node_id: nodeId,
+        type_id: attempt === 0 ? saved.candidateId : newId(write.route),
+      });
       if (result[0]?.typeId) {
         await finish.run(write.client, args);
         return { done: true, typeId: result[0].typeId };
@@ -136,7 +181,8 @@ export function createShelfTypeKeys(): ShelfTypeKeys {
     lookup,
     async reserve(write, fullType) {
       const native = await admission(write);
-      const args = owner(write.route, write.accountId), bytes = exactBytes(fullType);
+      const args = owner(write.route, write.accountId),
+        bytes = exactBytes(fullType);
       const digest = createHash('sha256').update(bytes).digest();
       const found = await root.run(write.client, { ...args, digest, full_type: fullType });
       if (found?.equal) return { done: true, typeId: found.typeId };
@@ -146,7 +192,12 @@ export function createShelfTypeKeys(): ShelfTypeKeys {
           const inserted = await insertValue.run(write.client, { ...args, type_id: typeId, full_type: fullType });
           if (!inserted) continue;
           for (let rootAttempt = 0; rootAttempt < 3; rootAttempt++) {
-            const insertedRoot = await insertRoot.run(write.client, { ...args, digest, type_id: typeId, node_id: newId(write.route) });
+            const insertedRoot = await insertRoot.run(write.client, {
+              ...args,
+              digest,
+              type_id: typeId,
+              node_id: newId(write.route),
+            });
             if (insertedRoot[0]) return { done: true, typeId };
           }
           throw new Error('Native root UUID allocation exhausted');
@@ -154,8 +205,16 @@ export function createShelfTypeKeys(): ShelfTypeKeys {
         throw new Error('Native type UUID allocation exhausted');
       }
       if (!native.reservationId) throw new TypeError('Collision allocation requires its native reservation identity');
-      await reserve.run(write.client, { ...args, reservation_id: native.reservationId, full_type: fullType, digest,
-        candidate_type_id: newId(write.route), node_id: found.nodeId, fence_id: native.fenceId, generation_id: native.generationId });
+      await reserve.run(write.client, {
+        ...args,
+        reservation_id: native.reservationId,
+        full_type: fullType,
+        digest,
+        candidate_type_id: newId(write.route),
+        node_id: found.nodeId,
+        fence_id: native.fenceId,
+        generation_id: native.generationId,
+      });
       return advance(write, native.reservationId);
     },
     continue: (write, input) => advance(write, input.reservationId),
@@ -165,7 +224,9 @@ export function createShelfTypeKeys(): ShelfTypeKeys {
 export function createTypePreparationPorts(dependencies: TypePreparationDependencies): TypePreparationPorts {
   return createNativeTypePreparationPorts(dependencies, withShelfTypePreparation);
 }
-export function createTypePreparationContinuation(dependencies: TypePreparationContinuationDependencies): Pick<TypePreparationPorts, 'continue'> {
+export function createTypePreparationContinuation(
+  dependencies: TypePreparationContinuationDependencies,
+): Pick<TypePreparationPorts, 'continue'> {
   return { continue: createNativeTypePreparationPorts(dependencies, withShelfTypePreparation).continue };
 }
 export default createShelfTypeKeys;

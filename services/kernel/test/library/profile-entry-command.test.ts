@@ -71,43 +71,77 @@ async function fact(subjectId: string, accountId = native.owner.actor.accountId)
 
 type Inspection = Awaited<ReturnType<NativeProfileFixture['inspect']>>;
 /** The fixture's short Type completes in the create command: one metadata receipt/event and one business pair. */
-function freshEntryEffects(before: Inspection, after: Inspection, accountId: string, subjectId: string,
-  requestKey: string, fullType: string, impliedFollow = false) {
-  const receipts = after.receipts.filter(({ row }) => !before.receipts.some(({ row: old }) =>
-    old.command_kind === row.command_kind && old.idempotency_key === row.idempotency_key)).map(({ row }) => row);
+function freshEntryEffects(
+  before: Inspection,
+  after: Inspection,
+  accountId: string,
+  subjectId: string,
+  requestKey: string,
+  fullType: string,
+  impliedFollow = false,
+) {
+  const receipts = after.receipts
+    .filter(
+      ({ row }) =>
+        !before.receipts.some(
+          ({ row: old }) => old.command_kind === row.command_kind && old.idempotency_key === row.idempotency_key,
+        ),
+    )
+    .map(({ row }) => row);
   expect(receipts.map((row) => row.command_kind).sort()).toEqual([
-    'library.entry.put', 'library.type-preparation.create',
+    'library.entry.put',
+    'library.type-preparation.create',
   ]);
   for (const receipt of receipts) {
     expect(receipt.principal_kind).toBe('account');
     expect(receipt.principal_id).toBe(accountId);
   }
   const business = receipts.find((row) => row.command_kind === 'library.entry.put')!;
-  expect(nativeReceiptKeyCandidates(native.pool, 'library.entry.put', accountId, requestKey))
-    .toContain(business.idempotency_key);
+  expect(nativeReceiptKeyCandidates(native.pool, 'library.entry.put', accountId, requestKey)).toContain(
+    business.idempotency_key,
+  );
   const metadata = receipts.find((row) => row.command_kind === 'library.type-preparation.create')!;
   const preparationId = metadata.response.preparationId;
-  expect(nativeReceiptKeyCandidates(native.pool, 'library.type-preparation.create', accountId, `create:${preparationId}`))
-    .toContain(metadata.idempotency_key);
-  expect(metadata.response.checkpoint).toEqual({ state: 'ready', typeId: expect.any(String),
-    chunk: '1', offset: String(Buffer.byteLength(fullType)), nodeId: null });
-  const events = after.events.filter(({ row }) => !before.events.some(({ row: old }) => old.id === row.id))
+  expect(
+    nativeReceiptKeyCandidates(native.pool, 'library.type-preparation.create', accountId, `create:${preparationId}`),
+  ).toContain(metadata.idempotency_key);
+  expect(metadata.response.checkpoint).toEqual({
+    state: 'ready',
+    typeId: expect.any(String),
+    chunk: '1',
+    offset: String(Buffer.byteLength(fullType)),
+    nodeId: null,
+  });
+  const events = after.events
+    .filter(({ row }) => !before.events.some(({ row: old }) => old.id === row.id))
     .map(({ row }) => row);
   expect(events.map((row) => row.type).sort()).toEqual([
     'com.rezics.library.entry.updated.v1',
     ...(impliedFollow ? ['com.rezics.library.follow.updated.v1'] : []),
     'com.rezics.library.type-preparation.changed.v1',
   ]);
-  if (impliedFollow) expect(events.find((row) => row.type === 'com.rezics.library.follow.updated.v1')).toMatchObject({
-    subject: accountId, data: { targetId: subjectId },
-    partition_no: business.partition_no, epoch: business.epoch, position: business.position,
-  });
+  if (impliedFollow)
+    expect(events.find((row) => row.type === 'com.rezics.library.follow.updated.v1')).toMatchObject({
+      subject: accountId,
+      data: { targetId: subjectId },
+      partition_no: business.partition_no,
+      epoch: business.epoch,
+      position: business.position,
+    });
   const event = events.find((row) => row.type === 'com.rezics.library.entry.updated.v1' && row.subject === accountId)!;
-  expect(event).toMatchObject({ subject: accountId, data: { subjectId },
-    partition_no: business.partition_no, epoch: business.epoch, position: business.position });
+  expect(event).toMatchObject({
+    subject: accountId,
+    data: { subjectId },
+    partition_no: business.partition_no,
+    epoch: business.epoch,
+    position: business.position,
+  });
   expect(events.find((row) => row.type === 'com.rezics.library.type-preparation.changed.v1')).toMatchObject({
-    subject: accountId, data: { preparationId }, partition_no: metadata.partition_no,
-    epoch: metadata.epoch, position: metadata.position,
+    subject: accountId,
+    data: { preparationId },
+    partition_no: metadata.partition_no,
+    epoch: metadata.epoch,
+    position: metadata.position,
   });
   return event;
 }
@@ -167,7 +201,10 @@ test('game recipe and record states use one HTTP entry slot and descriptive acti
     const subjectId = await native.createSubject(vertical);
     const before = await native.inspect();
     const key = entryKey();
-    const first = await json(await native.send('owner', 'PUT', path(subjectId), { state: entryStates[vertical] }, key), 201);
+    const first = await json(
+      await native.send('owner', 'PUT', path(subjectId), { state: entryStates[vertical] }, key),
+      201,
+    );
     expect(first.libraryEntry.state).toBe(entryStates[vertical]);
     expect(Object.keys(first.libraryEntry).sort()).toEqual([
       'createdAt',
@@ -236,7 +273,15 @@ test('the literal in_progress state follows once and preserves an explicit unfol
     expect(follows).toHaveLength(1);
     expect(follows[0]!.row.state).toBe(explicitUnfollow ? 'unfollowed' : 'following');
     expect(follows[0]!.row.reason).toBe(explicitUnfollow ? 'explicit' : 'library');
-    freshEntryEffects(before, after, native.owner.actor.accountId, subjectId, key, entryTypes.recipe, !explicitUnfollow);
+    freshEntryEffects(
+      before,
+      after,
+      native.owner.actor.accountId,
+      subjectId,
+      key,
+      entryTypes.recipe,
+      !explicitUnfollow,
+    );
     if (explicitUnfollow) expect(after.follows).toEqual(before.follows);
     expect(after.entries.length - before.entries.length).toBe(1);
     expect(follows[0]!.row.target_id).toBe(subjectId);

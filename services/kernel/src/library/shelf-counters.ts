@@ -12,18 +12,24 @@ function placement(write: ShelfWrite, value: ShelfPlacement | null, sign: number
   return [
     { bucket: 'all', type_id: NIL_SHELF_GENERATION, delta: sign },
     { bucket: 'all', type_id: value.typeId, delta: sign },
-    ...(isLegacyEntryState(value.state) ? [
-      { bucket: value.state, type_id: NIL_SHELF_GENERATION, delta: sign },
-      { bucket: value.state, type_id: value.typeId, delta: sign },
-    ] : []),
+    ...(isLegacyEntryState(value.state)
+      ? [
+          { bucket: value.state, type_id: NIL_SHELF_GENERATION, delta: sign },
+          { bucket: value.state, type_id: value.typeId, delta: sign },
+        ]
+      : []),
   ];
 }
 export function createShelfCounters(): ShelfCounters {
   async function apply(write: ShelfWrite, deltas: Delta[]) {
     const owner = await enterShelfWrite(write);
     if (!owner.ready) return;
-    await delta.run(write.client, { route: write.route, account_id: write.accountId,
-      generation_id: owner.generationId!, deltas });
+    await delta.run(write.client, {
+      route: write.route,
+      account_id: write.accountId,
+      generation_id: owner.generationId!,
+      deltas,
+    });
   }
   return {
     async transition(write, from, to) {

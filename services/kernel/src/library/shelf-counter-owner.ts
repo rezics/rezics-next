@@ -8,17 +8,26 @@ import complete from './shelf-counter-owner-complete.sql';
 
 export const NIL_SHELF_GENERATION = '00000000-0000-0000-0000-000000000000';
 export type ShelfNativeOwner = Readonly<{
-  fenceId: string; epoch: string; ready: boolean; generationId: string | null;
+  fenceId: string;
+  epoch: string;
+  ready: boolean;
+  generationId: string | null;
 }>;
 
 /** The owner lock precedes heads, placements and counter keys, and is retained until command completion. */
 export async function enterShelfWrite(write: ShelfWrite): Promise<ShelfNativeOwner> {
   const command = currentCommand(write.client);
-  if (routeOf(write.accountId) !== write.route || command.partition !== partitionOf(write.route) ||
-      command.authorization?.mode !== 'execute') throw new TypeError('Shelf write requires a live authorized owner command');
+  if (
+    routeOf(write.accountId) !== write.route ||
+    command.partition !== partitionOf(write.route) ||
+    command.authorization?.mode !== 'execute'
+  )
+    throw new TypeError('Shelf write requires a live authorized owner command');
   // The maintained gate owns initialization, durable backfill intent, terminal mode and active generation.
-  const native = await enterNativeShelfWrite(write.client as Parameters<typeof enterNativeShelfWrite>[0],
-    { route: write.route, accountId: write.accountId });
+  const native = await enterNativeShelfWrite(write.client as Parameters<typeof enterNativeShelfWrite>[0], {
+    route: write.route,
+    accountId: write.accountId,
+  });
   const args = { route: write.route, account_id: write.accountId };
   const client = write.client;
   await initialize.run(client, { ...args, fence_id: newId(write.route) });
@@ -26,13 +35,21 @@ export async function enterShelfWrite(write: ShelfWrite): Promise<ShelfNativeOwn
   if (!row) throw new Error('Shelf owner serialization row is missing');
   if (BigInt(row.epoch) > native.epoch) throw new CommandUnavailableError('contention', command.partition);
   if (row.state === 'initializing' || BigInt(row.epoch) < native.epoch || row.ready !== native.ready) {
-    await complete.run(client, { ...args, ready: native.ready, epoch: native.epoch.toString(),
-      generation_id: native.generationId });
+    await complete.run(client, {
+      ...args,
+      ready: native.ready,
+      epoch: native.epoch.toString(),
+      generation_id: native.generationId,
+    });
     row = (await read.run(client, args))!;
   }
   if (row.state !== 'open' || (row.ready && row.generationId !== native.generationId))
     throw new CommandUnavailableError('contention', command.partition);
   if (native.ready !== (native.generationId !== null)) throw new Error('Invalid shelf generation readiness');
-  return Object.freeze({ fenceId: row.fenceId, epoch: native.epoch.toString(), ready: native.ready,
-    generationId: native.generationId });
+  return Object.freeze({
+    fenceId: row.fenceId,
+    epoch: native.epoch.toString(),
+    ready: native.ready,
+    generationId: native.generationId,
+  });
 }

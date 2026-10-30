@@ -172,10 +172,14 @@ function binding(owner: AccountActor, selectedState: EntryState | null): CursorB
 export function createEntryCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
-  const heads = createShelfHeads(), counters = createShelfCounters();
-  const types = createTypePreparationPorts({ ...config, keys: createShelfTypeKeys(),
+  const heads = createShelfHeads(),
+    counters = createShelfCounters();
+  const types = createTypePreparationPorts({
+    ...config,
+    keys: createShelfTypeKeys(),
     observe: (id) => observePreparationSource(config, id),
-    observeIdentity: (id) => observePreparationIdentity(config, id) });
+    observeIdentity: (id) => observePreparationIdentity(config, id),
+  });
   const follows = createFollowCommands({ pool, access, ...(clock === undefined ? {} : { clock }) });
 
   async function admit(client: QueryClient, owner: AccountActor): Promise<number> {
@@ -243,7 +247,8 @@ export function createEntryCommands(config: Dependencies) {
     };
     const expectedRevision = parsed.revision;
     let preparedType: PreparedType | undefined;
-    const execute = () => runner.ownAccountPrepared(
+    const execute = () =>
+      runner.ownAccountPrepared(
         actor,
         {
           action: 'library_entry:update',
@@ -253,13 +258,14 @@ export function createEntryCommands(config: Dependencies) {
           async prepare(attempt) {
             try {
               const source = await readLibraryProfileSource(
-                { pool, access, actor: owner, at: attempt.time, deadline }, subjectId,
+                { pool, access, actor: owner, at: attempt.time, deadline },
+                subjectId,
               );
               if (!source) throw new LibraryNotFoundError();
               if (source.kind !== 'supported' || !hasEntryState(source.profile, parsed.state))
                 throw new ProblemError('unsupported_library_profile');
               if (preparedType) {
-                if (await types.revalidate(owner, preparedType) !== 'current')
+                if ((await types.revalidate(owner, preparedType)) !== 'current')
                   throw new CommandUnavailableError('contention', partitionOf(requireRoute(owner.accountId)));
               }
               return {
@@ -276,7 +282,11 @@ export function createEntryCommands(config: Dependencies) {
           const write = { client: tx, route, accountId: owner.accountId };
           const gate = await enterShelfWrite(write);
           const head = await heads.ensure(write, resolved.subjectId);
-          const before = await placement.run(tx, { route, account_id: owner.accountId, subject_id: resolved.subjectId });
+          const before = await placement.run(tx, {
+            route,
+            account_id: owner.accountId,
+            subject_id: resolved.subjectId,
+          });
           if (expectedRevision !== undefined) {
             // This exact locked row is the cutover evidence. Receipt replay has
             // already returned, and a concurrent stamp/replacement cannot race admission.
@@ -322,8 +332,7 @@ export function createEntryCommands(config: Dependencies) {
               },
               context,
               source.pin,
-              { head,
-                ...(acceptedType?.status === 'ready' ? { type: acceptedType } : {}) },
+              { head, ...(acceptedType?.status === 'ready' ? { type: acceptedType } : {}) },
             );
           } else {
             const changed = await store.updateEntryState(
@@ -342,10 +351,13 @@ export function createEntryCommands(config: Dependencies) {
           }
 
           const typeId = acceptedType?.status === 'ready' ? acceptedType.typeId : before?.typeId;
-          if (gate.ready && (!typeId || (before && !before.typeId))) throw new Error('Complete shelf placement is missing a type');
-          await counters.transition(write,
+          if (gate.ready && (!typeId || (before && !before.typeId)))
+            throw new Error('Complete shelf placement is missing a type');
+          await counters.transition(
+            write,
             before?.typeId ? { state: before.state, typeId: before.typeId } : null,
-            typeId ? { state: entry.state, typeId } : null);
+            typeId ? { state: entry.state, typeId } : null,
+          );
           const stamped = await stampOwnerSequence.run(tx, {
             route,
             account_id: owner.accountId,
@@ -446,7 +458,11 @@ export function createEntryCommands(config: Dependencies) {
         );
         if (!removed) throw new LibraryEntryLifecycleConflictError('stale');
         if (gate.ready && !removed.typeId) throw new Error('Complete shelf deletion is missing its type');
-        await counters.transition(write, removed.typeId ? { state: removed.state, typeId: removed.typeId } : null, null);
+        await counters.transition(
+          write,
+          removed.typeId ? { state: removed.state, typeId: removed.typeId } : null,
+          null,
+        );
         return {
           value: { deletionId: removed.deletionId, revision: removed.deletedRevision },
           events: [entryEvent(DELETED_EVENT, owner.accountId, subjectId)],
@@ -511,7 +527,11 @@ export function createEntryCommands(config: Dependencies) {
           throw new Error('Locked retained entry could not be restored');
         }
         if (gate.ready && !restored.typeId) throw new Error('Complete shelf restoration is missing its type');
-        await counters.transition(write, null, restored.typeId ? { state: restored.state, typeId: restored.typeId } : null);
+        await counters.transition(
+          write,
+          null,
+          restored.typeId ? { state: restored.state, typeId: restored.typeId } : null,
+        );
         const seq = await allocateOwnerWriteSeq(tx, owner.accountId);
         const stamped = await stampOwnerSequence.run(tx, {
           route,
@@ -603,7 +623,12 @@ export function createEntryCommands(config: Dependencies) {
     });
   }
 
-  return { putEntry: (...args: Parameters<typeof putEntry>) =>
-    withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => putEntry(...args)),
-    deleteEntry, restoreEntry, readEntry, listEntries };
+  return {
+    putEntry: (...args: Parameters<typeof putEntry>) =>
+      withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => putEntry(...args)),
+    deleteEntry,
+    restoreEntry,
+    readEntry,
+    listEntries,
+  };
 }

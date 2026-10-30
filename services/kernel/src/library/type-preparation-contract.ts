@@ -131,5 +131,8 @@ export interface TypePreparationDependencies {
   readonly clock?: KernelClock;
 }
 
-export type TypePreparationContinuationDependencies = Pick<TypePreparationDependencies, 'pool' | 'keys' | 'observeIdentity' | 'clock'>;
+export type TypePreparationContinuationDependencies = Pick<
+  TypePreparationDependencies,
+  'pool' | 'keys' | 'observeIdentity' | 'clock'
+>;
 export { createTypePreparationPorts, createTypePreparationContinuation } from './shelf-type-keys.ts';
