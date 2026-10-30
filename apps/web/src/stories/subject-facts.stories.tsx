@@ -66,7 +66,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The canonical subject’s multi-field workspace reuses the scalar editor controls and existing native-shaped proposal/review seam. Each included changed field keeps its own request and outcome. The stories demonstrate interface behavior; native binding, Web visual review and Root screenshots remain pending. Use locale, theme and viewport globals.',
+          'The canonical subject’s multi-field workspace reuses the scalar editor controls and existing native-shaped proposal/review seam. Each included changed field keeps its own request and outcome. The stories demonstrate interface behavior; integrated native outcome verification, Web visual review and Root screenshots remain pending. Use locale, theme and viewport globals.',
       },
     },
     viewport: {
