@@ -1,0 +1,66 @@
+{
+  "contract": "rezics.check-scripts",
+  "version": 1,
+  "workerCheck": {
+    "script": "scripts/worker-check.ts",
+    "startArgv": ["--", "<command...>"],
+    "startOutput": "check: id <uuid>",
+    "foregroundArgv": ["--wait", "<id>"],
+    "foregroundOutput": ["check: exit status <exitCode>", "check: log <path>"],
+    "resultPath": ".temp/goal/checks/results/<id>.json",
+    "logPathPrefix": ".temp/goal/checks/worker-check-",
+    "record": {
+      "identityFields": ["id", "cwd", "argv", "runnerPid", "runnerHost"],
+      "sharedFields": ["status", "log"],
+      "states": {
+        "running": {
+          "status": "running",
+          "requiredFields": ["id", "cwd", "argv", "status", "log", "runnerPid", "runnerHost"],
+          "exitCode": "absent"
+        },
+        "completed": {
+          "status": "finished",
+          "requiredFields": ["id", "cwd", "argv", "status", "log", "runnerPid", "runnerHost", "exitCode"],
+          "exitCode": "integer"
+        }
+      },
+      "id": "uuid",
+      "cwd": "absolute-worktree-root",
+      "argv": "string-array",
+      "runnerPid": "positive-safe-integer",
+      "runnerHost": "non-empty-string",
+      "log": "worktree-relative-log-path"
+    },
+    "bun": {
+      "manifestField": "package.json#packageManager",
+      "versionPrefix": "bun@",
+      "lookup": "node_modules/.bin/bun",
+      "versionArgv": ["--version"],
+      "revisionArgv": ["--eval", "console.log(Bun.revision)"],
+      "versionMustMatchManifest": true
+    }
+  },
+  "remoteCheck": {
+    "script": "scripts/remote-check.ts",
+    "requiredEnvironment": {
+      "KERNEL_CHECK_REMOTE": "hosts-file-path"
+    },
+    "optionalEnvironment": {
+      "REMOTE_CHECK_PRIORITY": ["landing", "critical"]
+    },
+    "requiredOptions": [
+      {
+        "flag": "--memory-gib",
+        "value": "<positive-integer>",
+        "consumer": "worker-check.ts"
+      },
+      {
+        "flag": "--returns",
+        "value": "<path>",
+        "consumer": "worker-check.ts",
+        "repeatable": true
+      }
+    ],
+    "commandTail": ["<workspace>", "--", "<command...>"]
+  }
+}
