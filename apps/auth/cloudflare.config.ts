@@ -7,6 +7,7 @@ const pageRoutes = [
   '/step-up',
   '/account/delete',
   '/organizations/new',
+  '/automated/new',
   '/organizations/delete',
   '/account/rename',
   '/organizations/members',
@@ -23,6 +24,7 @@ export default {
       notFoundHandling: 'none',
     },
     env: {
+      KERNEL_ORIGIN: { type: 'text', value: process.env.KERNEL_ORIGIN ?? '' },
       PRIVACY_CONTACT_URL: { type: 'text', value: process.env.PRIVACY_CONTACT_URL ?? '' },
       TURNSTILE_SITE_KEY: { type: 'text', value: process.env.TURNSTILE_SITE_KEY ?? '' },
       // Development can point the widget at a local script. Production ignores this value.

@@ -844,6 +844,84 @@ Final deployment approval resolution and the original lifecycle outcome driver
 remain application integration work, including binding state suspension to Access
 policy. `fenceOperator` provides the durable fencing fanout itself.
 
+## Operated actor creation transport
+
+`/automated/new` is an additive Auth page and production fetch trigger. It does not
+change route-admission contracts, add a menu link or claim deployment availability.
+It uses the existing credentialless `createAccountWorkflows.createAutomated` path;
+there is no new registration writer, handle allocator, account kind or actor session.
+
+The actual Auth-host protocol is:
+
+```ts
+// POST /account-operations/approve
+{
+  accountId: initiatingHumanId,
+  operationKey: originalKey,
+  operation: {
+    kind: 'automated',
+    registrationId: '',
+    operationKey: originalKey,
+    operatorAccountId: selectedOperatorId,
+    handle: normalizedHandle,
+  },
+}
+// -> { reference, expiresAt }
+// POST /account-operations/execute: same body plus reference
+// -> { accountId } only, from the completed native workflow
+```
+
+Both calls require the same real fresh human and the exact existing separate
+`rezics-auth-account-management` client with `['account:manage']`. They use
+`withFreshHuman`, `accessTokenForProof` and native Access approval/caller resolution.
+Access checks current operator authority, including organization membership, floors,
+client/principal scopes and denials. Execute calls only
+`createAutomated({ key: originalKey, authorization: reference, operatorAccountId,
+handle })`. The native workflow creates the stage and supplies its registration ID;
+the browser can supply only the initial empty registration ID. Access's existing
+`creationBinding` verifies that stage against the original approved business request.
+Owner impersonation, browser bearer input, credentials and extra fields are refused.
+Unexpected or pending native results cannot become complete creation results.
+
+The shared management discriminator currently omits `automated`. The exact additive
+alias needed is `AUTH_MANAGEMENT_SCOPES.automated = ['account:manage']`, together with
+`ManagementOperation`/`ManagementOperationKind` support for the native descriptor
+above. The local typed adapters use the already installed `transfer` profile, which
+has exactly those scopes. Shared active constants and the shared step-up engine are
+unchanged. Explicit inline native sign-in selects only that profile and materializes
+existing current consent; it never approves or creates. Missing registration or
+native ports refuse availability rather than fabricating approval.
+
+Review requires a private server adapter to the actual
+`GET /v1/accounts/{selectedOperatorId}/management` read. It issues a native token
+from the current Auth cookie only on the server, uses configured `KERNEL_ORIGIN`,
+checks the initiating account and returns the selected native identity. Public
+profiles and imported rows are not substitutes. The installed management read also
+requires `account:read`; the creation profile remains exactly `account:manage`.
+When the current session cannot read the target, or runtime configuration is absent,
+review shows target unavailable. No read scope is added to the management ceiling.
+A previously reviewed identity is presentation only: native approval and execution
+recheck actual authority after profile sign-in.
+
+The page explicitly confirms the exact operator ID, handle and initiating human.
+It retains one immutable key and business body in session storage across lost
+responses, reload and inline step-up. Reauthentication clears its transient password
+and resets confirmation; only a second explicit submit may create. Each explicit
+retry obtains current native approval for the unchanged binding. Navigation and
+restoration have no native effect. A lost response stays uncertain; a closed native
+`{ accountId }` is creation evidence, not a claim about a later public identity read.
+No optional credential input is exposed, so no actor password enters page storage,
+URLs, logs or a second staging path. All new actual workflow copies retain the
+existing native owners; rollout, identity publication and erasure debt stay with
+those owners.
+
+`test/automated-account-transport.test.ts` reuses the existing native account-binding
+fixture and names the approved creation acceptance, exact replay, foreign denial,
+source/key/operator substitution and stale-profile cases.
+`apps/auth/test/automated-account-create.test.ts` and the focused
+`automated-account-create` stories cover confirmation, response loss, unavailable
+identity, step-up and pending-result refusal. Story fixtures are presentation evidence.
+
 ## Account operation ports and ordering
 
 The optional operation ports deny their feature when absent. They use the native

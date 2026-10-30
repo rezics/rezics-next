@@ -1,6 +1,11 @@
 import type { AuthService } from './index.ts';
 import type { AccountOperation, createAccountWorkflows } from './workflows.ts';
 import { managementCallerMatches } from './auth-management-client.ts';
+import {
+  automatedCallerMatches,
+  automatedDescriptorMatches,
+  automatedNativeResult,
+} from './automated-account-transport.ts';
 
 /** Kernel workflow approval and platform gate ports, bound by the composition.
  * The transport hands them an Access bearer from a live Auth proof scope and
@@ -55,6 +60,7 @@ export async function readJsonObject(request: Request): Promise<Record<string, u
 const GATED_GROUP = 'organizations';
 const OPERATION_FIELDS: Record<string, readonly string[]> = {
   organization: ['kind', 'handle'],
+  automated: ['kind', 'registrationId', 'operationKey', 'operatorAccountId', 'handle'],
   rename: ['kind', 'accountId', 'handle', 'expectedHandle'],
   delete: ['kind', 'accountId', 'responsibility'],
   transfer: ['kind', 'previous', 'expectedVersion', 'operatorAccountId', 'acceptance'],
@@ -64,7 +70,13 @@ const OPERATION_FIELDS: Record<string, readonly string[]> = {
 };
 type Workflows = Pick<
   ReturnType<typeof createAccountWorkflows>,
-  'createOrganization' | 'renameHandle' | 'deleteAccount' | 'transferOperator' | 'setMembership' | 'fenceOperator'
+  | 'createAutomated'
+  | 'createOrganization'
+  | 'renameHandle'
+  | 'deleteAccount'
+  | 'transferOperator'
+  | 'setMembership'
+  | 'fenceOperator'
 >;
 type Operation = Record<string, unknown> & { kind: string };
 
@@ -128,10 +140,20 @@ export function accountOperationTransport(
       const operation = operationOf(body.operation);
       const management = Object.hasOwn(body, 'accountId');
       if (management) text(body.accountId);
+      const automated = operation.kind === 'automated';
+      if (
+        automated &&
+        (!management ||
+          !automatedDescriptorMatches(operation, key) ||
+          request.headers.has('authorization') ||
+          request.headers.get('sec-fetch-site') === 'cross-site')
+      )
+        return denied(400);
+      const callerMatches = automated ? automatedCallerMatches : managementCallerMatches;
       const context = access.context();
       if (command === 'approve') {
         const approval = await service.internal.withFreshHuman({ headers: request.headers }, async (proof) => {
-          if (management && !managementCallerMatches(proof, body.accountId, operation)) deny(403);
+          if (management && !callerMatches(proof, body.accountId, operation)) deny(403);
           const token = await service.internal.accessTokenForProof(proof);
           if (operation.kind === 'organization' && !(await access.admitGroup(token, GATED_GROUP, context))) return null;
           return access.approve(
@@ -156,7 +178,7 @@ export function accountOperationTransport(
       const executable = { ...operation, authorization } as AccountOperation;
       // The caller proves the person; the workflow resolves the approval again.
       await service.internal.withFreshHuman({ headers: request.headers, fresh: management }, async (proof) => {
-        if (management && !managementCallerMatches(proof, body.accountId, operation)) deny(403);
+        if (management && !callerMatches(proof, body.accountId, operation)) deny(403);
         return access.resolveForCaller(
           await service.internal.accessTokenForProof(proof),
           authorization,
@@ -166,6 +188,16 @@ export function accountOperationTransport(
       });
       const input = { key, authorization } as const;
       switch (operation.kind) {
+        case 'automated': {
+          const result = automatedNativeResult(
+            await workflows.createAutomated({
+              ...input,
+              operatorAccountId: operation.operatorAccountId as string,
+              handle: operation.handle as string,
+            }),
+          );
+          return result ? response(result) : denied(503);
+        }
         case 'organization':
           return response(await workflows.createOrganization({ ...input, handle: operation.handle as string }));
         case 'rename':
