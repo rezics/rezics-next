@@ -11,7 +11,8 @@ import {
   MAX_DUMP_CHUNK_BYTES,
   observeDumpRetention,
 } from './dumps-bytes.ts';
-import type { VndbTablesStore } from './vndb-tables.ts';
+import { DEFAULT_VNDB_ARCHIVE_BYTES, type VndbTablesStore } from './vndb-tables.ts';
+import { readArchive } from './archive.ts';
 import { VndbInputError, VndbMaterialization } from './vndb-materialization.ts';
 import type { SourceRegistration } from './import-contract.ts';
 import type { ImportMediaResolution } from './importer.ts';
@@ -712,21 +713,66 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       const materialization = new VndbMaterialization(importer, registration);
       options.observer?.onVndbStore?.({ importer, store: materialization.tables });
       const acquisition = materialization.begin();
-      if (options.entries !== undefined) {
-        await materialization.stage(acquisition, observedEntries(options.entries, signal, options.observer));
-      } else {
-        await materialization.stageArchive(
+      const entries =
+        options.entries !== undefined
+          ? observedEntries(options.entries, signal, options.observer)
+          : readArchive(
+              ownedChunks(
+                dumpHandle
+                  ? fileChunks(dumpHandle, signal)
+                  : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
+                signal,
+                'dump',
+                options.observer,
+              ),
+              {
+                maxTotalBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
+                maxChunkBytes: DEFAULT_DUMP_CHUNK_BYTES,
+                maxMetadataBytes: 4096,
+                signal,
+                onProgress: (sample) => options.observer?.onInputBuffer?.(sample.retainedBytes),
+              },
+            );
+      // The table reader deliberately rejects an empty catalogue. A complete,
+      // validated empty native archive still needs the ordinary loss-all guard
+      // when this source already has a completed baseline. Observe only framing;
+      // table/header validation remains with the existing table reader.
+      let completeEmptyTables = false;
+      const verifiedEntries = (async function* () {
+        const required = new Set([
+          'db/vn',
+          'db/vn.header',
+          'db/vn_titles',
+          'db/vn_titles.header',
+          'db/entry_meta',
+          'db/entry_meta.header',
+        ]);
+        let empty = true;
+        for await (const entry of entries) {
+          if (required.has(entry.path)) {
+            required.delete(entry.path);
+            if (!entry.path.endsWith('.header') && entry.declaredBytes !== 0) empty = false;
+          }
+          yield entry;
+        }
+        // Reaching EOF here also proves that stage consumed every preceding
+        // member, including all validated headers and any ignored members.
+        completeEmptyTables = empty && required.size === 0;
+      })();
+      let emptyCatalogue = false;
+      try {
+        await materialization.stage(
           acquisition,
-          ownedChunks(
-            dumpHandle
-              ? fileChunks(dumpHandle, signal)
-              : (options.stdin ?? (process.stdin as AsyncIterable<Uint8Array>)),
-            signal,
-            'dump',
-            options.observer,
-          ),
-          { signal, onProgress: (sample) => options.observer?.onInputBuffer?.(sample.retainedBytes) },
+          verifiedEntries as unknown as Parameters<VndbMaterialization['stage']>[1],
         );
+      } catch (error) {
+        if (
+          !completeEmptyTables ||
+          !(error instanceof VndbInputError) ||
+          importer.session.store.source(registration.source).count === 0
+        )
+          throw error;
+        emptyCatalogue = true;
       }
       options.observer?.onCoordinator?.({
         importer,
@@ -735,13 +781,18 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         converterModule: converterModule(config.source),
         decoderModule,
       });
-      const run = await materialization.commit(acquisition, {
+      const runOptions = {
         ...(config.disappearanceThreshold === undefined
           ? {}
           : { disappearanceThreshold: config.disappearanceThreshold }),
         signal,
-        onPageRecords: (count) => options.observer?.onPageRecords?.(count),
-      });
+      };
+      const run = emptyCatalogue
+        ? await importer.runRecords(registration, (async function* () {})(), runOptions)
+        : await materialization.commit(acquisition, {
+            ...runOptions,
+            onPageRecords: (count) => options.observer?.onPageRecords?.(count),
+          });
       output = resultFor(run, lastHttpStatus, signal);
     } else {
       const input = ownedChunks(

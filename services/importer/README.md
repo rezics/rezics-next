@@ -127,6 +127,23 @@ check. The selected native case passed at `669e18e5bff87837e8368e7c0ea9f562cb2f3
 source/converter revisions and receipt anchors. Local protocol proof and broader imports promotion remain
 separate. This adds no sourceRecords migration, asset, summary, discovery or new PostgreSQL growth claim.
 
+The remaining launch operators share the [reviewed native reduction journey](../kernel/test/imports/cli-reviewed-source-reduction.test.ts):
+five synthetic VNDB ustar/COPY records, Open Library five-column TSV works and Wikidata JSONL books coexist
+in one native application/Auth world and one state file. Each operator supplies three unchanged records,
+sees the default guard stop, explicitly reviews the same input with `--disappearance-threshold 0.5`, and
+reopens without writes. Only the two missing records' retrieved owned candidate IDs are retracted through
+ordinary batch commands. Public candidate/retraction reads, independent accepted/adopted facts, communal
+subjects, exact bootstrap journals and receipt point reads establish preservation. Loss of all three remaining
+records still stops at threshold `1`. The exact original successful retraction request is denied after native
+Global bulk-grant revocation, including when replayed with its original bearer. Only that ordinary grant is
+restored between source legs. VNDB uses the existing statistic foundation and seventh scope; the other
+operators retain six scopes. Acquisition reaches EOF and seals before any request, and each CLI invocation
+closes its handles. See the [evidence and limits](../../docs/research/imports-audit/cli-reviewed-source-reduction.md).
+
+A completely consumed VNDB archive containing the six valid headers/table members with no data rows reaches
+the same total-loss guard when that source has a completed nonempty baseline. Header validation remains with
+the native table reader; fresh empty catalogues and malformed archives remain refused before effects.
+
 Limits follow the exports in `src/dumps-bytes.ts`, `src/vndb-tables.ts`, `src/import-fetch.ts`, and `src/import-client.ts`: dump chunks default to 256 KiB (1 MiB maximum), records default to 256 KiB (1 MiB maximum), VNDB archives default to 16 GiB and 512 entries (64 GiB and 2,048 entries maximum), and VNDB source pages contain at most 16 records. HTTP request bodies are capped at 2 MiB, public batch bodies at 64 KiB, responses at 1 MiB, and scheduled HTTP retry waits at 30 seconds per attempt and 60 seconds total with a 120-second request deadline. Each HTTP transport invocation defaults to three counted attempts and permits at most five, plus its existing one-time 401 renewal. Alongside ordinary GET/HEAD and eligible POST retries, the exact `/v1/subjects/{UUID}/source-statistics/vndb` PUT retries only with a valid quoted structured-field `Idempotency-Key`. Other PUT routes and missing or malformed keys remain ineligible. Retried requests preserve their original bytes, headers and bearer except for the existing explicit 401 renewal rule; all attempt, wait, body and deadline ceilings remain unchanged. Cover resolution handles at most 64 assets per record, with one POST and one status GET per invocation and no inline polling wait.
 
 Record write width starts at `recordConcurrency` (default 16). After a final transport `429` or a `503` problem with `retryable: true`, an admitted continuation halves the width, rounding down to at least one. The failed write goes to the front of the queue with the same envelope and command keys; its record resumes at that write, preserving completed planning, bootstrap and cover resolution. Nothing new starts while active records meet or exceed the width. Each successful write adds one slot up to the configured concurrency. A write started alone at width one that still overloads fails as before; older requests from a wider cohort can requeue while it drains. Other failures retain their existing behaviour. Width persists across pages and phases within a run and resets for the next run.
