@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import accountRead from '../../src/access/account-read.sql';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
@@ -75,10 +75,7 @@ async function snapshot(f: ReviewLifecycleFixture, person: ReviewLifecyclePerson
   const route = routeOf(person.accountId)!;
   const partition = partitionOf(route);
   const [position, receipts, outbox, heads, revisions, slots] = await Promise.all([
-    f.admin.query(
-      'SELECT epoch, position::text FROM core.partition WHERE partition_no = $1',
-      [partition],
-    ),
+    f.admin.query('SELECT epoch, position::text FROM core.partition WHERE partition_no = $1', [partition]),
     f.admin.query(
       'SELECT principal_id, command_kind, idempotency_key, request_digest, epoch, position::text, transaction_id, response FROM core.receipt WHERE partition_no = $1 AND principal_id = $2 ORDER BY position, idempotency_key',
       [partition, person.accountId],
@@ -144,7 +141,11 @@ async function vote(f: ReviewLifecycleFixture, person: ReviewLifecyclePerson, su
     body: { units },
   });
   expectStatus(result, 200);
-  return { questionId: STANDARD_QUESTION_ID, units: result.value.units as number, revision: result.value.revision as number };
+  return {
+    questionId: STANDARD_QUESTION_ID,
+    units: result.value.units as number,
+    revision: result.value.revision as number,
+  };
 }
 
 test('Ratings and reviews: native vote citations remain immutable through review slot replacement and owner restoration.', async () => {
@@ -199,11 +200,9 @@ test('Ratings and reviews: native vote citations remain immutable through review
 
   const changedVote = await vote(f, f.author, originalSubject, 12);
   expect(changedVote).toEqual({ questionId: STANDARD_QUESTION_ID, units: 12, revision: 2 });
-  const oldExactBeforeRevision = await f.call(
-    'GET',
-    `/v1/posts/${original.postId}/revisions/${original.revisionId}`,
-    { bearer: f.author.bearer },
-  );
+  const oldExactBeforeRevision = await f.call('GET', `/v1/posts/${original.postId}/revisions/${original.revisionId}`, {
+    bearer: f.author.bearer,
+  });
   expectStatus(oldExactBeforeRevision, 200);
   expect(oldExactBeforeRevision.value.post.voteCitation).toEqual(originalVote);
 
@@ -224,21 +223,17 @@ test('Ratings and reviews: native vote citations remain immutable through review
   expectStatus(revised, 200);
   const revisedRevisionId = revised.value.post.revisionId as string;
   expect(revised.value.post.voteCitation).toEqual(changedVote);
-  const oldExactAfterRevision = await f.call(
-    'GET',
-    `/v1/posts/${original.postId}/revisions/${original.revisionId}`,
-    { bearer: f.author.bearer },
-  );
-  const newExact = await f.call(
-    'GET',
-    `/v1/posts/${original.postId}/revisions/${revisedRevisionId}`,
-    { bearer: f.author.bearer },
-  );
+  const oldExactAfterRevision = await f.call('GET', `/v1/posts/${original.postId}/revisions/${original.revisionId}`, {
+    bearer: f.author.bearer,
+  });
+  const newExact = await f.call('GET', `/v1/posts/${original.postId}/revisions/${revisedRevisionId}`, {
+    bearer: f.author.bearer,
+  });
   expectStatus(oldExactAfterRevision, 200);
   expectStatus(newExact, 200);
   expect(oldExactAfterRevision.value.post.voteCitation).toEqual(originalVote);
   expect(newExact.value.post.voteCitation).toEqual(changedVote);
-  expect((await storedRevision(f, original.revisionId))).toEqual(originalStored);
+  expect(await storedRevision(f, original.revisionId)).toEqual(originalStored);
   const revisedBytes = Buffer.from(serializeDocument(revisedBody));
   const revisedStored = await storedRevision(f, revisedRevisionId);
   expect(revisedStored.body).toEqual(revisedBytes);
@@ -281,7 +276,7 @@ test('Ratings and reviews: native vote citations remain immutable through review
   expectStatus(conflictRestore, 409);
   expect(conflictRestore.value.code).toBe('conflict');
   expect(await snapshot(f, f.author, originalSubject)).toEqual(beforeConflictRestore);
-  expect((await storedRevision(f, original.revisionId))).toEqual(originalStored);
+  expect(await storedRevision(f, original.revisionId)).toEqual(originalStored);
 
   const replacementDeleteKey = requestKey('replacement-delete');
   expectStatus(
@@ -306,9 +301,15 @@ test('Ratings and reviews: native vote citations remain immutable through review
     voteCitation: changedVote,
     availability: 'available',
   });
-  expect((await f.call('GET', `/v1/posts/${original.postId}/revisions/${original.revisionId}`, { bearer: f.author.bearer })).value.post.voteCitation).toEqual(originalVote);
-  expect((await f.call('GET', `/v1/posts/${original.postId}/revisions/${revisedRevisionId}`, { bearer: f.author.bearer })).value.post.voteCitation).toEqual(changedVote);
-  expect((await storedRevision(f, original.revisionId))).toEqual(originalStored);
+  expect(
+    (await f.call('GET', `/v1/posts/${original.postId}/revisions/${original.revisionId}`, { bearer: f.author.bearer }))
+      .value.post.voteCitation,
+  ).toEqual(originalVote);
+  expect(
+    (await f.call('GET', `/v1/posts/${original.postId}/revisions/${revisedRevisionId}`, { bearer: f.author.bearer }))
+      .value.post.voteCitation,
+  ).toEqual(changedVote);
+  expect(await storedRevision(f, original.revisionId)).toEqual(originalStored);
   const liveSlot = await f.admin.query(
     `SELECT thread_id FROM content.thread
      WHERE route = $1 AND author_account_id = $2 AND board_id = $3 AND review_subject_id = $4
@@ -344,10 +345,14 @@ test('Ratings and reviews: native vote citations remain immutable through review
     204,
   );
   const afterControlRestore = await snapshot(f, f.other, controlSubject);
-  expect(Number(afterControlRestore.position[0]?.position) - Number(beforeControlRestore.position[0]?.position)).toBe(1);
-  expect(afterControlRestore.receipts.filter(
-    (row: { idempotency_key: string }) => row.idempotency_key === controlRestoreKey,
-  )).toHaveLength(1);
+  expect(Number(afterControlRestore.position[0]?.position) - Number(beforeControlRestore.position[0]?.position)).toBe(
+    1,
+  );
+  expect(
+    afterControlRestore.receipts.filter(
+      (row: { idempotency_key: string }) => row.idempotency_key === controlRestoreKey,
+    ),
+  ).toHaveLength(1);
   const controlRestoreEvents = afterControlRestore.outbox.filter(
     (row: { position: string }) => Number(row.position) > Number(beforeControlRestore.position[0]?.position),
   );
@@ -411,8 +416,8 @@ test('Ratings and reviews: native vote citations remain immutable through review
     thread_id: winnerThread.id,
     revision_id: winnerThread.firstPost.revisionId,
   });
-  const raceReceipts = raceAfter.receipts.filter(
-    (row: { idempotency_key: string }) => raceKeys.includes(row.idempotency_key as (typeof raceKeys)[number]),
+  const raceReceipts = raceAfter.receipts.filter((row: { idempotency_key: string }) =>
+    raceKeys.includes(row.idempotency_key as (typeof raceKeys)[number]),
   );
   expect(raceReceipts).toHaveLength(1);
   expect(raceReceipts[0]?.idempotency_key).toBe(raceKeys[winnerIndex]);

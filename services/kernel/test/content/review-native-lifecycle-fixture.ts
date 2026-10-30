@@ -94,12 +94,7 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
       const text = await response.text();
       return { response, text, value: text ? (JSON.parse(text) as Record<string, any>) : {} };
     };
-    const checked = async (
-      method: string,
-      path: string,
-      options: Parameters<typeof call>[2] = {},
-      expected = 201,
-    ) => {
+    const checked = async (method: string, path: string, options: Parameters<typeof call>[2] = {}, expected = 201) => {
       const result = await call(method, path, options);
       if (result.response.status !== expected)
         throw new Error(`${method} ${path}: expected ${expected}, received ${result.response.status} ${result.text}`);
@@ -129,7 +124,9 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
     const subjectId = await subject('Native review lifecycle subject');
     const subjectRead = await call('GET', `/v1/subjects/${subjectId}`);
     if (subjectRead.response.status !== 200)
-      throw new Error(`Native review subject is not publicly readable: ${subjectRead.response.status} ${subjectRead.text}`);
+      throw new Error(
+        `Native review subject is not publicly readable: ${subjectRead.response.status} ${subjectRead.text}`,
+      );
 
     const createdBoard = await checked('POST', '/v1/boards', {
       bearer: author.bearer,
@@ -175,7 +172,9 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
       question.scale?.max !== 20 ||
       question.scale?.displayStep !== 1
     )
-      throw new Error(`Released standard work rating question mismatch: ${questionRead.response.status} ${questionRead.text}`);
+      throw new Error(
+        `Released standard work rating question mismatch: ${questionRead.response.status} ${questionRead.text}`,
+      );
 
     return {
       system,

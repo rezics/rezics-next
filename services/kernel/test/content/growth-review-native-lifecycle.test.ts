@@ -105,14 +105,7 @@ async function growthCounts(
        (SELECT count(*)::integer FROM core.receipt
         WHERE partition_no = $6 AND principal_id = $2) AS receipts,
        (SELECT count(*)::integer FROM core.outbox WHERE partition_no = $6) AS outbox`,
-    [
-      input.actorRoute,
-      input.authorId,
-      input.boardId,
-      input.subjectId,
-      STANDARD_QUESTION_ID,
-      input.actorPartition,
-    ],
+    [input.actorRoute, input.authorId, input.boardId, input.subjectId, STANDARD_QUESTION_ID, input.actorPartition],
   );
   return result.rows[0]!;
 }
@@ -122,10 +115,12 @@ test('Joined review lifecycle retains current authority, one live slot and stric
   const f = fixture;
   const original = await createReview(f, 'Growth review original');
   expect(
-    (await f.call('DELETE', `/v1/posts/${original.postId}`, {
-      bearer: f.author.bearer,
-      key: requestKey('growth-original-delete'),
-    })).response.status,
+    (
+      await f.call('DELETE', `/v1/posts/${original.postId}`, {
+        bearer: f.author.bearer,
+        key: requestKey('growth-original-delete'),
+      })
+    ).response.status,
   ).toBe(204);
   const replacement = await createReview(f, 'Growth review slot replacement');
 
@@ -315,9 +310,7 @@ test('Joined review lifecycle retains current authority, one live slot and stric
   }
   const measuredRelations = [
     ...new Set(
-      report.samples.flatMap((sample) =>
-        sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations)),
-      ),
+      report.samples.flatMap((sample) => sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations))),
     ),
   ].sort();
   assertGrowthAccessPaths(report.name, report.samples, measuredRelations);
