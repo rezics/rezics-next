@@ -2712,6 +2712,35 @@ committed deletion/expiry and current home epoch remain the source owner's autho
 propagate; only actual source ineligibility returns null. The native issuer in this checkout exposes contribution
 references; Context/Zone source authority remains the Semantic owner's dependency.
 
+`history/record-resource-adapter.ts` accepts the agreed input union independently of authority:
+
+```ts
+type ResourceRecordPurgeReference =
+  | Readonly<{kind:'context';contextId:string;deletionGeneration:string}>
+  | Readonly<{kind:'zone';zoneId:string;deletionGeneration:string}>;
+type NativeRecordPurgeReference = RecordPurgeReference | ResourceRecordPurgeReference;
+```
+
+It maps only the original contribution tuple, `{kind:'context',contextId}` or `{kind:'zone',zoneId}` to the
+existing source key. The actual typed subject, Context or Zone ID determines the home via `routeOf`/`partitionOf`.
+The compatible `core.record_history_purge` discriminator defaults existing rows to `contribution`; those rows keep
+non-null subject/candidate/revision and optional document, with no resource ID. Context/Zone rows require a resource
+ID and null subject/candidate/revision/document. The union CHECK rejects mixed or incomplete locators; operational
+fields and the existing primary key are unchanged. Restart validates the stored key and home against that typed
+reference before requesting authority. No source observation or stored locator authorizes a physical effect.
+
+The required native extension belongs solely in `services/kernel/src/semantic/record-purge-authority.ts`:
+`prepareRecordPurgeAuthority(deps: Readonly<{pool: Pool; clock?: () => Date}>, ref: NativeRecordPurgeReference,
+context: Readonly<{deadline: number}>): Promise<RecordPurgeAuthority | null>`, together with
+`RecordPurgeSource.reference: NativeRecordPurgeReference`. Its existing `readRecordPurgeAuthoritySource` and
+`lockRecordPurgeAuthoritySource` must retain the SAME opaque authority, native lifecycle/version/generation,
+original committed deletion, expiry, hold/restore locks and current home epoch checks for each variant.
+Until that native extension is delivered, `prepareNativeRecordPurgeAuthority` delegates contribution references to
+the actual issuer and throws `NativeResourceRecordPurgeUnavailableError` with code
+`record_history_native_resource_reference_unavailable` for Context/Zone, including after restart. It never casts the
+contribution issuer to a resource signature or creates an authority. Native resource preparation remains unavailable;
+the adapter/storage path adds no source inventory seal, receiving closure, account-erasure coverage or completion.
+
 Original source writers enroll with the exact export
 `declareCommandRecordSources(tx: CommandTransaction, sources: readonly RecordHistorySourceReference[]): void`
 from `history/record-source.ts`, before history serialization. The closed reference is

@@ -1,6 +1,5 @@
 import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
 import {
   lockRecordPurgeAuthoritySource,
   readRecordPurgeAuthoritySource,
@@ -8,6 +7,7 @@ import {
   type RecordPurgeSource,
 } from '../semantic/record-purge-authority.ts';
 import { purgeSourceKey } from './record-source-lock.ts';
+import { recordHistoryPurgeLocator } from './record-resource-adapter.ts';
 import { minimizeHistoryReceipt } from './receipt.ts';
 import { minimizeHistoryOutbox } from './outbox.ts';
 import { minimizeRecordHistoryWork } from './durable.ts';
@@ -55,18 +55,27 @@ export async function prepareRecordHistoryPurge(
   // Native source errors remain unavailable. Only native lifecycle ineligibility produces null.
   const source = await readRecordPurgeAuthoritySource(deps, authority, { deadline });
   if (!source) return null;
-  const ref = source.reference;
-  if (!('subjectId' in ref)) throw new Error('record_history_native_resource_reference_unavailable');
-  const partition = partitionOf(routeOf(ref.subjectId)!);
-  const key = purgeSourceKey(source);
+  const locator = recordHistoryPurgeLocator(source.reference);
+  const partition = locator.partition_no;
+  const key = locator.source_key;
   const saved = await runCommand(deps.pool, { partition, deadline, clock: deps.clock }, async (tx) => {
     const current = await lockRecordPurgeAuthoritySource(tx, authority);
     if (!current || !sameSource(current, source)) return noEffect(false);
     await tx.query(
       `INSERT INTO core.record_history_purge
-       (source_key,deletion_generation,partition_no,subject_id,candidate_id,revision,document_id)
-       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-      [key, ref.deletionGeneration, partition, ref.subjectId, ref.candidateId, ref.revision, ref.documentId],
+       (source_key,deletion_generation,partition_no,reference_kind,resource_id,subject_id,candidate_id,revision,document_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
+      [
+        key,
+        locator.deletion_generation,
+        partition,
+        locator.reference_kind,
+        locator.resource_id,
+        locator.subject_id,
+        locator.candidate_id,
+        locator.revision,
+        locator.document_id,
+      ],
     );
     return noEffect(true);
   });

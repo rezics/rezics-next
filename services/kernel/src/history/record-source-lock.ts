@@ -6,21 +6,12 @@ import {
 } from '../semantic/record-purge-authority.ts';
 import type { HistoryArtifactType } from './contracts.ts';
 import { recordHistorySourceKey } from './record-source.ts';
+import { recordHistoryPurgeSourceReference } from './record-resource-adapter.ts';
 
 export type RecordHistoryLocalJob = Readonly<{ partition_no: number; authority: RecordPurgeAuthority }>;
 
 export function purgeSourceKey(source: RecordPurgeSource): string {
-  // The current native issuer supports contribution references. Narrow before accessing its tuple;
-  // resource variants must use their native resource key when the source owner delivers them.
-  const ref = source.reference;
-  if (!('subjectId' in ref)) throw new Error('record_history_native_resource_reference_unavailable');
-  return recordHistorySourceKey({
-    kind: 'contribution',
-    subjectId: ref.subjectId,
-    candidateId: ref.candidateId,
-    revision: ref.revision,
-    documentId: ref.documentId,
-  });
+  return recordHistorySourceKey(recordHistoryPurgeSourceReference(source.reference));
 }
 
 /** Exact source and association locks remain held through physical effect and local progress. */

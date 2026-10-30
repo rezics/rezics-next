@@ -768,8 +768,16 @@ CREATE TABLE core.record_history_purge (
   source_key text COLLATE "C" NOT NULL,
   deletion_generation uuid NOT NULL,
   partition_no integer NOT NULL REFERENCES core.partition(partition_no),
-  subject_id uuid NOT NULL, candidate_id uuid NOT NULL, revision integer NOT NULL CHECK(revision>0),
+  reference_kind text NOT NULL DEFAULT 'contribution' CHECK(reference_kind IN ('contribution','context','zone')),
+  resource_id uuid,
+  subject_id uuid, candidate_id uuid, revision integer CHECK(revision>0),
   document_id uuid,
+  CONSTRAINT record_history_purge_reference CHECK(
+    (reference_kind='contribution' AND resource_id IS NULL
+      AND subject_id IS NOT NULL AND candidate_id IS NOT NULL AND revision IS NOT NULL AND revision>0)
+    OR (reference_kind IN ('context','zone') AND resource_id IS NOT NULL
+      AND subject_id IS NULL AND candidate_id IS NULL AND revision IS NULL AND document_id IS NULL)
+  ),
   gap text NOT NULL DEFAULT 'record-original-producer-coverage-unsealed' CHECK(octet_length(gap)<=256),
   next_run timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(source_key,deletion_generation)
