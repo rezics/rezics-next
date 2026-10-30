@@ -51,7 +51,7 @@ test('admitted starts retain capacity throughout delayed preparation until runni
     expect(capacityAvailable(store, directory)).toBe(false);
     // The remaining starts stay queued; their unresolved waits are cleared by dropping opt-in capacity.
     writeFileSync(join(directory, 'capacity.json'), '{}');
-    await Promise.all(starts.slice(0, 2));
+    await Promise.all(starts);
   } finally {
     db.close();
     rmSync(directory, { recursive: true, force: true });

@@ -816,15 +816,23 @@ export class WorkerJob implements GateOutcomeSink {
         kind: 'instruction' as const,
         summary: `Held task ${task.id} has cancelled dependencies ${cancelled.join(', ')}; decide whether they are still needed.`,
       };
-      store.write({ taskId: task.id, attempt: task.currentAttempt }, () => {
-        const alreadyReported = store.events(task.id).some((record) => record.kind === 'cancelled-dependency-reported');
-        if (alreadyReported) return;
-        store.event({ taskId: task.id, attempt: task.currentAttempt }, 'cancelled-dependency-reported', {
-          cancelled,
-          event,
+      try {
+        store.write({ taskId: task.id, attempt: task.currentAttempt }, () => {
+          const alreadyReported = store
+            .events(task.id)
+            .some((record) => record.kind === 'cancelled-dependency-reported');
+          if (alreadyReported) return;
+          store.event({ taskId: task.id, attempt: task.currentAttempt }, 'cancelled-dependency-reported', {
+            cancelled,
+            event,
+          });
+          this.inbox.deliver(event);
         });
-        this.inbox.deliver(event);
-      });
+      } catch (error) {
+        // A task held after a stop keeps its stopped attempt current, which the attempt fence refuses; skipping its
+        // notice must not fail every command and host sweep (all of them stopped on one such task on 2026-10-30).
+        if (!(error instanceof StaleAttemptError)) throw error;
+      }
     }
   }
   async recoverOrphans(options: { adoptRunning?: boolean } = {}): Promise<void> {
@@ -1433,7 +1441,18 @@ export class WorkerJob implements GateOutcomeSink {
           });
         });
         const evidencePath = evidenceBundle(task, store.attempt(outcome));
-        if (attempt.escalation === 'rebase-conflict') {
+        // The same landing conflict three times in recent attempts is not going to resolve by retrying: a resolution
+        // attempt that found no rebase in progress ended as an environment failure in between, so the previous-attempt
+        // check alone let one task loop 385 times (2026-10-29/30).
+        const fingerprint = failure?.fingerprint;
+        const repeatedConflict =
+          fingerprint !== undefined &&
+          store
+            .attempts(task.id)
+            .filter((a) => a.attempt < outcome.attempt)
+            .slice(-6)
+            .filter((a) => a.failure?.fingerprint === fingerprint).length >= 2;
+        if (attempt.escalation === 'rebase-conflict' || repeatedConflict) {
           record.escalation = 'spec-conflict';
           store.updateAttempt(outcome, (a) => {
             a.escalation = 'spec-conflict';

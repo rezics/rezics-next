@@ -4,6 +4,25 @@ import { join } from 'node:path';
 import { git } from './merge.ts';
 import { harness, integrationHarness, markdown } from './test-support.ts';
 
+function scopedBun(root: string, script: string): string {
+  return `#!/bin/sh
+case "$(pwd -P)/" in
+  ${JSON.stringify(`${root}/`)}*) ;;
+  *) exec ${JSON.stringify(process.execPath)} "$@" ;;
+esac
+${script}
+`;
+}
+
+function prependPath(directory: string): () => void {
+  const original = process.env.PATH;
+  process.env.PATH = [directory, original].filter(Boolean).join(':');
+  return () => {
+    if (original === undefined) delete process.env.PATH;
+    else process.env.PATH = original;
+  };
+}
+
 function briefFile(h: ReturnType<typeof harness>, paths: string[], after: string[] = []): string {
   const file = join(h.settings.stateDirectory, `hot-${crypto.randomUUID()}.md`);
   writeFileSync(
@@ -20,17 +39,26 @@ test('a bun.lock-only rebase conflict on retry keeps integration, installs, stag
   const h = integrationHarness();
   const bin = join(h.settings.stateDirectory, 'fake-bin');
   const installLog = join(h.settings.stateDirectory, 'bun-install.log');
-  const realBun = Bun.which('bun')!;
   try {
     h.ensureDev();
     mkdirSync(bin, { recursive: true });
     const shim = join(bin, 'bun');
     writeFileSync(
       shim,
-      `#!/bin/sh\nif [ "$1" = install ]; then\n  printf '%s\\n' "$*" >> ${JSON.stringify(installLog)}\n  printf 'installed from integration\\n' > bun.lock\nelse\n  exec ${JSON.stringify(realBun)} "$@"\nfi\n`,
+      scopedBun(
+        h.root,
+        `if [ "$1" = install ]; then
+  if [ "$#" = 1 ]; then
+    printf '%s\\n' "$*" >> ${JSON.stringify(installLog)}
+    printf 'installed from integration\\n' > bun.lock
+  fi
+else
+  exec ${JSON.stringify(process.execPath)} "$@"
+fi`,
+      ),
     );
     chmodSync(shim, 0o755);
-    const originalPath = process.env.PATH ?? '';
+    let restorePath: (() => void) | undefined;
     try {
       const task = h.dispatch('bun.lock');
       writeFileSync(
@@ -39,12 +67,12 @@ test('a bun.lock-only rebase conflict on retry keeps integration, installs, stag
       );
       await h.start(task);
       h.advanceDev('bun.lock', 'integration lock\n');
-      process.env.PATH = `${bin}:${originalPath}`;
       const current = h.store.task(task.id);
       h.store.updateTask({ taskId: task.id, attempt: current.currentAttempt }, (current) => {
         current.state = 'stopped';
       });
 
+      restorePath = prependPath(bin);
       const retried = await h.tasks.retry(task.id);
 
       expect(retried.attempt.attempt).toBe(current.currentAttempt + 1);
@@ -52,7 +80,7 @@ test('a bun.lock-only rebase conflict on retry keeps integration, installs, stag
       expect((await Bun.file(installLog).text()).trim().split('\n')).toEqual(['install']);
       expect(git(task.worktree, 'diff', '--name-only', '--diff-filter=U')).toBe('');
     } finally {
-      process.env.PATH = originalPath;
+      restorePath?.();
     }
   } finally {
     h.dispose();
@@ -69,15 +97,25 @@ test('a bun.lock-only rebase conflict in the train keeps integration, installs, 
     const shim = join(bin, 'bun');
     writeFileSync(
       shim,
-      `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(installLog)}\nprintf 'installed from integration\\n' > bun.lock\n`,
+      scopedBun(
+        h.root,
+        `if [ "$1" = install ]; then
+  if [ "$#" = 1 ]; then
+    printf '%s\\n' "$*" >> ${JSON.stringify(installLog)}
+    printf 'installed from integration\\n' > bun.lock
+  fi
+else
+  exec ${JSON.stringify(process.execPath)} "$@"
+fi`,
+      ),
     );
     chmodSync(shim, 0o755);
-    const originalPath = process.env.PATH ?? '';
+    let restorePath: (() => void) | undefined;
     try {
       const task = h.dispatch('bun.lock');
       await h.start(task);
       h.advanceDev('bun.lock', 'integration lock\n');
-      process.env.PATH = `${bin}:${originalPath}`;
+      restorePath = prependPath(bin);
 
       await h.train();
 
@@ -86,7 +124,7 @@ test('a bun.lock-only rebase conflict in the train keeps integration, installs, 
       expect(git(h.root, 'show', 'dev:bun.lock')).toBe('installed from integration');
       expect((await Bun.file(installLog).text()).trim()).toBe('install');
     } finally {
-      process.env.PATH = originalPath;
+      restorePath?.();
     }
   } finally {
     h.dispose();
@@ -127,8 +165,8 @@ test('a bun.lock conflict mixed with another file stays with the worker', async 
 test('a rebase conflict confined to bun.lock is resolved by taking the integration side, running bun install, staging the lockfile and continuing, at retry and in the train', async () => {
   for (const surface of ['retry', 'train'] as const) {
     const h = integrationHarness();
-    const originalPath = process.env.PATH ?? '';
     let replacement: Awaited<ReturnType<typeof h.tasks.retry>> | undefined;
+    let restorePath: (() => void) | undefined;
     try {
       h.ensureDev();
       const task = h.dispatch('bun.lock');
@@ -140,9 +178,11 @@ test('a rebase conflict confined to bun.lock is resolved by taking the integrati
       // Fail unless checkout --ours selected the integration side before install.
       writeFileSync(
         join(bin, 'bun'),
-        `#!/bin/sh
+        scopedBun(
+          h.root,
+          `
 if [ "$1" = install ]; then
-  test "$#" = 1 || exit 81
+  if [ "$#" != 1 ]; then exit 0; fi
   test "$(cat bun.lock)" = 'integration lock' || exit 82
   printf 'regenerated lock\\n' > bun.lock
   printf 'install\\n' >> ${JSON.stringify(installed)}
@@ -150,9 +190,10 @@ else
   exec ${JSON.stringify(process.execPath)} "$@"
 fi
 `,
+        ),
       );
       chmodSync(join(bin, 'bun'), 0o755);
-      process.env.PATH = `${bin}:${originalPath}`;
+      restorePath = prependPath(bin);
       if (surface === 'retry') {
         // The replacement worker keeps the resolved lockfile intact.
         writeFileSync(
@@ -192,7 +233,7 @@ fi
       expect(readFileSync(installed, 'utf8')).toBe('install\n');
     } finally {
       if (replacement) await replacement.exited;
-      process.env.PATH = originalPath;
+      restorePath?.();
       h.dispose();
     }
   }
@@ -200,8 +241,8 @@ fi
 
 test('a rebase that conflicts in bun.lock and in other files still stops at the other files', async () => {
   const h = integrationHarness();
-  const originalPath = process.env.PATH ?? '';
   let replacement: Awaited<ReturnType<typeof h.tasks.retry>> | undefined;
+  let restorePath: (() => void) | undefined;
   try {
     h.ensureDev();
     const task = h.tasks.dispatch(briefFile(h, ['bun.lock', 'ordinary.txt']));
@@ -216,18 +257,24 @@ test('a rebase that conflicts in bun.lock and in other files still stops at the 
     mkdirSync(bin);
     writeFileSync(
       join(bin, 'bun'),
-      `#!/bin/sh
+      scopedBun(
+        h.root,
+        `
 if [ "$1" = install ]; then
-  touch ${JSON.stringify(installed)}
-  exit 83
+  if [ "$#" = 1 ]; then
+    touch ${JSON.stringify(installed)}
+    exit 83
+  fi
+  exit 0
 fi
 exec ${JSON.stringify(process.execPath)} "$@"
 `,
+      ),
     );
     chmodSync(join(bin, 'bun'), 0o755);
     // The replacement worker exits without editing the conflicts it was handed.
     writeFileSync(h.settings.pools[0]!.command, '#!/bin/sh\nexit 0\n');
-    process.env.PATH = `${bin}:${originalPath}`;
+    restorePath = prependPath(bin);
     replacement = await h.tasks.retry(task.id);
     await replacement.exited;
     expect(git(task.worktree, 'diff', '--name-only', '--diff-filter=U').split('\n').sort()).toEqual([
@@ -238,7 +285,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
     expect(git(h.root, 'show', 'dev:ordinary.txt')).toBe('integration text');
   } finally {
     if (replacement) await replacement.exited;
-    process.env.PATH = originalPath;
+    restorePath?.();
     h.dispose();
   }
 }, 30_000);
