@@ -1502,6 +1502,9 @@ Native request rows have typed subject/human/operator/client locators. A native
 workflow result records its terminal marker; unfinished release consumers retain
 their rows. Recovery establishment witnesses remain while a surviving subject's
 native verifier can still use them. Their expiry is not a shared-copy handoff.
+An unfinished client reduction retains its progress witness; only its real native
+finish marks its request terminal. A fenced, interrupted reduction without that
+proof keeps native erasure pending rather than discarding its consumer's witness.
 
 ### Remaining producer and composition gaps
 

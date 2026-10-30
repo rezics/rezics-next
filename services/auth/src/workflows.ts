@@ -957,6 +957,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     );
     const finishReduction = step('finish-client-reduction', async (input: ReductionInput, operationId: string) => {
       await auth.internal.finishClientReduction({ ...input, operationId });
+      await database.query(
+        'UPDATE auth_workflow_request SET terminal_at=COALESCE(terminal_at,clock_timestamp()) WHERE workflow_id=$1',
+        [operationId],
+      );
     });
     clientReduction = DBOS.registerWorkflow(
       async (input: ReductionInput): Promise<ReductionResult> => {

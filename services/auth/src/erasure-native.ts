@@ -221,6 +221,13 @@ async function drainStore(connection: PoolClient, store: Store, role: string, ow
       );
       if (held.rowCount) return { after, keys, blocked: 'native-request' };
     }
+    if (store.table === 'auth_client_reduction_progress') {
+      const held = await connection.query(
+        'SELECT 1 FROM auth_client_reduction_progress WHERE operation_id=$1 AND NOT completed',
+        [key],
+      );
+      if (held.rowCount) return { after, keys, blocked: 'native-release' };
+    }
     // A surviving subject's live recovery release still owns its witness. Expiry
     // makes this native verifier unusable; no shared-history completion is inferred.
     if (store.table === 'auth_recovery_establishment') {
