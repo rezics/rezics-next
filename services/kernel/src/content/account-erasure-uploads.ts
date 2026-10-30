@@ -129,7 +129,7 @@ export function createAccountUploadIndexEffect(pool: Pool): Effect {
       const data = event.data as Record<string, unknown>;
       const id = (data.mediaId ?? data.id) as string;
       const accountId = (data.actorId ?? data.authorId) as string;
-      const idRoute = route(id),
+      const _idRoute = route(id),
         accountRoute = route(accountId);
       await runCommand(pool, { partition: partitionOf(accountRoute) }, async (tx) => {
         await add.run(tx, {
