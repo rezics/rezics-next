@@ -107,12 +107,12 @@ function present(collection: RawCollection & Partial<CollectionPreview>): MineCo
     ...collectionPresentationOf(collection),
     id: collection.id,
     title: collection.title ?? null,
-    ...(membershipKind === 'curated' || membershipKind === 'dynamic' ? { membershipKind } : {}),
+    ...(membershipKind === 'dynamic' ? { membershipKind } : {}),
     ...(typeof builtinKind === 'string' ? { builtinKind } : {}),
     ...(builtinLabels ? { builtinLabels } : {}),
     visibility: collection.visibility,
-    memberCount: collection.memberCount,
-    updatedAt: collection.updatedAt,
+    ...('memberCount' in collection ? { memberCount: collection.memberCount } : {}),
+    ...('updatedAt' in collection ? { updatedAt: collection.updatedAt } : {}),
     preview: previewOf(collection),
     curator: collection.curator
       ? { handle: collection.curator.handle, displayName: collection.curator.displayName }

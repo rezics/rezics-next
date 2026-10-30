@@ -186,12 +186,6 @@ test('a denied new proposal does not suppress or reconstruct the independently a
   const fixture = authoredFixture('denied');
   const initial = await fixture.transport.read();
   if (!initial.ok || !initial.body?.ok) throw new Error('Expected a public selected document');
-  // Readback must follow current native disclosure and body, not a previous response or the rejected draft.
-  fixture.documents.set(initial.body.document.id, {
-    ...initial.body.document,
-    availability: 'available',
-    body: fromPlainText('The currently authorized selected text.'),
-  });
   fixture.publicRead.subject.sourceRecords = [];
   expect(
     await fixture.transport.propose({
@@ -218,10 +212,23 @@ test('a denied new proposal does not suppress or reconstruct the independently a
       confirm: fixture.confirm,
     }),
   );
-  expect(html).toContain('The currently authorized selected text.');
+  expect(html).toContain('An aviator meets a young traveller in the desert.');
   expect(html).not.toContain('A rejected private draft.');
-  expect(html).not.toContain('An aviator meets a young traveller in the desert.');
   expect(fixture.calls.filter((call) => call.path.startsWith('/v1/documents/')).at(-1)?.authorization).toBeNull();
+  // Losing current document disclosure never falls back to the previous body or the rejected draft.
+  fixture.documents.delete(initial.body.document.id);
+  const hidden = await fixture.transport.read();
+  expect(hidden.ok && hidden.body?.ok).toBe(false);
+  const hiddenHtml = renderToStaticMarkup(
+    createElement(AuthoredField, {
+      initial: hidden,
+      locale: 'en',
+      transport: fixture.transport,
+      confirm: fixture.confirm,
+    }),
+  );
+  expect(hiddenHtml).not.toContain('An aviator meets a young traveller in the desert.');
+  expect(hiddenHtml).not.toContain('A rejected private draft.');
 });
 
 test('unsupported metadata, denied reads and an unbound production transport never supply an authored form or body', async () => {
