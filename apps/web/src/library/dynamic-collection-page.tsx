@@ -1,12 +1,9 @@
-import { CoverGrid, CoverCard } from '@rezics/ui/cover-card';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { coverSrc } from '../media/cover-src';
 import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
-import { rowRatio } from './subject-row';
 import { displayLibraryTitle } from './title';
 import type { DynamicCollectionPage as DynamicCollectionPageData } from './dynamic-collection';
 import type { DynamicMembersResult } from './collection-load';
@@ -19,6 +16,8 @@ import { Exposure, useOperation } from '../kernel/exposure';
 import { useSession } from '../session/query';
 import { setCollectionFollow } from './collection-edit';
 import { csrfHeaders } from '../threads/composer';
+import { CollectionSubjectList } from './collection-editor';
+import { AccountRef } from './account-ref';
 
 export function DynamicCollectionPage({
   page,
@@ -72,7 +71,6 @@ export function DynamicCollectionPage({
     );
     return () => clearTimeout(timer);
   }, [current, readMembers, retries, retrying]);
-  const ratio = rowRatio(current.members.map((member) => member.subject));
   const empty =
     current.builtinKind === 'everything'
       ? m.library_dynamic_empty_everything()
@@ -98,19 +96,19 @@ export function DynamicCollectionPage({
   }
   const locale = getLocale();
   return (
-    <div className="min-w-0 max-w-7xl space-y-6 text-foreground">
+    <div className="w-full min-w-0 space-y-6 text-foreground">
       <LibraryNavigation
         current={{ collectionId: current.id }}
         pins={pins}
         collections={collections}
-        activeCollection={{ id: current.id, title: current.title }}
       />
-      <article className="min-w-0 max-w-4xl space-y-8 text-foreground">
+      <article className="w-full min-w-0 space-y-6 text-foreground">
         <header>
           <div className="flex items-start justify-between gap-4">
             <PageHeading>{current.title}</PageHeading>
             <PinControl collectionId={current.id} pins={pins} mode="collection" />
           </div>
+          {current.curator ? <div className="mt-3"><AccountRef account={current.curator} avatar /></div> : null}
           {current.description ? <p className="mt-3 whitespace-pre-wrap">{current.description}</p> : null}
           {canFollow && following !== null ? (
             <Exposure operation="follow.put">
@@ -154,30 +152,15 @@ export function DynamicCollectionPage({
         ) : current.unavailable ? (
           <p role="alert">{m.library_dynamic_unavailable()}</p>
         ) : current.members.length ? (
-          <CoverGrid ratio={ratio}>
-            {current.members.map(({ subject }, index) => {
-              const localizedTitle = subject ? displayLibraryTitle(subject.label, locale) : undefined;
-              const title = localizedTitle?.text ?? m.library_subject_unavailable();
-              const href = subject ? subjectHref({ id: subject.id, label: title }, locale) : null;
-              return (
-                <CoverCard
-                  key={subject?.id ?? index}
-                  {...(href ? { href: href.href } : {})}
-                  title={title}
-                  {...(localizedTitle?.lang ? { titleLang: localizedTitle.lang } : {})}
-                  cover={{
-                    subject: {
-                      id: subject?.id ?? 'unavailable',
-                      title,
-                      types: subject?.types ?? [],
-                    },
-                    cover: subject?.cover ?? null,
-                    src: coverSrc,
-                  }}
-                />
-              );
-            })}
-          </CoverGrid>
+          <CollectionSubjectList
+            subjects={current.members.map((member) => member.subject)}
+            onCopy={(subject) => {
+              const title = displayLibraryTitle(subject.label, locale).text;
+              void navigator.clipboard
+                .writeText(`${location.origin}${subjectHref({ id: subject.id, label: title }, locale).href}`)
+                .catch(() => undefined);
+            }}
+          />
         ) : null}
         {current.preparing && retries >= 3 ? (
           <div>

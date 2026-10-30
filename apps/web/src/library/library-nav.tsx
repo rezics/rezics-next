@@ -32,7 +32,6 @@ function destinations(
   pins: LibraryPinsRead,
   collections: readonly BuiltinCollectionRecord[],
   locale: string,
-  activeCollection?: { id: string; title: string },
 ): Entry[] {
   const builtins = builtinCollectionDestinations(collections, locale);
   const builtinIds = new Set(builtins.map((item) => item.id));
@@ -42,6 +41,12 @@ function destinations(
       label: m.library_nav_tracked_entries(),
       href: entryHref(locale, '/library'),
       current: isCurrent(current, 'tracked'),
+    },
+    {
+      id: 'continue',
+      label: m.library_continue(),
+      href: entryHref(locale, '/library/continue'),
+      current: false,
     },
     ...builtins.map((item) => ({
       id: item.id,
@@ -53,6 +58,7 @@ function destinations(
   if (pins.state === 'loaded') {
     for (const pin of pins.pins.slice(0, 8)) {
       if (builtinIds.has(pin.collectionId)) continue;
+      if (typeof current === 'object' && current.collectionId === pin.collectionId) continue;
       const available = pin.target !== null;
       const title = pin.target
         ? (pin.target.title ??
@@ -75,14 +81,6 @@ function destinations(
         pin: { collectionId: pin.collectionId, available },
       });
     }
-  }
-  if (activeCollection && !output.some((entry) => entry.id === activeCollection.id)) {
-    output.push({
-      id: activeCollection.id,
-      label: activeCollection.title,
-      href: entryHref(locale, `/collections/${encodeURIComponent(activeCollection.id)}`),
-      current: isCurrent(current, activeCollection.id),
-    });
   }
   output.push({
     id: 'collections',
@@ -123,16 +121,14 @@ export function LibraryNavigation({
   current,
   pins,
   collections,
-  activeCollection,
   locale = getLocale(),
 }: {
   current: LibraryDestination;
   pins: LibraryPinsRead;
   collections: readonly BuiltinCollectionRecord[];
-  activeCollection?: { id: string; title: string };
   locale?: string;
 }) {
-  const entries = destinations(current, pins, collections, locale, activeCollection);
+  const entries = destinations(current, pins, collections, locale);
   const pinned = entries.filter((entry) => entry.pin !== undefined);
   const visiblePins = pinned.slice(0, 3);
   const selected = entries.find((entry) => entry.current) ?? entries[0]!;

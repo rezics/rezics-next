@@ -922,5 +922,14 @@
   "header_search_loading": "검색 제안 불러오는 중…",
   "header_search_remove_scope": "{scope} 검색 범위 해제",
   "header_search_scope_unavailable": "이 범위에서는 검색할 수 없습니다. 범위를 해제하면 REZICS를 검색할 수 있습니다.",
-  "header_search_suggestions": "검색 제안"
+  "header_search_suggestions": "검색 제안",
+  "library_collection_open": "열기",
+  "library_collection_preview_unavailable": "미리보기를 사용할 수 없습니다",
+  "library_collection_selection_count": "{count}개 선택됨",
+  "library_collection_move_to": "선택 항목을 이동할 컬렉션",
+  "library_collection_choose_target": "컬렉션 선택",
+  "library_collection_move_selected": "선택한 항목은 저장할 때 이동합니다.",
+  "library_collection_save_pending": "저장 중…",
+  "library_collection_save_partial": "다른 변경이 실패하기 전에 {count}개 변경을 저장했습니다. 컬렉션을 확인하려면 다시 불러오세요.",
+  "library_collection_cover_unavailable": "컬렉션 커버 선택은 아직 지원되지 않습니다."
 }

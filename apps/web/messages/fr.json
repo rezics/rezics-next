@@ -922,5 +922,14 @@
   "header_search_loading": "Chargement des suggestions…",
   "header_search_remove_scope": "Retirer le périmètre {scope}",
   "header_search_scope_unavailable": "La recherche est indisponible dans ce périmètre. Retirez-le pour rechercher dans REZICS.",
-  "header_search_suggestions": "Suggestions de recherche"
+  "header_search_suggestions": "Suggestions de recherche",
+  "library_collection_open": "Ouvrir",
+  "library_collection_preview_unavailable": "Aperçu indisponible",
+  "library_collection_selection_count": "{count} sélectionnés",
+  "library_collection_move_to": "Déplacer la sélection vers",
+  "library_collection_choose_target": "Choisir une collection",
+  "library_collection_move_selected": "Les éléments sélectionnés seront déplacés à l’enregistrement.",
+  "library_collection_save_pending": "Enregistrement…",
+  "library_collection_save_partial": "{count} modifications ont été enregistrées avant l’échec d’une autre. Rechargez la collection pour la vérifier.",
+  "library_collection_cover_unavailable": "Le choix d’une couverture de collection n’est pas encore pris en charge."
 }

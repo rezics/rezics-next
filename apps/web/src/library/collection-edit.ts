@@ -4,6 +4,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import {
+  addCollectionMemberRecord,
   createCollectionRecord,
   deleteCollectionRecord,
   followCollectionRecord,
@@ -64,6 +65,19 @@ function validateUpdate(input: unknown) {
     title: text(value, 'title'),
     description: text(value, 'description'),
     visibility: text(value, 'visibility'),
+    idempotencyKey: text(value, 'idempotencyKey'),
+  };
+}
+
+function validateAddMember(input: unknown) {
+  const value = record(input);
+  const note = value.note;
+  if (note !== null && note !== undefined && (typeof note !== 'string' || note.length > 20_000))
+    throw new Error('Invalid collection input');
+  return {
+    collectionId: identifier(value, 'collectionId'),
+    subjectId: identifier(value, 'subjectId'),
+    note: (typeof note === 'string' ? note : null) as string | null,
     idempotencyKey: text(value, 'idempotencyKey'),
   };
 }
@@ -139,6 +153,13 @@ export const updateCollection = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<CollectionWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return updateCollectionRecord(kernelClient(), getRequest(), serverEnv(), data);
+  });
+
+export const addCollectionMember = createServerFn({ method: 'POST' })
+  .validator(validateAddMember)
+  .handler(async ({ data }): Promise<CollectionWriteResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return addCollectionMemberRecord(kernelClient(), getRequest(), serverEnv(), data);
   });
 
 export const deleteCollection = createServerFn({ method: 'POST' })

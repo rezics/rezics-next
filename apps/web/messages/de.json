@@ -922,5 +922,14 @@
   "header_search_loading": "Vorschläge werden geladen…",
   "header_search_remove_scope": "Suchbereich {scope} entfernen",
   "header_search_scope_unavailable": "In diesem Bereich ist die Suche nicht verfügbar. Entferne den Bereich, um REZICS zu durchsuchen.",
-  "header_search_suggestions": "Suchvorschläge"
+  "header_search_suggestions": "Suchvorschläge",
+  "library_collection_open": "Öffnen",
+  "library_collection_preview_unavailable": "Vorschau nicht verfügbar",
+  "library_collection_selection_count": "{count} ausgewählt",
+  "library_collection_move_to": "Auswahl verschieben nach",
+  "library_collection_choose_target": "Sammlung auswählen",
+  "library_collection_move_selected": "Ausgewählte Einträge werden beim Speichern verschoben.",
+  "library_collection_save_pending": "Wird gespeichert…",
+  "library_collection_save_partial": "{count} Änderungen wurden gespeichert, bevor eine weitere Änderung fehlgeschlagen ist. Lade die Sammlung neu, um sie zu prüfen.",
+  "library_collection_cover_unavailable": "Die Auswahl eines Sammlungstitelbilds wird noch nicht unterstützt."
 }

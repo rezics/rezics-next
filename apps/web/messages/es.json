@@ -922,5 +922,14 @@
   "header_search_loading": "Cargando sugerencias…",
   "header_search_remove_scope": "Quitar el ámbito {scope}",
   "header_search_scope_unavailable": "La búsqueda no está disponible en este ámbito. Quítalo para buscar en REZICS.",
-  "header_search_suggestions": "Sugerencias de búsqueda"
+  "header_search_suggestions": "Sugerencias de búsqueda",
+  "library_collection_open": "Abrir",
+  "library_collection_preview_unavailable": "Vista previa no disponible",
+  "library_collection_selection_count": "{count} seleccionados",
+  "library_collection_move_to": "Mover la selección a",
+  "library_collection_choose_target": "Elegir una colección",
+  "library_collection_move_selected": "Los elementos seleccionados se moverán al guardar.",
+  "library_collection_save_pending": "Guardando…",
+  "library_collection_save_partial": "Se guardaron {count} cambios antes de que fallara otro. Vuelve a cargar la colección para revisarla.",
+  "library_collection_cover_unavailable": "Aún no se puede elegir una portada para la colección."
 }

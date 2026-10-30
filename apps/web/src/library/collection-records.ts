@@ -81,6 +81,11 @@ function createdId(data: unknown): string {
   return data.collection.id;
 }
 
+function createdMemberId(data: unknown): string {
+  if (!isRecord(data) || !isRecord(data.member) || typeof data.member.id !== 'string') return '';
+  return data.member.id;
+}
+
 export async function createCollectionRecord(
   client: KernelClient,
   request: Request,
@@ -145,6 +150,31 @@ export async function updateCollectionRecord(
       { headers: kernelHeaders(session.authorization, input.idempotencyKey) },
     );
     return fromKernel(result, input.collectionId);
+  } catch (error) {
+    return refused(error);
+  }
+}
+
+export async function addCollectionMemberRecord(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { collectionId: string; subjectId: string; note: string | null; idempotencyKey: string },
+): Promise<CollectionWriteResult> {
+  if (!input.collectionId || !input.subjectId || !uuid.test(input.idempotencyKey)) {
+    return { ok: false, reason: 'invalid' };
+  }
+  if (input.note !== null && (typeof input.note !== 'string' || input.note.length > 20_000)) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const session = await writeSession(request, sessionEnv);
+  if (!asSession(session)) return session;
+  try {
+    const result = await client.collections({ collectionId: input.collectionId }).members.post(
+      { subjectId: input.subjectId, ...(input.note === null ? {} : { note: input.note }) },
+      { headers: kernelHeaders(session.authorization, input.idempotencyKey) as never },
+    );
+    return fromKernel(result, createdMemberId(result.data));
   } catch (error) {
     return refused(error);
   }

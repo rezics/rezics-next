@@ -923,5 +923,14 @@
   "header_search_loading": "正在加载建议…",
   "header_search_remove_scope": "移除 {scope} 范围",
   "header_search_scope_unavailable": "此范围内暂不支持搜索。移除范围后可搜索 REZICS。",
-  "header_search_suggestions": "搜索建议"
+  "header_search_suggestions": "搜索建议",
+  "library_collection_open": "打开",
+  "library_collection_preview_unavailable": "暂时无法预览",
+  "library_collection_selection_count": "已选择 {count} 项",
+  "library_collection_move_to": "将所选条目移至",
+  "library_collection_choose_target": "选择收藏集",
+  "library_collection_move_selected": "所选条目将在保存时移动。",
+  "library_collection_save_pending": "正在保存…",
+  "library_collection_save_partial": "其他更改失败前已保存 {count} 项更改。请重新加载以检查收藏集。",
+  "library_collection_cover_unavailable": "目前尚不支持选择收藏集封面。"
 }

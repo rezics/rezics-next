@@ -923,5 +923,14 @@
   "header_search_loading": "Loading suggestions…",
   "header_search_remove_scope": "Remove {scope} scope",
   "header_search_scope_unavailable": "Search is not available in this scope. Remove the scope to search REZICS.",
-  "header_search_suggestions": "Suggestions"
+  "header_search_suggestions": "Suggestions",
+  "library_collection_open": "Open",
+  "library_collection_preview_unavailable": "Preview unavailable",
+  "library_collection_selection_count": "{count} selected",
+  "library_collection_move_to": "Move selected to",
+  "library_collection_choose_target": "Choose a collection",
+  "library_collection_move_selected": "Selected members move when you save.",
+  "library_collection_save_pending": "Saving…",
+  "library_collection_save_partial": "{count} changes were saved before another change failed. Reload to review the collection.",
+  "library_collection_cover_unavailable": "Choosing a Collection cover is not supported yet."
 }
