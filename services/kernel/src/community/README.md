@@ -137,6 +137,36 @@ It does not enumerate grants, boards or members. `test/community/growth-ban.test
 covers both identities as B grows through 256, 1024 and 4096 records, holding statements
 and returned rows constant.
 
+## Realm ownership continuity
+
+Access owns explicit owner roles, the last-holder leave guard, candidate ordering and erasure succession.
+Content does not infer ownership from membership, Global grants or unavailable candidate evidence. Succession is
+Realm-only. A successor's native grant and the Realm resource's returned owned-or-orphaned decision must commit
+in the same Realm-home transaction. The account-erasure participant remains the sole orchestrator and ACK writer;
+a Content transaction result alone never acknowledges account erasure.
+
+The existing Realm identity stores `ownership_state`, `orphaned_at` and `claim_eligible_at`, independently of its
+classification Context and Global subject identity. Orphaning keeps ordinary public/authorized reads and discussion
+participation. `RealmView` exposes `ownershipState`, `orphanedAt`, `claimEligibleAt` and `governanceReadOnly`.
+`realmGovernanceAuthorization` consumes existing Access admission and locks the current native Realm/head before
+receipt replay or mutation. Orphaned metadata, board scheme, vote configuration, publication and board creation
+are read-only even for an independently granted or Global actor. It never grants an action or changes a role.
+The locked identity serializes governance against the actual succession transaction and preserves removal's
+separate lifecycle check.
+
+`requestRealmClaim` / `POST /v1/realms/{realmId}/claimRequests` uses ordinary `realm:participate` admission and an
+independent current `realm:read` check. It accepts only an orphan whose original `orphaned_at + 720 hours` has
+elapsed at authoritative command time. The database preserves that deadline during orphan retries. A native
+pending request is unique per Realm, original orphan instant and requester; a fresh idempotency key returns the
+same pending request without another event. The result is always `pending`; neither expiry nor requesting grants
+ownership. Approval requires a genuine platform decision establishing a native Access owner. The API exposes no
+approval operation without that authority.
+
+Claim requests are held in the Realm home. A request point touches one native identity/head, one full requester
+key and a bounded receipt/event bundle, without enumerating members, requests or grants. Requester custody must
+be removed by the existing Community account-erasure participant using its anchored source obligations before
+that participant acknowledges completion; no new erasure ACK is introduced here.
+
 ## Realm transition publication proof
 
 Every positive native membership publication requires the fresh Access transition returned by inverse reservation.

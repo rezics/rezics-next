@@ -29,6 +29,7 @@ import { accessCheck, type Access, type Actor, type Resource } from '../request/
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { publicContextEligibility } from '../semantic/context.ts';
 import { ensureRealmMemberGrant } from './participation.ts';
+import { realmContinuityView, realmGovernanceAuthorization, type RealmContinuity } from './realm-continuity.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
 import read from './realm-read.sql';
@@ -74,7 +75,7 @@ export type Realm = Readonly<{
   author: string;
 }>;
 /** Head read used by HTTP. The scheme and vote weights travel on the same row. */
-export type RealmView = Realm &
+export type RealmView = Realm & RealmContinuity &
   Readonly<{
     boardSchemeId: string | null;
     votes: RealmVotes;
@@ -151,6 +152,7 @@ function options(
 }
 function record(row: RealmRow): RealmView {
   return {
+    ...realmContinuityView(row),
     realmId: row.realm_id,
     spaceId: row.space_id,
     state: row.state,
@@ -440,7 +442,7 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
     deps.pool,
     {
       ...options(deps, actor, route, 'community.realm.update', body, context),
-      authorization: combined.bound(authorization),
+      authorization: realmGovernanceAuthorization(combined.bound(authorization), { route, id: body.realmId }),
     },
     async (tx, command) => {
       const previous = current.get(command.time)!;

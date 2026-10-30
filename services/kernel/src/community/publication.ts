@@ -20,6 +20,7 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SpaceDependencies } from './space.ts';
 import { realmReadEligibility } from './realm.ts';
+import { realmGovernanceAuthorization } from './realm-continuity.ts';
 import realmActive from './publication-realm.sql';
 import insertRecord from './publication-insert.sql';
 import insertHead from './publication-head-insert.sql';
@@ -275,7 +276,7 @@ function decide(
           .update(canonicalize([identity, verdict, body])!)
           .digest(),
       },
-      authorization,
+      authorization: realmGovernanceAuthorization(authorization, { route: realmRoute, id: input.realmId }),
     },
     async (tx, command) => {
       const at = authoritativeTimeValue(command.time);

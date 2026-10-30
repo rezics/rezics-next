@@ -21,6 +21,7 @@ import { SubjectRedirectError } from '../semantic/merges.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { readItemTypes } from '../semantic/subject.ts';
 import { RealmConflictError, RealmInputError, type Realm, type RealmDependencies, type RealmContext } from './realm.ts';
+import { realmGovernanceAuthorization } from './realm-continuity.ts';
 import read from './board-scheme-read.sql';
 import append from './board-scheme-revision.sql';
 import moveHead from './board-scheme-head.sql';
@@ -125,13 +126,13 @@ export async function setBoardScheme(
             .update(canonicalize([identity, kind, body])!)
             .digest(),
         },
-        authorization: {
+        authorization: realmGovernanceAuthorization({
           ...authorization,
           async authorize(tx, attempt, proof) {
             if (Date.now() >= (checked.get(attempt.time) ?? -Infinity)) throw new GrantDeniedError();
             return authorization.authorize(tx, attempt, proof);
           },
-        },
+        }, { route, id: body.realmId }),
       },
       async (tx, command) => {
         const previous = current.get(command.time)!;

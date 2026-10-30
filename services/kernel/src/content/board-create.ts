@@ -25,6 +25,7 @@ import { withReadTransaction } from '../semantic/read.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readConceptSchemeReference } from '../semantic/concept-scheme-reference.ts';
+import { realmGovernanceAuthorization } from '../community/realm-continuity.ts';
 import { realmReadEligibility } from '../community/realm.ts';
 import { mediaParentSnapshot } from './media-parent.ts';
 import { realmParticipationAnchor, type RealmParticipationCheck } from '../community/participation.ts';
@@ -350,7 +351,8 @@ export async function createBoard(
             .update(canonicalize([identity, kind, body])!)
             .digest(),
         },
-        authorization: preparedAuthorization,
+        authorization: input.realmId === null ? preparedAuthorization
+          : realmGovernanceAuthorization(preparedAuthorization, { route: boardRoute, id: input.realmId }),
       },
       async (tx, { transactionId, time }) => {
         await insertBoard.run(tx, {
