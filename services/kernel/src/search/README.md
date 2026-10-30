@@ -405,6 +405,29 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   Kernel work is linear in selected fact/value bytes except sorting each subject's labels; there is no document byte
   cap, so growth checks fix payload sizes. Bulk item validation is `O(b)`; failure prevents checkpoint advance. The
   document adds an overflow property list only when needed and one integer listing-count field.
+- Acknowledgement binds every native item, in submitted order, to the action's operation, `_id` and selected
+  physical `_index`. A successful index/delete must return exactly the submitted safe external `_version`, a
+  consistent status/result pair (`201/created`, `200/updated`, `200/deleted`, `404/not_found`), safe native sequence
+  and primary-term metadata, and complete successful shards with no failures. Optional `forced_refresh` remains
+  native metadata; ordinary `refresh=wait_for` success does not require that field. Success with an error, wrong or
+  missing identities, duplicate/reordered/partial items, partial shards and contradictory top-level `errors` fail
+  the entire batch. A native missing-document delete proves a delete operation, rather than a generic 404 success.
+- A keyed `409/version_conflict_engine_exception` retains the actual engine error shape, including its physical
+  index and shard identity. It has no winning version or success shard metadata. Only this native failure is
+  accepted, followed by the existing whole physical-index `_refresh` and explicit complete shard validation.
+  Neither the error text nor a guessed winner body is interpreted as proof. No per-document Source reread or new
+  database relation is introduced. Malformed responses, native failures and response loss leave `projectBatch` at
+  its old checkpoint; genuine replay can conflict with already executed writes and settles only after visibility.
+- Added adapter cost: inspect the submitted actions and aligned native response once, `O(b)` items and response
+  bytes with fixed native fields per action. One bulk plus at most one existing conflict refresh per chunk;
+  no target-population or historical-receipt traversal. Explicit refresh still performs native engine work.
+  [Native receipt tests](../../test/search/bulk-visibility.test.ts) record full request/result identities and parsed
+  response byte/call accounting at unrelated populations `[4, 32, 256]` with fixed actions, multi-key conflicts,
+  rejection and response-loss/replay. This measures the adapter request bound, not Lucene ingestion cost or timing.
+  [Checkpoint recovery tests](../../test/search/indexer.test.ts) include the original indexing/source-chunk suites
+  and real PostgreSQL failure/replay schedules, including partial native item failure and response loss after write.
+  Their controlled Source isolates this boundary; it does not certify Source completeness, Auth/Access, disclosure,
+  physical incarnation or prevention of resurrection after native delete-version pruning.
 - Growth check: [test/search/indexing.test.ts](../../test/search/indexing.test.ts): “cost per batch is one snapshot
   read and one bulk request at every batch size” and “a later takedown deletes the document and replays are harmless”;
   [test/search/relation-overflow-mapping.test.ts](../../test/search/relation-overflow-mapping.test.ts): “relation
