@@ -278,7 +278,8 @@ tombstone filtering, explanation guards and terminal consent handling already pr
 Read-only reference source:
 main `.reference/INDEX.md`, `shelves/bookwyrm/bookwyrm/models/shelf.py` and Bangumi's
 `shelves/bangumi-server/openapi/components/user_subject_collection{,_modify_payload}.yaml`; no reference code copied.
-Local foreground Web typing is the only verification for this source slice; the new acceptance tests and story plays remain unrun.
+Local foreground `bun run --cwd apps/web typecheck` passed on the committed implementation with no type errors
+in 1,325 files. This is the only verification for this source slice; the new acceptance tests and story plays remain unrun.
 
 **Labels.** Sole authority: [independent labels](../library-labels.md); delivered [cap research](library-label-cap-independent-current.md)
 and [second investigation](library-label-cap-independent-deep.md) back same-row reservations/restore semantics.
