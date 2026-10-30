@@ -164,7 +164,7 @@ async function commitWhilePaused(
 }
 
 async function waitForChanges(runtime: ReactionWorkRuntime, changes: readonly CommittedChange[]): Promise<void> {
-  runtime.resume();
+  await runtime.resume();
   for (const change of changes) await runtime.waitForEffect(change.envelope, change.eventSeq);
   for (const change of changes) {
     const checkpoint = await runtime.relayCheckpoint(change.envelope.partition);
@@ -301,7 +301,7 @@ test.serial(
     const threadFreshness = await freshness(base, publicTarget.threadId);
     expect(threadFreshness).not.toBeNull();
     await expectThreadRead(base, publicTarget, base.author, 'like', base.other, 'like', { like: 2 }, threadFreshness);
-    for (const change of [threadLikeA, threadLikeB]) await runtime.effect.run(change.event);
+    for (const change of [threadLikeA, threadLikeB]) await runtime.replay(change.event);
     expect(await targetProjectionRows(base.system.database.pool, publicTarget.threadId)).toEqual(
       threadProjectionBeforeReplay,
     );
@@ -394,7 +394,7 @@ test.serial(
     const postFreshness = await freshness(base, publicTarget.postId);
     expect(postFreshness).not.toBeNull();
     await expectPostRead(base, publicTarget, base.author, 'like', base.other, 'like', { like: 2 }, postFreshness);
-    for (const change of [postLikeA, postLikeB]) await runtime.effect.run(change.event);
+    for (const change of [postLikeA, postLikeB]) await runtime.replay(change.event);
     expect(await targetProjectionRows(base.system.database.pool, publicTarget.postId)).toEqual(
       postProjectionBeforeReplay,
     );

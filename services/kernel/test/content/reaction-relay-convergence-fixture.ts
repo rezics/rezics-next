@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import type { Pool } from 'pg';
+import { Pool, type Pool as PoolType } from 'pg';
 import { registerContent } from '../../src/content/register.ts';
 import { threadTarget } from '../../src/content/commands.ts';
 import { effectsRelay, effectWorkflowId, type Effect } from '../../src/events/effects.ts';
@@ -13,6 +13,7 @@ import { composeWork, type WorkModule } from '../../src/work/registry.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const idempotencyKey = () => randomUUID();
 const asString = (value: unknown, label: string): string => {
@@ -68,13 +69,10 @@ export type CommandOptions = Readonly<{
 }>;
 
 export type ReactionWorkRuntime = {
-  readonly pool: Pool;
-  readonly work: Awaited<ReturnType<typeof composeWork>>;
-  readonly effect: Effect;
-  readonly relay?: ReturnType<typeof startRelays>;
-  readonly reactionEffects: readonly Effect[];
+  readonly pool: PoolType;
   pause(): Promise<void>;
-  resume(): void;
+  resume(): Promise<void>;
+  replay(event: CloudEvent): Promise<void>;
   stop(): Promise<void>;
   captureBeforeWrite(actorId: string): Promise<ReactionEventCapture>;
   waitForEffect(envelope: Envelope, eventSeq: number): Promise<void>;
@@ -286,77 +284,39 @@ export async function createReactionRelayBase(databaseUrl = process.env.DATABASE
 /** Register the exact production content module and expose the reaction Effect it registered. */
 export async function startReactionEffects(
   system: NativeContentSystem,
-  pool: Pool,
+  pool: PoolType,
   databaseUrl: string,
   options: { relay?: boolean } = {},
 ): Promise<ReactionWorkRuntime> {
+  if (options.relay === false) return startInlineReactionEffects(pool, databaseUrl, system.routeKey);
   const client = await createWorkClient(databaseUrl, pool);
-  const registered: Effect[] = [];
-  const observedModule: WorkModule = {
-    name: registerContent.name,
-    register(context) {
-      return registerContent.register({
-        ...context,
-        addEffects(effects) {
-          registered.push(...effects);
-          context.addEffects(effects);
-        },
-      });
-    },
-  };
-  let work: Awaited<ReturnType<typeof composeWork>> | undefined;
-  let relay: ReturnType<typeof startRelays> | undefined;
+  let worker: ReactionWorker | undefined;
   try {
-    work = await composeWork([observedModule], {
-      databaseUrl,
-      pool,
-      client,
-      executorId: `reaction-relay-${randomUUID()}`,
-      env: { KERNEL_ROUTE_KEY: Buffer.from(system.routeKey).toString('base64url') },
-    });
-    const reactionEffects = registered.filter((effect) => effect.name === 'content_reaction_count');
-    if (reactionEffects.length !== 1)
-      throw new Error('Content work did not register exactly one reaction count effect');
-    const effect = reactionEffects[0]!;
-    if (options.relay !== false) {
-      await work.launch();
-      const relayEffects = effectsRelay(pool, work.effects);
-      relay = startRelays(pool, [relayEffects], {
-        intervalMs: 5,
-        concurrency: Math.max(1, Math.min(2, (pool.options.max ?? 10) - 1)),
-      });
-    }
+    worker = await startReactionWorker(databaseUrl, system.routeKey, options.relay !== false);
     return {
       pool,
-      work,
-      effect,
-      ...(relay ? { relay } : {}),
-      reactionEffects: Object.freeze([...reactionEffects]),
       async pause() {
-        if (!relay) throw new Error('The production effects relay was not started');
-        await relay.pause();
+        await worker!.command('pause');
       },
-      resume() {
-        if (!relay) throw new Error('The production effects relay was not started');
-        relay.resume();
+      async resume() {
+        await worker!.command('resume');
+      },
+      async replay(event) {
+        await worker!.command('replay', event);
       },
       async stop() {
         try {
-          await relay?.stop();
+          await worker?.stop();
         } finally {
-          try {
-            await work?.shutdown();
-          } finally {
-            await client.close();
-          }
+          await client.close();
         }
       },
       captureBeforeWrite(actorId) {
         return captureReactionEventBeforeWrite(pool, actorId);
       },
       async waitForEffect(envelope, eventSeq) {
-        const id = effectWorkflowId(envelope, eventSeq, effect.name);
-        await DBOS.retrieveWorkflow(id).getResult({ pollingIntervalMs: 10 });
+        const id = effectWorkflowId(envelope, eventSeq, 'content_reaction_count');
+        await client.retrieveWorkflow(id).getResult({ pollingIntervalMs: 10 });
         await waitForRelayPosition(pool, envelope.partition, envelope.epoch, envelope.position);
       },
       relayCheckpoint(partition) {
@@ -368,19 +328,252 @@ export async function startReactionEffects(
     };
   } catch (error) {
     try {
+      await worker?.stop();
+    } finally {
+      await client.close();
+    }
+    throw error;
+  }
+}
+
+/** Growth captures the registered production projection on its instrumented pool in this process. */
+async function startInlineReactionEffects(
+  pool: PoolType,
+  databaseUrl: string,
+  routeKey: Uint8Array,
+): Promise<ReactionWorkRuntime> {
+  const client = await createWorkClient(databaseUrl, pool);
+  const registered: Effect[] = [];
+  const observedModule = observedContentModule(registered);
+  let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+  try {
+    // Native Auth owns the process-global DBOS during fixture setup. Its native identities and authorities are
+    // complete before measurement; release that executor so the exact content module can own DBOS here.
+    await DBOS.shutdown({ deregister: true });
+    work = await composeWork([observedModule], {
+      databaseUrl,
+      pool,
+      client,
+      executorId: `reaction-growth-${randomUUID()}`,
+      env: workerTestEnv({
+        CONTENT_TEST_COLLECTION_PARTITIONS: '0',
+        KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
+      }),
+    });
+    const reactionEffects = registered.filter((effect) => effect.name === 'content_reaction_count');
+    if (reactionEffects.length !== 1)
+      throw new Error('Content work did not register exactly one reaction count effect');
+    await work.launch();
+    const effect = reactionEffects[0]!;
+    return {
+      pool,
+      async pause() {
+        throw new Error('The production effects relay was not started');
+      },
+      async resume() {
+        throw new Error('The production effects relay was not started');
+      },
+      async replay(event) {
+        await effect.run(event);
+      },
+      async stop() {
+        try {
+          await work?.shutdown();
+        } finally {
+          await client.close();
+        }
+      },
+      captureBeforeWrite(actorId) {
+        return captureReactionEventBeforeWrite(pool, actorId);
+      },
+      async waitForEffect(envelope, eventSeq) {
+        const id = effectWorkflowId(envelope, eventSeq, effect.name);
+        await client.retrieveWorkflow(id).getResult({ pollingIntervalMs: 10 });
+        await waitForRelayPosition(pool, envelope.partition, envelope.epoch, envelope.position);
+      },
+      relayCheckpoint(partition) {
+        return readCheckpoint(pool, 'effects', partition);
+      },
+      partitionPosition(partition) {
+        return readPartitionPosition(pool, partition);
+      },
+    };
+  } catch (error) {
+    try {
+      await work?.shutdown();
+    } finally {
+      await client.close();
+    }
+    throw error;
+  }
+}
+
+type WorkerCommand = 'pause' | 'resume' | 'replay';
+type ReactionWorker = {
+  command(command: WorkerCommand, event?: CloudEvent): Promise<void>;
+  stop(): Promise<void>;
+};
+
+async function startReactionWorker(databaseUrl: string, routeKey: Uint8Array, relay: boolean): Promise<ReactionWorker> {
+  const child = Bun.spawn([process.execPath, import.meta.path, '--reaction-relay-worker'], {
+    env: {
+      ...process.env,
+      ...workerTestEnv({ KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') }),
+      DATABASE_URL: databaseUrl,
+      REACTION_RELAY_ENABLED: relay ? '1' : '0',
+    },
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  let output = '';
+  const readOutput = (async () => {
+    for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
+  })();
+  const readErrors = new Response(child.stderr).text();
+  const until = async (check: () => boolean, timeoutMs = 120_000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (!check()) {
+      if (child.exitCode !== null) throw new Error(`Reaction work worker exited with ${child.exitCode}`);
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for the reaction work worker');
+      await Bun.sleep(20);
+    }
+  };
+  try {
+    await until(() => output.includes('reaction-relay-ready'));
+  } catch (error) {
+    child.kill('SIGKILL');
+    await child.exited;
+    await readOutput;
+    throw new Error(`${String(error)}\nstdout:\n${output}\nstderr:\n${await readErrors}`);
+  }
+
+  const command = async (name: WorkerCommand, event?: CloudEvent) => {
+    const id = randomUUID().replaceAll('-', '');
+    child.stdin.write(`${JSON.stringify({ id, command: name, ...(event ? { event } : {}) })}\n`);
+    const success = `reaction-relay:${id}:ok`;
+    const failure = `reaction-relay:${id}:error:`;
+    await until(() => output.includes(success) || output.includes(failure));
+    if (output.includes(failure)) {
+      const detail = output.slice(output.indexOf(failure) + failure.length).split('\n', 1)[0];
+      throw new Error(`Registered reaction work ${name} failed: ${detail}`);
+    }
+  };
+  return {
+    command,
+    async stop() {
+      if (child.exitCode !== null) {
+        await readOutput;
+        throw new Error(`Reaction work worker exited early with ${child.exitCode}\n${output}\n${await readErrors}`);
+      }
+      const id = randomUUID().replaceAll('-', '');
+      child.stdin.write(`${JSON.stringify({ id, command: 'stop' })}\n`);
+      child.stdin.end();
+      try {
+        await until(() => child.exitCode !== null, 60_000);
+      } catch (error) {
+        child.kill('SIGKILL');
+        await child.exited;
+        await readOutput;
+        throw new Error(`${String(error)}\nstdout:\n${output}\nstderr:\n${await readErrors}`);
+      }
+      await child.exited;
+      await readOutput;
+      const status = await child.exited;
+      if (status !== 0 || !output.includes(`reaction-relay:${id}:ok`))
+        throw new Error(`Reaction work worker did not stop cleanly (${status})\nstdout:\n${output}\nstderr:\n${await readErrors}`);
+    },
+  };
+}
+
+async function runReactionRelayWorker(): Promise<void> {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+  const pool = new Pool({ connectionString: databaseUrl, max: 10 });
+  const client = await createWorkClient(databaseUrl, pool);
+  const registered: Effect[] = [];
+  const observedModule = observedContentModule(registered);
+  let work: Awaited<ReturnType<typeof composeWork>> | undefined;
+  let relay: ReturnType<typeof startRelays> | undefined;
+  let stopId: string | undefined;
+  try {
+    work = await composeWork([observedModule], {
+      databaseUrl,
+      pool,
+      client,
+      executorId: `reaction-relay-${randomUUID()}`,
+      env: workerTestEnv({
+        CONTENT_TEST_COLLECTION_PARTITIONS: '0',
+        KERNEL_ROUTE_KEY: process.env.KERNEL_ROUTE_KEY,
+      }),
+    });
+    const reactionEffects = registered.filter((effect) => effect.name === 'content_reaction_count');
+    if (reactionEffects.length !== 1)
+      throw new Error('Content work did not register exactly one reaction count effect');
+    await work.launch();
+    if (process.env.REACTION_RELAY_ENABLED === '1') {
+      relay = startRelays(pool, [effectsRelay(pool, work.effects)], {
+        intervalMs: 5,
+        concurrency: Math.max(1, Math.min(2, (pool.options.max ?? 10) - 1)),
+      });
+      // startRelays begins its first scan immediately; drain it before exposing the paused fixture.
+      await relay.pause();
+    }
+    console.log('reaction-relay-ready');
+    for await (const line of console) {
+      const request = JSON.parse(line) as { id: string; command: string; event?: CloudEvent };
+      try {
+        if (request.command === 'pause') {
+          if (!relay) throw new Error('The production effects relay was not started');
+          await relay.pause();
+        } else if (request.command === 'resume') {
+          if (!relay) throw new Error('The production effects relay was not started');
+          relay.resume();
+        } else if (request.command === 'replay') {
+          if (!request.event) throw new Error('A committed CloudEvent is required for replay');
+          await reactionEffects[0]!.run(request.event);
+        } else if (request.command === 'stop') {
+          stopId = request.id;
+          break;
+        } else {
+          throw new Error(`Unknown reaction work command: ${request.command}`);
+        }
+        console.log(`reaction-relay:${request.id}:ok`);
+      } catch (error) {
+        console.log(`reaction-relay:${request.id}:error:${String(error).replaceAll('\n', ' ')}`);
+      }
+    }
+  } finally {
+    try {
       await relay?.stop();
     } finally {
       try {
         await work?.shutdown();
       } finally {
         await client.close();
+        await pool.end();
       }
     }
-    throw error;
   }
+  if (stopId) console.log(`reaction-relay:${stopId}:ok`);
 }
 
-export async function captureReactionEventBeforeWrite(pool: Pool, actorId: string): Promise<ReactionEventCapture> {
+function observedContentModule(registered: Effect[]): WorkModule {
+  return {
+    name: registerContent.name,
+    register(context) {
+      return registerContent.register({
+        ...context,
+        addEffects(effects) {
+          registered.push(...effects);
+          context.addEffects(effects);
+        },
+      });
+    },
+  };
+}
+
+export async function captureReactionEventBeforeWrite(pool: PoolType, actorId: string): Promise<ReactionEventCapture> {
   const actorRoute = routeOf(actorId);
   if (actorRoute === null) throw new TypeError('A native actor must have a routed account id');
   const partition = partitionOf(actorRoute);
@@ -420,7 +613,7 @@ export async function captureReactionEventBeforeWrite(pool: Pool, actorId: strin
   };
 }
 
-export async function readPartitionPosition(pool: Pool, partition: number): Promise<Position> {
+export async function readPartitionPosition(pool: PoolType, partition: number): Promise<Position> {
   const row = (
     await pool.query<{ epoch: number; position: string }>(
       'SELECT epoch, position::text AS position FROM core.partition WHERE partition_no=$1',
@@ -431,7 +624,7 @@ export async function readPartitionPosition(pool: Pool, partition: number): Prom
   return { epoch: row.epoch, position: BigInt(row.position).toString() };
 }
 
-export async function readCheckpoint(pool: Pool, consumer: string, partition: number): Promise<Position | null> {
+export async function readCheckpoint(pool: PoolType, consumer: string, partition: number): Promise<Position | null> {
   const row = (
     await pool.query<{ epoch: number | null; position: string }>(
       `SELECT epoch, position::text AS position FROM core.consumer_checkpoint
@@ -443,7 +636,7 @@ export async function readCheckpoint(pool: Pool, consumer: string, partition: nu
 }
 
 export async function waitForRelayPosition(
-  pool: Pool,
+  pool: PoolType,
   partition: number,
   epoch: number,
   position: bigint,
@@ -478,7 +671,7 @@ export function countFreshness(
   return oldest;
 }
 
-export async function targetFreshness(pool: Pool, targetId: string): Promise<Position | null> {
+export async function targetFreshness(pool: PoolType, targetId: string): Promise<Position | null> {
   const rows = await pool.query<{ source_epoch: number; source_position: string }>(
     `SELECT source_epoch, source_position::text AS source_position
        FROM content.reaction_total WHERE route=$1 AND target_id=$2`,
@@ -487,7 +680,7 @@ export async function targetFreshness(pool: Pool, targetId: string): Promise<Pos
   return countFreshness(rows.rows);
 }
 
-export async function targetProjectionRows(pool: Pool, targetId: string) {
+export async function targetProjectionRows(pool: PoolType, targetId: string) {
   const [bySource, totals] = await Promise.all([
     pool.query(
       `SELECT route, target_id, source_partition, kind, count, source_epoch, source_position::text AS source_position
@@ -504,7 +697,7 @@ export async function targetProjectionRows(pool: Pool, targetId: string) {
   return { bySource: bySource.rows, totals: totals.rows };
 }
 
-export async function snapshotReactionOperation(pool: Pool, actorId: string, targetId: string, key: string) {
+export async function snapshotReactionOperation(pool: PoolType, actorId: string, targetId: string, key: string) {
   const actorRoute = routeOf(actorId);
   const targetRoute = routeOf(targetId);
   if (actorRoute === null || targetRoute === null) throw new TypeError('Reaction snapshots require routed ids');
@@ -559,3 +752,5 @@ export function comparePosition(left: Position | null, right: Position | null): 
       ? -1
       : 1;
 }
+
+if (process.argv.includes('--reaction-relay-worker')) await runReactionRelayWorker();

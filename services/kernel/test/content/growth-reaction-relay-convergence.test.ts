@@ -136,9 +136,8 @@ async function executeJoinedOperation(
       (event.data as { kind?: unknown }).kind === 'like',
   );
   if (matching.length !== 1) throw new Error('The real outbox did not return the committed target reaction event');
-  const effect = runtime!.reactionEffects[0]!;
-  await effect.run(matching[0]!);
-  await effect.run(matching[0]!);
+  await runtime!.replay(matching[0]!);
+  await runtime!.replay(matching[0]!);
   return {
     scale,
     targetId,
