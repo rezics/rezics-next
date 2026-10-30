@@ -7,7 +7,13 @@ import { normalizeSignupHandle } from './signup';
 // The installed shared discriminator has no automated alias. Reuse its actual
 // account:manage profile without changing registration ceilings or step-up kinds.
 export const AUTOMATED_PROFILE = managementOperationProfile('transfer');
-export type AutomatedOperation = Readonly<Omit<Extract<AccountOperation, { kind: 'automated' }>, 'authorization'>>;
+export type AutomatedOperation = Readonly<
+  Omit<Extract<AccountOperation, { kind: 'automated' }>, 'authorization'> & {
+    registrationId: '';
+    operationKey: string;
+    handle: string;
+  }
+>;
 export type AutomatedAttempt = Readonly<{
   accountId: string;
   operationKey: string;
