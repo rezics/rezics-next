@@ -270,6 +270,7 @@ test('native hit-only rating phases fill slots without counts and preserve every
   expect(node.body.version).toMatchObject({ distribution: 'opensearch' });
   expect(node.body.version.number).toMatch(/^3\.9\./);
   const evidence: HitCall[] = [];
+  const growth: { unrelated: number; size: number; iterations: number; engineCalls: number; candidates: number }[] = [];
   const recording = (mutate?: (reply: HitReply, ordinal: number) => void | Promise<void>) => {
     const calls: HitCall[] = [];
     const client: OpenSearch = {
@@ -441,6 +442,7 @@ test('native hit-only rating phases fill slots without counts and preserve every
         expect(seen).toEqual([...scored, ...unscored]);
         expect(new Set(seen).size).toBe(14);
         expect(engineCalls).toBeLessThanOrEqual(2 * (iterations + 1));
+        growth.push({ unrelated, size, iterations: iterations + 1, engineCalls, candidates: seen.length });
       }
       const sparse = await run({
         filter: { bool: { filter: [book, { terms: { id: [hitId(6), hitId(14)] } }] } },
@@ -482,10 +484,10 @@ test('native hit-only rating phases fill slots without counts and preserve every
           ],
         });
     });
-    expect((await run({ generation: undefined }, switcher)).result.hits.map((hit) => hit.id)).toEqual([
-      ...scored,
-      unscored[0]!,
-    ]);
+    const { generation: _generation, ...unPinned } = base;
+    const switched = await searchSubjectHits(switcher.client, hitPrefix, { ...unPinned, size: 7 });
+    expect(switched.generation).toBe(1);
+    expect(switched.hits.map((hit) => hit.id)).toEqual([...scored, unscored[0]!]);
     expect(switcher.calls.every((call) => call.path === `/${physical(1)}/_search/template`)).toBe(true);
     // Negative controls mutate only replies actually obtained from the check node.
     const corruptions: ((reply: HitReply) => void)[] = [
@@ -595,7 +597,7 @@ test('native hit-only rating phases fill slots without counts and preserve every
   } finally {
     await Bun.write(
       new URL(`../../../../.temp/rating-hit-evidence-${hitPrefix}.json`, import.meta.url),
-      JSON.stringify({ node: node.body, calls: evidence }),
+      JSON.stringify({ node: node.body, growth, calls: evidence }),
     );
     for (const generation of [1, 2])
       await search.request('DELETE', `/${physical(generation)}`).catch((error) => {
