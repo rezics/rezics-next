@@ -52,6 +52,7 @@ export const collectionSchema = t.Object(
   },
   closed,
 );
+const memberIds = t.Array(t.String(), { minItems: 1, maxItems: 100, uniqueItems: true });
 const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
 const collectionResponse = t.Object({ collection: collectionSchema }, closed);
 const memberResponse = t.Object({ member: memberSchema }, closed);
@@ -102,6 +103,10 @@ const failures = {
     'transaction_retry_exhausted',
     'deadline_exceeded',
   ),
+};
+const batchFailures = {
+  ...failures,
+  409: problemSchema('conflict', 'collection_full', 'stale_cursor', 'dynamic_membership_immutable'),
 };
 const memberRestoreFailures = {
   ...failures,
@@ -411,6 +416,68 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 201;
         return { member: memberView(result.value) };
+      },
+    )
+    .post(
+      customMethod('/v1/collections/:collectionId/members', 'batchRemove'),
+      {
+        params: collectionParams,
+        headers,
+        body: strict(t.Object({ revision, memberIds }, closed)),
+        response: {
+          200: t.Object(
+            {
+              collection: collectionSchema,
+              removed: t.Array(t.Object({ memberId: id, deletionId: id, revision }, closed)),
+            },
+            closed,
+          ),
+          ...batchFailures,
+        },
+        detail: detail('collection_member.batch_remove', 'collection:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().batchRemoveMembers(actor, params.collectionId, body, key)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { collection: collectionView(result.value.collection), removed: result.value.removed };
+      },
+    )
+    .post(
+      customMethod('/v1/collections/:collectionId/members', 'move'),
+      {
+        params: collectionParams,
+        headers,
+        body: strict(
+          t.Object(
+            { revision, memberIds, destinationCollectionId: id, destinationRevision: revision, after: nullableString },
+            closed,
+          ),
+        ),
+        response: {
+          200: t.Object(
+            { source: collectionSchema, destination: collectionSchema, members: t.Array(memberSchema) },
+            closed,
+          ),
+          ...batchFailures,
+        },
+        detail: detail('collection_member.transfer', 'collection:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().transferMembers(actor, params.collectionId, body, key)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return {
+          source: collectionView(result.value.source),
+          destination: collectionView(result.value.destination),
+          members: result.value.members.map(memberView),
+        };
       },
     )
     .patch(

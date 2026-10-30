@@ -1508,3 +1508,41 @@ Native acceptance covers independent identity, authorization, strict JSON/CAS, o
 strict expiry while parked, stale work after restore/redelete, rollback, commit-before-checkpoint recovery, the default
 scheduler/queue and the terminal owner barrier. The growth fixture uses the shared capture and occurrence APIs at
 64/512/4096 native unrelated live/deleted holdings and histories, including actual default worker/SDK work and bytes.
+
+### Selected occurrence removal and transfer
+
+`POST /v1/collections/{collectionId}/members:batchRemove` accepts `{revision,memberIds}` and returns
+`{collection,removed:[{memberId,deletionId,revision}]}`. `members:move` accepts the same selection plus
+`destinationCollectionId`, `destinationRevision` and required `after` (null means first), returning
+`{source,destination,members}`. Both use the existing Collections gate, update scope/grants, closed noncoercing JSON,
+Idempotency-Key, owning partition command envelope and existing member-changed events. IDs are distinct routable
+occurrence identities, with 1–100 selected occurrences. The previous per-member move remains an intra-Collection reorder.
+
+Removal checks current original and terminal disclosure, including retained addressed rows on replay. It locks the current parent and exact selected live keys, validates the whole selection, and calls the same
+retained-deletion statement as single removal. Every episode keeps its own ID, note, added time, original ordinal
+and exact 720-hour cutoff. All episodes share the one resulting parent revision; existing exact episode Undo
+remains independent of unrelated sibling writes. The parent count, revision and source generation advance once.
+
+Transfer requires two distinct live curated Collections with the same immutable curator and exact route. Mixed
+curators/routes return 409; a same-Collection request returns 400. Native `resourceAuthorizationPage` prepares one
+immutable two-resource page and applies the actual Access formula before receipt lookup. The live curator share
+fence remains held through commit. Current original/terminal subject disclosure is prepared after parent authority,
+releasing owning reads before subject-home visits; the transaction checks those exact immutable subject IDs.
+Replay rechecks both current parent grants and any selected occurrences now in the destination before returning
+stored member data. Destination anchors require the same subject readability.
+
+One transaction locks both parents, compares both supplied revisions, checks destination capacity and all selected
+source rows, and transfers the actual rows in source ordinal order. IDs, subject IDs, notes and added times survive.
+There is no source deletion episode. Independent previously retained occurrences remain independent. Ordinal gap
+exhaustion uses the existing 5,000-member bound and ordinal generator, defers the existing unique constraint for
+that transaction, then respace/transfer and both parent updates commit atomically. Source survivor order is unchanged.
+Each parent advances count/revision/source generation once; destination order epoch advances once when respaced.
+Per-occurrence existing events feed the native monotonic listing producer, including duplicate survivors and all
+public/private combinations. No public count is written by the command.
+
+Cost: parent and occurrence validation uses exact route/Collection/member point keys, O(selected log N), with at
+most 100 selected changes and two parent keys. Subject preparation visits at most 101 distinct originals, in the
+existing raw-100 helper pages. Destination respacing alone reads/writes at most 5,000 live rows, fully charged.
+Retained history is never searched. `collection-batch-growth.test.ts` adds API rollback/privacy/lifecycle coverage
+and native 64/512/4096 live/retained/unrelated growth at fixed batches 1 and 100, including fixed full destinations; captures use the existing inclusive
+Access, receipt, custody, outbox and listing accounting with unchanged bounds and raw plans/bytes.

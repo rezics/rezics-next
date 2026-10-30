@@ -8,7 +8,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { parentCreationAuthorization } from '../access/parent-creation.ts';
 import { initializeResourceGrants } from '../access/resource-initialization.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { resourceAuthorization, resourceAuthorizationPage } from '../access/resource-authorization.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -17,6 +17,7 @@ import {
   principalCommandIdentity,
   runCommand,
   type CommandAttempt,
+  type AuthoritativeTime,
   type CommandEvent,
   type CommandOutcome,
   type CommandTransaction,
@@ -54,6 +55,8 @@ import {
   updateMemberNote as updateMemberNoteRow,
 } from './collection-store.ts';
 import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { createCollectionBatchCommands } from './collection-batch.ts';
+import batchParents from './collection-batch-parents.sql';
 import { resolveSubject } from './subject-anchor.ts';
 
 const MEMBER_LIMIT = 5_000;
@@ -273,6 +276,7 @@ export function createCollectionCommands(config: {
     updateMemberNote,
     removeMember,
     restoreMember,
+    ...createCollectionBatchCommands(config, mutate),
   };
 
   async function createCollection(
@@ -367,21 +371,44 @@ export function createCollectionCommands(config: {
       command: { transactionId: string; time: string },
       route: number,
     ) => Promise<{ value: T; events: CommandEvent[] }>,
+    destinationCollectionId?: string,
+    prepareMembers?: (time: AuthoritativeTime) => Promise<void>,
     selection?: PresentationSelection,
   ): Promise<CommandOutcome<T>> {
     const route = collectionRoute(collectionId);
     const owner = accountActor(actor);
     const identity = principalCommandIdentity(owner);
-    const normalAccess = resourceAuthorization({
-      access,
-      actor: owner,
-      action,
-      anchor: {
-        resource: { route, id: collectionId },
-        validate: async (client, time) => !!(await visibleCollection(client, owner, route, collectionId, time)),
-      },
-      context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
-    });
+    const normalAccess = destinationCollectionId
+      ? resourceAuthorizationPage({
+          access,
+          actor: owner,
+          action,
+          anchor: {
+            route,
+            resourceType: 'library.collection',
+            ids: Object.freeze([collectionId, destinationCollectionId].sort()),
+            async validate(client, time) {
+              authoritativeTimeValue(time);
+              const rows = await batchParents.run(client, { route, ids: [collectionId, destinationCollectionId] });
+              if (rows.length !== 2 || rows.some((row) => row.state !== 'active')) throw notFound();
+              if (rows.some((row) => row.membershipKind !== 'curated'))
+                throw new ProblemError('dynamic_membership_immutable');
+              if (rows[0]!.curatorAccountId !== rows[1]!.curatorAccountId) throw new ProblemError('conflict');
+              return true;
+            },
+          },
+          context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
+        })
+      : resourceAuthorization({
+          access,
+          actor: owner,
+          action,
+          anchor: {
+            resource: { route, id: collectionId },
+            validate: async (client, time) => !!(await visibleCollection(client, owner, route, collectionId, time)),
+          },
+          context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
+        });
     const failures = new WeakMap<object, ProblemError | null>();
     const authorization: typeof normalAccess = {
       ...normalAccess,
@@ -392,6 +419,7 @@ export function createCollectionCommands(config: {
             attempt.time,
             await preparePresentationSelection(config, owner, selection, deadlineFor(WORK_STEP_DEADLINE_MS)),
           );
+        await prepareMembers?.(attempt.time);
         return proof;
       },
       async authorize(tx, attempt, proof) {
@@ -480,6 +508,8 @@ export function createCollectionCommands(config: {
         if (!value) throw new ProblemError('conflict');
         return { value, events: collectionEvents('updated', id, wasListed !== listed(value)) };
       },
+      undefined,
+      undefined,
       selection,
     );
   }
@@ -671,6 +701,7 @@ export function createCollectionCommands(config: {
     const route = collectionRoute(collectionId);
     if (typeof deletion?.deletionId !== 'string') throw invalid();
     const expectedRevision = revisionOf(deletion.revision);
+    let readableOriginal: string | null = null;
     return mutate(
       actor,
       collectionId,
@@ -685,13 +716,7 @@ export function createCollectionCommands(config: {
         if (!saved.purgeAfter || Date.parse(saved.purgeAfter) <= Date.parse(command.time))
           throw new ProblemError('member_restore_expired');
         if (saved.deletionRevision !== BigInt(expectedRevision)) throw new ProblemError('member_restore_stale');
-        const subject = await resolveSubject(
-          { pool, access, ...(clock ? { clock } : {}) },
-          accountActor(actor),
-          saved.subjectId,
-        );
-        if (!subject || (subject.subjectId !== saved.subjectId && subject.requestedSubjectId !== saved.subjectId))
-          throw notFound();
+        if (readableOriginal !== saved.subjectId) throw notFound();
         if (parent.memberCount >= MEMBER_LIMIT) throw new ProblemError('collection_full');
         const collision = await tx.query(
           `SELECT 1 FROM library.collection_member
@@ -711,6 +736,21 @@ export function createCollectionCommands(config: {
         if (!value) throw new ProblemError('member_restore_stale');
         return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
       },
+      undefined,
+      async (time) => {
+        const saved = await readMemberDeletion(pool, route, collectionId, memberId);
+        if (!saved || saved.deletionId !== deletion.deletionId) return;
+        const subject = await resolveSubject(
+          { pool, access, ...(clock ? { clock } : {}) },
+          accountActor(actor),
+          saved.subjectId,
+          time,
+        );
+        readableOriginal =
+          subject && (subject.subjectId === saved.subjectId || subject.requestedSubjectId === saved.subjectId)
+            ? saved.subjectId
+            : null;
+      },
     );
   }
 }
@@ -725,7 +765,6 @@ async function visibleCollection(
   authoritativeTimeValue(time);
   const current = await readCollection(client, route, collectionId);
   if (!current || current.state === 'deleted') throw notFound();
-  if (current.visibility === 'private' && actor.accountId !== current.curatorAccountId) throw notFound();
   return current;
 }
 

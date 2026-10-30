@@ -87,6 +87,7 @@ export async function readableSubjects(
   deps: SubjectAnchorDependencies,
   actor: Actor,
   subjectIds: readonly string[],
+  at?: AuthoritativeTime,
 ): Promise<string[]> {
   if (subjectIds.length > MAX_SUBJECT_IDS)
     throw new RangeError(`Subject page must contain at most ${MAX_SUBJECT_IDS} IDs`);
@@ -99,7 +100,7 @@ export async function readableSubjects(
     Array.from({ length: Math.min(MAX_CONCURRENT_SUBJECT_READS, distinctIds.length) }, async () => {
       while (nextIndex < distinctIds.length) {
         const index = nextIndex++;
-        resolved[index] = await resolveMappedSubject(deps, actor, distinctIds[index]!, mappings[index]!);
+        resolved[index] = await resolveMappedSubject(deps, actor, distinctIds[index]!, mappings[index]!, at);
       }
     }),
   );

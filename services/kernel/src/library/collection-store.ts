@@ -292,28 +292,48 @@ export async function deleteMember(
   const context = legacy ? expectedRevisionOrContext : suppliedContext;
   const deletionId = legacy ? newId(route) : deletionIdOrContext;
   if (!expectedRevision || !context || typeof deletionId !== 'string') return null;
-  const rows = await memberDelete.run(queryClient(client), {
+  const rows = await deleteMembers(client, route, collectionId, [{ memberId, deletionId }], expectedRevision, context);
+  return rows[0] ?? null;
+}
+
+/** The one native retained-deletion producer, shared by single and selected removal. */
+export async function deleteMembers(
+  client: Client,
+  route: number,
+  collectionId: string,
+  items: readonly { memberId: string; deletionId: string }[],
+  expectedRevision: number,
+  context: WriteContext,
+): Promise<(CollectionMember & { deletionId: string; revision: number })[]> {
+  if (items.length < 1 || items.length > 100 || new Set(items.map((item) => item.memberId)).size !== items.length)
+    throw new RangeError('Removal requires 1–100 distinct occurrences');
+  const input: (typeof memberDelete)['~reylo']['input'] = {
     route,
     collection_id: collectionId,
-    member_id: memberId,
+    items: items.map((item) => ({ member_id: item.memberId, deletion_id: item.deletionId })),
     expected_revision: expectedRevision,
-    deletion_id: deletionId,
     ...write(context),
-  });
-  const row = rows[0];
-  if (!row) return null;
-  if (row.deletionId === null || row.revision === null || row.ordinalKey === null || row.addedAt === null)
-    throw new Error('A removed Collection member must return its deletion episode revision');
-  return {
-    collectionId: row.collectionId,
-    id: row.id,
-    subjectId: row.subjectId,
-    note: row.note,
-    ordinalKey: row.ordinalKey,
-    addedAt: iso(row.addedAt),
-    deletionId: row.deletionId,
-    revision: Number(row.revision),
   };
+  // Bind the JSON document once, as in native ordinal respacing; never JSON-encode an already encoded string.
+  const values = memberDelete.params.map((name) => {
+    const value = input[name as keyof typeof input];
+    return name === 'items' ? JSON.stringify(value) : value;
+  });
+  const { rows } = await client.query<(typeof memberDelete)['~reylo']['element']>(memberDelete.sql, values);
+  return rows.map((row) => {
+    if (row.deletionId === null || row.revision === null || row.ordinalKey === null || row.addedAt === null)
+      throw new Error('A removed Collection member must return its deletion episode revision');
+    return {
+      collectionId: row.collectionId,
+      id: row.id,
+      subjectId: row.subjectId,
+      note: row.note,
+      ordinalKey: row.ordinalKey,
+      addedAt: iso(row.addedAt),
+      deletionId: row.deletionId,
+      revision: Number(row.revision),
+    };
+  });
 }
 
 export async function readMemberDeletion(client: Client, route: number, collectionId: string, memberId: string) {

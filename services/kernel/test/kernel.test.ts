@@ -248,6 +248,8 @@ const typed = [
   'DELETE /v1/collections/:collectionId/members/:memberId',
   'POST /v1/collections/:collectionId/members/:memberId/$restore',
   'POST /v1/collections/:collectionId/members/:memberId/$move',
+  'POST /v1/collections/:collectionId/members/$batchRemove',
+  'POST /v1/collections/:collectionId/members/$move',
   'GET /v1/subjects/:id/collections',
   'GET /v1/libraryPins',
   'PUT /v1/libraryPins/:collectionId',
