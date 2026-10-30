@@ -1576,7 +1576,8 @@ creation/change bridge and original/start/final checks; the Account owner remain
 The final native fence is persisted on that same settlement record only after the reader's complete
 revalidation. It contains the actual SQL transaction, physical UUID/write alias, Source registration epoch
 and native refresh response. Re-reading a locator always repeats the guard; a previously stored fence
-cannot establish current readiness. Effectful pages use a partial execution-leading index; empty Source
+cannot establish current readiness. Effectful pages use a partial execution-leading index and one scalar
+ordinal at a time, admitting each bounded intent before loading another; empty Source
 scan pages do not require rescanning all native homes. Every effect lookup, owner/writer lock, engine
 request and byte is charged against the consumer's existing allowance. An over-allowance closure remains
 unavailable rather than receiving a second verification budget.

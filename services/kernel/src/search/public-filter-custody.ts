@@ -531,12 +531,17 @@ export async function readPublicFilterRepairSettlement(
         // Source owns the step body's durable receipt/verifier and creation/change closure. This
         // native binding cannot replace those proofs, or accept a callback alone as a closed cut.
         await verifyStep(finalPage);
-        const pages = (await query(repairPagesSql, keys)).rows;
-        if (pages.length > 1000) throw new Failure('owner_unavailable');
         const copies = new Map<string, string>();
         const latest = new Map<string, SearchRepairWriterReceipt>();
-        for (const row of pages) {
+        let after = -1;
+        for (;;) {
+          // Admit each bounded intent before loading the next; a large retained window must not
+          // materialize hundreds of MiB before discovering that its original allowance is spent.
+          const row = (await query(repairPagesSql, [...keys, after])).rows[0];
+          if (!row) break;
+          if (row.ordinal <= after) throw new Failure('binding_mismatch');
           if (row.ordinal >= state.pages) throw new Failure('owner_unavailable');
+          after = row.ordinal;
           const page = decode<RetainedRepairPage>(row.intent);
           await verifyStep(page);
           if (page.repairs.length > 256) throw new Failure('binding_mismatch');
