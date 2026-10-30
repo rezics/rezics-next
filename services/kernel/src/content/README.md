@@ -512,6 +512,43 @@ Cover variants are served by the website's media route like every other media ob
 
 Every imported cover carries its rights holder, the source it came through and its licence, and is credited where it is shown. A cover comes down on a valid complaint through the media takedown path, and its subject then shows its placeholder. The takedown also fences the source record's cover field, so a later import refresh cannot bring the same cover back.
 
+## Document image presentations
+
+`readDocumentMediaPresentations(deps, actor, ids, context)` in `media-presentation.ts` returns the closed
+`DocumentMediaPage` (`{images}`) for one to 32 unique routed media IDs. `POST /v1/media/presentations` accepts
+only `{ids: string[]}` and exposes this ordinary `media:read` operation to authenticated and anonymous readers.
+It creates no resource or grants. Both successful and empty pages use `private, no-store`.
+
+Each `DocumentImagePresentation` contains `id`, `containerId`, the current original `digest`, crop-aware `width`
+and `height`, actual stored derivative `variants` with format/width/height, nullable stored `placeholder`, nullable
+`focalPoint`, and native import `credit` or null. This read selects the largest actual WebP derivative, falling back
+to an actual AVIF only when there is no usable WebP candidate. A single derivative is sufficient for this producer;
+the list is not the potential processing ladder. It never returns originals, URLs, storage keys, uploader metadata,
+document bodies or historical revisions. Consumers use the existing native media transport for the advertised slot.
+
+Enumeration is private storage fact gathering. The selected row then passes the same source/final verifier as
+`downloadMedia` and `decideDownload`: ordinary media Access, available media state, permanent post claim, independent
+declared container/ancestor/board gates, current Realm/Space lifecycle and protected Realm ban checks, or the native
+cover subject and source fence or Realm asset gates as appropriate. No document or paid edition grants image access.
+The expected metadata and selected derivative row must match at the native source and final media anchors, including
+credit, dimensions, digest and security revision. A changed or denied selection is omitted without selecting a
+replacement. Missing/denied images leave no metadata in the response; typed dependency/partition/deadline errors
+remain errors. Every checkout is released before a foreign anchor or Access preparation, supporting a one-slot pool.
+
+### Cost
+
+Let N be supplied IDs (1..32), V the actual derivative count per image (0..12, enforced by the native format/width
+constraints and unique `media_variant_slot_idx`), and H the native parent chain (at most 33 posts and one thread).
+There is exactly one exact `(route, media_id)` enumeration per supplied ID, examining at most one media row and V
+derivative rows, and at most one native derivative authorization per image. Thus the page performs at most 32
+enumerations, examines at most 384 derivative rows there, and makes at most 32 native variant checks (within the
+32*12 ceiling). Its cost is `N * (one indexed media seek + indexed V derivative rows + D(H))`, where `D(H)` is the
+existing bounded native download verification, including its fixed source/final exact-slot and independent parent,
+board, Realm/Space and Access anchors. There is no additional history, body or table scan, HTTP request per image,
+unbounded dependency expansion, retry or refill. This read does not change image processing, 40 MP limits, imports,
+collection or erasure. Focused native privacy, current-variant and schema cases live in
+`test/content/media-presentation.test.ts`; existing native download/privacy suites remain applicable.
+
 ## Realm presentation media
 
 Content adopts the native Realm asset slice of the [community presentation research](../../../../docs/research/content-community-presentation-contract.md).

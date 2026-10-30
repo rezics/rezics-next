@@ -8,6 +8,7 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { threadTarget } from './commands.ts';
+import { readDocumentMediaPresentations } from './media-presentation.ts';
 import { mutateContentPoint } from './erase-post.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
@@ -27,6 +28,8 @@ import {
   MediaCompletionResponseSchema,
   MediaDownloadQuerySchema,
   MediaDownloadResponseSchema,
+  DocumentMediaInputSchema,
+  DocumentMediaPageSchema,
   strictContentSchema,
 } from './schemas.ts';
 
@@ -65,6 +68,7 @@ const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { addition
 const upload = defineRateLimit({ family: 'upload', units: 1 });
 const write = defineRateLimit({ family: 'write', units: 1 });
 const secured = [{ bearerAuth: [] }];
+const readSecurity = [...secured, {}];
 function context(request: Request, deadline: number) {
   return {
     idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
@@ -102,6 +106,30 @@ function metadata(media: NonNullable<Awaited<ReturnType<typeof readReservation>>
 
 export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
   return app
+    .post(
+      '/v1/media/presentations',
+      {
+        body: strictContentSchema(DocumentMediaInputSchema),
+        response: {
+          200: withHeaders(strictContentSchema(DocumentMediaPageSchema), sessionHeader),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'media.presentations',
+          'x-exposure': 'public',
+          'x-action': 'media:read',
+          security: readSecurity,
+        },
+      },
+      async ({ actor, body, admission, job, set }) =>
+        admission.run('normal', job, async () => {
+          set.headers['cache-control'] = 'private, no-store';
+          return readDocumentMediaPresentations(dependencies, actor, body.ids, {
+            deadline: job.deadline,
+            routeKey: dependencies.routeKey,
+          });
+        }),
+    )
     .post(
       '/v1/media',
       {

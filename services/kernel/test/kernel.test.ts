@@ -219,6 +219,7 @@ const typed = [
   'GET /v1/openapi.json',
   'GET /v1/operations/:id',
   'POST /v1/media',
+  'POST /v1/media/presentations',
   'POST /v1/realms/:realmId/media',
   'GET /v1/media/:id',
   'POST /v1/media/:id/$complete',

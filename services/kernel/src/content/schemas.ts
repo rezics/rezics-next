@@ -2,6 +2,7 @@ import {
   MediaImportRequestSchema,
   MediaImportAcceptedSchema,
   MediaImportStatusSchema,
+  CoverCreditSchema,
   checkMediaImportRequest,
   checkMediaImportStatus,
 } from '@rezics/definitions/media-import';
@@ -463,6 +464,37 @@ export const AuthorPostsResponseSchema = t.Object(
 
 const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
+const imageDimension = t.Integer({ minimum: 1 });
+export const DocumentMediaInputSchema = t.Object(
+  { ids: t.Array(ContentIdSchema, { minItems: 1, maxItems: 32, uniqueItems: true }) },
+  closed,
+);
+export const DocumentMediaPageSchema = t.Object(
+  {
+    images: t.Array(t.Object({
+      id: ContentIdSchema,
+      containerId: ContentIdSchema,
+      digest: mediaDigest,
+      width: imageDimension,
+      height: imageDimension,
+      variants: t.Array(t.Object({
+        format: t.Union([t.Literal('avif'), t.Literal('webp')]),
+        width: t.Integer({ minimum: 1, maximum: 2560 }),
+        height: imageDimension,
+      }, closed), { minItems: 1, maxItems: 12 }),
+      placeholder: t.Union([t.Object({
+        thumbhash: t.String({ minLength: 1, maxLength: 44 }),
+        color: t.String({ pattern: '^#[0-9a-f]{6}$' }),
+      }, closed), t.Null()]),
+      focalPoint: t.Union([t.Object({
+        x: t.Number({ minimum: 0, maximum: 1 }),
+        y: t.Number({ minimum: 0, maximum: 1 }),
+      }, closed), t.Null()]),
+      credit: t.Union([CoverCreditSchema, t.Null()]),
+    }, closed), { maxItems: 32 }),
+  },
+  closed,
+);
 const reservationRequestId = t.String({ minLength: 1, maxLength: 255 });
 const mediaReservationFields = {
   mediaType: t.Union([
