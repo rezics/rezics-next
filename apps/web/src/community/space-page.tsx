@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
@@ -8,6 +9,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import { RealmMembership } from './realm-membership';
+import { RealmBansPanel } from './realm-bans-panel';
 import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
 import { SpaceSetupEntry } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
@@ -257,17 +259,18 @@ export function RealmShelf({ realm, transport }: { realm: RealmHome; transport?:
   );
 }
 
-function Home({ realm }: { realm: RealmHome }) {
+function Home({ realm, management }: { realm: RealmHome; management: ReactNode }) {
   return (
     <>
       <CarriedRealm realm={realm} />
       <RealmShelf key={realm.id} realm={realm} />
+      {management}
     </>
   );
 }
 
 /** A Space's page: its title and summary as the brand surface, and the Realm it carries as that Realm's home. */
-export function SpacePage({ page }: { page: SpacePageData }) {
+export function SpacePage({ page, realmManagement }: { page: SpacePageData; realmManagement?: ReactNode }) {
   const location = useLocation();
   const colors = placeholderColors({ id: page.space.id, types: [] });
   const banner = page.space.banner;
@@ -320,7 +323,9 @@ export function SpacePage({ page }: { page: SpacePageData }) {
       <section aria-label={m.space_follow_label()}>
         <FollowTargetControl targetId={page.space.id} />
       </section>
-      {page.realm ? <Home realm={page.realm} /> : null}
+      {page.realm ? (
+        <Home realm={page.realm} management={realmManagement ?? <RealmBansPanel realmId={page.realm.id} />} />
+      ) : null}
     </article>
   );
 }

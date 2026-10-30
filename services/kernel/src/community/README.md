@@ -120,6 +120,14 @@ current records ordered by account ID, with an opaque cursor bound to the Realm,
 viewer, limit and partition epoch. A record's `actor` is null once the moderator's account is erased. Denials stay on the Realm; content writes must check
 Realm participation directly, and public reads remain open.
 
+The Space home exposes Realm ban management through these native endpoints. Its personal current-ban list
+is also the current `realm:ban` authority check, independent of membership or cached role labels. Each page
+requests 20 records and keeps the native continuation; unavailable or denied reads never become empty lists.
+The ban response's non-null `workflowId` means removal was queued, not completed. The list supplies no removal
+completion status, so refreshing it cannot prove settlement. Unban permits later admission under the Realm's
+ordinary rules without restoring membership or changing follows; existing removal work may still be pending.
+A role-conflict response asks for genuine owner/moderator role removal before another ban attempt.
+
 The same ban precedence applies to non-public boards and their descendants in a public
 Realm, whether the independent grant names an account, an organization role or a
 delegated actor. Content owns those board checks. Protected Realm eligibility uses

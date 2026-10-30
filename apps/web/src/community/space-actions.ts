@@ -28,6 +28,7 @@ import {
   type SpacePageData,
 } from './space';
 import { changePublication, type PublicationChange, type PublicationOutcome } from './publication-controls';
+import { loadRealmBans, validateBanRead, validateBanWrite, writeRealmBan } from './realm-bans';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -221,4 +222,18 @@ export const changeRealmPublication = createServerFn({ method: 'POST' })
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
     return changePublication(kernelClient(), viewerCredential(request), data);
+  });
+
+export const readRealmBans = createServerFn({ method: 'GET' })
+  .validator(validateBanRead)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadRealmBans(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export const changeRealmBan = createServerFn({ method: 'POST' })
+  .validator(validateBanWrite)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return writeRealmBan(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
