@@ -5,6 +5,8 @@ import { commandAccessContext } from '../access/command-admission.ts';
 import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import type { DurableInitiatorRecord, DurableOperationAnchor } from '../access/durable-initiator.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { assertRealmOwnerMayLeave, lockRealmOwnership, REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
+import { resourceRoleHeld } from '../access/resource-role-held.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import {
   authoritativeTimeValue,
@@ -186,6 +188,14 @@ async function acceptOperation(
       const at = authoritativeTimeValue(command.time);
       const realm = await readRealmSpace.run(tx, { route, realm_id: intent.realmId, at });
       if (!realm || realm.spaceId !== intent.spaceId) throw new GrantDeniedError();
+      if (kind === 'leave') {
+        const ownership = { resource: target, accountId: actor.accountId, at: command.time };
+        // Admission authorizes the leave. Direct-role data only selects the invariant,
+        // after locking its native source in this same command and before any effect.
+        await lockRealmOwnership(tx, ownership);
+        if (await resourceRoleHeld(tx, { ...ownership, role: REALM_OWNER_ROLE }))
+          await assertRealmOwnerMayLeave(tx, ownership);
+      }
       if (
         kind === 'join' &&
         (await currentBan.run(tx, { route, realm_id: intent.realmId, account_id: intent.memberAccountId, at }))

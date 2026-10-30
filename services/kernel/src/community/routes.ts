@@ -19,7 +19,8 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { normalizeHandle } from '../access/lifecycle.ts';
 import { withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
-import { ProblemError, problemSchema } from '../http/problem.ts';
+import { PROBLEMS, ProblemError, problemSchema, type ProblemCode } from '../http/problem.ts';
+import { ResourceAccessWriteDeniedError } from '../access/resource-denials.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
@@ -322,6 +323,12 @@ const writeFailures = {
     'rate_limit_unavailable',
   ),
 };
+// Bind only the original problem catalogue. Until Access delivers its discriminator,
+// its native refusal stays generic; Community never manufactures the specific error.
+const realmLeaveConflict = problemSchema(
+  'conflict',
+  ...Object.keys(PROBLEMS).filter((code): code is ProblemCode => code === 'realm_last_owner'),
+);
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const publicationHeaders = t.Object(
@@ -353,6 +360,8 @@ export type CommunityRouteDependencies = {
 };
 
 function communityProblem(error: unknown): never {
+  // Preserve the native ownership subclass for the central problem mapper.
+  if (error instanceof ResourceAccessWriteDeniedError) throw error;
   if (error instanceof RealmBanRoleError) throw new ProblemError('conflict', { detail: error.message });
   if (error instanceof RealmBanInputError) throw new ProblemError('invalid_request');
   if (error instanceof SpaceInputError) throw new ProblemError('invalid_request');
@@ -1679,7 +1688,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/membership',
       {
         params: realmParams,
-        response: { 202: strict(accepted), ...writeFailures },
+        response: { 202: strict(accepted), ...writeFailures, 409: realmLeaveConflict },
         detail: {
           operationId: 'realm.leave',
           'x-exposure': 'public',

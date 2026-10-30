@@ -17,6 +17,8 @@ import legacySource from './membership-legacy-source.sql';
 import proofExists from './membership-proof-exists.sql';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { assertRealmOwnerMayLeave, lockRealmOwnership, REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
+import { resourceRoleHeld } from '../access/resource-role-held.ts';
 import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import {
   DurableInitiatorUnavailableError,
@@ -660,6 +662,17 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         const at = authoritativeTimeValue(command.time);
         const active = await readOne(realmActive.run(tx, { route, id: realmId, at }));
         denyUnless(text(active, 'realmId') === realmId);
+        if (
+          role === null &&
+          (operation ? operation.kind === 'leave' : request.actor.accountId === input.memberAccountId)
+        ) {
+          const ownership = { resource: target, accountId: input.memberAccountId, at: command.time };
+          // Recheck current owners at actual publication, under restored admission.
+          // Moderator removal and account erasure have independent obligations.
+          await lockRealmOwnership(tx, ownership);
+          if (await resourceRoleHeld(tx, { ...ownership, role: REALM_OWNER_ROLE }))
+            await assertRealmOwnerMayLeave(tx, ownership);
+        }
         if (role === 'member') {
           denyUnless(openTransition && reservation.transition);
           denyUnless(

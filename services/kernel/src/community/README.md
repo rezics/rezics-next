@@ -218,6 +218,39 @@ and returned rows constant.
 ## Realm ownership continuity
 
 Access owns explicit owner roles, the last-holder leave guard, candidate ordering and erasure succession.
+Self-leave acceptance in `join.ts` first completes ordinary full Access admission, then locks the native Realm
+ownership source in its existing command effect. At that command's authoritative time, `resourceRoleHeld` probes
+the admitted actor's direct `community.realm.owner` key solely to select `assertRealmOwnerMayLeave`. This data
+never authorizes the action. Non-owners retain ordinary leave; an explicit owner needs another current open-ended
+explicit owner. A scheduled expiring owner, an inferred administrator or action copies cannot supply continuity.
+The existing `createRealmMembership.publish` writer repeats this sequence before a new self-leave close, under
+its current restored initiator admission and its own command time. Authenticated legacy self-leave uses the same
+boundary; moderator removal and account erasure keep their independent native obligations. Receipt replays still
+reauthorize first and return the committed result without performing the new-effect guard again.
+
+The native ownership error is preserved through `communityProblem` for the central HTTP mapper. Access owns the
+required `RealmLastOwnerError extends ResourceAccessWriteDeniedError` export from `access/realm-ownership.ts`
+and the central `PROBLEMS.realm_last_owner` definition/mapping. Those declarations are absent in this base:
+the existing guard refuses generically until Access delivers them. The leave response schema binds the original
+catalogue's discriminator when present, retaining the old conflict alternative without duplicating the catalogue
+or manufacturing an error. The required specific response is HTTP 409, code `realm_last_owner`, title
+`Realm Ownership Transfer Required`, type `https://rezics.com/problems/realm_last_owner`, `retryable:false`,
+`effect_status:not_applied` and the standard `request_id`, with no owner, grant or evidence extensions. Missing
+source/target, denial and source unavailability retain native generic errors. This source binding and compiler
+typing do not establish native acceptance or delivery of the missing HTTP producer.
+
+Recovery uses the existing `/access/{resourceId}` interface to grant another eligible native owner before retrying
+leave. There is no delivered HTTP/UI for the native `createGrantCommands.transferRealmOwner` helper, and leave
+never grants or transfers ownership automatically. Focused native outcomes are in `test/community/owner-leave.test.ts`;
+the original membership and transition acceptance remains required at integration.
+
+Per new self-leave effect, acceptance and publication each add one exact native initialization-row lock and one
+direct owner-key probe. Only an explicit owner adds the guard's repeated lock of that same row and its one native
+statement containing two indexed EXISTS probes (target and one open-ended remaining owner). Thus a non-owner
+adds two statements and an owner four, each with constant result rows and logarithmic indexed key work. There is
+no count, scan, membership expansion or additional command. Existing SERIALIZABLE retries retain the source lock
+through commit and recheck concurrent grant changes; receipt returns add none of this work.
+
 Content does not infer ownership from membership, Global grants or unavailable candidate evidence. Succession is
 Realm-only. A successor's native grant and the Realm resource's returned owned-or-orphaned decision must commit
 in the same Realm-home transaction. The account-erasure participant remains the sole orchestrator and ACK writer;
