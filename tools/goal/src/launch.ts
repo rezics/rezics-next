@@ -87,7 +87,28 @@ function namedWorkerCheck(contractText: string): string | undefined {
 }
 type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'>;
 /** Current acceptance-check and controller wake instructions, repeated at every prompt boundary. */
-export function workerCheckProtocol(worktree: string, briefOrContract: CheckProtocolBrief | string = ''): string {
+/** Whether `<state>/verification-mode` asks for minimal verification: workers type-check and land, checks run later. */
+export function minimalVerification(stateDirectory: string | undefined): boolean {
+  if (!stateDirectory) return false;
+  try {
+    return readFileSync(join(stateDirectory, 'verification-mode'), 'utf8').trim() === 'minimal';
+  } catch {
+    return false;
+  }
+}
+export function workerCheckProtocol(
+  worktree: string,
+  briefOrContract: CheckProtocolBrief | string = '',
+  stateDirectory?: string,
+): string {
+  if (minimalVerification(stateDirectory))
+    return [
+      'Verification is minimal for now: do not run the acceptance command in the brief, and do not run any native, database, browser, host or remote check, worker-check or remote-check.',
+      'Before finishing, run only the type check of the workspaces you changed, locally in the foreground from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several), and fix every error it reports.',
+      'Unit tests you wrote that need no database may be run directly with `bun test <file>` if they take seconds; nothing else.',
+      'Then commit and finish with the normal exit object and `"checks":[]`. The acceptance command runs after integration; a failure there comes back to you as a fix.',
+      'A previous session may contain instructions to start or wait on checks; they are superseded by this one.',
+    ].join(' ');
   const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
   const placement: AcceptancePlacement =
     typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');
@@ -206,7 +227,7 @@ export function workerPrompt(
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
       : '',
-    workerCheckProtocol(task.worktree, task.brief),
+    workerCheckProtocol(task.worktree, task.brief, join(mainCheckout, '.temp', 'goal')),
   ]
     .filter(Boolean)
     .join('\n\n');
