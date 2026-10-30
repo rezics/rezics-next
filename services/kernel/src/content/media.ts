@@ -13,7 +13,8 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { initializeResourceGrants, parentCreationAuthorization, commandAccessContext } from '../access/index.ts';
+import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { accessCheck, accessCommandAuthorization, type AccessCheck } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
