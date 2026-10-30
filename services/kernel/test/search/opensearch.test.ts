@@ -52,7 +52,7 @@ function chunked(bytes: Uint8Array, sizes: readonly number[], headers?: HeadersI
         await Bun.sleep(1);
       },
     }),
-    { status, headers },
+    { status, ...(headers === undefined ? {} : { headers }) },
   );
 }
 
