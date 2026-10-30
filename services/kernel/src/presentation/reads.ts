@@ -535,13 +535,12 @@ export async function readPage(options: {
     credentials.session = encodeSession(options.session.ring, options.session.scope, components);
   };
   const execute = async (read: PreparedRead): Promise<DispatchResult> => {
-    const result = await executeRead(read, origin, credentials, async (request) => {
+    return executeRead(read, origin, credentials, async (request) => {
       budget.charge(nativeCost(read));
       const response = await options.dispatch(new Request(request, { signal: options.incoming.signal }));
       forwardToken(response.headers.get(SESSION_HEADER));
       return response;
     });
-    return result;
   };
   // Resolve the dependency first and release its owner connection before document.get.
   if (descriptor) {
@@ -656,23 +655,9 @@ export async function readPage(options: {
   const resultEntries = reads.map(({ key, canonical }) => [key, byCanonical.get(canonical)!] as const);
   const results = Object.fromEntries(resultEntries) as Record<string, PageResult>;
 
-  let components =
-    credentials.session === null
-      ? []
-      : (decodeSession(options.session.ring, options.session.scope, credentials.session) ?? []);
-  let hasSubResponseToken = false;
-  {
-    for (const token of tokens) {
-      hasSubResponseToken = true;
-      const writes = decodeSession(options.session.ring, options.session.scope, token);
-      if (!writes) continue;
-      for (const write of writes) components = mergeSession(components, write);
-    }
-  }
-
   return {
     results,
     documents,
-    session: hasSubResponseToken ? encodeSession(options.session.ring, options.session.scope, components) : null,
+    session: tokens.length ? credentials.session : null,
   };
 }

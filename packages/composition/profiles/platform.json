@@ -1362,6 +1362,25 @@
               }
             }
           ]
+        },
+        "details": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
         }
       }
     },
