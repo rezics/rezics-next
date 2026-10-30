@@ -198,7 +198,10 @@ export async function readRevisionDetail(
     let change: RevisionChange = { kind: 'record' };
     if (first.revision.kind === 'terms') {
       const support = listed(
-        await readTermSupport.run(client, { ...parameters, revisions: first.revision.term_support ?? [] }),
+        await readTermSupport.run(client, {
+          ...parameters,
+          revisions: (first.revision.term_support ?? []).map((revision) => revision!),
+        }),
       );
       if (
         support.length !== (first.revision.term_support ?? []).length ||

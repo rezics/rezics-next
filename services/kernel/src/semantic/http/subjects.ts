@@ -845,7 +845,7 @@ function subjectRoutes(
                   actor,
                   'subject:read',
                   { route, id: params.id, eligibility: subjectReadEligibility({ route, id: params.id }) },
-                  { pool, deadline: job.deadline, partition: partitionOf(route) },
+                  { pool, deadline: job.deadline },
                 ),
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
               digest: requestDigest('subject.terms', actor, { subject: params.id, expectedRevision, body }),

@@ -63,7 +63,8 @@ export async function readSubjectPageNativeWindow(
   );
   return {
     keys: found.slice(0, input.limit).map((row) => ({
-      sourceKey: [row.slot_id, String(row.log_seq)],
+      // View metadata is nullable to the compiler; the underlying fact key is NOT NULL.
+      sourceKey: [row.slot_id!, String(row.log_seq)],
       component: {
         kind: (row.kind === 'label'
           ? 'label'

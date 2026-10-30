@@ -207,7 +207,7 @@ export async function correctTerms(
       const kinds = { labels: 'label', descriptions: 'description', aliases: 'alias' } as const;
       const changed = (kind: string, language: string) =>
         patched.changes.some((change) => kinds[change.field] === kind && change.languages.includes(language));
-      const oldRows = current.filter((row) => changed(row.kind, row.language!));
+      const oldRows = current.filter((row) => changed(row.kind!, row.language!));
       const facts: StoredFact[] = [];
       const heads = patched.changes.flatMap((change) =>
         change.languages.map((language) => {
@@ -248,7 +248,7 @@ export async function correctTerms(
       await copyRoles.run(tx, {
         partition_no: partitionOf(route),
         transaction_id: transactionId,
-        keys: oldRows.map((row) => row.erasure_key),
+        keys: oldRows.map((row) => row.erasure_key!),
       });
       // Switch heads before inserting facts: their capture trigger may only initialize
       // original heads, never lose an imported head's immutable Source support.
@@ -288,12 +288,12 @@ export async function correctTerms(
   };
 }
 
-function termsOf(rows: { kind: string; language: string | null; body: unknown }[]): Terms {
+function termsOf(rows: { kind: string | null; language: string | null; body: unknown }[]): Terms {
   const terms: Terms = { labels: {}, descriptions: {}, aliases: {} };
   for (const row of rows) {
     if (row.kind === 'label') terms.labels[row.language!] = row.body as string;
     else if (row.kind === 'description') terms.descriptions[row.language!] = row.body as string;
-    else (terms.aliases[row.language!] ??= []).push(row.body as string);
+    else if (row.kind === 'alias') (terms.aliases[row.language!] ??= []).push(row.body as string);
   }
   return terms;
 }
