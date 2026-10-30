@@ -11,10 +11,13 @@ Current native source is `services/kernel/src/access/gates/`:
   `x-action`. Its visible gate groups are a partial inventory, never a complete management inventory.
 - `GET /v1/platform/exposure` returns `{ admitted: string[] }`, meaning **viewer admission** at T. It cannot
   establish public open/closed state, even for a governance viewer. This page does not use it as state.
-- `catalogue.ts:readExposure` reads one opening at T internally. There is no native HTTP complete management
-  read returning the installed group inventory and each group's current public opening at T. Accounts must
-  supply that authorized bounded result before complete inventory or public status can be shown. The local
-  typed `readCurrentExposure` adapter therefore returns `unavailable`, never fabricated rows or closed state.
+- `GET /v1/platform/exposure/management` supplies one authorized bounded page of installed groups and public
+  openings at the kernel's common T. The default `data.ts:readCurrentExposure` binding calls that exact route
+  when discovery declares `exposure.read_management` / `exposure:manage_read`. It validates the closed response,
+  ordered unique groups and common timestamp, preserving native precision and the continuation cursor. Failures
+  remain typed unavailable. Rendering and complete-inventory pagination remain with the page owner; the existing
+  visible group inventory and mutation-authority checks are unchanged. The native contract is owned by
+  [platform gates](../../../../../../services/kernel/src/access/gates/README.md#current-management-configuration).
 - `POST /v1/viewerActions` currently has neither an installed readable Global Context registry entry nor
   exposure command resource bindings (`routes.ts:detail` omits `x-resource-types`/`x-authority-resource-types`).
   Accounts must publish the actual Global Context resource reference and advertise `exposure:open` with

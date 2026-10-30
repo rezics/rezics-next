@@ -4,7 +4,9 @@ export const globalContext = Object.freeze({ route: 0, id: '00000000-0000-8000-8
 export type Action = 'open' | 'close';
 export type Intent = Readonly<{ group: string; action: Action; key: string; body: Readonly<Record<string, never>> }>;
 export type Authority = { status: 'available'; offered: Action[] } | { status: 'unavailable' };
-export type CurrentExposure = { status: 'unavailable'; missing: 'native-current-exposure-management-read' };
+export type CurrentExposure =
+  | { status: 'available'; exposureGroups: { group: string; open: boolean; at: string }[]; next: string | null }
+  | { status: 'unavailable'; missing: 'native-current-exposure-management-read' };
 export type Page =
   | { status: 'ready'; groups: string[]; inventory: 'visible-only'; current: CurrentExposure; authority: Authority }
   | { status: 'signed-out' | 'denied' | 'unavailable' };
@@ -42,18 +44,67 @@ export function parseIntent(value: unknown): Intent {
   return Object.freeze({ group: value.group, action: value.action, key: value.key, body: Object.freeze({}) });
 }
 
-/** No native HTTP result currently supplies complete installed groups and public openings at T. */
-export async function readCurrentExposure(): Promise<CurrentExposure> {
-  return { status: 'unavailable', missing: 'native-current-exposure-management-read' };
+/** One bounded native page. Preserve the kernel's T verbatim, including microseconds. */
+export async function readCurrentExposure(
+  client: KernelClient,
+  authorization: string,
+  query: { cursor?: string; limit?: number } = {},
+): Promise<CurrentExposure> {
+  const unavailable: CurrentExposure = { status: 'unavailable', missing: 'native-current-exposure-management-read' };
+  const limit = query.limit ?? 20;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) return unavailable;
+  try {
+    const result = await client.platform.exposure.management.get({
+      query: { ...query, limit },
+      headers: { authorization },
+      fetch: { cache: 'no-store' },
+    });
+    const value: unknown = result.data;
+    if (
+      result.error ||
+      !object(value) ||
+      Object.keys(value).length !== 2 ||
+      !Array.isArray(value.exposureGroups) ||
+      value.exposureGroups.length > limit ||
+      !(value.next === null || (typeof value.next === 'string' && /^[A-Za-z0-9_-]{1,4096}$/.test(value.next)))
+    )
+      return unavailable;
+    const exposureGroups: Extract<CurrentExposure, { status: 'available' }>['exposureGroups'] = [];
+    let previous = '';
+    let at: string | undefined;
+    for (const row of value.exposureGroups) {
+      if (
+        !object(row) ||
+        Object.keys(row).length !== 3 ||
+        !validGroup(row.group) ||
+        row.group <= previous ||
+        typeof row.open !== 'boolean' ||
+        typeof row.at !== 'string' ||
+        row.at.length > 64 ||
+        !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)$/.test(row.at) ||
+        !Number.isFinite(Date.parse(row.at)) ||
+        (at !== undefined && row.at !== at)
+      )
+        return unavailable;
+      previous = row.group;
+      at = row.at;
+      exposureGroups.push({ group: row.group, open: row.open, at: row.at });
+    }
+    if (value.next !== null && exposureGroups.length !== limit) return unavailable;
+    return { status: 'available', exposureGroups, next: value.next };
+  } catch {
+    return unavailable;
+  }
 }
 
 type Binding = { action: Action; type: string };
-type Discovery = { groups: string[]; bindings: Binding[] };
+type Discovery = { groups: string[]; bindings: Binding[]; management: boolean };
 /** Consume only the real viewer-filtered mounted catalogue. Admission is never public opening data. */
 export function parseDiscovery(value: unknown): Discovery | null {
   if (!object(value) || !object(value.paths) || Object.keys(value.paths).length > 4096) return null;
   const groups = new Set<string>();
   const bindings: Binding[] = [];
+  let management = false;
   let count = 0;
   for (const [path, methods] of Object.entries(value.paths)) {
     if (!object(methods)) return null;
@@ -67,6 +118,14 @@ export function parseDiscovery(value: unknown): Discovery | null {
         groups.add(group);
         if (groups.size > 256) return null;
       } else if (exposure !== 'public') return null;
+      if (
+        path === '/v1/platform/exposure/management' &&
+        method === 'get' &&
+        metadata.operationId === 'exposure.read_management' &&
+        metadata['x-action'] === 'exposure:manage_read' &&
+        exposure === 'public'
+      )
+        management = true;
       for (const action of ['open', 'close'] as const) {
         if (
           method !== 'post' ||
@@ -89,7 +148,7 @@ export function parseDiscovery(value: unknown): Discovery | null {
       }
     }
   }
-  return { groups: [...groups].sort(), bindings };
+  return { groups: [...groups].sort(), bindings, management };
 }
 
 async function readAuthority(client: KernelClient, authorization: string, bindings: Binding[]): Promise<Authority> {
@@ -133,7 +192,9 @@ export async function loadExposure(client: KernelClient, authorization: string):
       status: 'ready',
       groups: catalogue.groups,
       inventory: 'visible-only',
-      current: await readCurrentExposure(),
+      current: catalogue.management
+        ? await readCurrentExposure(client, authorization)
+        : { status: 'unavailable', missing: 'native-current-exposure-management-read' },
       authority: await readAuthority(client, authorization, catalogue.bindings),
     };
   } catch {

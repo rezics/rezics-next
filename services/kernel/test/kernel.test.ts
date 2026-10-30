@@ -109,6 +109,7 @@ const typed = [
   'PATCH /v1/accounts/:accountId/preferences',
   'GET /v1/me/realms',
   'GET /v1/platform/exposure',
+  'GET /v1/platform/exposure/management',
   'POST /v1/platform/exposure/:group/$close',
   'POST /v1/platform/exposure/:group/$open',
   'PATCH /v1/spaces/:spaceId',

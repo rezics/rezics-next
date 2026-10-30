@@ -60,8 +60,11 @@ before the final ordinary authority check. No group-specific account or role dat
 `cache-control: private, no-store`.
 
 The existing management page's adapter is `apps/web/src/platform/exposure/data.ts`, rather than a separate
-`source.ts`. Its source has not landed in this checkout; its typed unavailable current-configuration state remains
-until that adapter is integrated with this GET. Viewer admission must never be substituted for public configuration.
+`source.ts`. Its default current-configuration source calls this exact GET when the installed discovery document
+declares the management operation. It validates the closed bounded page, ordered unique groups and common T,
+preserving the native timestamp and next cursor. Failed, denied or malformed reads remain typed unavailable.
+The page's visible group inventory and mutation authority retain their existing discovery and viewerActions sources;
+viewer admission is never substituted for public configuration.
 
 ## Cost
 
