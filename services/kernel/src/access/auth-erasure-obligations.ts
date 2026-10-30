@@ -79,8 +79,8 @@ export function createAuthErasureObligationBindings(pool: Pool): AuthErasureObli
     return within(deadline, () =>
       withConnection(pool, async (connection) => {
         const client = deadlineClient(connection, deadline) as PoolClient;
-        await client.query('BEGIN');
         try {
+          await client.query('BEGIN');
           await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)", [
             String(Math.max(1, deadline - Date.now())),
           ]);
