@@ -52,12 +52,21 @@ export const SignedOut: Story = {
   name: 'Signed out, account menu open',
   play: async (context) => {
     const menu = await accountMenu(context);
-    await within(menu).findByRole('link', { name: m.account_sign_in() });
-    const links = [...menu.querySelectorAll('a')];
-    await expect(links.length).toBeGreaterThan(0);
-    for (const link of links)
-      for (const element of [link, ...link.querySelectorAll('*')])
-        await expect(getComputedStyle(element).textDecorationLine).not.toContain('underline');
+    const signIn = await within(menu).findByRole('link', { name: m.account_sign_in() });
+    await expect(signIn).toBeVisible();
+    const phoneMenu = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+    const focusedWhenOpened = signIn === document.activeElement;
+    if (!phoneMenu) await expect(focusedWhenOpened).toBe(true);
+    if (focusedWhenOpened) await expect(getComputedStyle(signIn).textDecorationLine).toContain('underline');
+
+    signIn.blur();
+    await userEvent.unhover(signIn);
+    await expect(document.activeElement).not.toBe(signIn);
+    await expect(getComputedStyle(signIn).textDecorationLine).not.toContain('underline');
+    await userEvent.hover(signIn);
+    await expect(getComputedStyle(signIn).textDecorationLine).toContain('underline');
+    await userEvent.unhover(signIn);
+    await expect(getComputedStyle(signIn).textDecorationLine).not.toContain('underline');
   },
   render: () => <ShellPattern visitor="Signed Out" />,
 };
