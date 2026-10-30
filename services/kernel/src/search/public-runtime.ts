@@ -259,8 +259,10 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (!release) notReady();
         const state = await subjectGenerations(config.search, config.prefix);
         if (state.active === null) notReady();
-        if (queried.consumer.physicalTarget !== subjectIndexName(config.prefix, state.active) ||
-          queried.consumer.meaningDigest !== release.digest)
+        if (
+          queried.consumer.physicalTarget !== subjectIndexName(config.prefix, state.active) ||
+          queried.consumer.meaningDigest !== release.digest
+        )
           throw new ProblemError('search_restart_required');
         // Native query resolves incarnation, Source registration and the exact retained execution.
         return create(queried.consumer.physicalTarget, release, context);
@@ -331,7 +333,6 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
   };
 }
 
-
 function readiness(): ProblemError {
   return new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 }
@@ -343,9 +344,15 @@ function unavailable(result: PublicFilterConsumerUnavailable, continuing: boolea
 }
 
 function sameObservation(a: PublicFilterQueriedObservation, b: PublicFilterQueriedObservation): boolean {
-  return isDeepStrictEqual(a.consumer, b.consumer) && a.snapshot.observation === b.snapshot.observation &&
-    (a.snapshot.kind === 'pit' ? b.snapshot.kind === 'pit' :
-      b.snapshot.kind === 'prepared' && a.snapshot.build === b.snapshot.build && a.snapshot.generation === b.snapshot.generation);
+  return (
+    isDeepStrictEqual(a.consumer, b.consumer) &&
+    a.snapshot.observation === b.snapshot.observation &&
+    (a.snapshot.kind === 'pit'
+      ? b.snapshot.kind === 'pit'
+      : b.snapshot.kind === 'prepared' &&
+        a.snapshot.build === b.snapshot.build &&
+        a.snapshot.generation === b.snapshot.generation)
+  );
 }
 
 export type PublicSearchRead<T> = Readonly<{
@@ -395,7 +402,8 @@ export async function readPublicSearchPage<T>(options: {
     queried = options.continuation.queried;
     repair = options.continuation.repair;
   } else {
-    const capture = options.capture ?? await operations.capture({ plan, snapshot: options.snapshot ?? 'prepared' }, context);
+    const capture =
+      options.capture ?? (await operations.capture({ plan, snapshot: options.snapshot ?? 'prepared' }, context));
     if (capture.status === 'captured') {
       queried = capture.queried;
       repair = capture.repair;
@@ -406,31 +414,34 @@ export async function readPublicSearchPage<T>(options: {
     } else return unavailable(capture, false);
   }
   const executions: string[] = [];
-  const collect = (continuation?: RetainedSearchContinuation) => collectRetainedUsefulPage({
-    limit,
-    prepared: queried.snapshot.kind === 'prepared',
-    ...(continuation ? {
-      continuation: continuation.window,
-      spent: continuation.work,
-      frontier: continuation.frontier,
-    } : {}),
-    read: async (_size, refill) => {
-      const result = await operations.query(queried, context, refill);
-      if (result.status === 'queried') {
-        if (!sameObservation(queried, result.queried)) throw readiness();
-        queried = result.queried;
-        executions.push(result.execution);
-        return { execution: result.execution, hits: result.result.hits, window: result.window };
-      }
-      if (result.status === 'preparing') {
-        await recover(repair);
-        throw readiness();
-      }
-      return unavailable(result, options.continuation !== undefined);
-    },
-    check: options.check,
-    canonicalId: options.canonicalId,
-  });
+  const collect = (continuation?: RetainedSearchContinuation) =>
+    collectRetainedUsefulPage({
+      limit,
+      prepared: queried.snapshot.kind === 'prepared',
+      ...(continuation
+        ? {
+            continuation: continuation.window,
+            spent: continuation.work,
+            frontier: continuation.frontier,
+          }
+        : {}),
+      read: async (_size, refill) => {
+        const result = await operations.query(queried, context, refill);
+        if (result.status === 'queried') {
+          if (!sameObservation(queried, result.queried)) throw readiness();
+          queried = result.queried;
+          executions.push(result.execution);
+          return { execution: result.execution, hits: result.result.hits, window: result.window };
+        }
+        if (result.status === 'preparing') {
+          await recover(repair);
+          throw readiness();
+        }
+        return unavailable(result, options.continuation !== undefined);
+      },
+      check: options.check,
+      canonicalId: options.canonicalId,
+    });
   let page = await collect(options.continuation);
   if (page.status === 'preparing') {
     // Do not hand the native owner a filtered vector or a guessed raw frontier.
@@ -438,8 +449,11 @@ export async function readPublicSearchPage<T>(options: {
     // all partially collected values remain internal and are discarded.
     const preparing = await operations.capture({ plan, snapshot: 'prepared' }, context);
     if (!('repair' in preparing)) return unavailable(preparing, options.continuation !== undefined);
-    if (preparing.status === 'captured' && executions.length === 0 &&
-      preparing.queried.snapshot.observation !== queried.snapshot.observation) {
+    if (
+      preparing.status === 'captured' &&
+      executions.length === 0 &&
+      preparing.queried.snapshot.observation !== queried.snapshot.observation
+    ) {
       if (!isDeepStrictEqual(queried.consumer, preparing.queried.consumer))
         throw new ProblemError('search_restart_required');
       // A later request that has spent no raw work can read the actual ready
@@ -456,14 +470,24 @@ export async function readPublicSearchPage<T>(options: {
     }
   }
   const continuation: RetainedSearchContinuation = {
-    queried, repair, window: page.continuation, frontier: page.frontier,
+    queried,
+    repair,
+    window: page.continuation,
+    frontier: page.frontier,
     work: { candidates: page.candidates, rounds: page.rounds },
-    ...(plan.rating ? { rating: {
-      questionId: plan.rating.questionId, populationId: plan.rating.populationId, priorEpoch: plan.rating.priorEpoch,
-    } } : {}),
+    ...(plan.rating
+      ? {
+          rating: {
+            questionId: plan.rating.questionId,
+            populationId: plan.rating.populationId,
+            priorEpoch: plan.rating.priorEpoch,
+          },
+        }
+      : {}),
   };
   return {
-    page, continuation,
+    page,
+    continuation,
     async finalize() {
       // End evidence never substitutes for final privacy authorization. Every
       // batch has its own retained start and original/terminal own-row set.

@@ -9,10 +9,7 @@ import type {
 /** A locator-only delivery boundary. The host supplies its existing durable work
  * enqueue operation; no local queue, job store or replacement frontier is created.
  */
-export type DeliverSearchRepair = (
-  job: PublicFilterConsumerJob,
-  context: PublicFilterConsumerContext,
-) => Promise<void>;
+export type DeliverSearchRepair = (job: PublicFilterConsumerJob, context: PublicFilterConsumerContext) => Promise<void>;
 
 /** Enqueue only actual native work. Missing dependencies cannot mint a preparing job. */
 export async function deliverSearchRecovery(

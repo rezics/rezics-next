@@ -19,7 +19,8 @@ test('useful iteration retains consumed rejects and duplicates before unused can
       expect(size).toBe(5);
       return { hits };
     },
-    check: async () => new Map(hits.filter(({ id }) => id !== 'hidden').map((h) => [h, h.id === 'alias-a' ? 'a' : h.id])),
+    check: async () =>
+      new Map(hits.filter(({ id }) => id !== 'hidden').map((h) => [h, h.id === 'alias-a' ? 'a' : h.id])),
     canonicalId: (id) => id,
   });
   expect(result).toEqual({
@@ -87,7 +88,9 @@ test('incomplete native work is an error and never exhaustion', async () => {
   await expect(
     collectUsefulPage({
       limit: 1,
-      read: async () => { throw error; },
+      read: async () => {
+        throw error;
+      },
       check: async () => new Map<SearchHit, string>(),
       canonicalId: (id) => id,
     }),

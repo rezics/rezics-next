@@ -14,7 +14,13 @@ import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { compileKinds, kindDigest, type KindSnapshot } from './query.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { decodeSearchCursor, encodeSearchCursor, encodeRetainedSearchCursor, retainedSearchContinuation, type SearchCursorBinding } from './cursor.ts';
+import {
+  decodeSearchCursor,
+  encodeSearchCursor,
+  encodeRetainedSearchCursor,
+  retainedSearchContinuation,
+  type SearchCursorBinding,
+} from './cursor.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
 import {
@@ -40,7 +46,11 @@ import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
 import { collectUsefulPage } from './useful-page.ts';
 import { readPublicSearchPage, type DefaultPublicFilterRuntime } from './public-runtime.ts';
-import type { PublicFilterConsumerJob, PublicFilterConsumerOperations, PublicFilterConsumerCapture } from './public-filter-consumer-contract.ts';
+import type {
+  PublicFilterConsumerJob,
+  PublicFilterConsumerOperations,
+  PublicFilterConsumerCapture,
+} from './public-filter-consumer-contract.ts';
 import type { SearchHit as NativeSearchHit } from './query.ts';
 import type { PublicSearchHit } from './public-figures.ts';
 import type { KindValue } from './query.ts';
@@ -367,7 +377,12 @@ export function createSearchService({
         throw error;
       }
     }
-    if (!publicFilters && (text || admitted) && !(text && positiveText(text)) && !(admitted && positiveFilter(admitted)))
+    if (
+      !publicFilters &&
+      (text || admitted) &&
+      !(text && positiveText(text)) &&
+      !(admitted && positiveFilter(admitted))
+    )
       unsupported(text ? '/text' : '/filter');
     return admitted;
   }
@@ -415,11 +430,16 @@ export function createSearchService({
       if (!publicFilters && retained) throw new ProblemError('search_restart_required');
       // Authenticate the original operation/request/viewer before reading dynamic rating metadata.
       const rating = sort === 'rating' ? await ratingEpoch() : undefined;
-      if (retained && (
-        rating ? !retained.rating || retained.rating.questionId !== rating.questionId ||
-          retained.rating.populationId !== rating.populationId || retained.rating.priorEpoch !== rating.priorEpoch
-          : retained.rating !== undefined
-      )) throw new ProblemError('search_restart_required');
+      if (
+        retained &&
+        (rating
+          ? !retained.rating ||
+            retained.rating.questionId !== rating.questionId ||
+            retained.rating.populationId !== rating.populationId ||
+            retained.rating.priorEpoch !== rating.priorEpoch
+          : retained.rating !== undefined)
+      )
+        throw new ProblemError('search_restart_required');
       let ratingPhase: RatingPhase | undefined;
       if (rating) {
         if (request.cursor !== undefined && !retained) {
@@ -443,8 +463,11 @@ export function createSearchService({
       // refill targets that physical index even if the alias switches during validation.
       const generation = await indexRequest(aliasGeneration);
       if (cursor && cursor.generation !== generation) throw new ProblemError('search_restart_required');
-      if (retained && (retained.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
-        retained.queried.consumer.meaningDigest !== native?.digest))
+      if (
+        retained &&
+        (retained.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
+          retained.queried.consumer.meaningDigest !== native?.digest)
+      )
         throw new ProblemError('search_restart_required');
       const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
       if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
@@ -505,34 +528,35 @@ export function createSearchService({
             }
           : source;
       const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
-          sourcePositions.clear();
-          const { passed, relationRejected } = await sourceRequest(() =>
-            checkHits(
-              disclosureSource,
-              hits,
-              clauses,
-              admitted ? { filter: admitted, relationProperties } : undefined,
-            ),
-          );
-          inexact ||= relationRejected === true;
-          const ratingAccepted = rating ? await ratingCandidates([...hits], rating, sourcePositions) : undefined;
-          const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
-          const checked = new Map<(typeof hits)[number], IndexedSubject>();
-          for (const hit of hits) {
-            if (rating && hit.ratingPhase !== 'scored' && hit.ratingPhase !== 'unscored') throw indexNotReady();
-            const subject = subjects.get(hit);
-            if (subject && (!ratingAccepted || ratingAccepted.has(hit))) checked.set(hit, subject);
-          }
-          return checked;
+        sourcePositions.clear();
+        const { passed, relationRejected } = await sourceRequest(() =>
+          checkHits(disclosureSource, hits, clauses, admitted ? { filter: admitted, relationProperties } : undefined),
+        );
+        inexact ||= relationRejected === true;
+        const ratingAccepted = rating ? await ratingCandidates([...hits], rating, sourcePositions) : undefined;
+        const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
+        const checked = new Map<(typeof hits)[number], IndexedSubject>();
+        for (const hit of hits) {
+          if (rating && hit.ratingPhase !== 'scored' && hit.ratingPhase !== 'unscored') throw indexNotReady();
+          const subject = subjects.get(hit);
+          if (subject && (!ratingAccepted || ratingAccepted.has(hit))) checked.set(hit, subject);
+        }
+        return checked;
       };
       const runtime = publicFilters?.();
       if (publicFilters && (!runtime || !readContext)) throw indexNotReady();
       const context = { deadline: readContext?.deadline ?? Date.now() + 10_000 };
       const capturePlan = {
-          ...plan, generation, filterDocument: admitted, text,
-          pageSize: limit, size: Math.min(200, 2 * limit + 1),
-          ...(retained?.frontier.after ? { after: retained.frontier.after } : {}),
-          ...(rating ? { rating, ...(retained?.frontier.ratingPhase ? { ratingPhase: retained.frontier.ratingPhase } : {}) } : {}),
+        ...plan,
+        generation,
+        filterDocument: admitted,
+        text,
+        pageSize: limit,
+        size: Math.min(200, 2 * limit + 1),
+        ...(retained?.frontier.after ? { after: retained.frontier.after } : {}),
+        ...(rating
+          ? { rating, ...(retained?.frontier.ratingPhase ? { ratingPhase: retained.frontier.ratingPhase } : {}) }
+          : {}),
       };
       let operations: PublicFilterConsumerOperations | undefined;
       let capture: PublicFilterConsumerCapture | undefined;
@@ -543,46 +567,58 @@ export function createSearchService({
           } else {
             // Poll the retained preparation instead of reserving a fresh direct
             // allowance on every retry of the same sparse page.
-            const bound = await indexRequest(() => runtime.bindRequest({ plan: capturePlan, snapshot: 'prepared' }, context));
+            const bound = await indexRequest(() =>
+              runtime.bindRequest({ plan: capturePlan, snapshot: 'prepared' }, context),
+            );
             operations = bound.operations;
             capture = bound.capture;
           }
         }
         const installed = operations;
-        const retainedRead = installed ? await indexRequest(() => readPublicSearchPage({
-          operations: installed, context, plan: capturePlan,
-          ...(capture ? { capture } : {}),
-          ...(preparePublic ? { prepare: preparePublic } : {}),
-          ...(retained ? { continuation: retained } : {}),
-          check: checkCandidates,
-          canonicalId: (subject) => subject.id,
-        })) : undefined;
-        if (retainedRead && (
-          retainedRead.continuation.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
-          retainedRead.continuation.queried.consumer.meaningDigest !== native?.digest
-        )) throw request.cursor ? new ProblemError('search_restart_required') : indexNotReady();
-        const useful = retainedRead?.page ?? await collectUsefulPage({
-          limit,
-          frontier: {
-            ...(cursor?.after === undefined ? {} : { after: cursor.after }),
-            ...(ratingPhase === undefined ? {} : { ratingPhase }),
-          },
-          read: async ({ after, ratingPhase: phase, size }) => {
-            const page = await indexRequest(() =>
-              searchSubjectHits(client, prefix, {
-                ...plan,
-                generation,
-                size,
-                ...(after === undefined ? {} : { after }),
-                ...(rating ? { rating, ...(phase ? { ratingPhase: phase } : {}) } : {}),
+        const retainedRead = installed
+          ? await indexRequest(() =>
+              readPublicSearchPage({
+                operations: installed,
+                context,
+                plan: capturePlan,
+                ...(capture ? { capture } : {}),
+                ...(preparePublic ? { prepare: preparePublic } : {}),
+                ...(retained ? { continuation: retained } : {}),
+                check: checkCandidates,
+                canonicalId: (subject) => subject.id,
               }),
-            );
-            overflow ||= page.overflow === true;
-            return page;
-          },
-          check: checkCandidates,
-          canonicalId: (subject) => subject.id,
-        });
+            )
+          : undefined;
+        if (
+          retainedRead &&
+          (retainedRead.continuation.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
+            retainedRead.continuation.queried.consumer.meaningDigest !== native?.digest)
+        )
+          throw request.cursor ? new ProblemError('search_restart_required') : indexNotReady();
+        const useful =
+          retainedRead?.page ??
+          (await collectUsefulPage({
+            limit,
+            frontier: {
+              ...(cursor?.after === undefined ? {} : { after: cursor.after }),
+              ...(ratingPhase === undefined ? {} : { ratingPhase }),
+            },
+            read: async ({ after, ratingPhase: phase, size }) => {
+              const page = await indexRequest(() =>
+                searchSubjectHits(client, prefix, {
+                  ...plan,
+                  generation,
+                  size,
+                  ...(after === undefined ? {} : { after }),
+                  ...(rating ? { rating, ...(phase ? { ratingPhase: phase } : {}) } : {}),
+                }),
+              );
+              overflow ||= page.overflow === true;
+              return page;
+            },
+            check: checkCandidates,
+            canonicalId: (subject) => subject.id,
+          }));
         // Never publish a partial page or a raw-candidate continuation on work-bound exhaustion.
         // Native preparation must own the retained input; a request cannot fabricate a job.
         if (useful.status === 'preparing') throw indexNotReady();
@@ -635,20 +671,21 @@ export function createSearchService({
             : retainedRead
               ? await encodeRetainedSearchCursor(cursors, cursorBinding, generation!, retainedRead.continuation, now)
               : rating
-              ? await encodeRatingCursor(
-                  cursors,
-                  cursorBinding,
-                  rating,
-                  { generation: generation!, phase: ratingPhase!, after: after! },
-                  now,
-                )
-              : await encodeSearchCursor(cursors, cursorBinding, { generation: generation!, after: after! }, now),
+                ? await encodeRatingCursor(
+                    cursors,
+                    cursorBinding,
+                    rating,
+                    { generation: generation!, phase: ratingPhase!, after: after! },
+                    now,
+                  )
+                : await encodeSearchCursor(cursors, cursorBinding, { generation: generation!, after: after! }, now),
           as_of,
         };
         // This operation's final observation must follow all query and source work;
         // another request's in-flight alias read cannot bracket this response.
         await readContext?.complete(response);
-        if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
+        if ((await indexRequest(freshAliasGeneration)) !== generation)
+          throw new ProblemError('search_restart_required');
         if (retainedRead) {
           await indexRequest(retainedRead.finalize);
           await indexRequest(retainedRead.release);

@@ -118,20 +118,29 @@ export function encodeRetainedSearchCursor(
   now = Date.now(),
 ): Promise<string> {
   const { queried, repair, window, frontier, work } = continuation;
-  return encodeSearchCursor(ring, binding, {
-    generation,
-    after: [WINDOW_PREFIX, JSON.stringify({
-      consumer: queried.consumer,
-      snapshot: queried.snapshot.kind === 'prepared'
-        ? { ...queried.snapshot, generation: String(queried.snapshot.generation) }
-        : queried.snapshot,
-      job: repair.job,
-      ...window,
-      ...frontier,
-      work,
-      ...(continuation.rating ? { rating: continuation.rating } : {}),
-    })],
-  }, now);
+  return encodeSearchCursor(
+    ring,
+    binding,
+    {
+      generation,
+      after: [
+        WINDOW_PREFIX,
+        JSON.stringify({
+          consumer: queried.consumer,
+          snapshot:
+            queried.snapshot.kind === 'prepared'
+              ? { ...queried.snapshot, generation: String(queried.snapshot.generation) }
+              : queried.snapshot,
+          job: repair.job,
+          ...window,
+          ...frontier,
+          work,
+          ...(continuation.rating ? { rating: continuation.rating } : {}),
+        }),
+      ],
+    },
+    now,
+  );
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -144,46 +153,87 @@ function nonempty(value: unknown): value is string {
 export function retainedSearchContinuation(after: readonly SearchSortValue[]): RetainedSearchContinuation | null {
   if (after.length !== 2 || after[0] !== WINDOW_PREFIX || typeof after[1] !== 'string') return null;
   let value: unknown;
-  try { value = JSON.parse(after[1]); } catch { return null; }
+  try {
+    value = JSON.parse(after[1]);
+  } catch {
+    return null;
+  }
   if (!record(value) || !record(value.consumer) || !record(value.snapshot) || !record(value.work)) return null;
   const c = value.consumer;
   const s = value.snapshot;
   if (
-    !nonempty(c.physicalTarget) || !nonempty(c.incarnation) || !nonempty(c.consumerGeneration) ||
-    !nonempty(c.projectionGeneration) || !(c.meaningDigest === null || nonempty(c.meaningDigest)) ||
-    !(c.readDefinition === null || nonempty(c.readDefinition)) || !nonempty(s.observation) ||
-    typeof value.work.candidates !== 'number' || !Number.isInteger(value.work.candidates) ||
-    value.work.candidates < 0 || value.work.candidates > 600 ||
-    typeof value.work.rounds !== 'number' || !Number.isInteger(value.work.rounds) ||
-    value.work.rounds < 1 || value.work.rounds > 3 ||
-    !nonempty(value.execution) || !nonempty(value.job) || typeof value.consumed !== 'number' ||
-    !Number.isInteger(value.consumed) || value.consumed < 0 || value.consumed > value.work.candidates ||
+    !nonempty(c.physicalTarget) ||
+    !nonempty(c.incarnation) ||
+    !nonempty(c.consumerGeneration) ||
+    !nonempty(c.projectionGeneration) ||
+    !(c.meaningDigest === null || nonempty(c.meaningDigest)) ||
+    !(c.readDefinition === null || nonempty(c.readDefinition)) ||
+    !nonempty(s.observation) ||
+    typeof value.work.candidates !== 'number' ||
+    !Number.isInteger(value.work.candidates) ||
+    value.work.candidates < 0 ||
+    value.work.candidates > 600 ||
+    typeof value.work.rounds !== 'number' ||
+    !Number.isInteger(value.work.rounds) ||
+    value.work.rounds < 1 ||
+    value.work.rounds > 3 ||
+    !nonempty(value.execution) ||
+    !nonempty(value.job) ||
+    typeof value.consumed !== 'number' ||
+    !Number.isInteger(value.consumed) ||
+    value.consumed < 0 ||
+    value.consumed > value.work.candidates ||
     (value.ratingPhase !== undefined && value.ratingPhase !== 'scored' && value.ratingPhase !== 'unscored')
-  ) return null;
+  )
+    return null;
   const consumer = {
-    physicalTarget: c.physicalTarget, incarnation: c.incarnation,
-    consumerGeneration: c.consumerGeneration, projectionGeneration: c.projectionGeneration,
-    meaningDigest: c.meaningDigest, readDefinition: c.readDefinition,
+    physicalTarget: c.physicalTarget,
+    incarnation: c.incarnation,
+    consumerGeneration: c.consumerGeneration,
+    projectionGeneration: c.projectionGeneration,
+    meaningDigest: c.meaningDigest,
+    readDefinition: c.readDefinition,
   };
   let snapshot: PublicFilterQueriedObservation['snapshot'];
   if (s.kind === 'pit' && nonempty(s.pit)) {
     snapshot = { kind: 'pit', observation: s.observation, pit: s.pit };
-  } else if (s.kind === 'prepared' && nonempty(s.build) && typeof s.generation === 'string' && /^[1-9][0-9]{0,19}$/.test(s.generation)) {
+  } else if (
+    s.kind === 'prepared' &&
+    nonempty(s.build) &&
+    typeof s.generation === 'string' &&
+    /^[1-9][0-9]{0,19}$/.test(s.generation)
+  ) {
     snapshot = { kind: 'prepared', observation: s.observation, build: s.build, generation: BigInt(s.generation) };
   } else return null;
   const tuple = value.after;
-  if (tuple !== undefined && (!Array.isArray(tuple) || tuple.length > 8 || !tuple.every((v): v is SearchSortValue =>
-    v === null || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)),
-  ))) return null;
+  if (
+    tuple !== undefined &&
+    (!Array.isArray(tuple) ||
+      tuple.length > 8 ||
+      !tuple.every(
+        (v): v is SearchSortValue =>
+          v === null || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)),
+      ))
+  )
+    return null;
   let rating: RatingCursorContext | undefined;
   if (value.rating !== undefined) {
     const r = value.rating;
-    if (!record(r) || !nonempty(r.questionId) || !nonempty(r.populationId) ||
-      !(r.priorEpoch === null || (typeof r.priorEpoch === 'number' && Number.isSafeInteger(r.priorEpoch) && r.priorEpoch > 0))) return null;
+    if (
+      !record(r) ||
+      !nonempty(r.questionId) ||
+      !nonempty(r.populationId) ||
+      !(
+        r.priorEpoch === null ||
+        (typeof r.priorEpoch === 'number' && Number.isSafeInteger(r.priorEpoch) && r.priorEpoch > 0)
+      )
+    )
+      return null;
     rating = { questionId: r.questionId, populationId: r.populationId, priorEpoch: r.priorEpoch };
   }
   return {
-    queried: { consumer, snapshot }, repair: { consumer, job: value.job },
+    queried: { consumer, snapshot },
+    repair: { consumer, job: value.job },
     window: { execution: value.execution, consumed: value.consumed },
     work: { candidates: value.work.candidates, rounds: value.work.rounds },
     frontier: {

@@ -84,10 +84,11 @@ export async function collectUsefulPage<T>(options: {
 
 export type SearchConsumedWindow = Readonly<{ execution: string; consumed: number }>;
 export type SearchWindowWork = Readonly<{ candidates: number; rounds: number }>;
-export type RetainedUsefulPage<T> = Omit<UsefulPage<T>, 'frontier'> & Readonly<{
-  frontier: SearchFrontier;
-  continuation: SearchConsumedWindow;
-}>;
+export type RetainedUsefulPage<T> = Omit<UsefulPage<T>, 'frontier'> &
+  Readonly<{
+    frontier: SearchFrontier;
+    continuation: SearchConsumedWindow;
+  }>;
 
 /** The producer owns the retained raw keys, canonical population and all native budgets.
  * A filtered hit vector, including an empty vector, says nothing about exhaustion.
@@ -99,11 +100,16 @@ export async function collectRetainedUsefulPage<T>(options: {
   continuation?: SearchConsumedWindow;
   spent?: SearchWindowWork;
   frontier?: SearchFrontier;
-  read: (size: number, refill?: PublicFilterConsumerRefill) => Promise<Readonly<{
-    execution: string;
-    hits: readonly SearchHit[];
-    window: PublicFilterConsumerWindow;
-  }>>;
+  read: (
+    size: number,
+    refill?: PublicFilterConsumerRefill,
+  ) => Promise<
+    Readonly<{
+      execution: string;
+      hits: readonly SearchHit[];
+      window: PublicFilterConsumerWindow;
+    }>
+  >;
   check: (hits: readonly SearchHit[]) => Promise<ReadonlyMap<SearchHit, T>>;
   canonicalId: (value: T) => string;
 }): Promise<RetainedUsefulPage<T>> {
@@ -115,9 +121,15 @@ export async function collectRetainedUsefulPage<T>(options: {
   const emitted = new Set<string>();
   let candidates = options.spent?.candidates ?? 0;
   let rounds = options.spent?.rounds ?? 0;
-  if (!Number.isInteger(candidates) || candidates < 0 || candidates > candidateLimit ||
-    !Number.isInteger(rounds) || rounds < 0 || rounds > roundLimit ||
-    (options.spent !== undefined && options.continuation === undefined))
+  if (
+    !Number.isInteger(candidates) ||
+    candidates < 0 ||
+    candidates > candidateLimit ||
+    !Number.isInteger(rounds) ||
+    rounds < 0 ||
+    rounds > roundLimit ||
+    (options.spent !== undefined && options.continuation === undefined)
+  )
     throw new RangeError('Invalid retained Search allowance');
   let continuation = options.continuation;
   let frontier = options.frontier ?? {};
@@ -131,14 +143,22 @@ export async function collectRetainedUsefulPage<T>(options: {
     rounds++;
     const { window } = page;
     if (
-      !page.execution || !window || !Number.isInteger(window.examined) ||
-      window.examined < 0 || window.examined > size || typeof window.exhausted !== 'boolean' ||
+      !page.execution ||
+      !window ||
+      !Number.isInteger(window.examined) ||
+      window.examined < 0 ||
+      window.examined > size ||
+      typeof window.exhausted !== 'boolean' ||
       window.positions.length !== page.hits.length ||
-      window.positions.some((position, index) =>
-        !Number.isInteger(position) || position < 0 || position >= window.examined ||
-        (index > 0 && position <= window.positions[index - 1]!),
+      window.positions.some(
+        (position, index) =>
+          !Number.isInteger(position) ||
+          position < 0 ||
+          position >= window.examined ||
+          (index > 0 && position <= window.positions[index - 1]!),
       )
-    ) throw new Error('Invalid retained Search window');
+    )
+      throw new Error('Invalid retained Search window');
     candidates += window.examined;
     // Revalidation and accounting include every returned candidate, including unused suffix.
     const accepted = await options.check(page.hits);

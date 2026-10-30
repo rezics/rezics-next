@@ -42,13 +42,21 @@ async function ready(driver: SearchDriver, request: Record<string, unknown>, exp
 test('the default real Search journey provides useful current-authorized filled or exhausted pages with finite actual preparation and recovery', async () => {
   const driver = await createSearchDriver();
   try {
-    const marker = `useful${randomUUID().replaceAll('-', '').replace(/[0-9]/g, (n) => String.fromCharCode(97 + Number(n)))}`;
+    const marker = `useful${randomUUID()
+      .replaceAll('-', '')
+      .replace(/[0-9]/g, (n) => String.fromCharCode(97 + Number(n)))}`;
     const ids: string[] = [];
     for (let index = 0; index < 27; index++) {
-      const created = await driver.request('editor', 'POST', '/v1/subjects', {
-        type: 'schema:Book',
-        labels: { en: `${marker} ${String(index).padStart(2, '0')}` },
-      }, { 'Idempotency-Key': `"${randomUUID()}"` });
+      const created = await driver.request(
+        'editor',
+        'POST',
+        '/v1/subjects',
+        {
+          type: 'schema:Book',
+          labels: { en: `${marker} ${String(index).padStart(2, '0')}` },
+        },
+        { 'Idempotency-Key': `"${randomUUID()}"` },
+      );
       expect(created.status).toBe(201);
       const subject = created.body.subject as { id: string };
       expect(typeof subject.id).toBe('string');
@@ -58,9 +66,13 @@ test('the default real Search journey provides useful current-authorized filled 
     await ready(driver, request, ids);
     await driver.indexing('paused');
     for (const id of ids.slice(0, 24)) await driver.remove(id, 'hidden');
-    const sparse = useful(await driver.request('anonymous', 'POST', '/v1/subjects:search', {
-      ...request, limit: 1,
-    }), 1);
+    const sparse = useful(
+      await driver.request('anonymous', 'POST', '/v1/subjects:search', {
+        ...request,
+        limit: 1,
+      }),
+      1,
+    );
     if (sparse) expect(sparse.subjects.map(({ id }) => id)).toEqual([ids[24]!]);
     await driver.indexing('running');
     const first = await ready(driver, { ...request, limit: 1 }, [ids[24]!]);
@@ -74,9 +86,14 @@ test('the default real Search journey provides useful current-authorized filled 
     const last = await ready(driver, { ...request, limit: 10 }, ids.slice(24));
     expect(last.subjects.map(({ id }) => id)).toEqual(ids.slice(24));
     expect(last.next).toBeNull();
-    const empty = useful(await driver.request('anonymous', 'POST', '/v1/subjects:search', {
-      text: `${marker}nomatches`, sort: 'name', limit: 1,
-    }), 1);
+    const empty = useful(
+      await driver.request('anonymous', 'POST', '/v1/subjects:search', {
+        text: `${marker}nomatches`,
+        sort: 'name',
+        limit: 1,
+      }),
+      1,
+    );
     expect(empty).toEqual({ subjects: [], next: null });
   } finally {
     await driver.close();
