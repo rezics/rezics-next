@@ -351,7 +351,10 @@ export const ACCESS_EVENTS = {
   ),
   'com.rezics.access.realm-membership-legacy-recorded.v1': Type.Object(
     {
-      accountId: identity, reservationId: identity, realmId: identity, holdTransactionId: identity,
+      accountId: identity,
+      reservationId: identity,
+      realmId: identity,
+      holdTransactionId: identity,
       state: Type.Union([membershipOutcome, Type.Literal('pending'), Type.Literal('uncertain')]),
     },
     { additionalProperties: false },

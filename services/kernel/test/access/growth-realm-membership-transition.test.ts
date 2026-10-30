@@ -28,14 +28,21 @@ import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts
 
 let controls: Pool | undefined;
 const pending = new Set<string>();
-afterAll(async () => { await controls?.end(); await closeCommunityDrivers(); });
+afterAll(async () => {
+  await controls?.end();
+  await closeCommunityDrivers();
+});
 async function settleNative() {
   for (const id of pending) {
-    try { await waitCommunityWorkflow(id); } finally { pending.delete(id); }
+    try {
+      await waitCommunityWorkflow(id);
+    } finally {
+      pending.delete(id);
+    }
   }
 }
 function control(state: Native) {
-  return controls ??= new Pool({ connectionString: state.system.database.pool.options.connectionString, max: 4 });
+  return (controls ??= new Pool({ connectionString: state.system.database.pool.options.connectionString, max: 4 }));
 }
 const key = () => crypto.randomUUID();
 async function body<T>(response: Response, status: number): Promise<T> {
@@ -156,40 +163,40 @@ async function lock(state: Native, owner: 'realm' | 'account') {
   const client = await control(state).connect();
   await client.query('BEGIN');
   try {
-  const pid = (await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
-  if (owner === 'realm')
-    await client.query('SELECT 1 FROM community.realm WHERE route=$1 AND realm_id=$2 FOR UPDATE', [
-      routeOf(state.realm.realmId),
-      state.realm.realmId,
-    ]);
-  else
-    await client.query('SELECT 1 FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [
-      routeOf(state.persona.accountId),
-      state.persona.accountId,
-    ]);
-  let done = false;
-  return {
-    pid,
-    client,
-    async release() {
-      if (!done) {
-        done = true;
-        await client.query('ROLLBACK');
-        client.release();
-      }
-    },
-  };
-  } catch (error) { await client.query('ROLLBACK'); client.release(); throw error; }
+    const pid = (await client.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+    if (owner === 'realm')
+      await client.query('SELECT 1 FROM community.realm WHERE route=$1 AND realm_id=$2 FOR UPDATE', [
+        routeOf(state.realm.realmId),
+        state.realm.realmId,
+      ]);
+    else
+      await client.query('SELECT 1 FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [
+        routeOf(state.persona.accountId),
+        state.persona.accountId,
+      ]);
+    let done = false;
+    return {
+      pid,
+      client,
+      async release() {
+        if (!done) {
+          done = true;
+          await client.query('ROLLBACK');
+          client.release();
+        }
+      },
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    client.release();
+    throw error;
+  }
 }
 async function blocked(state: Native, pid: number) {
   return until(
     async () =>
-      (
-        await control(state).query(
-          'SELECT pid,query FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',
-          [pid],
-        )
-      ).rows,
+      (await control(state).query('SELECT pid,query FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))', [pid]))
+        .rows,
     (rows) => rows.length > 0,
     'a native transaction waiting on the owner row',
   );
@@ -320,14 +327,18 @@ test.serial(
     expect(proof?.outcome).toBe('published');
     const consumeKey = key();
     await state.transitions.consume({ ...first, key: consumeKey, proofTransactionId: proof!.transactionId });
-    await expect(state.system.database.pool.query(
-      'UPDATE community.realm_membership_proof SET outcome=outcome WHERE route=$1 AND realm_id=$2 AND account_id=$3 AND generation_id=$4',
-      [routeOf(state.realm.realmId), state.realm.realmId, first.accountId, first.transition.generationId],
-    )).rejects.toThrow();
-    await expect(state.system.database.pool.query(
-      'DELETE FROM access.realm_membership_transition WHERE route=$1 AND account_id=$2 AND generation_id=$3',
-      [routeOf(first.accountId), first.accountId, first.transition.generationId],
-    )).rejects.toThrow();
+    await expect(
+      state.system.database.pool.query(
+        'UPDATE community.realm_membership_proof SET outcome=outcome WHERE route=$1 AND realm_id=$2 AND account_id=$3 AND generation_id=$4',
+        [routeOf(state.realm.realmId), state.realm.realmId, first.accountId, first.transition.generationId],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      state.system.database.pool.query(
+        'DELETE FROM access.realm_membership_transition WHERE route=$1 AND account_id=$2 AND generation_id=$3',
+        [routeOf(first.accountId), first.accountId, first.transition.generationId],
+      ),
+    ).rejects.toThrow();
     const later = await state.reserve();
     expect(later.reservationId).toBe(first.reservationId);
     expect(later.transition.generationId).not.toBe(first.transition.generationId);
@@ -520,87 +531,151 @@ test.serial(
   120_000,
 );
 
-test.serial('a real queued stale publisher cannot publish after exact cancellation consumption and genuine T', async () => {
-  const state = await setup();
-  const held = await state.reserve();
-  const original = await lock(state, 'realm');
-  const parked = await control(state).connect();
-  const publisherPool = new Pool({ connectionString: state.system.database.pool.options.connectionString, max: 1 });
-  await parked.query('BEGIN');
-  try {
-    const cancelling = state.membership.cancel(held, key()).then(value => ({ value }), error => ({ error }));
-    await blocked(state, original.pid);
-    const parkPid = (await parked.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
-    const parkedLock = parked.query('SELECT 1 FROM community.realm WHERE route=$1 AND realm_id=$2 FOR UPDATE',
-      [routeOf(state.realm.realmId), state.realm.realmId]).then(value => ({ value }), error => ({ error }));
-    await until(async () => (await control(state).query('SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type=$2', [parkPid, 'Lock'])).rows,
-      rows => rows.length === 1, 'second actual Realm locker queued');
-    const publisherPid = (await publisherPool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
-    const publisher = createRealmMembership({ pool: publisherPool, access: state.system.access, referenceKeys: state.system.tokenKeys });
-    const publishing = publisher.authorize(state.persona.bearer, state.input)
-      .then(request => publisher.publish(request, state.input, held, key()))
-      .then(value => ({ value }), error => ({ error }));
-    await until(async () => (await control(state).query('SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type=$2', [publisherPid, 'Lock'])).rows,
-      rows => rows.length === 1, 'actual positive command queued before cancellation commits');
-    await original.release();
-    expect('value' in await cancelling).toBe(true);
-    expect('value' in await parkedLock).toBe(true);
-    expect((await blocked(state, parkPid)).some(row => row.pid === publisherPid)).toBe(true);
+test.serial(
+  'a real queued stale publisher cannot publish after exact cancellation consumption and genuine T',
+  async () => {
+    const state = await setup();
+    const held = await state.reserve();
+    const original = await lock(state, 'realm');
+    const parked = await control(state).connect();
+    const publisherPool = new Pool({ connectionString: state.system.database.pool.options.connectionString, max: 1 });
+    await parked.query('BEGIN');
+    try {
+      const cancelling = state.membership.cancel(held, key()).then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
+      await blocked(state, original.pid);
+      const parkPid = (await parked.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      const parkedLock = parked
+        .query('SELECT 1 FROM community.realm WHERE route=$1 AND realm_id=$2 FOR UPDATE', [
+          routeOf(state.realm.realmId),
+          state.realm.realmId,
+        ])
+        .then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+      await until(
+        async () =>
+          (
+            await control(state).query('SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type=$2', [
+              parkPid,
+              'Lock',
+            ])
+          ).rows,
+        (rows) => rows.length === 1,
+        'second actual Realm locker queued',
+      );
+      const publisherPid = (await publisherPool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      const publisher = createRealmMembership({
+        pool: publisherPool,
+        access: state.system.access,
+        referenceKeys: state.system.tokenKeys,
+      });
+      const publishing = publisher
+        .authorize(state.persona.bearer, state.input)
+        .then((request) => publisher.publish(request, state.input, held, key()))
+        .then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+      await until(
+        async () =>
+          (
+            await control(state).query('SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type=$2', [
+              publisherPid,
+              'Lock',
+            ])
+          ).rows,
+        (rows) => rows.length === 1,
+        'actual positive command queued before cancellation commits',
+      );
+      await original.release();
+      expect('value' in (await cancelling)).toBe(true);
+      expect('value' in (await parkedLock)).toBe(true);
+      expect((await blocked(state, parkPid)).some((row) => row.pid === publisherPid)).toBe(true);
+      await state.ports.finalize!(held, key());
+      expect(
+        (
+          await state.system.database.pool.query(
+            'SELECT 1 FROM access.membership_inverse WHERE route=$1 AND account_id=$2 AND reservation_id=$3',
+            [routeOf(held.accountId), held.accountId, held.reservationId],
+          )
+        ).rows,
+      ).toHaveLength(1);
+      await state.erase();
+      expect(await readErasureStatus(state.system.database.pool, held.accountId)).not.toBeNull();
+      await parked.query('ROLLBACK');
+      expect('error' in (await publishing)).toBe(true);
+      expect(await state.rows()).toEqual([]);
+      expect(await state.hold()).toEqual([]);
+    } finally {
+      await original.release();
+      await parked.query('ROLLBACK');
+      parked.release();
+      await publisherPool.end();
+    }
+  },
+  120_000,
+);
+
+test.serial(
+  'cancelling a later confirmation closes only that generation while the live membership and inverse survive',
+  async () => {
+    const state = await setup();
+    await state.join();
+    await settleNative();
+    const held = await state.reserve();
+    await state.ports.cancel!(held, key());
+    expect((await state.transitions.proof(held))?.outcome).toBe('cancelled');
+    expect(await state.hold()).toHaveLength(1);
     await state.ports.finalize!(held, key());
-    expect((await state.system.database.pool.query('SELECT 1 FROM access.membership_inverse WHERE route=$1 AND account_id=$2 AND reservation_id=$3',
-      [routeOf(held.accountId), held.accountId, held.reservationId])).rows).toHaveLength(1);
-    await state.erase();
-    expect(await readErasureStatus(state.system.database.pool, held.accountId)).not.toBeNull();
-    await parked.query('ROLLBACK');
-    expect('error' in await publishing).toBe(true);
-    expect(await state.rows()).toEqual([]);
     expect(await state.hold()).toEqual([]);
-  } finally {
-    await original.release();
-    await parked.query('ROLLBACK');
-    parked.release();
-    await publisherPool.end();
-  }
-}, 120_000);
+    expect(await state.rows()).toHaveLength(1);
+    expect(await state.membership.authority.readTerminal(state.system.database.pool, held)).toBeNull();
+    await expect(state.ports.terminalize(held, key())).rejects.toThrow();
+    expect(
+      (
+        await state.system.database.pool.query(
+          'SELECT 1 FROM access.membership_inverse WHERE route=$1 AND account_id=$2 AND reservation_id=$3',
+          [routeOf(held.accountId), held.accountId, held.reservationId],
+        )
+      ).rows,
+    ).toHaveLength(1);
+    await state.erase();
+    expect(await state.rows()).toHaveLength(1);
+  },
+  120_000,
+);
 
-test.serial('cancelling a later confirmation closes only that generation while the live membership and inverse survive', async () => {
-  const state = await setup();
-  await state.join();
-  await settleNative();
-  const held = await state.reserve();
-  await state.ports.cancel!(held, key());
-  expect((await state.transitions.proof(held))?.outcome).toBe('cancelled');
-  expect(await state.hold()).toHaveLength(1);
-  await state.ports.finalize!(held, key());
-  expect(await state.hold()).toEqual([]);
-  expect(await state.rows()).toHaveLength(1);
-  expect(await state.membership.authority.readTerminal(state.system.database.pool, held)).toBeNull();
-  await expect(state.ports.terminalize(held, key())).rejects.toThrow();
-  expect((await state.system.database.pool.query('SELECT 1 FROM access.membership_inverse WHERE route=$1 AND account_id=$2 AND reservation_id=$3',
-    [routeOf(held.accountId), held.accountId, held.reservationId])).rows).toHaveLength(1);
-  await state.erase();
-  expect(await state.rows()).toHaveLength(1);
-}, 120_000);
-
-test.serial('closing a Realm transition never releases an unrelated native operator responsibility', async () => {
-  const state = await setup();
-  await state.join();
-  await settleNative();
-  const subject = await state.deletion.person();
-  const operators = createOperatorCommands({ pool: state.system.database.pool, access: state.system.access,
-    actions: LIFECYCLE_ACTIONS, managementAction: 'account:manage' });
-  const input = { operatorAccountId: state.persona.accountId, subjectAccountId: subject.accountId, key: key() };
-  const held = await operators.reserveResponsibility(input);
-  expect(await operators.reserveResponsibility(input)).toMatchObject({ replayed: true });
-  await expect(state.erase()).rejects.toThrow();
-  expect(await readErasureStatus(state.system.database.pool, state.persona.accountId)).toBeNull();
-  const responsibility = { ...held.value, key: key() };
-  await expect(operators.releaseResponsibility(responsibility)).rejects.toThrow();
-  await operators.retireResponsibility({ ...responsibility, key: key() });
-  await operators.releaseResponsibility({ ...responsibility, key: key() });
-  await state.erase();
-  expect(await state.rows()).toHaveLength(1);
-}, 120_000);
+test.serial(
+  'closing a Realm transition never releases an unrelated native operator responsibility',
+  async () => {
+    const state = await setup();
+    await state.join();
+    await settleNative();
+    const subject = await state.deletion.person();
+    const operators = createOperatorCommands({
+      pool: state.system.database.pool,
+      access: state.system.access,
+      actions: LIFECYCLE_ACTIONS,
+      managementAction: 'account:manage',
+    });
+    const input = { operatorAccountId: state.persona.accountId, subjectAccountId: subject.accountId, key: key() };
+    const held = await operators.reserveResponsibility(input);
+    expect(await operators.reserveResponsibility(input)).toMatchObject({ replayed: true });
+    await expect(state.erase()).rejects.toThrow();
+    expect(await readErasureStatus(state.system.database.pool, state.persona.accountId)).toBeNull();
+    const responsibility = { ...held.value, key: key() };
+    await expect(operators.releaseResponsibility(responsibility)).rejects.toThrow();
+    await operators.retireResponsibility({ ...responsibility, key: key() });
+    await operators.releaseResponsibility({ ...responsibility, key: key() });
+    await state.erase();
+    expect(await state.rows()).toHaveLength(1);
+  },
+  120_000,
+);
 
 /** Historical fixture only: represent an old writer's stable hold using the
  * actual native inverse provenance and real published intervals. No account,
@@ -781,9 +856,12 @@ test.serial(
           legacyAccountId: legacy.accountId,
           issuer: claims.iss,
           audience: claims.aud,
-          jwks: await response.json() as TransitionGrowthConfig['jwks'],
+          jwks: (await response.json()) as TransitionGrowthConfig['jwks'],
           routeKey: Buffer.from(state.system.routeKey).toString('base64url'),
-          keys: [...state.system.tokenKeys.keys].map(([id, value]): [number, string] => [id, Buffer.from(value).toString('base64url')]),
+          keys: [...state.system.tokenKeys.keys].map(([id, value]): [number, string] => [
+            id,
+            Buffer.from(value).toString('base64url'),
+          ]),
         } satisfies TransitionGrowthConfig),
       );
       child.stdin.end();

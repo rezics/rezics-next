@@ -719,8 +719,20 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           });
         return {
           value,
-          events: [{ type: 'com.rezics.community.realm.membership.v1', subject: realmId,
-            data: { realmId, accountId: input.memberAccountId, reservationId: reservation.reservationId, role, at, transactionId: command.transactionId } }],
+          events: [
+            {
+              type: 'com.rezics.community.realm.membership.v1',
+              subject: realmId,
+              data: {
+                realmId,
+                accountId: input.memberAccountId,
+                reservationId: reservation.reservationId,
+                role,
+                at,
+                transactionId: command.transactionId,
+              },
+            },
+          ],
         };
       },
     );
@@ -933,12 +945,27 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           const existing = await readTransition(tx, exact);
           if (existing) denyUnless(existing.outcome === 'cancelled');
           else {
-            denyUnless(!first(await proofExists.run(tx, { route, realm_id: realmId, account_id: reservation.accountId, generation_id: exact.transition.generationId })));
+            denyUnless(
+              !first(
+                await proofExists.run(tx, {
+                  route,
+                  realm_id: realmId,
+                  account_id: reservation.accountId,
+                  generation_id: exact.transition.generationId,
+                }),
+              ),
+            );
             transition = { ...exact.transition, outcome: 'cancelled' };
             await proofWrite.run(tx, {
-              ...transitionParameters(exact), route, outcome: 'cancelled', transaction_id: command.transactionId,
-              publication_transaction_id: '', principal_id: identity.principal.id,
-              command_kind: TERMINAL_KIND, command_key: key, at,
+              ...transitionParameters(exact),
+              route,
+              outcome: 'cancelled',
+              transaction_id: command.transactionId,
+              publication_transaction_id: '',
+              principal_id: identity.principal.id,
+              command_kind: TERMINAL_KIND,
+              command_key: key,
+              at,
             });
           }
         }

@@ -47,7 +47,11 @@ export function first<T>(value: T | readonly T[] | null): T | null {
 }
 /** A released exact preflight, never held across the foreign command. Source
  * proof uniqueness serializes a delayed publisher against consume/cancellation. */
-export async function isRealmTransitionOpen(pool: Pool, input: RealmMembershipTransition, deadline = deadlineFor(30_000)): Promise<boolean> {
+export async function isRealmTransitionOpen(
+  pool: Pool,
+  input: RealmMembershipTransition,
+  deadline = deadlineFor(30_000),
+): Promise<boolean> {
   const row = first(await read.run(deadlineClient(pool, deadline), transitionParameters(input)));
   return !!row && row.active && row.held && row.proofTransactionId === null;
 }

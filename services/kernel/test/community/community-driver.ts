@@ -192,10 +192,19 @@ export async function waitCommunityWorkflow(workflowId: string): Promise<unknown
 }
 
 /** Deployment coordinator entry through the normally registered Accounts host. */
-export async function reconcileCommunityMembership(input: RealmMembershipReconciliationInput): Promise<RealmMembershipReconciliationResult> {
+export async function reconcileCommunityMembership(
+  input: RealmMembershipReconciliationInput,
+): Promise<RealmMembershipReconciliationResult> {
   if (!shared) throw new Error('Community driver is not open');
-  const handle = await shared.work.enqueue<(input: RealmMembershipReconciliationInput) => Promise<RealmMembershipReconciliationResult>>(
-    { queueName: 'workflows', workflowName: REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME, workflowID: crypto.randomUUID() }, input,
+  const handle = await shared.work.enqueue<
+    (input: RealmMembershipReconciliationInput) => Promise<RealmMembershipReconciliationResult>
+  >(
+    {
+      queueName: 'workflows',
+      workflowName: REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME,
+      workflowID: crypto.randomUUID(),
+    },
+    input,
   );
   const result = await handle.getResult({ pollingIntervalMs: 10 });
   if (!result) throw new Error('Native reconciliation result is missing');
