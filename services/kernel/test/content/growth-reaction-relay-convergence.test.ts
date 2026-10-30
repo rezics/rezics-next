@@ -29,6 +29,7 @@ let runtime: ReactionWorkRuntime | undefined;
 type RunEvidence = {
   readonly scale: number;
   readonly targetId: string;
+  readonly kind: 'like' | 'love';
   readonly targetRoute: number;
   readonly targetPartition: number;
   readonly sourcePartition: number;
@@ -93,6 +94,7 @@ async function executeJoinedOperation(
   evidence: Awaited<ReturnType<typeof captureEvidence>>,
   scale: number,
   idempotencyKey: string,
+  kind: 'like' | 'love',
 ): Promise<RunEvidence> {
   const targetRoute = routeOf(targetId);
   const actorRoute = routeOf(actor.accountId);
@@ -104,10 +106,10 @@ async function executeJoinedOperation(
   const result = await setReaction(
     { pool: db.pool, access: base!.system.access },
     actor,
-    { targetKind: 'thread', targetId, kind: 'like' },
+    { targetKind: 'thread', targetId, kind },
     { idempotencyKey, deadline: Date.now() + 30_000, requestId: randomUUID() },
   );
-  if (!result || result.value.kind !== 'like')
+  if (!result || result.value.kind !== kind)
     throw new Error(
       `The native reaction command did not commit a slot change for ${actor.accountId}/${targetId}: ${JSON.stringify(result)}`,
     );
@@ -135,7 +137,7 @@ async function executeJoinedOperation(
       event.type === 'com.rezics.content.reaction.changed.v1' &&
       (event.data as { actorId?: unknown; targetId?: unknown; kind?: unknown }).actorId === actor.accountId &&
       (event.data as { targetId?: unknown }).targetId === targetId &&
-      (event.data as { kind?: unknown }).kind === 'like',
+      (event.data as { kind?: unknown }).kind === kind,
   );
   if (matching.length !== 1) throw new Error('The real outbox did not return the committed target reaction event');
   await runtime!.replay(matching[0]!);
@@ -143,6 +145,7 @@ async function executeJoinedOperation(
   return {
     scale,
     targetId,
+    kind,
     targetRoute,
     targetPartition,
     sourcePartition,
@@ -307,15 +310,10 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
   // its decoded source event, the registered production projection and same-event replay as one fixed operation.
   base = await createReactionRelayBase();
   const measuredTargets = new Map<number, string>();
-  const warmupTargets = new Map<number, string>();
   for (const scale of scales) {
     measuredTargets.set(
       scale,
       (await base.createThread(base.mainBoardId, `Reaction growth measured ${scale} ${randomUUID()}`)).threadId,
-    );
-    warmupTargets.set(
-      scale,
-      (await base.createThread(base.mainBoardId, `Reaction growth warmup ${scale} ${randomUUID()}`)).threadId,
     );
   }
 
@@ -335,6 +333,8 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
   const populations: PopulationEvidence[] = [];
   const captures = new Map<number, Awaited<ReturnType<typeof captureEvidence>>>();
   const idempotencyKeys = new Map<number, string>();
+  const warmupKinds = new Map<number, 'like' | 'love'>();
+  const measuredKinds = new Map<number, 'like' | 'love'>();
   const report = await checkGrowth(growth, {
     name: 'Joined reaction slot and target projection replay',
     scales,
@@ -344,9 +344,21 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
     async grow(db, scale) {
       const targetId = measuredTargets.get(scale)!;
       const targetRoute = routeOf(targetId)!;
+      const existing = await db.admin.query<{ kind: string }>(
+        `SELECT kind FROM content.reaction
+          WHERE route=$1 AND actor_account_id=$2 AND target_kind='thread' AND target_id=$3`,
+        [actorRoute, actorId, targetId],
+      );
+      expect(existing.rows).toEqual([]);
       const population = growthPopulation(actorId, actorRoute, targetRoute, scale);
       const before = await populationEvidence(db, actorId, actorRoute, targetRoute);
       await seed(db, population, { from: 0, to: scale });
+      const afterSeed = await db.admin.query<{ kind: string }>(
+        `SELECT kind FROM content.reaction
+          WHERE route=$1 AND actor_account_id=$2 AND target_kind='thread' AND target_id=$3`,
+        [actorRoute, actorId, targetId],
+      );
+      expect(afterSeed.rows).toEqual([]);
       const snapshot = await populationEvidence(db, actorId, actorRoute, targetRoute);
       populations.push({
         scale,
@@ -365,8 +377,16 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
       });
     },
     async warmup(_db, scale, repetition) {
-      const targetId = warmupTargets.get(scale)!;
+      const targetId = measuredTargets.get(scale)!;
       const targetRoute = routeOf(targetId)!;
+      const previous = await growth!.admin.query<{ kind: 'like' | 'love' }>(
+        `SELECT kind FROM content.reaction
+          WHERE route=$1 AND actor_account_id=$2 AND target_kind='thread' AND target_id=$3`,
+        [actorRoute, actorId, targetId],
+      );
+      if (previous.rows.length > 1) throw new Error('Warmup target had more than one actor slot');
+      const kind = previous.rows[0]?.kind === 'like' ? 'love' : 'like';
+      warmupKinds.set(scale, kind);
       const setup = await captureEvidence(growth!, actorId, targetRoute);
       await executeJoinedOperation(
         growth!,
@@ -375,6 +395,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         setup,
         scale,
         `reaction-growth-warmup-${repetition}-${scale}`,
+        kind,
       );
     },
     async prepare(_db, scale, repetition) {
@@ -384,16 +405,20 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
           WHERE route=$1 AND actor_account_id=$2 AND target_kind='thread' AND target_id=$3`,
         [actorRoute, actorId, targetId],
       );
-      expect(occupied.rows).toEqual([]);
+      const warmupKind = warmupKinds.get(scale);
+      if (!warmupKind) throw new Error(`Missing warmup slot kind for scale ${scale}`);
+      expect(occupied.rows).toEqual([{ kind: warmupKind }]);
       captures.set(repetition, await captureEvidence(growth!, actorId, routeOf(targetId)!));
       idempotencyKeys.set(repetition, `reaction-growth-measured-${repetition}-${scale}`);
+      measuredKinds.set(scale, warmupKind === 'like' ? 'love' : 'like');
     },
     async operation(_db, scale, repetition) {
       const targetId = measuredTargets.get(scale)!;
       const setup = captures.get(repetition);
       const key = idempotencyKeys.get(repetition);
-      if (!setup || !key) throw new Error(`Missing pre-operation capture for repetition ${repetition}`);
-      const result = await executeJoinedOperation(growth!, actor, targetId, setup, scale, key);
+      const kind = measuredKinds.get(scale);
+      if (!setup || !key || !kind) throw new Error(`Missing pre-operation capture for repetition ${repetition}`);
+      const result = await executeJoinedOperation(growth!, actor, targetId, setup, scale, key, kind);
       evidence.push(result);
       return result;
     },
@@ -444,7 +469,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
           WHERE route=$1 AND actor_account_id=$2 AND target_kind='thread' AND target_id=$3`,
       [actorRoute, actorId, run.targetId],
     );
-    expect(sourceSlot.rows).toEqual([{ kind: 'like' }]);
+    expect(sourceSlot.rows).toEqual([{ kind: run.kind }]);
     const receipt = await growth.admin.query<{ idempotency_key: string; position: string }>(
       `SELECT idempotency_key, position::text AS position FROM core.receipt
           WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND idempotency_key=$3`,
@@ -468,12 +493,12 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
           WHERE route=$1 AND target_id=$2 AND source_partition=$3 ORDER BY kind`,
       [run.targetRoute, run.targetId, run.sourcePartition],
     );
-    expect(projection.rows).toEqual([{ kind: 'like', count: 1 }]);
+    expect(projection.rows).toEqual([{ kind: run.kind, count: 1 }]);
     const total = await growth.admin.query<{ kind: string; count: number }>(
       `SELECT kind, count FROM content.reaction_total WHERE route=$1 AND target_id=$2 ORDER BY kind`,
       [run.targetRoute, run.targetId],
     );
-    expect(total.rows).toEqual([{ kind: 'like', count: 1 }]);
+    expect(total.rows).toEqual([{ kind: run.kind, count: 1 }]);
     const targetHead = await readPartitionPosition(growth.pool, run.targetPartition);
     const prepared = captures.get([...idempotencyKeys.entries()].find(([, key]) => key === run.idempotencyKey)![0])!;
     expect(targetHead).toEqual(prepared.targetPosition);
