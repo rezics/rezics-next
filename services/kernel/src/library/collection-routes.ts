@@ -15,7 +15,7 @@ import { FactSchema } from '../search/http/routes.ts';
 import { CoverSummarySchema } from '../semantic/http/summaries.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
-import { createCollectionReads } from './collection-reads.ts';
+import { collectionReadView, createCollectionReads } from './collection-reads.ts';
 import { createCollectionCommands } from './collections.ts';
 import { collectionPresentation } from './collection-presentation.ts';
 import { parseCollectionRule, requireCollectionRuleExecution } from './collection-rules.ts';
@@ -360,9 +360,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         detail: detail('collection.list', 'collection:read', true),
       },
       async ({ query, actor, admission, job }) =>
-        admission.run('normal', job, async () =>
-          fullView(viewDependencies(), actor, query.view, await read().listCollections(actor, basicQuery(query))),
-        ),
+        admission.run('normal', job, async () => {
+          const page = await read().listCollections(actor, basicQuery(query));
+          return fullView(viewDependencies(), actor, query.view, {
+            ...page, collections: page.collections.map(collectionReadView),
+          });
+        }),
     )
     .get(
       '/v1/accounts/:accountId/collections',
@@ -376,14 +379,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         detail: detail('account.collections', 'collection:read', true),
       },
       async ({ params, query, actor, admission, job }) =>
-        admission.run('normal', job, async () =>
-          fullView(
-            viewDependencies(),
-            actor,
-            query.view,
-            await read().listAccountCollections(actor, { curatorAccountId: params.accountId, ...basicQuery(query) }),
-          ),
-        ),
+        admission.run('normal', job, async () => {
+          const page = await read().listAccountCollections(actor, { curatorAccountId: params.accountId, ...basicQuery(query) });
+          return fullView(viewDependencies(), actor, query.view, {
+            ...page, collections: page.collections.map(collectionReadView),
+          });
+        }),
     )
     .get(
       '/v1/collections/:collectionId',
@@ -396,7 +397,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, async () =>
           fullView(viewDependencies(), actor, query.view, {
-            collection: await read().readCollection(actor, params.collectionId),
+            collection: collectionReadView(await read().readCollection(actor, params.collectionId)),
           }),
         ),
     )

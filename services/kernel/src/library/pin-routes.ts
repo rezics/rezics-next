@@ -8,6 +8,7 @@ import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { collectionResourceSchema, strict } from './collection-routes.ts';
+import { collectionReadView } from './collection-reads.ts';
 import { createPins } from './pins.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -87,7 +88,10 @@ export function pinRoutes(
       },
       async ({ actor, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => pins().list(actor, query));
+        return admission.run('normal', job, async () => {
+          const page = await pins().list(actor, query);
+          return { ...page, pins: page.pins.map((pin) => ({ ...pin, target: pin.target && collectionReadView(pin.target) })) };
+        });
       },
     )
     .put(
