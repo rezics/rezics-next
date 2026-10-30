@@ -422,7 +422,20 @@ export function clientAuthority(
         if (coverage.ready) return { next: null, ready: true };
         const rows = (
           await connection.query<{ id: string; traversal_ordinal: string }>(
-            'SELECT id,traversal_ordinal FROM "user" WHERE traversal_ordinal>$1 ORDER BY traversal_ordinal LIMIT $2',
+            `WITH RECURSIVE page(id,traversal_ordinal,depth) AS (
+               (SELECT id,traversal_ordinal,1 FROM "user"
+                WHERE traversal_ordinal>$1 ORDER BY traversal_ordinal LIMIT 1)
+               UNION ALL
+               SELECT next.id,next.traversal_ordinal,page.depth+1
+               FROM page
+               CROSS JOIN LATERAL (
+                 SELECT id,traversal_ordinal FROM "user"
+                 WHERE traversal_ordinal>page.traversal_ordinal
+                 ORDER BY traversal_ordinal LIMIT 1
+               ) next
+               WHERE page.depth<$2
+             )
+             SELECT id,traversal_ordinal FROM page ORDER BY traversal_ordinal`,
             [coverage.after_ordinal, input.limit + 1],
           )
         ).rows;
