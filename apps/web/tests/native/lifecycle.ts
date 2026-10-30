@@ -396,7 +396,7 @@ function readProcessIdentity(pid: number | undefined): NativeProcessIdentity | u
 }
 
 function processGroupIdentities(pgid: number): NativeProcessIdentity[] {
-  const result = spawnSync('ps', ['-o', 'pid=', '--pgroup', String(pgid)], {
+  const result = spawnSync('ps', ['-o', 'pid=', '-g', String(pgid)], {
     encoding: 'utf8',
     timeout: 1_000,
     stdio: ['ignore', 'pipe', 'ignore'],
