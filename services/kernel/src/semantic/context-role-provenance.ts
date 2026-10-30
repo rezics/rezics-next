@@ -2,6 +2,7 @@ import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import type { ContextRoleProvenance } from '../access/shared-history-context.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { recordSemanticSourceCommit } from './erasure-producer.ts';
+import enroll from './context-role-provenance.sql';
 
 export type ContextRoleEnrollmentResult =
   | Readonly<{ state: 'enrolled'; contextKey: string }>
@@ -26,27 +27,26 @@ export async function enrollContextRoleProvenance(
     return { state: 'pending' };
   if (!/^[1-9][0-9]{0,18}$/.test(occurrence.occurrence) || BigInt(occurrence.occurrence) > 9223372036854775807n)
     throw new TypeError('Invalid native Context role occurrence');
+  await tx.query('SAVEPOINT semantic_context_role_enrollment');
   await recordSemanticSourceCommit(tx, command.transactionId);
-  const result = await tx.query<{ state: string; context_key: string | null }>(
-    `SELECT state,context_key::text FROM semantic.enroll_context_role_provenance(
-      $1::integer,$2::bigint,$3::uuid,$4::uuid,$5::uuid,$6::text,$7::text,$8::text,$9::uuid,$10::uuid)`,
-    [
-      input.route,
-      occurrence.occurrence,
-      occurrence.resourceId,
-      occurrence.originalCreator,
-      occurrence.accountId,
-      occurrence.grantRole,
-      occurrence.valid,
-      occurrence.side,
-      occurrence.grantTransaction,
-      occurrence.sourceTransaction,
-    ],
-  );
-  const row = result.rows[0];
-  if (row?.state === 'enrolled' && row.context_key !== null) {
-    if (!/^[1-9][0-9]*$/.test(row.context_key)) throw new TypeError('Invalid native Context erasure key');
-    return { state: 'enrolled', contextKey: row.context_key };
+  const result = await enroll.run(tx, {
+    route: input.route,
+    occurrence: occurrence.occurrence,
+    resource_id: occurrence.resourceId,
+    original_creator: occurrence.originalCreator,
+    account_id: occurrence.accountId,
+    grant_role: occurrence.grantRole,
+    valid: occurrence.valid,
+    side: occurrence.side,
+    grant_transaction: occurrence.grantTransaction,
+    source_transaction: occurrence.sourceTransaction,
+  });
+  const row = result[0];
+  if (row?.state !== 'enrolled') await tx.query('ROLLBACK TO SAVEPOINT semantic_context_role_enrollment');
+  await tx.query('RELEASE SAVEPOINT semantic_context_role_enrollment');
+  if (row?.state === 'enrolled' && row.contextKey !== null) {
+    if (!/^[1-9][0-9]*$/.test(row.contextKey)) throw new TypeError('Invalid native Context erasure key');
+    return { state: 'enrolled', contextKey: row.contextKey };
   }
   if (row?.state === 'not-applicable') return { state: 'not-applicable' };
   return { state: 'pending' };

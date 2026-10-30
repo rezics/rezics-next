@@ -807,9 +807,10 @@ async function recordLocatorObligation(pool: Pool, partition: number, accountId:
         [route, accountId],
       );
       const closed = fence.rows[0].at !== null;
-      await tx.query(
+      const admission = await tx.query(
         `INSERT INTO semantic.erasure_inbox(route,account_id,source_partition,store,record_key,role,delivery_position,late)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(route,account_id,source_partition,store,record_key,role,delivery_position) DO UPDATE SET late=semantic.erasure_inbox.late OR EXCLUDED.late`,
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(route,account_id,source_partition,store,record_key,role,delivery_position)
+      DO UPDATE SET late=true WHERE NOT semantic.erasure_inbox.late AND EXCLUDED.late RETURNING 1`,
         [
           route,
           accountId,
@@ -821,12 +822,30 @@ async function recordLocatorObligation(pool: Pool, partition: number, accountId:
           closed,
         ],
       );
-      if (closed)
+      if (closed) {
         await recordLateErasureItem(tx, {
           accountId,
           participant: 'semantic',
           locator: lateKey(partition, locator),
         });
+        if (admission.rowCount) {
+          // A newly admitted native generation invalidates both independently transferred
+          // Source cursors. Replaying an existing late item cannot reset work in progress.
+          await tx.query('DELETE FROM semantic.erasure_source_terminal WHERE route=$1 AND account_id=$2', [
+            route,
+            accountId,
+          ]);
+          await tx.query('DELETE FROM semantic.erasure_source_page WHERE route=$1 AND account_id=$2', [
+            route,
+            accountId,
+          ]);
+          await tx.query(
+            `UPDATE semantic.erasure_progress SET partition_no=least(partition_no,$3),state='local'
+             WHERE route=$1 AND account_id=$2`,
+            [route, accountId, partition],
+          );
+        }
+      }
       return { value: closed, events: event(accountId) };
     })
   ).value;

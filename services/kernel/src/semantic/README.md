@@ -1329,6 +1329,35 @@ Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP 
 | Owned lifecycle and retention | Community Context DELETE/restore is implemented; contribution DELETE/restore, purge/hold, scoped withholding and account cleanup remain required by `deletion-contract.test.ts` and `growth-deletion.test.ts`.             |
 | Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters. |
 
+### Native Context historical-party enrollment
+
+`enrollContextRoleProvenance(tx,{route,occurrence})` in `context-role-provenance.ts` is the Source sink for
+the exact readonly Access `ContextRoleProvenance`. Its SQL ABI is
+`semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)`, with arguments
+`route, occurrence, resourceId, originalCreator, accountId, grantRole, valid, side, grantTransaction,
+sourceTransaction`, returning `(state text, context_key bigint)`. Both bigint identities stay canonical decimal
+strings in TypeScript. Access validates and locks its genuine occurrence and binds its original deferred trigger
+and pending redrive to this entrypoint; the sink neither reads nor mutates Access grants or provenance.
+
+The sink locks the exact Context erasure key in its active home and enrolls the original creator as `author`
+and the actual new or former owner as `owner` in the existing locator inventory. Creator-only occurrences use
+`author`; a former occurrence needs no current grant. Unknown roles, missing/purged keys and unavailable native
+command provenance remain pending. Only the actual Global Context row's native no-personal-payload policy yields
+`not-applicable`. A deferred constraint binds every new occurrence receipt to the real same-home write basis,
+epoch and position; a setting or supplied transaction UUID cannot establish enrollment.
+
+Occurrence receipts retain native technical coordinates, side and separate grant/source/receiving transactions,
+without another party payload. Their Context foreign key joins the existing erasure inventory and cascades on
+physical Context removal. An identical occurrence does not dirty its locator again. A distinct late occurrence
+reopens that exact Source seal/home and records the current native delivery generation. The existing durable
+locator relay registers the account-home late item, invalidates both Source page cursors and restarts local work
+under the account fence. Pending redrive must emit the existing locator-scheduled event for its actual enrollment
+position. The TypeScript port uses the current command with no additional checkout; another Context home stays
+pending and requires a real durable receiver. Enrollment changes no Context payload, lifecycle or ownership and
+establishes no history receiving, account, family or participant completion.
+
+Focused acceptance is `test/semantic/context-role-provenance.test.ts`; native execution follows integration.
+
 ### Community Context lifecycle
 
 `DELETE /v1/contexts/:id` and `POST /v1/contexts/:id:restore` use the native command executor, request digest,
