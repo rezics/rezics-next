@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import canonicalize from 'canonicalize';
+import { createHash } from 'node:crypto';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
@@ -538,6 +540,17 @@ test('default alias normalization retains original positive and clear receipt di
     await problem(await fixture.request('PUT', writePath(subjectId), { body }), 400);
   }
   expect(await sourceStatistics(subjectId)).toEqual([{ source, ...value }]);
+  const legacyReceipt = await fixture.database.admin.query(
+    `SELECT request_digest FROM core.receipt
+     WHERE principal_id=$1 AND command_kind='rating.source_statistic.write' AND idempotency_key=$2`,
+    [fixture.actorId, key],
+  );
+  expect(legacyReceipt.rows).toHaveLength(1);
+  expect(Buffer.from(legacyReceipt.rows[0]!.request_digest)).toEqual(
+    createHash('sha256')
+      .update(canonicalize([subjectId, source, value])!)
+      .digest(),
+  );
   const maximumAlias = 'a'.repeat(32);
   const custom = { ...value, sourceAlias: maximumAlias };
   const customKey = crypto.randomUUID();

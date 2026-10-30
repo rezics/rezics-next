@@ -329,7 +329,6 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
               data: {
                 subjectId: input.subjectId,
                 source: value.source,
-                ...(value.sourceAlias === undefined ? {} : { sourceAlias: value.sourceAlias }),
                 sourceRecordId: value.sourceRecordId,
               },
             },
@@ -383,9 +382,6 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
               data: {
                 subjectId: input.subjectId,
                 source: input.source,
-                ...(effectiveAlias(input.source, input.value) === input.source
-                  ? {}
-                  : { sourceAlias: input.value.sourceAlias }),
                 sourceRecordId: input.value.sourceRecordId,
               },
             },
