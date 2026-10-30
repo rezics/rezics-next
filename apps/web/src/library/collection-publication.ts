@@ -196,7 +196,12 @@ export function collectionPublicationQuery(viewer: PublicationViewer, address: P
     queryFn: async ({ signal }): Promise<PublicationPage> => {
       const page = await readCollectionPublication({ data: address });
       signal.throwIfAborted();
-      if (page.viewer?.subject !== viewer.subject || page.viewer.csrfToken !== viewer.csrfToken)
+      if (
+        page.viewer?.subject !== viewer.subject ||
+        page.viewer.csrfToken !== viewer.csrfToken ||
+        page.address.id !== address.id ||
+        page.address.cursor !== address.cursor
+      )
         return { viewer: null, address, source: { state: 'denied' } };
       return page;
     },

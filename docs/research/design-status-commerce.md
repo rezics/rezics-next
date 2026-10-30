@@ -222,6 +222,7 @@ and supplied catalogue facts. Only the displayed page is selectable; canonical d
 curated occurrences and notes retain their separate meaning. There is no all-matching-IDs read, hidden-page selection,
 query editor or snapshot-all promise. The maximum explicit selection is 100; zero requires deliberate empty intent.
 The owner-menu integration exports typed `PublicationLink` without conferring authority.
+The route uses the existing `$id_` filename convention to avoid inheriting the public Collection loader or renderer.
 
 The BFF sends only `{revision,subjectIds}` to the declared native
 `POST /v1/collections/:collectionId:publishSelected`, with current session/CSRF and the original idempotency key.
