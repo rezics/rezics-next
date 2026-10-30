@@ -14,11 +14,7 @@ import { integrationHarness } from './test-support.ts';
 const REPEATED_REDACTED_FINGERPRINT = 'same-redacted-could-not-apply-fingerprint';
 
 function durableJob(h: ReturnType<typeof integrationHarness>): WorkerJob {
-  return new WorkerJob(
-    h.tasks,
-    h.queue,
-    new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory),
-  );
+  return new WorkerJob(h.tasks, h.queue, new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory));
 }
 
 async function startWorker(
@@ -52,7 +48,10 @@ function advanceMain(h: ReturnType<typeof integrationHarness>, file: string, con
   return git(h.root, ['rev-parse', 'HEAD']);
 }
 
-function advanceMainFiles(h: ReturnType<typeof integrationHarness>, files: readonly { path: string; content: string }[]) {
+function advanceMainFiles(
+  h: ReturnType<typeof integrationHarness>,
+  files: readonly { path: string; content: string }[],
+) {
   for (const file of files) {
     mkdirSync(dirname(join(h.root, file.path)), { recursive: true });
     writeFileSync(join(h.root, file.path), file.content);
@@ -329,9 +328,9 @@ test('a stale attempt cannot publish its worker commit', async () => {
     const targetBefore = h.head('dev');
     await job.start(task.id);
     await job.drain();
-    const newerRequest = h.store.db
-      .query('SELECT id FROM landing_queue WHERE task=? AND attempt=2')
-      .get(task.id) as { id: number };
+    const newerRequest = h.store.db.query('SELECT id FROM landing_queue WHERE task=? AND attempt=2').get(task.id) as {
+      id: number;
+    };
     h.queue.acknowledge(newerRequest.id);
 
     const outcomes = await runTrain(h, job);

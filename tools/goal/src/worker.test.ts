@@ -14,41 +14,90 @@ import { runWorkerCommand } from './worker-commands.ts';
 function waitForFile(path: string): Promise<void> {
   if (existsSync(path)) return Promise.resolve();
   return new Promise((resolve, reject) => {
-    const watcher = watch(join(path, '..'), () => { if (existsSync(path)) { clearTimeout(timer); watcher.close(); resolve(); } });
-    const timer = setTimeout(() => { watcher.close(); reject(new Error(`missing fixture signal: ${path}`)); }, 10000);
-    if (existsSync(path)) { clearTimeout(timer); watcher.close(); resolve(); }
+    const watcher = watch(join(path, '..'), () => {
+      if (existsSync(path)) {
+        clearTimeout(timer);
+        watcher.close();
+        resolve();
+      }
+    });
+    const timer = setTimeout(() => {
+      watcher.close();
+      reject(new Error(`missing fixture signal: ${path}`));
+    }, 10000);
+    if (existsSync(path)) {
+      clearTimeout(timer);
+      watcher.close();
+      resolve();
+    }
   });
 }
 test('brief -> worktree -> fake official CLI -> record -> fenced enqueue, then integration outcome', async () => {
-  const h = harness(), landings: LandingRequest[] = [], inbox: ManagerEvent[] = [];
+  const h = harness(),
+    landings: LandingRequest[] = [],
+    inbox: ManagerEvent[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const job = new WorkerJob(h.tasks, { enqueue: request => landings.push(request) }, { deliver: event => inbox.push(event) });
+    const job = new WorkerJob(
+      h.tasks,
+      { enqueue: (request) => landings.push(request) },
+      { deliver: (event) => inbox.push(event) },
+    );
     await job.start(task.id);
     expect(readFileSync(join(task.worktree, 'result.txt'), 'utf8')).toBe('accepted');
     expect(git(task.worktree, ['branch', '--show-current'])).toBe(task.branch);
     expect(git(task.worktree, ['status', '--porcelain'])).toBe('');
     expect(task.briefPath.startsWith(h.settings.stateDirectory)).toBe(true);
     const workerCommit = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`]);
-    expect(landings).toEqual([{ taskId: task.id, attempt: 1, worktree: task.worktree, branch: task.branch, declaredPaths: ['result.txt'],
-      workerCommit, protectedPaths: h.tasks.protectedPaths(task.brief), gate: ['bun', 'test'] }]);
-    const landingEvent = h.store.events(task.id, 1).find(event => event.kind === 'landing-requested');
+    expect(landings).toEqual([
+      {
+        taskId: task.id,
+        attempt: 1,
+        worktree: task.worktree,
+        branch: task.branch,
+        declaredPaths: ['result.txt'],
+        workerCommit,
+        protectedPaths: h.tasks.protectedPaths(task.brief),
+        gate: ['bun', 'test'],
+      },
+    ]);
+    const landingEvent = h.store.events(task.id, 1).find((event) => event.kind === 'landing-requested');
     expect(JSON.parse(landingEvent!.body)).toEqual(landings[0]);
     expect(landings[0]!.protectedPaths).toContain('**/auth/**');
-    const ref = { taskId: task.id, attempt: 1 }, record = h.store.record(ref)!;
+    const ref = { taskId: task.id, attempt: 1 },
+      record = h.store.record(ref)!;
     expect(record.tokens).toEqual({ input: 120, cached: 80, output: 20 });
-    expect(record.stepClasses.commit).toBe(1); expect(record.before?.pool).toBe('fixture'); expect(record.after?.pool).toBe('fixture');
+    expect(record.stepClasses.commit).toBe(1);
+    expect(record.before?.pool).toBe('fixture');
+    expect(record.after?.pool).toBe('fixture');
     const evidence = h.store.attempt(ref).evidencePath;
     expect(readFileSync(join(evidence, 'diff.patch'), 'utf8')).toContain('+accepted');
-    job.onGateOutcome({ ...ref, passed: true, stage: 'merge', logPath: 'fixture', changedFiles: ['result.txt'], diffLines: 1, hostMs: 31, mergedCommit: git(task.worktree, ['rev-parse', 'HEAD']) });
-    expect(h.store.task(task.id).state).toBe('integrated'); expect(h.store.record(ref)?.hostMs).toBe(31);
-    expect(h.store.record(ref)?.outcome).toBe('passed'); expect(inbox).toEqual([]);
+    job.onGateOutcome({
+      ...ref,
+      passed: true,
+      stage: 'merge',
+      logPath: 'fixture',
+      changedFiles: ['result.txt'],
+      diffLines: 1,
+      hostMs: 31,
+      mergedCommit: git(task.worktree, ['rev-parse', 'HEAD']),
+    });
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(h.store.record(ref)?.hostMs).toBe(31);
+    expect(h.store.record(ref)?.outcome).toBe('passed');
+    expect(inbox).toEqual([]);
     await job.recover(task.id);
-    expect(h.store.task(task.id).state).toBe('integrated'); expect(h.store.record(ref)?.outcome).toBe('passed'); expect(landings).toHaveLength(1);
-  } finally { h.dispose(); }
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(h.store.record(ref)?.outcome).toBe('passed');
+    expect(landings).toHaveLength(1);
+  } finally {
+    h.dispose();
+  }
 });
 test('retry atomically fences a live process and its CLI writes; replacement launches only after the entire old group exits', async () => {
-  const storeModule = join(import.meta.dir, 'store.ts'), dbModule = join(import.meta.dir, 'db.ts'), processModule = join(import.meta.dir, 'process.ts');
+  const storeModule = join(import.meta.dir, 'store.ts'),
+    dbModule = join(import.meta.dir, 'db.ts'),
+    processModule = join(import.meta.dir, 'process.ts');
   const cli = join(import.meta.dir, 'cli.ts');
   const script = `#!/usr/bin/env bun
 import { writeFileSync } from 'node:fs';
@@ -90,66 +139,110 @@ if(ref.attempt === 1) {
   store.db.close();
 }
 `;
-  const h = harness(script), landings: LandingRequest[] = [];
+  const h = harness(script),
+    landings: LandingRequest[] = [];
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const ready = waitForFile(join(h.settings.stateDirectory, 'ready'));
-    const first = await h.tasks.retry(task.id); await ready;
+    const first = await h.tasks.retry(task.id);
+    await ready;
     const identity = h.store.attempt(first.attempt).process!;
     expect(sameProcess(identity)).toBe(true);
     const second = await h.tasks.retry(task.id);
-    await settle(h.tasks, second, { enqueue: request => landings.push(request) });
-    await expect(settle(h.tasks, first, { enqueue: request => landings.push(request) })).rejects.toBeInstanceOf(StaleAttemptError);
+    await settle(h.tasks, second, { enqueue: (request) => landings.push(request) });
+    await expect(settle(h.tasks, first, { enqueue: (request) => landings.push(request) })).rejects.toBeInstanceOf(
+      StaleAttemptError,
+    );
     const refusals = JSON.parse(readFileSync(join(h.settings.stateDirectory, 'refusals'), 'utf8'));
     expect(refusals.rejected).toEqual(['event', 'attempt', 'task', 'record', 'landing', 'fence']);
-    expect(refusals.code).toBe(1); expect(refusals.error).toContain('StaleAttemptError');
+    expect(refusals.code).toBe(1);
+    expect(refusals.error).toContain('StaleAttemptError');
     expect(sameProcess(identity)).toBe(false);
     expect(readFileSync(join(h.settings.stateDirectory, 'replacement'), 'utf8')).toBe('false');
     expect(h.store.attempt(first.attempt).state).toBe('superseded');
-    expect(h.store.events(task.id).filter(e => e.kind === 'obsolete')).toEqual([]);
-    expect(landings.map(r => r.attempt)).toEqual([2]);
+    expect(h.store.events(task.id).filter((e) => e.kind === 'obsolete')).toEqual([]);
+    expect(landings.map((r) => r.attempt)).toEqual([2]);
     expect(() => h.store.assertCurrent(first.attempt)).toThrow(StaleAttemptError);
-    expect(h.store.records().map(r => r.attempt)).toEqual([1, 2]);
-  } finally { h.dispose(); }
+    expect(h.store.records().map((r) => r.attempt)).toEqual([1, 2]);
+  } finally {
+    h.dispose();
+  }
 }, 15000);
 test('registered CLI dispatch runs against injected landing and inbox adapters', async () => {
-  const h = harness(), requests: LandingRequest[] = [], output: string[] = [];
+  const h = harness(),
+    requests: LandingRequest[] = [],
+    output: string[] = [];
   try {
-    expect(await runWorkerCommand('dispatch', [h.briefFile], { settings: h.settings, store: h.store, tasks: h.tasks,
-      landing: { enqueue: r => requests.push(r) }, inbox: { deliver() {} }, print: s => output.push(s), env: {} })).toBe(0);
-    expect(requests.length).toBe(1); expect(output[0]).toBe(requests[0]!.taskId);
-    expect(await runWorkerCommand('attempts', ['--json'], { settings: h.settings, store: h.store, print: s => output.push(s), env: {} })).toBe(0);
+    expect(
+      await runWorkerCommand('dispatch', [h.briefFile], {
+        settings: h.settings,
+        store: h.store,
+        tasks: h.tasks,
+        landing: { enqueue: (r) => requests.push(r) },
+        inbox: { deliver() {} },
+        print: (s) => output.push(s),
+        env: {},
+      }),
+    ).toBe(0);
+    expect(requests.length).toBe(1);
+    expect(output[0]).toBe(requests[0]!.taskId);
+    expect(
+      await runWorkerCommand('attempts', ['--json'], {
+        settings: h.settings,
+        store: h.store,
+        print: (s) => output.push(s),
+        env: {},
+      }),
+    ).toBe(0);
     expect(JSON.parse(output[1]!)[0].tokens.input).toBe(120);
     // The executable has the same command registration and reads the main checkout's untracked settings.
-    const result = spawnSync(process.execPath, [join(import.meta.dir, 'cli.ts'), 'status', requests[0]!.taskId], { cwd: h.root, env: { ...process.env, GOAL_MAIN_CHECKOUT: h.root, GOAL_TASK_ID: '', GOAL_ATTEMPT: '' }, encoding: 'utf8' });
-    expect(result.status).toBe(0); expect(JSON.parse(result.stdout).state).toBe('landing');
-  } finally { h.dispose(); }
+    const result = spawnSync(process.execPath, [join(import.meta.dir, 'cli.ts'), 'status', requests[0]!.taskId], {
+      cwd: h.root,
+      env: { ...process.env, GOAL_MAIN_CHECKOUT: h.root, GOAL_TASK_ID: '', GOAL_ATTEMPT: '' },
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).state).toBe('landing');
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a restarted controller settles a persisted attempt with a kernel process notification', async () => {
   const h = harness(`#!/usr/bin/env bun
 console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESULT: success'}}));
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:8,output_tokens:1}}));
-`), requests: LandingRequest[] = [];
+`),
+    requests: LandingRequest[] = [];
   try {
-    const task = h.tasks.dispatch(h.briefFile), worker = await h.tasks.retry(task.id);
+    const task = h.tasks.dispatch(h.briefFile),
+      worker = await h.tasks.retry(task.id);
     await worker.exited;
     // A fresh job has no ChildProcess handle and discovers the running attempt from SQLite.
-    const recovered = new WorkerJob(h.tasks, { enqueue: r => requests.push(r) }, { deliver() {} });
+    const recovered = new WorkerJob(h.tasks, { enqueue: (r) => requests.push(r) }, { deliver() {} });
     await recovered.recover(task.id);
-    expect(requests.map(r => r.attempt)).toEqual([1]); expect(h.store.records()[0]!.tokens.input).toBe(8);
-  } finally { h.dispose(); }
+    expect(requests.map((r) => r.attempt)).toEqual([1]);
+    expect(h.store.records()[0]!.tokens.input).toBe(8);
+  } finally {
+    h.dispose();
+  }
 });
 test('stop fences the same sequence and an explicit retry starts a fresh attempt', async () => {
   const h = harness();
   try {
-    const task = h.tasks.dispatch(h.briefFile), worker = await h.tasks.retry(task.id);
+    const task = h.tasks.dispatch(h.briefFile),
+      worker = await h.tasks.retry(task.id);
     await worker.exited;
     await h.tasks.stop(task.id);
-    expect(h.store.task(task.id).state).toBe('stopped'); expect(() => h.store.event(worker.attempt, 'old-result', {})).toThrow(StaleAttemptError);
-    const next = await h.tasks.retry(task.id); await settle(h.tasks, next, { enqueue() {} });
-    expect(next.attempt.attempt).toBe(2); expect(h.store.record(worker.attempt)?.outcome).toBe('stopped');
-  } finally { h.dispose(); }
+    expect(h.store.task(task.id).state).toBe('stopped');
+    expect(() => h.store.event(worker.attempt, 'old-result', {})).toThrow(StaleAttemptError);
+    const next = await h.tasks.retry(task.id);
+    await settle(h.tasks, next, { enqueue() {} });
+    expect(next.attempt.attempt).toBe(2);
+    expect(h.store.record(worker.attempt)?.outcome).toBe('stopped');
+  } finally {
+    h.dispose();
+  }
 });
 
 test('evidence captures untracked edits and explicit approach results without copying the session stream', async () => {
@@ -160,16 +253,19 @@ console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',tex
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:8}}));
 `);
   try {
-    const task = h.tasks.dispatch(h.briefFile), job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    const task = h.tasks.dispatch(h.briefFile),
+      job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await job.start(task.id);
     const attempt = h.store.attempt({ taskId: task.id, attempt: 1 });
     expect(readFileSync(join(attempt.evidencePath, 'diff.patch'), 'utf8')).toContain('+uncommitted new file');
     expect(attempt.approaches).toEqual([{ approach: 'add the missing guard', result: 'assertion still fails' }]);
     // Reattaching twice cannot submit the same attempt twice.
     const requests: LandingRequest[] = [];
-    await new WorkerJob(h.tasks, { enqueue: r => requests.push(r) }, { deliver() {} }).recover(task.id);
+    await new WorkerJob(h.tasks, { enqueue: (r) => requests.push(r) }, { deliver() {} }).recover(task.id);
     expect(requests).toEqual([]);
-  } finally { h.dispose(); }
+  } finally {
+    h.dispose();
+  }
 });
 
 test('a missing CLI is recorded as a stopped attempt with after-usage, and remains retryable', async () => {
@@ -179,6 +275,9 @@ test('a missing CLI is recorded as a stopped attempt with after-usage, and remai
     const task = h.tasks.dispatch(h.briefFile);
     await expect(h.tasks.retry(task.id)).rejects.toThrow();
     expect(h.store.task(task.id).state).toBe('stopped');
-    expect(h.store.records()[0]!.outcome).toBe('stopped'); expect(h.store.records()[0]!.after?.pool).toBe('fixture');
-  } finally { h.dispose(); }
+    expect(h.store.records()[0]!.outcome).toBe('stopped');
+    expect(h.store.records()[0]!.after?.pool).toBe('fixture');
+  } finally {
+    h.dispose();
+  }
 });

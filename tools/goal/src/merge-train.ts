@@ -706,7 +706,9 @@ function frozenFilesModifiedAtCommit(
         encoding: 'buffer',
       });
       if (blob.error || blob.status !== 0)
-        throw new Error(blob.stderr?.toString().trim() || blob.error?.message || `Cannot read frozen path ${file.path}`);
+        throw new Error(
+          blob.stderr?.toString().trim() || blob.error?.message || `Cannot read frozen path ${file.path}`,
+        );
       return createHash('sha256').update(blob.stdout).digest('hex') !== file.hash;
     })
     .map((file) => file.path);
@@ -1370,7 +1372,8 @@ export class MergeTrain {
             // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
             // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
             const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
-            if (workerOnlyFrozenChanges.length) result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
+            if (workerOnlyFrozenChanges.length)
+              result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
@@ -2109,12 +2112,13 @@ export class MergeTrain {
         const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
         // A worker that left its work uncommitted would otherwise integrate nothing and release its dependents. The
         // controller commits the frozen acceptance files itself, so they are not the worker's work.
-        const frozenAtStart = workspace && sharedStore
-          ? sharedStore
-              .tasks()
-              .filter((task) => task.workspace?.module === recorded.workspace!.module)
-              .flatMap((task) => frozenFilesForTask(o.stateDirectory, task.id))
-          : frozenFilesForTask(o.stateDirectory, request.taskId);
+        const frozenAtStart =
+          workspace && sharedStore
+            ? sharedStore
+                .tasks()
+                .filter((task) => task.workspace?.module === recorded.workspace!.module)
+                .flatMap((task) => frozenFilesForTask(o.stateDirectory, task.id))
+            : frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
         if (changedFrozenAtSource.length) {
           const changedFrozenOnTarget = new Set(frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart));

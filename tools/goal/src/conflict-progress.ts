@@ -67,11 +67,11 @@ export function sameRebaseConflict(left: unknown, right: unknown): boolean {
   const b = completeRebaseConflictContext(right);
   return Boolean(
     a &&
-      b &&
-      a.targetHead === b.targetHead &&
-      a.workerCommit === b.workerCommit &&
-      a.paths.length === b.paths.length &&
-      a.paths.every((path, index) => path === b.paths[index]),
+    b &&
+    a.targetHead === b.targetHead &&
+    a.workerCommit === b.workerCommit &&
+    a.paths.length === b.paths.length &&
+    a.paths.every((path, index) => path === b.paths[index]),
   );
 }
 

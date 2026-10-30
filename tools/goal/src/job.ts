@@ -1481,9 +1481,7 @@ export class WorkerJob implements GateOutcomeSink {
           .filter((prior) => prior.attempt < outcome.attempt)
           .slice(-REBASE_CONFLICT_HISTORY_LIMIT)
           .map((prior) => {
-            const priorOutcome = store
-              .events(task.id, prior.attempt)
-              .find((event) => event.kind === 'gate-outcome');
+            const priorOutcome = store.events(task.id, prior.attempt).find((event) => event.kind === 'gate-outcome');
             if (!priorOutcome) return undefined;
             try {
               const body = JSON.parse(priorOutcome.body) as { stage?: unknown; rebaseConflict?: unknown };
