@@ -19,7 +19,7 @@ export function routeFailure(matches: readonly ErrorMatch[], nativeStatus = 200)
   const failed = matches.find((match) => match.status === 'error');
   const closed = matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error));
   const missing =
-    matches.length === 1 ||
+    (matches.length === 1 && !failed) ||
     matches.some((match) => match._notFound || match.status === 'notFound' || isNotFound(match.error));
   if (!failed && !missing) return undefined;
   const status = closed ? 403 : missing ? 404 : (failureStatus(nativeStatus) ?? errorStatus(failed?.error) ?? 500);

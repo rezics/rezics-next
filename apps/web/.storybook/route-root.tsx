@@ -21,4 +21,4 @@ function StorybookDocument({ children }: { children: ReactNode }) {
 
 // Storybook owns the iframe document. Keep the real root route but mount its AppShell in the story canvas.
 Route.update({ component: Outlet });
-Route.options.shellComponent = StorybookDocument;
+Object.assign(Route.options, { shellComponent: StorybookDocument });

@@ -107,7 +107,7 @@ function Root({ children }: { children: ReactNode }) {
   });
   const rereadPage = useRouterState({
     select: (state) =>
-      state.matches.length === 1 ||
+      (state.matches.length === 1 && state.matches[0]?.status !== 'error') ||
       state.matches.some((entry) => {
         const match = entry as unknown as {
           status: string;

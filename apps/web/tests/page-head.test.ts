@@ -76,6 +76,8 @@ test('shared route errors preserve native failures, conceal missing targets and 
   const generic = { status: 'error', error: new Error('private dependency detail') };
   expect(routeFailure([root, generic])?.status).toBe(500);
   expect(routeFailure([root, generic], 503)?.status).toBe(503);
+  expect(routeFailure([generic])?.status).toBe(500);
+  expect(routeFailure([generic], 503)?.status).toBe(503);
   expect(routeFailure([root, { status: 'notFound', error: notFound() }])?.status).toBe(404);
   expect(routeFailure([root, { status: 'error', error: new PlatformClosedError(403, {}) }])?.status).toBe(403);
   const unavailable = routeFailure([
