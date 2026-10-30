@@ -37,6 +37,31 @@ actor and principal requirement for delegated callers. Both served discovery rou
 which holds the viewer's authenticated identity evidence. The groups read performs no route projection and sends
 `cache-control: no-store`.
 
+## Current management configuration
+
+`GET /v1/platform/exposure/management` (`exposure.read_management`) declares public exposure and the nonanonymous
+action/scope `exposure:manage_read`. It checks that exact action directly on the fixed Global Context, before reading
+configuration and again before disclosure. The additive `platform.governance` role supplies this action; neither
+`gate:any` nor discovery admission supplies management authority. This action has no Global reach or default grant.
+
+The native export is
+`readExposureManagementPage({ pool, access, clock?, cursorKeys, routes }, actor, { cursor?, limit? }, { deadline })`.
+`cursorKeys` is the existing `KeyRing` from `tokens/seal.ts`; `routes` is a readonly array of native `MountedRoute`.
+The closed result is `{ exposureGroups: [{ group: string, open: boolean, at: string }], next: string | null }`.
+`limit` is an integer from 1 through 100, defaulting to 20. The signed native list cursor binds the current viewer,
+query and immutable mounted catalogue digest; malformed, expired and old-definition cursors return 400.
+
+Only nonhidden mounted gate declarations supply groups, sorted and deduplicated after composition. Each selected
+group reads one genuine temporal opening at the same minted authoritative kernel T. The `at` string preserves that
+database instant, including submillisecond precision; it is not an opening's change time. An absent opening means
+closed. Failed or moved sources return a typed 503, never a closed configuration. Checkouts are sequential and released
+before the final ordinary authority check. No group-specific account or role data is returned, and responses use
+`cache-control: private, no-store`.
+
+The existing management page's adapter is `apps/web/src/platform/exposure/data.ts`, rather than a separate
+`source.ts`. Its source has not landed in this checkout; its typed unavailable current-configuration state remains
+until that adapter is integrated with this GET. Viewer admission must never be substituted for public configuration.
+
 ## Cost
 
 `G` is the fixed mounted group count. `M` is the fixed mounted route count, `K <= 1,000` the Access formula's admitted-key cap, and `E` the exposure-opening index size. Gate checks reuse the Access formula bound: O(log E + (1 + K) log G) with constant rows and statements for a fixed request.
