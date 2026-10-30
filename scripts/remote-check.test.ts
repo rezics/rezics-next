@@ -4189,9 +4189,7 @@ test('landing priority: a waiting landing run reserves its slots while ordinary 
     await waitFor(() =>
       events().some(
         (event) =>
-          event.kind === 'slot' &&
-          event.granted &&
-          String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'),
+          event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'),
       ),
     );
     const grants = events().filter((event) => event.kind === 'slot' && event.granted);
@@ -4201,9 +4199,7 @@ test('landing priority: a waiting landing run reserves its slots while ordinary 
         String(event.script).includes('# REMOTE_CHECK_PRIORITY ordinary') &&
         String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 1'),
     );
-    const multiGrant = grants.findIndex(
-      (event) => String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'),
-    );
+    const multiGrant = grants.findIndex((event) => String(event.script).includes('# REMOTE_CHECK_SLOT_COUNT 2'));
     expect(landingGrant).toBeGreaterThanOrEqual(0);
     expect(ordinaryGrant).toBeGreaterThanOrEqual(0);
     expect(multiGrant).toBeGreaterThanOrEqual(0);
@@ -4377,10 +4373,13 @@ test('admission backfill: ordinary execution starts in capacity the priority hea
   try {
     await waitFor(() => events().some((event) => event.kind === 'landing-marker'));
     ordinary = startRemote(env, directory, ['sh', '-c', 'echo backfill-one-slot'], ['--estimate-ms', '120001']);
-    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo backfill-one-slot')));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo backfill-one-slot')),
+    );
 
     const grant = events().find(
-      (event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
+      (event) =>
+        event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
     )!;
     const generatedLimit = Number(String(grant.script).match(/# REMOTE_CHECK_ORDINARY_ADMISSION_LIMIT (\d+)/)?.[1]);
     expect(generatedLimit).toBe(3);
@@ -4427,10 +4426,19 @@ test('admission backfill: ordinary execution starts in capacity the priority hea
       ['sh', '-c', 'echo smaller-memory-backfill'],
       ['--memory-gib', '4', '--estimate-ms', '120001'],
     );
-    await waitFor(() => memoryCase.events().some((event) => event.kind === 'run' && String(event.script).includes('echo smaller-memory-backfill')));
-    const grant = memoryCase.events().find(
-      (event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_MEMORY_RESERVATION_BYTES 4294967296'),
-    )!;
+    await waitFor(() =>
+      memoryCase
+        .events()
+        .some((event) => event.kind === 'run' && String(event.script).includes('echo smaller-memory-backfill')),
+    );
+    const grant = memoryCase
+      .events()
+      .find(
+        (event) =>
+          event.kind === 'slot' &&
+          event.granted &&
+          String(event.script).includes('# REMOTE_CHECK_MEMORY_RESERVATION_BYTES 4294967296'),
+      )!;
     expect(grant.actualAdmissionLimit).toBe(3);
     expect(grant.slot).toBe(0);
     expect(await memoryBackfill.child.exited).toBe(0);
@@ -4461,14 +4469,28 @@ test('admission backfill: a fitting priority head gets the first opportunity wit
   try {
     await waitFor(() => events().some((event) => event.kind === 'landing-marker'));
     const firstAttempt = events().find((event) => event.kind === 'slot' && event.reason === 'held-priority-grant')!;
-    ordinary = startRemote(env, directory, ['sh', '-c', 'echo after-priority-opportunity'], ['--estimate-ms', '120001']);
+    ordinary = startRemote(
+      env,
+      directory,
+      ['sh', '-c', 'echo after-priority-opportunity'],
+      ['--estimate-ms', '120001'],
+    );
     await Bun.sleep(100);
-    expect(events().some((event) => event.kind === 'run' && String(event.script).includes('echo after-priority-opportunity'))).toBe(false);
-    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo after-priority-opportunity')));
+    expect(
+      events().some(
+        (event) => event.kind === 'run' && String(event.script).includes('echo after-priority-opportunity'),
+      ),
+    ).toBe(false);
+    await waitFor(() =>
+      events().some(
+        (event) => event.kind === 'run' && String(event.script).includes('echo after-priority-opportunity'),
+      ),
+    );
 
     const landingMarker = events().find((event) => event.kind === 'landing-marker')!;
     const ordinaryGrant = events().find(
-      (event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
+      (event) =>
+        event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
     )!;
     expect(firstAttempt).toBeDefined();
     expect(Number(firstAttempt.call)).toBeLessThan(Number(ordinaryGrant.call));
@@ -4491,11 +4513,11 @@ test('admission backfill: a fitting priority head gets the first opportunity wit
   const missingEstimate = scenario({ b: { available: 20e9, slots: 2, holdLandingGrant: true } });
   missingEstimate.env.REMOTE_CHECK_POLL_MS = '100';
   const missingDirectory = workspace();
-  const unestimatedHead = startRemote(
-    { ...missingEstimate.env, REMOTE_CHECK_PRIORITY: 'critical' },
-    missingDirectory,
-    ['sh', '-c', 'echo unestimated-head'],
-  );
+  const unestimatedHead = startRemote({ ...missingEstimate.env, REMOTE_CHECK_PRIORITY: 'critical' }, missingDirectory, [
+    'sh',
+    '-c',
+    'echo unestimated-head',
+  ]);
   let missingEstimateBackfill: ReturnType<typeof startRemote> | undefined;
   try {
     await waitFor(() => missingEstimate.events().some((event) => event.kind === 'landing-marker'));
@@ -4505,11 +4527,18 @@ test('admission backfill: a fitting priority head gets the first opportunity wit
       ['sh', '-c', 'echo finite-default-backfill'],
       ['--estimate-ms', '120001'],
     );
-    await waitFor(() => missingEstimate.events().some((event) => event.kind === 'run' && String(event.script).includes('echo finite-default-backfill')));
+    await waitFor(() =>
+      missingEstimate
+        .events()
+        .some((event) => event.kind === 'run' && String(event.script).includes('echo finite-default-backfill')),
+    );
     const marker = missingEstimate.events().find((event) => event.kind === 'landing-marker')!;
-    const grant = missingEstimate.events().find(
-      (event) => event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
-    )!;
+    const grant = missingEstimate
+      .events()
+      .find(
+        (event) =>
+          event.kind === 'slot' && event.granted && String(event.script).includes('# REMOTE_CHECK_ESTIMATE_MS 120001'),
+      )!;
     expect(marker.estimateMs).toBeNull();
     expect(grant.actualAdmissionLimit).toBe(1);
     expect(await missingEstimateBackfill.child.exited).toBe(0);
@@ -4538,19 +4567,24 @@ test('admission backfill: every host is freshly probed each poll and a previousl
   const directory = workspace();
   const pending = startRemote(env, directory, ['sh', '-c', 'echo recovered-host']);
   try {
-    await waitFor(() => events().some((event) => event.kind === 'probe' && event.address === 'ops@a.test' && event.load === 13));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'probe' && event.address === 'ops@a.test' && event.load === 13),
+    );
     const configFile = join(env.FAKE_DIR!, 'config.json');
     const config = JSON.parse(readFileSync(configFile, 'utf8')) as Record<string, HostConfig>;
     config['ops@a.test']!.load = 0;
     writeFileSync(configFile, JSON.stringify(config));
     await waitFor(
       () =>
-        events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test' && event.load === 0).length >= 3 &&
+        events().filter((event) => event.kind === 'probe' && event.address === 'ops@a.test' && event.load === 0)
+          .length >= 3 &&
         events().filter((event) => event.kind === 'probe' && event.address === 'ops@b.test').length >= 3,
     );
     config['ops@a.test']!.grantOnly = 1;
     writeFileSync(configFile, JSON.stringify(config));
-    await waitFor(() => events().some((event) => event.kind === 'run' && String(event.script).includes('echo recovered-host')));
+    await waitFor(() =>
+      events().some((event) => event.kind === 'run' && String(event.script).includes('echo recovered-host')),
+    );
     const [, , stderr] = await Promise.all([pending.child.exited, pending.stdout, pending.stderr]);
     expect(pending.child.exitCode).toBe(0);
     expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@a.test');
@@ -4610,7 +4644,11 @@ exec /usr/bin/flock "$@"
     await waitFor(() => existsSync(ready));
     rmSync(marker);
     replacement = Bun.spawn(
-      ['bash', '-c', 'exec 8>>"$MARKER"; flock -n 8; printf "1 0 -1 2684354560 1\\n" >&8; echo REPLACEMENT; cat >/dev/null'],
+      [
+        'bash',
+        '-c',
+        'exec 8>>"$MARKER"; flock -n 8; printf "1 0 -1 2684354560 1\\n" >&8; echo REPLACEMENT; cat >/dev/null',
+      ],
       { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
     );
     await waitForOutput(replacement, 'REPLACEMENT\n');
@@ -4658,7 +4696,10 @@ test('admission backfill: capacity, memory, gate and express reservations remain
   }
   let winner: (typeof concurrent)[number] | undefined;
   try {
-    await waitFor(() => concurrent.some((holder) => holder.exitCode === 75) && concurrent.some((holder) => holder.exitCode === null));
+    await waitFor(
+      () =>
+        concurrent.some((holder) => holder.exitCode === 75) && concurrent.some((holder) => holder.exitCode === null),
+    );
     winner = concurrent.find((holder) => holder.exitCode === null)!;
     await waitForSlotToken(winner, 2);
     const held = [0, 1, 2].filter(
@@ -4812,7 +4853,8 @@ test('admission backfill: capacity, memory, gate and express reservations remain
     await legacyTake.stdin.flush();
     await waitForSlotToken(legacyTake, 1);
     expect(
-      spawnSync('/usr/bin/flock', ['-n', join(legacyRoot, 'slots', `landing-wait-${legacyId}.lock`), '-c', 'true']).status,
+      spawnSync('/usr/bin/flock', ['-n', join(legacyRoot, 'slots', `landing-wait-${legacyId}.lock`), '-c', 'true'])
+        .status,
     ).not.toBe(0);
     await legacyTake.stdin.end();
     expect(await legacyTake.exited).toBe(0);
@@ -4831,7 +4873,11 @@ test('admission backfill: capacity, memory, gate and express reservations remain
 
   const memoryRoot = join(testRoot, 'memory-host');
   const memoryHolder = Bun.spawn(
-    ['bash', '-c', nativeSlotScript(memoryRoot, { slots: 3, slotLimit: 3, memoryMaxGiB: 8, memoryReservationBytes: 6 * 2 ** 30 })],
+    [
+      'bash',
+      '-c',
+      nativeSlotScript(memoryRoot, { slots: 3, slotLimit: 3, memoryMaxGiB: 8, memoryReservationBytes: 6 * 2 ** 30 }),
+    ],
     { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe', env: environment },
   );
   memoryHolder.stdin.write('memory-holder\n');
@@ -4840,7 +4886,10 @@ test('admission backfill: capacity, memory, gate and express reservations remain
     await waitForSlotToken(memoryHolder, 1);
     const memoryContender = spawnSync(
       'bash',
-      ['-c', nativeSlotScript(memoryRoot, { slots: 3, slotLimit: 3, memoryMaxGiB: 8, memoryReservationBytes: 4 * 2 ** 30 })],
+      [
+        '-c',
+        nativeSlotScript(memoryRoot, { slots: 3, slotLimit: 3, memoryMaxGiB: 8, memoryReservationBytes: 4 * 2 ** 30 }),
+      ],
       { input: 'memory-contender\n', encoding: 'utf8', env: environment, timeout: 5000 },
     );
     expect(memoryContender.status).toBe(75);
@@ -4895,7 +4944,9 @@ test('admission backfill: capacity, memory, gate and express reservations remain
   await express.stdin.flush();
   try {
     await waitForSlotToken(express, 1);
-    expect(spawnSync('/usr/bin/flock', ['-n', join(expressRoot, 'slots', 'express.lock'), '-c', 'true']).status).not.toBe(0);
+    expect(
+      spawnSync('/usr/bin/flock', ['-n', join(expressRoot, 'slots', 'express.lock'), '-c', 'true']).status,
+    ).not.toBe(0);
     expect(spawnSync('/usr/bin/flock', ['-n', join(expressRoot, 'slots', '0.lock'), '-c', 'true']).status).not.toBe(0);
   } finally {
     await express.stdin.end();

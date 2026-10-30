@@ -1318,7 +1318,9 @@ function rankHost(
   const resourceSlots = probeCapacity(capacity);
   const memoryMaximum = host.memoryMaxGiB * 2 ** 30;
   const landingAgeMs =
-    probe.landingWaitingStarted === null ? Number.POSITIVE_INFINITY : Math.max(0, Date.now() - probe.landingWaitingStarted);
+    probe.landingWaitingStarted === null
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, Date.now() - probe.landingWaitingStarted);
   const landingOpportunityActive =
     !gate &&
     !probe.gateWaiting &&
@@ -1501,7 +1503,8 @@ function parseProbe(output: string): HostProbe | null {
     (landingWaitingStarted !== null && (!Number.isSafeInteger(landingWaitingStarted) || landingWaitingStarted < 0)) ||
     (landingWaitingSlots === 0) !== (landingWaitingStarted === null) ||
     landingWaitingEstimateValue === null ||
-    (landingWaitingEstimateMs !== null && (!Number.isSafeInteger(landingWaitingEstimateMs) || landingWaitingEstimateMs < 0)) ||
+    (landingWaitingEstimateMs !== null &&
+      (!Number.isSafeInteger(landingWaitingEstimateMs) || landingWaitingEstimateMs < 0)) ||
     landingWaitingMemoryValue === null ||
     !Number.isSafeInteger(landingWaitingMemoryBytes) ||
     landingWaitingMemoryBytes < 1 ||
