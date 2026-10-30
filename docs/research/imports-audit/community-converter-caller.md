@@ -38,6 +38,24 @@ Its explicit protocol doubles prove response rejection, source-body isolation,
 normalized reconversion, input immutability and ignored/unsupported handling.
 They supply no native identity, authorization, receipt or worker evidence.
 
+At code revision `4f1418b26a`, the focused pure file passed all 15 children,
+140 assertions, zero skips/todos, using Bun `1.4.4-canary.1 (a0cc096ce)`.
+The conversion compiler (`node_modules/.bin/bun check --no-script -p packages/conversion/tsconfig.json`)
+reported no errors in 60 files, and edited-file oxfmt passed for all six changed
+files. The first local run reached a missing required Open Library
+`last_modified` in the new unit input; supplying the fixture's native timestamp
+fixed that input before native admission. No production defect was inferred.
+The pure child names are:
+
+- `<source>: public example rebinds the same normalized export without trusting the source body`
+  for each of `bangumi`, `vndb`, `openlibrary`, `wikidata` (four children).
+- `public example stops before bound send on <case>` for `denied`,
+  `non-success with an id`, `missing results`, `missing entry`, `foreign key`,
+  `missing id`, `candidate identity`, `malformed id`, `duplicate entry`
+  (nine children).
+- `public example seals normalized input and the exact create key before awaiting transport`.
+- `ignored launch records and unsupported sources never call the transport`.
+
 ## Native composition and source evidence
 
 The fixture uses one `openApiRuntime({batchRecords:8,maxFields:64,maxRecordBytes:65536})`.
