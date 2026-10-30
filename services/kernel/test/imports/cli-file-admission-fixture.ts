@@ -77,13 +77,14 @@ function scalar(source: Exclude<SourceId, 'vndb'>, successor = false) {
       key: '/books/OL900000002M',
       revision: successor ? 12 : 11,
       title: successor ? 'Successor 🌙' : 'Boundary 🌙',
+      last_modified: { type: '/type/datetime', value: '2025-01-02T03:04:05.123456' },
       works: [{ key: work.key }],
     };
     lines = [work, edition].map((r) =>
       [r.type.key, r.key, r.revision, '2025-01-02T03:04:05.123456', JSON.stringify(r)].join('\t'),
     );
   } else {
-    const pinned = JSON.parse(fixture('wikidata/entity.json'));
+    const pinned = JSON.parse(fixture('api/wikidata.jsonl').trimEnd().split('\n')[0]!);
     const record = {
       type: pinned.type,
       id: pinned.id,
@@ -170,6 +171,7 @@ export async function runCliFileAdmissionJourney() {
     const anchors = new Map<string, Anchor>();
     const commands = new Map<string, BatchCommand>();
     const subjects = new Map<string, { source: SourceId; id: string }>();
+    const mediaIds = new Set<string>();
     const evidence: unknown[] = [];
     const evidencePath = join(import.meta.dir, '../../../../.temp/cli-file-admission.json');
     await mkdir(join(import.meta.dir, '../../../../.temp'), { recursive: true });
@@ -220,9 +222,16 @@ export async function runCliFileAdmissionJourney() {
           'SELECT * FROM semantic.candidate WHERE route=$1 AND subject_id=$2 ORDER BY candidate_id LIMIT 100',
           [routeOf(id), id],
         );
-        rows.push({ source, id, response, candidates: candidates.rows });
+        rows.push({
+          source,
+          id,
+          response: { status: response.status, body: response.body },
+          candidates: candidates.rows,
+        });
       }
-      return rows;
+      const media = [];
+      for (const id of mediaIds) media.push(await runtime.mediaBoundary.observe(id));
+      return { subjects: rows, media };
     }
     async function invoke(source: SourceId, label: string, bytes: Uint8Array) {
       const dump = join(directory!, `${source}.dump`);
@@ -348,6 +357,31 @@ export async function runCliFileAdmissionJourney() {
                   subjects.set(`${source}:${command.source.external_id}`, { source, id: answer.value.id });
               }
             }
+            if (
+              request.method === 'PUT' &&
+              url.pathname.endsWith('/source-statistics/vndb') &&
+              response.status === 200
+            ) {
+              const id = url.pathname.split('/')[3]!;
+              const key = JSON.parse(request.headers.get('idempotency-key')!) as string;
+              anchors.set(key, {
+                source,
+                partition: partitionOf(routeOf(id)!),
+                kind: 'rating.source_statistic.write',
+                key,
+              });
+            }
+            if (url.pathname === '/v1/media:importFromUrl' && response.status === 202) {
+              const id = (JSON.parse(reply) as { media: { id: string } }).media.id;
+              mediaIds.add(id);
+              const key = JSON.parse(request.headers.get('idempotency-key')!) as string;
+              anchors.set(key, {
+                source,
+                partition: partitionOf(routeOf(id)!),
+                kind: 'content.media.importFromUrl',
+                key,
+              });
+            }
             return response;
           }) as typeof fetch,
         },
@@ -421,7 +455,7 @@ export async function runCliFileAdmissionJourney() {
       const projection = final.records[0] as { projection_json: string };
       const sourceKindAfter = (JSON.parse(projection.projection_json) as { sourceKind: SourceId }).sourceKind;
       results.push({
-        source,
+        source: initial.registrations[0]!.sourceKind,
         initial,
         actualInputPasses: initial.passes,
         nativeReceiptRows,

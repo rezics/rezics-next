@@ -735,11 +735,18 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
                 onProgress: (sample) => options.observer?.onInputBuffer?.(sample.retainedBytes),
               },
             );
-      await tableStore.stage(
-        registration.source,
-        acquisition,
-        entries as unknown as Parameters<VndbTablesStore['stage']>[2],
-      );
+      try {
+        await tableStore.stage(
+          registration.source,
+          acquisition,
+          entries as unknown as Parameters<VndbTablesStore['stage']>[2],
+        );
+      } catch {
+        // Staging has durably rejected and cleaned the acquisition. Like the
+        // scalar readers, archive admission failures are invalid input, before
+        // any run is sealed or any public effect is attempted.
+        throw new InputFailure();
+      }
       const records = (async function* (): AsyncGenerator<SourceRecord> {
         let after: string | null = null;
         for (;;) {

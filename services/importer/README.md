@@ -546,3 +546,16 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 
 This connected outcome adds no PG growth series; missing growth evidence is recorded as missing. Existing
 source, journal, media and transport limits and counted growth evidence retain their original scope.
+
+### Native file acquisition admission
+
+The [file journey](../kernel/test/imports/cli-file-admission.test.ts) runs ordinary
+`--dump <path>` acquisition for all four sources through real account-key Auth,
+Access and public writes, including the registered media worker. Each source
+completes an import, rejects malformed replacements without Auth/public effects
+or changes to the completed baseline and immutable receipts, then accepts a valid
+successor on the same SQLite state. VNDB reads ustar through `readArchive` rather
+than injected entries. Invalid archive staging exits 2, matching scalar input
+admission; interruption still exits 130. Files and SQLite close on either path.
+The [evidence notes](../../docs/research/imports-audit/cli-file-admission.md) describe
+captured anchors and limits. This caller adds no growth measurement or input cap.
