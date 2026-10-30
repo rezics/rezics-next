@@ -9,7 +9,7 @@ import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { createEntryCommands } from '../../src/library/entries.ts';
 import { createFollowCommands } from '../../src/library/follows.ts';
-import type { EntryState } from '../../src/library/entry-model.ts';
+import type { Entry, EntryState } from '../../src/library/entry-model.ts';
 import type { Access, AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -475,7 +475,7 @@ test('put, delete and list statement counts stay equal at three scales of unrela
   };
   const putSubjects = await Promise.all([0, 1, 2].map(() => createReadableSubject(owner)));
   const deleteSubjects = await Promise.all([0, 1, 2].map(() => createReadableSubject(owner)));
-  const deleteEntries = [];
+  const deleteEntries: Entry[] = [];
   for (const subjectId of deleteSubjects)
     deleteEntries.push((await commands.putEntry(owner, subjectId, { state: 'planned' }, key())).value.entry);
   const sample = async (population: Population, operation: (repetition: number) => Promise<unknown>) => {

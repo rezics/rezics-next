@@ -107,7 +107,15 @@ test('a signed-in reader of a public catalogue subject is offered follow and lib
   expect(libraryEntry).toMatchObject({ subjectId: ref.id, state: 'planned' });
   expect(libraryEntry.revision).toBeGreaterThan(0);
   expect(await read(bearer, [ref])).toEqual([offered(ref)]);
-  expect((await command(bearer, `${entryPath}?revision=${libraryEntry.revision}`, 'DELETE')).status).toBe(204);
+  expect(
+    (
+      await command(
+        bearer,
+        `${entryPath}?revision=${libraryEntry.revision}&incarnationId=${libraryEntry.incarnationId}`,
+        'DELETE',
+      )
+    ).status,
+  ).toBe(204);
   expect(await read(bearer, [ref])).toEqual([offered(ref)]);
   const unscoped = await f.unscoped('follow:create');
   expect(await read(unscoped.credential, [ref])).toEqual([
@@ -136,7 +144,7 @@ test('a withheld or concealed subject in a TypeList row answers the same not_fou
   const refs = [f.subjects[0]!, f.withheld, f.unknown, f.concealed, f.subjects[1]!];
   for (const credential of [f.alice.credential, f.bob.credential, f.anonymous.credential]) {
     const batch = await read(credential, refs);
-    for (const index of [1, 2, 3]) expect(batch[index]).toEqual({ ...refs[index], error: 'not_found' });
+    for (const index of [1, 2, 3]) expect(batch[index]).toEqual({ ...refs[index]!, error: 'not_found' });
     expect(batch[0]).toEqual(offered(refs[0]!, credential === null ? [] : bindings));
     expect(batch[4]).toEqual(offered(refs[4]!, credential === null ? [] : bindings));
   }
