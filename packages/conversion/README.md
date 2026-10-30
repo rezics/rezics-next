@@ -157,7 +157,7 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 | Open Library | The JSON payload carried by the native TSV row, for `/type/work` or `/type/edition`. A work bootstraps as `schema:Book`; an edition as `bf:Instance`. The native revision is cited as `schema:version`, and `last_modified` is cited as a day-precision `schema:dateModified`. For editions, valid ISBN-10 values are checksum-validated and converted to ISBN-13; only ISBN-13 is proposed. An unresolved author or work relation has value `somevalue` and keeps its Open Library identifier as a `wdt:P648` qualifier; a real native resolution may be supplied in `resolvedReferences`. | `CC0-1.0` describes the permitted bibliographic metadata source. Unknown-licensed descriptions are kept as metadata and never proposed as summary text. Links and publishers are metadata-only. Covers have separate unknown rights. This permission does not claim all dataset contents share the metadata license or set the output database's license.                                                              |
 | Wikidata     | A real Q entity with `type: 'item'`. The bundled catalogue vocabulary controls supported types, property mappings, datatypes, ranks, qualifiers, and time/quantity handling. Entity labels become name candidates; supported claims become proposals.                                                                                                                                                                                                                                                                                                                                       | Source metadata cites CC0-1.0 structured data. Unknown property mappings are skipped rather than invented. The converter does not import user or talk-page content. CC0 source data does not set the output database's license.                                                                                                                                                                                        |
 
-Bangumi revision `bangumi@3` recognizes types `3` (music) and `6` (live action)
+Bangumi revision `bangumi@4` recognizes types `3` (music) and `6` (live action)
 but returns `outcome: 'ignored'` with a safe `/type` diagnostic and empty
 proposals, cover assets, and media intents in both phases. Identity and type
 are validated before any discarded field is visited; `normalizedRecord`
@@ -419,7 +419,7 @@ cannot retract an earlier candidate from source data alone.
 - Bound: constant identity/type dispatch and at most 32 UTF-8 JSON bytes for
   an excluded normalized record, with zero commands, assets, or intents.
   Supported records retain the 64 KiB projection, 500-character title,
-  64-tag, 32 KiB summary snapshot, five-command and one-cover-intent caps.
+  64-tag plus 64-public-meta-tag (each 200 characters), 32 KiB summary snapshot, six-command and one-cover-intent caps.
   No skipped-ID set, kernel call, SQL, network, or source-wide work is added.
 - Growth check: `bangumi-scope.test.ts` covers launch/ignored outcomes,
   repeat conversion, privacy and named I/O guards; `bangumi-growth.test.ts`
@@ -520,3 +520,23 @@ contracts remain separate from this package. The package's current checks are de
 More detail lives in the actual [bulk contract](../definitions/src/bulk.ts),
 [document implementation](../document/src/index.ts), and the converter source
 modules linked above. No design proposal replaces those executable contracts.
+
+## Reviewed Bangumi public tags
+
+`bangumi@4` retains the ordered public `meta_tags` projection (at most 64 own
+data strings of 200 characters, within the existing 64 KiB projection). Exact
+`后宫` uses only the raw dictionary key
+`v1:["https://rezics.com/schemes/bangumi/public-tags","后宫"]`. With a trusted current
+source Concept UUID it emits one `schema:keywords` proposal, including the
+required dimensionless zero spoiler qualifier and existing public-record citation.
+Missing mapping omits that proposal. Popularity `tags`, private Collection labels,
+titles, platform, infobox and approximate spellings never substitute. No form,
+word measurement, canonical Concept substitution or equivalence is inferred.
+
+The caller owns current native trust; dictionary syntax is no proof of authority.
+The production Importer/CLI obtains the dictionary through its existing
+`identifierLookup`, after explicit reviewed seeding. Normalization and digesting
+remain pure; the source-only digest includes the ordered metadata tags and excludes
+bindings. Supported records visit twelve top-level fields and produce at most six
+commands and one cover intent; byte caps and ignored music/live-action outcomes
+are unchanged. The new keyword adds one bounded citation and one qualifier.

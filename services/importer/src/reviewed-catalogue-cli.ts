@@ -8,7 +8,8 @@ export async function runReviewedCatalogueSeedCli(argv: readonly string[]): Prom
   if (argv.length !== required.length * 2) throw new TypeError('Expected explicit seed operator configuration');
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
-    const flag = argv[i]!; const value = argv[i + 1]!;
+    const flag = argv[i]!;
+    const value = argv[i + 1]!;
     if (!required.includes(flag) || values.has(flag) || !value || value.length > 4096 || value.includes('\0'))
       throw new TypeError('Invalid seed operator configuration');
     values.set(flag, value);
@@ -22,8 +23,10 @@ export async function runReviewedCatalogueSeedCli(argv: readonly string[]): Prom
   const api = origin('--api');
   const auth = origin('--auth');
   const tokenProvider = await createAccountTokenProvider({
-    accountKeyPath: values.get('--account-key')!, account: values.get('--account')!,
-    client: values.get('--client')!, authOrigin: auth,
+    accountKeyPath: values.get('--account-key')!,
+    account: values.get('--account')!,
+    client: values.get('--client')!,
+    authOrigin: auth,
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
   const port = createImportTransport({ origin: api, tokenProvider });
@@ -32,6 +35,10 @@ export async function runReviewedCatalogueSeedCli(argv: readonly string[]): Prom
 }
 
 if (import.meta.main) {
-  try { await runReviewedCatalogueSeedCli(Bun.argv.slice(2)); }
-  catch { process.stderr.write('Reviewed vocabulary seeding failed.\n'); process.exitCode = 1; }
+  try {
+    await runReviewedCatalogueSeedCli(Bun.argv.slice(2));
+  } catch {
+    process.stderr.write('Reviewed vocabulary seeding failed.\n');
+    process.exitCode = 1;
+  }
 }

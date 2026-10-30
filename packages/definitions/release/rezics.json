@@ -721,6 +721,7 @@
         "schema:sameAs",
         "schema:url",
         "skos:broader",
+        "skos:closeMatch",
         "skos:inScheme"
       ],
       "facets": [],
@@ -2427,6 +2428,43 @@
           "ko": "하위 개념",
           "zh-Hans": "下位概念",
           "zh-Hant": "下位概念"
+        }
+      },
+      "targets": ["skos:Concept"]
+    },
+    "skos:closeMatch": {
+      "iri": "http://www.w3.org/2004/02/skos/core#closeMatch",
+      "labels": {
+        "de": "ähnlicher Begriff",
+        "en": "close match",
+        "es": "concepto cercano",
+        "fr": "concept proche",
+        "ja": "近似する概念",
+        "ko": "유사 개념",
+        "zh-Hans": "近似概念",
+        "zh-Hant": "近似概念"
+      },
+      "mappings": [],
+      "datatype": "wikibase-item",
+      "multivalued": true,
+      "qualifiers": [],
+      "value": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      },
+      "relation": {
+        "group": "classification",
+        "order": "name",
+        "inverse": "rezics:closeMatchedBy",
+        "inverseLabels": {
+          "de": "Ähnliche Begriffe",
+          "en": "Closely matching concepts",
+          "es": "Conceptos cercanos",
+          "fr": "Concepts proches",
+          "ja": "近似する概念",
+          "ko": "유사한 개념",
+          "zh-Hans": "近似概念",
+          "zh-Hant": "近似概念"
         }
       },
       "targets": ["skos:Concept"]

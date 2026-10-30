@@ -225,16 +225,23 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
     const dictionary = context.resolvedReferences;
-    if (dictionary && (typeof dictionary !== 'object' || utilTypes.isProxy(dictionary))) invalid('', 'invalid_reference_context');
+    if (dictionary && (typeof dictionary !== 'object' || utilTypes.isProxy(dictionary)))
+      invalid('', 'invalid_reference_context');
     const descriptor = dictionary ? Object.getOwnPropertyDescriptor(dictionary, reference) : undefined;
     if (descriptor && (!('value' in descriptor) || !descriptor.enumerable)) invalid('', 'invalid_reference_context');
     const concept: unknown = descriptor?.value;
     if (concept !== undefined) {
-      if (typeof concept !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(concept))
+      if (
+        typeof concept !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(concept)
+      )
         invalid('', 'invalid_reference_context');
-      facts.push({ ...fact('schema:keywords', concept), qualifiers: [
-        { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '0', unit: '1' } } },
-      ] });
+      facts.push({
+        ...fact('schema:keywords', concept),
+        qualifiers: [
+          { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '0', unit: '1' } } },
+        ],
+      });
     }
   }
   let document;

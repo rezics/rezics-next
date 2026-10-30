@@ -1,3 +1,4 @@
+import { createImportTransport } from '../../../importer/src/import-client.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { setLabelAssignment } from '../../src/library/label-assignment-store.ts';
@@ -118,6 +119,7 @@ export interface ReleasedDiscoveryFixture {
     spaceCreation(persona: DiscoveryAccountName): Promise<void>;
     realmCreation(persona: DiscoveryAccountName): Promise<void>;
   };
+  reviewedCatalogueOperator(persona: 'alice' | 'bob'): Promise<ReturnType<typeof createImportTransport>>;
   nativeLabelAssignment(
     persona: 'alice' | 'bob',
     labelId: string,
@@ -371,6 +373,38 @@ export async function createReleasedDiscoveryFixture(
         'Adopt released same-statement platform/language/date qualifier grammar: inLanguage currently string, not a Concept or credit role.',
       ),
       request,
+      async reviewedCatalogueOperator(persona) {
+        requireOpen();
+        // The explicit test operator receives real native Access grants, never an importer default.
+        await driver.fixtures.grantAccount(personas[persona], [
+          'subject:batch_write',
+          'subject:create',
+          'statement:propose',
+          'source_fence:read',
+          'context:accept',
+          'context:adopt',
+        ]);
+        const account = personas[persona];
+        return createImportTransport({
+          origin: 'https://reviewed.discovery.test',
+          tokenProvider: async () => account.bearer,
+          fetch: (async (input, init) => {
+            requireOpen();
+            const req = new Request(input, init);
+            const url = new URL(req.url);
+            const method = req.method as 'GET' | 'POST' | 'PUT' | 'DELETE';
+            const bytes = await req.text();
+            const response = await driver.fixtures.send(
+              account,
+              method,
+              url.pathname + url.search,
+              bytes ? JSON.parse(bytes) : undefined,
+              Object.fromEntries(req.headers),
+            );
+            return Response.json(response.body, { status: response.status, headers: response.headers });
+          }) as typeof fetch,
+        });
+      },
       async nativeLabelAssignment(persona, labelId, subjectId, operation = 'set') {
         requireOpen();
         // Delivered DAO seam: authenticate the real bearer, then use the real scoped owner command runner.

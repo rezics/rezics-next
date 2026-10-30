@@ -38,9 +38,7 @@
       {
         "property": "schema:sameAs",
         "value": "https://rezics.com/schemes/media-genres",
-        "citations": [
-          "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"
-        ]
+        "citations": ["https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"]
       }
     ]
   },
@@ -65,16 +63,12 @@
       {
         "property": "skos:inScheme",
         "target": "canonical-scheme",
-        "citations": [
-          "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"
-        ]
+        "citations": ["https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"]
       },
       {
         "property": "schema:sameAs",
         "value": "http://www.wikidata.org/entity/Q690342",
-        "citations": [
-          "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"
-        ]
+        "citations": ["https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"]
       }
     ]
   },

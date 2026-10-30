@@ -1423,3 +1423,15 @@ A property may declare `disclosure: sourceOrConsent` in a release. Catalogue slo
 - Touches: one optional enum on each property and optional localized descriptions; validation and compilation traverse the existing bounded property and presentation collections.
 - Bound: disclosure adds no lookup or data-dependent traversal to definitions reads. Definitions tests cover valid and invalid release values, compiler annotations, localized descriptions and unsourced input validation in `test/disclosure.test.ts`.
 - Growth check: semantic's public-read check is `test/semantic/growth-private-statements.test.ts`: `public inverse rows stay flat with 64, 512 and 4096 private pen-name links`, scales `[64, 512, 4096]`, one warm-up per scale.
+
+## Reviewed classification correspondence
+
+`skos:closeMatch` is a standard Concept item relation in the classification
+compiler, with eight locale labels and inverse display data. It connects distinct
+source/canonical meanings without equivalence, merge or filter expansion;
+`schema:sameAs` external identity and exact mapping retain their own meanings.
+No measurement, cardinality or existing Book/anime/filter profile changes follow.
+`src/reviewed-vocabulary.json` is the finite authored seed input consumed by the
+explicit Importer operator tool; it contains citations and explicit metadata
+rights, not native IDs or publication authority. Released data and both web
+definition recordings are generated through the normal release/record scripts.

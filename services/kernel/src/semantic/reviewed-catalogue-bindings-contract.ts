@@ -1,4 +1,4 @@
-/** Proposed review output only. No producer, registration, resolver or ready value is exported. */
+/** Native evidence shapes. The explicit operator implementation lives in services/importer. */
 import type { BatchCommand, BatchStatement, BatchWriteResult, Source } from '@rezics/definitions/bulk';
 import type { Item, Statement } from './item.ts';
 import type { createSubject } from './subject.ts';
@@ -12,10 +12,11 @@ type NativeBatch = Awaited<ReturnType<typeof batchCommand>>;
 export type NativeCandidateObservation = Awaited<ReturnType<typeof listCandidates>>['candidates'][number];
 
 /** A logical vocabulary key, not a provider record number or native subject ID. */
-export type ProposedVocabularyIdentity = Readonly<{
-  status: 'proposed';
+export type ReviewedVocabularyIdentity = Readonly<{
+  status: 'approved';
   mechanism: 'external_claim';
-  namespace: 'requires-semantic-imports-root-review';
+  namespace: 'rezics_reviewed_vocabulary';
+  encoding: 'v1:base64url-utf8-canonical-json-tuple';
   schemeURI: string;
   literalMember: string;
 }>;
@@ -69,7 +70,7 @@ type VocabularySubject = Readonly<{
   schemeMembership: NativeReviewedFact;
 }>;
 
-/** Required shape for future accepted output. Structural typing itself certifies no review. */
+/** Full native evidence shape. Structural typing alone certifies no current authority. */
 export type ReviewedCatalogueBinding =
   | Readonly<{
       kind: 'bangumi-public-tag';
@@ -104,18 +105,7 @@ export type ReviewedCatalogueBinding =
     }>;
 
 export type CatalogueBindingReview =
-  | Readonly<{
-      status: 'proposed';
-      identity: ProposedVocabularyIdentity;
-      missing: readonly (
-        | 'reviewed-seed-namespace'
-        | 'native-close-correspondence'
-        | 'native-source-metadata'
-        | 'admitted-sealed-run-metadata-ack'
-        | 'accepted-native-binding-producer'
-        | 'bangumi-resolved-reference-key'
-      )[];
-    }>
+  | Readonly<{ status: 'source-complete'; identity: ReviewedVocabularyIdentity; nativeProof: 'integration-required' }>
   | Readonly<{ status: 'accepted-output'; binding: ReviewedCatalogueBinding }>;
 
 /** No platform member is frozen by this contract. Exact inventory/code review is still required. */

@@ -576,28 +576,54 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<ReviewedCandidatePage> {
     mediaId(id);
     const safe = snapshot(query, BODY_BYTES) as typeof query;
-    const reply = await response(() => client.subjects({ id }).candidates.get({ query: safe, ...fetchOptions(signal) }), 200, signal);
+    const reply = await response(
+      () => client.subjects({ id }).candidates.get({ query: safe, ...fetchOptions(signal) }),
+      200,
+      signal,
+    );
     return reply.body as ReviewedCandidatePage;
   }
   async function acceptReviewedCandidate(
-    id: string, candidate: string,
-    body: Parameters<CandidateAPI['$accept']['post']>[0], key: string, signal?: AbortSignal,
+    id: string,
+    candidate: string,
+    body: Parameters<CandidateAPI['$accept']['post']>[0],
+    key: string,
+    signal?: AbortSignal,
   ): Promise<ReviewedAcceptance> {
-    mediaId(id); mediaId(candidate);
+    mediaId(id);
+    mediaId(candidate);
     const safe = snapshot(body, BODY_BYTES) as typeof body;
-    const reply = await response(() => client.subjects({ id }).candidates({ candidate }).$accept.post(safe, {
-      headers: { 'idempotency-key': idempotencyKey(key) }, ...fetchOptions(signal),
-    }), 200, signal);
+    const reply = await response(
+      () =>
+        client
+          .subjects({ id })
+          .candidates({ candidate })
+          .$accept.post(safe, {
+            headers: { 'idempotency-key': idempotencyKey(key) },
+            ...fetchOptions(signal),
+          }),
+      200,
+      signal,
+    );
     return reply.body as ReviewedAcceptance;
   }
   async function adoptReviewedCandidates(
-    id: string, body: Parameters<SubjectAPI['$adopt']['post']>[0], key: string, signal?: AbortSignal,
+    id: string,
+    body: Parameters<SubjectAPI['$adopt']['post']>[0],
+    key: string,
+    signal?: AbortSignal,
   ): Promise<ReviewedAdoption> {
     mediaId(id);
     const safe = snapshot(body, BODY_BYTES) as typeof body;
-    const reply = await response(() => client.subjects({ id }).$adopt.post(safe, {
-      headers: { 'idempotency-key': idempotencyKey(key) }, ...fetchOptions(signal),
-    }), 200, signal);
+    const reply = await response(
+      () =>
+        client.subjects({ id }).$adopt.post(safe, {
+          headers: { 'idempotency-key': idempotencyKey(key) },
+          ...fetchOptions(signal),
+        }),
+      200,
+      signal,
+    );
     return reply.body as ReviewedAdoption;
   }
   return {

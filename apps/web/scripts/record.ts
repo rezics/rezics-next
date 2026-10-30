@@ -21,7 +21,12 @@ const accountId = Bun.randomUUIDv7();
 const kernelRouteKey = randomBytes(32).toString('base64url');
 const sessionKey = randomBytes(32).toString('base64url');
 // Immutable definition snapshots are generated from the same bundled release without a runtime.
-if (import.meta.main && only.length === 2 && only.includes('definitions-active') && only.includes('definitions-release')) {
+if (
+  import.meta.main &&
+  only.length === 2 &&
+  only.includes('definitions-active') &&
+  only.includes('definitions-release')
+) {
   await recordDefinitions();
   process.exit(0);
 }

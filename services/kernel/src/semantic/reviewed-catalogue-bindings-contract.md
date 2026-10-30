@@ -1,14 +1,17 @@
 # Reviewed native catalogue bindings
 
-Status: **PROPOSED specification; awaiting Semantic, Imports and Root review**.
-This is the missing binding producer boundary, not a deployed mapping. Only the
-manager can accept/freeze it after coowner review. The
-[Definitions meanings](../../../../packages/definitions/README.md#public-classification-and-genuine-measurements)
+Status: **Approved bounded seed and read-only Bangumi consumer implementation**.
+The explicit operator producer is
+[`seedReviewedCatalogue`](../../../importer/src/reviewed-catalogue.ts); the
+ordinary Importer/CLI consumes its current native proof through existing
+`identifierLookup`. Runtime seeding remains deliberate authorized operator work.
+Source and local typing are the current delivery boundary; native acceptance is
+integration proof, not inferred from source completion.
+
+The [Definitions meanings](../../../../packages/definitions/README.md#public-classification-and-genuine-measurements)
 and [source inventory rules](../../../../packages/definitions/sources/README.md)
-remain authoritative. This contract specifies the native observations needed to
-implement those meanings. Its [type file](reviewed-catalogue-bindings-contract.ts)
-exports types only; it creates no native subjects, namespace, registration or
-ready binding. Released property admission is a separate prerequisite.
+remain authoritative. The type file describes evidence, without manufacturing
+native subjects, receipts or readiness.
 
 ## Required meanings
 
@@ -27,35 +30,28 @@ nor permission to double-emit. Book stays a work; `bf:Instance` stays an edition
 An explicit trusted cited form assertion or actual Wikidata P7937 value requires
 its own holder and Concept binding. An archived manga row cannot provide it.
 
-## Operational identity decision still required
+## Adopted operational identity
 
-Reuse `semantic.external_claim` and existing `batchCommand` create-or-resolve.
-No global claim endpoint, catalogue registry, provider converter, identity engine,
-custom correspondence property or permission is proposed. UUIDs always come from
-ordinary native APIs. A QID or URL is an external meaning key, never a native ID.
+Platform-authored seed records alone use `rezics_reviewed_vocabulary`. External
+identity is `v1:` plus unpadded base64url of UTF-8 canonical JSON
+`[schemeURI, exactLiteralMember]`. There is no normalization, trimming, hashing
+or label-derived ID. Both actual Source external-ID bounds and the complete
+255-byte command key are validated before effects. The pinned member has an
+82-byte ASCII external ID and 174-byte complete command key. The existing
+deterministic 64-hex command suffix is not an identity hash.
 
-The minimal proposed decision is to configure one explicit platform-review seed
-namespace/alias for platform-authored vocabulary, and adopt a stable literal
-encoding of `(owner-adopted scheme URI, literal member)` as its `external_id`.
-Review must select the alias, ownership, literal encoding/escaping and permitted
-vocabulary keys. None is adopted by this specification. In particular, do not
-silently use `bangumi`, `wikidata`, archive subject `498` or a fabricated numeric
-tag ID as the source identity of a platform-authored vocabulary record.
-Configured aliases are trusted configuration; their spelling proves no identity.
+The converter dictionary key stays raw
+`v1:["https://rezics.com/schemes/bangumi/public-tags","后宫"]` (58 UTF-16 units,
+62 UTF-8 bytes). Provider aliases, raw Wikidata QID lookup and claim identities
+remain unchanged. This namespace is neither provider record identity nor
+platform-name vocabulary approval.
 
-The acceptance file's `binding_mechanism_test` alias and random isolation suffix
-are **test-only configuration**, proving the existing durable claim mechanism.
-They are neither a runtime namespace choice nor an accepted binding producer.
-The independently created graph controls prove native representability and
-disclosure only. Neither they nor the shared released-discovery classification
-IDs may be passed off as production reviewed provider bindings. A future shared
-builder group must delegate to the one production producer once it exists.
-
-Imports must separately review the exact Bangumi `resolvedReferences` lookup key.
-The logical source/field/member tuple above is proposed identity, not an already
-implemented lookup string. Existing Wikidata conversion reads actual raw QID keys
-such as `Q747381`; a URL-keyed or property-keyed substitute will not resolve it.
-No speculative registration option or callback follows from a type declaration.
+The finite explicit authored input in Definitions contains source and canonical
+schemes and two distinct harem Concepts with reviewed citations. Empty literal
+members identify scheme self records; `Q690342` identifies the reviewed
+canonical member. Native receipts supply every UUID. Existing controlled graph
+fixtures remain mechanism tests; they are never returned as production bindings.
+No platform vocabulary, additional adapter or inference follows.
 
 ## Ordinary native protocol and closed output
 
@@ -170,21 +166,24 @@ setup; failure of a missing producer does not suppress the available graph cases
 | retracted claim-backed correspondence requires provenance even when its adoption remains public                                        | Real source-owned proposal, native selection and terminal bulk retraction; actual listing retains cited retraction while Context adoption remains. A retained Item assertion alone cannot certify a binding                                                            |
 | first-party vocabulary seeding requires a native source metadata ACK before any external claim bootstrap                               | Required native metadata **201**. Missing route is a red; no bootstrap dispatch is made after it. This is not proof of first-party sealed-run ordering                                                                                                                 |
 
-Required producer prerequisites are: an adopted namespace/encoding and Bangumi
-consumer key; real native source metadata and admitted-run ACK wiring; released
-standard close correspondence; and the one accepted reviewed binding producer.
-The current source-record contract names a future metadata route/storage/DTO;
-its tests are specifications, not evidence those exports already exist. A native
-metadata red must remain separate from the independently available graph proof.
+The real metadata API and released `skos:closeMatch` are used through native
+contracts. The production tool admits and seals the entire reviewed input before
+metadata dispatch, and obtains an actual metadata ACK before each bootstrap.
+It reuses unchanged RecordBindings claim/proposal journals, exact keys/bytes and
+current native editorial heads. Changed unrelated decisions are refused.
 
-No existing acceptance, shared builder, release/YAML, recordings, importer or
-converter is changed. Full word/form/tag/platform, same-statement, six-surface,
-defaults/index/privacy/main obligations remain with their owners. This focused
-boundary does not establish genuine measurements, complete projections, indexed
-execution or deployed mappings. Missing/empty/withheld tags and unresolved binding
-must later omit conversion proposals; no fallback to ordinary/private tags or
-infobox is authorized. Those converter obligations are not implemented by this
-native controlled-graph specification.
+The consumer checks current originals, fences, scheme/identity/correspondence,
+selected accepted unretracted candidates and public graph before supplying the
+source Concept. Retained adoption after retraction supplies no authority.
+Missing/hidden/unavailable bindings omit keywords. Pure `bangumi@4` projects
+bounded public metadata tags and never substitutes canonical meaning, ordinary
+tags, private labels, word counts or light-novel inference.
+
+The native producer/consumer acceptance case uses the same released-discovery
+Auth/Access fixture and production client, producer, Importer and RecordBindings.
+Its geometric lookup case includes current native validation and SQL/byte cost
+through shared growth/settle at 64/512/4096; search execution remains its owner's
+followup. No existing controlled-graph assertion is changed.
 
 ## Read-only evidence inspected
 
@@ -206,14 +205,7 @@ the actual member. AGPL-3.0-only source was neither copied nor executed.
 
 ## Verification
 
-From the worktree root, commit before running each required check:
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/semantic/reviewed-catalogue-bindings.test.ts
-bun scripts/worker-check.ts -- bun run typecheck
-```
-
-Record actual statuses and log paths in the handoff. The deliberate native reds
-identify missing producers; a passing typecheck would establish only that the
-proposed types and tests compile. Manager review, acceptance/freeze and promotion
-remain separate.
+Current source delivery permits only local workspace typechecks. Native
+producer/consumer and existing mechanism cases are authored for managed
+integration acceptance; actual seeding, external writes, native/database/browser
+checks and search execution are not part of this minimal implementation attempt.
