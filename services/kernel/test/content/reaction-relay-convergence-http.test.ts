@@ -297,8 +297,10 @@ test.serial(
       `/v1/threads/${publicTarget.threadId}/reaction`,
       'like',
     );
-    for (const partition of new Set([sourceA, sourceB]))
-      expect(await runtime.relayCheckpoint(partition)).toEqual(initialCheckpoints.get(partition));
+    for (const partition of new Set([sourceA, sourceB])) {
+      expect(initialCheckpoints.has(partition)).toBe(true);
+      expect(await runtime.relayCheckpoint(partition)).toEqual(initialCheckpoints.get(partition) ?? null);
+    }
     await expectThreadRead(base, publicTarget, base.author, 'like', base.other, 'like', {}, null);
     await waitForChanges(runtime, [threadLikeA, threadLikeB]);
     const threadProjectionBeforeReplay = await targetProjectionRows(base.system.database.pool, publicTarget.threadId);

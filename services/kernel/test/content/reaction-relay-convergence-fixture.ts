@@ -151,7 +151,7 @@ export async function createReactionRelayBase(databaseUrl = process.env.DATABASE
         bearer: options.bearer ?? author.bearer,
         key: options.key ?? idempotencyKey(),
         body,
-        headers: options.headers,
+        ...(options.headers ? { headers: options.headers } : {}),
       });
       const expected = options.expectedStatus ?? (method === 'POST' ? 201 : method === 'PUT' ? 200 : 204);
       if (result.response.status !== expected)

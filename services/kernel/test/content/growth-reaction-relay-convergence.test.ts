@@ -392,19 +392,18 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
     },
   });
 
-  expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
-  expect(populations.map(({ scale }) => scale)).toEqual(scales);
-  for (const item of populations) {
-    const prior = populations[populations.indexOf(item) - 1];
-    const cumulative = scales.slice(0, scales.indexOf(item.scale) + 1).reduce((sum, value) => sum + value, 0);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  expect(populations.map(({ scale }) => scale)).toEqual([...scales]);
+  for (const [index, item] of populations.entries()) {
+    const prior = populations[index - 1];
     expect(item.total).toEqual({
-      reaction: cumulative * 2,
-      receipt: cumulative * 2,
-      count: cumulative * 2,
-      total: cumulative * 2,
+      reaction: item.scale * 2,
+      receipt: item.scale * 2,
+      count: item.scale * 2,
+      total: item.scale * 2,
     });
-    expect(item.hot.reaction).toBe(cumulative);
-    expect(item.hot.receipt).toBe(cumulative);
+    expect(item.hot.reaction).toBe(item.scale);
+    expect(item.hot.receipt).toBe(item.scale);
     expect(item.hot.count).toBe(item.scale);
     expect(item.hot.total).toBe(item.scale);
     if (prior) {
@@ -415,7 +414,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
     }
   }
 
-  expect(evidence.map(({ scale }) => scale)).toEqual(scales);
+  expect(evidence.map(({ scale }) => scale)).toEqual([...scales]);
   for (const sample of report.samples) {
     const relations = sample.cost.relations;
     expect(relations?.['content.reaction']).toBeDefined();
