@@ -3,7 +3,10 @@ import type { KernelClient } from '@rezics/client';
 import { readSearchPage } from './search-request';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
-type NativePage = Extract<NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>, { subjects: unknown }>;
+type NativePage = Extract<
+  NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>,
+  { subjects: unknown }
+>;
 type NativeHit = NativePage['subjects'][number];
 
 // Keep the opt-in envelope separate from the generated Subject compatibility response.

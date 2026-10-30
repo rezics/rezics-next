@@ -295,10 +295,15 @@ export function searchRoutes<App>(
         body: t.Object(
           {
             representation: t.Optional(t.Literal('discovery-v1')),
-            kindPage: t.Optional(t.Object({
-              limit: t.Integer({ minimum: 1, maximum: 8 }),
-              cursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
-            }, object)),
+            kindPage: t.Optional(
+              t.Object(
+                {
+                  limit: t.Integer({ minimum: 1, maximum: 8 }),
+                  cursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
+                },
+                object,
+              ),
+            ),
             kindCountLeaf: t.Optional(t.Integer({ minimum: 0 })),
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
@@ -338,15 +343,24 @@ export function searchRoutes<App>(
       },
       ({ body, authorize, admission, job, actor }) => {
         async function prepare(): Promise<AccessCheck> {
-          if (body.representation === 'discovery-v1'
-            ? requiresAdvancedDiscoverySearch({ ...body, representation: 'discovery-v1' }) : requiresAdvancedSearch(body))
+          if (
+            body.representation === 'discovery-v1'
+              ? requiresAdvancedDiscoverySearch({ ...body, representation: 'discovery-v1' })
+              : requiresAdvancedSearch(body)
+          )
             await admitGroup({
               pool,
-              access: gateAccess ?? (() => (typeof access === 'function'
-                ? access({ actions: actionCatalogue(routed) }) : access!)),
-              actor, group: 'search_advanced', clientAction: 'subject:read', deadline: job.deadline, clock,
+              access:
+                gateAccess ??
+                (() => (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access!)),
+              actor,
+              group: 'search_advanced',
+              clientAction: 'subject:read',
+              deadline: job.deadline,
+              clock,
             });
-          return authorize({ ...resource,
+          return authorize({
+            ...resource,
             ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
           });
         }
@@ -355,11 +369,16 @@ export function searchRoutes<App>(
           return admission.run('normal', job, async () => {
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
             if (!discovery) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-            const ownerAccess: Access | undefined = gateAccess?.() ?? (typeof access === 'function'
-              ? access({ actions: actionCatalogue(routed) }) : access);
+            const ownerAccess: Access | undefined =
+              gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
             if (!ownerAccess) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-            return discoveryHttpPage(await discovery(actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-              { ...body, representation: 'discovery-v1' }, { access: ownerAccess, actor, deadline: job.deadline }));
+            return discoveryHttpPage(
+              await discovery(
+                actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
+                { ...body, representation: 'discovery-v1' },
+                { access: ownerAccess, actor, deadline: job.deadline },
+              ),
+            );
           });
         }
         async function catalogue(): Promise<SearchHttpResponse> {
@@ -367,17 +386,25 @@ export function searchRoutes<App>(
           return admission.run('normal', job, async () => {
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
             if (body.kindPage !== undefined || body.kindCountLeaf !== undefined)
-              throw new ProblemError('invalid_request', { errors: [{ pointer: '/representation', code: 'invalid_format' }] });
+              throw new ProblemError('invalid_request', {
+                errors: [{ pointer: '/representation', code: 'invalid_format' }],
+              });
             if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
             let completed: SearchHttpResponse | undefined;
             await search.search(
               actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-              body, clock().getTime(), active,
+              body,
+              clock().getTime(),
+              active,
               {
                 deadline: job.deadline,
                 async complete(page) {
-                  completed = publicBases(await fill(page, authorize, body.languages, active), body.languages ?? [], active);
+                  completed = publicBases(
+                    await fill(page, authorize, body.languages, active),
+                    body.languages ?? [],
+                    active,
+                  );
                 },
               },
             );

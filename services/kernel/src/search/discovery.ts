@@ -190,7 +190,7 @@ export type DiscoveryIndexDefinition = {
   mappings: {
     _meta: {
       discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
-  identity?: string;
+      identity?: string;
       name_sort_format: number;
       document_identity: string;
     };
@@ -200,11 +200,12 @@ export type DiscoveryIndexDefinition = {
 };
 
 /** Closed mixed admission on the same native consumer, never a Subject AST cast. */
-export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInput, 'filterDocument'> & Readonly<{
-  representation: 'discovery-v1';
-  filterDocument: DiscoveryFilterDocument | undefined;
-  comparator: 'mixed-public-v1';
-}>;
+export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInput, 'filterDocument'> &
+  Readonly<{
+    representation: 'discovery-v1';
+    filterDocument: DiscoveryFilterDocument | undefined;
+    comparator: 'mixed-public-v1';
+  }>;
 export type DiscoveryEngineHit = Readonly<{
   key: DiscoveryKey;
   index: string;
@@ -215,6 +216,7 @@ export type DiscoveryEngineHit = Readonly<{
 }>;
 export type DiscoveryEngineResult = Readonly<{ generation?: number; hits: readonly DiscoveryEngineHit[] }>;
 export type DiscoveryConsumerQuery =
-  | (Omit<Extract<PublicFilterConsumerQuery, { status: 'queried' }>, 'result'> & Readonly<{ result: DiscoveryEngineResult }>)
+  | (Omit<Extract<PublicFilterConsumerQuery, { status: 'queried' }>, 'result'> &
+      Readonly<{ result: DiscoveryEngineResult }>)
   | Exclude<PublicFilterConsumerQuery, { status: 'queried' }>;
 export type DiscoverySort = Extract<SearchPlan['sort'], 'id' | 'name' | 'relevance'>;

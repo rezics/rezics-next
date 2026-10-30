@@ -13,7 +13,10 @@ export class DiscoveryFrontier {
   private rounds = 0;
   private requested = 0;
 
-  constructor(readonly limit: number, after?: readonly SearchSortValue[]) {
+  constructor(
+    readonly limit: number,
+    after?: readonly SearchSortValue[],
+  ) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid discovery page limit');
     this.after = after;
   }
@@ -37,9 +40,13 @@ export class DiscoveryFrontier {
       this.after = candidate.sort;
       consumed++;
       if (hit) {
-        if (hit.key.owner !== candidate.key.owner || hit.key.kind !== candidate.key.kind ||
-          hit.key.route !== candidate.key.route || hit.key.id !== candidate.key.id ||
-          hit.summary.value.id !== candidate.key.id)
+        if (
+          hit.key.owner !== candidate.key.owner ||
+          hit.key.kind !== candidate.key.kind ||
+          hit.key.route !== candidate.key.route ||
+          hit.key.id !== candidate.key.id ||
+          hit.summary.value.id !== candidate.key.id
+        )
           throw new SearchUnavailableError('Discovery current projection disagrees with its native head');
         this.emitted.add(identity);
         this.hits.push(hit);

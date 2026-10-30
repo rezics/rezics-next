@@ -17,9 +17,10 @@ import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
 import { listKeyFacts } from '../media/type-presentation';
 import { subjectHref } from '../subject/subject-href';
 
-type NativeHit = Extract<NonNullable<
-  Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']
->, { subjects: unknown }>['subjects'][number];
+type NativeHit = Extract<
+  NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>,
+  { subjects: unknown }
+>['subjects'][number];
 export type Fact = NonNullable<NativeHit['facts']>[string][number];
 
 export type SubjectHit = {

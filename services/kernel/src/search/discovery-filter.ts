@@ -1,11 +1,20 @@
 import { isDeepStrictEqual } from 'node:util';
-import { parseDiscoveryFilter, admitDiscoveryFilter, type DiscoveryFilterDocument, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import {
+  parseDiscoveryFilter,
+  admitDiscoveryFilter,
+  type DiscoveryFilterDocument,
+  type FilterDocument,
+  type FilterRelease,
+} from '@rezics/filter';
 import { FilterError } from '@rezics/filter';
 import type { DiscoveryCondition, DiscoveryRegistry, DiscoveryConsumerCaptureInput } from './discovery.ts';
 import { compileText } from './text.ts';
 import { discoveryNativeQuery } from './discovery-query.ts';
 import { compileFilter } from './filter.ts';
-import type { PublicFilterDependencyKey, PublicFilterProjectionMeaning } from '../semantic/public-filter-source-contract.ts';
+import type {
+  PublicFilterDependencyKey,
+  PublicFilterProjectionMeaning,
+} from '../semantic/public-filter-source-contract.ts';
 
 type Query = Record<string, unknown>;
 const none: Query = { match_none: {} };
@@ -134,20 +143,32 @@ export function currentDiscoveryFilter(
 
 /** Derive native evidence from the exact admitted root. Size/frontier remain execution data. */
 export function compileDiscoveryCapture(
-  input: DiscoveryConsumerCaptureInput, registry: DiscoveryRegistry, release: FilterRelease,
+  input: DiscoveryConsumerCaptureInput,
+  registry: DiscoveryRegistry,
+  release: FilterRelease,
 ): DiscoveryConsumerCaptureInput {
-  if (input.representation !== 'discovery-v1' || input.comparator !== 'mixed-public-v1' ||
+  if (
+    input.representation !== 'discovery-v1' ||
+    input.comparator !== 'mixed-public-v1' ||
     !['id', 'name', 'relevance'].includes(input.sort) ||
-    !Number.isInteger(input.size) || input.size < 1 || input.size > 200 ||
-    !Number.isInteger(input.pageSize) || input.pageSize! < 1 || input.pageSize! > 100)
+    !Number.isInteger(input.size) ||
+    input.size < 1 ||
+    input.size > 200 ||
+    !Number.isInteger(input.pageSize) ||
+    input.pageSize! < 1 ||
+    input.pageSize! > 100
+  )
     throw new RangeError('Invalid mixed capture');
   const filterDocument = input.filterDocument
-    ? admitDiscoveryFilter(input.filterDocument, release, new Set(registry.entries.map((entry) => entry.kind))) : undefined;
+    ? admitDiscoveryFilter(input.filterDocument, release, new Set(registry.entries.map((entry) => entry.kind)))
+    : undefined;
   const compiled = filterDocument ? compileDiscoveryFilter(filterDocument, registry, release) : undefined;
   const text = input.text ? compileText(input.text, { field: 'search_text', prefix: 't' }) : undefined;
   const filter = compiled?.query ?? discoveryPopulation(registry);
-  if ((input.query !== undefined && !isDeepStrictEqual(input.query, text?.query)) ||
-    (input.filter !== undefined && !isDeepStrictEqual(input.filter, filter)))
+  if (
+    (input.query !== undefined && !isDeepStrictEqual(input.query, text?.query)) ||
+    (input.filter !== undefined && !isDeepStrictEqual(input.filter, filter))
+  )
     throw new TypeError('Compiled mixed evidence disagrees with the admitted root');
   const properties = new Set<string>();
   function visit(node: DiscoveryFilterDocument): void {
@@ -157,19 +178,29 @@ export function compileDiscoveryCapture(
     else if ('statement' in node) properties.add(node.statement.property);
   }
   if (filterDocument) visit(filterDocument);
-  return { ...input, filterDocument, filter, ...(text ? { query: text.query } : {}), overflowProperties: [...properties] };
+  return {
+    ...input,
+    filterDocument,
+    filter,
+    ...(text ? { query: text.query } : {}),
+    overflowProperties: [...properties],
+  };
 }
 
 /** Native consumer and custody derive identical dependencies from the immutable mixed root.
  * Custody can validate dependency coverage without a registry; native execution still requires the actual registry.
  */
 export function compileDiscoveryConsumerCapture(
-  input: DiscoveryConsumerCaptureInput, meaning: PublicFilterProjectionMeaning, registry: DiscoveryRegistry | undefined,
+  input: DiscoveryConsumerCaptureInput,
+  meaning: PublicFilterProjectionMeaning,
+  registry: DiscoveryRegistry | undefined,
 ): Readonly<{ query: Query; dependencyKeys: readonly PublicFilterDependencyKey[] }> {
   if (!Object.hasOwn(input, 'filterDocument') || !Object.hasOwn(input, 'text'))
     throw new TypeError('Mixed capture requires the exact root');
   const keys: PublicFilterDependencyKey[] = [
-    { kind: 'type' }, { kind: 'order', order: input.sort }, { kind: 'order', order: 'id' },
+    { kind: 'type' },
+    { kind: 'order', order: input.sort },
+    { kind: 'order', order: 'id' },
   ];
   const kinds = new Set<string>();
   function visit(node: DiscoveryFilterDocument, dependencies: boolean): void {
@@ -179,18 +210,27 @@ export function compileDiscoveryConsumerCapture(
     else if ('kind' in node) node.kind.in.forEach((kind) => kinds.add(kind));
     else {
       if ('owner' in node || 'saved' in node) throw new TypeError('Mixed public capture requires expanded leaves');
-      if (dependencies) for (const leaf of compileFilter(node, { prefix: 'd', relationOverflow: true }).leaves) {
-        if (leaf.facet !== 'statement') continue;
-        keys.push({ kind: 'property', property: leaf.property });
-        for (const qualifier of leaf.qualifiers ?? []) keys.push({ kind: 'property', property: qualifier.property });
-      }
+      if (dependencies)
+        for (const leaf of compileFilter(node, { prefix: 'd', relationOverflow: true }).leaves) {
+          if (leaf.facet !== 'statement') continue;
+          keys.push({ kind: 'property', property: leaf.property });
+          for (const qualifier of leaf.qualifiers ?? []) keys.push({ kind: 'property', property: qualifier.property });
+        }
     }
   }
   // Public admission runs before traversing caller structures for dependency extraction.
   if (!registry) {
-    if (input.representation !== 'discovery-v1' || input.comparator !== 'mixed-public-v1' ||
-      !['id', 'name', 'relevance'].includes(input.sort) || !Number.isInteger(input.size) || input.size < 1 || input.size > 200 ||
-      !Number.isInteger(input.pageSize) || input.pageSize! < 1 || input.pageSize! > 100)
+    if (
+      input.representation !== 'discovery-v1' ||
+      input.comparator !== 'mixed-public-v1' ||
+      !['id', 'name', 'relevance'].includes(input.sort) ||
+      !Number.isInteger(input.size) ||
+      input.size < 1 ||
+      input.size > 200 ||
+      !Number.isInteger(input.pageSize) ||
+      input.pageSize! < 1 ||
+      input.pageSize! > 100
+    )
       throw new RangeError('Invalid mixed capture');
     // The closed parser bounds structure before collecting names; Source owns configured-domain authority.
     const parsed = input.filterDocument === undefined ? undefined : parseDiscoveryFilter(input.filterDocument);
@@ -200,11 +240,19 @@ export function compileDiscoveryConsumerCapture(
   }
   const plan = registry ? compileDiscoveryCapture(input, registry, meaning.release) : input;
   if (registry && plan.filterDocument) visit(plan.filterDocument, true);
-  if (input.text !== undefined) keys.push(
-    { kind: 'field', field: 'labels' }, { kind: 'field', field: 'aliases' }, { kind: 'field', field: 'descriptions' },
-  );
+  if (input.text !== undefined)
+    keys.push(
+      { kind: 'field', field: 'labels' },
+      { kind: 'field', field: 'aliases' },
+      { kind: 'field', field: 'descriptions' },
+    );
   const text = input.text === undefined ? undefined : compileText(input.text, { field: 'search_text', prefix: 't' });
-  return { query: discoveryNativeQuery({ filter: plan.filter ?? none,
-    ...(text ? { query: text.query } : {}), ...(input.boost === undefined ? {} : { boost: input.boost }),
-  }), dependencyKeys: keys };
+  return {
+    query: discoveryNativeQuery({
+      filter: plan.filter ?? none,
+      ...(text ? { query: text.query } : {}),
+      ...(input.boost === undefined ? {} : { boost: input.boost }),
+    }),
+    dependencyKeys: keys,
+  };
 }

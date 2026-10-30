@@ -26,7 +26,15 @@ import { checkHits, type FactClause } from './disclosure/check.ts';
 import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
-import { admitProperties, chooseTexts, projectFacts, projectHit, validateHitOptions, validateSearchLimit, type SearchHit } from './hits.ts';
+import {
+  admitProperties,
+  chooseTexts,
+  projectFacts,
+  projectHit,
+  validateHitOptions,
+  validateSearchLimit,
+  type SearchHit,
+} from './hits.ts';
 export { validateSearchLimit } from './hits.ts';
 import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';

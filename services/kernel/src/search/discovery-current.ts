@@ -1,6 +1,12 @@
 import { relationFacetProperty, type DiscoveryFilterDocument, type FilterRelease } from '@rezics/filter';
 import { partitionOf, routeOf } from '../route/route.ts';
-import type { DiscoveryHit, DiscoveryReadContext, DiscoveryRegistry, IndexedAccount, DiscoveryEngineHit } from './discovery.ts';
+import type {
+  DiscoveryHit,
+  DiscoveryReadContext,
+  DiscoveryRegistry,
+  IndexedAccount,
+  DiscoveryEngineHit,
+} from './discovery.ts';
 import type { DiscoveryCandidate } from './discovery-query.ts';
 import { currentDiscoveryFilter } from './discovery-filter.ts';
 import { checkHits } from './disclosure/check.ts';
@@ -38,9 +44,13 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   const passed = new Map<Candidate, DiscoveryHit>();
   for (const candidate of candidates) {
     registry.key(candidate.key);
-    if ('revision' in candidate && (!/^(0|[1-9][0-9]{0,18})$/.test(candidate.revision) ||
-      BigInt(candidate.revision) > 9_223_372_036_854_775_807n ||
-      !/^(0|[1-9][0-9]{0,18})$/.test(candidate.sourcePosition))) unavailable();
+    if (
+      'revision' in candidate &&
+      (!/^(0|[1-9][0-9]{0,18})$/.test(candidate.revision) ||
+        BigInt(candidate.revision) > 9_223_372_036_854_775_807n ||
+        !/^(0|[1-9][0-9]{0,18})$/.test(candidate.sourcePosition))
+    )
+      unavailable();
   }
   // One Subject row-kind read per partition/chunk, shared across every configured catalogue kind.
   const semantic = candidates.filter((candidate) => candidate.key.owner === 'semantic');
@@ -59,8 +69,15 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
         if (position !== undefined && position !== snapshot.position) unavailable();
         position = snapshot.position;
       }
-      if (semantic.some((candidate) => partitionOf(candidate.key.route) === partition &&
-        'sourcePosition' in candidate && BigInt(candidate.sourcePosition) > position!)) unavailable();
+      if (
+        semantic.some(
+          (candidate) =>
+            partitionOf(candidate.key.route) === partition &&
+            'sourcePosition' in candidate &&
+            BigInt(candidate.sourcePosition) > position!,
+        )
+      )
+        unavailable();
       snapshots.set(partition, { partition, position: position!, subjects });
     }
     const cached: SubjectSource = {
@@ -80,16 +97,29 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       const currentFilter = filter ? currentDiscoveryFilter(filter, registry, entry.kind, release) : true;
       if (currentFilter === false) continue;
       const hits = group.map((candidate) => {
-        const revision = 'document' in candidate && candidate.document.owner === 'semantic'
-          ? candidate.document.security_revision : 'revision' in candidate ? Number(candidate.revision) : NaN;
+        const revision =
+          'document' in candidate && candidate.document.owner === 'semantic'
+            ? candidate.document.security_revision
+            : 'revision' in candidate
+              ? Number(candidate.revision)
+              : NaN;
         if (!Number.isSafeInteger(revision) || revision < 0) unavailable();
-        return { id: candidate.key.id, partition: partitionOf(candidate.key.route), securityRevision: revision, matched: [] };
+        return {
+          id: candidate.key.id,
+          partition: partitionOf(candidate.key.route),
+          securityRevision: revision,
+          matched: [],
+        };
       });
       const checked = await checkHits(cached, hits, new Map(), {
         ...(currentFilter === true ? {} : { filter: currentFilter }),
-        relationProperties: Object.keys(release.properties).filter((property) => relationFacetProperty(release, property)),
+        relationProperties: Object.keys(release.properties).filter((property) =>
+          relationFacetProperty(release, property),
+        ),
       });
-      const accepted = new Set(checked.passed.filter(({ subject }) => subject.type === entry.kind).map(({ subject }) => subject.id));
+      const accepted = new Set(
+        checked.passed.filter(({ subject }) => subject.type === entry.kind).map(({ subject }) => subject.id),
+      );
       selectedSemantic.push(...group.filter(({ key }) => accepted.has(key.id)));
     }
     const semanticEntry = registry.entries.find((entry) => entry.owner === 'semantic');
@@ -115,15 +145,34 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     for (let offset = 0; offset < ids.length; offset += 100) {
       const chunk = ids.slice(offset, offset + 100);
       const snapshot = await entry.source.read(partition, chunk);
-      if (snapshot.partition !== partition || typeof snapshot.position !== 'bigint' || snapshot.position < 0n ||
-        !Array.isArray(snapshot.accounts) || snapshot.accounts.length > chunk.length) unavailable();
-      if (accounts.some((candidate) => chunk.includes(candidate.key.id) && 'sourcePosition' in candidate &&
-        BigInt(candidate.sourcePosition) > snapshot.position)) unavailable();
+      if (
+        snapshot.partition !== partition ||
+        typeof snapshot.position !== 'bigint' ||
+        snapshot.position < 0n ||
+        !Array.isArray(snapshot.accounts) ||
+        snapshot.accounts.length > chunk.length
+      )
+        unavailable();
+      if (
+        accounts.some(
+          (candidate) =>
+            chunk.includes(candidate.key.id) &&
+            'sourcePosition' in candidate &&
+            BigInt(candidate.sourcePosition) > snapshot.position,
+        )
+      )
+        unavailable();
       for (const account of snapshot.accounts) {
-        if (!chunk.includes(account.id) || current.has(account.id) || typeof account.revision !== 'bigint' ||
-          account.revision < 0n || (account.accountKind !== 'actor' && account.accountKind !== 'organization') ||
+        if (
+          !chunk.includes(account.id) ||
+          current.has(account.id) ||
+          typeof account.revision !== 'bigint' ||
+          account.revision < 0n ||
+          (account.accountKind !== 'actor' && account.accountKind !== 'organization') ||
           (account.handle !== null && typeof account.handle !== 'string') ||
-          (account.displayName !== null && typeof account.displayName !== 'string')) unavailable();
+          (account.displayName !== null && typeof account.displayName !== 'string')
+        )
+          unavailable();
         current.set(account.id, account);
       }
     }
@@ -132,20 +181,33 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       if (!row || partitionOf(candidate.key.route) !== partition) return false;
       if ('revision' in candidate) return row.revision.toString() === candidate.revision;
       const document = candidate.document;
-      return document.owner === 'accounts' && row.revision.toString() === document.revision &&
-        row.handle === document.handle && row.displayName === document.display_name && row.accountKind === document.account_kind;
+      return (
+        document.owner === 'accounts' &&
+        row.revision.toString() === document.revision &&
+        row.handle === document.handle &&
+        row.displayName === document.display_name &&
+        row.accountKind === document.account_kind
+      );
     });
     for (const candidate of selected) selectedAccounts.set(candidate, current.get(candidate.key.id)!);
   }
   const selected = [...selectedAccounts.keys()];
   for (let offset = 0; offset < selected.length; offset += 100) {
     const chunk = selected.slice(offset, offset + 100);
-    const summaries = await entry.hydrate(chunk.map(({ key }) => key.id), context);
+    const summaries = await entry.hydrate(
+      chunk.map(({ key }) => key.id),
+      context,
+    );
     for (const candidate of chunk) {
       const summary = summaries.get(candidate.key.id);
       const row = selectedAccounts.get(candidate)!;
-      if (summary && summary.id === row.id && summary.handle === row.handle &&
-        summary.displayName === row.displayName && summary.accountKind === row.accountKind)
+      if (
+        summary &&
+        summary.id === row.id &&
+        summary.handle === row.handle &&
+        summary.displayName === row.displayName &&
+        summary.accountKind === row.accountKind
+      )
         passed.set(candidate, { key: candidate.key, summary: { kind: 'account', value: summary } });
     }
   }

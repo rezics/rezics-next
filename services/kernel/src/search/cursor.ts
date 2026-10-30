@@ -258,82 +258,176 @@ const objectValue = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
 export function encodeDiscoveryCursor(
-  ring: KeyRing, binding: SearchCursorBinding, state: DiscoveryCursorState, now = Date.now(),
+  ring: KeyRing,
+  binding: SearchCursorBinding,
+  state: DiscoveryCursorState,
+  now = Date.now(),
 ): Promise<string> {
-  if (state.retained && (state.after.length !== 0 || !state.retained.execution ||
-    !Number.isSafeInteger(state.retained.consumed) || state.retained.consumed < 0))
+  if (
+    state.retained &&
+    (state.after.length !== 0 ||
+      !state.retained.execution ||
+      !Number.isSafeInteger(state.retained.consumed) ||
+      state.retained.consumed < 0)
+  )
     throw new TypeError('Invalid retained discovery prefix');
-  if (state.repair && (!state.retained || !state.repair.job ||
-    canonicalize(state.repair.consumer) !== canonicalize(state.queried.consumer)))
+  if (
+    state.repair &&
+    (!state.retained ||
+      !state.repair.job ||
+      canonicalize(state.repair.consumer) !== canonicalize(state.queried.consumer))
+  )
     throw new TypeError('Invalid discovery repair locator');
-  const queried = JSON.stringify(state.retained ? { queried: state.queried, retained: state.retained,
-    ...(state.repair ? { repair: { job: state.repair.job } } : {}),
-  } : state.queried, (_, value: unknown) => typeof value === 'bigint' ? value.toString() : value);
+  const queried = JSON.stringify(
+    state.retained
+      ? {
+          queried: state.queried,
+          retained: state.retained,
+          ...(state.repair ? { repair: { job: state.repair.job } } : {}),
+        }
+      : state.queried,
+    (_, value: unknown) => (typeof value === 'bigint' ? value.toString() : value),
+  );
   // Four context keys and at most four comparator keys: retain the literal eight-key Search ceiling.
-  return encodeSearchCursor(ring, discoveryBinding(binding), {
-    generation: 1, after: [state.release, state.registry, 'mixed-public-v1', queried, ...state.after],
-  }, now);
+  return encodeSearchCursor(
+    ring,
+    discoveryBinding(binding),
+    {
+      generation: 1,
+      after: [state.release, state.registry, 'mixed-public-v1', queried, ...state.after],
+    },
+    now,
+  );
 }
 
 export async function decodeDiscoveryCursor(
-  ring: KeyRing, binding: SearchCursorBinding, token: string, now = Date.now(),
+  ring: KeyRing,
+  binding: SearchCursorBinding,
+  token: string,
+  now = Date.now(),
 ): Promise<{ ok: true; state: DiscoveryCursorState } | { ok: false; reason: 'expired' | 'invalid' }> {
   const decoded = await decodeSearchCursor(ring, discoveryBinding(binding), token, now);
   if (!decoded.ok) return decoded;
   const [release, registry, comparator, raw, ...after] = decoded.after;
   const invalid = () => ({ ok: false as const, reason: 'invalid' as const });
-  if (decoded.generation !== 1 || typeof release !== 'string' || typeof registry !== 'string' ||
-    comparator !== 'mixed-public-v1' || typeof raw !== 'string' || after.length > 4) return invalid();
+  if (
+    decoded.generation !== 1 ||
+    typeof release !== 'string' ||
+    typeof registry !== 'string' ||
+    comparator !== 'mixed-public-v1' ||
+    typeof raw !== 'string' ||
+    after.length > 4
+  )
+    return invalid();
   let value: unknown;
-  try { value = JSON.parse(raw); } catch { return invalid(); }
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return invalid();
+  }
   let retained: DiscoveryCursorState['retained'];
   let repairJob: string | undefined;
   if (objectValue(value) && 'retained' in value) {
     const locator = value.retained;
-    if (Object.keys(value).some((key) => !['queried', 'retained', 'repair'].includes(key)) ||
-      !objectValue(locator) || typeof locator.execution !== 'string' || !locator.execution ||
-      typeof locator.consumed !== 'number' || !Number.isSafeInteger(locator.consumed) || locator.consumed < 0 ||
-      Object.keys(locator).some((key) => key !== 'execution' && key !== 'consumed') || after.length !== 0) return invalid();
+    if (
+      Object.keys(value).some((key) => !['queried', 'retained', 'repair'].includes(key)) ||
+      !objectValue(locator) ||
+      typeof locator.execution !== 'string' ||
+      !locator.execution ||
+      typeof locator.consumed !== 'number' ||
+      !Number.isSafeInteger(locator.consumed) ||
+      locator.consumed < 0 ||
+      Object.keys(locator).some((key) => key !== 'execution' && key !== 'consumed') ||
+      after.length !== 0
+    )
+      return invalid();
     retained = { execution: locator.execution, consumed: locator.consumed };
     if (value.repair !== undefined) {
-      if (!objectValue(value.repair) || Object.keys(value.repair).some((key) => key !== 'job') ||
-        typeof value.repair.job !== 'string' || !value.repair.job) return invalid();
+      if (
+        !objectValue(value.repair) ||
+        Object.keys(value.repair).some((key) => key !== 'job') ||
+        typeof value.repair.job !== 'string' ||
+        !value.repair.job
+      )
+        return invalid();
       repairJob = value.repair.job;
     }
     value = value.queried;
   } else if (after.length < 3) return invalid();
-  if (!objectValue(value) || !objectValue(value.consumer) || !objectValue(value.snapshot) ||
-    Object.keys(value).some((key) => key !== 'consumer' && key !== 'snapshot')) return invalid();
+  if (
+    !objectValue(value) ||
+    !objectValue(value.consumer) ||
+    !objectValue(value.snapshot) ||
+    Object.keys(value).some((key) => key !== 'consumer' && key !== 'snapshot')
+  )
+    return invalid();
   const consumer = value.consumer;
   const required = ['physicalTarget', 'incarnation', 'consumerGeneration', 'projectionGeneration'];
-  if (required.some((key) => typeof consumer[key] !== 'string' || !consumer[key]) ||
+  if (
+    required.some((key) => typeof consumer[key] !== 'string' || !consumer[key]) ||
     (consumer.meaningDigest !== null && typeof consumer.meaningDigest !== 'string') ||
     (consumer.readDefinition !== null && typeof consumer.readDefinition !== 'string') ||
-    Object.keys(consumer).some((key) => ![...required, 'meaningDigest', 'readDefinition'].includes(key))) return invalid();
+    Object.keys(consumer).some((key) => ![...required, 'meaningDigest', 'readDefinition'].includes(key))
+  )
+    return invalid();
   // Construct the closed native type only after validating every field; never cast decrypted JSON to authority.
-  if (typeof consumer.physicalTarget !== 'string' || typeof consumer.incarnation !== 'string' ||
-    typeof consumer.consumerGeneration !== 'string' || typeof consumer.projectionGeneration !== 'string' ||
+  if (
+    typeof consumer.physicalTarget !== 'string' ||
+    typeof consumer.incarnation !== 'string' ||
+    typeof consumer.consumerGeneration !== 'string' ||
+    typeof consumer.projectionGeneration !== 'string' ||
     (consumer.meaningDigest !== null && typeof consumer.meaningDigest !== 'string') ||
-    (consumer.readDefinition !== null && typeof consumer.readDefinition !== 'string')) return invalid();
+    (consumer.readDefinition !== null && typeof consumer.readDefinition !== 'string')
+  )
+    return invalid();
   const nativeConsumer = {
-    physicalTarget: consumer.physicalTarget, incarnation: consumer.incarnation,
-    consumerGeneration: consumer.consumerGeneration, projectionGeneration: consumer.projectionGeneration,
-    meaningDigest: consumer.meaningDigest, readDefinition: consumer.readDefinition,
+    physicalTarget: consumer.physicalTarget,
+    incarnation: consumer.incarnation,
+    consumerGeneration: consumer.consumerGeneration,
+    projectionGeneration: consumer.projectionGeneration,
+    meaningDigest: consumer.meaningDigest,
+    readDefinition: consumer.readDefinition,
   };
   const snapshot = value.snapshot;
   if (typeof snapshot.observation !== 'string' || !snapshot.observation) return invalid();
   let queried: PublicFilterQueriedObservation;
-  if (snapshot.kind === 'pit' && typeof snapshot.pit === 'string' && snapshot.pit &&
-    Object.keys(snapshot).every((key) => ['kind', 'observation', 'pit'].includes(key)))
-    queried = { consumer: nativeConsumer, snapshot: { kind: 'pit', observation: snapshot.observation, pit: snapshot.pit } };
-  else if (snapshot.kind === 'prepared' && typeof snapshot.build === 'string' && snapshot.build &&
-    typeof snapshot.generation === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(snapshot.generation) &&
-    Object.keys(snapshot).every((key) => ['kind', 'observation', 'build', 'generation'].includes(key)))
-    queried = { consumer: nativeConsumer, snapshot: {
-      kind: 'prepared', observation: snapshot.observation, build: snapshot.build, generation: BigInt(snapshot.generation),
-    } };
+  if (
+    snapshot.kind === 'pit' &&
+    typeof snapshot.pit === 'string' &&
+    snapshot.pit &&
+    Object.keys(snapshot).every((key) => ['kind', 'observation', 'pit'].includes(key))
+  )
+    queried = {
+      consumer: nativeConsumer,
+      snapshot: { kind: 'pit', observation: snapshot.observation, pit: snapshot.pit },
+    };
+  else if (
+    snapshot.kind === 'prepared' &&
+    typeof snapshot.build === 'string' &&
+    snapshot.build &&
+    typeof snapshot.generation === 'string' &&
+    /^(0|[1-9][0-9]{0,18})$/.test(snapshot.generation) &&
+    Object.keys(snapshot).every((key) => ['kind', 'observation', 'build', 'generation'].includes(key))
+  )
+    queried = {
+      consumer: nativeConsumer,
+      snapshot: {
+        kind: 'prepared',
+        observation: snapshot.observation,
+        build: snapshot.build,
+        generation: BigInt(snapshot.generation),
+      },
+    };
   else return invalid();
-  return { ok: true, state: { release, registry, queried, after, ...(retained ? { retained } : {}),
-    ...(repairJob ? { repair: { consumer: nativeConsumer, job: repairJob } } : {}),
-  } };
+  return {
+    ok: true,
+    state: {
+      release,
+      registry,
+      queried,
+      after,
+      ...(retained ? { retained } : {}),
+      ...(repairJob ? { repair: { consumer: nativeConsumer, job: repairJob } } : {}),
+    },
+  };
 }

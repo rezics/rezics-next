@@ -702,23 +702,37 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if (!config.registry) throw new ConsumerFailure('dependency_unavailable');
     const match = /^(.*)discovery-g([1-9][0-9]*)$/.exec(target);
     if (!match) throw new ConsumerFailure('dependency_unavailable');
-    const row = (await m.sql<{ kinds: string[]; index_uuid: string | null }>(
-      `SELECT kinds,index_uuid FROM search.discovery_generation
+    const row = (
+      await m.sql<{ kinds: string[]; index_uuid: string | null }>(
+        `SELECT kinds,index_uuid FROM search.discovery_generation
        WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state IN ('ready','active','retiring')`,
-      [match[1], match[2]],
-    )).rows[0];
-    if (!row?.index_uuid || !isDeepStrictEqual([...row.kinds].sort(), config.registry.entries.map((entry) => entry.kind).sort()))
+        [match[1], match[2]],
+      )
+    ).rows[0];
+    if (
+      !row?.index_uuid ||
+      !isDeepStrictEqual([...row.kinds].sort(), config.registry.entries.map((entry) => entry.kind).sort())
+    )
       throw new ConsumerFailure('dependency_unavailable');
     const mapping = await m.native.request<unknown>('GET', `/${target}/_mapping`);
     const settings = await m.native.request<unknown>('GET', `/${target}/_settings`);
-    if (mapping.status !== 200 || !record(mapping.body) || Object.keys(mapping.body).length !== 1 ||
-      !record(mapping.body[target]) || !record(mapping.body[target].mappings) ||
+    if (
+      mapping.status !== 200 ||
+      !record(mapping.body) ||
+      Object.keys(mapping.body).length !== 1 ||
+      !record(mapping.body[target]) ||
+      !record(mapping.body[target].mappings) ||
       !record(mapping.body[target].mappings._meta) ||
       mapping.body[target].mappings._meta.discovery_document_format !== 2 ||
       mapping.body[target].mappings._meta.comparator !== 'mixed-public-v1' ||
-      settings.status !== 200 || !record(settings.body) || Object.keys(settings.body).length !== 1 ||
-      !record(settings.body[target]) || !record(settings.body[target].settings) ||
-      !record(settings.body[target].settings.index) || settings.body[target].settings.index.uuid !== row.index_uuid)
+      settings.status !== 200 ||
+      !record(settings.body) ||
+      Object.keys(settings.body).length !== 1 ||
+      !record(settings.body[target]) ||
+      !record(settings.body[target].settings) ||
+      !record(settings.body[target].settings.index) ||
+      settings.body[target].settings.index.uuid !== row.index_uuid
+    )
       throw new ConsumerFailure('incarnation_changed');
   }
   async function physical(q: PublicFilterQueriedObservation, m: Meter, context: PublicFilterConsumerContext) {
@@ -924,7 +938,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         throw new ConsumerFailure('dependency_unavailable');
       const raw = readDiscoveryEngineResult(body, config.registry, target, {
         sort: plan.sort === 'name' ? 'name' : plan.sort === 'relevance' ? 'relevance' : 'id',
-        size, filter: {}, ...(after === undefined ? {} : { after }),
+        size,
+        filter: {},
+        ...(after === undefined ? {} : { after }),
       }).hits;
       m.cost.engineIteratorSteps += iteratorSteps(body);
       return { queried: current, raw, exhausted: raw.length < size, total: undefined };
@@ -1082,7 +1098,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     if ('representation' in plan) {
       if (plan.text !== undefined) validateText(plan.text);
       compileDiscoveryConsumerCapture(plan, meaning, config.registry);
-      canonical = freeze(structuredClone(config.registry ? compileDiscoveryCapture(plan, config.registry, meaning.release) : plan));
+      canonical = freeze(
+        structuredClone(config.registry ? compileDiscoveryCapture(plan, config.registry, meaning.release) : plan),
+      );
     } else if ('purpose' in plan) {
       validatePublicSuggestionInput(plan);
       canonical = freeze(structuredClone(plan));

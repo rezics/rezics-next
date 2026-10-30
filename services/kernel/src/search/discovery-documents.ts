@@ -20,7 +20,16 @@ import { MISSING_NAME } from './document.ts';
 const MAX_NATIVE_VERSION = 9_223_372_036_854_775_807n;
 const ID_PREFIX = 'discovery-v1:';
 const COMMON_FIELDS = ['identity', 'document_format', 'owner', 'kind', 'id', 'route', 'partition', 'source_position'];
-const ACCOUNT_FIELDS = [...COMMON_FIELDS, 'account_kind', 'handle', 'display_name', 'revision', 'names', 'descriptions', 'name_sort'];
+const ACCOUNT_FIELDS = [
+  ...COMMON_FIELDS,
+  'account_kind',
+  'handle',
+  'display_name',
+  'revision',
+  'names',
+  'descriptions',
+  'name_sort',
+];
 const SUBJECT_FIELDS = [
   ...COMMON_FIELDS,
   'type',
@@ -146,11 +155,13 @@ export function discoveryDocumentActions(
           handle: value.handle,
           display_name: value.displayName,
           revision: value.revision.toString(),
-          ...(format === 'legacy' ? {} : {
-            names: [...new Set([value.displayName, value.handle].filter((name): name is string => name !== null))],
-            descriptions: [],
-            name_sort: value.displayName ?? value.handle ?? MISSING_NAME,
-          }),
+          ...(format === 'legacy'
+            ? {}
+            : {
+                names: [...new Set([value.displayName, value.handle].filter((name): name is string => name !== null))],
+                descriptions: [],
+                name_sort: value.displayName ?? value.handle ?? MISSING_NAME,
+              }),
         };
       }
     } else {
@@ -180,7 +191,8 @@ export function discoveryDocumentActions(
 export function validateDiscoveryDocument(registry: DiscoveryRegistry, value: unknown): IndexedDiscoveryDocument {
   if (
     !record(value) ||
-    (value.document_format !== DISCOVERY_DOCUMENT_FORMAT && value.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT) ||
+    (value.document_format !== DISCOVERY_DOCUMENT_FORMAT &&
+      value.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT) ||
     typeof value.id !== 'string' ||
     typeof value.kind !== 'string' ||
     typeof value.route !== 'number' ||
@@ -193,31 +205,41 @@ export function validateDiscoveryDocument(registry: DiscoveryRegistry, value: un
       : { owner: 'semantic', kind: value.kind, id: value.id, route: value.route },
   );
   if (value.kind !== key.kind) throw new TypeError('Invalid discovery kind');
-  if (value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT &&
-    value.identity !== discoveryDocumentId(registry, key)) throw new TypeError('Invalid mixed identity');
+  if (
+    value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT &&
+    value.identity !== discoveryDocumentId(registry, key)
+  )
+    throw new TypeError('Invalid mixed identity');
   if (value.document_format === DISCOVERY_DOCUMENT_FORMAT && value.identity !== undefined)
     throw new TypeError('Legacy discovery format has no comparator identity');
   if (value.partition !== partitionOf(key.route) || !decimalVersion(value.source_position))
     throw new TypeError('Invalid discovery document partition or position');
-  const allowed = value.owner === 'accounts'
-    ? value.document_format === DISCOVERY_DOCUMENT_FORMAT
-      ? ACCOUNT_FIELDS.filter((field) => !['names', 'descriptions', 'name_sort'].includes(field))
-      : ACCOUNT_FIELDS
-    : SUBJECT_FIELDS;
+  const allowed =
+    value.owner === 'accounts'
+      ? value.document_format === DISCOVERY_DOCUMENT_FORMAT
+        ? ACCOUNT_FIELDS.filter((field) => !['names', 'descriptions', 'name_sort'].includes(field))
+        : ACCOUNT_FIELDS
+      : SUBJECT_FIELDS;
   if (Object.keys(value).some((field) => !allowed.includes(field)))
     throw new TypeError('Unsupported discovery document field');
   if (value.owner === 'accounts') {
     if (
       (value.account_kind !== 'actor' && value.account_kind !== 'organization') ||
-      !nullableText(value.handle) || (value.handle !== null && !HANDLE_LOOKUP_PATTERN.test(value.handle)) ||
+      !nullableText(value.handle) ||
+      (value.handle !== null && !HANDLE_LOOKUP_PATTERN.test(value.handle)) ||
       !nullableText(value.display_name) ||
       !decimalVersion(value.revision)
     )
       throw new TypeError('Invalid Account discovery document');
-    if (value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT &&
-      (!texts(value.names) || !Array.isArray(value.descriptions) || value.descriptions.length !== 0 ||
+    if (
+      value.document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT &&
+      (!texts(value.names) ||
+        !Array.isArray(value.descriptions) ||
+        value.descriptions.length !== 0 ||
         !nullableText(value.name_sort) ||
-        JSON.stringify(value.names) !== JSON.stringify([...new Set([value.display_name, value.handle].filter((name) => name !== null))])))
+        JSON.stringify(value.names) !==
+          JSON.stringify([...new Set([value.display_name, value.handle].filter((name) => name !== null))]))
+    )
       throw new TypeError('Invalid mixed Account public fields');
   } else {
     if (

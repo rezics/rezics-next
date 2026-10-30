@@ -22,7 +22,7 @@ export function createNativeDiscoveryRegistry(options: {
       ...options.semantic,
       async hydrate(ids, context) {
         const summaries = await readSubjectSummaries({ pool, routeKey, ...context }, ids, { languages });
-        return new Map([...summaries].flatMap(([id, summary]) => summary ? [[id, summary]] : []));
+        return new Map([...summaries].flatMap(([id, summary]) => (summary ? [[id, summary]] : [])));
       },
     },
     accounts: {
@@ -30,7 +30,7 @@ export function createNativeDiscoveryRegistry(options: {
       source: accountDiscoverySource(pool),
       async hydrate(ids, context) {
         const summaries = await readAccountDiscoverySummaries({ pool, routeKey, ...context }, ids, { languages });
-        return new Map([...summaries].flatMap(([id, summary]) => summary ? [[id, summary]] : []));
+        return new Map([...summaries].flatMap(([id, summary]) => (summary ? [[id, summary]] : [])));
       },
     },
   });

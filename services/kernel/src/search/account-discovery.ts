@@ -15,12 +15,7 @@ import {
   recordLateErasureItem,
   resolveLateErasureItem,
 } from '../access/erasure.ts';
-import type {
-  AccountDiscoverySummary,
-  DiscoveryIndexAction,
-  DiscoveryKey,
-  DiscoveryRegistry,
-} from './discovery.ts';
+import type { AccountDiscoverySummary, DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { createDiscoveryRegistry } from './discovery-registry.ts';
@@ -428,7 +423,13 @@ export function createDiscoveryProjection(options: {
             ...snapshot,
             subjects: snapshot.subjects.filter((row) => kinds.get(row.id) === row.type),
           };
-          actions = discoveryDocumentActions(registry, { owner, snapshot: keyedSnapshot }, chunk, counts, 'mixed-public-v1');
+          actions = discoveryDocumentActions(
+            registry,
+            { owner, snapshot: keyedSnapshot },
+            chunk,
+            counts,
+            'mixed-public-v1',
+          );
         }
         // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.
         actions = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);

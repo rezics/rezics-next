@@ -1,6 +1,10 @@
 import { ProblemError } from '../../http/problem.ts';
 import type { PublicFilterSource } from '../../semantic/public-filter-source-contract.ts';
-import type { PublicFilterConsumerContext, PublicFilterConsumerQuery, PublicFilterConsumerOperations } from '../public-filter-consumer-contract.ts';
+import type {
+  PublicFilterConsumerContext,
+  PublicFilterConsumerQuery,
+  PublicFilterConsumerOperations,
+} from '../public-filter-consumer-contract.ts';
 import type { DiscoveryPage } from '../discovery.ts';
 
 /** Use the canonical persisted execution's native start, never returned-hit witnesses or readStatus.
@@ -9,7 +13,10 @@ import type { DiscoveryPage } from '../discovery.ts';
  */
 export async function finishDiscoveryDisclosure(
   source: PublicFilterSource,
-  executions: readonly Pick<Extract<PublicFilterConsumerQuery, { status: 'queried' }>, 'queried' | 'start' | 'execution'>[],
+  executions: readonly Pick<
+    Extract<PublicFilterConsumerQuery, { status: 'queried' }>,
+    'queried' | 'start' | 'execution'
+  >[],
   context: PublicFilterConsumerContext,
   project: () => Promise<DiscoveryPage>,
   consumer: PublicFilterConsumerOperations,
@@ -23,10 +30,18 @@ export async function finishDiscoveryDisclosure(
     if (status.status !== 'observed' || status.blocking.length !== 0)
       throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
     const final = await source.readPrivacyReductionHeads({
-      kind: 'population', queried: execution.queried, start: execution.start, execution: execution.execution, context,
+      kind: 'population',
+      queried: execution.queried,
+      start: execution.start,
+      execution: execution.execution,
+      context,
     });
-    if (final.status !== 'observed' || final.coverage !== 'all_native_homes' ||
-      !final.routingComplete || final.blocking.length !== 0)
+    if (
+      final.status !== 'observed' ||
+      final.coverage !== 'all_native_homes' ||
+      !final.routingComplete ||
+      final.blocking.length !== 0
+    )
       throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
   }
   // Nonblocking heads are classified as irrelevant by the actual Source, not by a caller's callback.
