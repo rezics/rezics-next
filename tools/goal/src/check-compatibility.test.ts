@@ -16,6 +16,7 @@ const realScriptPaths = [
   'scripts/check-ledger.ts',
   'scripts/stack-lease.ts',
   'scripts/check-memory.ts',
+  'scripts/check-host/docker',
 ];
 
 function temporaryDirectory(): string {
