@@ -37,7 +37,7 @@ async function call(accountId: string, bearer?: string, patch?: unknown) {
   return { status: response.status, body: await response.json(), headers: response.headers };
 }
 async function signed(bearer: string, changes: Record<string, unknown>) {
-  return new SignJWT({ ...decodeJwt(bearer), ...changes })
+  return new SignJWT({ ...decodeJwt<Record<string, unknown>>(bearer), ...changes })
     .setProtectedHeader({ alg: 'ES256', kid: auth.privateKey.kid, typ: 'at+jwt' })
     .sign(await importJWK(auth.privateKey, 'ES256'));
 }
