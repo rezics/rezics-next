@@ -211,6 +211,27 @@ The current native candidate read requires a property and, for relation slots, a
 subject-wide candidate or relation-slot discovery read. This region therefore covers descriptive property slots,
 including classifications, and does not offer an invented list of imported relation targets or a raw-id entry.
 
+## Withdrawing a just-submitted contribution
+
+After an ordinary field correction succeeds, its exact returned candidate offers **Withdraw contribution** beside
+the existing comparison and subject link. The confirmation addresses that contribution alone. It calls the declared
+native `DELETE /v1/subjects/{id}/candidates/{candidate}` through the session BFF; original write-revision authorship
+and current `statement:delete` authority remain native decisions. Source provenance, subject creation, adoption and
+target identity never establish ownership. An unserved lifecycle route remains unavailable, with no local tombstone.
+
+A confirmed deletion clears the correction draft, private comparison and cached subject/candidate payloads. The BFF
+rereads the current subject and candidate slot in parallel and returns only availability, without the removed text or
+author profile. The subject keeps its identity. **Restore contribution** requires another confirmation and a new
+native `POST …/{candidate}:restoreDeleted`, checking current native author authority and Global `statement:propose`.
+It does not change acceptance or adoption, undo moderation/source fences or restore terminal consent/account state.
+An actual restore 409 ends restoration in this flow. Missing or concealed reads share the unavailable state.
+
+Uncertain retries keep the exact operation, subject/candidate, consistency token and idempotency key. The original
+server thirty-day window applies; the interface creates no local deadline. Until the producer publishes a deadline
+DTO, it displays no invented date or countdown. The temporary typed port uses the generated client's existing runtime
+transport and must bind to generated lifecycle declarations when published. Page stories are declared-interface
+examples, not native acceptance or visual-review evidence.
+
 ## Relation contributions
 
 The canonical Global overview links to `/{locale}/subjects/{id}/{slug}/relation-edit`. The route keeps the

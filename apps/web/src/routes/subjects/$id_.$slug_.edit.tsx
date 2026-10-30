@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
@@ -14,6 +14,7 @@ import { useSession } from '../../session/query';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
+import { changeOwnContribution, rereadOwnContribution } from '../../features/catalogue/contribution-lifecycle-actions';
 
 const canonicalEditor = createServerFn({ method: 'GET', strict: false })
   .validator((value: { id: string; slug: string; locale: string; search: string }) => {
@@ -66,6 +67,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
 });
 
 function CorrectionRoute() {
+  const queryClient = useQueryClient();
   const { id } = Route.useLoaderData();
   const { property, statement } = Route.useSearch();
   const locale = getLocale();
@@ -108,6 +110,21 @@ function CorrectionRoute() {
       initial={query.data}
       locale={locale}
       transport={{ read, propose: (data) => submitCorrection({ data, headers: csrfHeaders() }) }}
+      lifecycle={{
+        change: (data) => changeOwnContribution({ data, headers: csrfHeaders() }),
+        read: (data) => rereadOwnContribution({ data, headers: csrfHeaders() }),
+      }}
+      onLifecycleClear={async () => {
+        // Cancel in-flight reads before dropping cached subject/candidate payloads.
+        await queryClient.cancelQueries({ predicate: (query) => query.queryKey.includes(id) });
+        queryClient.setQueriesData(
+          { predicate: (query) => query.queryKey.includes(id) && query.queryKey[0] === 'statement-editor' },
+          { ok: false, reason: 'unavailable' },
+        );
+        queryClient.removeQueries({
+          predicate: (query) => query.queryKey.includes(id) && query.queryKey[0] !== 'statement-editor',
+        });
+      }}
       review={(initialSession) => {
         let session = initialSession;
         return {

@@ -9,6 +9,8 @@ import { isRecord } from '../pages/shared';
 import { m } from '../../paraglide/messages.js';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { subjectHref } from '../../subject/subject-href';
+import { ContributionLifecycle } from './contribution-lifecycle-view';
+import type { ContributionAddress, ContributionTransport } from './contribution-lifecycle';
 import {
   editableScalar,
   statementInput,
@@ -341,11 +343,15 @@ export function StatementEditor({
   locale,
   transport,
   review,
+  lifecycle,
+  onLifecycleClear,
 }: {
   initial: EditorRead;
   locale: string;
   transport: EditorTransport;
   review: (session: string | undefined) => CandidateTransport;
+  lifecycle?: ContributionTransport;
+  onLifecycleClear?: () => void | Promise<void>;
 }) {
   const o = { locale: locale as never };
   const [read, setRead] = useState(initial);
@@ -356,6 +362,8 @@ export function StatementEditor({
   const [result, setResult] = useState<Extract<ProposalResult, { ok: true }> | null>(null);
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [submitted, setSubmitted] = useState<{ address: ContributionAddress; href?: string }>();
+  const [cleared, setCleared] = useState(false);
   const pending = useRef<ProposalCommand | null>(null);
   const running = useRef(false);
   const current = read.ok ? read : undefined;
@@ -404,6 +412,15 @@ export function StatementEditor({
       const next = await transport.propose(pending.current);
       if (next.ok) {
         setResult(next);
+        setSubmitted({
+          address: {
+            id: pending.current.id,
+            property: pending.current.statement.property.id,
+            candidate: next.candidate,
+            ...(next.session ? { session: next.session } : {}),
+          },
+          ...(href ? { href } : {}),
+        });
         pending.current = null;
       } else {
         setFailure(next);
@@ -433,7 +450,7 @@ export function StatementEditor({
         <p className="text-sm text-muted-foreground">{m.correction_intro({}, o)}</p>
         <p className="text-sm text-muted-foreground">{m.correction_global({}, o)}</p>
       </header>
-      {!read.ok && <EditorFailure reason={read.reason} locale={locale} />}
+      {!read.ok && !result && <EditorFailure reason={read.reason} locale={locale} />}
       {failure && (
         <div className="space-y-3 rounded-lg border border-destructive/50 p-4">
           <EditorFailure reason={failure.reason} locale={locale} />
@@ -456,17 +473,35 @@ export function StatementEditor({
       )}
       {busy && <p role="status">{m.correction_saving({}, o)}</p>}
       {result ? (
-        <section className="space-y-4 rounded-xl border border-border bg-card p-4">
-          <p role="status">{m.correction_proposed({}, o)}</p>
-          <Button type="button" onClick={() => setReviewing(true)}>
-            {m.correction_review({}, o)}
-          </Button>
-          {href && (
-            <a className={`${buttonVariants({ variant: 'outline' })} ms-2`} href={href}>
+        <section className="space-y-4">
+          {!cleared && <p role="status">{m.correction_proposed({}, o)}</p>}
+          {!cleared && (
+            <Button type="button" onClick={() => setReviewing(true)}>
+              {m.correction_review({}, o)}
+            </Button>
+          )}
+          {submitted?.href && (
+            <a className={`${buttonVariants({ variant: 'outline' })} ms-2`} href={submitted.href}>
               {m.candidate_view_public({}, o)}
             </a>
           )}
-          {reviewing && draft && subject && (
+          {lifecycle && submitted && (
+            <ContributionLifecycle
+              address={submitted.address}
+              locale={locale}
+              transport={lifecycle}
+              onClear={async () => {
+                setCleared(true);
+                setReviewing(false);
+                setDraft(null);
+                setRead({ ok: false, reason: 'unavailable' });
+                setFailure(null);
+                pending.current = null;
+                await onLifecycleClear?.();
+              }}
+            />
+          )}
+          {!cleared && reviewing && draft && subject && (
             <CandidateReview
               id={subject.id}
               locale={locale}

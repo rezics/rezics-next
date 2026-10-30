@@ -113,7 +113,13 @@ export async function readCandidates(
       public: current.data,
       fields: [],
       names: {},
-      page: result?.data ?? null,
+      // Native deleted tombstones carry no candidate payload and cannot enter comparison/adoption drafts.
+      page: result?.data
+        ? {
+            ...result.data,
+            candidates: result.data.candidates.filter((item) => !('deleted' in item && item.deleted === true)),
+          }
+        : null,
       ...(token ? { session: token } : {}),
     };
   } catch {
