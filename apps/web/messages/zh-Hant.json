@@ -393,7 +393,7 @@
   "order_still_processing": "付款仍在處理中。",
   "orders_empty": "你還沒有購買任何內容。",
   "orders_empty_hint": "完成結帳後，訂單會顯示在這裡。",
-  "orders_entitlement_active": "權益有效",
+  "orders_entitlement_recorded": "權益已記錄",
   "orders_entitlement_pending": "尚無權益",
   "orders_entitlement_none": "沒有權益",
   "orders_heading": "你的訂單",

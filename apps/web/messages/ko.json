@@ -393,7 +393,7 @@
   "order_still_processing": "결제가 아직 처리 중입니다.",
   "orders_empty": "아직 구매한 항목이 없습니다.",
   "orders_empty_hint": "체크아웃을 완료하면 주문이 여기에 표시됩니다.",
-  "orders_entitlement_active": "이용 권한 활성",
+  "orders_entitlement_recorded": "이용 권한 기록됨",
   "orders_entitlement_pending": "아직 이용 권한 없음",
   "orders_entitlement_none": "이용 권한 없음",
   "orders_heading": "내 주문",

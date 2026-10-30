@@ -472,6 +472,7 @@ const neverCalled = [
   'verification_request.reject',
   'offer.create',
   'offer.delist',
+  'offer.revise',
   'payout_statement.list',
   'payout_statement.get',
   'payout_statement.lines',

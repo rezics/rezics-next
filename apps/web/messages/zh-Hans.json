@@ -394,7 +394,7 @@
   "order_still_processing": "付款仍在处理中。",
   "orders_empty": "你还没有购买任何内容。",
   "orders_empty_hint": "完成结账后，订单会显示在这里。",
-  "orders_entitlement_active": "权益有效",
+  "orders_entitlement_recorded": "权益已记录",
   "orders_entitlement_pending": "暂无权益",
   "orders_entitlement_none": "没有权益",
   "orders_heading": "你的订单",

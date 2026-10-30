@@ -16,7 +16,7 @@ function settlementLabel(settlement: BuyerOrder['settlement']): string {
 }
 
 function entitlementLabel(order: BuyerOrder): string {
-  if (order.entitlementId) return m.orders_entitlement_active();
+  if (order.entitlementId) return m.orders_entitlement_recorded();
   if (order.settlement === 'pending' || order.settlement === 'unknown') return m.orders_entitlement_pending();
   return m.orders_entitlement_none();
 }

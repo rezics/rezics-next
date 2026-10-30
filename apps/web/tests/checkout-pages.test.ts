@@ -4,10 +4,12 @@ import { renderToString } from 'react-dom/server';
 import { formatOfferPrice } from '../src/checkout/price.ts';
 import type { OfferPageData } from '../src/checkout/offer.ts';
 import type { OrderPageData } from '../src/checkout/order.ts';
+import type { BuyerOrderPage } from '../src/checkout/orders.ts';
 import { subjectCover } from '../src/checkout/subject-cover.tsx';
 
 const { OfferPage } = await import('../src/checkout/offer-page.tsx');
 const { OrderPage } = await import('../src/checkout/order-page.tsx');
+const { OrdersPage } = await import('../src/checkout/orders-page.tsx');
 
 const subjectId = '01a17a79-d88a-77aa-a166-81d2b657df87';
 const offerId = '01a17a7a-477c-777f-9812-c7322f4814a8';
@@ -99,6 +101,41 @@ test('pending, failed, and canceled orders communicate their state and the failu
     expect(html).toContain(`/en/offers/${offerId}`);
     expect(text(html)).toMatch(/payment|cancel/i);
   }
+});
+
+test('buyer order history shows captured terms and current order state with bounded cursor navigation', () => {
+  const entitlementId = '01a17a7a-5e10-78d7-b57a-c2a70f31c9aa';
+  const history: BuyerOrderPage = {
+    orders: [
+      {
+        id: orderId,
+        offerId,
+        title: 'Book edition',
+        targetSubjectId: subjectId,
+        offerRevision: 3,
+        currency: 'usd',
+        unitAmountMinor: 1299,
+        taxCode: 'txcd_10302000',
+        amountTaxMinor: null,
+        settlement: 'paid',
+        entitlementId,
+        createdAt: paidOrder.createdAt,
+        checkoutUrl: null,
+        checkoutExpiresAt: null,
+      },
+    ],
+    next: 'signed-cursor',
+  };
+  const html = renderToString(createElement(OrdersPage, { page: history, locale: 'en' }));
+
+  expect(html).toContain(`/en/orders/${orderId}`);
+  expect(html).toContain('?cursor=signed-cursor');
+  expect(html).toContain(`data-order-id="${orderId}"`);
+  expect(html).toContain(`data-entitlement="${entitlementId}"`);
+  expect(text(html)).toContain('Book edition');
+  expect(text(html)).toContain(new Intl.NumberFormat('en', { style: 'currency', currency: 'USD' }).format(12.99));
+  expect(text(html)).toContain('Paid');
+  expect(text(html)).toContain('Entitlement recorded');
 });
 
 test('page headings share the shell heading size and long CJK offer titles fit a narrow layout', () => {

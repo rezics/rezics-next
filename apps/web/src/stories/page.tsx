@@ -8,7 +8,7 @@ import '../../.storybook/route-root';
 import { routeTree } from '../routeTree.gen';
 import { setStoryRequestContext } from '../../.storybook/react-start';
 import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
-import { deletedOrganizationThreadId, setOrderHistoryRecording } from '../kernel/fake';
+import { deletedOrganizationThreadId } from '../kernel/fake';
 import { PendingPage } from '../shell/pending';
 import { searchFacetStoryPaths } from '../kernel/fake/search-facets';
 import { selectLabelStory } from '../kernel/fake/library-labels';
@@ -136,7 +136,6 @@ export function PageStory({
   ratings,
   ratingsFixture,
   labelsFixture,
-  orderHistoryRecording = 'order-history-page',
 }: {
   visitor: 'Signed In' | 'Signed Out';
   path: string;
@@ -144,10 +143,8 @@ export function PageStory({
   ratings?: Ratings;
   ratingsFixture?: RatingsFixtureName;
   labelsFixture?: Parameters<typeof selectLabelStory>[0];
-  orderHistoryRecording?: 'order-history-page' | 'order-history-empty';
 }) {
   const entry = localizedEntry(path);
-  setOrderHistoryRecording(orderHistoryRecording);
   selectRatingsFixture(ratingsFixture);
   setStoryRequestContext({ visitor, url: entry });
   const { router, queryClient } = useMemo(() => {

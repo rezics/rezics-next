@@ -131,14 +131,6 @@ export type FakeKernelCall = {
 };
 
 const missingSubjectId = '00000000-0000-4000-8000-000000000000';
-type OrderHistoryRecordingName = 'order-history-page' | 'order-history-empty';
-let orderHistoryRecordingName: OrderHistoryRecordingName = 'order-history-page';
-
-/** Select the recorded native order-history page for a Storybook route. */
-export function setOrderHistoryRecording(name: OrderHistoryRecordingName): void {
-  orderHistoryRecordingName = name;
-}
-
 const reviewFakeRecordings: Record<string, KernelRecording> = {
   'subject-page': subjectPageRecording,
   subject: subjectRecording,
@@ -399,7 +391,6 @@ async function selectRecording(
   pathname: string,
   recordings: Record<string, KernelRecording>,
 ): Promise<KernelRecording | undefined> {
-  if (request.method === 'GET' && pathname === '/v1/orders') return recordings[orderHistoryRecordingName];
   const moduleRecording = await answerFakeRoute('story', request, recordings);
   if (moduleRecording) return moduleRecording;
   if (request.method === 'POST' && pathname === '/v1/subjects:search') {

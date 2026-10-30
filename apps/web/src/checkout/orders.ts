@@ -9,28 +9,9 @@ import { prepareSession, viewerCredential } from '../session/request';
 
 export const ORDER_HISTORY_PAGE_SIZE = 20;
 
-export type BuyerOrder = {
-  id: string;
-  offerId: string;
-  title: string;
-  targetSubjectId: string;
-  currency: string;
-  unitAmountMinor: number;
-  settlement: 'pending' | 'paid' | 'failed' | 'unknown';
-  entitlementId: string | null;
-  createdAt: string;
-};
-
-export type BuyerOrderPage = { orders: BuyerOrder[]; next: string | null };
-
-type OrdersListClient = {
-  orders: {
-    get(options: {
-      query: { limit: number; cursor?: string };
-      headers: { authorization: string };
-    }): Promise<{ data?: unknown; error?: { status?: number }; status?: number }>;
-  };
-};
+type NativeOrderHistory = NonNullable<Awaited<ReturnType<KernelClient['orders']['get']>>['data']>;
+export type BuyerOrder = NativeOrderHistory['orders'][number];
+export type BuyerOrderPage = Pick<NativeOrderHistory, 'orders' | 'next'>;
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const settlements = new Set(['pending', 'paid', 'failed', 'unknown']);
@@ -93,12 +74,10 @@ export async function loadBuyerOrders(
   const authorization = viewerCredential(request);
   if (!authorization) throw notFound();
 
-  // The commerce collection route is being integrated with its generated client export; this narrow cast keeps the
-  // web caller on that same Treaty client and exact owner-self GET /v1/orders contract.
-  const orders = (client as unknown as OrdersListClient).orders;
-  let result: Awaited<ReturnType<OrdersListClient['orders']['get']>>;
+  // Keep the history read on the generated owner-self Treaty route with no account selector.
+  let result: Awaited<ReturnType<KernelClient['orders']['get']>>;
   try {
-    result = await orders.get({
+    result = await client.orders.get({
       query: { limit: ORDER_HISTORY_PAGE_SIZE, ...(input.cursor ? { cursor: input.cursor } : {}) },
       headers: { authorization },
     });

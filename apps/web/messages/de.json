@@ -393,7 +393,7 @@
   "order_still_processing": "Ihre Zahlung wird noch verarbeitet.",
   "orders_empty": "Du hast noch nichts gekauft.",
   "orders_empty_hint": "Bestellungen aus dem Bezahlvorgang erscheinen hier.",
-  "orders_entitlement_active": "Berechtigung aktiv",
+  "orders_entitlement_recorded": "Berechtigung erfasst",
   "orders_entitlement_pending": "Noch keine Berechtigung",
   "orders_entitlement_none": "Keine Berechtigung",
   "orders_heading": "Deine Bestellungen",

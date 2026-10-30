@@ -394,7 +394,7 @@
   "order_still_processing": "Your payment is still processing.",
   "orders_empty": "You haven't bought anything yet.",
   "orders_empty_hint": "Orders from Checkout will appear here.",
-  "orders_entitlement_active": "Entitlement active",
+  "orders_entitlement_recorded": "Entitlement recorded",
   "orders_entitlement_pending": "No entitlement yet",
   "orders_entitlement_none": "No entitlement",
   "orders_heading": "Your orders",

@@ -393,7 +393,7 @@
   "order_still_processing": "Votre paiement est encore en cours de traitement.",
   "orders_empty": "Vous n’avez encore rien acheté.",
   "orders_empty_hint": "Vos commandes apparaîtront ici après le paiement.",
-  "orders_entitlement_active": "Droit d’accès actif",
+  "orders_entitlement_recorded": "Droit d’accès enregistré",
   "orders_entitlement_pending": "Aucun droit d’accès pour le moment",
   "orders_entitlement_none": "Aucun droit d’accès",
   "orders_heading": "Vos commandes",

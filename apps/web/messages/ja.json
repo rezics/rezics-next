@@ -393,7 +393,7 @@
   "order_still_processing": "お支払いはまだ処理中です。",
   "orders_empty": "購入したものはまだありません。",
   "orders_empty_hint": "チェックアウト後、注文がここに表示されます。",
-  "orders_entitlement_active": "利用権は有効です",
+  "orders_entitlement_recorded": "利用権を記録しました",
   "orders_entitlement_pending": "利用権はまだありません",
   "orders_entitlement_none": "利用権はありません",
   "orders_heading": "注文履歴",
