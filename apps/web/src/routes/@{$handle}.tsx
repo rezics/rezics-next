@@ -1,8 +1,9 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
-import { createFileRoute, redirect } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths } from '../features/pages/agent-page';
+import { agentPath } from '../features/pages/agent';
 import { agentPageQuery, agentReaderQuery } from '../features/pages/agent-queries';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { SubjectPage } from '../features/pages/subject';
@@ -37,7 +38,17 @@ export const Route = createFileRoute('/@{$handle}')({
         headers: { 'Cache-Control': 'public, max-age=300' },
       });
     }
-    return { ...page, paths: agentPagePaths(params.handle) };
+    const canonicalHandle = page.page.account?.handle;
+    if (!canonicalHandle) throw notFound();
+    if (canonicalHandle !== params.handle) {
+      const search = location.searchStr
+        ? location.searchStr.startsWith('?')
+          ? location.searchStr
+          : `?${location.searchStr}`
+        : '';
+      throw redirect({ href: `${agentPath(locale, canonicalHandle)}${search}`, statusCode: 308 });
+    }
+    return { ...page, paths: agentPagePaths(canonicalHandle) };
   },
   head: ({ loaderData }) =>
     loaderData

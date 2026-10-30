@@ -9,6 +9,7 @@ import {
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
 import { securityDevice, type SecurityPasskey } from './security';
+import { accountOperationProfile, type AccountOperationStepUpKind } from './account-operation-step-up';
 import { SIGN_IN_CLIENT_ID, SIGN_IN_SCOPE, signInResult, type SignInResult } from './sign-in';
 
 export const passkeysSupported = browserSupportsWebAuthn;
@@ -43,7 +44,10 @@ function isCancellation(error: unknown): boolean {
 
 // Signs in with a discoverable credential. With `autofill`, the browser offers passkeys in the email field and the
 // call stays pending until the person picks one. Otherwise it prompts at once.
-export async function signInWithPasskey({ autofill = false } = {}): Promise<PasskeySignInResult> {
+export async function signInWithPasskey({
+  autofill = false,
+  operation,
+}: { autofill?: boolean; operation?: AccountOperationStepUpKind } = {}): Promise<PasskeySignInResult> {
   const fetched = await signInOptions();
   if (!fetched.ok) return signInResult(fetched);
 
@@ -55,9 +59,10 @@ export async function signInWithPasskey({ autofill = false } = {}): Promise<Pass
   }
   // The challenge is spent once the response is sent.
   held = null;
-  return signInResult(
-    await authPost('/signin/passkey', { response, client_id: SIGN_IN_CLIENT_ID, scope: SIGN_IN_SCOPE }),
-  );
+  const profile = operation
+    ? accountOperationProfile(operation)
+    : { client_id: SIGN_IN_CLIENT_ID, scope: SIGN_IN_SCOPE };
+  return signInResult(await authPost('/signin/passkey', { response, ...profile }));
 }
 
 export function passkeySignInFailure(result: Exclude<PasskeySignInResult, { ok: true } | { reason: 'cancelled' }>) {

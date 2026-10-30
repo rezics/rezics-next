@@ -8,6 +8,14 @@ import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
 import { readPrivacyContact } from '../privacy-contact';
 import {
+  accountOperationSessionMatches,
+  accountOperationStepUpUrl,
+  clearPendingAccountOperationStepUp,
+  pendingAccountOperationMatches,
+  pendingAccountOperationStepUpState,
+  storePendingAccountOperationStepUp,
+} from '../account-operation-step-up';
+import {
   forgetOperationKey,
   loadAccountSession,
   operationKeyFor,
@@ -16,8 +24,6 @@ import {
 } from '../account-operations';
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
-
-const STEP_UP_URL = '/step-up?return_to=%2Faccount%2Fdelete';
 
 function normalizeConfirmation(value: string): string {
   return value.trim().normalize('NFC').toLowerCase();
@@ -54,6 +60,19 @@ function DeleteAccountPage() {
     void loadAccountSession().then((result) => {
       if (!active) return;
       if (result.kind === 'ready') {
+        const pendingState = pendingAccountOperationStepUpState();
+        const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+        if (
+          pendingState.kind === 'invalid' ||
+          (pendingOperation &&
+            (pendingOperation.kind !== 'delete' ||
+              pendingOperation.returnTo !== '/account/delete' ||
+              !accountOperationSessionMatches(result, pendingOperation)))
+        ) {
+          setLoadMessage(m.auth_account_operation_failure());
+          setLoadState('failure');
+          return;
+        }
         setAccountId(result.accountId);
         setLoadState('ready');
       } else if (result.kind === 'signed-out') {
@@ -86,16 +105,35 @@ function DeleteAccountPage() {
     setMessage('');
     setShowRetry(false);
     const operation: AccountOperation = { kind: 'delete', accountId };
-    const result = await runAccountOperation(operationKeyFor(operation), operation);
+    const operationKey = operationKeyFor(operation);
+    const pendingState = pendingAccountOperationStepUpState();
+    const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+    if (
+      pendingState.kind === 'invalid' ||
+      (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation))
+    ) {
+      setMessage(m.auth_account_operation_failure());
+      submitting.current = false;
+      setPending(false);
+      return;
+    }
+    const result = await runAccountOperation(operationKey, operation);
     if (result.ok) {
       forgetOperationKey(operation);
+      clearPendingAccountOperationStepUp();
       setDeleted(true);
       submitting.current = false;
       setPending(false);
       return;
     }
     if (result.reason === 'step-up') {
-      window.location.assign(STEP_UP_URL);
+      if (!storePendingAccountOperationStepUp({ kind: 'delete', accountId, operationKey, operation })) {
+        setMessage(m.auth_account_operation_failure());
+        submitting.current = false;
+        setPending(false);
+        return;
+      }
+      window.location.assign(accountOperationStepUpUrl('delete'));
       return;
     }
     submitting.current = false;

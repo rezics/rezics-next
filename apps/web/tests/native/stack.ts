@@ -31,6 +31,7 @@ export type NativeKernelFailureInjection = {
   status: number;
   body: string;
 };
+export type NativeAccountOperationActor = { accountId: string; scopes: readonly string[] };
 export type NativeWebStack = {
   kernelOrigin: string;
   authIssuer: string;
@@ -39,6 +40,14 @@ export type NativeWebStack = {
   web: string;
   /** Read fixture identity for form entry, without creating a website session. */
   authPersona(persona: string): Promise<{ accountId: string; email: string; authorization: string }>;
+  /** Confirm the production Auth host has its native operation boundary configured. */
+  enableAccountOperations(): Promise<void>;
+  /** Read real Auth /session proofs observed on account-operation requests. */
+  accountOperationActors(): Promise<readonly NativeAccountOperationActor[]>;
+  /** This fixture's separate automated workflow needs a native approval fixture port. */
+  createAutomatedActor(operator: string, handle: string, authCookie: string): Promise<{ accountId: string }>;
+  /** Flushes browser/Auth request observations into this receipt. */
+  flushObservations(): Promise<void>;
   /** Install the Auth page app on the issuer; undefined removes the page routing. */
   routeAuthPages(handler?: (request: Request) => Response | Promise<Response>): Promise<string>;
   kernel(path: string, init?: RequestInit, persona?: string): Promise<Response>;
@@ -304,6 +313,7 @@ async function startStack(): Promise<
   const accounts = new Map<string, Promise<{ accountId: string; bearer: string }>>();
   let governorScopes: readonly string[] | undefined;
   const requests: NativeKernelRequest[] = [];
+  const accountOperationActors: NativeAccountOperationActor[] = [];
   const getAccount = (persona: string) => {
     let account = accounts.get(persona);
     if (!account) {
@@ -436,7 +446,9 @@ async function startStack(): Promise<
     // Observe the harness's actual issuance, retaining its Auth cookie for the
     // website code flow. Never copy fixture passwords or manufacture sessions.
     const authCookies = new Map<string, string>();
-    const authHandler = auth.service.handler.bind(auth.service);
+    // Keep the actual production host transport in this listener. In particular,
+    // its account-operation routes must use the host's own configured native port.
+    const authHandler = auth.host.handler.bind(auth.host);
     let pageOrigin: string | undefined;
     let signupHandler: ((request: Request) => Promise<Response>) | undefined;
     const pagePaths = new Set([
@@ -464,6 +476,26 @@ async function startStack(): Promise<
         return fetch(forwarded, { redirect: 'manual' });
       }
       if (pageOrigin && request.method === 'POST' && url.pathname === '/signup') return signupHandler!(request);
+      if (
+        request.method === 'POST' &&
+        ['/account-operations/approve', '/account-operations/execute'].includes(url.pathname)
+      ) {
+        const cookie = request.headers.get('cookie');
+        if (cookie) {
+          const session = await authHandler(
+            new Request(`${auth.issuer}/session`, { headers: { cookie }, redirect: 'manual' }),
+          );
+          if (session.ok) {
+            const proof = (await session.json()) as { account_id?: unknown; scope?: unknown };
+            if (typeof proof.account_id === 'string' && Array.isArray(proof.scope)) {
+              accountOperationActors.push({
+                accountId: proof.account_id,
+                scopes: proof.scope.filter((scope): scope is string => typeof scope === 'string').sort(),
+              });
+            }
+          }
+        }
+      }
       const response = await authHandler(request);
       if (
         new URL(request.url).pathname === '/token' &&
@@ -646,6 +678,31 @@ async function startStack(): Promise<
         if (!result.rows[0]?.email) throw new Error(`Native ${persona} has no sign-in email`);
         return { accountId, email: result.rows[0].email, authorization: `Bearer ${bearer}` };
       },
+      async enableAccountOperations() {
+        const probe = await authHandler(
+          new Request(`${auth.issuer}/account-operations/approve`, {
+            method: 'GET',
+            headers: { origin: auth.issuer, 'content-type': 'application/json' },
+          }),
+        );
+        if (probe.status === 503)
+          throw new Error(
+            'Native Auth account operations returned 503 account_operation_denied: the shared Auth host has no accountOperations bind after createAuthHost construction',
+          );
+        if (probe.status !== 400)
+          throw new Error(`Native Auth account-operation configuration probe returned ${probe.status}, expected 400`);
+      },
+      accountOperationActors() {
+        return accountOperationActors.slice();
+      },
+      async createAutomatedActor() {
+        throw new Error(
+          'SemanticOutcomeDriver.fixtures has no native workflow-approval port for automated account creation; expose the existing createWorkflowApprovals boundary instead of using the account-operation client',
+        );
+      },
+      async flushObservations() {
+        await this.syncKernelRequests();
+      },
       async routeAuthPages(origin) {
         if (origin && !signupHandler) {
           // Replace the fixture's workflow executor once, on the same database and
@@ -774,6 +831,9 @@ type HostCall = {
   method:
     | 'credentials'
     | 'authPersona'
+    | 'enableAccountOperations'
+    | 'accountOperationActors'
+    | 'createAutomatedActor'
     | 'routeAuthPages'
     | 'restartWeb'
     | 'injectKernelFailureOnce'
@@ -1043,6 +1103,21 @@ export async function startNativeWebStack(options: { writeRateOverrides?: string
         lifecycle.assertOpen('read native account identity');
         return (await call('authPersona', persona)) as { accountId: string; email: string; authorization: string };
       },
+      async enableAccountOperations() {
+        lifecycle.assertOpen('check native account-operation boundary');
+        await call('enableAccountOperations');
+      },
+      async accountOperationActors() {
+        return (await call('accountOperationActors')) as readonly NativeAccountOperationActor[];
+      },
+      async createAutomatedActor(operator, handle, authCookie) {
+        return (await call('createAutomatedActor', JSON.stringify({ operator, handle, authCookie }))) as {
+          accountId: string;
+        };
+      },
+      async flushObservations() {
+        await api.syncKernelRequests();
+      },
       async routeAuthPages(handler) {
         if (handler !== undefined) lifecycle.assertOpen('route native Auth pages');
         pageBridgeRelease?.();
@@ -1191,7 +1266,12 @@ if (process.env.NATIVE_WEB_STACK_HOST === '1' && process.send) {
         let value: unknown;
         if (method === 'credentials') value = await stack.credentials(argument!);
         else if (method === 'authPersona') value = await stack.authPersona(argument!);
-        else if (method === 'routeAuthPages') value = await stack.routeAuthPages(argument);
+        else if (method === 'enableAccountOperations') await stack.enableAccountOperations();
+        else if (method === 'accountOperationActors') value = stack.accountOperationActors();
+        else if (method === 'createAutomatedActor') {
+          const input = JSON.parse(argument!) as { operator: string; handle: string; authCookie: string };
+          value = await stack.createAutomatedActor(input.operator, input.handle, input.authCookie);
+        } else if (method === 'routeAuthPages') value = await stack.routeAuthPages(argument);
         else if (method === 'injectKernelFailureOnce')
           stack.injectKernelFailureOnce(JSON.parse(argument!) as NativeKernelFailureInjection);
         else if (method === 'observe') await stack.syncKernelRequests();

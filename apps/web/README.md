@@ -103,6 +103,8 @@ Configure these variables in the environment of `bun run dev`:
   posting routes need `thread:create` and `post:create`; reactions need `reaction:set`; presentation curation needs `presentation:publish` and
   `presentation:activate`; checkout start needs `order:create` and the order return page needs `order:read`; the settings page needs
   `account:read`, `account:update`, `collection:read` and `collection:update` (for the owner Collection list and visibility writes).
+  Auth's create-organization and self-deletion pages also need the exact operation scopes `organization:create`,
+  `account:manage` and `account:delete`.
   Offer pages and other public reads need no scope. Sign-in requests
   `openid offline_access` followed by these scopes, each once.
 - `WEBSITE_CLIENT_ID`: the confidential website client id, `rezics-website`.
@@ -141,11 +143,14 @@ const registration = {
   publicJwks: { keys: [websitePublicJwk] },
   redirectUris: ['https://rezics.com/auth/callback'],
   postLogoutRedirectUris: ['https://rezics.com/'],
-  scopes: [
+  scopes: [...new Set([
     'openid',
     'offline_access',
     ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
-  ],
+    'organization:create',
+    'account:manage',
+    'account:delete',
+  ])],
 };
 await auth.internal.registerWebsiteClient(registration);
 // Deploy this exact string as the Worker's WEBSITE_SCOPES text variable.
@@ -154,7 +159,7 @@ const websiteScopes = registration.scopes.join(' ');
 
 The catalogue must include the five media scopes above, the posting scopes `thread:create` and `post:create`,
 `reaction:set`,
-the curation scopes `presentation:publish` and `presentation:activate`, and `order:create` and `order:read`, and the settings page's `account:read`, `account:update`, `collection:read` and `collection:update`.
+the curation scopes `presentation:publish` and `presentation:activate`, `order:create` and `order:read`, the settings page's `account:read`, `account:update`, `collection:read` and `collection:update`, and Auth's account-operation scopes `organization:create`, `account:manage` and `account:delete`.
 Registration and `WEBSITE_SCOPES` must change together
 when more protected site features are mounted. Auth's [website contract](../../services/auth/README.md#website-client)
 defines registration and key rotation.
@@ -183,8 +188,8 @@ For local Auth, migrate a separate PostgreSQL database with Auth's documented `d
 the same trusted bootstrap with `issuer: 'http://127.0.0.1:4200'`, `audience: 'https://api.rezics.test'`,
 Auth's own signing key/secret and the trusted Access ports. Serve `auth.handler` on that exact loopback origin.
 Register the generated website public key with redirect `http://127.0.0.1:3000/auth/callback`, post-logout URI
-`http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting, presentation curation and checkout routes:
-`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read account:read account:update`.
+`http://127.0.0.1:3000/`, and exactly these scopes for the current media, posting, presentation curation, checkout, settings and account-operation routes:
+`openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read account:read account:update organization:create account:manage account:delete`.
 From `apps/web`, run:
 
 ```sh
@@ -192,7 +197,7 @@ AUTH_ISSUER=http://127.0.0.1:4200 \
 API_RESOURCE=https://api.rezics.test \
 WEBSITE_CLIENT_ID=rezics-website \
 WEBSITE_CLIENT_KEY="$(cat .temp/website-private.jwk)" \
-WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read account:read account:update' \
+WEBSITE_SCOPES='openid offline_access media:create media:read_reservation media:read media:complete media:erase thread:create post:create reaction:set presentation:publish presentation:activate order:create order:read account:read account:update organization:create account:manage account:delete' \
 KERNEL_ORIGIN=http://127.0.0.1:4300 \
 bun run dev --host 127.0.0.1 --port 3000 --strictPort
 ```

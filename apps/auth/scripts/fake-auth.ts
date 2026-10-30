@@ -1,3 +1,5 @@
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
+
 const accountId = 'screenshot-account';
 const now = Date.now();
 
@@ -19,6 +21,10 @@ export type FakeAuthState = {
   signedOut: boolean;
   sessionFresh: boolean;
   signInSucceeds: boolean;
+  signInAccountId: string;
+  sessionAccountId: string;
+  sessionClientId: string;
+  sessionScopes: string[];
   organizationsOpen: boolean;
   denyAccountOperation: boolean;
   dropFirstExecuteResponse: boolean;
@@ -31,6 +37,10 @@ export function createFakeAuthState(overrides: Partial<FakeAuthState> = {}): Fak
     signedOut: false,
     sessionFresh: true,
     signInSucceeds: false,
+    signInAccountId: accountId,
+    sessionAccountId: accountId,
+    sessionClientId: 'login',
+    sessionScopes: [],
     organizationsOpen: true,
     denyAccountOperation: false,
     dropFirstExecuteResponse: false,
@@ -100,8 +110,23 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
 
       if (url.pathname === '/signin' && request.method === 'POST') {
         if (state.signInSucceeds) {
+          const payload = JSON.parse(body) as { client_id?: unknown; scope?: unknown };
+          const scopes = payload.scope;
+          const profileValid =
+            payload.client_id === 'login'
+              ? Array.isArray(scopes) && scopes.length === 0
+              : payload.client_id === AUTH_PAGE_OPERATION_CLIENT_ID &&
+                Array.isArray(scopes) &&
+                Object.values(AUTH_PAGE_OPERATION_SCOPES).some(
+                  (allowed) =>
+                    allowed.length === scopes.length && allowed.every((scope, index) => scope === scopes[index]),
+                );
+          if (!profileValid) return Response.json({ error: 'invalid_scope' }, { status: 400, headers });
           state.signedOut = false;
           state.sessionFresh = true;
+          state.sessionAccountId = state.signInAccountId;
+          state.sessionClientId = payload.client_id as string;
+          state.sessionScopes = scopes as string[];
           headers.append('set-cookie', 'auth_session=fake-fresh-session; Path=/; HttpOnly; SameSite=Lax');
           return Response.json({ success: true }, { headers });
         }
@@ -122,7 +147,12 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
       if (url.pathname === '/session' && request.method === 'GET') {
         if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
         return Response.json(
-          { account_id: accountId, holdings: { sessions: state.sessionCount, organizations: state.organizationCount } },
+          {
+            account_id: state.sessionAccountId,
+            client_id: state.sessionClientId,
+            scope: state.sessionScopes,
+            holdings: { sessions: state.sessionCount, organizations: state.organizationCount },
+          },
           { headers },
         );
       }
@@ -142,6 +172,19 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
         if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
         if (!state.sessionFresh)
           return Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401, headers });
+        const requiredScope = operation?.kind === 'organization' ? 'organization:create' : 'account:delete';
+        if (
+          state.sessionClientId !== AUTH_PAGE_OPERATION_CLIENT_ID ||
+          state.sessionScopes.length !== 1 ||
+          state.sessionScopes[0] !== requiredScope ||
+          (operation?.kind === 'delete' &&
+            'accountId' in operation &&
+            (operation as { accountId: string }).accountId !== state.sessionAccountId)
+        )
+          return Response.json(
+            { error: 'account_operation_denied', effect_status: 'not_applied' },
+            { status: 403, headers },
+          );
         if (operation?.kind === 'organization' && !state.organizationsOpen)
           return Response.json({ error: 'platform_closed', effect_status: 'not_applied' }, { status: 403, headers });
         if (state.denyAccountOperation)

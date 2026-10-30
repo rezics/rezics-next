@@ -7,6 +7,14 @@ import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
 import {
+  accountOperationSessionMatches,
+  accountOperationStepUpUrl,
+  clearPendingAccountOperationStepUp,
+  pendingAccountOperationMatches,
+  pendingAccountOperationStepUpState,
+  storePendingAccountOperationStepUp,
+} from '../account-operation-step-up';
+import {
   forgetOperationKey,
   loadAccountSession,
   operationKeyFor,
@@ -20,7 +28,6 @@ type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 
 const handleId = 'organization-handle';
 const handleErrorId = 'organization-handle-error';
-const STEP_UP_URL = '/step-up?return_to=%2Forganizations%2Fnew';
 
 export const Route = createFileRoute('/organizations/new')({
   head: () => ({ meta: [{ title: `${m.auth_organization_heading()} · REZICS` }] }),
@@ -29,6 +36,7 @@ export const Route = createFileRoute('/organizations/new')({
 
 function NewOrganizationPage() {
   const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [accountId, setAccountId] = useState('');
   const [handle, setHandle] = useState('');
   const [handleError, setHandleError] = useState('');
   const [pending, setPending] = useState(false);
@@ -46,6 +54,20 @@ function NewOrganizationPage() {
     void loadAccountSession().then((result) => {
       if (!active) return;
       if (result.kind === 'ready') {
+        const pendingState = pendingAccountOperationStepUpState();
+        const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+        if (
+          pendingState.kind === 'invalid' ||
+          (pendingOperation &&
+            (pendingOperation.kind !== 'organization' ||
+              pendingOperation.returnTo !== '/organizations/new' ||
+              !accountOperationSessionMatches(result, pendingOperation)))
+        ) {
+          setLoadMessage(m.auth_account_operation_failure());
+          setLoadState('failure');
+          return;
+        }
+        setAccountId(result.accountId);
         setLoadState('ready');
       } else if (result.kind === 'signed-out') {
         setLoadState('signed-out');
@@ -82,17 +104,36 @@ function NewOrganizationPage() {
     setMessage('');
     setShowRetry(false);
     const operation = { kind: 'organization' as const, handle: normalizedHandle };
-    const result = await runAccountOperation(operationKeyFor(operation), operation);
+    const operationKey = operationKeyFor(operation);
+    const pendingState = pendingAccountOperationStepUpState();
+    const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+    if (
+      pendingState.kind === 'invalid' ||
+      (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation))
+    ) {
+      setMessage(m.auth_account_operation_failure());
+      submitting.current = false;
+      setPending(false);
+      return;
+    }
+    const result = await runAccountOperation(operationKey, operation);
     if (result.ok) {
       forgetOperationKey(operation);
       storePendingOrganizationHandle('');
+      clearPendingAccountOperationStepUp();
       setCreatedHandle(normalizedHandle);
       submitting.current = false;
       setPending(false);
       return;
     }
     if (result.reason === 'step-up') {
-      window.location.assign(STEP_UP_URL);
+      if (!storePendingAccountOperationStepUp({ kind: 'organization', accountId, operationKey, operation })) {
+        setMessage(m.auth_account_operation_failure());
+        submitting.current = false;
+        setPending(false);
+        return;
+      }
+      window.location.assign(accountOperationStepUpUrl('organization'));
       return;
     }
     submitting.current = false;

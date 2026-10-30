@@ -4,7 +4,7 @@ import { m } from './paraglide/messages.js';
 export type AccountOperation = { kind: 'delete'; accountId: string } | { kind: 'organization'; handle: string };
 
 export type AccountSessionResult =
-  | { kind: 'ready'; accountId: string }
+  | { kind: 'ready'; accountId: string; clientId?: string; scopes?: string[] }
   | { kind: 'signed-out' }
   | { kind: 'failure'; message: string };
 
@@ -30,11 +30,27 @@ export async function loadAccountSession(): Promise<AccountSessionResult> {
     if (response.status === 401) return { kind: 'signed-out' };
     if (response.status !== 200) return { kind: 'failure', message: m.auth_account_operation_failure() };
     const body: unknown = await response.json();
-    const accountId =
-      body && typeof body === 'object' && 'account_id' in body && typeof body.account_id === 'string'
-        ? body.account_id
-        : '';
-    return accountId ? { kind: 'ready', accountId } : { kind: 'failure', message: m.auth_account_operation_failure() };
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      !('account_id' in body) ||
+      typeof body.account_id !== 'string' ||
+      !body.account_id
+    )
+      return { kind: 'failure', message: m.auth_account_operation_failure() };
+    const clientId = 'client_id' in body ? body.client_id : undefined;
+    const scopes = 'scope' in body ? body.scope : undefined;
+    if (
+      (clientId !== undefined && typeof clientId !== 'string') ||
+      (scopes !== undefined && (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === 'string')))
+    )
+      return { kind: 'failure', message: m.auth_account_operation_failure() };
+    return {
+      kind: 'ready',
+      accountId: body.account_id,
+      ...(typeof clientId === 'string' ? { clientId } : {}),
+      ...(Array.isArray(scopes) ? { scopes: scopes as string[] } : {}),
+    };
   } catch {
     return { kind: 'failure', message: m.auth_account_operation_failure() };
   }

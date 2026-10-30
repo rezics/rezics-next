@@ -100,11 +100,9 @@ export async function loadViewPages(
   locale = 'en',
   cursor?: string,
 ): Promise<ViewPagesLoad> {
-  const [result, overview] = await Promise.all([
-    loadSubjectPage(client, id, view, locale),
-    loadSubjectPage(client, id, undefined, locale),
-  ]);
+  const result = await loadSubjectPage(client, id, view, locale);
   if (result.kind !== 'page') return result;
+  const overview = await loadSubjectPage(client, id, undefined, locale);
   if (overview.kind !== 'page') return overview;
   let next: string | undefined;
   const reads = planReads(

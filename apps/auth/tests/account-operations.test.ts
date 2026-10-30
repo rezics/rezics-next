@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { createFakeAuthState, startFakeAuth, type FakeAuthRequest } from '../scripts/fake-auth';
 
 const app = join(import.meta.dir, '..');
@@ -113,6 +114,10 @@ function reset(overrides: Partial<typeof state> = {}) {
     signedOut: false,
     sessionFresh: true,
     signInSucceeds: false,
+    signInAccountId: accountId,
+    sessionAccountId: accountId,
+    sessionClientId: 'login',
+    sessionScopes: [],
     organizationsOpen: true,
     denyAccountOperation: false,
     dropFirstExecuteResponse: false,
@@ -146,7 +151,7 @@ afterAll(async () => {
 test(
   'a signed-in person deletes their account after confirming, sees it was deleted, and is signed out',
   async () => {
-    reset();
+    reset({ sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID, sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete] });
     const { page, origin } = await open('/account/delete');
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
@@ -194,7 +199,12 @@ test(
 test(
   'deleting without a fresh sign-in goes through step-up and returns to the delete page',
   async () => {
-    reset({ sessionFresh: false, signInSucceeds: true });
+    reset({
+      sessionFresh: false,
+      signInSucceeds: true,
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+    });
     const { page, origin } = await open('/account/delete');
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
@@ -202,6 +212,7 @@ test(
       await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), submit.click()]);
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       expect(new URL(page.url()).searchParams.get('return_to')).toBe('/account/delete');
+      expect(new URL(page.url()).searchParams.get('account_operation')).toBe('delete');
       expect(authCalls('/account-operations/approve')).toHaveLength(1);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
 
@@ -215,6 +226,151 @@ test(
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
       await page.getByRole('textbox').waitFor({ state: 'visible' });
       expect(state.sessionFresh).toBe(true);
+      expect(postBodies('/signin')).toEqual([
+        {
+          email: 'reader@example.test',
+          password: 'secure-password',
+          client_id: AUTH_PAGE_OPERATION_CLIENT_ID,
+          scope: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+        },
+      ]);
+      expect(state.sessionAccountId).toBe(accountId);
+      expect(state.sessionClientId).toBe(AUTH_PAGE_OPERATION_CLIENT_ID);
+      expect(state.sessionScopes).toEqual([...AUTH_PAGE_OPERATION_SCOPES.delete]);
+      expect(await page.getByRole('textbox').inputValue()).toBe('');
+      expect(await page.getByRole('button', { name: 'Delete account', exact: true }).isDisabled()).toBe(true);
+      expect(authCalls('/account-operations/execute')).toHaveLength(0);
+      const firstApproval = postBodies('/account-operations/approve')[0]!;
+      await (await confirmDelete(page)).click();
+      await page.getByRole('status').waitFor();
+      const approvals = postBodies('/account-operations/approve');
+      expect(approvals).toHaveLength(2);
+      expect(approvals[1]).toEqual(firstApproval);
+      expect(postBodies('/account-operations/execute')[0]?.operationKey).toBe(firstApproval.operationKey);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'a different signed-in account cannot resume the pending deletion',
+  async () => {
+    reset({
+      sessionFresh: false,
+      signInSucceeds: true,
+      signInAccountId: 'different-account',
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+    });
+    const { page } = await open('/account/delete');
+    try {
+      await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
+      await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), (await confirmDelete(page)).click()]);
+      await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
+      await page.getByLabel('Password', { exact: true }).fill('secure-password');
+      await page.getByRole('button', { name: 'Verify your identity', exact: true }).click();
+      await page.getByRole('alert').waitFor();
+      expect(new URL(page.url()).pathname).toBe('/step-up');
+      expect(await page.getByRole('alert').innerText()).toContain('could not be completed');
+      expect(state.sessionAccountId).toBe('different-account');
+      expect(authCalls('/account-operations/execute')).toHaveLength(0);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'a changed operation key after step-up cannot submit the saved deletion body',
+  async () => {
+    reset({
+      sessionFresh: false,
+      signInSucceeds: true,
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+    });
+    const { page, origin } = await open('/account/delete');
+    try {
+      await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
+      await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), (await confirmDelete(page)).click()]);
+      await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
+      await page.getByLabel('Password', { exact: true }).fill('secure-password');
+      await Promise.all([
+        page.waitForURL((url) => url.origin === origin && url.pathname === '/account/delete'),
+        page.getByRole('button', { name: 'Verify your identity', exact: true }).click(),
+      ]);
+      await page.getByRole('textbox').waitFor({ state: 'visible' });
+      await page.evaluate(() => {
+        const key = 'rezics.account-operation.step-up';
+        const pending = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+        pending.operationKey = 'ffffffffffffffffffffffffffffffff';
+        sessionStorage.setItem(key, JSON.stringify(pending));
+      });
+      await (await confirmDelete(page)).click();
+      await page.getByRole('alert').waitFor();
+      expect(await page.getByRole('alert').innerText()).toContain('could not be completed');
+      expect(authCalls('/account-operations/approve')).toHaveLength(1);
+      expect(authCalls('/account-operations/execute')).toHaveLength(0);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'step-up refuses an operation return target without its matching pending intent',
+  async () => {
+    reset({ signInSucceeds: true });
+    const { page } = await open('/step-up?return_to=%2Faccount%2Fdelete');
+    try {
+      await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
+      await page.getByLabel('Password', { exact: true }).fill('secure-password');
+      await page.getByRole('button', { name: 'Verify your identity', exact: true }).click();
+      await page.getByRole('alert').waitFor();
+      expect(new URL(page.url()).pathname).toBe('/step-up');
+      expect(authCalls('/signin')).toHaveLength(0);
+      expect(authCalls('/account-operations/approve')).toHaveLength(0);
+      expect(authCalls('/account-operations/execute')).toHaveLength(0);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'a substituted pending deletion body is refused before another approval request',
+  async () => {
+    reset({
+      sessionFresh: false,
+      signInSucceeds: true,
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+    });
+    const { page, origin } = await open('/account/delete');
+    try {
+      await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
+      await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), (await confirmDelete(page)).click()]);
+      await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
+      await page.getByLabel('Password', { exact: true }).fill('secure-password');
+      await Promise.all([
+        page.waitForURL((url) => url.origin === origin && url.pathname === '/account/delete'),
+        page.getByRole('button', { name: 'Verify your identity', exact: true }).click(),
+      ]);
+      await page.getByRole('textbox').waitFor({ state: 'visible' });
+      await page.evaluate(() => {
+        const key = 'rezics.account-operation.step-up';
+        const pending = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+        pending.operation.accountId = 'different-account';
+        sessionStorage.setItem(key, JSON.stringify(pending));
+      });
+      await (await confirmDelete(page)).click();
+      await page.getByRole('alert').waitFor();
+      expect(authCalls('/account-operations/approve')).toHaveLength(1);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
     } finally {
       await page.context().close();
@@ -226,7 +382,11 @@ test(
 test(
   'a refused deletion lists what must be done first and deletes nothing',
   async () => {
-    reset({ denyAccountOperation: true });
+    reset({
+      denyAccountOperation: true,
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+    });
     const { page } = await open('/account/delete');
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
@@ -251,7 +411,11 @@ test(
 test(
   'a retry after a lost response reuses the same operation key',
   async () => {
-    reset({ dropFirstExecuteResponse: true });
+    reset({
+      dropFirstExecuteResponse: true,
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+    });
     const { page } = await open('/account/delete');
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
@@ -281,7 +445,10 @@ test(
 test(
   'a person creates an organization with a normalized handle and sees it created',
   async () => {
-    reset();
+    reset({
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.organization],
+    });
     const { page } = await open('/organizations/new');
     try {
       await page.getByRole('heading', { name: 'Create an organization', exact: true }).waitFor();
@@ -315,9 +482,63 @@ test(
 );
 
 test(
+  'organization step-up uses its fixed scope and returns for an explicit second submit',
+  async () => {
+    reset({
+      sessionFresh: false,
+      signInSucceeds: true,
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.organization],
+    });
+    const { page, origin } = await open('/organizations/new');
+    try {
+      await page.getByRole('heading', { name: 'Create an organization', exact: true }).waitFor();
+      await page.getByLabel('Handle', { exact: true }).fill('team-alpha');
+      await Promise.all([
+        page.waitForURL((url) => url.pathname === '/step-up'),
+        page.getByRole('button', { name: 'Create organization', exact: true }).click(),
+      ]);
+      expect(new URL(page.url()).searchParams.get('account_operation')).toBe('organization');
+      await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
+      await page.getByLabel('Password', { exact: true }).fill('secure-password');
+      await Promise.all([
+        page.waitForURL((url) => url.origin === origin && url.pathname === '/organizations/new'),
+        page.getByRole('button', { name: 'Verify your identity', exact: true }).click(),
+      ]);
+      expect(postBodies('/signin')).toEqual([
+        {
+          email: 'reader@example.test',
+          password: 'secure-password',
+          client_id: AUTH_PAGE_OPERATION_CLIENT_ID,
+          scope: [...AUTH_PAGE_OPERATION_SCOPES.organization],
+        },
+      ]);
+      expect(state.sessionScopes).toEqual([...AUTH_PAGE_OPERATION_SCOPES.organization]);
+      expect(authCalls('/account-operations/execute')).toHaveLength(0);
+      expect(await page.getByLabel('Handle', { exact: true }).inputValue()).toBe('team-alpha');
+      expect(await page.getByRole('button', { name: 'Create organization', exact: true }).isEnabled()).toBe(true);
+      const firstApproval = postBodies('/account-operations/approve')[0]!;
+      await page.getByRole('button', { name: 'Create organization', exact: true }).click();
+      await page.getByRole('status').waitFor();
+      const approvals = postBodies('/account-operations/approve');
+      expect(approvals).toHaveLength(2);
+      expect(approvals[1]).toEqual(firstApproval);
+      expect(postBodies('/account-operations/execute')[0]?.operationKey).toBe(firstApproval.operationKey);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
   'creating an organization while it is closed says so and keeps the handle',
   async () => {
-    reset({ organizationsOpen: false });
+    reset({
+      organizationsOpen: false,
+      sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+      sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.organization],
+    });
     const { page } = await open('/organizations/new');
     try {
       await page.getByRole('heading', { name: 'Create an organization', exact: true }).waitFor();

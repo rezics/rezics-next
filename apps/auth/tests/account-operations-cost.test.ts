@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { createFakeAuthState, startFakeAuth, type FakeAuthRequest } from '../scripts/fake-auth';
 
 const app = join(import.meta.dir, '..');
@@ -80,12 +81,16 @@ async function open(path: string) {
   }
 }
 
-function reset(scale: number) {
+function reset(scale: number, kind: 'delete' | 'organization') {
   calls.length = 0;
   Object.assign(state, {
     signedOut: false,
     sessionFresh: true,
     signInSucceeds: false,
+    signInAccountId: 'screenshot-account',
+    sessionAccountId: 'screenshot-account',
+    sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+    sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES[kind]],
     organizationsOpen: true,
     denyAccountOperation: false,
     dropFirstExecuteResponse: false,
@@ -121,7 +126,7 @@ test(
   'deleting an account makes three Auth requests whatever the person holds',
   async () => {
     for (const scale of [1, 10, 100]) {
-      reset(scale);
+      reset(scale, 'delete');
       const { page, context } = await open('/account/delete');
       try {
         await page
@@ -148,7 +153,7 @@ test(
   'creating an organization makes at most three Auth requests whatever the person holds',
   async () => {
     for (const scale of [1, 10, 100]) {
-      reset(scale);
+      reset(scale, 'organization');
       const { page, context } = await open('/organizations/new');
       try {
         await page.getByLabel('Handle', { exact: true }).fill(`scale-${scale}`);

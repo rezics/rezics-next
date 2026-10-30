@@ -26,6 +26,7 @@
         "@fontsource-variable/source-serif-4": "5.3.1",
         "@inlang/paraglide-js": "2.29.1",
         "@inlang/plugin-json": "5.1.63",
+        "@rezics/auth-contract": "workspace:*",
         "@rezics/ui": "workspace:*",
         "@simplewebauthn/browser": "14.0.0",
         "@tailwindcss/vite": "4.3.3",

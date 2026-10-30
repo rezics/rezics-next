@@ -4,6 +4,7 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type CDPSession, type Page } from 'playwright';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -33,14 +34,21 @@ let hasPassword = true;
 // A session older than 10 minutes is refused for credential changes until the person confirms again.
 let fresh = true;
 let sessionCookieSet = false;
+let sessionClientId = 'login';
+let sessionScopes: string[] = [];
+let sessionAccountId = accountId;
 
-function reset(options: { passkeys?: Passkey[]; hasPassword?: boolean; fresh?: boolean } = {}) {
+function reset(options: { passkeys?: Passkey[]; hasPassword?: boolean; fresh?: boolean; accountId?: string } = {}) {
   calls.length = 0;
   issued.clear();
   passkeys = options.passkeys ?? [];
   hasPassword = options.hasPassword ?? true;
   fresh = options.fresh ?? true;
   sessionCookieSet = false;
+  sessionClientId = 'login';
+  sessionScopes = [];
+  sessionAccountId = accountId;
+  if (options.accountId) sessionAccountId = options.accountId;
 }
 
 function base64url(bytes: Buffer): string {
@@ -63,10 +71,22 @@ const fake = Bun.serve({
     const headers = new Headers({ 'cache-control': 'no-store' });
     const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
     const stepUp = () => json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
-    const issueSession = () => {
+    const issueSession = (profile: { client_id?: unknown; scope?: unknown }) => {
+      const scopes = profile.scope;
+      const valid =
+        (profile.client_id === 'login' && Array.isArray(scopes) && scopes.length === 0) ||
+        (profile.client_id === AUTH_PAGE_OPERATION_CLIENT_ID &&
+          Array.isArray(scopes) &&
+          Object.values(AUTH_PAGE_OPERATION_SCOPES).some(
+            (allowed) => allowed.length === scopes.length && allowed.every((scope, index) => scope === scopes[index]),
+          ));
+      if (!valid) return false;
       fresh = true;
       sessionCookieSet = true;
+      sessionClientId = profile.client_id as string;
+      sessionScopes = scopes as string[];
       headers.append('set-cookie', `auth_session=${session}; Path=/; HttpOnly; SameSite=Lax`);
+      return true;
     };
     const parsed = () => (call.body ? (JSON.parse(call.body) as Record<string, any>) : {});
     // Accepts a WebAuthn JSON response only if it echoes a challenge this fake issued for this page's origin.
@@ -82,7 +102,8 @@ const fake = Bun.serve({
       return new Response('No session', { status: 401, headers });
     }
 
-    if (url.pathname === '/session' && request.method === 'GET') return json({ account_id: accountId });
+    if (url.pathname === '/session' && request.method === 'GET')
+      return json({ account_id: sessionAccountId, client_id: sessionClientId, scope: sessionScopes });
     if (url.pathname === '/sessions' && request.method === 'GET')
       return json({
         sessions: [
@@ -100,7 +121,7 @@ const fake = Bun.serve({
     if (url.pathname === '/signin' && request.method === 'POST') {
       const body = parsed();
       if (body.email !== email || body.password !== password) return json({ error: 'authentication_denied' }, 401);
-      issueSession();
+      if (!issueSession(body)) return json({ error: 'invalid_scope' }, 400);
       return json({});
     }
 
@@ -112,7 +133,7 @@ const fake = Bun.serve({
     if (url.pathname === '/signin/passkey' && request.method === 'POST') {
       const body = parsed();
       if (!acceptsResponse(body.response)) return json({ error: 'authentication_denied' }, 401);
-      issueSession();
+      if (!issueSession(body)) return json({ error: 'invalid_scope' }, 400);
       return json({});
     }
 
@@ -253,9 +274,9 @@ async function addVirtualAuthenticator(cdp: CDPSession): Promise<Authenticator> 
 // An IP address cannot be a relying party ID, so the pages are opened at localhost.
 async function open(
   path: string,
-  options: BrowserContextOptions & { webauthn?: boolean; signedIn?: boolean } = {},
+  options: BrowserContextOptions & { webauthn?: boolean; signedIn?: boolean; pendingOperation?: unknown } = {},
 ): Promise<{ page: Page; origin: string; authenticator: Authenticator | null }> {
-  const { webauthn = true, signedIn = true, ...contextOptions } = options;
+  const { webauthn = true, signedIn = true, pendingOperation, ...contextOptions } = options;
   const port = await site();
   const origin = `http://localhost:${port}`;
   browser ??= await chromium.launch();
@@ -282,6 +303,10 @@ async function open(
       Reflect.deleteProperty(window, 'PublicKeyCredential');
     });
   }
+  if (pendingOperation)
+    await page.addInitScript((pending) => {
+      sessionStorage.setItem('rezics.account-operation.step-up', JSON.stringify(pending));
+    }, pendingOperation);
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
@@ -575,6 +600,50 @@ test(
       expect(authCalls('/signin/passkey/options')).toHaveLength(1);
       expect(authCalls('/signin/passkey')).toHaveLength(1);
       expect(fresh).toBe(true);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'account-operation passkey step-up issues only the fixed delete profile and resumes without executing it',
+  async () => {
+    reset({ fresh: false });
+    const pendingOperation = {
+      version: 1,
+      kind: 'delete',
+      accountId,
+      operationKey: '0123456789abcdef0123456789abcdef',
+      operation: { kind: 'delete', accountId },
+      returnTo: '/account/delete',
+    };
+    const { page, authenticator } = await open('/step-up?account_operation=delete&return_to=%2Faccount%2Fdelete', {
+      pendingOperation,
+    });
+    try {
+      await addResidentCredential(authenticator!);
+      await Promise.all([
+        page.waitForURL((url) => url.pathname === '/account/delete'),
+        page.getByRole('button', { name: 'Verify with a passkey', exact: true }).click(),
+      ]);
+      const signedIn = postBody('/signin/passkey');
+      expect(signedIn).toEqual({
+        response: expect.any(Object),
+        client_id: AUTH_PAGE_OPERATION_CLIENT_ID,
+        scope: [...AUTH_PAGE_OPERATION_SCOPES.delete],
+      });
+      expectWebAuthnResponse(signedIn.response, 'assertion');
+      expect(sessionClientId).toBe(AUTH_PAGE_OPERATION_CLIENT_ID);
+      expect(sessionScopes).toEqual([...AUTH_PAGE_OPERATION_SCOPES.delete]);
+      expect(new URL(page.url()).search).toBe('');
+      expect(await page.getByRole('heading', { name: 'Delete your account', exact: true }).count()).toBe(1);
+      expect(await page.getByRole('textbox').inputValue()).toBe('');
+      expect(authCalls('/signin/passkey/options')).toHaveLength(1);
+      expect(authCalls('/signin/passkey')).toHaveLength(1);
+      expect(authCalls('/account-operations/approve')).toHaveLength(0);
+      expect(authCalls('/account-operations/execute')).toHaveLength(0);
     } finally {
       await page.context().close();
     }

@@ -52,7 +52,22 @@ export async function loadAgentPage(
     };
     if (typeof data.account !== 'string') throw new Error('internal_error');
     const { account, subject, ...rest } = data;
-    return { kind: 'page', page: { ...rest, subject: subject ?? null, account: { id: account, handle } } };
+    const page = { ...rest, subject: subject ?? null, account: { id: account, handle } } as SubjectPageData;
+    const reads = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page)).reads;
+    const canonicalHandle = Object.entries(reads).flatMap(([key, read]) => {
+      if (read.kind !== 'account' || page.reads[key]?.status !== 200) return [];
+      const profile = accountOf(page.reads[key]?.body);
+      if (profile?.id !== account) return [];
+      const canonical = profile.handle;
+      return canonical ? [canonical] : [];
+    })[0];
+    return {
+      kind: 'page',
+      page: {
+        ...page,
+        account: { id: account, handle: canonicalHandle ?? handle },
+      },
+    };
   }
   throw problemError(result.error?.value);
 }

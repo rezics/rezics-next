@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { createFakeAuthState, startFakeAuth, type FakeAuthRequest } from '../scripts/fake-auth';
 
 const app = join(import.meta.dir, '..');
@@ -113,6 +114,10 @@ function reset(overrides: Partial<typeof state> = {}) {
     signedOut: false,
     sessionFresh: true,
     signInSucceeds: false,
+    signInAccountId: accountId,
+    sessionAccountId: accountId,
+    sessionClientId: AUTH_PAGE_OPERATION_CLIENT_ID,
+    sessionScopes: [...AUTH_PAGE_OPERATION_SCOPES.delete],
     organizationsOpen: true,
     denyAccountOperation: false,
     dropFirstExecuteResponse: false,
@@ -243,6 +248,7 @@ test(
       ]);
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       expect(new URL(page.url()).searchParams.get('return_to')).toBe('/account/delete');
+      expect(new URL(page.url()).searchParams.get('account_operation')).toBe('delete');
       expect(authCalls('/account-operations/approve')).toHaveLength(1);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
       await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
@@ -256,6 +262,9 @@ test(
       expect(await input.inputValue()).toBe('');
       expect(await page.getByRole('button', { name: 'Delete account', exact: true }).isDisabled()).toBe(true);
       expect(state.sessionFresh).toBe(true);
+      expect(state.sessionAccountId).toBe(accountId);
+      expect(state.sessionClientId).toBe(AUTH_PAGE_OPERATION_CLIENT_ID);
+      expect(state.sessionScopes).toEqual([...AUTH_PAGE_OPERATION_SCOPES.delete]);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
     } finally {
       await page.context().close();
