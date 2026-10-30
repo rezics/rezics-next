@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { assertGrowthAccessPaths, checkGrowth, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import {
   addressInPartition,
   addressRoute,
@@ -350,12 +350,24 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
   });
 
   expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);
+  const relations = [
+    ...new Set(
+      report.samples.flatMap((sample) =>
+        sample.repetitions.flatMap((run) =>
+          Object.keys(run.relations).filter((relation) => !relation.startsWith('index:')),
+        ),
+      ),
+    ),
+  ];
+  expect(relations.length).toBeGreaterThan(0);
+  assertGrowthAccessPaths('community Space address recovery', report.samples, relations);
   expect(new Set(report.samples.map((sample) => sample.cost.rows)).size).toBe(1);
   expect(new Set(report.samples.map((sample) => sample.cost.statements)).size).toBe(1);
   for (const sample of report.samples) {
     expect(sample.cost.rows).toBeGreaterThan(0);
     expect(sample.cost.blocks).toBeGreaterThan(0);
     expect(sample.cost.statements).toBeGreaterThan(0);
+    expect(Object.keys(sample.cost.relations).length).toBeGreaterThan(0);
     expect(sample.occurrenceRepetitions).toHaveLength(1);
     expect(sample.occurrenceRepetitions[0]?.statements.length).toBeGreaterThan(0);
     for (const relation of [
