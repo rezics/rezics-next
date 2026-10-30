@@ -53,12 +53,14 @@ test('CLI construction preserves the real coordinator, durable completion and sh
   await withInput(async (argv, state) => {
     let now = 1000;
     const waits: number[] = [];
+    let holdWait = false;
     let constructed: ImporterOptions | undefined;
     const options: ImportCliOptions = {
       clock: {
         now: () => now,
         sleep: async (ms) => {
           waits.push(ms);
+          if (holdWait) await new Promise<void>(() => {});
           now += ms;
         },
       },
@@ -81,6 +83,14 @@ test('CLI construction preserves the real coordinator, durable completion and sh
     aborted.abort(new Error('cancelled wait'));
     await expect(constructed!.sleep!(29, aborted.signal)).rejects.toThrow('cancelled wait');
     expect(waits).toEqual([17]);
+    holdWait = true;
+    const interrupted = new AbortController();
+    const waiting = constructed!.sleep!(31, interrupted.signal);
+    await Promise.resolve();
+    expect(waits).toEqual([17, 31]);
+    interrupted.abort(new Error('interrupted active wait'));
+    await expect(waiting).rejects.toThrow('interrupted active wait');
+    expect(constructed!.now!()).toBe(1017);
     const session = new ImportSession(state);
     try {
       expect(session.store.source('bangumi').count).toBe(0);

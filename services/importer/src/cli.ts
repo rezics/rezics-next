@@ -240,6 +240,33 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw signal.reason ?? new DOMException('Import interrupted', 'AbortError');
 }
 
+function clockSleep(clock: NonNullable<ImportCliOptions['clock']>, ms: number, signal: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', aborted);
+    const aborted = () => {
+      cleanup();
+      reject(signal.reason ?? new DOMException('Import interrupted', 'AbortError'));
+    };
+    signal.addEventListener('abort', aborted, { once: true });
+    Promise.resolve()
+      .then(() => {
+        throwIfAborted(signal);
+        return clock.sleep(ms);
+      })
+      .then(
+        () => {
+          cleanup();
+          resolve();
+        },
+        (error) => {
+          cleanup();
+          reject(error);
+        },
+      );
+  });
+}
+
 function nextWithSignal<T>(iterator: AsyncIterator<T>, signal: AbortSignal): Promise<IteratorResult<T>> {
   throwIfAborted(signal);
   return new Promise((resolve, reject) => {
@@ -638,11 +665,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       path: config.state,
       transport: signalTransport,
       now: () => clock.now(),
-      sleep: async (ms, sleepSignal) => {
-        throwIfAborted(sleepSignal);
-        await clock.sleep(ms);
-        throwIfAborted(sleepSignal);
-      },
+      // Keep Importer's cancellable native timer unless a clock was explicitly supplied.
+      ...(options.clock ? { sleep: (ms: number, sleepSignal: AbortSignal) => clockSleep(clock, ms, sleepSignal) } : {}),
       ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
     };
     importer = (options.createImporter ?? createImporter)(importerOptions);

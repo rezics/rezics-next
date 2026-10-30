@@ -35,7 +35,9 @@ available native row, object variants and events survive the metadata refresh.
 The implementation adds an optional CLI construction boundary that retains the real Importer/RunStore/
 RecordBindings and wires the existing CLI clock into coordinator waits as well as HTTP waits. The two local
 tests in `services/importer/tests/cli-native-backpressure.test.ts` cover real durable construction with that
-shared clock, cancellation before scheduling, and safe cleanup after constructor failure. They do not claim
+shared clock, cancellation before and during scheduling, and safe cleanup after constructor failure. Default
+coordinator waits retain the existing cancellable native timer; explicitly supplied clock waits race cancellation.
+They do not claim
 native rate acceptance.
 
 The shared reference index was read at its prescribed read-only path. The three implementations cited by the
