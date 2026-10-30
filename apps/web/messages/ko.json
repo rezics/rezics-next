@@ -2399,5 +2399,16 @@
   "order_reconcile_unavailable": "현재 상태를 확인할 수 없습니다. 마지막으로 확인된 결제와 접근 상태는 유지됩니다.",
   "order_reconcile_error": "요청 결과를 알 수 없습니다. 같은 요청으로 다시 시도하세요.",
   "order_reconcile_denied": "더 이상 이 상태 확인이 허용되지 않습니다. 페이지를 새로고침하여 현재 권한을 확인하세요.",
-  "order_reconcile_hint": "기록된 구매 상태를 다시 확인하도록 요청합니다. 새로운 결제가 발생하지 않습니다."
+  "order_reconcile_hint": "기록된 구매 상태를 다시 확인하도록 요청합니다. 새로운 결제가 발생하지 않습니다.",
+  "realm_discovery_popular": "인기 커뮤니티",
+  "realm_discovery_trending": "주목받는 커뮤니티",
+  "realm_discovery_popular_window": "직전 30일간의 공개 토론 활동입니다. 날짜는 완료된 UTC 일자를 기준으로 합니다.",
+  "realm_discovery_trending_window": "직전 하루의 공개 토론 활동입니다. 날짜는 완료된 UTC 일자를 기준으로 합니다.",
+  "realm_discovery_loading": "커뮤니티를 불러오는 중…",
+  "realm_discovery_empty": "이 기간에 표시할 커뮤니티가 없습니다.",
+  "realm_discovery_page_empty": "이 페이지에는 커뮤니티가 없습니다. 다음 페이지를 확인해 보세요.",
+  "realm_discovery_unavailable": "커뮤니티를 불러올 수 없습니다. 다시 시도해 주세요.",
+  "realm_discovery_closed": "커뮤니티 탐색이 아직 열리지 않았습니다.",
+  "realm_discovery_continue": "계속",
+  "realm_discovery_retry": "다시 시도"
 }

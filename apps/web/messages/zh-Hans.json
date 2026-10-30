@@ -2400,5 +2400,16 @@
   "order_reconcile_unavailable": "暂时无法检查状态。保留上次验证的付款和访问状态。",
   "order_reconcile_error": "请求结果未知。请重试同一请求。",
   "order_reconcile_denied": "当前已无权执行此状态检查。请刷新页面检查当前权限。",
-  "order_reconcile_hint": "请求重新检查这笔已记录的购买，不会发起另一笔付款。"
+  "order_reconcile_hint": "请求重新检查这笔已记录的购买，不会发起另一笔付款。",
+  "realm_discovery_popular": "热门社群",
+  "realm_discovery_trending": "趋势社群",
+  "realm_discovery_popular_window": "过去 30 个完整 UTC 日的公开讨论活动。",
+  "realm_discovery_trending_window": "前一个完整 UTC 日的公开讨论活动。",
+  "realm_discovery_loading": "正在加载社群…",
+  "realm_discovery_empty": "此期间没有可显示的社群。",
+  "realm_discovery_page_empty": "此页没有社群，请继续查看下一页。",
+  "realm_discovery_unavailable": "目前无法加载社群，请重试。",
+  "realm_discovery_closed": "社群探索尚未开放。",
+  "realm_discovery_continue": "继续",
+  "realm_discovery_retry": "重试"
 }

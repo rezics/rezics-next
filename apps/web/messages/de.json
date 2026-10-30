@@ -2399,5 +2399,16 @@
   "order_reconcile_unavailable": "Statusprüfungen sind derzeit nicht verfügbar. Deine zuletzt bestätigte Zahlung und dein Zugriff bleiben unverändert.",
   "order_reconcile_error": "Das Ergebnis der Anfrage ist unbekannt. Versuche dieselbe Anfrage erneut.",
   "order_reconcile_denied": "Diese Statusprüfung ist nicht mehr erlaubt. Lade die Seite neu, um die aktuellen Berechtigungen zu prüfen.",
-  "order_reconcile_hint": "Fordere eine neue Prüfung dieses erfassten Kaufs an. Dadurch entsteht keine weitere Zahlung."
+  "order_reconcile_hint": "Fordere eine neue Prüfung dieses erfassten Kaufs an. Dadurch entsteht keine weitere Zahlung.",
+  "realm_discovery_popular": "Beliebte Realms",
+  "realm_discovery_trending": "Realms im Trend",
+  "realm_discovery_popular_window": "Öffentliche Diskussionen der letzten 30 abgeschlossenen UTC-Tage.",
+  "realm_discovery_trending_window": "Öffentliche Diskussionen des letzten abgeschlossenen UTC-Tages.",
+  "realm_discovery_loading": "Realms werden geladen…",
+  "realm_discovery_empty": "Für diesen Zeitraum sind keine Realms verfügbar.",
+  "realm_discovery_page_empty": "Auf dieser Seite gibt es keine Realms. Weiter zur nächsten Seite.",
+  "realm_discovery_unavailable": "Realms können nicht geladen werden. Bitte erneut versuchen.",
+  "realm_discovery_closed": "Die Realm-Entdeckung ist noch nicht geöffnet.",
+  "realm_discovery_continue": "Weiter",
+  "realm_discovery_retry": "Erneut versuchen"
 }

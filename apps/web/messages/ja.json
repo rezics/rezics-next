@@ -2399,5 +2399,16 @@
   "order_reconcile_unavailable": "現在、状況を確認できません。最後に確認された支払いとアクセスの状態は維持されます。",
   "order_reconcile_error": "依頼の結果は不明です。同じ依頼を再試行してください。",
   "order_reconcile_denied": "この確認を行う権限がなくなりました。ページを再読み込みして現在の権限を確認してください。",
-  "order_reconcile_hint": "記録済みの購入状況を改めて確認します。新たな支払いは発生しません。"
+  "order_reconcile_hint": "記録済みの購入状況を改めて確認します。新たな支払いは発生しません。",
+  "realm_discovery_popular": "人気のコミュニティ",
+  "realm_discovery_trending": "注目のコミュニティ",
+  "realm_discovery_popular_window": "直近の完了した UTC 30 日間の公開ディスカッション。",
+  "realm_discovery_trending_window": "直前の完了した UTC 1 日間の公開ディスカッション。",
+  "realm_discovery_loading": "コミュニティを読み込み中…",
+  "realm_discovery_empty": "この期間に表示できるコミュニティはありません。",
+  "realm_discovery_page_empty": "このページにコミュニティはありません。次のページをご覧ください。",
+  "realm_discovery_unavailable": "コミュニティを読み込めません。もう一度お試しください。",
+  "realm_discovery_closed": "コミュニティの探索はまだ公開されていません。",
+  "realm_discovery_continue": "次へ",
+  "realm_discovery_retry": "再試行"
 }

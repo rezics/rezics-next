@@ -2399,5 +2399,16 @@
   "order_reconcile_unavailable": "暫時無法檢查狀態。保留上次驗證的付款與存取狀態。",
   "order_reconcile_error": "請求結果未知。請重試同一請求。",
   "order_reconcile_denied": "目前已無權執行此狀態檢查。請重新整理頁面檢查目前權限。",
-  "order_reconcile_hint": "請求重新檢查這筆已記錄的購買，不會發起另一筆付款。"
+  "order_reconcile_hint": "請求重新檢查這筆已記錄的購買，不會發起另一筆付款。",
+  "realm_discovery_popular": "熱門社群",
+  "realm_discovery_trending": "趨勢社群",
+  "realm_discovery_popular_window": "過去 30 個完整 UTC 日的公開討論活動。",
+  "realm_discovery_trending_window": "前一個完整 UTC 日的公開討論活動。",
+  "realm_discovery_loading": "正在載入社群…",
+  "realm_discovery_empty": "此期間沒有可顯示的社群。",
+  "realm_discovery_page_empty": "此頁沒有社群。請繼續查看下一頁。",
+  "realm_discovery_unavailable": "目前無法載入社群，請重試。",
+  "realm_discovery_closed": "社群探索尚未開放。",
+  "realm_discovery_continue": "繼續",
+  "realm_discovery_retry": "重試"
 }

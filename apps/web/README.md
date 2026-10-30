@@ -2165,3 +2165,39 @@ Cost: create, publish, review and uncertain retry
   Commerce reads, history scan or source mutation. Native commands own admission before receipts and final disclosure.
 - Growth check: later native edition outcomes and physical checks remain required; these fixture tests claim no growth
   or promoted-source result.
+
+### Public Realm discovery
+
+`community/realm-discovery/index.ts` exports the sole `RealmDiscoverySection`, `loadRealmDiscovery` and the adopted
+`RealmDiscoverySort`, `RealmDiscoveryCard`, `RealmDiscoveryState` and `RealmDiscoverySectionProps` types. Search and
+Web import this same module for their existing placements; this delivery adds no page, shell or source caller.
+The section consumes only public state, locale and optional continue/retry callbacks. It never fetches.
+
+`loadRealmDiscovery(client, { sort, cursor?, limit? })` calls the installed generated
+`client.realms.discovery.get` once for each valid page request. Its strict closed response is `realms` plus `next`.
+It validates the native card shape and the selected image summary from `threads/board-community-source`, including
+the exact Realm/container binding and at most twelve published derivatives. The installed native response currently
+has `avatar: null`; the agreed selected-image enrichment is accepted without extra lookups. Rows use the existing
+guarded `MediaImage` and derivative site route, or initials. No account avatar, external image, count, score or
+identity tracking is introduced. Empty authored descriptions stay empty; links use localized `/realms/{realmId}`.
+
+The [native Community contract](../../services/kernel/src/community/README.md#public-realm-discovery) owns original
+qualification, complete UTC windows, ranking, expiry and current/final anonymous disclosure. Popular covers the
+previous 30 complete UTC days; Trending covers the previous complete UTC day. The client supplies no timestamp,
+Explore fallback, permission or popularity estimate. Native failures become unavailable, and `platform_closed`
+becomes closed; neither becomes an empty success. Empty pages keep their continuation. Callers replace outdated
+state, hide prior results on failures, and deduplicate Realm IDs if accumulating multiple pages.
+
+The attached [Realm discovery Pattern](src/stories/patterns/realm-discovery/realm-discovery.mdx) has the shared IDs
+`patterns-community-realm-discovery--available`, `--image`, `--initials`, `--sparse`, `--empty`, `--loading`,
+`--unavailable` and `--closed`. Sparse continues the returned page; Unavailable retries the real adapter. The fixtures
+use recorded Realm metadata and explicit source-contract responses, without claiming native rank qualification.
+They do not establish native or visual approval. Search/Web own their actual Pages IDs and placement review.
+
+Cost: public Realm discovery
+
+- Touches: one generated native GET per sort/page invocation; no per-row HTTP, account batch, permission read or refill.
+- Bound: at most `min(limit, 20)` returned cards, matching the native examined-candidate cap; native query limits remain
+  1–100 with default 20. Invalid local input sends no request. Continuations are preserved without automatic walking.
+- Growth check: later use the existing native Community discovery acceptance; the focused local boundary cases in
+  `tests/realm-discovery.test.ts` establish adapter/presentation behavior only.

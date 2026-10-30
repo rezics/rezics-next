@@ -2494,5 +2494,16 @@
   "edition_publication_open": "Open published edition",
   "edition_publication_entry_heading": "Publish this revision as an edition",
   "edition_publication_entry_help": "Create a fixed draft from this exact authored revision and one of its original subjects. Your post stays as it is.",
-  "edition_publication_entry_action": "Create a fixed edition"
+  "edition_publication_entry_action": "Create a fixed edition",
+  "realm_discovery_popular": "Popular Realms",
+  "realm_discovery_trending": "Trending Realms",
+  "realm_discovery_popular_window": "Public discussion activity over the previous 30 complete UTC days.",
+  "realm_discovery_trending_window": "Public discussion activity over the previous complete UTC day.",
+  "realm_discovery_loading": "Loading Realms…",
+  "realm_discovery_empty": "No Realms to show for this period.",
+  "realm_discovery_page_empty": "No Realms on this page. Continue to see more.",
+  "realm_discovery_unavailable": "Realms are unavailable. Try again.",
+  "realm_discovery_closed": "Realm discovery is not open yet.",
+  "realm_discovery_continue": "Continue",
+  "realm_discovery_retry": "Try again"
 }

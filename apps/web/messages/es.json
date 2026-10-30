@@ -2399,5 +2399,16 @@
   "order_reconcile_unavailable": "La comprobación no está disponible ahora. Se mantienen el último pago y acceso verificados.",
   "order_reconcile_error": "Se desconoce el resultado. Reintenta la misma solicitud.",
   "order_reconcile_denied": "Ya no tienes permiso para esta comprobación. Actualiza la página para consultar los permisos actuales.",
-  "order_reconcile_hint": "Solicita una nueva comprobación de esta compra registrada. No se crea otro pago."
+  "order_reconcile_hint": "Solicita una nueva comprobación de esta compra registrada. No se crea otro pago.",
+  "realm_discovery_popular": "Realms populares",
+  "realm_discovery_trending": "Realms en tendencia",
+  "realm_discovery_popular_window": "Discusiones públicas de los últimos 30 días UTC completos.",
+  "realm_discovery_trending_window": "Discusiones públicas del último día UTC completo.",
+  "realm_discovery_loading": "Cargando Realms…",
+  "realm_discovery_empty": "No hay Realms para mostrar en este período.",
+  "realm_discovery_page_empty": "No hay Realms en esta página. Continúa para ver más.",
+  "realm_discovery_unavailable": "Los Realms no están disponibles. Inténtalo de nuevo.",
+  "realm_discovery_closed": "El descubrimiento de Realms aún no está abierto.",
+  "realm_discovery_continue": "Continuar",
+  "realm_discovery_retry": "Reintentar"
 }
