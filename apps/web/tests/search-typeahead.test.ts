@@ -35,7 +35,13 @@ const result: SuggestionResult = {
 
 function present(state: Parameters<typeof HeaderSearchView>[0]['state']) {
   return renderToStaticMarkup(
-    createElement(HeaderSearchView, { id: 'search', state, locale: 'zh-Hans', region: null }),
+    createElement(HeaderSearchView, {
+      id: 'search',
+      state,
+      locale: 'zh-Hans',
+      region: null,
+      inputProps: { onChange() {} },
+    }),
   );
 }
 
@@ -245,9 +251,17 @@ test('keyboard wrapping and plain GET submission retain current conditions witho
   state = reduceHeaderSearchState(state, { type: 'suggestions', state: 'error' });
   const fields = searchFormFields({ type: 'schema:Book', sort: 'rating', 'f.schema:genre': ['fable'], cursor: 'old' });
   const html = renderToStaticMarkup(
-    createElement(HeaderSearchView, { id: 'search', state, fields, locale: 'en', region: null }),
+    createElement(HeaderSearchView, {
+      id: 'search',
+      state,
+      fields,
+      locale: 'en',
+      region: null,
+      inputProps: { onChange() {} },
+    }),
   );
-  expect(html).toContain('method="get" action="/en/search"');
+  expect(html).toMatch(/<form\b[^>]*method="get"/);
+  expect(html).toMatch(/<form\b[^>]*action="\/en\/search"/);
   expect(html).toContain('name="q"');
   expect(html).toContain('value="Prince &amp; fox"');
   expect(html).toContain('name="type" value="schema:Book"');
