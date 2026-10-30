@@ -200,7 +200,14 @@ test('generated smoke brief keeps its real acceptance command and WorkerTasks se
     expect(launched?.prompt).toContain(JSON.stringify([...SMOKE_ACCEPTANCE_COMMAND]));
     expect(launched?.prompt).toContain('{"status":"waiting","checks":["<bare UUID>"]}');
     expect(launched?.prompt).toContain('Do not invoke `bun scripts/worker-check.ts --wait <id>`');
-    expect(launched?.prompt).not.toMatch(/(?:run|invoke)\s+`bun scripts\/worker-check\.ts --wait/);
+    const pollingInstructions = (launched?.prompt ?? '')
+      .split(/(?<=[.!?])\s+/)
+      .filter(
+        (sentence) =>
+          /\b(?:poll(?:ing)?|--wait)\b/i.test(sentence) &&
+          !/\b(?:do not|don't|never|obsolete|superseded|previous session may contain)\b/i.test(sentence),
+      );
+    expect(pollingInstructions).toEqual([]);
   } finally {
     if (worktree && existsSync(worktree)) fixtureGit(h.root, ['worktree', 'remove', '--force', worktree]);
     if (branch) {

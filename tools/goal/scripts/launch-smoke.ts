@@ -16,7 +16,6 @@ import {
   readSync,
   renameSync,
   realpathSync,
-  rmSync,
   rmdirSync,
   statSync,
   unlinkSync,
@@ -876,14 +875,25 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
   let branch = '';
   let worktreeAdded = false;
   let devWorktreeAdded = false;
-  const saveRunEvidence = (extra: Record<string, unknown> = {}) =>
+  const saveRunEvidence = (extra: Record<string, unknown> = {}) => {
+    let previous: Record<string, unknown> = {};
+    try {
+      if (existsSync(runEvidencePath)) {
+        const value: unknown = JSON.parse(readFileSync(runEvidencePath, 'utf8'));
+        if (value && typeof value === 'object' && !Array.isArray(value)) previous = value as Record<string, unknown>;
+      }
+    } catch {
+      // Replace an incomplete prior write with the current bounded facts.
+    }
     saveSmokeEvidence(runEvidencePath, {
+      ...previous,
       runId,
       candidate,
       startedAt: new Date(startedAt).toISOString(),
       stage: currentStep,
       ...extra,
     });
+  };
   persistReport(root, reportPath, evidence);
   saveRunEvidence();
   report(`evidence: ${reportPath}`);
@@ -1029,7 +1039,27 @@ async function runRealSmoke(root: string, report: Reporter, requestedReportPath?
         report(detail);
       }
     }
-    if (cleanupErrors.length && !failed) throw new Error(cleanupErrors[0]);
+    if (cleanupErrors.length) {
+      try {
+        saveRunEvidence({ cleanupErrors, cleanupFailedAt: new Date().toISOString() });
+      } catch (evidenceError) {
+        report(`run evidence: failed: ${message(evidenceError)}`);
+      }
+      if (!failed) {
+        const detail = cleanupErrors[0]!;
+        try {
+          const current = existsSync(reportPath) ? readReport(reportPath) : evidence;
+          current.status = 'failed';
+          current.finishedAt = new Date().toISOString();
+          current.failure = { step: 'cleanup', detail, classification: 'failure' };
+          upsertScenario(current, { id: 'smoke-step-cleanup', status: 'failed', detail });
+          persistReport(root, reportPath, current);
+        } catch {
+          // Report the owned cleanup failure even if the lifecycle evidence cannot be updated.
+        }
+        throw new Error(detail);
+      }
+    }
   }
 }
 
@@ -1306,7 +1336,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   };
   try {
     const frontMatter = launchSmokeBrief(workerCheckScript);
-    const brief = parseBrief(frontMatter, readRiskOwnership(settings.riskAreasFile));
+    parseBrief(frontMatter, readRiskOwnership(settings.riskAreasFile));
     const briefPath = join(stateDirectory, 'briefs', `${randomUUID()}.md`);
     mkdirSync(dirname(briefPath), { recursive: true });
     writeFileSync(briefPath, frontMatter, { flag: 'wx' });
