@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { nativeFixture, password, scopes } from './support/erasure-native.ts';
+import { issuer, nativeFixture, password, scopes } from './support/erasure-native.ts';
 import { AUTH_SYSTEM_SCHEMA } from '../src/maintenance.ts';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import { nativeErasurePage, startNativeErasure } from '../src/erasure-native.ts';
+import { createHash, randomBytes } from 'node:crypto';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { WEBSITE_CLIENT_ID, type PublicJwks } from '../src/index.ts';
 
 async function eventually(probe: () => Promise<boolean>, timeout = 30_000) {
   const until = Date.now() + timeout;
@@ -36,6 +39,76 @@ test('existing deletion caller drains real Auth stores before user deletion; def
         [`owned-token-${i}-`, client, survivor.accountId],
       );
     }
+    // Use the pinned native provider for real opaque code, family and assertion
+    // evidence. A second unconsumed code exercises the client-side exact locator.
+    const clientKey = await generateKeyPair('ES256', { extractable: true });
+    const redirect = `${issuer}/website/callback`;
+    await f.host.service.internal.registerWebsiteClient({
+      publicJwks: {
+        keys: [{ ...(await exportJWK(clientKey.publicKey)), kid: 'native-client', alg: 'ES256', use: 'sig' }],
+      } as PublicJwks,
+      redirectUris: [redirect],
+      postLogoutRedirectUris: [`${issuer}/`],
+      scopes: ['openid', 'offline_access', 'media:complete'],
+    });
+    await f.pool.query('UPDATE auth_client SET "userId"=$1 WHERE client_id=$2', [owner, WEBSITE_CLIENT_ID]);
+    async function authorize(cookie: string) {
+      const verifier = randomBytes(48).toString('base64url');
+      const url = new URL(`${issuer}/authorize`);
+      url.search = new URLSearchParams({
+        client_id: WEBSITE_CLIENT_ID,
+        redirect_uri: redirect,
+        response_type: 'code',
+        scope: 'openid offline_access media:complete',
+        state: 'native-erasure',
+        nonce: 'native-erasure',
+        code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+        code_challenge_method: 'S256',
+        resource: 'https://native-erasure.api.test',
+      }).toString();
+      const response = await f.host.handler(new Request(url, { headers: { cookie } }));
+      expect([302, 303]).toContain(response.status);
+      const code = new URL(response.headers.get('location')!).searchParams.get('code');
+      expect(code).toBeTruthy();
+      return { code: code!, verifier };
+    }
+    const code = await authorize(victim.cookie);
+    const now = Math.floor(Date.now() / 1000);
+    const assertion = await new SignJWT({})
+      .setProtectedHeader({ alg: 'ES256', kid: 'native-client' })
+      .setIssuer(WEBSITE_CLIENT_ID)
+      .setSubject(WEBSITE_CLIENT_ID)
+      .setAudience(issuer)
+      .setIssuedAt(now)
+      .setExpirationTime(now + 120)
+      .setJti('native-erasure-assertion')
+      .sign(clientKey.privateKey);
+    const exchange = await f.host.handler(
+      new Request(`${issuer}/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: WEBSITE_CLIENT_ID,
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+          client_assertion: assertion,
+          grant_type: 'authorization_code',
+          code: code.code,
+          code_verifier: code.verifier,
+          redirect_uri: redirect,
+          resource: 'https://native-erasure.api.test',
+        }),
+      }),
+    );
+    expect(exchange.status).toBe(200);
+    expect(((await exchange.json()) as { refresh_token?: string }).refresh_token).toBeString();
+    await authorize(survivor.cookie);
+    expect(
+      (await f.pool.query('SELECT 1 FROM "oauthRefreshFamily" WHERE erasure_account_id=$1', [owner])).rowCount,
+    ).toBeGreaterThan(0);
+    expect(
+      (await f.pool.query('SELECT 1 FROM "oauthClientAssertion" WHERE erasure_client_id=$1', [WEBSITE_CLIENT_ID]))
+        .rowCount,
+    ).toBe(1);
     const actingSession = (
       await f.pool.query<{ id: string }>('SELECT id FROM session WHERE "userId"=$1', [survivor.accountId])
     ).rows[0]!.id;
@@ -135,6 +208,16 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     }
     for (const { key } of counterKeys)
       expect((await f.pool.query('SELECT 1 FROM auth_attempt_counter WHERE key=$1', [key])).rowCount).toBe(0);
+    for (const [table, column] of [
+      ['oauthAccessToken', 'clientId'],
+      ['oauthRefreshToken', 'clientId'],
+      ['oauthRefreshFamily', 'clientId'],
+      ['oauthClientAssertion', 'erasure_client_id'],
+      ['verification', 'erasure_client_id'],
+    ] as const)
+      expect((await f.pool.query(`SELECT 1 FROM "${table}" WHERE "${column}"=$1`, [WEBSITE_CLIENT_ID])).rowCount).toBe(
+        0,
+      );
     expect(
       (await f.pool.query('SELECT id FROM "oauthAccessToken" WHERE "clientId" LIKE $1 LIMIT 1', ['owned-%'])).rowCount,
     ).toBe(0);
