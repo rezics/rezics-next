@@ -2660,11 +2660,50 @@ existing generic effects. Scoped execution production and stale application writ
 `readHistoryOwnerCoverage` / `verifyHistoryOwnerCoverage` with opaque WeakMap process capabilities. Exact receiving
 proofs bind the barrier, physical locator, full role union and current partition epoch; verification locks the proof
 and source on the account-home final command. Source loss alone produces no proof. Outbox slots with effect consumers remain pending receiving-copy binding
-even after business completion; generic DBOS inputs/results are not erased by completing an effect. Family coverage reads report
-actual registry/progress gaps. No owner coverage capability is issued yet: the current router has individual home
-epochs but no aggregate invalidation proof through final commit. An earlier verified home could move during later
-units. The runtime therefore records `routing-aggregate-proof-unavailable` after otherwise complete native pages
-rather than issuing a stale aggregate certificate. Final shared-history ACK remains unavailable.
+even after business completion; generic DBOS inputs/results are not erased by completing an effect. Family coverage uses a separate durable selected-family aggregate, never local job completion or an ACK.
+`HistoryRegistry.registerFamilySources(family, version, sources)` declares the complete current/former producer
+catalogue (at most 100 entries). Each entry fixes an artifact type, native producer name and producer version.
+The declaration and `registerCoverage` cannot enroll historical sources or certify an empty prefix.
+
+The default module in `history/work.ts` preserves the existing local worker and adds native family progress.
+It captures the finite configured local `core.partition` domain and its routing generation. Each operational segment
+visits one native home and reads at most 100 **raw**, unfiltered locator keys. Empty prefixes require the same native
+source enrollment as occupied ones. It checks every configured producer's immutable original erasure version/time,
+source cut, definition digest and current home epoch; a missing former producer is an exact family-specific gap.
+Selected copies require the existing actual receiving proof, physical minimization/retirement and full role union.
+Known foreign producers do not block an independent selected family; unresolved provenance stays pending.
+The bootstrap reads at most 100 existing native history jobs per unit, with insertion admission covering late jobs.
+Cursors survive restarts. Request reads perform only bounded exact aggregate/root/version key reads.
+
+`core.history_family_enrollment` is the remaining **producer-owner native input**, not a public assertion port.
+For each family, account root, configured physical home and current/former producer, its owner must enroll:
+`{family, account_route, account_id, partition_no, artifact_type, producer, producer_version,
+definition_digest, barrier_version, barrier_at, partition_epoch, source_cut}`. `source_cut` is a least-required opaque
+locator (1–256 bytes) for that owner's actual sealed historical source inventory. The owner must first capture all
+original/receiving role associations, retained deidentified dispositions and late-writer/handoff intents under its
+native fences. The receiving worker validates the root, sealed native prefix and source versions and consumes the
+actual copy proofs; it never manufactures this owner enrollment from registry declarations, current rows or Source
+terminal proof alone. Native enrollment does not replace the consumer's independent Source proof.
+
+Semantic and Zones must supply their actual current/former source declarations and native enrollment from their
+sealed Source inventory, including empty prefixes, before their family result can complete. Their modules currently
+supply neither input. Other unconverted producer families retain their own registry/enrollment gaps. The local
+aggregate cannot certify a foreign physical store or an unavailable cross-home writer fence: the owner must leave
+its enrollment absent in that scope. This delivery does not claim those owner integrations or full native acceptance.
+
+The opaque result binds the copied original root, selected family and durable proof identity. On the **same real
+account-home final command**, verification locks the genuine current aggregate, source definition, original erasure,
+account fence and native routing generation through commit. Native role/receiving/enrollment/physical-copy changes
+invalidate the account fence; routing, epoch/restore, source definition and registry changes invalidate the domain.
+A newly associated account invalidates the entire copied artifact's role union. Spread/cloned capabilities, wrong
+roots/families/homes and changed versions refuse. Sealed native roles and minimized payloads remain irreversible.
+No global, Search or Semantic final ACK is called or emitted by this path. Final shared-history ACK remains unavailable.
+
+Cost: one physical home and at most 100 raw locator keys per operational segment, with at most 64 role keys per
+selected artifact and a fixed producer catalogue bound of 100; native index seeks are `O(log R)`. No request performs
+an all-home, account, role or body scan. Source and home coverage is finite operational work. Final reads lock only
+exact root, definition, registry, domain, fence, home and aggregate keys. Original shared-history native correctness
+and cost debt, including measured growth evidence and full native acceptance, remains deferred under minimal mode.
 
 Access captures current/new/former direct native grant occurrences before destructive mutation, with original creator
 and resource type retained separately. Initialization reads its committed-in-transaction rows after the sibling CTEs

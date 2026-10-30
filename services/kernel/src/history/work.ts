@@ -1,9 +1,19 @@
-// Compatibility export for existing callers; the default native worker owns all history progress.
-export { sharedHistoryWorkModule as preferenceHistoryWorkModule } from '../access/shared-history-work.ts';
-
 import type { Pool } from 'pg';
 import { prepareRecordPurgeAuthority } from '../semantic/record-purge-authority.ts';
 import { minimizeRecordHistoryPurge, prepareRecordHistoryPurge } from './record-purge.ts';
+import { sharedHistoryWorkModule as localHistoryWorkModule } from '../access/shared-history-work.ts';
+import { registerHistoryFamilyCoverage } from './family-coverage-work.ts';
+import type { WorkModule } from '../work/registry.ts';
+
+/** Preserve the delivered local minimizers and add the independent selected-family aggregate. */
+export const sharedHistoryWorkModule: WorkModule = {
+  name: 'shared_history',
+  async register(context) {
+    await localHistoryWorkModule.register(context);
+    registerHistoryFamilyCoverage(context);
+  },
+};
+export { sharedHistoryWorkModule as preferenceHistoryWorkModule };
 
 /** Redrive one existing native record job from its durable source locator. A restart always
  * reissues the real native authority; saved source observations never authorize payload changes. */

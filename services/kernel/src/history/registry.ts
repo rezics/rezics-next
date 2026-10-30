@@ -32,11 +32,33 @@ export const HISTORY_PRODUCER_FAMILIES = Object.freeze([
 ] as const);
 export type HistoryProducerFamily = (typeof HISTORY_PRODUCER_FAMILIES)[number];
 
+/** The owner's complete current AND former native producer inventory. This declaration does
+ * not enroll historical data. Each configured home needs separate native source enrollment. */
+export type HistoryFamilySource = Readonly<{
+  artifactType: HistoryArtifactType;
+  producer: string;
+  version: number;
+}>;
+export type HistoryFamilyDefinition = Readonly<{
+  family: HistoryProducerFamily;
+  version: number;
+  sources: readonly HistoryFamilySource[];
+  digest: string;
+}>;
+
+/** Native producer namespaces with unambiguous ownership. Other names require the owner's
+ * explicit manifest; they never acquire a Semantic family merely by elimination. */
+export function nativeHistoryProducerFamily(producer: string): HistoryProducerFamily | undefined {
+  const namespace = producer.startsWith('com.rezics.') ? producer.slice(11).split('.')[0] : producer.split('.')[0];
+  return HISTORY_PRODUCER_FAMILIES.find((family) => family === namespace);
+}
+
 /** A registration is an owner declaration of conversion, never an absence proof. Local sealed
  * prefixes, native consumers and Auth completion are checked separately by the receiving runtime. */
 export class HistoryRegistry {
   private readonly owners = new Map<string, HistoryOwner>();
   private readonly coverage = new Map<string, ReadonlySet<HistoryArtifactType>>();
+  private readonly families = new Map<HistoryProducerFamily, HistoryFamilyDefinition>();
   private closed = false;
 
   registerOwner(owner: HistoryOwner): void {
@@ -56,6 +78,31 @@ export class HistoryRegistry {
 
   owner(type: HistoryArtifactType, name: string): HistoryOwner | undefined {
     return this.owners.get(`${type}:${name}`);
+  }
+
+  registerFamilySources(family: HistoryProducerFamily, version: number, sources: readonly HistoryFamilySource[]): void {
+    if (this.closed || !HISTORY_PRODUCER_FAMILIES.includes(family) || this.families.has(family) ||
+      !Number.isSafeInteger(version) || version < 1 || version > 2147483647 || sources.length === 0 || sources.length > 100)
+      throw new TypeError('Invalid native history family definition');
+    const keys = new Set<string>();
+    const fixed = sources.map((source) => {
+      historyArtifact(source.artifactType);
+      const key = `${source.artifactType}:${source.producer}`;
+      if (!/^[a-z][a-z0-9_.-]{0,95}$/.test(source.producer) || keys.has(key) ||
+        !Number.isSafeInteger(source.version) || source.version < 1 || source.version > 2147483647 ||
+        (nativeHistoryProducerFamily(source.producer) !== undefined && nativeHistoryProducerFamily(source.producer) !== family) ||
+        [...this.families.values()].some((definition) => definition.sources.some(
+          (other) => other.artifactType === source.artifactType && other.producer === source.producer)))
+        throw new TypeError('Invalid native history family producer');
+      keys.add(key);
+      return Object.freeze({ artifactType: source.artifactType, producer: source.producer, version: source.version });
+    }).sort((a, b) => a.artifactType.localeCompare(b.artifactType) || a.producer.localeCompare(b.producer));
+    const digest = createHash('sha256').update(JSON.stringify([family, version, fixed])).digest('hex');
+    this.families.set(family, Object.freeze({ family, version, sources: Object.freeze(fixed), digest }));
+  }
+
+  familyDefinitions(): readonly HistoryFamilyDefinition[] {
+    return [...this.families.values()].sort((a, b) => a.family.localeCompare(b.family));
   }
 
   gaps(): readonly string[] {
@@ -78,6 +125,7 @@ export class HistoryRegistry {
             .map(({ name, artifactType, version }) => [artifactType, name, version])
             .sort(),
           coverage: [...this.coverage].map(([family, types]) => [family, [...types].sort()]).sort(),
+          families: this.familyDefinitions(),
         }),
       )
       .digest('hex');

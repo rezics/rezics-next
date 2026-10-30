@@ -5,6 +5,7 @@ import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { commandHistoryKind } from './record.ts';
 import { encodeLocator, validateLocator, validateScope } from './locator.ts';
+import { lockNativeFamilyCoverage, type NativeFamilyCoverage } from './family-coverage-state.ts';
 import {
   HISTORY_PRODUCER_FAMILIES,
   type HistoryArtifact,
@@ -30,11 +31,9 @@ type ReceiptBinding = Readonly<{
   epoch: number;
 }>;
 const receipts = new WeakMap<HistoryReceivingReceipt, ReceiptBinding>();
-// Owner coverage capabilities will be issued only from a native aggregate proof with routing
-// invalidation. Local prefix EOF and a registry declaration cannot mint that proof.
 const coverages = new WeakMap<
   HistoryOwnerCoverage,
-  Readonly<{ barrier: HistoryBarrier; family: HistoryProducerFamily }>
+  Readonly<{ barrier: HistoryBarrier; family: HistoryProducerFamily; native: NativeFamilyCoverage }>
 >();
 
 function validateBarrier(barrier: HistoryBarrier): void {
@@ -331,32 +330,24 @@ export async function readHistoryOwnerCoverage(
   validateBarrier(barrier);
   if (!HISTORY_PRODUCER_FAMILIES.includes(family)) throw new TypeError('Unknown history producer family');
   historyDeadline(context, partitionOf(barrier.accountRoute));
+  const fixedBarrier = Object.freeze({ ...barrier });
   return withConnection(deps.pool, async (tx) => {
-    if (!(await lockHistoryBarrier(tx, barrier))) throw new TypeError('History barrier mismatch');
-    const registry = (await tx.query<{ gaps: string[] }>('SELECT gaps FROM core.history_registry WHERE singleton=true'))
-      .rows[0];
-    if (!registry) return { state: 'pending', gaps: ['producer-registry-unavailable'] };
-    const gaps = registry.gaps.filter((gap) => gap.startsWith(`${family}:`));
-    if (gaps.length) return { state: 'pending', gaps };
-    const job = (
-      await tx.query(
-        `SELECT phase,gap FROM core.preference_history_job WHERE account_route=$1 AND account_id=$2
-       AND barrier_id=$2 AND barrier_version=$3 AND barrier_at=$4`,
-        [barrier.accountRoute, barrier.accountId, barrier.version, barrier.at],
-      )
-    ).rows[0];
-    historyDeadline(context, partitionOf(barrier.accountRoute));
-    return {
-      state: 'pending',
-      gaps: [
-        job?.gap ??
-          (job?.phase === 'complete'
-            ? 'routing-aggregate-proof-unavailable'
-            : job
-              ? 'sealed-owner-coverage-incomplete'
-              : 'sealed-owner-coverage-unavailable'),
-      ],
-    };
+    await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    try {
+      await tx.query("SELECT set_config('statement_timeout',$1,true)", [
+        `${Math.max(1, context.deadline - Date.now())}ms`,
+      ]);
+      const result = await lockNativeFamilyCoverage(tx, fixedBarrier, family);
+      historyDeadline(context, partitionOf(fixedBarrier.accountRoute));
+      await tx.query('COMMIT');
+      if (result.state === 'pending') return result;
+      const coverage = Object.freeze({}) as HistoryOwnerCoverage;
+      coverages.set(coverage, { barrier: fixedBarrier, family, native: result.binding });
+      return { state: 'complete', coverage };
+    } catch (error) {
+      await tx.query('ROLLBACK');
+      throw error;
+    }
   });
 }
 
@@ -374,7 +365,27 @@ export async function verifyHistoryOwnerCoverage(
     currentCommand(tx).partition !== partitionOf(barrier.accountRoute)
   )
     return false;
-  // No aggregate proof issuer is installed until routing invalidation and complete historical
-  // producer inventory exist. In particular, a forged/spread value never reaches this branch.
-  return false;
+  const current = await lockNativeFamilyCoverage(tx, barrier, family);
+  return current.state === 'complete' && current.binding.proofId === binding.native.proofId &&
+    current.binding.domain === binding.native.domain && current.binding.revision === binding.native.revision &&
+    current.binding.definition === binding.native.definition;
+}
+
+/** Operational use only. Reuses the exact artifact receiving proof and source locks. */
+export async function recordHistoryFamilyArtifactWatch(
+  tx: CommandTransaction, barrier: HistoryBarrier, artifact: HistoryArtifact,
+): Promise<boolean> {
+  if (!(await nativeReceipt(tx, barrier, artifact))) return false;
+  const locator = artifact.locator;
+  const sourceKey = locator.artifactType === 'command-receipt/v1'
+    ? [locator.principalKind, locator.principalId, commandHistoryKind(locator.commandKindId),
+      `rk1.${locator.keyVersion}.${Buffer.from(locator.keyToken, 'hex').toString('base64url')}`]
+    : locator.artifactType === 'outbox-event/v1'
+      ? [locator.position.toString(), locator.eventSeq] : [locator.workId];
+  await tx.query(
+    `INSERT INTO core.history_family_watch(partition_no,artifact_type,locator,source_key)
+     VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+    [artifact.partition, locator.artifactType, Buffer.from(encodeLocator(locator)), JSON.stringify(sourceKey)],
+  );
+  return true;
 }
