@@ -21,6 +21,8 @@ import { AccountSafetyCard } from './account-safety';
 import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
 import { SectionsNavigation, settingsSections } from './sections-navigation';
+import { ManagedAccountDetail } from './managed-account-detail';
+import { managedAccountTarget, managedAccountsBackHref } from './managed-account-detail-read';
 
 function SettingsFailure({
   state,
@@ -97,6 +99,7 @@ function SettingsSections({
   const [version, setVersion] = useState('preferences' in page ? page.preferences.version : 0);
   const formCsrfToken = page.csrfToken ?? csrfToken;
   const notificationError = new URL(location.publicHref, 'https://rezics.local').searchParams.has('notificationError');
+  const managedTarget = managedAccountTarget(location.publicHref);
   useEffect(() => {
     if ('preferences' in page) setVersion((current) => Math.max(current, page.preferences.version));
   }, [page]);
@@ -179,14 +182,20 @@ function SettingsSections({
           <PublicViewsSection />
         </section>
         <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
-          <AccountSafetyCard
-            state="signed-in"
-            securityHref={page.securityHref}
-            renameAccount={page.renameAccount ?? null}
-            csrfToken={formCsrfToken}
-            onReload={() => window.location.reload()}
-          />
-          <ManagedAccountsSection io={managedAccountsIO} />
+          {managedTarget !== undefined ? (
+            <ManagedAccountDetail accountId={managedTarget} backHref={managedAccountsBackHref(location.publicHref)} />
+          ) : (
+            <>
+              <AccountSafetyCard
+                state="signed-in"
+                securityHref={page.securityHref}
+                renameAccount={page.renameAccount ?? null}
+                csrfToken={formCsrfToken}
+                onReload={() => window.location.reload()}
+              />
+              <ManagedAccountsSection io={managedAccountsIO} />
+            </>
+          )}
         </section>
       </div>
     </div>

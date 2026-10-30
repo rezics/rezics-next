@@ -2547,5 +2547,12 @@
   "library_follow_counts_retry_at": "請在 {value} 後重試。",
   "library_follow_counts_context_help": "從資源的管理選單開啟追蹤者數量，即可查看其私人總數。",
   "library_follow_counts_invalid_context": "此資源的連結資訊無效，請從資源的管理選單重新開啟。",
-  "library_follow_counts_reload": "重新載入數量"
+  "library_follow_counts_reload": "重新載入數量",
+  "settings_managed_detail_identity_unavailable": "無法取得身分資料",
+  "settings_managed_unavailable": "無法查詢此帳號。帳號可能暫時無法使用，或不在你目前的存取權限內。請重試。",
+  "settings_managed_first_page": "第一頁",
+  "settings_managed_read_only": "以你目前登入的身分檢視私人帳號資料，僅供讀取。",
+  "settings_managed_detail_loading": "正在載入帳號資料…",
+  "settings_managed_responsibilities_unavailable": "此帳號的責任資料無法使用，或你尚未獲得檢視權限。",
+  "settings_managed_observation": "這些是目前觀察到的關係。現有關係或仍在核對中的責任，都不能證明帳號操作已完成。"
 }

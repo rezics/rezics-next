@@ -2548,5 +2548,12 @@
   "library_follow_counts_retry_at": "请在 {value} 后重试。",
   "library_follow_counts_context_help": "从资源的管理菜单打开关注者数量，即可查看其私人总数。",
   "library_follow_counts_invalid_context": "此资源的链接信息无效，请从资源的管理菜单重新打开。",
-  "library_follow_counts_reload": "重新加载数量"
+  "library_follow_counts_reload": "重新加载数量",
+  "settings_managed_detail_identity_unavailable": "无法获取身份资料",
+  "settings_managed_unavailable": "无法查询此账号。账号可能暂时无法使用，或不在你当前的访问权限内。请重试。",
+  "settings_managed_first_page": "第一页",
+  "settings_managed_read_only": "以你当前登录的身份查看私人账号资料，仅供读取。",
+  "settings_managed_detail_loading": "正在加载账号资料…",
+  "settings_managed_responsibilities_unavailable": "此账号的责任资料不可用，或你尚未获得查看权限。",
+  "settings_managed_observation": "这些是当前观察到的关系。现有关系或仍在核对中的责任，都不能证明账号操作已完成。"
 }
