@@ -19,6 +19,66 @@ request-time alias recovery, repeated home sweeps and final leaf replay are no l
 code and frozen tests are unchanged by this prose adoption. Native batch, byte/string and cursor limits keep their
 independent units and scope. No replacement executable signature, discriminant, counter ABI or schema is selected.
 
+## Existing-owner native capture and custody
+
+[`native-source-custody.ts`](../services/kernel/src/library/native-source-custody.ts) is the closed lower
+Library seam. `createNativeLibrarySourceCustody({pool, clock?})` exports these exact calls:
+
+- `capturePage({identity, frontier, limit, allowance, deadline})` returns `pending` with raw dependency rows,
+  a persisted `NativeSourceFrontier` and work, or typed `unavailable`.
+- `finishCapture({identity, frontier, allowance, deadline})` returns `complete` with opaque
+  `NativeSourceCapture` and work only after the native receipt transaction commits, or `unavailable`.
+- `readAndHold({client, at, identity, captureId, holdId, allowance, deadline})` returns `held` with opaque
+  `NativeSourceCustody` and work, or `unavailable`. `client` is the actual Core `CommandTransaction` query
+  capability, including its private live attempt registration; `at` is that command's `AuthoritativeTime`.
+- `releaseHold({client, at, identity, captureId, holdId, allowance, deadline})` returns `released` with
+  work, or `unavailable`. Releasing the same real hold again is idempotent under its exact owner fences.
+
+`NativeSourceIdentity` contains `route`, `collectionId`, `accountId`, native `incarnation`, source
+`generation`, `scope` (`curated` or `private_builtin`), `ownerEpoch`, `receivingEpoch` and `effectKey`.
+These are lookup hints, never evidence or admission. Receiving owns the meaning/currentness of its epoch and
+planned/accepted record; the native seam requires exact equality to the committed capture's binding.
+`NativeSourceCaptureWork` carries the existing `WorkAllowance` and unchanged absolute deadline. Every result,
+including insufficient allowance and missing evidence, carries the consumed `WorkReceipt`.
+
+The native incarnation is the existing Collection ID plus its exact native creation epoch, as used by native
+metadata. A capture is bound to the active Collection, its native curator, the active unfenced account and the
+current active, unmoved partition epoch. Source and account must occupy that same native partition; this seam
+cannot promise a cross-owner hold. Ordinary caller/source/subject authorization remains with the consumer's
+existing Access boundary. Neither these metadata nor a successful custody read grant disclosure permission.
+
+A raw page scans at most 100 native rows, before eligibility filtering. Its frontier contains the capture ID,
+actual driver, native `after` and stable `tie`, current session parent where needed, total `scanned` and persisted
+`version`. The owner verifies every frontier field before advancing it. Curated occurrence order uses native
+ordinal plus member ID, including retained occurrences. Other ranges cover live and retained entries, personal
+labels, every assignment (including excluded/unreserved assignments), sessions and their unit/change children,
+copies including retained copies, and account-owned published logs. Child pages stay anchored to one already
+scanned native session; they never search other owners to discover dependencies. Publication tombstones without
+an account or subject carry no dependency. No subject normalization or eligibility classifier runs here.
+
+`native_source_fence` holds only route-leading native writer counters. Every insert/update/delete of these
+owner rows, including raw reorder/rebalance, retained deletion/restoration, Collection activation and participant
+writes, advances the corresponding control in that same transaction. Session child writes fence their native
+parent account. Capture pages compare both Collection and account controls; finalization repeats the checks under
+native shared row locks. The final receipt increments the actual active Core partition fence and commits with the
+completed frontier. Consumption rereads the receipt and capture, verifies their same-transaction native provenance
+and current owner position/epoch, and refuses a receipt from the consuming transaction itself.
+
+`readAndHold` retains native partition, account, source and writer-control locks on the receiving command's own
+client through adoption. No connection or callback crosses an owner checkout, and no process-local token or lock
+establishes durable proof. The hold locator references only that committed native custody. Releasing it changes
+only hold metadata, preserving facts, shared history and receipt provenance. An intervening native fact change
+invalidates capture/holding; it does not give this seam authority to withdraw or purge a public destination, or
+acknowledge destination disposition. Releasing an existing hold tolerates later fact/source generations while
+requiring its original capture binding, source incarnation/ownership and current owner/account fences.
+
+Public/unlisted dynamic and frozen output remain `unavailable` with `output_authority`: there is no committed native
+published Collection output generation/receipt authority to capture. The published-log dependency range is not
+that authority. Cross-partition owner holds also remain unavailable. This seam imports no identity receiving,
+scoped observation, coordinator, canonical Source store or Library participant. Scoped protocols and canonical
+Source remain separate authorities. Export presence and local compilation do not establish native physical-plan,
+full-row payload, acceptance, integration or main readiness; those proofs are deferred to controller checks.
+
 ## Authority and source selection
 
 One Library owner selects the same native truth:
