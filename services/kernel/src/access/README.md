@@ -1376,6 +1376,28 @@ freeze assignments or public identity state.
   releases that row. An active owner may reclaim it through the ordinary rename workflow, while deleted accounts and
   other accounts cannot. The same growth check covers this forwarding and retirement path.
 
+### Public Account canonical targets
+
+`account-canonical-targets.ts` exports `PublicAccountCanonicalTarget` with only
+`{accountId, accountKind: 'actor' | 'organization', handle: string | null, canonicalPath: string | null}` and
+`readPublicAccountCanonicalTargets(deps: SummaryReaderDependencies, subjectIds)` returning a map with explicit
+nulls. It validates and deduplicates at most 100 full routed input keys before I/O, groups native pointer and
+Account reads by home, and always hydrates through the actual anonymous Account discovery summary reader.
+Semantic retains ordinary Subject discovery/listability and its feed constructor; null proves neither.
+
+A positive requires reciprocal current Account, page-pointer and Semantic account-agent links with the same
+verification receipt, plus the delivered `semantic/identity-epoch-read.ts:readIdentityMappings` publication
+guard for both the derived agent and the requested terminal. Stored verification flags and legacy redirects
+alone cannot satisfy it. Missing, pending or unavailable required publication authority throws typed
+unavailability. No provisional replacement of the native reader is installed. Completing legacy verification's
+native publication remains the Semantic verification producer's responsibility.
+
+Native source revisions, exact claim revisions, reciprocal links and publication epochs are collected again
+after released foreign hydration; a changed candidate is withheld. Active unfenced Accounts with former,
+pending, missing or foreign claims remain valid identities with null handle/navigation. Only an exact current
+active claim supplies `/@${encodeURIComponent(handle)}`. A handleless identity has no public URL. These are
+readonly facts, with no writer, disclosure-policy, catalogue-identity or operator-identity substitution.
+
 ### Public activity view port
 
 - Access exports `readPublicViews(client, accountIds): Promise<Map<string, PublicViews>>` for Content and Commerce.

@@ -20,12 +20,14 @@ type AccountRow = {
   operatorId: string | null;
   avatar: string | null;
   agent: string | null;
+  agentReceipt: string | null;
 };
 type ClaimRow = { route: number; handle: string; id: string; revision: string };
 const columns = `route, account_id::text AS id, kind AS "accountKind", handle,
   display_name AS "displayName", discovery_revision::text AS revision,
   operator_account_id::text AS "operatorId", avatar::text,
-  CASE WHEN agent_verified THEN agent_subject_id::text END AS agent`;
+  CASE WHEN agent_verified THEN agent_subject_id::text END AS agent,
+  CASE WHEN agent_verified THEN agent_verification_receipt_id::text END AS "agentReceipt"`;
 
 function partitionKey(partition: number): void {
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095)
@@ -226,6 +228,9 @@ export async function readAccountDiscoveryBindings(pool: Pool, partition: number
           row.id,
           {
             revision: BigInt(row.revision),
+            handle: exactHandle(row, found),
+            // Native reciprocal-link facts only, not publication or Subject eligibility.
+            agent: row.agent && row.agentReceipt ? { subjectId: row.agent, receiptId: row.agentReceipt } : null,
             claim: exact ? { route: exact.route, revision: BigInt(exact.revision) } : null,
             consumedClaimRevision: BigInt(consumed?.revision ?? '0'),
           },
