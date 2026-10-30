@@ -88,8 +88,9 @@ export async function writeTarget(client: KernelClient, authorization: string, i
   if (current.profile.kind !== 'organization' && input.patch.speakersListed !== undefined)
     return { ok: false as const, status: 400, message: '' };
   // PATCH evaluates current actor/principal/assignment/floor, grants, operator and consent natively at command T.
+  const headers = { authorization, 'idempotency-key': input.idempotencyKey, 'cache-control': 'no-store' };
   const result = await client.accounts({ accountId: input.accountId }).patch(input.patch as ProfilePatch, {
-    headers: { authorization, 'idempotency-key': input.idempotencyKey, 'cache-control': 'no-store' },
+    headers,
     fetch: { cache: 'no-store' },
   });
   if (result.error || !result.data)
