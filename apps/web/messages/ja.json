@@ -1023,6 +1023,8 @@
   "inbox_kind_reply": "返信",
   "inbox_kind_mention": "メンション",
   "inbox_kind_moderation": "モデレーション結果",
+  "inbox_notice_unread": "未読の通知",
+  "inbox_notice_read": "既読の通知",
   "inbox_actor_unknown": "コミュニティメンバー",
   "inbox_actor_moderation": "モデレーションチーム",
   "inbox_empty": "新しい通知はありません。",

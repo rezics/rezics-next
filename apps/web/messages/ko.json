@@ -1023,6 +1023,8 @@
   "inbox_kind_reply": "답글",
   "inbox_kind_mention": "멘션",
   "inbox_kind_moderation": "검토 결과",
+  "inbox_notice_unread": "읽지 않은 알림",
+  "inbox_notice_read": "읽은 알림",
   "inbox_actor_unknown": "커뮤니티 회원",
   "inbox_actor_moderation": "검토 팀",
   "inbox_empty": "새 알림이 없습니다.",

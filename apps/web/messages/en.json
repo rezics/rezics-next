@@ -1053,6 +1053,8 @@
   "inbox_kind_reply": "Reply",
   "inbox_kind_mention": "Mention",
   "inbox_kind_moderation": "Moderation outcome",
+  "inbox_notice_unread": "Unread notification",
+  "inbox_notice_read": "Read notification",
   "inbox_actor_unknown": "Community member",
   "inbox_actor_moderation": "Moderation team",
   "inbox_empty": "You are all caught up.",

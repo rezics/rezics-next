@@ -27,70 +27,76 @@ export function InboxRows({
   onLoadMore?: () => void;
   loading?: boolean;
 }) {
+  const locale = getLocale();
+  const exactDate = new Intl.DateTimeFormat(locale, {
+    dateStyle: 'full',
+    timeStyle: 'long',
+    timeZone: 'UTC',
+  });
   return (
     <>
       <ol aria-label={m.inbox_heading()} className="mt-6 space-y-1">
-        {page.items.map((item) => (
-          <ListRow
-            key={item.id}
-            data-notice-id={item.id}
-            data-unread={item.unread}
-            data-kind={item.reportId ? 'report_outcome' : item.kind}
-            data-actor-id={item.actorId ?? undefined}
-            className={`flex items-start gap-3 py-4 ${item.unread ? 'bg-muted/50' : ''}`}
-          >
-            {item.actorId ? (
-              <Avatar aria-hidden="true" size="sm" className="mt-0.5 shrink-0">
-                <AvatarFallback>{initials(item.actorId)}</AvatarFallback>
-              </Avatar>
-            ) : (
-              <span
-                data-icon-kind={item.reportId ? 'report_outcome' : item.kind}
-                aria-hidden="true"
-                className="mt-1 shrink-0 text-muted-foreground"
-              >
-                {item.reportId ? (
-                  <Flag aria-hidden="true" size={18} />
-                ) : item.kind === 'moderation_decision' ? (
-                  <Gavel aria-hidden="true" size={18} />
-                ) : (
-                  <MessageCircleReply aria-hidden="true" size={18} />
-                )}
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              {item.unavailable ? (
-                <p className="text-sm text-muted-foreground">{m.inbox_unavailable_item()}</p>
-              ) : item.href ? (
-                <>
-                  <ListRowLink href={item.href}>{item.text}</ListRowLink>
-                  <p aria-hidden="true" className="text-sm leading-6">
-                    {item.text}
-                  </p>
-                </>
+        {page.items.map((item) => {
+          const href = item.unavailable ? undefined : item.href;
+          const actorId = item.unavailable ? null : item.actorId;
+          const actor =
+            (!item.unavailable && item.actorName) ||
+            (item.actorId ? m.inbox_actor_unknown() : m.inbox_actor_moderation());
+          const kind = kindLabel(item);
+          const text = item.unavailable ? m.inbox_unavailable_item() : item.text;
+          const readState = item.unread ? m.inbox_notice_unread() : m.inbox_notice_read();
+          const date = exactDate.format(new Date(item.createdAt));
+          return (
+            <ListRow
+              key={item.id}
+              data-notice-id={item.id}
+              data-unread={item.unread}
+              data-kind={item.reportId ? 'report_outcome' : item.kind}
+              data-actor-id={actorId ?? undefined}
+              className={`flex items-start gap-3 py-4 ${item.unread ? 'bg-muted/50' : ''}`}
+            >
+              {actorId ? (
+                <Avatar aria-hidden="true" size="sm" className="mt-0.5 shrink-0">
+                  <AvatarFallback>{initials(actorId)}</AvatarFallback>
+                </Avatar>
               ) : (
-                <p className="text-sm leading-6">{item.text}</p>
+                <span
+                  data-icon-kind={item.reportId ? 'report_outcome' : item.kind}
+                  aria-hidden="true"
+                  className="mt-1 shrink-0 text-muted-foreground"
+                >
+                  {item.reportId ? (
+                    <Flag aria-hidden="true" size={18} />
+                  ) : item.kind === 'moderation_decision' ? (
+                    <Gavel aria-hidden="true" size={18} />
+                  ) : (
+                    <MessageCircleReply aria-hidden="true" size={18} />
+                  )}
+                </span>
               )}
-              <span className="sr-only">{item.unread ? 'Unread notification' : 'Read notification'}</span>
-              <span className="mt-1 block text-xs text-muted-foreground">
-                <span data-notice-byline="true">
-                  {item.actorName || (item.actorId ? m.inbox_actor_unknown() : m.inbox_actor_moderation())}
+              {href ? (
+                <ListRowLink href={href}>{[text, actor, kind, readState, date].join('. ')}</ListRowLink>
+              ) : null}
+              {/* Linked rows announce the same content once through the stretched primary link. */}
+              <div aria-hidden={href ? true : undefined} className="min-w-0 flex-1">
+                <p className={item.unavailable ? 'text-sm text-muted-foreground' : 'text-sm leading-6'}>{text}</p>
+                {!href ? <span className="sr-only">{readState}</span> : null}
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  <span data-notice-byline="true">
+                    {actor}
+                    <span aria-hidden="true"> · </span>
+                    {kind}
+                  </span>
                   <span aria-hidden="true"> · </span>
-                  {kindLabel(item)}
+                  <span aria-hidden="true">
+                    <RelativeTime value={item.createdAt} locale={locale} timeZone="UTC" />
+                  </span>
+                  {!href ? <span className="sr-only">{date}</span> : null}
                 </span>
-                <span aria-hidden="true"> · </span>
-                <RelativeTime value={item.createdAt} locale={getLocale()} timeZone="UTC" />
-                <span className="sr-only">
-                  {new Intl.DateTimeFormat(getLocale(), {
-                    dateStyle: 'full',
-                    timeStyle: 'long',
-                    timeZone: 'UTC',
-                  }).format(new Date(item.createdAt))}
-                </span>
-              </span>
-            </div>
-          </ListRow>
-        ))}
+              </div>
+            </ListRow>
+          );
+        })}
       </ol>
       {page.next && onLoadMore ? (
         <Button variant="outline" className="mt-5" onClick={onLoadMore} disabled={loading}>

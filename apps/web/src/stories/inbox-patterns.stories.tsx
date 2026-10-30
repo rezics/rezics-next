@@ -5,6 +5,7 @@ import { InboxPageView } from '../inbox/inbox-page';
 import { readInboxPage, type InboxPage } from '../inbox/inbox-read';
 import { UnreadBadgeView } from '../inbox/unread-badge';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PatternStory } from './page';
 
 const meta = {
@@ -178,5 +179,59 @@ export const ModeratorResponse: Story = {
     await list.findByText(m.inbox_unavailable_item());
     await expect(list.queryByRole('link')).toBeNull();
     await expect(list.queryByText('Repeated advertising in this discussion.')).toBeNull();
+  },
+};
+
+export const RowAnnouncements: Story = {
+  render: () => <Example fixture="row-overlay" />,
+  play: async ({ canvasElement }) => {
+    const list = within(await within(canvasElement).findByRole('list'));
+    const rows = list.getAllByRole('listitem');
+    await expect(rows.map((row) => row.getAttribute('data-unread'))).toEqual(['true', 'false']);
+    for (const row of rows) {
+      const link = within(row).getByRole('link');
+      const content = row.querySelector('p')!.textContent;
+      const byline = row.querySelector('[data-notice-byline]')!.textContent!.replace(' · ', '. ');
+      const state = row.dataset.unread === 'true' ? m.inbox_notice_unread() : m.inbox_notice_read();
+      const time = row.querySelector('time')!;
+      const date = new Intl.DateTimeFormat(getLocale(), {
+        dateStyle: 'full',
+        timeStyle: 'long',
+        timeZone: 'UTC',
+      }).format(new Date(time.dateTime));
+      await expect(link).toHaveAccessibleName([content, byline, state, date].join('. '));
+      await expect(time).toBeVisible();
+      await expect(time.parentElement).toHaveAttribute('aria-hidden', 'true');
+      await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      await expect(link.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+    }
+    await userEvent.tab();
+    await expect(list.getAllByRole('link')[0]).toHaveFocus();
+    await userEvent.tab();
+    await expect(list.getAllByRole('link')[1]).toHaveFocus();
+  },
+};
+
+export const UnavailableRowAnnouncement: Story = {
+  render: () => <Example fixture="unavailable" />,
+  play: async ({ canvasElement }) => {
+    const list = within(await within(canvasElement).findByRole('list'));
+    const row = within(list.getByRole('listitem'));
+    await expect(row.queryByRole('link')).toBeNull();
+    await expect(row.getByText(m.inbox_unavailable_item())).toBeVisible();
+    const byline = list.getByRole('listitem').querySelector('[data-notice-byline]')!;
+    await expect(byline).toBeVisible();
+    await expect(byline).toHaveTextContent(m.inbox_actor_moderation());
+    await expect(row.getByText(m.inbox_notice_read())).not.toHaveAttribute('aria-hidden', 'true');
+    await expect(byline).toHaveTextContent(m.inbox_kind_moderation());
+    const time = list.getByRole('listitem').querySelector('time')!;
+    const date = new Intl.DateTimeFormat(getLocale(), {
+      dateStyle: 'full',
+      timeStyle: 'long',
+      timeZone: 'UTC',
+    }).format(new Date(time.dateTime));
+    await expect(row.getByText(date)).not.toHaveAttribute('aria-hidden', 'true');
+    await expect(time).toBeVisible();
+    await expect(time.parentElement).toHaveAttribute('aria-hidden', 'true');
   },
 };

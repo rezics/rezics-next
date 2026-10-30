@@ -1023,6 +1023,8 @@
   "inbox_kind_reply": "Respuesta",
   "inbox_kind_mention": "Mención",
   "inbox_kind_moderation": "Resultado de moderación",
+  "inbox_notice_unread": "Notificación sin leer",
+  "inbox_notice_read": "Notificación leída",
   "inbox_actor_unknown": "Miembro de la comunidad",
   "inbox_actor_moderation": "Equipo de moderación",
   "inbox_empty": "Estás al día.",

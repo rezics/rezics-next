@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser } from 'playwright';
 import { m } from '../src/paraglide/messages.js';
+import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -114,4 +115,92 @@ test('the inbox list has no accessibility violations', async () => {
   );
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
+});
+
+test('linked notices announce their resolved content, actor, kind, current read state and exact date once in every launch locale', async () => {
+  const previousLocale = getLocale();
+  const items: Item[] = [
+    { ...linked, actorName: '桃子' },
+    { ...linked, id: 'read-mention', kind: 'mention', unread: false, actorName: 'あおい', text: 'A mention' },
+  ];
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const catalog = JSON.parse(await readFile(new URL(`../messages/${locale}.json`, import.meta.url), 'utf8'));
+      expect(m.inbox_notice_unread()).toBe(catalog.inbox_notice_unread);
+      expect(m.inbox_notice_read()).toBe(catalog.inbox_notice_read);
+      if (locale !== 'en') {
+        expect(catalog.inbox_notice_unread).not.toBe('Unread notification');
+        expect(catalog.inbox_notice_read).not.toBe('Read notification');
+      }
+      const date = new Intl.DateTimeFormat(locale, {
+        dateStyle: 'full',
+        timeStyle: 'long',
+        timeZone: 'UTC',
+      }).format(new Date(timestamp));
+      // Reverse the order too: read state belongs to the notice, never its position.
+      for (const ordered of [items, items.toReversed()]) {
+        const html = markup(ordered);
+        const links = [...html.matchAll(/<a\b[^>]*data-slot="list-row-link"[^>]*>([\s\S]*?)<\/a>/g)];
+        expect(links).toHaveLength(2);
+        for (const [index, item] of ordered.entries()) {
+          const state = item.unread ? catalog.inbox_notice_unread : catalog.inbox_notice_read;
+          const kind = item.kind === 'mention' ? catalog.inbox_kind_mention : catalog.inbox_kind_reply;
+          const announcement = [item.text, item.actorName, kind, state, date].join('. ');
+          expect(links[index]![1]).toBe(
+            renderToStaticMarkup(createElement('span', { className: 'sr-only' }, announcement)),
+          );
+          expect(html.split(state)).toHaveLength(2);
+        }
+        expect(html.match(/<div aria-hidden="true" class="min-w-0 flex-1">/g)).toHaveLength(2);
+        expect(html.match(/<span aria-hidden="true"><time/g)).toHaveLength(2);
+      }
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
+});
+
+test('plain and unavailable notices retain localized announcements without restoring stale destination, text or identity', () => {
+  const previousLocale = getLocale();
+  const hidden: Item = {
+    ...unavailable,
+    unread: true,
+    actorId: 'stale-private-actor',
+    actorName: 'Stale private name',
+    href: '/threads/stale-private-target',
+    text: 'Stale private text',
+  };
+  try {
+    for (const locale of ['ja', 'zh-Hans'] as const) {
+      setLocale(locale, { reload: false });
+      const html = markup([plain, hidden]);
+      const rows = [...html.matchAll(/<li\b[^>]*data-slot="list-row"[^>]*>[\s\S]*?<\/li>/g)].map((match) => match[0]!);
+      expect(rows).toHaveLength(2);
+      expect(html).not.toContain('<a');
+      expect(html).not.toContain('stale-private');
+      expect(html).not.toContain('Stale private');
+      expect(rows[0]).toContain(m.inbox_notice_read());
+      expect(rows[0]).toContain(m.inbox_actor_moderation());
+      expect(rows[1]).toContain(m.inbox_notice_unread());
+      expect(rows[1]).toContain(m.inbox_actor_unknown());
+      expect(rows[1]).toContain(m.inbox_unavailable_item());
+      expect(rows[1]).toContain('data-unread="true"');
+      expect(rows[1]).not.toContain('data-actor-id');
+      const date = new Intl.DateTimeFormat(locale, {
+        dateStyle: 'full',
+        timeStyle: 'long',
+        timeZone: 'UTC',
+      }).format(new Date(timestamp));
+      for (const row of rows) {
+        expect(row).toContain(m.inbox_kind_moderation());
+        expect(row.split(date)).toHaveLength(2);
+        expect(row).toContain('<span aria-hidden="true"><time');
+        expect(row).not.toContain('<div aria-hidden="true"');
+        expect(row).not.toMatch(/cursor-pointer/);
+      }
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
 });

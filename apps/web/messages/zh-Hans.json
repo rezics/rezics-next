@@ -1024,6 +1024,8 @@
   "inbox_kind_reply": "回复",
   "inbox_kind_mention": "提及",
   "inbox_kind_moderation": "审核结果",
+  "inbox_notice_unread": "未读通知",
+  "inbox_notice_read": "已读通知",
   "inbox_actor_unknown": "社区成员",
   "inbox_actor_moderation": "审核团队",
   "inbox_empty": "目前没有新通知。",

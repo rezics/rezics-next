@@ -1023,6 +1023,8 @@
   "inbox_kind_reply": "回覆",
   "inbox_kind_mention": "提及",
   "inbox_kind_moderation": "審核結果",
+  "inbox_notice_unread": "未讀通知",
+  "inbox_notice_read": "已讀通知",
   "inbox_actor_unknown": "社群成員",
   "inbox_actor_moderation": "審核團隊",
   "inbox_empty": "目前沒有新通知。",
