@@ -467,7 +467,7 @@ const mediaDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const mediaLength = t.Integer({ minimum: 1, maximum: 20 * 1024 * 1024 });
 const imageDimension = t.Integer({ minimum: 1 });
 export const DocumentMediaInputSchema = t.Object(
-  { ids: t.Array(t.String({ pattern: `${ContentIdSchema.pattern}(?![\\s\\S])` }), {
+  { ids: t.Array(t.Intersect([ContentIdSchema, t.String({ minLength: 36, maxLength: 36 })]), {
     minItems: 1, maxItems: 32, uniqueItems: true,
   }) },
   closed,
