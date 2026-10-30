@@ -22,6 +22,7 @@ import {
   launchSmokeBrief,
   main,
   observeSmokeAdapter,
+  parseSmokeArguments,
   requireSmokeWaitingCheckId,
   resolveSmokeReportPath,
   runLaunchSmoke,
@@ -32,11 +33,11 @@ import {
 } from '../scripts/launch-smoke.ts';
 import { launchSmokeRequired } from './merge-train.ts';
 import { codexAdapter } from './agents/codex.ts';
-import { fixturePool, git as fixtureGit, harness, reading } from './test-support.ts';
+import { fixturePool, harness, reading } from './test-support.ts';
 import { loadSettings, mainCheckout } from './config.ts';
 import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { classifyTask, readRouting } from './routing.ts';
-import { WorkerTasks } from './tasks.ts';
+import { git as fixtureGit, WorkerTasks } from './tasks.ts';
 
 test('smoke evidence observes actual start and resume argv without exposing prompts or account configuration', () => {
   const disposable = createSmokeDirectory(root, 'launch-smoke-test-');
@@ -258,7 +259,7 @@ test('real worker-check starts the generated acceptance command once and its ret
     expect(start.status).toBe(0);
     const id = /check: id ([0-9a-f-]{36})/i.exec(start.stdout)?.[1];
     const returnedId = requireSmokeWaitingCheckId(id === undefined ? [] : [id]);
-    expect(returnedId).toBe(id);
+    expect(returnedId).toBe(id!);
     expect(() => requireSmokeWaitingCheckId([])).toThrow('one bare worker-check UUID');
     expect(() => requireSmokeWaitingCheckId(['<id>'])).toThrow('one bare worker-check UUID');
 
@@ -397,9 +398,7 @@ test('launch smoke path list covers the launch path, schema, agents, and prompt 
   expect(launchSmokeRequired(['tools/goal/src/landing.ts'])).toBe(false);
 });
 
-import { existsSync, readFileSync } from 'node:fs';
 import { openDb } from './db.ts';
-import { parseBrief, readRiskOwnership } from './briefs.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { MergeTrain } from './merge-train.ts';
 import { git } from './merge.ts';
