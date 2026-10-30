@@ -450,19 +450,58 @@ function packageScript(cwd: string, script: string): string | undefined {
 function testFilesNeedStack(args: readonly string[], cwd: string): boolean {
   let directory = cwd;
   const files: string[] = [];
+  const selectors = new Set(['-t', '--test-name-pattern']);
+  const preloadOptions = new Set(['--preload', '--require', '-r']);
+  const valueOptions = new Set([
+    '--bail',
+    '--coverage-dir',
+    '--coverage-reporter',
+    '--coverage-threshold',
+    '--max-concurrency',
+    '--rerun-each',
+    '--timeout',
+  ]);
+  let optionsEnded = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
-    if (argument === '--cwd' && args[index + 1]) {
-      directory = resolve(cwd, args[index + 1]!);
-      index += 1;
+    if (!optionsEnded && argument === '--') {
+      optionsEnded = true;
       continue;
     }
-    if (argument.startsWith('--cwd=')) {
-      directory = resolve(cwd, argument.slice('--cwd='.length));
+    if (!optionsEnded && (argument === '--cwd' || argument.startsWith('--cwd='))) {
+      const value = argument === '--cwd' ? args[index + 1] : argument.slice('--cwd='.length);
+      if (!value) return true;
+      directory = resolve(cwd, value);
+      if (argument === '--cwd') index += 1;
       continue;
     }
-    if (argument.startsWith('-') || /[*?{}\[\]]/.test(argument)) continue;
-    if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(argument)) files.push(resolve(directory, argument));
+    if (!optionsEnded && argument.startsWith('-')) {
+      const separator = argument.indexOf('=');
+      const option = separator < 0 ? argument : argument.slice(0, separator);
+      const inlineValue = separator >= 0;
+      if (selectors.has(option) || valueOptions.has(option) || preloadOptions.has(option)) {
+        const value = inlineValue ? argument.slice(separator + 1) : args[index + 1];
+        if (value === undefined) return true;
+        if (!inlineValue) index += 1;
+        if (preloadOptions.has(option)) {
+          if (
+            /[*?{}\[\]]/.test(value) ||
+            isNativeStackPath(resolve(directory, value)) ||
+            isNativeScript(resolve(directory, value)) ||
+            (!value.startsWith('.') && !value.startsWith('/') && !value.includes('/') && !value.includes('\\'))
+          )
+            return true;
+        }
+      }
+      continue;
+    }
+    if (/[*?{}\[\]]/.test(argument)) return true;
+    if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(argument)) {
+      files.push(resolve(directory, argument));
+      continue;
+    }
+    // Extra positional arguments can discover tests or supply an unresolved file or directory.
+    return true;
   }
   if (files.length === 0 || isNativeStackPath(directory)) return true;
   return files.some((file) => isNativeStackPath(file) || isNativeScript(file));

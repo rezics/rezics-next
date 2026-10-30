@@ -21,7 +21,7 @@ import {
   startWorkerCheck,
   waitWorkerCheck,
 } from './worker-check.ts';
-import { checkClass, recordPeak } from './check-memory.ts';
+import { checkClass, checkMemoryWeight, recordPeak } from './check-memory.ts';
 
 const dirs: string[] = [];
 const repository = join(import.meta.dir, '..');
@@ -730,6 +730,7 @@ test('stack-free placement: cwd and env wrappers retain command meaning and ambi
   expect(await needsStack(['bun', 'test', importerFile, 'services/kernel/test'])).toBe(true);
   expect(await needsStack(['bun', 'test', importerFile, '--preload', 'services/kernel/test/preload.ts'])).toBe(true);
   expect(await needsStack(['bun', 'test', importerFile, '--require', 'services/kernel/test/preload.ts'])).toBe(true);
+  expect(await needsStack(['bun', 'test', importerFile, '--preload=services/kernel/test/preload.ts'])).toBe(true);
   expect(await needsStack(['bun', 'test', join(repository, 'services/kernel/test/native.test.ts')])).toBe(true);
   expect(await needsStack(['bun', 'test', 'test/native.test.ts'], join(repository, 'services/kernel'))).toBe(true);
   expect(await needsStack(['bun', 'run', '--cwd=services/kernel', 'check'])).toBe(true);
@@ -788,19 +789,20 @@ test('stack-free placement: a real managed local check completes while every fak
     testFile,
     `import { writeFileSync } from 'node:fs';\nimport { expect, test } from 'bun:test';\ntest('local importer evidence', () => { const lease = process.env.REZICS_CHECK_MEMORY_LEASE; expect(lease).toBeTruthy(); writeFileSync(${JSON.stringify(marker)}, lease!); console.log('local importer evidence ran'); });\n`,
   );
-  writeFileSync(hosts, JSON.stringify({ hosts: [{ name: 'busy', slots: 0 }] }));
+  writeFileSync(hosts, JSON.stringify({ hosts: [{ name: 'unavailable', slots: 0 }] }));
   const command = ['bun', 'test', file];
   const commandClass = checkClass(command, fixture.root);
   const holder = await acquireStackSlot('held local memory slot', {
-    REZICS_STACK_SLOTS: '1',
+    REZICS_STACK_SLOTS: '4',
     REZICS_STACK_LEASE_DIR: fixture.memory,
-  });
+  }, 4);
   let id: string | undefined;
   let waiting: Promise<number> | undefined;
   try {
     workerEnv(fixture, hosts);
-    process.env.REZICS_CHECK_MEMORY_GIB = '1';
-    process.env.WORKER_REMOTE_MODE = 'queued';
+    expect(existsSync(join(fixture.memory, 'peaks.json'))).toBe(false);
+    expect(checkMemoryWeight([], 4)).toBe(4);
+    process.env.WORKER_REMOTE_MODE = 'transport';
     id = startWorkerCheck(command, fixture.root);
     const resultDirectory = join(fixture.root, '.temp/goal/checks/results');
     const recordFile = join(resultDirectory, `${id}.json`);
@@ -811,8 +813,10 @@ test('stack-free placement: a real managed local check completes while every fak
       stallMs: 5_000,
       write: (line) => report.push(line),
     });
-    await untilRecorded(() => readFileSync(recordLog, 'utf8').includes(`${commandClass} waiting (1/1 held, 0 ahead)`));
+    await untilRecorded(() => readFileSync(recordLog, 'utf8').includes(`${commandClass} waiting (4/4 held, 0 ahead)`));
     expect(existsSync(marker)).toBe(false);
+    expect(existsSync(fixture.remoteEvents)).toBe(false);
+    expect(existsSync(fixture.remoteArgs)).toBe(false);
     await holder.release();
     expect(await waiting).toBe(0);
     const record = JSON.parse(readFileSync(recordFile, 'utf8')) as {
@@ -826,7 +830,8 @@ test('stack-free placement: a real managed local check completes while every fak
     expect(readFileSync(marker, 'utf8')).not.toBe('missing');
     expect(report.join('')).toContain('check: exit status 0');
     expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('local importer evidence ran');
-    expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('waiting (1/1 held, 0 ahead)');
+    expect(readFileSync(join(fixture.root, record.log), 'utf8')).toContain('waiting (4/4 held, 0 ahead)');
+    expect(readFileSync(join(fixture.root, record.log), 'utf8')).toMatch(/slots \(4\/4\) after \d+ ms/);
     expect(readFileSync(join(fixture.root, record.log), 'utf8')).not.toContain('remote-check:');
     expect(existsSync(fixture.remoteEvents)).toBe(false);
   } finally {
