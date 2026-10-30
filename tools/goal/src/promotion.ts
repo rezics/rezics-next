@@ -32,9 +32,9 @@ const STABILIZE_QUICK_GATE = [
 ] as const;
 const ref = (branch: string) => `refs/heads/${branch}`;
 function sourceDevBranch(settings: Settings): string {
-  return optionalHead(settings.mainCheckout, 'dev-verified') === undefined
-    ? settings.integrationBranch
-    : 'dev-verified';
+  // 'dev-verified' records verifier progress and known findings; promotion always freezes the latest integration head
+  // and must pass its own full candidate gate.
+  return settings.integrationBranch;
 }
 function isAncestor(cwd: string, older: string, newer: string): boolean {
   try {
