@@ -1,12 +1,17 @@
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { actionOnReport } from './actions';
-import { BoardReportQueue } from '../stories/patterns/board-report-queue/board-report-queue';
+import { BoardReportQueue, type ReportQueueAction } from '../stories/patterns/board-report-queue/board-report-queue';
 import type { Report, ReportedRevision, ResolvedReportTarget } from './reports-read';
 import { PageHeading } from '../shell/page-heading';
 
 export { moderationTargetContent } from '../stories/patterns/board-report-queue/target-content';
 export type ModerationTarget = ResolvedReportTarget;
+
+const submitReportAction: ReportQueueAction = async (data) => {
+  await actionOnReport({ data, headers: csrfHeaders() });
+  location.reload();
+};
 
 export function ModerationReportsView({
   reports,
@@ -17,6 +22,7 @@ export function ModerationReportsView({
   threadId,
   postId,
   onNext,
+  onAction = submitReportAction,
 }: {
   reports: Report[];
   targets: ModerationTarget[];
@@ -26,6 +32,7 @@ export function ModerationReportsView({
   threadId?: string;
   postId?: string;
   onNext?: (cursor: string) => void;
+  onAction?: ReportQueueAction;
 }) {
   const filters = [
     threadId ? `thread=${encodeURIComponent(threadId)}` : '',
@@ -62,10 +69,7 @@ export function ModerationReportsView({
         reports={reports}
         targets={targets}
         revisions={revisions}
-        onAction={async (data) => {
-          await actionOnReport({ data, headers: csrfHeaders() });
-          location.reload();
-        }}
+        onAction={onAction}
       />
       {next ? (
         <button type="button" className="rounded-md border px-4 py-2" onClick={() => onNext?.(next)}>

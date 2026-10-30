@@ -23,7 +23,7 @@ const targets = [
 ];
 const revisions = [{ reportId: report.id, value: { post: { body: 'Original reported text.' } } }];
 const meta = {
-  title: 'Patterns/Community/Board report queue',
+  title: 'Patterns/Moderation Queue',
   component: BoardReportQueue,
   parameters: {
     layout: 'padded',

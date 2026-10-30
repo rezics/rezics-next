@@ -1,9 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { ModerationAppealsView } from '../moderation/appeals-tab';
 import { ModerationReportsView } from '../moderation/reports-page';
+import type { ReportActionInput } from '../moderation/actions';
+import { m } from '../paraglide/messages.js';
+import { moderationQueueFixture, resolvedQueueFixture } from './patterns/moderation-queue.stories';
 
 const meta = {
   title: 'Pages/Community/Moderation reports',
+  component: ModerationReportsView,
   parameters: {
     layout: 'fullscreen',
     viewport: {
@@ -13,114 +18,43 @@ const meta = {
       },
     },
   },
-} satisfies Meta;
+  args: {
+    ...moderationQueueFixture,
+    next: 'cursor-next',
+    onNext: fn(),
+    onAction: fn(async (_input: ReportActionInput): Promise<void> => {
+      throw new TypeError('Failed to fetch');
+    }),
+  },
+} satisfies Meta<typeof ModerationReportsView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const postReport = {
-  id: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
-  target: { kind: 'post' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000050' },
-  revisionId: null,
-  reason: 'Contains personal information that should not be public.',
-  evidence: null,
-  createdAt: '2026-10-28T15:30:00.000Z',
-  outcome: null,
-  resolvedAt: null,
-};
-const threadReport = {
-  ...postReport,
-  id: '0192f3a0-6c1e-7b2a-9d4e-000000000002',
-  target: { kind: 'thread' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000051' },
-  reason: 'The thread appears to be advertising.',
-};
-const targets = [
-  {
-    key: `post:${postReport.target.id}`,
-    kind: 'post' as const,
-    value: {
-      post: {
-        body: {
-          version: 'rezics-document-v1',
-          profile: 'blocks',
-          doc: {
-            type: 'doc',
-            content: [
-              {
-                type: 'paragraph',
-                attrs: { id: 'moderation-report-post' },
-                content: [
-                  {
-                    type: 'text',
-                    text: 'A sample reported post with enough text to show how a moderator reviews the target.',
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      },
-    },
+export const OpenReports: Story = {
+  name: 'Open reports',
+  play: async ({ canvasElement, args }) => {
+    const view = within(canvasElement);
+    await expect(view.getByRole('navigation', { name: m.moderation_tabs_label() })).toBeVisible();
+    await expect(view.getAllByRole('textbox', { name: m.moderation_reason_label() })).toHaveLength(2);
+    await userEvent.type(view.getAllByRole('textbox')[0]!, 'Private address disclosure.');
+    await userEvent.click(view.getAllByRole('button', { name: m.moderation_take_down() })[0]!);
+    await expect(await view.findByRole('alert')).toHaveTextContent(m.moderation_action_failed());
+    await expect(view.getAllByRole('textbox')[0]!).toHaveValue('Private address disclosure.');
+    await userEvent.click(view.getByRole('button', { name: m.threads_next_page() }));
+    await expect(args.onNext).toHaveBeenCalledWith('cursor-next');
   },
-  {
-    key: `thread:${threadReport.target.id}`,
-    kind: 'thread' as const,
-    value: { thread: { title: 'A reported thread with an unavailable promise' } },
+};
+
+export const ResolvedReports: Story = {
+  name: 'Resolved reports',
+  args: { ...resolvedQueueFixture, next: null },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByText(m.moderation_actioned())).toBeVisible();
+    await expect(view.getByText(m.moderation_dismissed())).toBeVisible();
+    await expect(view.queryByRole('textbox')).toBeNull();
+    await expect(view.queryByRole('button')).toBeNull();
   },
-];
-
-function makeStory(
-  state: 'open' | 'resolved',
-  locale: 'en' | 'zh-Hans' = 'en',
-  theme: 'light' | 'dark' = 'light',
-  regression = false,
-) {
-  const reports =
-    state === 'open'
-      ? [postReport, threadReport]
-      : [
-          { ...postReport, outcome: 'actioned' as const, resolvedAt: '2026-10-29T08:30:00.000Z' },
-          { ...threadReport, outcome: 'dismissed' as const, resolvedAt: '2026-10-29T08:45:00.000Z' },
-        ];
-  return {
-    globals: { locale, theme },
-    ...(regression ? { tags: ['!dev'] } : {}),
-    render: () => (
-      <ModerationReportsView reports={reports} targets={targets} next={state === 'open' ? 'cursor-next' : null} />
-    ),
-  } satisfies Story;
-}
-
-export const OpenReports: Story = { name: 'Open reports', ...makeStory('open') };
-export const OpenReportsDark: Story = {
-  name: 'Open reports',
-  tags: ['!dev'],
-  ...makeStory('open', 'en', 'dark', true),
-};
-export const OpenReportsChinese: Story = {
-  name: 'Open reports',
-  tags: ['!dev'],
-  ...makeStory('open', 'zh-Hans', 'light', true),
-};
-export const OpenReportsChineseDark: Story = {
-  name: 'Open reports',
-  tags: ['!dev'],
-  ...makeStory('open', 'zh-Hans', 'dark', true),
-};
-export const ResolvedReports: Story = { name: 'Resolved reports', ...makeStory('resolved') };
-export const ResolvedReportsDark: Story = {
-  name: 'Resolved reports',
-  tags: ['!dev'],
-  ...makeStory('resolved', 'en', 'dark', true),
-};
-export const ResolvedReportsChinese: Story = {
-  name: 'Resolved reports',
-  tags: ['!dev'],
-  ...makeStory('resolved', 'zh-Hans', 'light', true),
-};
-export const ResolvedReportsChineseDark: Story = {
-  name: 'Resolved reports',
-  tags: ['!dev'],
-  ...makeStory('resolved', 'zh-Hans', 'dark', true),
 };
 
 const appeal = {
@@ -131,21 +65,13 @@ const appeal = {
   createdAt: '2026-10-29T14:20:00.000Z',
   decision: {
     statement: 'The post includes a private phone number.',
-    target: { kind: 'post' as const, id: postReport.target.id },
+    target: { kind: 'post' as const, id: moderationQueueFixture.reports[0]!.target.id },
   },
   canResolve: true,
 };
 
-function appealStory(locale: 'en' | 'zh-Hans', viewport: 'phone390' | 'desktop1280') {
-  return {
-    name: `appeals · ${locale} · ${viewport}`,
-    globals: { locale, theme: 'light' },
-    parameters: { viewport: { defaultViewport: viewport } },
-    render: () => <ModerationAppealsView appeals={[appeal]} targets={targets} next={null} />,
-  } satisfies Story;
-}
-
-export const AppealsEnglishPhone: Story = appealStory('en', 'phone390');
-export const AppealsEnglishDesktop: Story = appealStory('en', 'desktop1280');
-export const AppealsChinesePhone: Story = appealStory('zh-Hans', 'phone390');
-export const AppealsChineseDesktop: Story = appealStory('zh-Hans', 'desktop1280');
+export const Appeals: Story = {
+  render: () => (
+    <ModerationAppealsView appeals={[appeal]} targets={moderationQueueFixture.targets} next={null} />
+  ),
+};
