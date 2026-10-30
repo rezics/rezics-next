@@ -44,7 +44,7 @@ test('ordinary CLI holds acquisition ownership until cancellation and rejects on
   const fetchBoundary = (async (url: Request | string | URL) => {
     requests.push(url instanceof Request ? url.url : String(url));
     throw new Error('Acquisition must not reach HTTP');
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   function hold(alias: string) {
     const controller = new AbortController();
     controllers.push(controller);
@@ -137,6 +137,17 @@ test('ordinary CLI holds acquisition ownership until cancellation and rejects on
     }
     expect(owners('books-a')).toBeNull();
     expect(owners('books-b')).toBeNull();
+    const invalid = await runImportCli(args('books-a'), {
+      stdin: {
+        async *[Symbol.asyncIterator]() {
+          yield new TextEncoder().encode('malformed native TSV\n');
+        },
+      },
+      fetch: fetchBoundary,
+    });
+    expect(invalid.code).toBe(2);
+    expect(invalid.openHandles).toBe(0);
+    expect(owners('books-a')).toBeNull();
     expect(requests).toEqual([]);
   } finally {
     for (const controller of controllers) controller.abort();

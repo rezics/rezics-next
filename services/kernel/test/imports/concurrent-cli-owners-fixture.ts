@@ -507,13 +507,13 @@ export async function runConcurrentCliOwnersJourney() {
     expect((await stat(state)).mode & 0o777).toBe(0o600);
     for (const db of databases) expect(() => db.query('SELECT 1').get()).toThrow();
     const db = new Database(state, { readonly: true });
-    let remainingOwners: { count: number };
+    let remainingOwners: unknown[];
     try {
-      remainingOwners = db.query('SELECT count(*) AS count FROM import_owners').get() as { count: number };
+      remainingOwners = db.query('SELECT source FROM import_owners WHERE source IN (?,?)').all(a, b);
     } finally {
       db.close();
     }
-    const openHandlesAtEnd = invocations.reduce((n, i) => n + i.result!.openHandles, remainingOwners.count);
+    const openHandlesAtEnd = invocations.reduce((n, i) => n + i.result!.openHandles, remainingOwners.length);
     console.log(
       'concurrent CLI native evidence',
       JSON.stringify({
