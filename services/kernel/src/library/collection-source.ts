@@ -5,6 +5,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
+import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 
 /** Shared caller-ledger dimensions. These types allocate no budget and implement no ledger. */
@@ -193,6 +194,7 @@ export interface CollectionSource {
   readRawStoredPrefix(
     input: CollectionSourceCall & { readonly afterStoredSubjectId: string | null },
   ): Promise<RawStoredCollectionPrefix>;
+  readRawOrdinalPrefix(input: ReadRawOrdinalCollectionPrefix): Promise<RawOrdinalCollectionPrefix>;
 }
 
 /**
@@ -212,5 +214,6 @@ export function createCollectionSource(_dependencies: {
     prefix: unavailable,
     containsSubject: unavailable,
     readRawStoredPrefix: unavailable,
+    readRawOrdinalPrefix: unavailable,
   };
 }

@@ -10,14 +10,36 @@ specializes Collection obligations for shared Search/Zone composition, not a new
 The exported `createCollectionSource` factory in
 [`collection-source.ts`](../services/kernel/src/library/collection-source.ts) throws retryable
 `ProblemError('dependency_unavailable')` from every method. It does no query, mutation, identity production or
-readiness simulation. Its typed `prepare`, `prefix`, `containsSubject` and `readRawStoredPrefix` surface and outcome
-driver interfaces do not establish native capability.
+readiness simulation. Its typed `prepare`, `prefix`, `containsSubject`, `readRawStoredPrefix` and
+`readRawOrdinalPrefix` surface and outcome driver interfaces do not establish native capability.
 
 Old exported identity-basis, sealed-repair, alias-window and one-pending-group protocols are superseded list
 scaffolding until replacement native acceptance permits removal. The universal 256 raw-key ledger, exhaustive
 request-time alias recovery, repeated home sweeps and final leaf replay are no longer list requirements. Existing
 code and frozen tests are unchanged by this prose adoption. Native batch, byte/string and cursor limits keep their
-independent units and scope. No replacement executable signature, discriminant, counter ABI or schema is selected.
+independent units and scope. Apart from the raw ordinal callable below, no replacement executable signature,
+discriminant, counter ABI or schema is selected.
+
+## Raw native ordinal callable
+
+[`collection-source-order.ts`](../services/kernel/src/library/collection-source-order.ts) owns the exported
+`NativeOrdinalKey`, `NativeOrdinalFrontier`, `NativeOrdinalRow`, `RawOrdinalCollectionPrefix` and
+`ReadRawOrdinalCollectionPrefix` aliases. `CollectionSource.readRawOrdinalPrefix(input)` accepts the existing
+`CollectionSourceCall` plus `after: NativeOrdinalKey | null` and integer `limit` from 1 through 100 raw native rows.
+It returns `Promise<RawOrdinalCollectionPrefix>` with kind `raw_curated_ordinal_prefix`, readonly native rows,
+frontier, raw exhaustion, and the existing `CollectionSourceObservation` and `WorkReceipt`.
+
+The key aliases the actual `MemberPage.after` tuple `(ordinalKey, memberId)`. Rows pick the actual member's
+`memberId`, `subjectId`, `ordinalKey`, `deletionId`, `deletedAt` and `memberRevision`, preserving their optionality.
+The frontier records actual raw progress, including deleted and excluded rows. Raw exhaustion does not establish
+canonical uniqueness, disclosed-result completeness, or current source/identity readiness. The existing shared
+`WorkAllowance`/`WorkReceipt` budget is charged before filtering; full excluded/order/population observations and
+current original, terminal and canonical semantics remain mandatory.
+
+This is an internal owner primitive for preparation's already adopted `id | ordinal` ordering and canonical
+identity, not a new public sort, filter engine or retained mechanism. Consumers alias these owner types without a
+reverse dependency. The factory's new method uses the same explicit `dependency_unavailable` implementation;
+this declaration adds no execution, native evidence or readiness.
 
 ## Existing-owner native capture and custody
 
