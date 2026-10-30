@@ -52,11 +52,11 @@ const context = (request: Request, deadline: number) => ({
   idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
   requestId: Bun.randomUUIDv7(),
 });
-async function operation<T>(work: () => Promise<T>) {
+async function operation<T>(work: () => Promise<T>, denied: 'not_found' | 'forbidden' = 'not_found') {
   try {
     return await work();
   } catch (error) {
-    if (error instanceof GrantDeniedError) throw new ProblemError('not_found');
+    if (error instanceof GrantDeniedError) throw new ProblemError(denied);
     throw error;
   }
 }
@@ -108,13 +108,15 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
         },
       },
       ({ params: { id }, actor, body, request, admission, job, session, set }) =>
-        operation(() =>
-          admission.run('normal', job, async () => {
-            const result = await resolveAppeal(deps, actor, id, body, context(request, job.deadline));
-            session.record(result);
-            set.headers['cache-control'] = 'private, no-store';
-            return result.value;
-          }),
+        operation(
+          () =>
+            admission.run('normal', job, async () => {
+              const result = await resolveAppeal(deps, actor, id, body, context(request, job.deadline));
+              session.record(result);
+              set.headers['cache-control'] = 'private, no-store';
+              return result.value;
+            }),
+          'forbidden',
         ),
     );
   const listOptions = {
@@ -136,7 +138,10 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
                     {
                       statement: t.String(),
                       target: t.Object(
-                        { kind: t.Union([t.Literal('post'), t.Literal('thread')]), id: t.String() },
+                        {
+                          kind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post')]),
+                          id: t.String(),
+                        },
                         { additionalProperties: false },
                       ),
                     },

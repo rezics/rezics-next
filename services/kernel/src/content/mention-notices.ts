@@ -1,6 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
+import { deadlineClient, within } from '../access/authenticate.ts';
 import { notificationAllowed } from '../access/index.ts';
+import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -10,6 +12,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { writeNotices } from './notices.ts';
 import readMentionSource from './read-mention-source.sql';
+import readBoard from './read-board.sql';
 import { postReadableByAccount } from './reads.ts';
 
 const postCreated = 'com.rezics.content.post.created.v1';
@@ -30,8 +33,8 @@ type MentionRow = {
   revision_id: string;
   body: Buffer | null;
   board_id: string;
-  board_visibility: string;
 };
+type BoardRow = { board_id: string; visibility: string; realm_id: string | null };
 
 function uniqueMentions(body: Buffer | null): string[] {
   if (!body) return [];
@@ -56,6 +59,34 @@ function uniqueMentions(body: Buffer | null): string[] {
 
 async function readSource(client: PoolClient, route: number, postId: string, revisionId: string) {
   return readMentionSource.run(client, { route, post_id: postId, revision_id: revisionId });
+}
+
+async function readBoardMetadata(pool: Pool, boardId: string, deadline: number): Promise<BoardRow | null> {
+  const boardRoute = routeOf(boardId);
+  if (boardRoute === null) return null;
+  return within(deadline, () =>
+    withConnection(pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const partitionNo = partitionOf(boardRoute);
+        const partition = await readPartition(client, partitionNo);
+        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+        if (partition.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+        const row = await readBoard.run(client, { route: boardRoute, id: boardId });
+        await client.query('COMMIT');
+        return (row as BoardRow | null) ?? null;
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(connection, rollbackError as Error);
+        }
+        throw error;
+      }
+    }),
+  );
 }
 
 /** The registered effects runner supplies the retryable, recorded DBOS step. */
@@ -92,12 +123,14 @@ export function createMentionNoticeEffect(pool: Pool, access: Access): Effect {
         row.visibility !== 'published' ||
         row.availability !== 'available' ||
         !['published', 'protected'].includes(row.thread_visibility) ||
-        row.thread_availability !== 'available' ||
-        !['published', 'protected'].includes(row.board_visibility)
+        row.thread_availability !== 'available'
       )
         return;
       const excluded = new Set([row.actor_id, row.reply_to_post_id ? row.parent_author_id : row.first_post_author_id]);
       const recipients = uniqueMentions(row.body).filter((id) => !excluded.has(id));
+      if (recipients.length === 0) return;
+      const board = await readBoardMetadata(pool, row.board_id, deadline);
+      if (!board || board.board_id !== row.board_id || !['published', 'protected'].includes(board.visibility)) return;
       for (const recipientId of recipients) {
         const recipientRoute = routeOf(recipientId);
         if (recipientRoute === null) continue;

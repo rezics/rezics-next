@@ -6,6 +6,7 @@ import { contentNoticeEffects } from '../../src/content/relays.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
+import { createContentNotificationDriver } from './notification-driver.ts';
 
 let fixture: Awaited<ReturnType<typeof standingFixture>>;
 beforeAll(async () => {
@@ -343,3 +344,51 @@ test('mention notices recheck current board and every post ancestor before sendi
   );
   expect(await notices()).toEqual([]);
 });
+
+test('a native first-publication mention reads the independent board anchor and reaches its recipient', async () => {
+  const driver = await createContentNotificationDriver();
+  try {
+    const people = await driver.provision();
+    let created: Awaited<ReturnType<typeof driver.createThread>>['value'] = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const result = await driver.createThread(
+        {
+          boardId: people.publicBoardId,
+          visibility: 'published',
+          body: {
+            version: 'rezics-document-v1',
+            profile: 'blocks',
+            doc: {
+              type: 'doc',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [{ type: 'mention', attrs: { accountId: people.mentioned.id } }],
+                },
+              ],
+            },
+          },
+        },
+        { actor: people.author, key: JSON.stringify(`independent-board-mention-${attempt}`) },
+      );
+      expect(result.response.status).toBe(201);
+      if (routeOf(result.value!.id) !== routeOf(people.publicBoardId)) {
+        created = result.value;
+        break;
+      }
+    }
+    expect(created).not.toBeNull();
+    await driver.effects('drain');
+    const inbox = await driver.inbox(people.mentioned.id, people.mentioned, { limit: 50 });
+    expect(inbox.response.status).toBe(200);
+    expect(inbox.value!.items).toContainEqual(
+      expect.objectContaining({
+        kind: 'mention',
+        actorId: people.author.id,
+        target: { threadId: created!.id, postId: created!.firstPost.id },
+      }),
+    );
+  } finally {
+    await driver.close();
+  }
+}, 60_000);

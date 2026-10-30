@@ -16,6 +16,7 @@ import {
   type PrincipalCommandReceipt,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
+import { readAccount } from '../access/account-data.ts';
 import { anonymousCommandTarget, anonymousRequestDigest, requestDigest } from '../http/request.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
@@ -402,6 +403,53 @@ async function inspect(dependencies: ReportDependencies, target: ReportTarget, c
   );
 }
 
+function sameReportReference(left: ReportRow, right: ReportRow): boolean {
+  return (
+    left.route === right.route &&
+    left.report_id === right.report_id &&
+    left.target_kind === right.target_kind &&
+    left.target_id === right.target_id &&
+    left.revision_id === right.revision_id &&
+    left.reporter_account_id === right.reporter_account_id &&
+    left.recorded_transaction_id === right.recorded_transaction_id &&
+    left.created_at === right.created_at &&
+    left.outcome === right.outcome &&
+    left.resolved_at === right.resolved_at
+  );
+}
+
+async function reporterCanReadOwnReport(
+  dependencies: ReportDependencies,
+  actor: Actor,
+  reporterAccountId: string,
+  context: ReadContext,
+): Promise<boolean> {
+  if (actor.kind !== 'account' || actor.accountId !== reporterAccountId) return false;
+  const accountRoute = route(reporterAccountId);
+  const check = await accessCheck(
+    dependencies.access,
+    actor,
+    'account:read',
+    { route: accountRoute, id: reporterAccountId },
+    { pool: dependencies.pool, deadline: context.deadline },
+  );
+  return (
+    await snapshot(dependencies, reporterAccountId, context.deadline, async (client) => {
+      const account = await readAccount(client, accountRoute, reporterAccountId);
+      if (
+        !account ||
+        account.accountId !== actor.accountId ||
+        account.kind !== 'actor' ||
+        account.state !== 'active' ||
+        account.fenced ||
+        BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+      )
+        return false;
+      return check(client);
+    })
+  ).value;
+}
+
 function view(row: ReportRow): ReportView {
   if (row.reason === null) throw new ReportUnavailableError();
   return {
@@ -424,9 +472,14 @@ export async function readReport(
   reportId: ReportId,
   context: ReadContext,
 ): Promise<Anchored<ReportView | null>> {
-  const load = (includePrivate: boolean) =>
+  const load = (includePrivate: boolean, ownerAccountId: string | null = null) =>
     snapshot(dependencies, reportId, context.deadline, async (client) => {
-      const parameters = { route: route(reportId), report_id: reportId, include_private: includePrivate };
+      const parameters = {
+        route: route(reportId),
+        report_id: reportId,
+        include_private: includePrivate,
+        owner_account_id: ownerAccountId,
+      };
       const { rows } = await client.query<ReportRow>(
         read.sql,
         read.params.map((name) => parameters[name as keyof typeof parameters]),
@@ -437,6 +490,23 @@ export async function readReport(
   const reference = await load(false);
   if (!reference.value) return { ...reference, value: null };
   const target: ReportTarget = { kind: reference.value.target_kind, id: reference.value.target_id };
+
+  if (context.actor.kind === 'account' && reference.value.reporter_account_id === context.actor.accountId) {
+    const owner = context.actor.accountId;
+    if (await reporterCanReadOwnReport(dependencies, context.actor, owner, context)) {
+      const record = await load(true, owner);
+      if (!record.value || !sameReportReference(reference.value, record.value)) return { ...record, value: null };
+      const finalReference = await load(false, owner);
+      if (
+        !finalReference.value ||
+        !sameReportReference(reference.value, finalReference.value) ||
+        !(await reporterCanReadOwnReport(dependencies, context.actor, owner, context))
+      )
+        return { ...finalReference, value: null };
+      return { ...finalReference, value: view(record.value) };
+    }
+  }
+
   if (!(await inspect(dependencies, target, context)).value) return { ...reference, value: null };
   const record = await load(true);
   const final = await inspect(dependencies, target, context);

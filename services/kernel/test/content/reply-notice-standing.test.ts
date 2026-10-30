@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createContentWorkAccess } from '../../src/content/register.ts';
 import { createReplyNoticeEffect } from '../../src/content/reply-notices.ts';
+import { contentNoticeEffects } from '../../src/content/relays.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
 
@@ -13,10 +14,22 @@ afterAll(async () => {
 });
 
 test('the registered worker Access sends public replies without recipient credentials', async () => {
-  const thread = await f.thread();
-  const post = await f.post(thread.id);
+  let thread: Awaited<ReturnType<typeof f.thread>> | undefined;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = await f.thread();
+    if (routeOf(candidate.id) !== routeOf(f.boardId)) {
+      thread = candidate;
+      break;
+    }
+  }
+  expect(thread).toBeDefined();
+  const independentThread = thread!;
+  expect(routeOf(independentThread.id)).not.toBe(routeOf(f.boardId));
+  const post = await f.post(independentThread.id);
   const access = createContentWorkAccess(() => new Date(), f.db.pool);
-  await createReplyNoticeEffect(f.db.pool, access).run((await f.envelope(post.id)).events.find(Boolean)!);
+  const effect = contentNoticeEffects(f.db.pool, access).find((candidate) => candidate.name === 'content_reply_notice');
+  expect(effect).toBeDefined();
+  await effect!.run((await f.envelope(post.id)).events.find(Boolean)!);
   expect((await f.notices(post.id)).map((row) => row.recipient_id)).toEqual([f.accounts.recipient]);
 });
 

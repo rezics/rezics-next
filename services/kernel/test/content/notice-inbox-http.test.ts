@@ -3,6 +3,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { reactionFixture } from './reactions.test.ts';
 import type { GrowthDatabase } from '../support/growth.ts';
+import { createContentNotificationDriver } from './notification-driver.ts';
 
 let fixture: Awaited<ReturnType<typeof reactionFixture>>;
 let kernel: ReturnType<typeof createKernel>;
@@ -95,3 +96,75 @@ test('the unread count stops at 100 and the seen marker never moves backward', a
   expect((await call(`${base}:markSeen`, 'POST', { through: ids[12] })).response.status).toBe(204);
   expect((await call(`${base}/count`)).value).toEqual({ count: 21, capped: false });
 });
+
+test('native inbox keeps readable public notices, hides a revoked protected notice, and omits a notice denied before send', async () => {
+  const driver = await createContentNotificationDriver();
+  try {
+    const people = await driver.provision();
+    let serial = 0;
+    const makeThread = async (boardId: string, label: string) => {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const created = await driver.createThread(
+          {
+            boardId,
+            visibility: 'published',
+            body: {
+              version: 'rezics-document-v1',
+              profile: 'text',
+              doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: label }] }] },
+            },
+          },
+          { actor: people.author, key: JSON.stringify(`inbox-${label}-${serial++}`) },
+        );
+        expect(created.response.status).toBe(201);
+        if (routeOf(created.value!.id) !== routeOf(boardId)) return created.value!;
+      }
+      throw new Error(`Could not obtain an independently routed ${label} thread`);
+    };
+    const reply = async (threadId: string, parentId: string, label: string) => {
+      const created = await driver.createPost(
+        {
+          threadId,
+          parentId,
+          visibility: 'published',
+          body: {
+            version: 'rezics-document-v1',
+            profile: 'text',
+            doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: label }] }] },
+          },
+        },
+        { actor: people.replier, key: JSON.stringify(`inbox-${label}-${serial++}`) },
+      );
+      expect(created.response.status).toBe(201);
+      return created.value!;
+    };
+
+    const publicThread = await makeThread(people.publicBoardId, 'public');
+    const publicReply = await reply(publicThread.id, publicThread.firstPost.id, 'public reply');
+    const writtenThread = await makeThread(people.protectedBoardId, 'written-before-revocation');
+    const writtenReply = await reply(writtenThread.id, writtenThread.firstPost.id, 'protected reply');
+    await driver.effects('drain');
+
+    const deniedThread = await makeThread(people.protectedBoardId, 'revoked-before-send');
+    const deniedReply = await reply(deniedThread.id, deniedThread.firstPost.id, 'refused reply');
+    await driver.fixtures.realmMember(people.author, false);
+    await driver.effects('drain');
+
+    const revokedInbox = await driver.inbox(people.author.id, people.author, { limit: 50 });
+    expect(revokedInbox.response.status).toBe(200);
+    const revokedPosts = revokedInbox.value!.items.map((notice) => notice.target.postId);
+    expect(revokedPosts).toContain(publicReply.id);
+    expect(revokedPosts).not.toContain(writtenReply.id);
+    expect(revokedPosts).not.toContain(deniedReply.id);
+
+    await driver.fixtures.realmMember(people.author, true);
+    const restoredInbox = await driver.inbox(people.author.id, people.author, { limit: 50 });
+    expect(restoredInbox.response.status).toBe(200);
+    const restoredPosts = restoredInbox.value!.items.map((notice) => notice.target.postId);
+    expect(restoredPosts).toContain(publicReply.id);
+    expect(restoredPosts).toContain(writtenReply.id);
+    expect(restoredPosts).not.toContain(deniedReply.id);
+  } finally {
+    await driver.close();
+  }
+}, 60_000);

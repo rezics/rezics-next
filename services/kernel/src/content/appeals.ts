@@ -13,6 +13,7 @@ import {
   type CommandEvent,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
+import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { Effect } from '../events/effects.ts';
 import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';
@@ -166,7 +167,7 @@ export async function resolveAppeal(
     'moderation:takedown',
     { route, id: reference.value.target_id },
     { pool: deps.pool, deadline: context.deadline },
-    missing,
+    () => new GrantDeniedError(),
   );
   const authorization: CommandAuthorization = {
     ...admission,
@@ -289,7 +290,8 @@ export async function listAppeals(
     ).value;
     if (!row || row.outcome !== null || (target.kind === 'board' ? row.board_id : row.thread_id) !== target.id)
       continue;
-    if (!(await canAct(deps, row, context)).value) continue;
+    const canTakedown = (await canAct(deps, row, context)).value;
+    if (!canTakedown) continue;
     appeals.push({
       id: row.appeal_id,
       decisionId: row.decision_id,
@@ -298,7 +300,7 @@ export async function listAppeals(
       createdAt: new Date(row.created_at).toISOString(),
       decision: {
         statement: row.decision_statement,
-        target: { kind: row.target_kind as 'post' | 'thread', id: row.target_id },
+        target: { kind: row.target_kind, id: row.target_id },
       },
       canResolve: row.decider_account_id !== context.actor.accountId,
     });

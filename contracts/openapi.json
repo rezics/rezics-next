@@ -123103,6 +123103,7 @@
     },
     "/v1/reports/{id}": {
       "get": {
+        "description": "A reporter reads their own report through account:read. Moderators retain report inspection through moderation:read_reports.",
         "operationId": "report.get",
         "parameters": [
           {
@@ -123822,7 +123823,7 @@
             "bearerAuth": []
           }
         ],
-        "x-action": "moderation:read_reports",
+        "x-action": "account:read",
         "x-exposure": "public"
       }
     },

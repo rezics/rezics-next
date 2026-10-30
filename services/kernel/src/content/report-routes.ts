@@ -178,7 +178,9 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         detail: {
           operationId: 'report.get',
           'x-exposure': 'public',
-          'x-action': 'moderation:read_reports',
+          'x-action': 'account:read',
+          description:
+            'A reporter reads their own report through account:read. Moderators retain report inspection through moderation:read_reports.',
           security: [{ bearerAuth: [] }],
         },
       },

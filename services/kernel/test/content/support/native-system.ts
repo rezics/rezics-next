@@ -33,6 +33,22 @@ export type NativeContentSystem = Omit<ContentSystem, 'actors' | 'auth'> & {
   readonly nativeAuth: AuthService;
 };
 
+type NativeRegistration = { key: string; handle: string; email: string; password: string };
+const nativeRegistrations = new WeakMap<
+  NativeContentSystem,
+  (input: NativeRegistration) => Promise<{ accountId: string }>
+>();
+
+/** Register a test persona through the ordinary native Auth workflow. */
+export async function registerNativeContentAccount(
+  system: NativeContentSystem,
+  input: NativeRegistration,
+): Promise<{ accountId: string }> {
+  const register = nativeRegistrations.get(system);
+  if (!register) throw new TypeError('Native content system has no account registration workflow');
+  return register(input);
+}
+
 export class NativeContentSystemUnfinishedError extends Error {
   constructor() {
     super('Native content system is unfinished; actual native composition is required');
@@ -387,10 +403,12 @@ async function createNativeContentSystemWithOptions(
     };
     const governance = await person('governance');
     await bootstrapGovernance(pool, governance.actor.accountId);
-    const author = await person('author');
-    const other = await person('other');
-    const moderator = await person('content-moderator');
-    const suspended = await person('suspended');
+    const [author, other, moderator, suspended] = await Promise.all([
+      person('author'),
+      person('other'),
+      person('content-moderator'),
+      person('suspended'),
+    ]);
     const capture = async (request: Request) => ({ request, response: await kernel.handle(request) });
     const command = async (path: string, body: unknown, status: number) => {
       const request = new Request(`${audience}${path}`, {
@@ -479,6 +497,7 @@ async function createNativeContentSystemWithOptions(
       transport: { capture },
       close,
     };
+    nativeRegistrations.set(system, (input) => host!.workflows.register(input));
     registerAccountDeletionRuntime(system, deletion);
     return system;
   } catch (error) {

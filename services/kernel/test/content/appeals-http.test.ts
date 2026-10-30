@@ -3,7 +3,7 @@ import { normalizeDocument } from '@rezics/document';
 import { randomUUID } from 'node:crypto';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import resourceRoles from '../../src/access/resource-roles.json';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
@@ -132,8 +132,17 @@ describe('minimal appeals through HTTP and committed effects', () => {
   }
 
   async function decide(kind: 'thread' | 'post' = 'thread', targetBoard = boardId) {
-    const thread = await create('Appealable thread', targetBoard);
-    const id = kind === 'thread' ? thread.id : thread.firstPost.id;
+    let thread: Awaited<ReturnType<typeof create>> | undefined;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const candidate = await create('Appealable thread', targetBoard);
+      if (routeOf(candidate.id) !== routeOf(targetBoard)) {
+        thread = candidate;
+        break;
+      }
+    }
+    expect(thread).toBeDefined();
+    const independentThread = thread!;
+    const id = kind === 'thread' ? independentThread.id : independentThread.firstPost.id;
     await fixture.grant(fixture.principal, 'moderation:takedown', { route: routeOf(id)!, id });
     const key = randomUUID();
     const path = `/v1/${kind === 'thread' ? 'threads' : 'posts'}/${id}:takeDown`;
@@ -145,7 +154,7 @@ describe('minimal appeals through HTTP and committed effects', () => {
       routeOf(id),
       id,
     ]);
-    return { thread, id, decision };
+    return { thread: independentThread, id, decision };
   }
   async function deliver() {
     const effects = contentEffects(db.pool, {} as WorkClient);
@@ -236,7 +245,7 @@ describe('minimal appeals through HTTP and committed effects', () => {
       now = new Date(new Date(decision.decided_at).getTime() + 183 * 86400000);
       const created = await appeal(decision.decision_id);
       expect((await resolve(created.id, 'reverse', fixture.principal)).response.status).toBe(403);
-      expect((await resolve(created.id, 'reverse')).response.status).toBe(404);
+      expect((await resolve(created.id, 'reverse')).response.status).toBe(403);
       expect((await call('POST', path, { statement: 'Again' })).response.status).toBe(409);
       await fixture.grant(fixture.recipient, 'moderation:takedown', { route: routeOf(id)!, id });
       expect((await resolve(created.id, 'uphold')).response.status).toBe(200);
@@ -300,21 +309,160 @@ describe('minimal appeals through HTTP and committed effects', () => {
     expect(hidden.body.appeals).toEqual([]);
     const visible = await call('GET', `/v1/threads/${visibleThread}/appeals`, undefined, undefined, fixture.recipient);
     expect(visible.response.status).toBe(200);
+    expect(visible.response.headers.get('cache-control')).toBe('private, no-store');
     expect(visible.body.appeals.map((a: { id: string }) => a.id)).toEqual([visibleAppeal]);
     expect(visible.body.appeals[0]).toMatchObject({
+      id: visibleAppeal,
       decision: {
         statement: 'Policy violation',
         target: { kind: 'thread', id: visibleThread },
       },
       canResolve: true,
     });
-    expect(JSON.stringify(visible.body.appeals[0])).not.toContain(fixture.principal);
+    expect(JSON.stringify(visible.body)).not.toContain(fixture.principal);
+    expect(JSON.stringify(visible.body)).not.toMatch(/decider(?:Id|_account_id)/i);
     expect((await resolve(ids[0]!, 'uphold')).response.status).toBe(200);
     await deliver();
     const page = await call('GET', path, undefined, undefined, fixture.recipient);
     expect(page.body.appeals.map((a: { id: string }) => a.id)).not.toContain(ids[0]);
     const badCursor = await call('GET', `${path}?cursor=invalid`, undefined, undefined, fixture.recipient);
     expect(badCursor.response.status).toBe(400);
+  });
+  test('board and thread appeal lists expose the current decision projection without disclosing its decider', async () => {
+    const cases: Array<{
+      kind: 'thread' | 'post';
+      id: string;
+      thread: { id: string };
+      decision: { decision_id: string };
+      appealId: string;
+    }> = [];
+    for (const kind of ['thread', 'post'] as const) {
+      const { id, thread, decision } = await decide(kind);
+      const appealReceipt = await appeal(decision.decision_id);
+      cases.push({ kind, id, thread, decision, appealId: appealReceipt.id });
+      await fixture.grant(fixture.recipient, 'moderation:takedown', { route: routeOf(id)!, id });
+      await fixture.grant(fixture.recipient, 'moderation:read_reports', {
+        route: routeOf(thread.id)!,
+        id: thread.id,
+      });
+      await fixture.grant(fixture.principal, 'moderation:read_reports', {
+        route: routeOf(thread.id)!,
+        id: thread.id,
+      });
+    }
+    await fixture.grant(fixture.recipient, 'moderation:read_reports', { route: routeOf(boardId)!, id: boardId });
+    await fixture.grant(fixture.principal, 'moderation:read_reports', { route: routeOf(boardId)!, id: boardId });
+    await deliver();
+
+    const boardPath = `/v1/boards/${boardId}/appeals?limit=100`;
+    const reviewerBoard = await call('GET', boardPath, undefined, undefined, fixture.recipient);
+    const deciderBoard = await call('GET', boardPath, undefined, undefined, fixture.principal);
+    expect(reviewerBoard.response.status).toBe(200);
+    expect(deciderBoard.response.status).toBe(200);
+    expect(reviewerBoard.response.headers.get('cache-control')).toBe('private, no-store');
+    const rawResponses = [JSON.stringify(reviewerBoard.body), JSON.stringify(deciderBoard.body)];
+    for (const [index, item] of cases.entries()) {
+      expect(routeOf(item.thread.id)).not.toBe(routeOf(boardId));
+      const projected = {
+        id: item.appealId,
+        decisionId: item.decision.decision_id,
+        appellantId: fixture.actor,
+        statement: 'Please reconsider',
+        createdAt: expect.any(String),
+        decision: { statement: reason.reason, target: { kind: item.kind, id: item.id } },
+      };
+      expect(reviewerBoard.body.appeals.find((row: { id: string }) => row.id === item.appealId)).toEqual({
+        ...projected,
+        canResolve: true,
+      });
+      expect(deciderBoard.body.appeals.find((row: { id: string }) => row.id === item.appealId)).toEqual({
+        ...projected,
+        canResolve: false,
+      });
+      const threadPage = await call(
+        'GET',
+        `/v1/threads/${item.thread.id}/appeals?limit=100`,
+        undefined,
+        undefined,
+        fixture.recipient,
+      );
+      expect(threadPage.response.status).toBe(200);
+      expect(threadPage.response.headers.get('cache-control')).toBe('private, no-store');
+      expect(threadPage.body.appeals.find((row: { id: string }) => row.id === item.appealId)).toEqual({
+        ...projected,
+        canResolve: true,
+      });
+      rawResponses.push(JSON.stringify(threadPage.body));
+      const outcome = index === 0 ? 'uphold' : 'reverse';
+      if (index === 0) expect((await resolve(item.appealId, 'reverse', fixture.principal)).response.status).toBe(403);
+      expect((await resolve(item.appealId, outcome)).response.status).toBe(200);
+    }
+    for (const raw of rawResponses) {
+      expect(raw).not.toMatch(/decider(?:Id|_account_id)/i);
+      expect(raw).not.toContain(fixture.principal);
+    }
+    await deliver();
+    const after = await call('GET', boardPath, undefined, undefined, fixture.recipient);
+    expect(after.response.status).toBe(200);
+    expect(after.body.appeals.map((row: { id: string }) => row.id)).not.toContain(cases[0]!.appealId);
+    expect(after.body.appeals.map((row: { id: string }) => row.id)).not.toContain(cases[1]!.appealId);
+  });
+  test('appeal list rechecks revoked target authority before disclosing the decision projection', async () => {
+    const { id, thread, decision } = await decide('post');
+    const created = await appeal(decision.decision_id);
+    await fixture.grant(fixture.recipient, 'moderation:read_reports', { route: routeOf(boardId)!, id: boardId });
+    await fixture.grant(fixture.recipient, 'moderation:read_reports', { route: routeOf(thread.id)!, id: thread.id });
+    await fixture.grant(fixture.recipient, 'moderation:takedown', { route: routeOf(id)!, id });
+    await deliver();
+
+    const path = `/v1/boards/${boardId}/appeals`;
+    const before = await call('GET', path, undefined, undefined, fixture.recipient);
+    expect(before.response.status).toBe(200);
+    expect(before.body.appeals.find((item: { id: string }) => item.id === created.id)).toMatchObject({
+      decision: { statement: reason.reason, target: { kind: 'post', id } },
+      canResolve: true,
+    });
+
+    await db.admin.query(
+      `DELETE FROM access.resource_grant
+       WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='moderation:takedown'`,
+      [routeOf(id), id, fixture.recipient],
+    );
+    const after = await call('GET', path, undefined, undefined, fixture.recipient);
+    expect(after.response.status).toBe(200);
+    expect(after.body.appeals.map((item: { id: string }) => item.id)).not.toContain(created.id);
+    expect(JSON.stringify(after.body)).not.toContain(decision.decision_id);
+  });
+  test('appeal list preserves a moved source partition as a native unavailable response', async () => {
+    const { id, decision } = await decide('thread');
+    await appeal(decision.decision_id);
+    await fixture.grant(fixture.recipient, 'moderation:read_reports', { route: routeOf(boardId)!, id: boardId });
+    await fixture.grant(fixture.recipient, 'moderation:takedown', { route: routeOf(id)!, id });
+    await deliver();
+
+    const sourcePartition = partitionOf(routeOf(id)!);
+    const prior = await db.admin.query<{ write_state: string; moved_to: string | null }>(
+      'SELECT write_state,moved_to FROM core.partition WHERE partition_no=$1',
+      [sourcePartition],
+    );
+    expect(prior.rows).toHaveLength(1);
+    await db.admin.query(
+      "UPDATE core.partition SET write_state='moved', moved_to='content-node-2' WHERE partition_no=$1",
+      [sourcePartition],
+    );
+    let result: Awaited<ReturnType<typeof call>> | undefined;
+    try {
+      result = await call('GET', `/v1/boards/${boardId}/appeals`, undefined, undefined, fixture.recipient);
+    } finally {
+      await db.admin.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
+        sourcePartition,
+        prior.rows[0]!.write_state,
+        prior.rows[0]!.moved_to,
+      ]);
+    }
+    expect(result).toBeDefined();
+    expect(result!.response.status).toBe(503);
+    expect(result!.body.code).toBe('partition_unavailable');
   });
   test('appeals per board', async () => {
     for (const operation of ['list', 'appeal', 'resolve'] as const) {

@@ -56,9 +56,17 @@ after the original decision did. Each notice stores only its identity, kind, tim
 and target ids: thread and post, or decision and report as applicable. It stores no text. The inbox links to the
 author-readable decision or reporter-readable report for statements, deadlines and outcomes.
 
+An authenticated report's exact reporter can read that report and its outcome through native `account:read` on
+their own account. This owner read does not disclose target document bytes. Moderators retain the existing
+`moderation:read_reports` path and target checks; anonymous reports have no owner reader, and unrelated or
+otherwise private report reads return 404. The report GET advertises `account:read` and describes the moderator
+alternative.
+
 When the effect runs, each candidate first passes accounts' `notificationAllowed`; `reply` and `mention` then
-pass the same current Access read check as a post read, including the thread, ancestors, board and Realm. A failed
-check writes nothing and is never retried, including on event replay after preferences or membership change.
+pass the same current Access read check as a post read, including the thread, ancestors, board and Realm. Mention
+source selection reads the thread and its revision on the thread route, releases that checkout, then reads the
+board on the board's own route. A failed check writes nothing and is never retried, including on event replay after
+preferences or membership change.
 Deleted accounts receive nothing. Moderation decisions are mandatory through the catalogue's preference override:
 they still use accounts' check, but turning the kind off cannot suppress them. They do not require the recipient
 to read the taken-down target.
@@ -69,8 +77,9 @@ to read the taken-down target.
 `Idempotency-Key`. The inbox is private to its account. Naming another account returns 404 for list, count and mark seen. The GET list returns newest
 first, using an immutable notice ordering to break time ties. `limit` is 1–50, default 20. Its opaque shared list
 cursor (`src/tokens/list-cursor.ts`) binds the viewer and list query. Each item contains `id`, `kind`, `createdAt`,
-`actorId`, target ids and `unread`. Reply and mention candidates pass a current batched post read check; unreadable
-ones are skipped without exposing their notice or post ids, including through a cursor. A page scans at most
+`actorId`, target ids and `unread`. Reply and mention candidates pass the current native post disclosure check,
+including the full post ancestry and independently anchored board and Realm; unreadable ones are skipped without
+exposing their notice or post ids, including through a cursor. A page scans at most
 four times its limit, advancing past scanned candidates even when none can be returned, as subject threads do.
 
 The unread count reads at most 101 index rows and returns `{ count, capped }`: `count` is at most 100, and
@@ -87,18 +96,21 @@ Notification costs are bounded independently of inbox or thread size:
   has one `notificationAllowed` check and, when allowed, one Access check; recipient overlap is deduplicated.
 - Report outcomes write at most one notice per report, amortized against that report's creation. A takedown
   resolves open reports in bounded batches rather than requiring an unbounded synchronous fan-out.
-- List uses one index range of at most `4 × limit` rows plus a batched read check. Count reads at most 101 index
-  rows. Mark seen moves one row; no inbox scan is needed.
+- List uses one inbox index range of at most `4 × limit` notice rows and checks each distinct reply or mention target
+  with native post disclosure in batches of eight. At most 200 candidates are checked; each read is bounded by the
+  fixed 33-post ancestry ceiling and checks the board and Realm at their independent anchors. Count reads at most 101
+  index rows. Mark seen moves one row; no inbox scan is needed.
 - Retention deletes bounded batches on recipient routes. The `community` erasure participant removes notices in
   bounded batches and the one seen marker; neither cleanup requires one transaction over an entire inbox.
 
 ## Appeals
 
 Each thread or post takedown stores a decision with its target, action, moderator's statement (the takedown
-`reason`), decider and time. Its author can read the decision even though the target is taken down, including
-the statement and appeal deadline. An unrelated account receives 404. A takedown marks the target's open reports
-`actioned`; a moderator can instead mark an open report `dismissed`. A report receives at most one outcome and
-one outcome notice. A later takedown does not replace an already dismissed outcome.
+`reason`), internal decider identity and time. The takedown response exposes only `securityRevision`; the author's
+inbox supplies the decision link. Its author can read the decision even though the target is taken down, including
+the statement and appeal deadline, but not the decider identity. An unrelated account receives 404. A takedown
+marks the target's open reports `actioned`; a moderator can instead mark an open report `dismissed`. A report
+receives at most one outcome and one outcome notice. A later takedown does not replace an already dismissed outcome.
 
 Only the target's author may appeal, once per decision, with a statement of at most 2,000 characters. The appeal
 deadline is the decision time plus 183 days, inclusive; the next instant is late. A second appeal returns 409,
@@ -109,8 +121,11 @@ An account with `moderation:takedown` on the target, other than the original dec
 with a statement. The original decider and accounts lacking that authorization receive 403. `uphold` keeps the
 takedown. `reverse` restores the target, makes it readable under its ordinary disclosure rules, raises its security
 revision and emits a restore event. The resolution notifies the appellant with a mandatory moderation outcome.
-Pending appeals appear alongside reports in the moderator queue and leave it on resolution. This scope covers
-content targets only, not other owners' takedowns.
+Pending appeals appear alongside reports in the moderator queue and leave it on resolution. Board and thread appeal
+list rows include the decision statement and its `{ kind, id }` target, plus `canResolve`, which is true only when
+the current `moderation:takedown` check succeeds and the viewer is not the original decider. It is a current list
+capability hint; resolving always repeats authorization at command time. List responses never include decider
+identity. This scope covers content targets only, not other owners' takedowns.
 
 The executable API contract is `specs/content-notification-outcomes.test.ts`, with the test-only interface in
 `specs/content-notification-driver.ts`. `CONTENT_NOTIFICATION_DRIVER` selects a real product binding exporting
@@ -588,7 +603,7 @@ idempotent prefix delete, plus one acknowledgement command per account.
 | Author post deletion/restore/cleanup | One tombstone command; clear revisions in bounded pages, only affected keys. Delete and restore each raise one security revision and emit one event; restore reclaims one review slot without enumerating revisions. Cleanup starts after the restore window or an immediate moderation/account purge. | Constant rows/statements per command/page; linear in affected revisions across pages.                                          | `test/content/author-post-delete.test.ts`: “delete is one bounded tombstone and cleanup runs in bounded pages as posts and revisions grow” `test/content/post-soft-deletion.test.ts`: “post delete and restore stay bounded”, scales [64, 256, 1024].                                                                          |
 | Thread/post takedown                 | Read/write target/security revision and bounded projection; command event.                                                                                                                                                                                                                             | Constant rows/statements; logarithmic blocks.                                                                                  | `test/content/moderation-http.test.ts`: “checkGrowth proves the declared three-scale machine-independent bound”                                                                                                                                                                                                                |
 | Report storage                       | Insert one report and its event through the report-home command.                                                                                                                                                                                                                                       | Constant rows/statements; logarithmic blocks in report and command history.                                                    | `test/content/reports.test.ts`: “checkGrowth proves the declared three-scale machine-independent bound”                                                                                                                                                                                                                        |
-| Report read and target listing       | Exact report read; target-index keyset page and selected report rows, bounded by the fixed page limit.                                                                                                                                                                                                 | Constant rows/statements for a point read; linear rows in page limit for listing; logarithmic blocks in indexed history.       | `test/content/reports.test.ts`: “checkGrowth proves the declared three-scale machine-independent bound”                                                                                                                                                                                                                        |
+| Report read and target listing       | Owner read checks the exact report reference, native `account:read` on the reporter's account, the exact report record and current owner/authority again. Moderators retain the target Access check. Listing uses the target-index keyset page and selected report rows, bounded by the fixed page limit. | Constant rows/statements for a point read; linear rows in page limit for listing; logarithmic blocks in indexed history.       | `test/content/reports.test.ts`: “checkGrowth proves the declared three-scale machine-independent bound”                                                                                                                                                                                                                        |
 | Report inspection HTTP admission     | Authenticate and read the target partition, Access grant and report state for each inspection request.                                                                                                                                                                                                 | Constant rows/statements; logarithmic blocks in grant and report history.                                                      | `test/content/reports-http.test.ts`: “checkGrowth proves constant report HTTP work with unrelated and hot-partition growth at three scales”                                                                                                                                                                                    |
 | Report effect projection             | Read one committed report source reference and run one target-partition reverse-index command.                                                                                                                                                                                                         | Constant rows/statements per report event; logarithmic blocks in source and target histories.                                  | Missing: no native projection growth check covers source and target history.                                                                                                                                                                                                                                                   |
 | Thread/post reaction slot            | Actor-target slot read/update and command; post targets add bounded ancestry. Current check measures thread set at 64/512/4096.                                                                                                                                                                        | Constant rows/statements, logarithmic blocks for measured set branch; known defect, owner fix pending for clear/post branches. | `test/content/growth-reactions.test.ts`: “Reaction slot”                                                                                                                                                                                                                                                                       |
@@ -653,8 +668,15 @@ check uses scales [256, 1024, 4096] with the series rule.
 
 ### Mention notices
 
-- **Touches:** One first-revision body read (at most 2 MiB) and, for up to ten recipients, one preference check, one current Access read check and one notice row.
-- **Growth check:** `test/content/growth-mention-notices.test.ts`; mention nodes per post at scales [16, 64, 256], with at most ten notices and constant database rows beyond ten.
+- **Touches:** One thread-route first-revision body read (at most 2 MiB), one independent board point read, and, for up to ten recipients, one preference check, one current Access read check and one notice row.
+- **Bound:** Constant source rows and statements plus a bounded board point and bounded thread/board/Realm read checks per recipient; logarithmic blocks in their indexed histories.
+- **Growth check:** `test/content/growth-mention-notices.test.ts`; mention nodes per post at scales [16, 64, 256], with at most ten notices and constant database rows beyond ten. `test/content/mention-notices.test.ts` proves native first-publication delivery when board and thread routes differ.
+
+### Notification inbox projection
+
+- **Touches:** One recipient index range of at most `4 × limit` notice rows, then one current native post disclosure for each distinct reply or mention target in that range. Each disclosure checks the complete bounded post ancestry and the independently anchored board and Realm.
+- **Bound:** At most 200 candidates per page; rows and statements are bounded by candidate count and the fixed 33-post ancestry ceiling, with logarithmic blocks in indexed histories.
+- **Growth check:** `test/content/growth-notice-inbox.test.ts` keeps the existing [256, 1024, 4096] inbox range bound and captures a real independently anchored post notice at those same scales.
 
 Derivations use the implemented adapters and SQL in `db/content/migrations/` and `db/content/schema.sql`. At fixed admitted input, unique-key B-tree probes examine constant rows and use O(log N) shared blocks; changing k indexed rows uses O(k log N) blocks. Rows include filtered candidates; blocks include bounded body access but exclude dead tuples, vacuum debt and lock waits. `C` is the command envelope (receipt/partition/outbox and bounded write-basis inserts), adding constant rows/statements and logarithmic blocks. `A` is an authenticated Access check, derived in [Access Cost](../access/README.md#cost). Transactions, settings, catalogue checks and time reads add fixed statement constants. Body and metadata byte caps bound read/write bytes.
 
@@ -676,6 +698,6 @@ Limits: board candidates <= 200, collection <= 100, public pages <= 100 results 
 
 ### Appeals
 
-- **Touches:** Appeal reads one decision and inserts one appeal row. Resolve updates one appeal row and checks target authorization, plus `liftTakedown`'s bound and one notice. Pending lists follow the report list bound: at most L + 1 queue candidates and L independently authorized source reads, with L <= 100. Board candidates are projected from committed events on the board route; a resolution permanently removes the candidate from its pending index.
-- **Bound:** Constant rows per appeal and resolution; O(L) rows and statements per list, independent of appeals per board.
+- **Touches:** Appeal reads one decision and inserts one appeal row. Resolve updates one appeal row and checks target authorization, plus `liftTakedown`'s bound and one notice. Pending lists follow the report list bound: at most L + 1 queue candidates and L independently authorized source reads, with L <= 100. The existing appeal read returns the decision statement, target and decider identity internally; list projection exposes only the statement and target, and derives `canResolve` from that same current target authorization plus the independent-review comparison. Board candidates are projected from committed events on the board route; a resolution permanently removes the candidate from its pending index.
+- **Bound:** Constant rows and statements per appeal and resolution; O(L) rows and statements per list, independent of appeals per board.
 - **Growth check:** `test/content/appeals-http.test.ts`, `appeals per board`, at 64, 256 and 1024 appeals; rows per call stay constant.

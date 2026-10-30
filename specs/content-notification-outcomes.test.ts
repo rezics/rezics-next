@@ -129,6 +129,16 @@ async function noticesFor(actor: Persona, source: Post) {
   return (await inbox(actor)).filter((item) => item.target.postId === source.id);
 }
 const target = (p: Post): Target => ({ kind: 'post', id: p.id });
+async function decisionIdFor(target: Target): Promise<string> {
+  await driver.effects('drain');
+  const notice = (await inbox(fixture.author)).find(
+    (item) =>
+      item.kind === 'moderation_decision' &&
+      (target.kind === 'thread' ? item.target.threadId === target.id : item.target.postId === target.id),
+  );
+  expect(notice?.target.decisionId).toEqual(expect.any(String));
+  return notice!.target.decisionId!;
+}
 const daysAfter = (instant: string, days: number, extraMs = 0) =>
   new Date(Date.parse(instant) + days * 86_400_000 + extraMs).toISOString();
 
@@ -316,17 +326,20 @@ test('a takedown sends its author the decision with its statement and appeal dea
     const t = await thread();
     const subject = kind === 'thread' ? { kind, id: t.id } : target(await post(t, fixture.author));
     const reason = `Decision statement for ${kind}`;
-    const result = written(await driver.takedown(subject, reason, options(fixture.moderator)));
-    const decision = ok(await driver.decision(result.decisionId, fixture.author));
+    written(await driver.takedown(subject, reason, options(fixture.moderator)));
+    const decisionId = await decisionIdFor(subject);
+    const decisionResult = await driver.decision(decisionId, fixture.author);
+    const decision = ok(decisionResult);
     expect(decision).toMatchObject({
-      id: result.decisionId,
+      id: decisionId,
       target: subject,
       action: 'takedown',
       statement: reason,
-      deciderId: fixture.moderator.id,
     });
+    const decisionWire = await decisionResult.response.clone().json();
+    expect(decisionWire).not.toHaveProperty('deciderId');
+    expect(decisionWire).not.toHaveProperty('decider_account_id');
     expect(decision.appealDeadline).toBe(daysAfter(decision.createdAt, 183));
-    await driver.effects('drain');
     const notice = (await inbox(fixture.author)).filter((n) => n.target.decisionId === decision.id);
     expect(notice).toEqual([expect.objectContaining({ kind: 'moderation_decision', actorId: null })]);
     expect(JSON.stringify(notice)).not.toContain(reason);
@@ -372,12 +385,14 @@ test('the author appeals once within six months and another moderator upholds or
     const p = await post(t, fixture.author);
     const subject: Target = outcome === 'uphold' ? target(p) : { kind: 'thread', id: t.id };
     ok(await driver.readTarget(subject, fixture.mentioned));
-    const decision = written(await driver.takedown(subject, 'Original reason', options(fixture.moderator)));
-    await driver.effects('drain');
+    const takenDown = written(
+      await driver.takedown(subject, 'Original reason', options(fixture.moderator)),
+    );
+    const decisionId = await decisionIdFor(subject);
     await problem(await driver.readTarget(subject, fixture.mentioned), 404);
-    const appeal = ok(await driver.appeal(decision.decisionId, 'Please reconsider', options()), 201);
+    const appeal = ok(await driver.appeal(decisionId, 'Please reconsider', options()), 201);
     expect(appeal).toMatchObject({
-      decisionId: decision.decisionId,
+      decisionId,
       appellantId: fixture.author.id,
       statement: 'Please reconsider',
       outcome: 'pending',
@@ -397,12 +412,12 @@ test('the author appeals once within six months and another moderator upholds or
       expect.objectContaining({
         kind: 'moderation_decision',
         actorId: null,
-        target: expect.objectContaining({ decisionId: decision.decisionId }),
+        target: expect.objectContaining({ decisionId }),
       }),
     ]);
     if (outcome === 'reverse') {
       const restored = ok(await driver.readTarget(subject, fixture.mentioned));
-      expect(BigInt(restored.securityRevision)).toBeGreaterThan(BigInt(decision.securityRevision));
+      expect(BigInt(restored.securityRevision)).toBeGreaterThan(BigInt(takenDown.securityRevision));
       ok(await driver.readPost(p, fixture.mentioned));
     } else await problem(await driver.readTarget(subject, fixture.mentioned), 404);
     await driver.effects('replay');
@@ -413,24 +428,26 @@ test('the author appeals once within six months and another moderator upholds or
 test('the decider cannot resolve the appeal, a second appeal is refused, and an appeal after six months is refused', async () => {
   const t = await thread();
   const p = await post(t, fixture.author);
-  const decision = written(await driver.takedown(target(p), 'Reason', options(fixture.moderator)));
-  await problem(await driver.appeal(decision.decisionId, 'Not my decision', options(fixture.replier)), 404);
-  await problem(await driver.appeal(decision.decisionId, 'x'.repeat(2001), options()), 422);
-  const read = ok(await driver.decision(decision.decisionId, fixture.author));
+  written(await driver.takedown(target(p), 'Reason', options(fixture.moderator)));
+  const decisionId = await decisionIdFor(target(p));
+  await problem(await driver.appeal(decisionId, 'Not my decision', options(fixture.replier)), 404);
+  await problem(await driver.appeal(decisionId, 'x'.repeat(2001), options()), 422);
+  const read = ok(await driver.decision(decisionId, fixture.author));
   // The deadline is inclusive; the next millisecond is late.
   await driver.fixtures.now(read.appealDeadline);
-  const appeal = ok(await driver.appeal(decision.decisionId, 'x'.repeat(2000), options()), 201);
+  const appeal = ok(await driver.appeal(decisionId, 'x'.repeat(2000), options()), 201);
   await problem(await driver.resolveAppeal(appeal.id, 'reverse', 'Own review', options(fixture.moderator)), 403);
   await problem(await driver.resolveAppeal(appeal.id, 'reverse', 'No authority', options(fixture.replier)), 403);
   expect(ok(await driver.pendingAppeals(fixture.secondModerator)).find((a) => a.id === appeal.id)?.outcome).toBe(
     'pending',
   );
-  await problem(await driver.appeal(decision.decisionId, 'Again', options()), 409);
+  await problem(await driver.appeal(decisionId, 'Again', options()), 409);
   written(await driver.resolveAppeal(appeal.id, 'uphold', 'Final review', options(fixture.secondModerator)));
-  await problem(await driver.appeal(decision.decisionId, 'After resolution', options()), 409);
+  await problem(await driver.appeal(decisionId, 'After resolution', options()), 409);
   const latePost = await post(t, fixture.author);
-  const lateDecision = written(await driver.takedown(target(latePost), 'Later reason', options(fixture.moderator)));
-  const late = ok(await driver.decision(lateDecision.decisionId, fixture.author));
+  written(await driver.takedown(target(latePost), 'Later reason', options(fixture.moderator)));
+  const lateDecisionId = await decisionIdFor(target(latePost));
+  const late = ok(await driver.decision(lateDecisionId, fixture.author));
   await driver.fixtures.now(daysAfter(late.createdAt, 183, 1));
   await problem(await driver.appeal(late.id, 'Too late', options()), 422);
   expect(ok(await driver.pendingAppeals(fixture.secondModerator))).toEqual([]);

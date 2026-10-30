@@ -58,7 +58,6 @@ export interface Decision {
   target: Target;
   action: 'takedown';
   statement: string;
-  deciderId: string;
   createdAt: string;
   appealDeadline: string;
 }
@@ -125,12 +124,7 @@ export interface ContentNotificationDriver {
     target: Target,
     reason: string,
     options: WriteOptions,
-  ): Promise<
-    ApiResult<{
-      decisionId: string;
-      securityRevision: string;
-    }>
-  >;
+  ): Promise<ApiResult<{ securityRevision: string }>>;
   decision(id: string, actor: Persona): Promise<ApiResult<Decision>>;
   report(target: Target, options: WriteOptions): Promise<ApiResult<{ reportId: string }>>;
   readReport(id: string, actor: Persona): Promise<ApiResult<Report>>;

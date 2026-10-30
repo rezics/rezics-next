@@ -85,7 +85,9 @@ test('report routes publish closed schemas, shared report cost, actions and prob
   for (const path of paths) {
     const get = document.paths[path]?.get;
     expect(get).toBeDefined();
-    expect(get?.['x-action']).toBe('moderation:read_reports');
+    expect(get?.['x-action']).toBe(path === '/v1/reports/{id}' ? 'account:read' : 'moderation:read_reports');
+    if (path === '/v1/reports/{id}')
+      expect(get?.description).toContain('Moderators retain report inspection through moderation:read_reports');
     expect(get?.['x-rate-limit']).toBeUndefined();
     expect(get?.security).toEqual([{ bearerAuth: [] }]);
     expect(

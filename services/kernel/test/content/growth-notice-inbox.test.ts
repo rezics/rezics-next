@@ -1,8 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
 import { listNoticeInbox, countUnreadNotices } from '../../src/content/notice-inbox.ts';
+import { createContentWorkAccess } from '../../src/content/register.ts';
+import { contentNoticeEffects } from '../../src/content/relays.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { openGrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
@@ -37,3 +40,64 @@ test('inbox list and unread count examine constant index rows as a recipient inb
   }
   expect(seen).toEqual([80, 80, 80]);
 });
+
+test('native inbox disclosure of a real post notice stays bounded as the recipient range grows', async () => {
+  const native = await replyNoticeFixture();
+  try {
+    let thread: Awaited<ReturnType<typeof native.thread>> | undefined;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const candidate = await native.thread();
+      if (routeOf(candidate.id) !== routeOf(native.boardId)) {
+        thread = candidate;
+        break;
+      }
+    }
+    expect(thread).toBeDefined();
+    const independentThread = thread!;
+    expect(routeOf(independentThread.id)).not.toBe(routeOf(native.boardId));
+    const post = await native.post(independentThread.id);
+    const event = (await native.envelope(post.id)).events.find(Boolean)!;
+    const effects = contentNoticeEffects(
+      native.db.pool,
+      createContentWorkAccess(() => new Date(), native.db.pool),
+    );
+    const replyEffect = effects.find((effect) => effect.name === 'content_reply_notice');
+    expect(replyEffect).toBeDefined();
+    await replyEffect!.run(event);
+    expect(await native.notices(post.id)).toHaveLength(1);
+
+    const recipient = native.accounts.recipient;
+    const recipientRoute = routeOf(recipient)!;
+    const report = await checkGrowth(native.db, {
+      name: 'native inbox post disclosure amid recipient range growth',
+      scales: [256, 1024, 4096],
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      repetitions: 1,
+      warmups: 1,
+      grow: async (target, scale, previous) => {
+        const ids = Array.from({ length: scale - previous }, () => newId(recipientRoute));
+        await target.admin.query(
+          `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at)
+           SELECT $1,$2,id,'moderation_decision',id,'2026-10-27T00:00:00Z'::timestamptz + ordinality * interval '1 millisecond'
+           FROM unnest($3::uuid[]) WITH ORDINALITY AS n(id,ordinality)`,
+          [recipientRoute, recipient, ids],
+        );
+      },
+      operation: async () => {
+        const result = await native.call(recipient, 'GET', `/v1/accounts/${recipient}/notifications?limit=20`);
+        expect(result.status).toBe(200);
+        expect(result.value.items).toHaveLength(20);
+        expect(
+          result.value.items.some(
+            (item: { kind: string; postId: string | null }) => item.kind === 'reply' && item.postId === post.id,
+          ),
+        ).toBe(true);
+        return result.value.items.length;
+      },
+    });
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
+    console.info(JSON.stringify(report));
+  } finally {
+    await native.close();
+  }
+}, 300_000);

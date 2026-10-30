@@ -1,9 +1,10 @@
 import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
-import { resourcePage, type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { readPost } from './reads.ts';
 
 export type InboxDependencies = {
   pool: Pool;
@@ -81,45 +82,32 @@ export async function listNoticeInbox(
     );
     return result.rows as Array<Record<string, any>>;
   });
-  // Check current content state and the installed post:read formula in bounded route batches.
-  const postIds = rows
-    .filter((row) => row.post_id && (row.kind === 'reply' || row.kind === 'mention'))
-    .map((row) => row.post_id as string);
-  const readable = new Set<string>();
-  const groups = new Map<number, string[]>();
-  for (const id of new Set(postIds)) {
-    const contentRoute = routeOf(id);
-    if (contentRoute !== null) groups.set(contentRoute, [...(groups.get(contentRoute) ?? []), id]);
+  // The range is capped at 200 candidates. Read each distinct full post reference
+  // through the installed native disclosure path in bounded concurrent batches;
+  // this checks its current thread, reply ancestry, independent board and Realm at
+  // the request's actual Access time. The returned content is used only as a proof.
+  const content = new Map<string, { threadId: string; postId: string }>();
+  for (const row of rows) {
+    if ((row.kind !== 'reply' && row.kind !== 'mention') || !row.post_id || !row.thread_id) continue;
+    const key = `${row.thread_id}\u0000${row.post_id}`;
+    content.set(key, { threadId: row.thread_id as string, postId: row.post_id as string });
   }
-  for (const [contentRoute, ids] of groups) {
-    if (!dependencies.access?.preparePage || !dependencies.access.authorizePage || !dependencies.actor) continue;
-    for (let offset = 0; offset < ids.length; offset += 100) {
-      const batch = ids.slice(offset, offset + 100);
-      const page = resourcePage({ route: contentRoute, resourceType: 'content.post', ids: batch });
-      const evidence = await dependencies.access.preparePage(dependencies.actor, 'post:read', page, {
-        pool: dependencies.pool,
-        deadline: dependencies.deadline ?? Date.now() + 3_000,
-      });
-      const allowed = await withConnection(dependencies.pool, async (client) => {
-        const decision = await dependencies.access!.authorizePage!(
-          client,
-          dependencies.actor!,
-          'post:read',
-          page,
-          evidence,
-        );
-        if (!decision) return [];
-        const checked = await client.query(
-          `SELECT p.post_id FROM content.post p
-           JOIN content.thread t ON t.route=p.route AND t.thread_id=p.thread_id
-           JOIN content.board b ON b.route=t.route AND b.board_id=t.board_id
-           WHERE p.route=$1 AND p.post_id=ANY($2::uuid[]) AND p.visibility IN ('published','protected')
-             AND p.availability='available' AND t.visibility IN ('published','protected') AND b.visibility IN ('published','protected')`,
-          [contentRoute, batch],
-        );
-        return checked.rows.map((row) => row.post_id as string);
-      });
-      allowed.forEach((id) => readable.add(id));
+  const readable = new Set<string>();
+  if (dependencies.access && dependencies.actor) {
+    const candidates = [...content.entries()];
+    const deadline = dependencies.deadline ?? Date.now() + 3_000;
+    for (let offset = 0; offset < candidates.length; offset += 32) {
+      await Promise.all(
+        candidates.slice(offset, offset + 32).map(async ([key, candidate]) => {
+          const result = await readPost(
+            { pool: dependencies.pool, access: dependencies.access!, tokens: dependencies.tokens },
+            candidate.threadId,
+            candidate.postId,
+            { actor: dependencies.actor!, deadline },
+          );
+          if (result.value) readable.add(key);
+        }),
+      );
     }
   }
   const items: InboxItem[] = [];
@@ -128,7 +116,11 @@ export async function listNoticeInbox(
   for (const row of rows) {
     scanned++;
     lastScanned = row;
-    if ((row.kind === 'reply' || row.kind === 'mention') && (!row.post_id || !readable.has(row.post_id))) continue;
+    if (
+      (row.kind === 'reply' || row.kind === 'mention') &&
+      (!row.post_id || !row.thread_id || !readable.has(`${row.thread_id}\u0000${row.post_id}`))
+    )
+      continue;
     items.push({
       id: row.notice_id,
       kind: row.kind,
