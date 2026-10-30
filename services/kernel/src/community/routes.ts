@@ -1,5 +1,6 @@
 import { listRealmDiscovery } from './discovery.ts';
 import { requestRealmClaim } from './realm-continuity.ts';
+import { readOwnRealmClaim } from './realm-claim-status.ts';
 import { exactRealmPresentationImage } from '../content/realm-media.ts';
 import { approveRealmClaim } from '../access/realm-claim.ts';
 import { realmClaimApprovalResponseSchema } from './schemas.ts';
@@ -158,6 +159,18 @@ const realm = t.Object(
   closed,
 );
 const realmResponse = t.Object({ realm }, closed);
+const realmClaimStatus = t.Object(
+  {
+    realmId: id,
+    requestId: id,
+    state: t.Union([t.Literal('pending'), t.Literal('approved')]),
+    orphanedAt: instant,
+    requestedAt: instant,
+    approvedAt: t.Union([instant, t.Null()]),
+    currentEpisode: t.Boolean(),
+  },
+  closed,
+);
 const publicationFields = {
   realmId: id,
   subjectId: id,
@@ -1282,6 +1295,47 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         } catch (error) {
           communityProblem(error);
         }
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/claimRequests/mine',
+      {
+        params: realmParams,
+        response: { 200: strict(t.Object({ claimRequest: t.Union([realmClaimStatus, t.Null()]) }, closed)), ...readFailures },
+        detail: {
+          operationId: 'realm.own_claim_request',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
+          security: writeSecurity,
+        },
+      },
+      async ({ params, actor, admission, job }) => {
+        const claimRequest = await admission.run('normal', job, () =>
+          readOwnRealmClaim(realmDependencies(), actor, params, { deadline: job.deadline }),
+        );
+        return { claimRequest };
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/claimRequests/:requestId',
+      {
+        params: t.Object({ realmId: t.String(), requestId: t.String() }, closed),
+        response: { 200: strict(t.Object({ claimRequest: realmClaimStatus }, closed)), ...readFailures },
+        detail: {
+          operationId: 'realm.claim_request_status',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
+          security: writeSecurity,
+        },
+      },
+      async ({ params, actor, admission, job }) => {
+        const claimRequest = await admission.run('normal', job, () =>
+          readOwnRealmClaim(realmDependencies(), actor, params, { deadline: job.deadline }),
+        );
+        if (!claimRequest) throw new ProblemError('not_found');
+        return { claimRequest };
       },
     )
     .post(

@@ -82,6 +82,8 @@ const typed = [
   'POST /v1/realms/:realmId/publications',
   'POST /v1/realms',
   'POST /v1/realms/:realmId/claimRequests',
+  'GET /v1/realms/:realmId/claimRequests/mine',
+  'GET /v1/realms/:realmId/claimRequests/:requestId',
   'POST /v1/presentation/profiles/:digest/$activate',
   'POST /v1/presentation/profiles',
   'POST /v1/pages/$read',

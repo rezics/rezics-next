@@ -299,6 +299,15 @@ never current ownership or management authority. These reads neither reset the t
 Accounts retains sole approval authority, source locking and account-erasure disposition remain unchanged, and
 the read adds no durable payload, event or locator.
 
+Cost per read: one locating snapshot and two admitted snapshots, each with one native partition key,
+one active Realm/Space binding and one continuity key. Each admitted snapshot reads at most one request:
+the existing `(route, realm_id, request_id)` primary key or `(route, realm_id, orphaned_at, account_id)` unique
+key. Each admission prepares three ordinary Access decisions on released anchors, then evaluates them at one
+native read time. Final disclosure repeats both source and authority; changed bindings, episode or receipt return
+typed unavailability. Rows and statements are constant, with logarithmic indexed key work plus bounded native
+Access work. No history, account-wide enumeration or new index is needed. Focused native outcomes live in
+`test/community/realm-claim-status.test.ts`; physical, growth, replay and erasure proof remains deferred.
+
 The approval source is `lockRealmClaimApprovalSource(tx, {realmId, requestId})`. It locks the actual current
 Realm/head and exact routed `realm_claim_request`, retaining the original `orphaned_at`, `claim_eligible_at`,
 `account_id` and `requested_at`. Only an active, pending, same-episode request after the original 720-hour deadline
