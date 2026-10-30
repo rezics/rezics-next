@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { ContextComparisonView } from '../features/catalogue/context-curation-view';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -9,7 +10,6 @@ import { m } from '../paraglide/messages.js';
 import { subjectHref } from './subject-href';
 import { candidateCanSelect, editCandidateDraft, refreshCandidateDraft, type CandidateDraft } from './candidate-draft';
 import {
-  candidateIsPublic,
   candidateSourceRecords,
   publicCandidateSelection,
   type Candidate,
@@ -17,6 +17,7 @@ import {
   type CandidateFailure,
   type CandidateRead,
   type CandidateResult,
+  type CandidateSlot,
 } from './candidates';
 
 export type CandidateTransport = {
@@ -31,12 +32,16 @@ export function CandidateReview({
   transport,
   initialProperty,
   exactCandidate,
+  context,
+  slot,
 }: {
   id: string;
   locale: string;
   transport: CandidateTransport;
   initialProperty?: string | undefined;
   exactCandidate?: string;
+  context?: string;
+  slot?: CandidateSlot;
 }) {
   const options = { locale: locale as never };
   const [opened, setOpened] = useState(false);
@@ -45,6 +50,8 @@ export function CandidateReview({
   const [candidate, setCandidate] = useState<Candidate>();
   const [confirmation, setConfirmation] = useState<CandidateCommand['operation'] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, CandidateDraft>>({});
+  const [modes, setModes] = useState<Record<string, 'inherit' | 'replace' | 'suppress'>>({});
+  const mode = modes[property] ?? 'replace';
   const [busy, setBusy] = useState(false);
   const [requiresReload, setRequiresReload] = useState(false);
   const [failure, setFailure] = useState<CandidateFailure>();
@@ -53,21 +60,28 @@ export function CandidateReview({
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
   const current = read?.ok ? read : undefined;
-  const publicRead = result ? result.public : current?.public;
+  const publicRead = context
+    ? (result?.contextReview?.reading ?? current?.contextReview?.reading)
+    : result
+      ? result.public
+      : current?.public;
   const draft = drafts[property];
   const maximum = current?.fields.find((field) => field.id === property)?.multivalued ? 32 : 1;
   const locked = busy || confirmation !== null || !!request.current || !!result;
-  const publicStatements = (publicRead?.subject.statements[property] ?? []).filter(
-    (statement) => statement.rank === 'normal' || statement.rank === 'preferred',
-  );
+  const publicStatements = (
+    context
+      ? (result?.contextReview?.selected ?? current?.contextReview?.selected ?? [])
+      : (publicRead?.subject.statements[property] ?? [])
+  ).filter((statement) => statement.rank === 'normal' || statement.rank === 'preferred');
   // Public values outside this page remain choices. No page ever stands in for the whole selection.
   const choices = new Map(publicStatements.map((statement) => [statement.id, { statement, eligible: true }]));
   for (const item of current?.page?.candidates ?? [])
     choices.set(item.id, { statement: item.statement, eligible: candidateCanSelect(item) });
   const valid =
-    !!draft &&
-    draft.selection.length <= maximum &&
-    draft.selection.every((entry) => choices.get(entry.candidate)?.eligible);
+    (context && mode !== 'replace') ||
+    (!!draft &&
+      draft.selection.length <= maximum &&
+      draft.selection.every((entry) => choices.get(entry.candidate)?.eligible));
   const action =
     confirmation === 'reject'
       ? m.candidate_reject({}, options)
@@ -109,10 +123,29 @@ export function CandidateReview({
           : next,
       );
       if (!cursor) setRequiresReload(false);
+      if (context)
+        setModes((previous) => ({
+          ...previous,
+          [field]:
+            previous[field] ??
+            next.page?.adoption?.mode ??
+            (next.contextReview?.context.kind === 'community'
+              ? (next.contextReview.context.defaults[field] ?? 'inherit')
+              : 'replace'),
+        }));
       if (field)
         setDrafts((previous) => ({
           ...previous,
-          [field]: refreshCandidateDraft(previous[field], publicCandidateSelection(next.public, field)),
+          [field]: refreshCandidateDraft(
+            previous[field],
+            next.contextReview
+              ? next.contextReview.selected.flatMap((statement) =>
+                  statement.rank === 'normal' || statement.rank === 'preferred'
+                    ? [{ candidate: statement.id, rank: statement.rank }]
+                    : [],
+                )
+              : publicCandidateSelection(next.public, field),
+          ),
         }));
       if (exactCandidate)
         setCandidate(next.page?.candidates.find((item) => item.id === exactCandidate && item.retracted === null));
@@ -145,8 +178,11 @@ export function CandidateReview({
       operation: confirmation,
       head: confirmation === 'adopt' ? (current.page.adoption?.head ?? null) : candidate!.head,
       key: crypto.randomUUID(),
-      ...(confirmation === 'adopt' ? { selection: structuredClone(draft!.selection) } : {}),
+      ...(confirmation === 'adopt'
+        ? { selection: context && mode !== 'replace' ? [] : structuredClone(draft!.selection) }
+        : {}),
       ...(session.current ? { session: session.current } : {}),
+      ...(context ? { context, mode, ...(slot ? { slot } : {}) } : {}),
     };
     try {
       const next = await transport.confirm(request.current);
@@ -186,7 +222,7 @@ export function CandidateReview({
   function state(item: Candidate) {
     if (item.retracted !== null) return m.candidate_retracted({}, options);
     if (item.decision === 'rejected') return m.candidate_rejected_state({}, options);
-    if (publicRead && candidateIsPublic(publicRead, property, item.id)) return m.candidate_selected({}, options);
+    if (publicStatements.some((statement) => statement.id === item.id)) return m.candidate_selected({}, options);
     if (item.rank === 'normal' || item.rank === 'preferred') return m.candidate_pending({}, options);
     return item.decision === 'accepted' ? m.candidate_unselected({}, options) : m.candidate_unresolved({}, options);
   }
@@ -231,16 +267,19 @@ export function CandidateReview({
           )}
           {result && (
             <div role="status" className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+              {result.contextRefreshFailed && <p>{m.context_read_unavailable({}, options)}</p>}
               <p>
-                {result.kind === 'selected'
-                  ? m.candidate_selection_confirmed({}, options)
-                  : result.kind === 'accepted'
-                    ? m.candidate_accepted({}, options)
-                    : result.kind === 'rejected'
-                      ? m.candidate_rejected({}, options)
-                      : m.candidate_pending({}, options)}
+                {context && confirmation === null && result.kind !== 'accepted' && result.kind !== 'rejected'
+                  ? m.context_saved({}, options)
+                  : result.kind === 'selected'
+                    ? m.candidate_selection_confirmed({}, options)
+                    : result.kind === 'accepted'
+                      ? m.candidate_accepted({}, options)
+                      : result.kind === 'rejected'
+                        ? m.candidate_rejected({}, options)
+                        : m.candidate_pending({}, options)}
               </p>
-              {result.kind === 'selected' && result.public && (
+              {!context && result.kind === 'selected' && result.public && (
                 <a
                   className="underline underline-offset-4"
                   href={
@@ -260,13 +299,20 @@ export function CandidateReview({
           )}
           {current && (
             <>
+              {context && (
+                <ContextComparisonView
+                  read={result?.contextReview ? { ...current, contextReview: result.contextReview } : current}
+                  property={property}
+                  locale={locale}
+                />
+              )}
               <Field>
                 <FieldLabel htmlFor="candidate-field">{m.candidate_field({}, options)}</FieldLabel>
                 <NativeSelect
                   id="candidate-field"
                   className="min-h-11 w-full"
                   value={property}
-                  disabled={locked || !!exactCandidate}
+                  disabled={locked || !!exactCandidate || !!slot}
                   onChange={(event) => {
                     setProperty(event.target.value);
                     void load(event.target.value);
@@ -294,7 +340,11 @@ export function CandidateReview({
                           .filter((item) => !exactCandidate || item.id === exactCandidate)
                           .map((item) => (
                             <li key={item.id} className="space-y-3 rounded-lg border border-border p-3">
-                              <CandidateValue snak={item.statement} related={current.public.related} locale={locale} />
+                              <CandidateValue
+                                snak={item.statement}
+                                related={(current.contextReview?.reading ?? current.public).related}
+                                locale={locale}
+                              />
                               <p className="text-sm text-muted-foreground">{state(item)}</p>
                               <CandidateProvenance candidate={item} read={current} locale={locale} />
                               <Button
@@ -340,7 +390,11 @@ export function CandidateReview({
                         </div>
                         <div className="min-w-0 space-y-2 rounded-lg border border-primary/40 p-3">
                           <h4 className="text-sm font-semibold">{m.candidate_proposed({}, options)}</h4>
-                          <CandidateValue snak={candidate.statement} related={current.public.related} locale={locale} />
+                          <CandidateValue
+                            snak={candidate.statement}
+                            related={(current.contextReview?.reading ?? current.public).related}
+                            locale={locale}
+                          />
                           <p className="text-sm text-muted-foreground">{state(candidate)}</p>
                           {candidate.statement.qualifiers.map((snak, index) => (
                             <div key={index}>
@@ -349,7 +403,11 @@ export function CandidateReview({
                                   m.subject_value_unlabelled({}, options)}
                                 :{' '}
                               </span>
-                              <CandidateValue snak={snak} related={current.public.related} locale={locale} />
+                              <CandidateValue
+                                snak={snak}
+                                related={(current.contextReview?.reading ?? current.public).related}
+                                locale={locale}
+                              />
                             </div>
                           ))}
                           <CandidateProvenance candidate={candidate} read={current} locale={locale} />
@@ -393,61 +451,94 @@ export function CandidateReview({
                       className="space-y-3 rounded-lg border border-border p-3"
                     >
                       <h3 className="font-semibold">{m.candidate_selection_draft({}, options)}</h3>
-                      <p className="text-sm text-muted-foreground">{m.candidate_replace_hint({}, options)}</p>
+                      {context && current.contextReview && (
+                        <Field>
+                          <FieldLabel htmlFor="context-mode">{m.context_mode({}, options)}</FieldLabel>
+                          <NativeSelect
+                            id="context-mode"
+                            value={mode}
+                            disabled={locked || requiresReload}
+                            onChange={(event) =>
+                              setModes((previous) => ({ ...previous, [property]: event.target.value as typeof mode }))
+                            }
+                          >
+                            <NativeSelectOption value="replace">{m.context_replace({}, options)}</NativeSelectOption>
+                            {current.contextReview.context.kind === 'community' && (
+                              <>
+                                <NativeSelectOption value="inherit">
+                                  {m.context_inherit({}, options)}
+                                </NativeSelectOption>
+                                <NativeSelectOption value="suppress">
+                                  {m.context_suppress({}, options)}
+                                </NativeSelectOption>
+                              </>
+                            )}
+                          </NativeSelect>
+                        </Field>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        {context && mode !== 'replace'
+                          ? m.context_empty_selection({}, options)
+                          : m.candidate_replace_hint({}, options)}
+                      </p>
                       <p className="text-sm">{m.candidate_selection_limit({ limit: String(maximum) }, options)}</p>
-                      <ul className="space-y-3">
-                        {[...new Set([...choices.keys(), ...draft.selection.map((entry) => entry.candidate)])].map(
-                          (choice) => {
-                            const value = choices.get(choice);
-                            const entry = draft.selection.find((entry) => entry.candidate === choice);
-                            return (
-                              <li key={choice} className="space-y-2 rounded-lg bg-muted/30 p-3">
-                                <Field orientation="horizontal">
-                                  <Checkbox
-                                    id={`include-${choice}`}
-                                    checked={!!entry}
-                                    disabled={
-                                      locked || (!entry && (!value?.eligible || draft.selection.length >= maximum))
-                                    }
-                                    onCheckedChange={(checked) => edit(choice, checked ? 'normal' : null)}
-                                  />
-                                  <FieldLabel htmlFor={`include-${choice}`} className="min-h-11 flex-wrap">
-                                    <span>{m.candidate_include({}, options)}</span>
-                                    {value ? (
-                                      <CandidateValue
-                                        snak={value.statement}
-                                        related={current.public.related}
-                                        locale={locale}
-                                      />
-                                    ) : (
-                                      <span>{m.candidate_choice_unresolved({}, options)}</span>
-                                    )}
-                                  </FieldLabel>
-                                </Field>
-                                {entry && (
-                                  <Field>
-                                    <FieldLabel htmlFor={`rank-${choice}`}>{m.candidate_rank({}, options)}</FieldLabel>
-                                    <NativeSelect
-                                      id={`rank-${choice}`}
-                                      className="min-h-11"
-                                      value={entry.rank}
-                                      disabled={locked || !value?.eligible}
-                                      onChange={(event) => edit(choice, event.target.value as 'normal' | 'preferred')}
-                                    >
-                                      <NativeSelectOption value="normal">
-                                        {m.candidate_rank_normal({}, options)}
-                                      </NativeSelectOption>
-                                      <NativeSelectOption value="preferred">
-                                        {m.candidate_rank_preferred({}, options)}
-                                      </NativeSelectOption>
-                                    </NativeSelect>
+                      {(!context || mode === 'replace') && (
+                        <ul className="space-y-3">
+                          {[...new Set([...choices.keys(), ...draft.selection.map((entry) => entry.candidate)])].map(
+                            (choice) => {
+                              const value = choices.get(choice);
+                              const entry = draft.selection.find((entry) => entry.candidate === choice);
+                              return (
+                                <li key={choice} className="space-y-2 rounded-lg bg-muted/30 p-3">
+                                  <Field orientation="horizontal">
+                                    <Checkbox
+                                      id={`include-${choice}`}
+                                      checked={!!entry}
+                                      disabled={
+                                        locked || (!entry && (!value?.eligible || draft.selection.length >= maximum))
+                                      }
+                                      onCheckedChange={(checked) => edit(choice, checked ? 'normal' : null)}
+                                    />
+                                    <FieldLabel htmlFor={`include-${choice}`} className="min-h-11 flex-wrap">
+                                      <span>{m.candidate_include({}, options)}</span>
+                                      {value ? (
+                                        <CandidateValue
+                                          snak={value.statement}
+                                          related={(current.contextReview?.reading ?? current.public).related}
+                                          locale={locale}
+                                        />
+                                      ) : (
+                                        <span>{m.candidate_choice_unresolved({}, options)}</span>
+                                      )}
+                                    </FieldLabel>
                                   </Field>
-                                )}
-                              </li>
-                            );
-                          },
-                        )}
-                      </ul>
+                                  {entry && (
+                                    <Field>
+                                      <FieldLabel htmlFor={`rank-${choice}`}>
+                                        {m.candidate_rank({}, options)}
+                                      </FieldLabel>
+                                      <NativeSelect
+                                        id={`rank-${choice}`}
+                                        className="min-h-11"
+                                        value={entry.rank}
+                                        disabled={locked || !value?.eligible}
+                                        onChange={(event) => edit(choice, event.target.value as 'normal' | 'preferred')}
+                                      >
+                                        <NativeSelectOption value="normal">
+                                          {m.candidate_rank_normal({}, options)}
+                                        </NativeSelectOption>
+                                        <NativeSelectOption value="preferred">
+                                          {m.candidate_rank_preferred({}, options)}
+                                        </NativeSelectOption>
+                                      </NativeSelect>
+                                    </Field>
+                                  )}
+                                </li>
+                              );
+                            },
+                          )}
+                        </ul>
+                      )}
                       {!draft.selection.length && <p>{m.candidate_clear_selection({}, options)}</p>}
                       {!valid && <p role="status">{m.candidate_selection_invalid({}, options)}</p>}
                       <Button
@@ -472,9 +563,20 @@ export function CandidateReview({
                   ? m.candidate_confirm_accept({}, options)
                   : confirmation === 'reject'
                     ? m.candidate_confirm_reject({}, options)
-                    : m.candidate_confirm_replace({}, options)}
+                    : context && mode !== 'replace'
+                      ? m.context_empty_selection({}, options)
+                      : m.candidate_confirm_replace({}, options)}
               </p>
-              {confirmation === 'adopt' && (
+              {context && confirmation === 'adopt' && (
+                <p>
+                  {mode === 'inherit'
+                    ? m.context_inherit({}, options)
+                    : mode === 'suppress'
+                      ? m.context_suppress({}, options)
+                      : m.context_replace({}, options)}
+                </p>
+              )}
+              {confirmation === 'adopt' && (!context || mode === 'replace') && (
                 <ul className="space-y-2">
                   {draft?.selection.map((entry) => {
                     const value = choices.get(entry.candidate);

@@ -6,6 +6,17 @@ export type Candidate = CandidatePage['candidates'][number];
 export type CandidateField = { id: string; label: string; multivalued?: boolean };
 export type CandidateSlot = { target?: string; sameAs?: string; key?: string };
 export type CandidateSelection = { candidate: string; rank: 'normal' | 'preferred' };
+export type ReviewContext = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['contexts']>['get']>>['data']
+>['context'];
+export type ContextComparison = {
+  context: ReviewContext;
+  reading: SubjectRead;
+  slot?: CandidateSlot;
+  selected: SubjectRead['subject']['statements'][string];
+  inherited: SubjectRead['subject']['statements'][string];
+  adoption: CandidatePage['adoption'];
+};
 export type CandidateFailure = { ok: false; reason: 'denied' | 'stale' | 'unavailable' | 'invalid' };
 export type CandidateRead =
   | CandidateFailure
@@ -15,6 +26,7 @@ export type CandidateRead =
       fields: CandidateField[];
       names: Record<string, Record<string, string>>;
       page: CandidatePage | null;
+      contextReview?: ContextComparison;
       session?: string;
     };
 export type CandidateCommand = {
@@ -29,6 +41,8 @@ export type CandidateCommand = {
   /** Explicit whole-slot replacement; omitted only by existing single-candidate callers. */
   selection?: CandidateSelection[];
   session?: string;
+  context?: string;
+  mode?: 'inherit' | 'replace' | 'suppress';
 };
 export type CandidateResult =
   | CandidateFailure
@@ -37,6 +51,8 @@ export type CandidateResult =
       kind: 'accepted' | 'rejected' | 'selected' | 'pending';
       public: SubjectRead | null;
       session?: string;
+      contextReview?: ContextComparison;
+      contextRefreshFailed?: boolean;
     };
 
 export const candidateContext = '00000000-0000-8000-8000-000000000000';
@@ -173,10 +189,14 @@ export async function selectCandidate(
 ): Promise<CandidateResult> {
   try {
     const endpoint = client.subjects({ id: input.id });
+    const context = input.context ?? candidateContext;
+    const mode = input.mode ?? 'replace';
     const selection = input.selection ?? [{ candidate: input.candidate, rank: input.rank ?? 'normal' }];
     if (
       input.operation === 'adopt' &&
-      (selection.length > 32 ||
+      ((context === candidateContext && mode !== 'replace') ||
+        (mode !== 'replace' && selection.length !== 0) ||
+        selection.length > 32 ||
         new Set(selection.map((entry) => entry.candidate)).size !== selection.length ||
         selection.some((entry) => entry.rank !== 'normal' && entry.rank !== 'preferred'))
     )
@@ -188,7 +208,7 @@ export async function selectCandidate(
         ...(input.session ? { 'rezics-session-token': input.session } : {}),
       } as { 'idempotency-key': string },
     };
-    const decision = { context: candidateContext, expected_head: input.head };
+    const decision = { context, expected_head: input.head };
     const result =
       input.operation === 'accept'
         ? await endpoint.candidates({ candidate: input.candidate }).$accept.post(decision, options)
@@ -196,10 +216,10 @@ export async function selectCandidate(
           ? await endpoint.candidates({ candidate: input.candidate }).$reject.post(decision, options)
           : await endpoint.$adopt.post(
               {
-                context: candidateContext,
+                context,
                 property: input.property,
                 ...input.slot,
-                mode: 'replace',
+                mode,
                 selection,
                 expected_head: input.head,
               },
@@ -221,10 +241,11 @@ export async function selectCandidate(
         input.operation === 'reject'
           ? 'rejected'
           : input.operation === 'accept'
-            ? current && candidateIsPublic(current, input.property, input.candidate)
+            ? context === candidateContext && current && candidateIsPublic(current, input.property, input.candidate)
               ? 'selected'
               : 'accepted'
-            : current &&
+            : context === candidateContext &&
+                current &&
                 sameCandidateSelection(publicCandidateSelection(current, input.property, input.slot), selection)
               ? 'selected'
               : 'pending',

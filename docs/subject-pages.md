@@ -238,6 +238,33 @@ DTO, it displays no invented date or countdown. The temporary typed port uses th
 transport and must bind to generated lifecycle declarations when published. Page stories are declared-interface
 examples, not native acceptance or visual-review evidence.
 
+## Context review
+
+An actual subject reading links its native Context to
+`/{locale}/subjects/{id}/{slug}/context-review?context={contextId}`. This companion editor retains the public
+canonical subject frame. It verifies the explicit Context with native `GET /v1/contexts/{id}` after session
+preparation and explicit opening. Its label and Global/community scope come from that response. A Realm name
+never supplies editorial scope, and this route does not change the selected Realm reader or its publication.
+
+The editor reuses candidate comparison for descriptive fields. Existing exact-slot links may additionally supply
+`property`, `target` or `sameAs`, and an admitted qualifier `key`. Those addresses travel intact through native
+candidate listing and adoption; a relation property without its exact address is not offered as a scalar field.
+The comparison shows separately the anonymous Global values and the authenticated Context reading, with supplied
+related summaries. Native adoption and resolution distinguish inherited, replaced, suppressed and unresolved
+readings. Relation resolution is field-wide, so the editor labels its disclosed exact-slot preview accordingly
+instead of assigning a field diagnostic to one relation or picking a winning candidate.
+
+Global supports replacement only. Community review additionally offers inherit and suppress with an empty command
+selection; switching modes retains the replacement draft. Replacement uses normal/preferred ranks and emitted
+cardinality. Candidate acceptance/rejection and slot adoption retain their separate observed heads and native
+`context:accept` / `context:adopt` checks. Reading or preparing the Context grants neither write permission.
+
+The private no-store session BFF preserves current identity, CSRF, session continuity and idempotency. A stale
+comparison keeps the draft and mode, requires reload, then a new explicit confirmation and key. An uncertain
+request freezes its exact payload and key for retry. Confirmed writes re-read the actual Context, subject and slot;
+a failed reread remains unconfirmed. A local adoption never claims whole-Context publication. A separate link
+opens the ordinary public canonical subject. Candidate data never enters public SSR or its dehydrated cache.
+
 ## Relation contributions
 
 The canonical Global overview links to `/{locale}/subjects/{id}/{slug}/relation-edit`. The route keeps the

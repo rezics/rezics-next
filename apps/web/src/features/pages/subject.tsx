@@ -463,6 +463,14 @@ export function SubjectPage({
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
             {overview && <SubjectSourcesLink />}
             {curation}
+            {overview && read && !page.account && (
+              <a
+                className={`${linkClass} ${linkColor}`}
+                href={`${subjectUrlForView(subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale), 'context-review')}?${new URLSearchParams({ context: page.context?.id ?? read.subject.context })}`}
+              >
+                {m.context_title({}, { locale: locale as never })}
+              </a>
+            )}
             {overview &&
               read &&
               !page.account &&
