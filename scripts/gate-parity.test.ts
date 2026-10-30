@@ -1,14 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import {
-  chmodSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const repository = resolve(import.meta.dir, '..');
@@ -353,170 +344,185 @@ function startRemoteGate(
   );
 }
 
-test(
-  'the root gate keeps its supported workspace check environment and native Git survives concurrent remote restores',
-  async () => {
-    mkdirSync(join(repository, '.temp'), { recursive: true });
-    const fixtureRoot = mkdtempSync(join(repository, '.temp/gate-parity-joint-'));
-    fixtureRoots.push(fixtureRoot);
-    const remoteRoot = join(fixtureRoot, 'remote-host');
-    const bin = join(fixtureRoot, 'bin');
-    mkdirSync(remoteRoot);
-    mkdirSync(bin);
-    const hosts = join(fixtureRoot, 'hosts.json');
-    const transportLog = join(fixtureRoot, 'transport.jsonl');
-    writeFileSync(
-      hosts,
-      JSON.stringify({
-        hosts: [
-          {
-            name: 'native-fixture',
-            address: 'fixture@native.test',
-            identity: '/fixture/identity',
-            memoryMaxGiB: 16,
-            cpuQuotaPercent: 1600,
-            slots: 3,
-            processorsPerSlot: 2,
-          },
-        ],
-      }),
-    );
-    executable(join(bin, 'ssh'), fakeSsh);
-    executable(join(bin, 'rsync'), fakeRsync);
-    executable(
-      join(bin, 'systemd-run'),
-      '#!/bin/sh\nif [ "$1" = --help ]; then printf "%s\\n" --expand-environment; exit 0; fi\nwhile [ "$#" -gt 0 ]; do if [ "$1" = sh ]; then exec "$@"; fi; shift; done\nexit 2\n',
-    );
-    executable(join(bin, 'systemctl'), '#!/bin/sh\nexit 0\n');
-    executable(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
+test('the root gate keeps its supported workspace check environment and native Git survives concurrent remote restores', async () => {
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const fixtureRoot = mkdtempSync(join(repository, '.temp/gate-parity-joint-'));
+  fixtureRoots.push(fixtureRoot);
+  const remoteRoot = join(fixtureRoot, 'remote-host');
+  const bin = join(fixtureRoot, 'bin');
+  mkdirSync(remoteRoot);
+  mkdirSync(bin);
+  const hosts = join(fixtureRoot, 'hosts.json');
+  const transportLog = join(fixtureRoot, 'transport.jsonl');
+  writeFileSync(
+    hosts,
+    JSON.stringify({
+      hosts: [
+        {
+          name: 'native-fixture',
+          address: 'fixture@native.test',
+          identity: '/fixture/identity',
+          memoryMaxGiB: 16,
+          cpuQuotaPercent: 1600,
+          slots: 3,
+          processorsPerSlot: 2,
+        },
+      ],
+    }),
+  );
+  executable(join(bin, 'ssh'), fakeSsh);
+  executable(join(bin, 'rsync'), fakeRsync);
+  executable(
+    join(bin, 'systemd-run'),
+    '#!/bin/sh\nif [ "$1" = --help ]; then printf "%s\\n" --expand-environment; exit 0; fi\nwhile [ "$#" -gt 0 ]; do if [ "$1" = sh ]; then exec "$@"; fi; shift; done\nexit 2\n',
+  );
+  executable(join(bin, 'systemctl'), '#!/bin/sh\nexit 0\n');
+  executable(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
 
-    const fixtureA = createGateRepository('selected');
-    const fixtureB = createGateRepository('concurrent');
-    const environment: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      PATH: `${bin}:${join(repository, 'node_modules/.bin')}:${process.env.PATH}`,
-      KERNEL_CHECK_REMOTE: hosts,
-      REMOTE_CHECK_POLL_MS: '10',
-      REMOTE_CHECK_PINNED_BUN_PATH: join(repository, 'node_modules/.bin/bun'),
-      PARITY_REMOTE_ROOT: remoteRoot,
-      PARITY_TRANSPORT_LOG: transportLog,
-    };
-    for (const key of Object.keys(environment)) {
-      if (
-        key.startsWith('REZICS_CHECK_') ||
-        key.startsWith('REZICS_STACK_') ||
-        key === 'KERNEL_CHECK_ON_REMOTE' ||
-        key === 'AUTH_CHECK_LANE_OWNER' ||
-        key === 'WEB_TEST_STATE_DIR' ||
-        key === 'GATE_RESULT_FILE' ||
-        key === 'GATE_CONCURRENCY' ||
-        key === 'GATE_DURATIONS_FILE'
-      ) {
-        delete environment[key];
-      }
+  const fixtureA = createGateRepository('selected');
+  const fixtureB = createGateRepository('concurrent');
+  const environment: Record<string, string> = {
+    ...(process.env as Record<string, string>),
+    PATH: `${bin}:${join(repository, 'node_modules/.bin')}:${process.env.PATH}`,
+    KERNEL_CHECK_REMOTE: hosts,
+    REMOTE_CHECK_POLL_MS: '10',
+    REMOTE_CHECK_PINNED_BUN_PATH: join(repository, 'node_modules/.bin/bun'),
+    PARITY_REMOTE_ROOT: remoteRoot,
+    PARITY_TRANSPORT_LOG: transportLog,
+  };
+  for (const key of Object.keys(environment)) {
+    if (
+      key.startsWith('REZICS_CHECK_') ||
+      key.startsWith('REZICS_STACK_') ||
+      key === 'KERNEL_CHECK_ON_REMOTE' ||
+      key === 'AUTH_CHECK_LANE_OWNER' ||
+      key === 'WEB_TEST_STATE_DIR' ||
+      key === 'GATE_RESULT_FILE' ||
+      key === 'GATE_CONCURRENCY' ||
+      key === 'GATE_DURATIONS_FILE'
+    ) {
+      delete environment[key];
     }
+  }
 
-    const first = startRemoteGate(fixtureA, 'selected', ['pass', 'fail'], environment);
-    const second = startRemoteGate(fixtureB, 'concurrent', ['solo'], environment);
-    const collect = async (child: ReturnType<typeof Bun.spawn>) => {
-      const timer = setTimeout(() => child.kill('SIGTERM'), 50_000);
-      try {
-        const [code, stdout, stderr] = await Promise.all([
-          child.exited,
-          new Response(child.stdout as ReadableStream<Uint8Array>).text(),
-          new Response(child.stderr as ReadableStream<Uint8Array>).text(),
-        ]);
-        return { code, stdout, stderr };
-      } finally {
-        clearTimeout(timer);
-      }
-    };
-    const [failedRun, passingRun] = await Promise.all([collect(first), collect(second)]);
-    expect(failedRun.code, `${failedRun.stdout}\n${failedRun.stderr}`).toBe(1);
-    expect(passingRun.code, `${passingRun.stdout}\n${passingRun.stderr}`).toBe(0);
-    expect(existsSync(join(fixtureA.root, '.git'))).toBe(false);
-    expect(existsSync(join(fixtureB.root, '.git'))).toBe(false);
+  const first = startRemoteGate(fixtureA, 'selected', ['pass', 'fail'], environment);
+  const second = startRemoteGate(fixtureB, 'concurrent', ['solo'], environment);
+  const collect = async (child: ReturnType<typeof Bun.spawn>) => {
+    const timer = setTimeout(() => child.kill('SIGTERM'), 50_000);
+    try {
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout as ReadableStream<Uint8Array>).text(),
+        new Response(child.stderr as ReadableStream<Uint8Array>).text(),
+      ]);
+      return { code, stdout, stderr };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const [failedRun, passingRun] = await Promise.all([collect(first), collect(second)]);
+  expect(failedRun.code, `${failedRun.stdout}\n${failedRun.stderr}`).toBe(1);
+  expect(passingRun.code, `${passingRun.stdout}\n${passingRun.stderr}`).toBe(0);
+  expect(existsSync(join(fixtureA.root, '.git'))).toBe(false);
+  expect(existsSync(join(fixtureB.root, '.git'))).toBe(false);
 
-    const selectedOutcomes = JSON.parse(readFileSync(join(fixtureA.root, '.temp/gate/result.json'), 'utf8')) as {
-      workspaces: Array<{
-        name: string;
-        directory: string;
-        host: string;
-        passed: boolean;
-        durationSeconds: number;
-        failingFiles: string[];
-        loadSensitiveTests: string[];
-      }>;
-    };
-    expect(selectedOutcomes.workspaces).toEqual([
-      { name: '@fixture/fail', directory: 'apps/fail', host: 'native-fixture', passed: false, durationSeconds: expect.any(Number), failingFiles: [], loadSensitiveTests: [] },
-      { name: '@fixture/pass', directory: 'apps/pass', host: 'native-fixture', passed: true, durationSeconds: expect.any(Number), failingFiles: [], loadSensitiveTests: [] },
-    ]);
-    const concurrentOutcomes = JSON.parse(readFileSync(join(fixtureB.root, '.temp/gate/result.json'), 'utf8')) as {
-      workspaces: Array<{ directory: string; host: string; passed: boolean }>;
-    };
-    expect(concurrentOutcomes.workspaces).toHaveLength(1);
-    expect(concurrentOutcomes.workspaces[0]).toMatchObject({
-      directory: 'apps/solo',
+  const selectedOutcomes = JSON.parse(readFileSync(join(fixtureA.root, '.temp/gate/result.json'), 'utf8')) as {
+    workspaces: Array<{
+      name: string;
+      directory: string;
+      host: string;
+      passed: boolean;
+      durationSeconds: number;
+      failingFiles: string[];
+      loadSensitiveTests: string[];
+    }>;
+  };
+  expect(selectedOutcomes.workspaces).toEqual([
+    {
+      name: '@fixture/fail',
+      directory: 'apps/fail',
+      host: 'native-fixture',
+      passed: false,
+      durationSeconds: expect.any(Number),
+      failingFiles: [],
+      loadSensitiveTests: [],
+    },
+    {
+      name: '@fixture/pass',
+      directory: 'apps/pass',
       host: 'native-fixture',
       passed: true,
-    });
+      durationSeconds: expect.any(Number),
+      failingFiles: [],
+      loadSensitiveTests: [],
+    },
+  ]);
+  const concurrentOutcomes = JSON.parse(readFileSync(join(fixtureB.root, '.temp/gate/result.json'), 'utf8')) as {
+    workspaces: Array<{ directory: string; host: string; passed: boolean }>;
+  };
+  expect(concurrentOutcomes.workspaces).toHaveLength(1);
+  expect(concurrentOutcomes.workspaces[0]).toMatchObject({
+    directory: 'apps/solo',
+    host: 'native-fixture',
+    passed: true,
+  });
 
-    const selectedRecords = readFileSync(join(fixtureA.root, '.temp/gate-parity-state/selected.jsonl'), 'utf8')
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line));
-    const concurrentRecords = readFileSync(join(fixtureB.root, '.temp/gate-parity-state/concurrent.jsonl'), 'utf8')
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line));
-    expect(selectedRecords.map((record) => record.workspace).sort()).toEqual(['fail', 'pass']);
-    expect(concurrentRecords.map((record) => record.workspace)).toEqual(['solo']);
-    const passedSelected = selectedRecords.find((record) => record.workspace === 'pass')!;
-    const passedConcurrent = concurrentRecords[0]!;
-    for (const [record, workspace] of [[passedSelected, 'pass'], [passedConcurrent, 'solo']] as const) {
-      expect(record.cwd).toMatch(new RegExp(`/runs/[^/]+/apps/${workspace}$`));
-      expect(record.ancestry[0].command).toContain('check.ts');
-      expect(record.ancestry.some((entry: { command: string }) => entry.command.includes('scripts/gate.ts'))).toBe(true);
-      expect(record.environment).toMatchObject({
-        remoteHost: 'native-fixture',
-        remoteMarker: '1',
-        stackLease: 'off',
-      });
-      expect(record.environment.run).toBeTruthy();
-      expect(record.environment.slice).toBeTruthy();
-      expect(record.environment.phases).toBeTruthy();
-      expect(record.environment.authLaneOwner).toBeUndefined();
-      expect(record.environment.webStateDirectory).toBeUndefined();
-      expect(record.result).toMatchObject({
-        head: expect.any(String),
-        historical: 'historical',
-        staged: 'staged',
-        status: fixtureA.expectedStatus,
-        worktreeFile: 'unstaged\n',
-        childWorktree: 'committed\n',
-        gitMetadataInsideRun: true,
-      });
-    }
-    expect(passedSelected.environment.run).not.toBe(passedConcurrent.environment.run);
-    expect(passedSelected.result.gitDirectory).not.toBe(passedConcurrent.result.gitDirectory);
-    const transportRecords = readFileSync(transportLog, 'utf8')
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line));
-    expect(transportRecords.filter((record) => record.kind === 'workspace-upload')).toHaveLength(2);
-    expect(transportRecords.filter((record) => record.kind === 'workspace-return')).toHaveLength(2);
-    const runStarts = transportRecords.filter((record) => record.kind === 'run-start');
-    expect(runStarts).toHaveLength(2);
-    for (const run of runStarts) {
-      expect(run.artifactBytes).toBeGreaterThan(0);
-      expect(run.manifestRelative).toContain('.temp/remote-check-git-');
-      expect(run.artifactsPresentBeforeBootstrap).toBe(true);
-      expect(run.gitUnavailableBeforeBootstrap).toBe(true);
-      expect(existsSync(join(remoteRoot, 'bases/current', run.manifestRelative))).toBe(false);
-      expect(existsSync(join(remoteRoot, 'bases/current/.git'))).toBe(false);
-      expect(existsSync(join(remoteRoot, 'runs', run.run))).toBe(false);
-    }
-  },
-  65_000,
-);
+  const selectedRecords = readFileSync(join(fixtureA.root, '.temp/gate-parity-state/selected.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const concurrentRecords = readFileSync(join(fixtureB.root, '.temp/gate-parity-state/concurrent.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(selectedRecords.map((record) => record.workspace).sort()).toEqual(['fail', 'pass']);
+  expect(concurrentRecords.map((record) => record.workspace)).toEqual(['solo']);
+  const passedSelected = selectedRecords.find((record) => record.workspace === 'pass')!;
+  const passedConcurrent = concurrentRecords[0]!;
+  for (const [record, workspace] of [
+    [passedSelected, 'pass'],
+    [passedConcurrent, 'solo'],
+  ] as const) {
+    expect(record.cwd).toMatch(new RegExp(`/runs/[^/]+/apps/${workspace}$`));
+    expect(record.ancestry[0].command).toContain('check.ts');
+    expect(record.ancestry.some((entry: { command: string }) => entry.command.includes('scripts/gate.ts'))).toBe(true);
+    expect(record.environment).toMatchObject({
+      remoteHost: 'native-fixture',
+      remoteMarker: '1',
+      stackLease: 'off',
+    });
+    expect(record.environment.run).toBeTruthy();
+    expect(record.environment.slice).toBeTruthy();
+    expect(record.environment.phases).toBeTruthy();
+    expect(record.environment.authLaneOwner).toBeUndefined();
+    expect(record.environment.webStateDirectory).toBeUndefined();
+    expect(record.result).toMatchObject({
+      head: expect.any(String),
+      historical: 'historical',
+      staged: 'staged',
+      status: fixtureA.expectedStatus,
+      worktreeFile: 'unstaged\n',
+      childWorktree: 'committed\n',
+      gitMetadataInsideRun: true,
+    });
+  }
+  expect(passedSelected.environment.run).not.toBe(passedConcurrent.environment.run);
+  expect(passedSelected.result.gitDirectory).not.toBe(passedConcurrent.result.gitDirectory);
+  const transportRecords = readFileSync(transportLog, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(transportRecords.filter((record) => record.kind === 'workspace-upload')).toHaveLength(2);
+  expect(transportRecords.filter((record) => record.kind === 'workspace-return')).toHaveLength(2);
+  const runStarts = transportRecords.filter((record) => record.kind === 'run-start');
+  expect(runStarts).toHaveLength(2);
+  for (const run of runStarts) {
+    expect(run.artifactBytes).toBeGreaterThan(0);
+    expect(run.manifestRelative).toContain('.temp/remote-check-git-');
+    expect(run.artifactsPresentBeforeBootstrap).toBe(true);
+    expect(run.gitUnavailableBeforeBootstrap).toBe(true);
+    expect(existsSync(join(remoteRoot, 'bases/current', run.manifestRelative))).toBe(false);
+    expect(existsSync(join(remoteRoot, 'bases/current/.git'))).toBe(false);
+    expect(existsSync(join(remoteRoot, 'runs', run.run))).toBe(false);
+  }
+}, 65_000);

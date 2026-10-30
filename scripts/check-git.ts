@@ -256,14 +256,7 @@ export async function stageCheckGit(workspace: string, artifactDirectory: string
     if (existsSync(sourceIndex)) copyFileSync(sourceIndex, indexCopy);
     else runGit(source, ['read-tree', head], { GIT_INDEX_FILE: indexCopy });
     mkdirSync(template);
-    runGit(build, [
-      'init',
-      '--bare',
-      '--quiet',
-      `--object-format=${objectFormat}`,
-      `--template=${template}`,
-      bare,
-    ]);
+    runGit(build, ['init', '--bare', '--quiet', `--object-format=${objectFormat}`, `--template=${template}`, bare]);
 
     const isolatedObjects = {
       GIT_OBJECT_DIRECTORY: join(bare, 'objects'),
