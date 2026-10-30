@@ -96,11 +96,17 @@ function fail(code: AuthRestorePendingCode): never {
 }
 const key = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 1024;
-const timestamp = (value: string) => Number.isFinite(Date.parse(value));
+const timestamp = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 64 && Number.isFinite(Date.parse(value));
 const instant = (value: Date | string | null) => (value === null ? null : new Date(value).getTime());
 
 async function inventoryFor(database: Pool, restored: AuthRestoredGeneration): Promise<AuthRestoreInventory> {
   if (restored.kind !== 'RESTORED' || !key(restored.generation)) fail('restore-lineage-mismatch');
+  // NULL inventory records only the declaration, never verified backup evidence.
+  // Failed native recovery must also keep later construction closed by omission.
+  await database.query('INSERT INTO auth_restore_generation(generation) VALUES ($1) ON CONFLICT DO NOTHING', [
+    restored.generation,
+  ]);
   if (!restored.databaseOwner) fail('database-owner-unavailable');
   let result: Awaited<ReturnType<AuthRestoreDatabaseOwner['verifyRestoredDatabase']>>;
   try {
@@ -125,7 +131,18 @@ async function inventoryFor(database: Pool, restored: AuthRestoredGeneration): P
     ].every(key)
   )
     fail('restore-lineage-mismatch');
-  return result;
+  // Keep only the nonsecret contract fields, not an owner's extra record fields.
+  return {
+    generation: result.generation,
+    databaseIdentity: result.databaseIdentity,
+    inventoryEntry: result.inventoryEntry,
+    inventoryVersion: result.inventoryVersion,
+    sourceCluster: result.sourceCluster,
+    sourceTimeline: result.sourceTimeline,
+    sourceLineage: result.sourceLineage,
+    capturePoint: result.capturePoint,
+    committedNativeTail: result.committedNativeTail,
+  };
 }
 
 async function bindInventory(database: Pool, inventory: AuthRestoreInventory) {
@@ -158,7 +175,7 @@ export async function importRestoredAuthProgress(
   }
   if (!progress || typeof progress !== 'object') fail('original-progress-unavailable');
   if ('pending' in progress) fail(progress.pending);
-  validateProgress(progress, accountId);
+  progress = normalizeProgress(progress, accountId);
   await bindInventory(database, inventory);
   // ALL owner reads have completed before this checkout. There is no foreign
   // call, wait or SDK recovery while holding a native producer lock.
@@ -269,8 +286,7 @@ export async function importRestoredAuthProgress(
   }
 }
 
-function validateProgress(progress: AuthRestoreNativeProgress, accountId: string) {
-  if (Buffer.byteLength(JSON.stringify(progress)) > 16384) fail('original-progress-mismatch');
+function normalizeProgress(progress: AuthRestoreNativeProgress, accountId: string): AuthRestoreNativeProgress {
   const source = progress.source;
   if (
     !source ||
@@ -317,6 +333,37 @@ function validateProgress(progress: AuthRestoreNativeProgress, accountId: string
       (consumer.publishedAt !== null && (!consumer.dischargedAt || !timestamp(consumer.publishedAt))))
   )
     fail('original-progress-mismatch');
+  const selected: AuthRestoreNativeProgress = {
+    source: { accountId: source.accountId, route: source.route, version: source.version, at: source.at },
+    originalNativeId: progress.originalNativeId,
+    checkpoint: progress.checkpoint,
+    floor: progress.floor,
+    acceptedAt: progress.acceptedAt,
+    applicable: progress.applicable,
+    userDeletion:
+      deletion.state === 'established'
+        ? {
+            state: 'established',
+            deletedAt: deletion.deletedAt,
+            consentDueAt: deletion.consentDueAt,
+            consentCompletedAt: deletion.consentCompletedAt,
+          }
+        : { state: 'never-established' },
+    consumer:
+      consumer.state === 'accepted'
+        ? {
+            state: 'accepted',
+            workflowId: consumer.workflowId,
+            continuationId: consumer.continuationId,
+            receiptId: consumer.receiptId,
+            acceptedAt: consumer.acceptedAt,
+            dischargedAt: consumer.dischargedAt,
+            publishedAt: consumer.publishedAt,
+          }
+        : { state: 'pending' },
+  };
+  if (Buffer.byteLength(JSON.stringify(selected)) > 16384) fail('original-progress-mismatch');
+  return selected;
 }
 
 /** One existing native page, then (on a later invocation) one shared-copy page.
@@ -400,13 +447,6 @@ export async function requireRestoredAuthAdmission(database: Pool, restored?: Au
     if (marked.rowCount) fail('restore-lineage-unavailable');
     return;
   }
-  if (restored.kind !== 'RESTORED' || !key(restored.generation)) fail('restore-lineage-mismatch');
-  // Record the declaration even when its owner is missing. NULL inventory is
-  // explicitly UNVERIFIED, and can never authorize replay or admission. A later
-  // construction cannot turn this same image into a fresh database by omission.
-  await database.query('INSERT INTO auth_restore_generation(generation) VALUES ($1) ON CONFLICT DO NOTHING', [
-    restored.generation,
-  ]);
   const inventory = await inventoryFor(database, restored);
   await bindInventory(database, inventory);
   fail('source-authority-unavailable');

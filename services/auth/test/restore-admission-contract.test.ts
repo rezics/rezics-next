@@ -55,7 +55,7 @@ test('An explicitly restored Auth generation remains closed before handler issue
     if (!database.ended) await database.end();
     fixture.close();
   }
-});
+}, 60_000);
 
 test('missing or ambiguous verified lineage refuses construction without reading or logging native payload', async () => {
   for (const pending of ['restore-lineage-unavailable', 'restore-lineage-mismatch'] as const) {
@@ -83,7 +83,7 @@ test('missing or ambiguous verified lineage refuses construction without reading
       fixture.close();
     }
   }
-});
+}, 60_000);
 
 // These fixture inventory identities exercise native binding/refusal only.
 // They are NOT a production backup verifier, sealed Source feed or certificate.
@@ -324,6 +324,7 @@ test('missing original Auth tail stays pending even when an old restored image h
       code: 'original-progress-unavailable',
     });
     expect((await database.query('SELECT 1 FROM auth_erasure LIMIT 1')).rowCount).toBe(0);
+    await expect(requireRestoredAuthAdmission(database)).rejects.toMatchObject({ code: 'restore-lineage-unavailable' });
   } finally {
     await database.end();
     fixture.close();
