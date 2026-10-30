@@ -85,7 +85,7 @@ async function durableWorker(hostPid: number): Promise<ProcessInfo> {
   for (const pid of await childPids(hostPid)) {
     const info = await processInfo(pid);
     if (
-      info?.command.includes('services/kernel/src/worker.ts') &&
+      info?.command.includes('src/worker.ts') &&
       info.environment.some((entry) => /^KERNEL_EXECUTOR_ID=native-web-/.test(entry))
     ) return info;
   }
@@ -539,10 +539,10 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
       const host = await ownedStackHost();
       const target = kind === 'subject-view' ? await durableWorker(host.pid) : host;
       if (kind === 'owner-read') {
-        // Cache fixture credentials before stopping the stack host. The served
-        // page request remains ordinary HTTP through the production web Worker.
+        // Cache fixture bearer credentials before stopping the stack host. The
+        // served page request remains ordinary HTTP through the production web Worker.
         for (const persona of ['alice', 'bob', 'editor', 'suspended'] as const)
-          directCredentials.set(persona, await stack.credentials(persona));
+          directCredentials.set(persona, { authorization: (await stack.authPersona(persona)).authorization });
       }
       try {
         process.kill(target.pid, 'SIGSTOP');
