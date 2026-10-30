@@ -1874,6 +1874,23 @@ async function executeRecord(): Promise<number> {
   }
 }
 
+// Preserve only JSON object presentation order. Every value and array member is fresh generated data.
+function recordingObjectOrder(value: unknown, previous: unknown): unknown {
+  if (Array.isArray(value))
+    return value.map((child, index) =>
+      recordingObjectOrder(child, Array.isArray(previous) ? previous[index] : undefined),
+    );
+  if (!value || typeof value !== 'object') return value;
+  const fresh = value as Record<string, unknown>;
+  const before =
+    previous && typeof previous === 'object' && !Array.isArray(previous) ? (previous as Record<string, unknown>) : {};
+  const keys = [
+    ...Object.keys(before).filter((key) => Object.hasOwn(fresh, key)),
+    ...Object.keys(fresh).filter((key) => !Object.hasOwn(before, key)),
+  ];
+  return Object.fromEntries(keys.map((key) => [key, recordingObjectOrder(fresh[key], before[key])]));
+}
+
 async function recordDefinitions(): Promise<void> {
   const { bundledDigest, bundledRelease } = await import('@rezics/definitions/bundled');
   const snapshots = {
@@ -1883,7 +1900,8 @@ async function recordDefinitions(): Promise<void> {
   const files: string[] = [];
   for (const [name, value] of Object.entries(snapshots)) {
     const file = join(app, 'src/kernel/recorded', `${name}.json`);
-    await writeFile(file, JSON.stringify(recordingSnapshot(name, value, undefined)));
+    const previous = (await Bun.file(file).exists()) ? await Bun.file(file).json() : undefined;
+    await writeFile(file, JSON.stringify(recordingObjectOrder(recordingSnapshot(name, value, undefined), previous)));
     files.push(file);
   }
   const formatted = Bun.spawnSync([join(root, 'node_modules/.bin/oxfmt'), '--write', ...files], { cwd: root });
