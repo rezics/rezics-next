@@ -1,5 +1,5 @@
 WITH input AS NOT MATERIALIZED (
-  SELECT :route::integer AS route, :account_id::uuid AS account_id
+  SELECT :route::integer AS route, :account_id::uuid AS account_id, :pin::jsonb AS pin
 ), source AS MATERIALIZED (
   SELECT copy_id, revision, kind
   FROM library.copy
@@ -12,8 +12,8 @@ WITH input AS NOT MATERIALIZED (
   SELECT 1 FROM source WHERE kind IS NOT NULL AND kind <> 'legacy-unspecified'
 ), changed AS (
   UPDATE library.copy AS fact
-  SET library_profile_pin = :pin::jsonb, kind = COALESCE(fact.kind, 'legacy-unspecified'),
-      kind_profile_pin = :pin::jsonb, status_profile_pin = :pin::jsonb
+  SET library_profile_pin = (SELECT pin FROM input), kind = COALESCE(fact.kind, 'legacy-unspecified'),
+      kind_profile_pin = (SELECT pin FROM input), status_profile_pin = (SELECT pin FROM input)
   FROM source
   WHERE fact.route = (SELECT route FROM input) AND fact.account_id = (SELECT account_id FROM input)
     AND fact.copy_id = source.copy_id AND fact.revision = source.revision AND fact.library_profile_pin IS NULL

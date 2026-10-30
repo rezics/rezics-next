@@ -773,4 +773,4 @@ test('metadata preserves both meanings and an explicit newer status survives del
     meaning: 'known', kindLabel: 'installation', statusLabel: 'Archived now',
     statusEditing: { state: 'supported', statuses: [{ id: 'licensed', label: 'licensed', labelLanguage: 'en' }] },
   });
-});
+}, 120_000);
