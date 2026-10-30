@@ -175,6 +175,7 @@ function SettingsSections({
           <AccountSafetyCard
             state="signed-in"
             securityHref={page.securityHref}
+            renameAccount={page.renameAccount}
             csrfToken={formCsrfToken}
             onReload={() => window.location.reload()}
           />

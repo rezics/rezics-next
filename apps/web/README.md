@@ -242,6 +242,19 @@ Unsafe requests carrying that cookie require an exact allowed `Origin` and the s
 element, and the token is never placed in a cookie.
 
 Sign-in uses `GET /auth/sign-in?return_to=/ja`, followed by `GET /auth/callback`. Sign-out uses `POST /auth/sign-out`.
+
+The private Settings Account section offers handle rename at exactly `<AUTH_ISSUER origin>/account/rename`,
+derived from the same validated configuration as `/security`. Its self context comes from the existing session
+account key, `GET /v1/accounts/{accountId}/profile` and `POST /v1/viewerActions`; only an exact self
+`account:update` entry advertising installed `account.update` enables navigation. Missing context, issuer or
+capability stays unavailable. Handleless accounts use the same private key, never a public handle lookup.
+This is navigation only: no target, scopes, approval, return URL, website credentials or operation body travel
+to Auth, and the anchor suppresses the referrer. Auth owns `GET /account/rename`: it must load its actual native
+account/session, choose a separate exact rename management profile, and require explicit confirmation and current
+native authorization before execution. The fixed organization/deletion page profile is unchanged. That Auth route
+is an owner port, not implemented or proved by the Web entry; native rename, integration and visual acceptance
+remain separate. Former handles forward for 30 days and remain permanently unavailable to other accounts.
+
 The header offers a sign-in document link returning to the current path and query, or an account menu with a security
 settings link at `<AUTH_ISSUER origin>/security` and a sign-out form that revokes the session and ends it at Auth. The
 menu and form appear after hydration. Without JavaScript, an Account link opens the server-checked settings page.

@@ -30,3 +30,9 @@ export function accountSafetyLinks(securityHref: string | null): { security: str
   if (!security || security.pathname !== '/security') return null;
   return { security: security.href, deletion: new URL('/account/delete', security.origin).href };
 }
+
+/** Fixed Auth-owned route. Navigation supplies no account, scope, approval or return target. */
+export function accountRenameHref(securityHref: string | null): string | null {
+  const links = accountSafetyLinks(securityHref);
+  return links ? new URL('/account/rename', links.security).href : null;
+}

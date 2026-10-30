@@ -2601,5 +2601,12 @@
   "realm_claim_retry": "Retry same request",
   "realm_claim_review_current": "Review current Realm",
   "realm_claim_refresh": "Refresh Realm status",
-  "realm_claim_working": "Checking Realm…"
+  "realm_claim_working": "Checking Realm…",
+  "settings_account_rename_heading": "Change your handle",
+  "settings_account_rename_identity": "Your account: {account}",
+  "settings_account_rename_handleless": "No handle yet",
+  "settings_account_rename_policy": "Your former handle forwards to your current handle for 30 days, then stops forwarding. It remains permanently unavailable to other accounts.",
+  "settings_account_rename_confirmation": "Continue to Auth to review the current signed-in account and explicitly confirm the change. Auth checks current permissions before renaming.",
+  "settings_account_rename_continue": "Continue to handle rename",
+  "settings_account_rename_unavailable": "Handle rename is unavailable. Reload to check your current account, permissions and Auth configuration."
 }
