@@ -1857,7 +1857,6 @@ Both use `phone390`/`desktop1280` and existing locale/theme globals. Story suffi
 `unavailable` and `current-denial`; the respective ID prefixes are `patterns-community-thread-reading--` and
 `pages-community-thread-reading--`. These are review inputs; typing alone establishes no native or visual pass.
 
-
 ### Realm appearance and rules
 
 `community/realm-presentation-settings.tsx` owns the reusable `RealmAppearanceSettings` Pattern, inserted into
