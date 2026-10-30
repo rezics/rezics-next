@@ -70,7 +70,7 @@ async function population(target: PointTarget, kind: PointKind): Promise<Populat
       const transaction = randomUUID();
       const at = new Date(Date.UTC(2020, 0, 1) + ordinal);
       return {
-        'content.board': [{ ...board, board_id: boardId, recorded_transaction_id: transaction }],
+        'content.board': [{ ...board, board_id: boardId, subject_id: newId(target.boardRoute), recorded_transaction_id: transaction }],
         'content.thread': [{ ...thread, thread_id: threadId, board_id: target.boardId, first_post_id: null, recorded_transaction_id: transaction }],
         'content.post': [{ ...post, post_id: postId, thread_id: target.threadId, head_revision_id: revisionId, reply_to_post_id: target.postId, recorded_transaction_id: transaction }],
         'content.revision': [
