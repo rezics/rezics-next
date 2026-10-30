@@ -7,6 +7,19 @@ input outside launch scope remains a present source member and increments `skipp
 no subject, proposal, or media effect. The sealed run stores this bounded count so recovery reports it without reading
 replacement input. CLI summaries always include `skipped=N`, including zero.
 
+The connected [Bangumi scope-transition journey](../kernel/test/imports/cli-bangumi-scope-transition.test.ts)
+uses five metadata-only native envelopes and the ordinary account-key CLI: an existing Book becomes ignored
+music, then ignored live action, then returns as a revised Book under the same native key. Complete membership
+stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
+receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
+`bangumi@3` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+five-record launch checks. [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md)
+record source inspection and execution status; binding alone does not establish a native pass or promotion.
+
+```sh
+bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-bangumi-scope-transition.test.ts
+```
+
 ## Command line
 
 Run the importer with a decompressed native dump and an automated account key:

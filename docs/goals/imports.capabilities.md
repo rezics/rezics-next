@@ -60,6 +60,14 @@ The linked report records raw log and actual source/converter/bundle anchors. Pr
 `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-sealed-source-resume.test.ts`.
 This ordinary CLI journey adds no browser surface or PG growth series; existing Cost, rights, metadata and
 six-surface discovery obligations retain their current limits.
+Within the existing Provider imports and bridges In surface, the ordinary Bangumi CLI now has a connected
+[supported → ignored music → ignored live action → supported → unchanged journey](../research/imports-audit/cli-bangumi-scope-transition.md).
+Its frozen native child observes complete five-record membership, exact owned retractions, immutable native
+identity/bootstrap/receipts, independent editor selection and fresh cited `bangumi@3` proposals on return.
+The driver uses one existing Auth/API/registered-worker world and actual public replies. Binding is implemented;
+native execution and promotion remain pending until the named managed command passes. The report records
+synthetic metadata-only input, command and evidence limits. This adds no growth series, rights inference,
+Music import, metadata ACK migration or six-surface discovery claim; existing deferred cells remain open.
 A missing-driver verifier can advance only that stage. Registration is inspected binding, exposure is inspected
 production code, a pass requires actual named-revision execution with all exact scenarios and zero skips/todos,
 and promotion requires separate integration evidence. Helper, converter and SQLite tests support these jobs;
