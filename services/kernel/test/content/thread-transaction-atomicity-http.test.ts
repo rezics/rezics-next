@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText, normalizeDocument } from '@rezics/document';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import {
   call,
@@ -168,7 +168,7 @@ async function canonicalRevisionReplayAndReads(): Promise<void> {
     subjectIds: [conceptId],
   });
   expect(canonicalize(expected.body)).toBe(expected.bytes.toString('utf8'));
-  expect(createHash('sha256').update(expected.bytes).digest()).toEqual(expected.sha256);
+  expect(Buffer.compare(createHash('sha256').update(expected.bytes).digest(), expected.sha256)).toBe(0);
 }
 
 async function invalidMediaRollbacksAndPositiveControl(): Promise<void> {
@@ -503,23 +503,16 @@ async function nativeDenialsAndControl(): Promise<void> {
   expect(insufficient.body).toMatchObject({ code: 'forbidden', status: 403, effect_status: 'not_applied' });
   expect(await atomicSnapshot(reply.id, [], limitedKey)).toEqual(limitedBefore);
 
-  const protectedConceptResult = await call<SubjectResponse>(
-    kernel,
-    system.actors.other,
-    'POST',
-    '/v1/subjects',
-    { type: 'skos:Concept', labels: { en: `Protected-parent ${randomUUID()}` } },
-  );
+  const protectedConceptResult = await call<SubjectResponse>(kernel, system.actors.other, 'POST', '/v1/subjects', {
+    type: 'skos:Concept',
+    labels: { en: `Protected-parent ${randomUUID()}` },
+  });
   expect(protectedConceptResult.response.status).toBe(201);
   const protectedConceptId = protectedConceptResult.body.subject.id;
-  const protectedBoard = await createGlobalBoard(
-    system,
-    kernel,
-    governance,
-    system.actors.other,
-    protectedConceptId,
-    { title: `Protected parent ${randomUUID()}`, visibility: 'protected' },
-  );
+  const protectedBoard = await createGlobalBoard(system, kernel, governance, system.actors.other, protectedConceptId, {
+    title: `Protected parent ${randomUUID()}`,
+    visibility: 'protected',
+  });
   const authorId = system.actors.author.actor.accountId;
   const protectedResource = { route: protectedBoard.route, id: protectedBoard.id };
   await grant(system, kernel, governance, protectedResource, authorId, ['board:read', 'thread:create']);
@@ -606,49 +599,50 @@ async function atomicSnapshot(postId: string, mediaIds: readonly string[], idemp
   const route = routeOf(postId)!;
   const partition = partitionOf(route);
   const authorId = system.actors.author.actor.accountId;
-  const [post, revisions, mediaClaims, keyReceipt, receipts, writeBasisRows, outboxRows, partitionRows] = await Promise.all([
-    system.database.pool.query<{ head: string; availability: string; security_revision: string }>(
-      'SELECT head_revision_id AS head,availability,security_revision::text FROM content.post WHERE route=$1 AND post_id=$2',
-      [route, postId],
-    ),
-    system.database.pool.query<{ revision_id: string }>(
-      'SELECT revision_id::text FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY revision_id',
-      [route, postId],
-    ),
-    system.database.pool.query(
-      `SELECT media_id::text,container_id::text,uploader_id::text,state,claimed_item_id::text,claimed_at
+  const [post, revisions, mediaClaims, keyReceipt, receipts, writeBasisRows, outboxRows, partitionRows] =
+    await Promise.all([
+      system.database.pool.query<{ head: string; availability: string; security_revision: string }>(
+        'SELECT head_revision_id AS head,availability,security_revision::text FROM content.post WHERE route=$1 AND post_id=$2',
+        [route, postId],
+      ),
+      system.database.pool.query<{ revision_id: string }>(
+        'SELECT revision_id::text FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY revision_id',
+        [route, postId],
+      ),
+      system.database.pool.query(
+        `SELECT media_id::text,container_id::text,uploader_id::text,state,claimed_item_id::text,claimed_at
        FROM content.media WHERE route=$1 AND media_id=ANY($2::uuid[]) ORDER BY media_id`,
-      [route, [...mediaIds]],
-    ),
-    system.database.pool.query(
-      `SELECT principal_kind,principal_id::text,command_kind,idempotency_key,epoch,position::text,transaction_id::text
+        [route, [...mediaIds]],
+      ),
+      system.database.pool.query(
+        `SELECT principal_kind,principal_id::text,command_kind,idempotency_key,epoch,position::text,transaction_id::text
        FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
          AND command_kind='content.post.revise' AND idempotency_key=$3`,
-      [partition, authorId, idempotencyKey],
-    ),
-    system.database.pool.query(
-      `SELECT principal_kind,principal_id::text,command_kind,idempotency_key,epoch,position::text,transaction_id::text
+        [partition, authorId, idempotencyKey],
+      ),
+      system.database.pool.query(
+        `SELECT principal_kind,principal_id::text,command_kind,idempotency_key,epoch,position::text,transaction_id::text
        FROM core.receipt WHERE partition_no=$1 ORDER BY position,principal_kind,principal_id,command_kind,idempotency_key`,
-      [partition],
-    ),
-    system.database.pool.query(
-      `SELECT transaction_id::text,epoch,position::text,principal_kind,principal_id::text,client_id,requested_by
+        [partition],
+      ),
+      system.database.pool.query(
+        `SELECT transaction_id::text,epoch,position::text,principal_kind,principal_id::text,client_id,requested_by
        FROM editorial.write_basis WHERE partition_no=$1 ORDER BY position,transaction_id`,
-      [partition],
-    ),
-    system.database.pool.query(
-      `SELECT position::text,event_seq,id::text,type,subject,data::text
+        [partition],
+      ),
+      system.database.pool.query(
+        `SELECT position::text,event_seq,id::text,type,subject,data::text
        FROM core.outbox WHERE partition_no=$1 ORDER BY position,event_seq`,
-      [partition],
-    ),
-    system.database.pool.query<{ position: string }>(
-      'SELECT position::text FROM core.partition WHERE partition_no=$1',
-      [partition],
-    ),
-  ]);
+        [partition],
+      ),
+      system.database.pool.query<{ position: string }>(
+        'SELECT position::text FROM core.partition WHERE partition_no=$1',
+        [partition],
+      ),
+    ]);
   const receipt = keyReceipt.rows[0] ?? null;
   const basisForReceipt = receipt
-    ? writeBasisRows.rows.find((row) => row.transaction_id === receipt.transaction_id) ?? null
+    ? (writeBasisRows.rows.find((row) => row.transaction_id === receipt.transaction_id) ?? null)
     : null;
   const outboxForPost = outboxRows.rows.filter(
     (row) => row.subject === postId && row.type === 'com.rezics.content.revision.created.v1',

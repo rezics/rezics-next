@@ -3,10 +3,23 @@ import canonicalize from 'canonicalize';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import type { Pool } from 'pg';
-import { createAtomicityKernel, createReply, createThreadAtomicityWorld, call, reserveAvailableImage } from './thread-transaction-atomicity-fixture.ts';
+import {
+  createAtomicityKernel,
+  createReply,
+  createThreadAtomicityWorld,
+  call,
+  reserveAvailableImage,
+} from './thread-transaction-atomicity-fixture.ts';
 import type { ContentItem, ThreadAtomicityWorld } from './thread-transaction-atomicity-fixture.ts';
 import { createMediaStorage } from './support/storage.ts';
-import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
@@ -88,7 +101,10 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
       epoch,
       template,
     });
-    const countsAtScale = new Map<number, { revisions: number; media: number; receipts: number; outbox: number; bases: number }>();
+    const countsAtScale = new Map<
+      number,
+      { revisions: number; media: number; receipts: number; outbox: number; bases: number }
+    >();
     const measuredKernel = createAtomicityKernel(system, growthDb.pool);
     const missingMediaId = newId(thread.route);
     const validBody = fromPlainText('A fixed joined growth edit: 東京と雪。');
@@ -103,10 +119,7 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       grow: async (database, scale, previous) => {
         await seed(database, population, { from: previous, to: scale });
-        countsAtScale.set(
-          scale,
-          await fixtureCounts(database, tag, thread.route, unrelatedPost.id, partition, scale),
-        );
+        countsAtScale.set(scale, await fixtureCounts(database, tag, thread.route, unrelatedPost.id, partition, scale));
       },
       async operation(database, _scale, run) {
         const key = `${seedName}-operation-${repetition++}-${run}`;
@@ -162,7 +175,9 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         expect((rejected.body as Problem).code).toBe('media_unavailable');
         const head = await databaseHead(database.admin, growthTarget.id);
         expect(head).toBe(revisionId);
-        expect(await commandReceipt(database.admin, partition, system.actors.author.actor.accountId, rejectedKey)).toBeNull();
+        expect(
+          await commandReceipt(database.admin, partition, system.actors.author.actor.accountId, rejectedKey),
+        ).toBeNull();
       },
     });
 
@@ -189,23 +204,19 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
         expect(sample.occurrenceRepetitions[index]!.statements.length).toBeGreaterThan(0);
       }
     }
-    assertGrowthAccessPaths(
-      report.name,
-      report.samples,
-      [
-        'content.thread',
-        'content.post',
-        'content.revision',
-        'content.media',
-        'core.partition',
-        'core.receipt',
-        'core.outbox',
-        'editorial.write_basis',
-        'access.resource_grant',
-        'access.resource_role_grant',
-        'access.resource_denial',
-      ],
-    );
+    assertGrowthAccessPaths(report.name, report.samples, [
+      'content.thread',
+      'content.post',
+      'content.revision',
+      'content.media',
+      'core.partition',
+      'core.receipt',
+      'core.outbox',
+      'editorial.write_basis',
+      'access.resource_grant',
+      'access.resource_role_grant',
+      'access.resource_denial',
+    ]);
 
     const head = await databaseHead(growthDb.admin, growthTarget.id);
     expect(head).toBe(expectedRevisionId);
@@ -374,7 +385,8 @@ async function templates(
       [routeOf(mediaId), mediaId],
     ),
   ]);
-  if (!revision.rows[0] || !media.rows[0]) throw new Error('Growth templates must come from real committed content and media');
+  if (!revision.rows[0] || !media.rows[0])
+    throw new Error('Growth templates must come from real committed content and media');
   const row = revision.rows[0];
   return {
     revision: {

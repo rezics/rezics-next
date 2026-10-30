@@ -1,5 +1,5 @@
 import canonicalize from 'canonicalize';
-import { fromPlainText, normalizeDocument } from '@rezics/document';
+import { fromPlainText, normalizeDocument, type DocumentSnapshot } from '@rezics/document';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -7,10 +7,16 @@ import { createImageJob } from '../../src/content/image-job.ts';
 import { threadTarget } from '../../src/content/commands.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
-import { newId, type Resource } from '../../src/route/route.ts';
+import { newId } from '../../src/route/route.ts';
+import type { Resource } from '../../src/request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { createContentSystem, contentGovernanceCredential, type ContentCredential, type ContentSystem } from './support/system.ts';
+import {
+  createContentSystem,
+  contentGovernanceCredential,
+  type ContentCredential,
+  type ContentSystem,
+} from './support/system.ts';
 import { createMediaStorage } from './support/storage.ts';
 import { imageSource } from './support/media-fixtures.ts';
 
@@ -115,14 +121,21 @@ export async function createThreadAtomicityWorld(namespace: string): Promise<Thr
       visibility: 'published',
     });
     const threadKey = routeIndependentThreadKey(system, system.actors.author.actor.accountId, board.route, namespace);
-    const threadResult = await call<ThreadResponse>(kernel, system.actors.author, 'POST', '/v1/threads', {
-      title: `Atomicity public thread ${namespace}`,
-      body: fromPlainText(`Opening post for ${namespace}: 測試內容`),
-      licence: 'CC-BY-4.0',
-      subjectIds: [conceptId],
-      boardId: board.id,
-      visibility: 'published',
-    }, threadKey);
+    const threadResult = await call<ThreadResponse>(
+      kernel,
+      system.actors.author,
+      'POST',
+      '/v1/threads',
+      {
+        title: `Atomicity public thread ${namespace}`,
+        body: fromPlainText(`Opening post for ${namespace}: 測試內容`),
+        licence: 'CC-BY-4.0',
+        subjectIds: [conceptId],
+        boardId: board.id,
+        visibility: 'published',
+      },
+      threadKey,
+    );
     requireStatus(threadResult, 201, 'create fixture thread');
     const thread = threadResult.body.thread;
     if (thread.route === board.route) throw new Error('Fixture thread and board must use different routes');
@@ -176,7 +189,12 @@ export async function createReply(
   kernel: ReturnType<typeof createKernel>,
   author: ContentCredential,
   thread: ContentThread,
-  body: { readonly body: unknown; readonly licence: string; readonly subjectIds: readonly string[]; readonly parentId?: string },
+  body: {
+    readonly body: unknown;
+    readonly licence: string;
+    readonly subjectIds: readonly string[];
+    readonly parentId?: string;
+  },
 ): Promise<ContentItem> {
   const created = await call<PostResponse>(kernel, author, 'POST', `/v1/threads/${thread.id}/posts`, {
     body: body.body,
@@ -197,18 +215,12 @@ export async function grant(
   accountId: string,
   actions: readonly string[],
 ): Promise<void> {
-  const result = await call(
-    kernel,
-    governance,
-    'POST',
-    '/v1/grants',
-    {
-      resource,
-      subject: { kind: 'account', id: accountId },
-      actions: [...actions],
-      valid: '(,)',
-    },
-  );
+  const result = await call(kernel, governance, 'POST', '/v1/grants', {
+    resource,
+    subject: { kind: 'account', id: accountId },
+    actions: [...actions],
+    valid: '(,)',
+  });
   requireStatus(result, 201, `grant ${actions.join(',')}`);
 }
 
@@ -219,18 +231,12 @@ export async function revoke(
   accountId: string,
   actions: readonly string[],
 ): Promise<void> {
-  const result = await call(
-    kernel,
-    governance,
-    'POST',
-    '/v1/grants:revoke',
-    {
-      resource,
-      subject: { kind: 'account', id: accountId },
-      actions: [...actions],
-      valid: '(,)',
-    },
-  );
+  const result = await call(kernel, governance, 'POST', '/v1/grants:revoke', {
+    resource,
+    subject: { kind: 'account', id: accountId },
+    actions: [...actions],
+    valid: '(,)',
+  });
   requireStatus(result, 200, `revoke ${actions.join(',')}`);
 }
 
@@ -240,7 +246,7 @@ export async function call<T extends object = Record<string, unknown>>(
   method: string,
   path: string,
   body?: unknown,
-  key = randomUUID(),
+  key: string = randomUUID(),
   headers: Readonly<Record<string, string>> = {},
 ): Promise<CallResult<T>> {
   const requestHeaders = new Headers(headers);
@@ -292,19 +298,13 @@ export async function reserveAvailableImage(
   });
   requireStatus(reserved, 201, 'reserve fixture image');
   const media = reserved.body.media;
-  await storage.storage.put(media.key, source.bytes);
-  const completed = await call<CompletionResponse>(
-    kernel,
-    completer,
-    'POST',
-    `/v1/media/${media.id}:complete`,
-    {
-      containerId,
-      reservationRequestId: media.reservationRequestId,
-      byteCount: source.bytes.length,
-      sha256: source.sha256,
-    },
-  );
+  await storage.storage.put(media.key, source.bytes, { mediaType: source.type });
+  const completed = await call<CompletionResponse>(kernel, completer, 'POST', `/v1/media/${media.id}:complete`, {
+    containerId,
+    reservationRequestId: media.reservationRequestId,
+    byteCount: source.bytes.length,
+    sha256: source.sha256,
+  });
   requireStatus(completed, 200, 'complete fixture image');
   const outcome = await createImageJob(system.database.pool, storage.storage).process(media.id);
   if (outcome.state !== 'available') throw new Error(`Fixture image processing ended in ${outcome.state}`);
@@ -320,7 +320,11 @@ export async function reserveAvailableImage(
 type MediaResponse = { readonly media: StoredMedia };
 type CompletionResponse = { readonly media: { readonly id: string; readonly state: string } };
 
-export function documentBytes(body: unknown): { readonly body: unknown; readonly bytes: Buffer; readonly sha256: Buffer } {
+export function documentBytes(body: DocumentSnapshot): {
+  readonly body: DocumentSnapshot;
+  readonly bytes: Buffer;
+  readonly sha256: Buffer;
+} {
   const normalized = normalizeDocument(body);
   const canonical = canonicalize(normalized);
   if (canonical === undefined) throw new TypeError('Document cannot be canonicalized as RFC 8785 JSON');
@@ -331,7 +335,8 @@ export function documentBytes(body: unknown): { readonly body: unknown; readonly
 export function reverseObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(reverseObjectKeys);
   if (typeof value !== 'object' || value === null) return value;
-  const entries = Object.entries(value).reverse().map(([key, item]) => [key, reverseObjectKeys(item)] as const);
+  const entries = Object.entries(value)
+    .reverse()
+    .map(([key, item]) => [key, reverseObjectKeys(item)] as const);
   return Object.fromEntries(entries);
 }
-
