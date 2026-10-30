@@ -196,8 +196,9 @@ export async function purchaseHistoryFixture() {
   // Exercise entitlement point probes among unrelated real grants, rather than a
   // tiny entitlement table where repeated sequential scans can win the cost estimate.
   // Each payment still crosses the official Stripe port and signed native webhook.
-  for (let offset = 0; offset < 512; offset += 8) {
-    const orders = await Promise.all(Array.from({ length: 8 }, () => checkout(background)));
+  // Leave half of the eight workflow slots for the checkout children awaited by events.
+  for (let offset = 0; offset < 512; offset += 4) {
+    const orders = await Promise.all(Array.from({ length: 4 }, () => checkout(background)));
     for (const order of orders) fake.pay(order.checkoutSessionId!);
     await Promise.all(orders.map((order) => event('checkout.session.completed', order.checkoutSessionId!)));
   }
