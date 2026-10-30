@@ -1,6 +1,5 @@
 import type { Pool } from 'pg';
 import { currentCommand, currentCommandReceipt, type CommandTransaction } from '../command/command.ts';
-import { originalAccountIdentitySource } from '../access/agent-verification-identity.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import { guardHistoryAccounts } from './gates.ts';
@@ -19,7 +18,7 @@ export type AgentIdentitySourceKey = Readonly<{
   receiptId: string;
 }>;
 type Declaration = Readonly<{
-  original: ReturnType<typeof originalAccountIdentitySource>;
+  original: ReturnType<typeof import('../access/agent-verification-identity.ts').originalAccountIdentitySource>;
   accounts: readonly AccountReference[];
   kind: string;
 }>;
@@ -42,6 +41,9 @@ export function agentIdentitySourceKey(key: AgentIdentitySourceKey): string {
 export async function declareAgentIdentitySource(
   tx: CommandTransaction, key: AgentIdentitySourceKey, digest: string,
 ): Promise<void> {
+  // Load the owner only for this family, without a command-bootstrap import cycle.
+  // Validate after the yield so concurrent declarations still reserve atomically below.
+  const { originalAccountIdentitySource } = await import('../access/agent-verification-identity.ts');
   const command = currentCommand(tx);
   agentIdentitySourceKey(key);
   if (declarations.has(tx) || serializing.has(tx) || command.partition !== partitionOf(key.route))
