@@ -109,13 +109,7 @@ export function CollectionFilters({
       <Menu
         title={m.collection_filters()}
         trigger={
-          <Button
-            type="button"
-            aria-label={m.collection_filters()}
-            variant="outline"
-            className="min-h-10 w-full justify-between sm:w-auto"
-          >
-            {m.collection_filters()}
+          <Button type="button" aria-label={m.collection_filters()} variant="outline" size="icon">
             <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
           </Button>
         }

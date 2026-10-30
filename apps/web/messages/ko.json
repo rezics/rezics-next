@@ -931,5 +931,10 @@
   "library_collection_move_selected": "선택한 항목은 저장할 때 이동합니다.",
   "library_collection_save_pending": "저장 중…",
   "library_collection_save_partial": "다른 변경이 실패하기 전에 {count}개 변경을 저장했습니다. 컬렉션을 확인하려면 다시 불러오세요.",
-  "library_collection_cover_unavailable": "컬렉션 커버 선택은 아직 지원되지 않습니다."
+  "library_collection_cover_unavailable": "컬렉션 커버 선택은 아직 지원되지 않습니다.",
+  "library_collection_previews": "미리보기",
+  "library_collection_independent_writes": "변경 사항은 하나씩 저장됩니다. 저장에 실패해도 앞서 저장된 변경 사항은 유지됩니다.",
+  "library_collection_move_unavailable": "다른 컬렉션으로 항목을 이동하는 기능은 아직 지원하지 않습니다.",
+  "library_collection_builtin_rule": "기본 컬렉션의 규칙은 고정되어 있습니다. 필터는 현재 보기에만 적용됩니다.",
+  "library_collection_remove_selected": "선택한 항목 제거"
 }

@@ -37,8 +37,14 @@ function destinations(
   const builtinIds = new Set(builtins.map((item) => item.id));
   const output: Entry[] = [
     {
+      id: 'collections',
+      label: m.library_nav_collections(),
+      href: entryHref(locale, '/library/collections'),
+      current: isCurrent(current, 'collections'),
+    },
+    {
       id: 'tracked',
-      label: m.library_nav_tracked_entries(),
+      label: m.library_state_all(),
       href: entryHref(locale, '/library'),
       current: isCurrent(current, 'tracked'),
     },
@@ -82,12 +88,6 @@ function destinations(
       });
     }
   }
-  output.push({
-    id: 'collections',
-    label: m.library_nav_all_collections(),
-    href: entryHref(locale, '/library/collections'),
-    current: isCurrent(current, 'collections'),
-  });
   return output;
 }
 
@@ -131,14 +131,13 @@ export function LibraryNavigation({
   const entries = destinations(current, pins, collections, locale);
   const pinned = entries.filter((entry) => entry.pin !== undefined);
   const visiblePins = pinned.slice(0, 3);
-  const selected = entries.find((entry) => entry.current) ?? entries[0]!;
   const desktopEntries = entries.filter((entry) => !entry.pin || pinned.indexOf(entry) < 8);
   return (
     <div data-library-navigation className="min-w-0 space-y-2">
       <nav
         data-library-navigation-desktop
         aria-label={m.library_nav_sidebar_label()}
-        className="hidden min-w-0 flex-wrap items-center gap-1 border-b border-border lg:flex"
+        className="hidden min-w-0 flex-wrap items-center gap-1 lg:flex"
       >
         {desktopEntries.map((entry, index) => (
           <Fragment key={entry.id}>
@@ -154,7 +153,7 @@ export function LibraryNavigation({
           title={m.library_nav_selector()}
           trigger={
             <Button aria-label={m.library_nav_selector()} variant="outline" className="max-w-full">
-              <span className="max-w-[62vw] truncate">{selected.label}</span>
+              <span className="max-w-[62vw] truncate">{m.library_navigation()}</span>
             </Button>
           }
           entries={entries.map((entry) =>

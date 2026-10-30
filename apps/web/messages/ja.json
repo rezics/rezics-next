@@ -931,5 +931,10 @@
   "library_collection_move_selected": "選択した項目は保存時に移動します。",
   "library_collection_save_pending": "保存中…",
   "library_collection_save_partial": "別の変更が失敗する前に {count} 件の変更を保存しました。コレクションを確認するには再読み込みしてください。",
-  "library_collection_cover_unavailable": "コレクションのカバー選択にはまだ対応していません。"
+  "library_collection_cover_unavailable": "コレクションのカバー選択にはまだ対応していません。",
+  "library_collection_previews": "プレビュー",
+  "library_collection_independent_writes": "変更は1件ずつ保存されます。途中で失敗しても、それまでに保存された変更は残ります。",
+  "library_collection_move_unavailable": "他のコレクションへのメンバー移動には、まだ対応していません。",
+  "library_collection_builtin_rule": "組み込みコレクションのルールは固定されています。フィルターは現在の表示にのみ適用されます。",
+  "library_collection_remove_selected": "選択した項目を削除"
 }

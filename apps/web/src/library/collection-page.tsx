@@ -7,7 +7,7 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -18,7 +18,6 @@ import { subjectHref } from '../subject/subject-href';
 import { pageText } from '../features/pages/shared';
 import { libraryTitleValue } from './title';
 import {
-  addCollectionMember,
   deleteCollection,
   moveCollectionMember,
   removeCollectionMember,
@@ -38,7 +37,13 @@ import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { validatePublicOrigin } from '../shell/origin';
 import { CollectionFilterFeedback, CollectionFilters } from './collection-filters';
-import { CollectionMemberList, applyCollectionMemberEditPlan, buildCollectionMemberEditPlan } from './collection-editor';
+import { Share2Icon } from 'lucide-react';
+import { reorderCollectionMembers } from './collection-presentation';
+import {
+  CollectionMemberList,
+  applyCollectionMemberEditPlan,
+  buildCollectionMemberEditPlan,
+} from './collection-editor';
 
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
@@ -198,15 +203,6 @@ function visibilityNote(visibility: CollectionVisibility): string {
   return m.library_visibility_private_note();
 }
 
-function memberOrder(members: readonly CollectionMember[], memberId: string, after: string | null) {
-  const moved = members.find((member) => member.id === memberId);
-  if (!moved) return [...members];
-  const remaining = members.filter((member) => member.id !== memberId);
-  const target = after === null ? 0 : remaining.findIndex((member) => member.id === after) + 1;
-  if (after !== null && target === 0) return [...members];
-  return [...remaining.slice(0, target), moved, ...remaining.slice(target)];
-}
-
 function writeMessage(result: Extract<CollectionWriteResult, { ok: false }>): string {
   return result.reason === 'full' ? m.library_collection_full() : m.error_message();
 }
@@ -240,7 +236,7 @@ export function CollectionPage({
   const [hydrated, setHydrated] = useState(false);
   const [members, setMembers] = useState(page.members);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
-  const [moveTarget, setMoveTarget] = useState('');
+  const writeKeys = useRef(new Map<string, string>());
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(page.title);
   const [description, setDescription] = useState(page.description ?? '');
@@ -260,6 +256,10 @@ export function CollectionPage({
 
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
+    if (editing) {
+      setConflict(true);
+      return;
+    }
     setMembers(page.members);
     setTitle(page.title);
     setDescription(page.description ?? '');
@@ -276,6 +276,7 @@ export function CollectionPage({
   }
 
   function beginEditing() {
+    writeKeys.current.clear();
     setFailure('');
     setConflict(false);
     setMembers(page.members);
@@ -292,7 +293,6 @@ export function CollectionPage({
     setDescription(page.description ?? '');
     setVisibility(page.visibility ?? 'public');
     setSelectedIds(new Set());
-    setMoveTarget('');
     setConflict(false);
     setFailure('');
     setEditing(false);
@@ -300,18 +300,24 @@ export function CollectionPage({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!hydrated || pending) return;
+    if (!hydrated || pending || conflict || !owner) return;
     setPending(true);
     setFailure('');
     setConflict(false);
     let committed = 0;
-    let metadataSaved = false;
+
+    const keyFor = (operation: unknown) => {
+      const fingerprint = JSON.stringify(operation);
+      let key = writeKeys.current.get(fingerprint);
+      if (!key) {
+        key = crypto.randomUUID();
+        writeKeys.current.set(fingerprint, key);
+      }
+      return key;
+    };
     try {
-      if (
-        title !== page.title ||
-        description !== (page.description ?? '') ||
-        visibility !== page.visibility
-      ) {
+      const plan = buildCollectionMemberEditPlan(page.members, members, page.firstPage);
+      if (title !== page.title || description !== (page.description ?? '') || visibility !== page.visibility) {
         const result = await updateCollection({
           data: {
             collectionId: page.id,
@@ -319,7 +325,7 @@ export function CollectionPage({
             title,
             description,
             visibility,
-            idempotencyKey: crypto.randomUUID(),
+            idempotencyKey: keyFor([page.id, page.revision, title, description, visibility]),
           },
           headers: csrfHeaders(),
         });
@@ -328,60 +334,18 @@ export function CollectionPage({
           else setFailure(writeMessage(result));
           return;
         }
-        metadataSaved = true;
         committed += 1;
       }
 
-      const moving = moveTarget
-        ? new Set([...selectedIds].filter((id) => members.some((member) => member.id === id)))
-        : new Set<string>();
-      if (moving.size) {
-        for (const member of page.members.filter((candidate) => moving.has(candidate.id))) {
-          if (!member.subject) {
-            setFailure(m.library_collection_save_partial({ count: committed }));
-            await reloadCollection();
-            setEditing(false);
-            return;
-          }
-          const added = await addCollectionMember({
-            data: {
-              collectionId: moveTarget,
-              subjectId: member.subject.id,
-              note: members.find((draft) => draft.id === member.id)?.note ?? null,
-              idempotencyKey: crypto.randomUUID(),
-            },
-            headers: csrfHeaders(),
-          });
-          if (!added.ok) {
-            setFailure(m.library_collection_save_partial({ count: committed }));
-            await reloadCollection();
-            setEditing(false);
-            return;
-          }
-          committed += 1;
-          const removed = await removeCollectionMember({
-            data: { collectionId: page.id, memberId: member.id, idempotencyKey: crypto.randomUUID() },
-            headers: csrfHeaders(),
-          });
-          if (!removed.ok) {
-            setFailure(m.library_collection_save_partial({ count: committed }));
-            await reloadCollection();
-            setEditing(false);
-            return;
-          }
-          committed += 1;
-        }
-      }
-
-      const initial = page.members.filter((member) => !moving.has(member.id));
-      const desired = members.filter((member) => !moving.has(member.id));
-      const plan = buildCollectionMemberEditPlan(initial, desired, page.firstPage);
       const applied = await applyCollectionMemberEditPlan(plan, async (operation) => {
-        const common = { collectionId: page.id, idempotencyKey: crypto.randomUUID() };
+        const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation]) };
         if (operation.kind === 'remove')
           return removeCollectionMember({ data: { ...common, memberId: operation.memberId }, headers: csrfHeaders() });
         if (operation.kind === 'move')
-          return moveCollectionMember({ data: { ...common, memberId: operation.memberId, after: operation.after }, headers: csrfHeaders() });
+          return moveCollectionMember({
+            data: { ...common, memberId: operation.memberId, after: operation.after },
+            headers: csrfHeaders(),
+          });
         return updateMemberNote({
           data: { ...common, memberId: operation.memberId, note: operation.note },
           headers: csrfHeaders(),
@@ -389,17 +353,18 @@ export function CollectionPage({
       });
       committed += applied.completed;
       if (applied.failed) {
-        await reloadCollection();
-        setEditing(false);
-        setFailure(m.library_collection_save_partial({ count: committed }));
+        if (committed > 0) {
+          await reloadCollection();
+          setEditing(false);
+          setFailure(m.library_collection_save_partial({ count: committed }));
+        } else if (applied.failed.reason === 'conflict') setConflict(true);
+        else setFailure(m.error_message());
         return;
       }
       await reloadCollection();
       setEditing(false);
       setSelectedIds(new Set());
-      setMoveTarget('');
       setFailure('');
-      if (!metadataSaved && committed === 0) setEditing(false);
     } catch {
       if (committed > 0) {
         try {
@@ -450,17 +415,14 @@ export function CollectionPage({
   }
 
   function setMemberOrder(memberId: string, after: string | null) {
-    setMembers((current) => memberOrder(current, memberId, after));
+    setMembers((current) => reorderCollectionMembers(current, memberId, after, page.firstPage));
   }
 
   function copyLink(href: string) {
     void navigator.clipboard.writeText(`${location.origin}${href}`).catch(() => setFailure(m.error_message()));
   }
 
-  const targets = navigationCollections.filter(
-    (collection) => collection.id !== page.id && collection.membershipKind !== 'dynamic',
-  );
-  const visibility = page.visibility;
+  const visibleVisibility = page.visibility ?? page.disclosedVisibility;
   return (
     <div className="w-full min-w-0 space-y-6 text-foreground">
       <LibraryNavigation current={{ collectionId: page.id }} pins={pins} collections={navigationCollections} />
@@ -481,11 +443,15 @@ export function CollectionPage({
             <MetaLine
               items={[
                 page.memberCount === null ? null : m.library_member_count({ count: page.memberCount }),
-                visibility ? visibilityLabel(visibility) : null,
-                <span>{m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} /></span>,
+                visibleVisibility ? visibilityLabel(visibleVisibility) : null,
+                <span>
+                  {m.library_collection_updated()} <RelativeTime value={page.updatedAt} locale={getLocale()} />
+                </span>,
               ]}
             />
-            {page.description ? <p className="max-w-4xl whitespace-pre-wrap text-muted-foreground">{page.description}</p> : null}
+            {page.description ? (
+              <p className="max-w-4xl whitespace-pre-wrap text-muted-foreground">{page.description}</p>
+            ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap items-start gap-2">
             {owner ? (
@@ -503,15 +469,29 @@ export function CollectionPage({
                 }}
                 extraEntries={pinActions.entries}
                 onCopyLink={() => copyLink(collectionHref(page.id))}
-                onEdit={beginEditing}
-                onDelete={removeCollection}
+                onEdit={pending || editing ? undefined : beginEditing}
+                onDelete={pending || editing ? undefined : removeCollection}
               />
             ) : (
-              <PinControl collectionId={page.id} pins={pins} mode="collection" />
+              <>
+                <ContentActions
+                  ownsContent={false}
+                  labels={{ moreActions: m.library_collection_actions(), copyLink: m.library_collection_copy() }}
+                  onCopyLink={() => copyLink(collectionHref(page.id))}
+                />
+                <PinControl collectionId={page.id} pins={pins} mode="collection" />
+              </>
             )}
+            <Button type="button" variant="outline" onClick={() => copyLink(collectionHref(page.id))}>
+              <Share2Icon aria-hidden="true" />
+              {m.library_collection_copy()}
+            </Button>
             {owner ? <PinControlNotice notice={pinActions.notice} /> : null}
             {canFollow && following !== null ? (
               <Exposure operation="follow.put">
+                {following ? (
+                  <span className="self-center text-sm text-muted-foreground">{m.library_following()}</span>
+                ) : null}
                 <Button variant="outline" disabled={!hydrated || pending} onClick={() => void toggleFollow()}>
                   {following ? m.library_follow_unfollow() : m.library_follow()}
                 </Button>
@@ -524,34 +504,71 @@ export function CollectionPage({
         {conflict ? (
           <p role="alert">
             {m.library_collection_conflict()}{' '}
-            <button className="text-primary underline" type="button" onClick={() => void reloadCollection()}>
+            <button
+              className="text-primary underline"
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                cancelEditing();
+                void reloadCollection().catch(() => setFailure(m.error_message()));
+              }}
+            >
               {m.library_collection_reload()}
             </button>
           </p>
         ) : null}
 
         {editing && owner ? (
-          <form className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6" onSubmit={(event) => void save(event)}>
+          <form
+            className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6"
+            onSubmit={(event) => void save(event)}
+          >
             <h2 className="text-xl font-semibold">{m.library_collection_edit()}</h2>
             <label className="block max-w-3xl">
               {m.library_collection_title()}
-              <input className={fieldClass} onChange={(event) => setTitle(event.target.value)} required maxLength={512} value={title} />
+              <input
+                disabled={pending}
+                className={fieldClass}
+                onChange={(event) => setTitle(event.target.value)}
+                required
+                maxLength={512}
+                value={title}
+              />
             </label>
             <label className="block max-w-3xl">
               {m.library_collection_description()}
-              <textarea className={fieldClass} onChange={(event) => setDescription(event.target.value)} rows={4} value={description} />
+              <textarea
+                disabled={pending}
+                maxLength={20_000}
+                className={fieldClass}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={4}
+                value={description}
+              />
             </label>
-            <p className="text-sm text-muted-foreground" role="note">{m.library_collection_cover_unavailable()}</p>
+            <p className="text-sm text-muted-foreground" role="note">
+              {m.library_collection_cover_unavailable()}
+            </p>
             <VisibilityField onChange={setVisibility} value={visibility} disabled={pending} />
+            <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" disabled={!hydrated || pending}>{pending ? m.library_collection_save_pending() : m.library_collection_save()}</Button>
-              <Button type="button" variant="outline" disabled={pending} onClick={cancelEditing}>{m.library_collection_cancel()}</Button>
+              <Button type="submit" disabled={!hydrated || pending || conflict}>
+                {pending ? m.library_collection_save_pending() : m.library_collection_save()}
+              </Button>
+              <Button type="button" variant="outline" disabled={pending} onClick={cancelEditing}>
+                {m.library_collection_cancel()}
+              </Button>
             </div>
           </form>
         ) : null}
 
-        {page.filterProperties && page.filterParams ? (
-          <CollectionFilters id={page.id} type={page.filterType ?? 'schema:Book'} properties={page.filterProperties} params={page.filterParams} />
+        {!editing && page.filterProperties && page.filterParams ? (
+          <CollectionFilters
+            id={page.id}
+            type={page.filterType ?? 'schema:Book'}
+            properties={page.filterProperties}
+            params={page.filterParams}
+          />
         ) : null}
         <CollectionFilterFeedback
           id={page.id}
@@ -563,49 +580,68 @@ export function CollectionPage({
           emptyLabel={m.library_collection_empty()}
         />
         <section aria-label={m.library_collection_members()}>
+          <h2 className="sr-only">{m.library_collection_members()}</h2>
           {editing && owner ? (
             <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3">
               <p className="me-auto self-center text-sm text-muted-foreground">
                 {m.library_collection_selection_count({ count: selectedIds.size })}
               </p>
-              {targets.length && selectedIds.size ? (
-                <>
-                  <label className="grid gap-1 text-sm">
-                    {m.library_collection_move_to()}
-                    <select className={fieldClass} value={moveTarget} onChange={(event) => setMoveTarget(event.target.value)}>
-                      <option value="">{m.library_collection_choose_target()}</option>
-                      {targets.map((target) => <option key={target.id} value={target.id}>{target.title ?? m.library_collection_unavailable()}</option>)}
-                    </select>
-                  </label>
-                  <p className="self-center text-sm text-muted-foreground">{m.library_collection_move_selected()}</p>
-                </>
-              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || selectedIds.size === 0}
+                onClick={() => {
+                  setMembers((current) => current.filter((member) => !selectedIds.has(member.id)));
+                  setSelectedIds(new Set());
+                }}
+              >
+                {m.library_collection_remove_selected()}
+              </Button>
+              <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_unavailable()}</p>
             </div>
           ) : null}
           <CollectionMemberList
             members={members}
+            typeRatios={page.typeRatios}
             editing={editing && owner}
             firstPage={page.firstPage}
             busy={pending}
             selectedIds={selectedIds}
-            onSelectionChange={(memberId, selected) => setSelectedIds((current) => {
-              const next = new Set(current);
-              if (selected) next.add(memberId);
-              else next.delete(memberId);
-              return next;
-            })}
+            onSelectionChange={(memberId, selected) =>
+              setSelectedIds((current) => {
+                const next = new Set(current);
+                if (selected) next.add(memberId);
+                else next.delete(memberId);
+                return next;
+              })
+            }
             onMove={setMemberOrder}
-            onNoteChange={(memberId, note) => setMembers((current) => current.map((member) => member.id === memberId ? { ...member, note: note || null } : member))}
-            onRemove={(memberId) => setMembers((current) => current.filter((member) => member.id !== memberId))}
+            onNoteChange={(memberId, note) =>
+              setMembers((current) =>
+                current.map((member) => (member.id === memberId ? { ...member, note: note || null } : member)),
+              )
+            }
+            onRemove={(memberId) => {
+              setMembers((current) => current.filter((member) => member.id !== memberId));
+              setSelectedIds((current) => new Set([...current].filter((id) => id !== memberId)));
+            }}
             onCopy={(memberId) => {
               const subject = members.find((member) => member.id === memberId)?.subject;
-              if (subject) copyLink(subjectHref({ id: subject.id, label: pageText(libraryTitleValue(subject.label), getLocale()).text }, getLocale()).href);
+              if (subject)
+                copyLink(
+                  subjectHref(
+                    { id: subject.id, label: pageText(libraryTitleValue(subject.label), getLocale()).text },
+                    getLocale(),
+                  ).href,
+                );
             }}
           />
         </section>
-        {page.next ? (
+        {page.next && !editing ? (
           <nav aria-label={m.library_collection_members()}>
-            <a href={`${collectionHref(page.id)}?cursor=${encodeURIComponent(page.next)}`} className={buttonClass}>{m.library_collection_more()}</a>
+            <a href={`${collectionHref(page.id)}?cursor=${encodeURIComponent(page.next)}`} className={buttonClass}>
+              {m.library_collection_more()}
+            </a>
           </nav>
         ) : null}
       </article>

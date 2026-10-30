@@ -931,5 +931,10 @@
   "library_collection_move_selected": "Les éléments sélectionnés seront déplacés à l’enregistrement.",
   "library_collection_save_pending": "Enregistrement…",
   "library_collection_save_partial": "{count} modifications ont été enregistrées avant l’échec d’une autre. Rechargez la collection pour la vérifier.",
-  "library_collection_cover_unavailable": "Le choix d’une couverture de collection n’est pas encore pris en charge."
+  "library_collection_cover_unavailable": "Le choix d’une couverture de collection n’est pas encore pris en charge.",
+  "library_collection_previews": "Aperçu",
+  "library_collection_independent_writes": "Les modifications sont enregistrées une par une. En cas d’échec, les modifications déjà enregistrées sont conservées.",
+  "library_collection_move_unavailable": "Le déplacement des membres vers une autre collection n’est pas encore disponible.",
+  "library_collection_builtin_rule": "Les règles des collections intégrées sont fixes. Les filtres modifient uniquement cette vue.",
+  "library_collection_remove_selected": "Retirer la sélection"
 }

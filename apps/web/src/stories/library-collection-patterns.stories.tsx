@@ -14,8 +14,7 @@ type Story = StoryObj<typeof meta>;
 
 const collectionId = pagePaths['library-collection'].split('/').at(-1)!;
 
-function CollectionRegion({ mode, visitor }: { mode: CollectionStoryMode; visitor: 'Signed In' | 'Signed Out' }) {
-  setCollectionStoryMode(mode);
+function CollectionRegion({ visitor }: { visitor: 'Signed In' | 'Signed Out' }) {
   const credentialMode = visitor === 'Signed In' ? 'session' : 'anonymous';
   const query = collectionPageQuery(collectionId, undefined, credentialMode);
   const { data } = useSuspenseQuery(query);
@@ -38,11 +37,12 @@ function CollectionRegion({ mode, visitor }: { mode: CollectionStoryMode; visito
 }
 
 function renderCollection(mode: CollectionStoryMode, visitor: 'Signed In' | 'Signed Out' = 'Signed In') {
+  setCollectionStoryMode(mode);
   return (
     <PatternStory visitor={visitor} path={pagePaths['library-collection']}>
       <Suspense fallback={null}>
-        <div className="w-full max-w-4xl p-4">
-          <CollectionRegion mode={mode} visitor={visitor} />
+        <div className="w-full p-4">
+          <CollectionRegion visitor={visitor} />
         </div>
       </Suspense>
     </PatternStory>
@@ -59,12 +59,8 @@ export const EditFormOpen: Story = {
   name: 'Owner, collection edit form open',
   play: async ({ canvasElement }) => {
     const view = await collectionReady(canvasElement);
-    await userEvent.click(await view.findByRole('button', { name: m.library_collection_actions() }));
-    await userEvent.click(
-      await within(document.body).findByRole('menuitem', {
-        name: m.library_collection_edit(),
-      }),
-    );
+    await userEvent.click(view.getAllByRole('button', { name: m.library_collection_actions(), exact: true })[0]!);
+    await userEvent.click(await within(document.body).findByText(m.library_collection_edit(), { exact: true }));
     await view.findByRole('textbox', { name: m.library_collection_title() });
   },
   render: () => renderCollection('private'),
@@ -74,12 +70,8 @@ export const MembersReordered: Story = {
   name: 'Owner, members reordered',
   play: async ({ canvasElement }) => {
     const view = await collectionReady(canvasElement);
-    await userEvent.click(await view.findByRole('button', { name: m.library_collection_actions() }));
-    await userEvent.click(
-      await within(document.body).findByRole('menuitem', {
-        name: m.library_collection_edit(),
-      }),
-    );
+    await userEvent.click(view.getAllByRole('button', { name: m.library_collection_actions(), exact: true })[0]!);
+    await userEvent.click(await within(document.body).findByText(m.library_collection_edit(), { exact: true }));
     const first = await view.findByRole('link', { name: 'Snow Country' });
     const firstItem = first.closest('li');
     if (!firstItem) throw new Error('The first member is not in the ordered list.');

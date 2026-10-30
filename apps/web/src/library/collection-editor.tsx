@@ -1,4 +1,3 @@
-import { coverRatio } from '@rezics/ui/cover';
 import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -7,13 +6,13 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Link } from '@tanstack/react-router';
 import { EllipsisIcon, GripVerticalIcon } from 'lucide-react';
 import type { DragEvent, ReactNode } from 'react';
-import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { pageText } from '../features/pages/shared';
 import { libraryTitleValue } from './title';
 import { SubjectCover } from './subject-row';
+import { collectionMemberRatio } from './collection-presentation';
 import type { CollectionMember, LibrarySubject } from './reads';
 
 const dragType = 'application/x-rezics-collection-member';
@@ -22,7 +21,9 @@ const dragType = 'application/x-rezics-collection-member';
 export function CollectionSubjectList({
   subjects,
   onCopy,
+  typeRatios,
 }: {
+  typeRatios?: Readonly<Record<string, string>>;
   subjects: readonly (LibrarySubject | null)[];
   onCopy?: (subject: LibrarySubject) => void | Promise<void>;
 }) {
@@ -33,19 +34,39 @@ export function CollectionSubjectList({
         const title = localizedTitle?.text ?? m.library_subject_unavailable();
         const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()) : null;
         return (
-          <ListRow key={subject?.id ?? `unavailable-${index}`} className="flex min-w-0 items-center gap-3 rounded-xl p-3 sm:gap-4 sm:p-4">
-            <SubjectCover subject={subject} ratio={coverRatio(subject?.types ?? [])} size="md" />
-            <div className="min-w-0 flex-1 space-y-1">
+          <ListRow
+            key={subject?.id ?? `unavailable-${index}`}
+            className="flex min-w-0 items-center gap-3 rounded-xl p-3 sm:gap-4 sm:p-4"
+          >
+            <SubjectCover
+              subject={subject}
+              ratio={collectionMemberRatio(subject, typeRatios)}
+              size="md"
+              className="w-24 sm:w-40"
+            />
+            <div className="min-w-24 flex-1 space-y-1">
               <div className="line-clamp-2 font-medium leading-snug">
-                {href ? <Link to={href.to} params={href.params} className="text-primary underline-offset-4 hover:underline">{title}</Link> : title}
+                {href ? (
+                  <Link to={href.to} params={href.params} className="text-primary underline-offset-4 hover:underline">
+                    {title}
+                  </Link>
+                ) : (
+                  title
+                )}
               </div>
-              <p className="text-sm text-muted-foreground">{m.library_column_type()}: {subject?.typeLabel ?? m.library_other()}</p>
+              <p className="text-sm text-muted-foreground">
+                {m.library_column_type()}: {subject?.typeLabel ?? m.library_other()}
+              </p>
             </div>
             {subject && onCopy ? (
               <ListRowControl>
                 <Menu
                   title={m.library_collection_actions()}
-                  trigger={<Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost"><EllipsisIcon aria-hidden="true" /></Button>}
+                  trigger={
+                    <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+                      <EllipsisIcon aria-hidden="true" />
+                    </Button>
+                  }
                   entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: () => onCopy(subject) }]}
                 />
               </ListRowControl>
@@ -69,13 +90,24 @@ export function buildCollectionMemberEditPlan(
   firstPage: boolean,
 ): CollectionMemberEditOperation[] {
   if (initial.length > 100 || desired.length > 100) throw new RangeError('Collection edit selection exceeds one page');
+  const initialIds = new Set(initial.map((member) => member.id));
   const desiredIds = new Set(desired.map((member) => member.id));
+  if (
+    initialIds.size !== initial.length ||
+    desiredIds.size !== desired.length ||
+    desired.some((member) => !initialIds.has(member.id))
+  )
+    throw new RangeError('Collection edits must name distinct loaded occurrences');
+  if (!firstPage && desired.length && desired[0]?.id !== initial.find((member) => desiredIds.has(member.id))?.id)
+    throw new RangeError('A later page cannot move a member before its loaded boundary');
   const operations: CollectionMemberEditOperation[] = [];
-  for (const member of initial) if (!desiredIds.has(member.id)) operations.push({ kind: 'remove', memberId: member.id });
+  for (const member of initial)
+    if (!desiredIds.has(member.id)) operations.push({ kind: 'remove', memberId: member.id });
   const initialById = new Map(initial.map((member) => [member.id, member]));
   for (const member of desired) {
     const original = initialById.get(member.id);
-    if (original && original.note !== member.note) operations.push({ kind: 'note', memberId: member.id, note: member.note });
+    if (original && original.note !== member.note)
+      operations.push({ kind: 'note', memberId: member.id, note: member.note });
   }
   const working = initial.filter((member) => desiredIds.has(member.id));
   const target = desired.filter((member) => initialById.has(member.id));
@@ -101,7 +133,7 @@ export async function applyCollectionMemberEditPlan(
   if (operations.length > 300) throw new RangeError('Collection edit plan exceeds its per-page bound');
   let completed = 0;
   for (const operation of operations) {
-    const result = await write(operation);
+    const result = await write(operation).catch(() => ({ ok: false as const, reason: 'unavailable' }));
     if (!result.ok) return { completed, failed: { operation, reason: result.reason } };
     completed += 1;
   }
@@ -119,7 +151,9 @@ export function CollectionMemberList({
   onNoteChange,
   onRemove,
   onCopy,
+  typeRatios,
 }: {
+  typeRatios?: Readonly<Record<string, string>>;
   members: readonly CollectionMember[];
   editing: boolean;
   firstPage: boolean;
@@ -133,12 +167,12 @@ export function CollectionMemberList({
   children?: ReactNode;
 }) {
   return (
-    <ul className="min-w-0 space-y-3" data-collection-members>
+    <ul className="min-w-0 space-y-3" data-collection-members aria-busy={busy}>
       {members.map((member, index) => {
         const localizedTitle = member.subject ? pageText(libraryTitleValue(member.subject.label), getLocale()) : null;
         const title = localizedTitle?.text ?? m.library_subject_unavailable();
         const href = member.subject ? subjectHref({ id: member.subject.id, label: title }, getLocale()) : null;
-        const rowRatio = coverRatio(member.subject?.types ?? []);
+        const rowRatio = collectionMemberRatio(member.subject, typeRatios);
         const moveUpAfter = index === 1 && firstPage ? null : index >= 2 ? members[index - 2]!.id : undefined;
         const nextAfter = index < members.length - 1 ? members[index + 1]!.id : undefined;
         const beginDrag = (event: DragEvent<HTMLElement>) => {
@@ -148,7 +182,7 @@ export function CollectionMemberList({
         return (
           <ListRow
             key={member.id}
-            className="flex min-w-0 items-center gap-3 rounded-xl p-3 sm:gap-4 sm:p-4"
+            className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl p-2 sm:flex-nowrap sm:gap-4 sm:p-4"
             data-member={member.id}
             onDragOver={editing && !busy ? (event) => event.preventDefault() : undefined}
             onDrop={
@@ -159,7 +193,14 @@ export function CollectionMemberList({
                     const from = members.findIndex((item) => item.id === movedId);
                     if (!movedId || from < 0 || movedId === member.id) return;
                     const targetIndex = members.findIndex((item) => item.id === member.id);
-                    const placeAfter = from < targetIndex ? member.id : targetIndex === 0 ? (firstPage ? null : undefined) : members[targetIndex - 1]!.id;
+                    const placeAfter =
+                      from < targetIndex
+                        ? member.id
+                        : targetIndex === 0
+                          ? firstPage
+                            ? null
+                            : undefined
+                          : members[targetIndex - 1]!.id;
                     if (placeAfter !== undefined) onMove(movedId, placeAfter);
                   }
                 : undefined
@@ -175,8 +216,8 @@ export function CollectionMemberList({
                 />
               </ListRowControl>
             ) : null}
-            <SubjectCover subject={member.subject} ratio={rowRatio} size="md" />
-            <div className="min-w-0 flex-1 space-y-1">
+            <SubjectCover subject={member.subject} ratio={rowRatio} size="md" className="w-24 sm:w-40" />
+            <div className="min-w-24 flex-1 space-y-1">
               <div className="line-clamp-2 font-medium leading-snug">
                 {href ? (
                   <Link to={href.to} params={href.params} className="text-primary underline-offset-4 hover:underline">
@@ -189,7 +230,7 @@ export function CollectionMemberList({
               <p className="text-sm text-muted-foreground">
                 {m.library_column_type()}: {member.subject?.typeLabel ?? m.library_other()}
               </p>
-              {editing ? (
+              {editing && member.subject ? (
                 <Textarea
                   aria-label={`${m.library_member_note()}: ${title}`}
                   className="min-h-16"
@@ -198,14 +239,14 @@ export function CollectionMemberList({
                   value={member.note ?? ''}
                   onChange={(event) => onNoteChange?.(member.id, event.target.value)}
                 />
-              ) : member.note ? (
+              ) : member.subject && member.note ? (
                 <p data-slot="collection-member-note" className="line-clamp-2 text-sm text-muted-foreground">
                   {member.note}
                 </p>
               ) : null}
             </div>
             <ListRowControl className="flex shrink-0 flex-col items-end gap-1">
-              {onCopy ? (
+              {onCopy && member.subject ? (
                 <Menu
                   title={m.library_collection_actions()}
                   trigger={
@@ -225,6 +266,7 @@ export function CollectionMemberList({
                     aria-label={m.library_member_move_up()}
                     disabled={busy || moveUpAfter === undefined}
                     onClick={() => moveUpAfter !== undefined && onMove?.(member.id, moveUpAfter)}
+                    data-drag-handle
                     draggable={!busy}
                     onDragStart={beginDrag}
                   >
@@ -235,7 +277,7 @@ export function CollectionMemberList({
                     variant="outline"
                     size="sm"
                     aria-label={m.library_member_move_down()}
-                    disabled={busy || nextAfter === undefined}
+                    disabled={busy || nextAfter === undefined || (!firstPage && index === 0)}
                     onClick={() => nextAfter !== undefined && onMove?.(member.id, nextAfter)}
                   >
                     {m.library_member_move_down()}

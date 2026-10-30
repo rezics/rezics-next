@@ -931,5 +931,10 @@
   "library_collection_move_selected": "Los elementos seleccionados se moverán al guardar.",
   "library_collection_save_pending": "Guardando…",
   "library_collection_save_partial": "Se guardaron {count} cambios antes de que fallara otro. Vuelve a cargar la colección para revisarla.",
-  "library_collection_cover_unavailable": "Aún no se puede elegir una portada para la colección."
+  "library_collection_cover_unavailable": "Aún no se puede elegir una portada para la colección.",
+  "library_collection_previews": "Vista previa",
+  "library_collection_independent_writes": "Los cambios se guardan uno a uno. Si uno falla, los cambios ya guardados se conservan.",
+  "library_collection_move_unavailable": "Aún no se pueden mover miembros a otra colección.",
+  "library_collection_builtin_rule": "Las reglas de las colecciones integradas son fijas. Los filtros solo cambian esta vista.",
+  "library_collection_remove_selected": "Quitar seleccionados"
 }

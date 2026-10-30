@@ -1,10 +1,18 @@
-import { Cover, coverRatio } from '@rezics/ui/cover';
+import { Cover } from '@rezics/ui/cover';
 import { ListRow, ListRowControl } from '@rezics/ui/list-row';
 import { Menu } from '@rezics/ui/menu';
 import { Button } from '@rezics/ui/shadcn/button';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Link } from '@tanstack/react-router';
-import { ChevronRightIcon, ImageOffIcon, LockKeyholeIcon, SearchIcon } from 'lucide-react';
+import {
+  ChevronRightIcon,
+  EllipsisIcon,
+  ImageOffIcon,
+  LayoutListIcon,
+  PanelsTopLeftIcon,
+  LockKeyholeIcon,
+  SearchIcon,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
@@ -14,17 +22,18 @@ import { displayLibraryTitle } from './title';
 import { dynamicCollectionTitle, type DynamicBuiltinKind } from './dynamic-collection';
 import type { LibrarySubject } from './reads';
 import type { MineCollection } from './mine-collections';
+import { collectionMemberRatio } from './collection-presentation';
 
 export type CollectionBrowseLayout = 'rows' | 'previews';
-export type CollectionPreviewData =
-  | { state: 'unavailable' }
-  | { state: 'loaded'; members: readonly LibrarySubject[] };
+export type CollectionPreviewData = { state: 'unavailable' } | { state: 'loaded'; members: readonly LibrarySubject[] };
 
 export type CollectionBrowseRecord = MineCollection & {
   preview: CollectionPreviewData;
 };
 
-export function browseCollectionTitle(collection: Pick<MineCollection, 'title' | 'builtinKind' | 'builtinLabels'>): string {
+export function browseCollectionTitle(
+  collection: Pick<MineCollection, 'title' | 'builtinKind' | 'builtinLabels'>,
+): string {
   if (collection.title !== null) return collection.title;
   return dynamicCollectionTitle(
     {
@@ -53,7 +62,8 @@ function CollectionCover({ collection, subject }: { collection: MineCollection; 
         subject={{ id: subject.id, title: label, types: subject.types }}
         cover={subject.cover}
         size="md"
-        ratio={coverRatio(subject.types)}
+        className="w-24 sm:w-40"
+        ratio={collectionMemberRatio(subject)}
         src={coverSrc}
         decorative
       />
@@ -61,7 +71,7 @@ function CollectionCover({ collection, subject }: { collection: MineCollection; 
   }
   return (
     <div
-      className="flex aspect-[4/5] w-40 shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 px-3 text-center text-muted-foreground"
+      className="flex aspect-square w-24 sm:w-40 shrink-0 flex-col items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 px-3 text-center text-muted-foreground"
       role="img"
       aria-label={`${title}: ${m.library_collection_preview_unavailable()}`}
       data-collection-cover="unavailable"
@@ -103,8 +113,8 @@ function CopyMenu({ title, onCopy }: { title: string; onCopy: () => void | Promi
     <Menu
       title={`${m.library_collection_actions()}: ${title}`}
       trigger={
-          <Button type="button" aria-label={`${m.library_collection_actions()}: ${title}`} variant="ghost" size="icon-sm">
-          <ChevronRightIcon aria-hidden="true" className="size-4 rotate-90" />
+        <Button type="button" aria-label={`${m.library_collection_actions()}: ${title}`} variant="ghost" size="icon-sm">
+          <EllipsisIcon aria-hidden="true" className="size-4" />
         </Button>
       }
       entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: onCopy }]}
@@ -126,20 +136,30 @@ export function CollectionBrowseRow({
   const firstMember = collection.preview.state === 'loaded' ? collection.preview.members[0] : undefined;
   const action = readable ? m.library_collection_open() : m.account_sign_in();
   return (
-    <ListRow className="flex min-w-0 items-center gap-4 rounded-xl p-3 sm:gap-6 sm:p-4" data-collection-row={collection.id}>
-      <CollectionCover collection={collection} subject={firstMember} />
-      <div className="min-w-0 flex-1 py-1">
+    <ListRow
+      className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl p-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto_auto] sm:gap-6 sm:p-4"
+      data-collection-row={collection.id}
+    >
+      <div className="row-span-2 sm:row-span-1">
+        <CollectionCover collection={collection} subject={firstMember} />
+      </div>
+      <div className="col-span-2 min-w-0 py-1 sm:col-span-1">
         <h2 className="line-clamp-2 text-lg font-semibold leading-snug sm:text-xl">{title}</h2>
         <CollectionFacts collection={collection} />
       </div>
-      {menu ? <ListRowControl>{menu}</ListRowControl> : null}
-      <ListRowControl className="shrink-0">
+      {menu ? (
+        <ListRowControl className="col-start-3 row-start-2 sm:col-auto sm:row-auto">{menu}</ListRowControl>
+      ) : null}
+      <ListRowControl className="col-start-2 row-start-2 justify-self-start sm:col-auto sm:row-auto sm:justify-self-end">
         {readable ? (
           <Link to="/collections/$id" params={{ id: collection.id }} className={buttonVariants({ size: 'lg' })}>
             {action}
           </Link>
         ) : (
-          <a href={`/${getLocale()}/auth/sign-in?return_to=${encodeURIComponent(collectionHref(collection.id))}`} className={buttonVariants({ size: 'lg' })}>
+          <a
+            href={`/${getLocale()}/auth/sign-in?return_to=${encodeURIComponent(collectionHref(collection.id))}`}
+            className={buttonVariants({ size: 'lg' })}
+          >
             {action}
           </a>
         )}
@@ -150,21 +170,26 @@ export function CollectionBrowseRow({
 
 function PreviewStrip({ members }: { members: readonly LibrarySubject[] }) {
   return (
-    <ul className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
+    <ul className="grid min-w-0 grid-cols-3 gap-3">
       {members.slice(0, 3).map((subject) => {
         const title = displayLibraryTitle(subject.label, getLocale()).text;
         const href = subjectHref({ id: subject.id, label: title }, getLocale());
         return (
-          <li key={subject.id} className="flex min-w-0 items-center gap-3 rounded-lg bg-muted/30 p-2">
+          <li key={subject.id} className="min-w-0 space-y-2 rounded-lg bg-muted/30 p-2">
             <Cover
               subject={{ id: subject.id, title, types: subject.types }}
               cover={subject.cover}
               size="sm"
-              ratio={coverRatio(subject.types)}
+              className="w-full max-w-40"
+              ratio={collectionMemberRatio(subject)}
               src={coverSrc}
               decorative
             />
-            <Link to={href.to} params={href.params} className="line-clamp-2 min-w-0 text-sm font-medium hover:underline">
+            <Link
+              to={href.to}
+              params={href.params}
+              className="line-clamp-2 min-w-0 text-sm font-medium hover:underline"
+            >
               {title}
             </Link>
           </li>
@@ -179,13 +204,24 @@ export function CollectionPreview({ collection }: { collection: CollectionBrowse
   const title = browseCollectionTitle(collection);
   const members = collection.preview.state === 'loaded' ? collection.preview.members.slice(0, 3) : [];
   return (
-    <article className="min-w-0 rounded-xl border border-border bg-card p-3 sm:p-4" data-collection-preview={collection.id}>
+    <article
+      className="min-w-0 rounded-xl border border-border bg-card p-3 sm:p-4"
+      data-collection-preview={collection.id}
+    >
       <header className="flex min-w-0 items-center gap-3">
-        <Link to="/collections/$id" params={{ id: collection.id }} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-ring">
+        <Link
+          to="/collections/$id"
+          params={{ id: collection.id }}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-ring"
+        >
           <span className="line-clamp-2 min-w-0 text-lg font-semibold">{title}</span>
-          {privateCollection(collection) ? <LockKeyholeIcon aria-label={m.library_visibility_private()} className="size-4 shrink-0" /> : null}
+          {privateCollection(collection) ? (
+            <LockKeyholeIcon aria-label={m.library_visibility_private()} className="size-4 shrink-0" />
+          ) : null}
           {collection.memberCount !== undefined ? (
-            <span className="shrink-0 text-sm text-muted-foreground">{m.library_collection_item_count({ count: collection.memberCount })}</span>
+            <span className="shrink-0 text-sm text-muted-foreground">
+              {m.library_collection_item_count({ count: collection.memberCount })}
+            </span>
           ) : null}
           <ChevronRightIcon aria-hidden="true" className="ms-auto size-4 shrink-0" />
         </Link>
@@ -193,7 +229,7 @@ export function CollectionPreview({ collection }: { collection: CollectionBrowse
       <div className="mt-3">
         {members.length ? (
           <PreviewStrip members={members} />
-        ) : collection.memberCount === 0 ? (
+        ) : collection.preview.state === 'loaded' && collection.memberCount === 0 ? (
           <p className="text-sm text-muted-foreground">{m.library_collection_empty()}</p>
         ) : (
           <p role="status" className="text-sm text-muted-foreground">
@@ -232,21 +268,35 @@ export function CollectionBrowseToolbar({
 }: {
   layout: CollectionBrowseLayout;
   onLayoutChange: (layout: CollectionBrowseLayout) => void;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3" data-collection-browser-toolbar>
-      <nav aria-label={m.library_layout()} className="flex items-center gap-1">
-        <Button type="button" variant={layout === 'rows' ? 'secondary' : 'outline'} aria-pressed={layout === 'rows'} onClick={() => onLayoutChange('rows')}>
-          {m.library_layout_list()}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children}</div>
+      <nav aria-label={m.library_layout()} className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          size="icon"
+          variant={layout === 'rows' ? 'secondary' : 'outline'}
+          aria-label={m.library_layout_list()}
+          aria-pressed={layout === 'rows'}
+          onClick={() => onLayoutChange('rows')}
+        >
+          <LayoutListIcon aria-hidden="true" />
         </Button>
-        <Button type="button" variant={layout === 'previews' ? 'secondary' : 'outline'} aria-pressed={layout === 'previews'} onClick={() => onLayoutChange('previews')}>
-          {m.library_layout_grid()}
+        <Button
+          type="button"
+          size="icon"
+          variant={layout === 'previews' ? 'secondary' : 'outline'}
+          aria-label={m.library_collection_previews()}
+          aria-pressed={layout === 'previews'}
+          onClick={() => onLayoutChange('previews')}
+        >
+          <PanelsTopLeftIcon aria-hidden="true" />
         </Button>
       </nav>
       <div className="flex items-center gap-2">
         <SearchLauncher />
-        {children}
       </div>
     </div>
   );
@@ -265,14 +315,21 @@ export function CollectionBrowseList({
 }) {
   if (layout === 'previews')
     return (
-      <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2" data-collection-browse="previews">
-        {collections.map((collection) => <CollectionPreview key={collection.id} collection={collection} />)}
+      <div className="min-w-0 space-y-3" data-collection-browse="previews">
+        {collections.map((collection) => (
+          <CollectionPreview key={collection.id} collection={collection} />
+        ))}
       </div>
     );
   return (
     <ul className="min-w-0 space-y-3" data-collection-browse="rows">
       {collections.map((collection) => (
-        <CollectionBrowseRow key={collection.id} collection={collection} readable={readable} menu={menuFor?.(collection)} />
+        <CollectionBrowseRow
+          key={collection.id}
+          collection={collection}
+          readable={readable}
+          menu={menuFor?.(collection)}
+        />
       ))}
     </ul>
   );

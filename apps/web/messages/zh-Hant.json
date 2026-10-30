@@ -931,5 +931,10 @@
   "library_collection_move_selected": "所選項目會在儲存時移動。",
   "library_collection_save_pending": "正在儲存…",
   "library_collection_save_partial": "其他變更失敗前已儲存 {count} 項變更。請重新載入以檢查收藏集。",
-  "library_collection_cover_unavailable": "目前尚不支援選擇收藏集封面。"
+  "library_collection_cover_unavailable": "目前尚不支援選擇收藏集封面。",
+  "library_collection_previews": "預覽",
+  "library_collection_independent_writes": "變更會逐項儲存。若某項失敗，先前儲存的變更仍會保留。",
+  "library_collection_move_unavailable": "目前尚無法將成員移至其他收藏集。",
+  "library_collection_builtin_rule": "內建收藏集的規則固定。篩選只會變更目前的檢視。",
+  "library_collection_remove_selected": "移除所選成員"
 }

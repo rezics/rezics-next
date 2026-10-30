@@ -1350,6 +1350,106 @@ Full subject views page through their owner list read with the first page's para
 - **Feeds:** Boards, threads, Realms and Spaces use their typed kernel sitemap feeds; stalled pages are detected by
   item order rather than cursor tokens.
 
+## Collection browse and editor
+
+The existing Library Collections route composes `CollectionBrowseRow` or `CollectionPreview`, the shared Library
+navigation, and a compact toolbar. Each row has one Open action and the disclosed native total. Genuine built-ins
+come from the owner list; a current Collection title is not another tab. Pin management remains available in a
+collapsed section. The compact search action focuses the shell's single query field; the current shell exports no
+scope-registration or phone-search activation port. The header owner must deliver that port before this action can
+register a Library scope or open the phone header search. It adds no second body query field.
+
+The Collection page uses shared `ListRow` members and an owner-only menu Edit action. At rest, member selection,
+reorder buttons, note inputs and removal controls are absent. Editing is a local draft, including details, loaded
+occurrence order, notes and selection removal; Cancel discards it without writes. Keyboard buttons accompany drag
+handles. Later pages cannot move their first loaded anchor or claim the Collection's first position. Save retains
+the numeric metadata revision and stable per-operation idempotency keys. Current native member operations are
+independent: saving stops at the first refusal or transport failure and reports any earlier accepted changes.
+Pending writes disable editing; a revision conflict retains the draft until explicit reload. No atomic bulk success
+or exact Undo is claimed for current per-member commands.
+
+Member images use their own actual Type and the exact fallback in
+[Collection presentation](../../docs/collection-presentation.md), then existing valid release `coverRatio` hints.
+No new release fields are cast into existence. Current FULL summaries lack creator and other key facts, so rows show
+only the real localized Type and any real note. Public and private disclosure, hidden subject concealment, cursor
+bounds, session credentials and private no-store responses retain their existing authorities. Visitor totals stay
+unknown on filtered or partial pages; an unfiltered complete page can disclose its admitted visible size. Owner and
+browse totals retain the native total rather than the preview/page length.
+
+The four-versus-five defect was a fake-route collision: `collection-filters.ts` intercepted the recorded Collection's
+unfiltered members request with five unrelated filter fixtures while the recorded header correctly held four.
+Filter stories now use a separate Collection with its own matching five-member header. The original recording and
+its four members are unchanged. The duplicate-occurrence story independently has five occurrences and a total of
+five. Collection detail fake routes now match their exact Collection so dynamic and other Collection stories can
+reach their own handlers. Stateful editor fakes exercise only existing metadata/note/reorder/removal commands,
+including receipt replay, pending, failure and conflict, without pretending to prove native authorization.
+
+### Producer handoff
+
+The generated client and native definitions remain the delivery boundary. These are required from their existing
+owners before the complete selected surface can be enabled:
+
+- Commerce: bounded list previews containing the first three actual admitted member summaries in native order,
+  in the list response or one bounded batch for the current page. Current owner lists have no previews or cover.
+  Real browse rows show unavailable covers/previews; pattern stories use actual recorded member summaries. No
+  per-Collection detail/member fanout is added.
+- Commerce and Content: the selected optional `cover`, `coverSource`, owner `coverMediaId`, and create/PATCH
+  `coverMediaId` contract, including current imported-media reference/download authority. The editor explicitly
+  explains that cover choice is unavailable; there is no Collection upload or arbitrary URL input.
+- Commerce and Semantic: generated `presentationKind`, `presentationKindSource`, optional release
+  `listPresentation`, and the bounded FULL Fact-union producer described in the joint contract. No partial-page
+  dominant-Type vote, author guess or per-row subject-detail request substitutes for these producers.
+- Commerce: `members:batchRemove {revision,memberIds}` and same-curator
+  `members:move {revision,memberIds,destinationCollectionId,destinationRevision,after}`, with the documented
+  result envelopes, CAS, receipt and current member lifecycle/Undo authority. Current removal uses explicit loaded
+  occurrence IDs and existing independent commands. Cross-Collection move stays visibly unavailable; add-then-delete
+  would lose identity and is not a transfer implementation.
+- Commerce: saved dynamic create and `PUT /v1/collections/{collectionId}/rule {revision,filter,sort?}` using the shared
+  admitted filter protocol. Built-in dynamic rules remain immutable; the collapsed shared Filters panel changes the
+  current view only. There is no member editor for dynamic results.
+- Existing interaction owners: a Collection-target Like and Report capability. Current reaction/report targets do
+  not support Collections. Copy link, personal pinning and public follow use actual operations; none is relabelled
+  as Like or used as a fake successful report.
+
+These are precise missing producer capabilities, not new Web Kernel endpoints or evidence of runtime delivery.
+The joint document remains the sole API contract authority.
+
+### Story handoff
+
+The following complete Pattern folders expose autodocs and state plays using the real presenters/editor. Each
+**same ID** is handed off for both **phone390 and desktop1280**, with **en and zh-Hans**, in **light and dark** via
+review toolbar globals. No export encodes locale, width or theme.
+
+| Folder             | State IDs                                                                                                                                                                                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collection Row     | `patterns-collection-row--public`, `patterns-collection-row--private`, `patterns-collection-row--empty`, `patterns-collection-row--menu-open`                                                                                                                                                                                         |
+| Collection Preview | `patterns-collection-preview--members`, `patterns-collection-preview--empty`, `patterns-collection-preview--unavailable`                                                                                                                                                                                                              |
+| Collection Editor  | `patterns-collection-editor--details`, `patterns-collection-editor--members`, `patterns-collection-editor--selection`, `patterns-collection-editor--reordering`, `patterns-collection-editor--note`, `patterns-collection-editor--save-pending`, `patterns-collection-editor--save-error`, `patterns-collection-editor--dynamic-rule` |
+
+`Pages/Library/Collections` and Collection page stories remain actual component compositions. Menu Edit, keyboard
+reorder, selection, note, Save, Cancel and shared filter opening use real play interactions. Dynamic Rule demonstrates
+the current immutable built-in and its actual view filter; saved rule editing awaits its producer.
+`tests/collection-browse-editor.test.ts` is the focused stack-free presenter/fake regression, including native-total
+preservation, fixture isolation, hidden notes, finite selection, Cancel draft isolation, first-failure accounting and
+constant read counts. Existing older layout/filter-fixture tests remain under controller custody for integration;
+the separate filter fixture identity supersedes their recorded-Collection filter assumption.
+
+Local typing or focused fake results do not establish native outcomes or visual approval. All screenshot review by
+Root remains pending. Worker acceptance, browser/native/database/remote checks, Storybook builds, publication and
+promotion are intentionally deferred to integration under the current verification instruction.
+
+### Collection browse/editor cost
+
+- **Touches:** Existing owner Collection page and pins reads; inner metadata and one FULL members page, cached
+  definitions for labels/ratios, plus existing follow state where applicable. Preview and cover rendering cause no
+  added kernel detail reads.
+- **Bound:** Existing cursor pages cap at 100; preview presenters render at most three supplied members. An editor
+  draft contains at most one loaded page, never all pages. A save plan has at most 300 independently receipted
+  operations, sequentially stopping on failure. No account scan, cross-Collection fanout or new physical allowance.
+- **Growth check:** The focused regression records one owner-list request at 1/8/100 Collections, two public inner
+  reads with withheld partial/filtered totals, and stops finite mutation plans on a refused or thrown write. Native
+  privacy, growth and lifecycle proof remain gate-owned.
+
 ## Admitted controls
 
 `src/kernel/exposure.ts` maps the site's gated operation IDs to the groups declared in OpenAPI. Controls use

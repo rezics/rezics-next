@@ -53,6 +53,7 @@ export type DynamicCollectionPage = {
   pins?: LibraryPinsRead;
   navigationCollections?: MineCollection[];
   following?: boolean | null;
+  typeRatios?: Record<string, string>;
 };
 
 export function dynamicCollectionTitle(

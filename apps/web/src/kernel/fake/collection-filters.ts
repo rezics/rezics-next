@@ -1,7 +1,8 @@
 import type { FakeRoute } from '../fake-modules.ts';
 import type { KernelRecording } from '../fake.ts';
 
-const collectionId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2';
+export const collectionFilterStoryId = '00000000-0000-4000-8000-000000000200';
+const collectionId = collectionFilterStoryId;
 const harem = '00000000-0000-4000-8000-000000000123';
 const preparing = '00000000-0000-4000-8000-000000000998';
 const fixtures = [
@@ -23,6 +24,26 @@ const fixtures = [
 ] as const;
 
 export const routes: FakeRoute[] = [
+  {
+    method: 'GET',
+    path: `/v1/collections/${collectionId}`,
+    story: () => ({
+      status: 200,
+      collection: {
+        id: collectionId,
+        membershipKind: 'curated',
+        curatorAccountId: 'story-filter-curator',
+        title: 'A filtered reading list',
+        description: null,
+        visibility: 'public',
+        revision: 1,
+        memberCount: fixtures.length,
+        createdAt: '2026-10-29T00:00:00Z',
+        updatedAt: '2026-10-29T00:00:00Z',
+        curator: null,
+      },
+    }),
+  },
   {
     method: 'GET',
     path: '/v1/subjects:suggest',

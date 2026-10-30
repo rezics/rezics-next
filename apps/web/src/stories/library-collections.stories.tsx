@@ -6,20 +6,21 @@ import { m } from '../paraglide/messages.js';
 import { PageStory, pagePaths, pageReady } from './page';
 
 const meta = { title: 'Pages/Library/Collections', parameters: { layout: 'fullscreen' } } satisfies Meta;
-const phone390 = {
-  phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' as const },
-};
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 function render(
   mode: Parameters<typeof setCollectionStoryMode>[0],
   path: string = pagePaths['library-collections'],
-  pins: Parameters<typeof setLibraryNavigationStoryState>[0] = { pinCount: 0, builtins: 'none', collectionCount: 0 },
+  pins: Parameters<typeof setLibraryNavigationStoryState>[0] = {
+    pinCount: 0,
+    builtins: 'none',
+    collectionCount: mode === 'none' ? 0 : mode === 'one' ? 1 : 3,
+  },
 ) {
   setCollectionStoryMode(mode);
   setLibraryNavigationStoryState(pins);
-  return <PageStory visitor="Signed In" path={path} />;
+  return <PageStory visitor="Signed In" path={path} credentialMode="session" />;
 }
 
 async function collectionsReady(context: { canvasElement: HTMLElement }) {
@@ -28,6 +29,12 @@ async function collectionsReady(context: { canvasElement: HTMLElement }) {
     level: 1,
     name: m.library_collections_heading(),
   });
+  await openPinManager(context.canvasElement);
+}
+
+async function openPinManager(canvasElement: HTMLElement) {
+  const manager = canvasElement.querySelector<HTMLDetailsElement>('[data-library-pin-manager]');
+  if (manager && !manager.open) await userEvent.click(manager.querySelector('summary')!);
 }
 
 async function selectResponsiveMenuAction(label: string) {
@@ -37,10 +44,10 @@ async function selectResponsiveMenuAction(label: string) {
 }
 
 function collectionCard(main: HTMLElement, title: string): HTMLElement {
-  const card = [...main.querySelectorAll<HTMLElement>('[data-slot="cover-card"]')].find((element) =>
+  const card = [...main.querySelectorAll<HTMLElement>('[data-collection-row]')].find((element) =>
     element.textContent?.includes(title),
   );
-  if (!card) throw new globalThis.Error(`Missing Collection card: ${title}`);
+  if (!card) throw new globalThis.Error(`Missing Collection row: ${title}`);
   return card;
 }
 
@@ -146,7 +153,7 @@ export const LibraryNinePins: Story = {
     await expect(navigation).toBeTruthy();
     await expect(within(navigation as HTMLElement).getAllByRole('link', { name: /Pinned collection/ })).toHaveLength(8);
     await expect(
-      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_all_collections() }),
+      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_collections() }),
     ).toHaveLength(1);
   },
 };
@@ -185,7 +192,7 @@ export const CollectionsNinePins: Story = {
     await expect(navigation).toBeTruthy();
     await expect(within(navigation as HTMLElement).getAllByRole('link', { name: /Pinned collection/ })).toHaveLength(8);
     await expect(
-      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_all_collections() }),
+      within(navigation as HTMLElement).getAllByRole('link', { name: m.library_nav_collections() }),
     ).toHaveLength(1);
   },
 };
@@ -223,7 +230,6 @@ export const CollectionsNoPins: Story = {
 };
 
 export const PinAndUnpin: Story = {
-  parameters: { viewport: { viewports: phone390, defaultViewport: 'phone390' } },
   render: () => render('one', pagePaths['library-collections'], { pinCount: 0, builtins: 'none', collectionCount: 1 }),
   play: async (context) => {
     await collectionsReady(context);
@@ -231,6 +237,7 @@ export const PinAndUnpin: Story = {
     const card = collectionCard(main, 'To read this winter');
     await userEvent.click(within(card).getByRole('button', { name: m.library_pin_actions() }));
     await selectResponsiveMenuAction(m.library_pin_pin());
+    await openPinManager(context.canvasElement);
     await expect(within(main).getByRole('heading', { name: m.library_pin_pinned_section() })).toBeVisible();
     const pin = within(main).getByText('Pinned collection 1').closest('li');
     if (!pin) throw new globalThis.Error('The pinned Collection has no list row.');
@@ -295,7 +302,6 @@ export const PinAtCapacity: Story = {
 };
 
 export const PhoneSelectorOpen: Story = {
-  parameters: { viewport: { viewports: phone390, defaultViewport: 'phone390' } },
   render: () =>
     render('many', pagePaths['library-entries'], { pinCount: 3, builtins: 'everything-liked', collectionCount: 3 }),
   play: async (context) => {

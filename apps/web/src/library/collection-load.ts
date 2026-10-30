@@ -174,6 +174,9 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> & {
   filterParams?: CollectionFilterParams;
   /** Whether the visible first member page can be exported as a complete public ItemList. */
   publicExport: boolean;
+  typeRatios?: Record<string, string>;
+  /** Public visibility can be shown without granting owner controls. */
+  disclosedVisibility?: 'public' | 'unlisted';
 };
 
 function accountOf(account: { handle: string | null; displayName: string | null } | null | undefined) {
@@ -333,7 +336,7 @@ export async function loadEditableCollectionPage(
   const visibleMembers = owner ? members.members : members.members.filter((member) => member.subject != null);
   const memberCount = owner
     ? curatedCollection.memberCount
-    : input.cursor === undefined && members.next === null
+    : !input.filter && !filterStatus && (first.stale || input.cursor === undefined) && members.next === null
       ? visibleMembers.length
       : null;
   return {
@@ -344,6 +347,9 @@ export async function loadEditableCollectionPage(
     updatedAt: curatedCollection.updatedAt,
     curator: accountOf(curatedCollection.curator),
     visibility: owner ? curatedCollection.visibility : null,
+    ...(!owner && curatedCollection.visibility !== 'private'
+      ? { disclosedVisibility: curatedCollection.visibility }
+      : {}),
     members: visibleMembers.map((member) => ({
       id: member.id,
       note: member.note,

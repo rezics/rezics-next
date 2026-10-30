@@ -932,5 +932,10 @@
   "library_collection_move_selected": "Selected members move when you save.",
   "library_collection_save_pending": "Saving…",
   "library_collection_save_partial": "{count} changes were saved before another change failed. Reload to review the collection.",
-  "library_collection_cover_unavailable": "Choosing a Collection cover is not supported yet."
+  "library_collection_cover_unavailable": "Choosing a Collection cover is not supported yet.",
+  "library_collection_previews": "Preview",
+  "library_collection_independent_writes": "Changes are saved one at a time. If a change fails, earlier saved changes remain.",
+  "library_collection_move_unavailable": "Moving members to another Collection is not available yet.",
+  "library_collection_builtin_rule": "Built-in Collection rules are fixed. Filters change this view only.",
+  "library_collection_remove_selected": "Remove selected"
 }

@@ -97,18 +97,18 @@ export function DynamicCollectionPage({
   const locale = getLocale();
   return (
     <div className="w-full min-w-0 space-y-6 text-foreground">
-      <LibraryNavigation
-        current={{ collectionId: current.id }}
-        pins={pins}
-        collections={collections}
-      />
+      <LibraryNavigation current={{ collectionId: current.id }} pins={pins} collections={collections} />
       <article className="w-full min-w-0 space-y-6 text-foreground">
-        <header>
+        <header className="rounded-2xl bg-card p-4 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <PageHeading>{current.title}</PageHeading>
             <PinControl collectionId={current.id} pins={pins} mode="collection" />
           </div>
-          {current.curator ? <div className="mt-3"><AccountRef account={current.curator} avatar /></div> : null}
+          {current.curator ? (
+            <div className="mt-3">
+              <AccountRef account={current.curator} avatar />
+            </div>
+          ) : null}
           {current.description ? <p className="mt-3 whitespace-pre-wrap">{current.description}</p> : null}
           {canFollow && following !== null ? (
             <Exposure operation="follow.put">
@@ -127,6 +127,7 @@ export function DynamicCollectionPage({
             </Exposure>
           ) : null}
         </header>
+        <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>
         {current.filterProperties && current.filterParams ? (
           <CollectionFilters
             id={current.id}
@@ -154,6 +155,7 @@ export function DynamicCollectionPage({
         ) : current.members.length ? (
           <CollectionSubjectList
             subjects={current.members.map((member) => member.subject)}
+            typeRatios={current.typeRatios}
             onCopy={(subject) => {
               const title = displayLibraryTitle(subject.label, locale).text;
               void navigator.clipboard

@@ -128,8 +128,16 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
       data.credentialMode,
     );
     await nameSubjectTypes(page.members.map((member) => member.subject));
+    const typeRatios = await readRelease().then(
+      (release) =>
+        Object.fromEntries(
+          Object.entries(release.types).flatMap(([id, type]) => (type.coverRatio ? [[id, type.coverRatio]] : [])),
+        ),
+      () => ({}),
+    );
     return {
       ...page,
+      typeRatios,
       ...(filtersOn
         ? { filterProperties, filterParams: filter ?? { selected: {}, selectedLabels: {}, ranges: {}, ignored: [] } }
         : {}),

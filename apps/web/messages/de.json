@@ -931,5 +931,10 @@
   "library_collection_move_selected": "Ausgewählte Einträge werden beim Speichern verschoben.",
   "library_collection_save_pending": "Wird gespeichert…",
   "library_collection_save_partial": "{count} Änderungen wurden gespeichert, bevor eine weitere Änderung fehlgeschlagen ist. Lade die Sammlung neu, um sie zu prüfen.",
-  "library_collection_cover_unavailable": "Die Auswahl eines Sammlungstitelbilds wird noch nicht unterstützt."
+  "library_collection_cover_unavailable": "Die Auswahl eines Sammlungstitelbilds wird noch nicht unterstützt.",
+  "library_collection_previews": "Vorschau",
+  "library_collection_independent_writes": "Änderungen werden einzeln gespeichert. Schlägt eine Änderung fehl, bleiben zuvor gespeicherte Änderungen erhalten.",
+  "library_collection_move_unavailable": "Mitglieder können noch nicht in eine andere Sammlung verschoben werden.",
+  "library_collection_builtin_rule": "Die Regeln integrierter Sammlungen sind festgelegt. Filter ändern nur diese Ansicht.",
+  "library_collection_remove_selected": "Ausgewählte entfernen"
 }

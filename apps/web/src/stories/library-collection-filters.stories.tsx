@@ -6,14 +6,15 @@ import { CollectionFilterFeedback, CollectionFilters } from '../library/collecti
 import { collectionPageQuery } from '../library/collection-queries';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { PatternStory, pagePaths } from './page';
+import { PatternStory } from './page';
+import { collectionFilterStoryId } from '../kernel/fake/collection-filters';
 
 const meta = { title: 'Patterns/Library/Collection filters' } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const id = pagePaths['library-collection'].split('/').at(-1)!;
-const path = pagePaths['library-collection'];
+const id = collectionFilterStoryId;
+const path = `/collections/${id}`;
 const harem = '00000000-0000-4000-8000-000000000123';
 
 const states = {

@@ -932,5 +932,10 @@
   "library_collection_move_selected": "所选条目将在保存时移动。",
   "library_collection_save_pending": "正在保存…",
   "library_collection_save_partial": "其他更改失败前已保存 {count} 项更改。请重新加载以检查收藏集。",
-  "library_collection_cover_unavailable": "目前尚不支持选择收藏集封面。"
+  "library_collection_cover_unavailable": "目前尚不支持选择收藏集封面。",
+  "library_collection_previews": "预览",
+  "library_collection_independent_writes": "更改将逐项保存。如果某项失败，之前保存的更改仍会保留。",
+  "library_collection_move_unavailable": "暂不支持将成员移动到其他收藏集。",
+  "library_collection_builtin_rule": "内置收藏集的规则固定。筛选仅更改当前视图。",
+  "library_collection_remove_selected": "移除所选成员"
 }
