@@ -127,7 +127,9 @@ async function beginProgress(
   try {
     await page.getByRole('spinbutton', { name: inputName, exact: true }).waitFor({ state: 'visible' });
   } catch {
-    throw new Error(`Update progress did not expose ${inputName}; served page: ${await page.locator('body').innerText()}`);
+    throw new Error(
+      `Update progress did not expose ${inputName}; served page: ${await page.locator('body').innerText()}`,
+    );
   }
   return sessionId;
 }
@@ -264,11 +266,7 @@ describe('native holdings and progress history', () => {
 
     const bobCopy = await stack.kernel(`/v1/copies/${encodeURIComponent(copy.id)}`, {}, 'bob');
     expect(bobCopy.status).toBe(404);
-    const bobCopies = await stack.kernel(
-      `/v1/copies?subjectId=${encodeURIComponent(book.id)}&limit=100`,
-      {},
-      'bob',
-    );
+    const bobCopies = await stack.kernel(`/v1/copies?subjectId=${encodeURIComponent(book.id)}&limit=100`, {}, 'bob');
     const bobCopyPage = await nativeJson<{ copies: { id: string; note: string | null }[]; next: string | null }>(
       bobCopies,
       200,
