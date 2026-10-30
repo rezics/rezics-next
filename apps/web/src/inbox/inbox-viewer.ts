@@ -24,9 +24,7 @@ function createViewerStore(client: QueryClient) {
     if (next !== currentSubject) {
       currentSubject = next;
       epoch += 1;
-      const viewer: InboxViewer | null = next
-        ? { subject: next, epoch, isCurrent: () => snapshot() === viewer }
-        : null;
+      const viewer: InboxViewer | null = next ? { subject: next, epoch, isCurrent: () => snapshot() === viewer } : null;
       current = viewer;
     }
     return current;

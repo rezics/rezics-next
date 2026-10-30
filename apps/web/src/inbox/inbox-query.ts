@@ -50,10 +50,7 @@ export function unreadCountQueryFor(viewer: InboxViewer | null) {
   });
 }
 
-type SeenTransport = (request: {
-  data: InboxSeenAttempt;
-  headers: HeadersInit;
-}) => Promise<{ signedIn: boolean }>;
+type SeenTransport = (request: { data: InboxSeenAttempt; headers: HeadersInit }) => Promise<{ signedIn: boolean }>;
 
 export async function markInboxViewerSeen(
   client: QueryClient,

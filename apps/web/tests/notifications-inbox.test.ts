@@ -321,7 +321,12 @@ test('Changing or losing the signed-in viewer immediately removes prior inbox ro
       items: [{ ...notice({ id: 'alice-old' }), text: 'Older Alice reply', unavailable: false }],
       next: null,
     });
-    client.setQueryData(unreadCountQueryFor(alice).queryKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+    client.setQueryData(unreadCountQueryFor(alice).queryKey, {
+      signedIn: true,
+      state: 'ready',
+      count: 7,
+      capped: false,
+    });
     const latePage = deferred<string>();
     const lateCount = deferred<number>();
     const page = forInboxViewer(alice, () => latePage.promise).catch((error: Error) => error.name);
@@ -403,7 +408,9 @@ test('stale seen outcomes cannot invalidate the next viewer badge or dispatch an
         if (commands.length === 2) throw new Error('Response lost');
         return { signedIn: true };
       };
-      await expect(markInboxViewerSeen(client, alice, aliceAttempt, 'bob-token', retry)).rejects.toThrow('Inbox viewer changed');
+      await expect(markInboxViewerSeen(client, alice, aliceAttempt, 'bob-token', retry)).rejects.toThrow(
+        'Inbox viewer changed',
+      );
       await expect(markInboxViewerSeen(client, bob, bobAttempt, 'same-token', retry)).rejects.toThrow('Response lost');
       client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'bob-refreshed-token' });
       await markInboxViewerSeen(client, bob, bobAttempt, 'bob-refreshed-token', retry);
