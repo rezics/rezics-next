@@ -100,10 +100,11 @@ export function ProviderReviewActions({
       const next = await transport.refresh(current);
       setReadings(next.readings);
       setRefreshFailed(!next.queue.ok);
-      onRefresh(next.queue);
+      // An older decision must not navigate the owning queue back after a scope change.
+      if (providerScopeKey(current.scope) === lastScope.current) onRefresh(next.queue);
     } catch {
       setRefreshFailed(true);
-      onRefresh({ ok: false, reason: 'unavailable' });
+      if (providerScopeKey(current.scope) === lastScope.current) onRefresh({ ok: false, reason: 'unavailable' });
     }
   }
 
@@ -312,7 +313,12 @@ export function ProviderReviewActions({
               </Button>
             )}
             {attempted && (
-              <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void refresh(batch)}>
+              <Button
+                variant="outline"
+                className="min-h-11"
+                disabled={busy || !sameScope}
+                onClick={() => void refresh(batch)}
+              >
                 {m.provider_refresh({}, o)}
               </Button>
             )}
