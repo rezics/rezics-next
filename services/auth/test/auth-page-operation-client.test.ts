@@ -67,8 +67,9 @@ test('default native host registers the exact narrow first-party operation clien
         scopes: ['account:delete', 'organization:create'],
       },
     ]);
-    expect((await product.query('SELECT first_party, scopes FROM auth_client WHERE client_id=$1', ['login'])).rows)
-      .toEqual([{ first_party: true, scopes: [] }]);
+    expect(
+      (await product.query('SELECT first_party, scopes FROM auth_client WHERE client_id=$1', ['login'])).rows,
+    ).toEqual([{ first_party: true, scopes: [] }]);
   } finally {
     if (host) await host.stop();
     else await Promise.all([product.end(), system.end()]);
