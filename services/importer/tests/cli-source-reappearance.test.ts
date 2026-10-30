@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { SourceId, SourceRecord } from '@rezics/conversion';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { Importer } from '../src/importer.ts';
+import type { ImportTransport } from '../src/import-contract.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
 // Pure coordinator/SQLite proof with an explicit protocol double. This is not native CLI acceptance.
@@ -57,8 +58,23 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
     const path = join(directory, 'state.sqlite');
     const sent: BatchCommand[] = [];
     const receipts = new Map<string, BatchWriteResult['results'][number]>();
+    const clearRequests = new Map<string, string>();
     const fences = new Set<string>();
     const transport = {
+      // This coordinator-only protocol double acknowledges exact clear requests separately
+      // from semantic receipts. The native companion observes actual removal/204/receipts.
+      async clearSourceStatistic(input: Parameters<NonNullable<ImportTransport['clearSourceStatistic']>>[0]) {
+        expect(input.source).toBe('vndb');
+        expect(input.value).toEqual({
+          sourceRecordId: expect.stringMatching(/^v[0-9]+$/),
+          count: 0,
+          asOf: '2026-10-25',
+        });
+        const bytes = JSON.stringify(input);
+        const prior = clearRequests.get(input.idempotencyKey);
+        if (prior !== undefined) expect(bytes).toBe(prior);
+        clearRequests.set(input.idempotencyKey, bytes);
+      },
       async readFence(tuple: { source: string; external_id: string; field_group: string }) {
         const fenced = fences.has(JSON.stringify(tuple));
         return { fenced, securityRevision: fenced ? '1' : null };
