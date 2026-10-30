@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
+import { mediaRequest, type MediaEnv } from '../src/media/index.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -210,6 +211,76 @@ async function stored(entry: Media): Promise<Uint8Array | null> {
 }
 
 const completions = () => seen.filter((call) => call.method === 'complete');
+
+test('genuine native small derivative variant syntax passes the Worker boundary while malformed variants and exact-slot denial remain closed', async () => {
+  const id = randomUUID();
+  const bytes = new Uint8Array(randomBytes(32));
+  const key = `m/${id}/webp-160`;
+  const decision: Decision = {
+    allowed: true,
+    key,
+    sha256: sha256(bytes),
+    mediaType: 'image/webp',
+    byteCount: bytes.length,
+    publicCache: false,
+    cacheControl: 'private, no-cache',
+  };
+  decisions.set(`${id}/webp-160`, decision);
+  // An allowed original must never rescue a denied derivative slot.
+  decisions.set(`${id}/original`, { ...decision, key: `m/${id}/original` });
+  const storage: string[] = [];
+  const env: MediaEnv = {
+    KERNEL_ORIGIN: fake.url.origin,
+    MEDIA: {
+      async head(storedKey: string) {
+        storage.push(`head:${storedKey}`);
+        return { size: bytes.length };
+      },
+      async get(storedKey: string) {
+        storage.push(`get:${storedKey}`);
+        return { size: bytes.length, body: new Blob([bytes]).stream() };
+      },
+    } as unknown as R2Bucket,
+  };
+  const request = (variant: string) =>
+    mediaRequest(
+      new Request(`https://site.test/media/${id}/${variant}`, {
+        headers: { authorization: 'Bearer user:bob', 'if-none-match': '"stale"' },
+      }),
+      env,
+    );
+  const asked = () =>
+    seen.filter((call) => call.method === 'authorizeDownload' && call.path.startsWith(`/v1/media/${id}:`));
+  const small = await request('webp-160');
+  expect(small.status).toBe(200);
+  expect(small.headers.get('content-type')).toBe('image/webp');
+  expect(new Uint8Array(await small.arrayBuffer())).toEqual(bytes);
+  expect(storage).toEqual([`head:${key}`, `get:${key}`]);
+  for (const variant of ['webp-159', 'avif-160', 'webp-320']) {
+    const denied = await mediaRequest(
+      new Request(`https://site.test/media/${id}/${variant}`, {
+        headers: { authorization: 'Bearer user:bob', 'if-none-match': `"${decision.sha256}"` },
+      }),
+      env,
+    );
+    expect(denied.status).toBe(404);
+    expect(denied.headers.get('cache-control')).toBe('private, no-store');
+    const body = await denied.text();
+    expect(body).not.toContain(key);
+    expect(body).not.toContain(decision.sha256);
+  }
+  expect(asked().map((call) => new URL(call.path, fake.url).searchParams.get('variant'))).toEqual([
+    'webp-160',
+    'webp-159',
+    'avif-160',
+    'webp-320',
+  ]);
+  expect(asked().every((call) => call.authorization === 'Bearer user:bob')).toBe(true);
+  for (const variant of ['webp-0', 'webp-0160', 'webp-321', 'webp-160%2f..'])
+    expect((await request(variant)).status).toBe(404);
+  expect(asked()).toHaveLength(4);
+  expect(storage).toEqual([`head:${key}`, `get:${key}`]);
+});
 
 test(
   'an upload streams the reserved bytes to storage and completes the reservation with what the Worker measured',
