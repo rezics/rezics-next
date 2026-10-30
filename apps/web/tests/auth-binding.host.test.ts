@@ -1,13 +1,15 @@
 import { readSessionToken } from './session-token';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { createAuthService, type AccessAccount, type AuthService } from '../../../services/auth/src/index.ts';
 import { testDatabase } from '../../../services/auth/scripts/database.ts';
+import { startDevServer } from './support/dev-server.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 360_000;
@@ -35,19 +37,10 @@ let kernel: ReturnType<typeof Bun.serve> | undefined;
 let service: AuthService;
 let issuer: string;
 let site: string;
-let child: ChildProcess | undefined;
+let devServer: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let keys: ReturnType<typeof createLocalJWKSet>;
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
+let webState: string | undefined;
+let privateDirectory: string | undefined;
 
 beforeAll(async () => {
   fixture = testDatabase();
@@ -96,15 +89,17 @@ beforeAll(async () => {
       },
     },
   });
-  site = `http://127.0.0.1:${await freePort()}`;
-  await service.internal.registerWebsiteClient({
-    publicJwks: {
-      keys: [{ ...(await exportJWK(clientKey.publicKey)), kid: privateJwk.kid, alg: 'ES256', use: 'sig' }],
-    } as Parameters<AuthService['internal']['registerWebsiteClient']>[0]['publicJwks'],
-    redirectUris: [`${site}/auth/callback`],
-    postLogoutRedirectUris: [`${site}/`],
-    scopes,
-  });
+  privateDirectory = await mkdtemp(join(tmpdir(), 'web-auth-binding-'));
+  webState = join(privateDirectory, 'state');
+  await mkdir(webState);
+  const viteCache = join(privateDirectory, 'vite-cache');
+  await mkdir(viteCache);
+  const viteConfig = join(privateDirectory, 'vite.config.ts');
+  await writeFile(
+    viteConfig,
+    `import config from ${JSON.stringify(pathToFileURL(join(app, 'vite.config.ts')).href)};\n` +
+      `export default { ...config, cacheDir: ${JSON.stringify(viteCache)} };\n`,
+  );
   await service.internal.registerClient({ clientId: 'login', firstParty: true, scopes: ['media:read'] });
   for (const accountId of people) {
     const account: AccessAccount = { accountId, kind: 'actor', state: 'pending', authnEpoch: 1, automated: false };
@@ -150,16 +145,27 @@ beforeAll(async () => {
       return Response.json({ code: 'not_found' }, { status: 404 });
     },
   });
-  let output = '';
-  const keep = (chunk: Buffer) => {
-    output = (output + chunk.toString()).slice(-8000);
-  };
-  child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', new URL(site).port, '--strictPort'], {
+  devServer = await startDevServer({
     cwd: app,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    warmUpPaths: [],
+    budgets: { ready: 120_000, firstResponse: 30_000, warmUp: 0 },
+    command: ({ port, origin }) => [
+      'env',
+      `SITE_ORIGINS=${origin}`,
+      'bun',
+      'run',
+      'dev',
+      '--config',
+      viteConfig,
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--strictPort',
+    ],
     env: {
-      ...process.env,
+      PUBLIC_ORIGIN: 'https://rezics.com',
+      WEB_TEST_STATE_DIR: webState,
       KERNEL_ORIGIN: kernel.url.origin,
       AUTH_ISSUER: issuer,
       WEBSITE_CLIENT_ID: clientId,
@@ -168,31 +174,24 @@ beforeAll(async () => {
       WEBSITE_SCOPES: scopes.join(' '),
     },
   });
-  child.stdout!.on('data', keep);
-  child.stderr!.on('data', keep);
-  const deadline = Date.now() + 150_000;
-  for (;;) {
-    if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-    try {
-      if ((await fetch(`${site}/en`, { redirect: 'manual', signal: AbortSignal.timeout(10_000) })).status < 500) break;
-    } catch {}
-    if (Date.now() > deadline) throw new Error(`dev server did not start:\n${output}`);
-    await Bun.sleep(500);
-  }
+  site = devServer.origin;
+  await service.internal.registerWebsiteClient({
+    publicJwks: {
+      keys: [{ ...(await exportJWK(clientKey.publicKey)), kid: privateJwk.kid, alg: 'ES256', use: 'sig' }],
+    } as Parameters<AuthService['internal']['registerWebsiteClient']>[0]['publicJwks'],
+    redirectUris: [`${site}/auth/callback`],
+    postLogoutRedirectUris: [`${site}/`],
+    scopes,
+  });
 }, timeout);
 
 afterAll(async () => {
-  if (child?.pid) {
-    const exited = new Promise<void>((resolve) => child!.once('exit', () => resolve()));
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
-    await Promise.race([exited, Bun.sleep(5_000)]);
-  }
+  await devServer?.stop();
   await kernel?.stop(true);
   await auth?.stop(true);
   await pool?.end();
   fixture?.close();
+  if (privateDirectory) await rm(privateDirectory, { recursive: true, force: true });
 });
 
 function cookie(response: Response, name: string) {

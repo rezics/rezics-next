@@ -32,7 +32,7 @@ afterAll(() => {
 });
 
 test(
-  'a fresh worktree prepares generated sources, Worker credentials and browser dependencies before its selected browser test',
+  'a fresh worktree prepares generated sources and browser dependencies without copying Worker credentials into test startup',
   async () => {
     const added = await run(['git', 'worktree', 'add', '--detach', checkout, 'HEAD']);
     expect(added.code, added.output).toBe(0);
@@ -52,6 +52,10 @@ test(
     expect(Bun.file(join(app, 'src/paraglide/messages.js')).exists()).resolves.toBe(true);
     expect(Bun.file(join(app, 'src/routeTree.gen.ts')).exists()).resolves.toBe(true);
     expect(checked.output).not.toMatch(/optimized dependencies changed\. reloading/i);
+    expect(Bun.file(join(app, '.dev.vars')).exists()).resolves.toBe(false);
+
+    const prepared = await run(['bun', 'scripts/check.ts', '--prepare-only'], app);
+    expect(prepared.code, prepared.output).toBe(0);
     const example = readFileSync(join(app, '.dev.vars.example'), 'utf8');
     const installedVars = readFileSync(join(app, '.dev.vars'), 'utf8');
     expect(installedVars).toBe(example);

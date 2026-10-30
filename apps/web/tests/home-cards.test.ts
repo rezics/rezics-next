@@ -137,6 +137,8 @@ let entries = phoneEntries();
 let sessions = phoneSessions();
 let failLibrary = false;
 let progressReads = 0;
+let oidcTokenRequests = 0;
+let oidcClientRejection = 'none';
 type Call = {
   method: string;
   path: string;
@@ -176,7 +178,10 @@ const fake = Bun.serve({
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const client = async (form: URLSearchParams) => {
-      if (form.get('client_assertion_type') !== 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer') return false;
+      if (form.get('client_assertion_type') !== 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer') {
+        oidcClientRejection = 'client_assertion_type';
+        return false;
+      }
       try {
         // Auth's contract: the registered kid, iss = sub = the client, aud exactly the issuer, at most 120 seconds.
         const { payload, protectedHeader } = await jwtVerify(form.get('client_assertion') ?? '', clientKeys.publicKey, {
@@ -186,19 +191,22 @@ const fake = Bun.serve({
           algorithms: ['ES256'],
           maxTokenAge: '120s',
         });
-        if (
-          protectedHeader.kid !== clientJwk.kid ||
-          payload.aud !== issuer ||
-          !payload.jti ||
-          assertions.has(payload.jti) ||
-          !payload.exp ||
-          !payload.iat ||
-          payload.exp - payload.iat > 120
-        )
+        const jti = typeof payload.jti === 'string' ? payload.jti : undefined;
+        if (!jti) {
+          oidcClientRejection = 'client_assertion_replay';
           return false;
-        assertions.add(payload.jti);
+        }
+        if (protectedHeader.kid !== clientJwk.kid) oidcClientRejection = 'client_key_id';
+        else if (payload.aud !== issuer) oidcClientRejection = 'client_assertion_audience';
+        else if (assertions.has(jti)) oidcClientRejection = 'client_assertion_replay';
+        else if (!payload.exp || !payload.iat || payload.exp - payload.iat > 120)
+          oidcClientRejection = 'client_assertion_lifetime';
+        else oidcClientRejection = 'none';
+        if (oidcClientRejection !== 'none') return false;
+        assertions.add(jti);
         return true;
-      } catch {
+      } catch (error) {
+        oidcClientRejection = error instanceof Error ? error.name : typeof error;
         return false;
       }
     };
@@ -245,6 +253,7 @@ const fake = Bun.serve({
       });
     if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
     if (url.pathname === '/auth/token' && request.method === 'POST') {
+      oidcTokenRequests += 1;
       const form = new URLSearchParams(await request.text());
       if (!(await client(form))) return json({ error: 'invalid_client' }, 401);
       if (form.get('grant_type') === 'authorization_code') {
@@ -334,15 +343,13 @@ function freePort(): Promise<number> {
 
 let child: ChildProcess | undefined;
 let started: Promise<string> | undefined;
+let siteOutput = '';
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
+    const keep = (chunk: Buffer) => (siteOutput = (siteOutput + chunk.toString()).slice(-8000));
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,
@@ -362,7 +369,7 @@ function site(): Promise<string> {
     const origin = `http://127.0.0.1:${port}`;
     const deadline = Date.now() + 150_000;
     for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${siteOutput}`);
       try {
         const response = await fetch(`${origin}/en`, {
           redirect: 'manual',
@@ -372,7 +379,7 @@ function site(): Promise<string> {
       } catch {
         // The dev server is still starting.
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${siteOutput}`);
       await Bun.sleep(500);
     }
   })();
@@ -402,12 +409,31 @@ async function signIn(returnTo = '/en', grant: Partial<Grant> = {}) {
     expiresIn: 3600,
     ...grant,
   });
+  oidcTokenRequests = 0;
+  oidcClientRejection = 'none';
   const loginCookie = cookieValue(start, login);
   const answer = await fetch(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`, {
     redirect: 'manual',
     headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
   });
-  expect([302, 303], 'OpenID callback setup').toContain(answer.status);
+  const body = (await answer.clone().json().catch(() => undefined)) as
+    | { status?: unknown; code?: unknown; title?: unknown }
+    | undefined;
+  const safeProblem = body
+    ? {
+        status: typeof body.status === 'number' ? body.status : undefined,
+        code: typeof body.code === 'string' ? body.code.slice(0, 64) : undefined,
+        title: typeof body.title === 'string' ? body.title.slice(0, 64) : undefined,
+      }
+    : undefined;
+  const oidcDiagnostic = siteOutput
+    .split('\n')
+    .filter((line) => line.includes('[web auth] OpenID authorization-code grant failed:'))
+    .at(-1);
+  expect(
+    [302, 303],
+    `OpenID callback setup; HTTP ${answer.status}; problem=${JSON.stringify(safeProblem)}; ${oidcDiagnostic ?? 'no named OIDC grant error logged'}; client_id=${params.get('client_id')}; fake_token_requests=${oidcTokenRequests}; fake_client_rejection=${oidcClientRejection}`,
+  ).toContain(answer.status);
   const sessionCookie = cookieValue(answer, session);
   expect(sessionCookie, 'signed-in session setup').toBeTruthy();
   return sessionCookie!;

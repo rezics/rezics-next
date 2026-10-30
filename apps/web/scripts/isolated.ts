@@ -1,7 +1,6 @@
 import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
-import { ensureLocalWorkerVars } from './dev-vars.ts';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
 
 const rawCommand = process.argv.slice(2);
@@ -16,7 +15,6 @@ if (command.length === 0) {
   process.exitCode = 2;
 } else {
   const app = resolve(import.meta.dir, '..');
-  ensureLocalWorkerVars(app);
   const root = resolve(app, '../..');
   const appCommand =
     command[0] === 'bun' && command[1] === 'test'
@@ -89,7 +87,7 @@ if (command.length === 0) {
       }
       const childEnvironment = {
         ...process.env,
-        PUBLIC_ORIGIN: process.env.PUBLIC_ORIGIN ?? 'http://127.0.0.1:3000',
+        PUBLIC_ORIGIN: 'http://127.0.0.1:3000',
         WEB_TEST_STATE_DIR: stateRoot ?? join(temporary!, 'cloudflare-state'),
       };
       try {
@@ -115,8 +113,20 @@ if (command.length === 0) {
               'the tests are running on the host network, so host network changes can break browser tests.\n',
             );
           }
+          const testEnvironment: NodeJS.ProcessEnv = { ...childEnvironment, ...slotEnvironment };
+          testEnvironment.PUBLIC_ORIGIN = 'http://127.0.0.1:3000';
+          for (const name of [
+            'AUTH_ISSUER',
+            'WEBSITE_CLIENT_ID',
+            'WEBSITE_CLIENT_KEY',
+            'API_RESOURCE',
+            'WEBSITE_SCOPES',
+            'SITE_ORIGINS',
+            'KERNEL_ORIGIN',
+          ])
+            delete testEnvironment[name];
           const child = Bun.spawn(invocation, {
-            env: { ...childEnvironment, ...slotEnvironment },
+            env: testEnvironment,
             stdin: 'inherit',
             stdout: 'inherit',
             stderr: 'inherit',

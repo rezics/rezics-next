@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { stackRun, type StackRun } from '../../../scripts/stack-run.ts';
 import { ensureLocalWorkerVars } from './dev-vars.ts';
 
-export { ensureLocalWorkerVars } from './dev-vars.ts';
+export { ensureLocalWorkerVars };
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = resolve(app, '../..');
@@ -417,8 +417,8 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
 }
 
 async function main(args: string[]): Promise<void> {
-  ensureLocalWorkerVars();
   if (args.includes('--prepare-only')) {
+    ensureLocalWorkerVars();
     await prepare(process.env);
     return;
   }

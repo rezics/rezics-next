@@ -18,6 +18,21 @@ import {
 const invalid = () => problem(400, 'invalid_request', 'Invalid Request');
 const redirect = (location: string, status = 303) => new Response(null, { status, headers: { location } });
 
+function oidcFailureNames(error: unknown): string {
+  const names: string[] = [];
+  let current: unknown = error;
+  while (current instanceof Error && names.length < 4) {
+    const name = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u.test(current.name) ? current.name : 'Error';
+    const details = current as Error & { error?: unknown; status?: unknown };
+    const code =
+      typeof details.error === 'string' && /^[a-z][a-z0-9_]{0,63}$/u.test(details.error) ? details.error : undefined;
+    const status = typeof details.status === 'number' && Number.isInteger(details.status) ? details.status : undefined;
+    names.push([name, code, status === undefined ? undefined : `HTTP_${status}`].filter(Boolean).join(':'));
+    current = current.cause;
+  }
+  return names.join(' <- ') || typeof error;
+}
+
 function returnTarget(value: string | null, origin: string): string {
   if (!value?.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return '/';
   try {
@@ -88,6 +103,7 @@ async function callback(request: Request, env: SessionEnv): Promise<Response> {
       { resource: env.API_RESOURCE },
     );
   } catch (error) {
+    console.error(`[web auth] OpenID authorization-code grant failed: ${oidcFailureNames(error)}`);
     throw unreachable(error) ? dependencyUnavailable() : invalid();
   }
   const claims = tokens.claims();
