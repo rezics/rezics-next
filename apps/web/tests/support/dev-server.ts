@@ -15,6 +15,7 @@ export type DevServerOptions = {
   cwd?: string;
   command?: (context: { port: number; origin: string }) => string[];
   budgets?: Partial<typeof phaseBudgets>;
+  signal?: AbortSignal;
   pollIntervalMs?: number;
   onPhase?: (timing: PhaseTiming) => void;
   /** A clock seam for deterministic budget tests; timers still use the remaining phase budget. */
@@ -35,8 +36,9 @@ function freePort(): Promise<number> {
 /** One process group and one warm-up for each browser test file. Always await stop() in afterAll. */
 export async function startDevServer(
   options: DevServerOptions,
-): Promise<{ origin: string; stop: () => Promise<void> }> {
+): Promise<{ origin: string; stop: () => Promise<void>; diagnostics: () => string }> {
   const port = await freePort();
+  if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
   const origin = `http://127.0.0.1:${port}`;
   const now = options.now ?? Date.now;
   const spawnedAt = now();
@@ -62,9 +64,16 @@ export async function startDevServer(
   let stopped: Promise<void> | undefined;
   let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>;
   try {
+    const childEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...options.env,
+      REZICS_TEST_RUNTIME: '1',
+    };
+    if (options.env?.WEB_TEST_STATE_DIR && !options.env.WEB_TEST_STATE_INSTANCE_DIR)
+      childEnvironment.WEB_TEST_STATE_INSTANCE_DIR = options.env.WEB_TEST_STATE_DIR;
     child = Bun.spawn(command, {
       cwd: options.cwd ?? join(import.meta.dir, '../..'),
-      env: { ...process.env, ...options.env },
+      env: childEnvironment,
       detached: true,
       stdin: 'ignore',
       stdout: 'pipe',
@@ -116,6 +125,7 @@ export async function startDevServer(
   };
   const stop = () =>
     (stopped ??= (async () => {
+      options.signal?.removeEventListener('abort', abortServer);
       let browserError: unknown;
       try {
         await browser?.close();
@@ -140,6 +150,9 @@ export async function startDevServer(
       }
       if (browserError) throw browserError;
     })());
+  const abortServer = () => {
+    void stop().catch(() => {});
+  };
 
   const record = (started: number) => {
     const timing = { phase, path, elapsedMs: now() - started };
@@ -153,11 +166,23 @@ export async function startDevServer(
     const controller = new AbortController();
     const remaining = () => Math.max(1, deadline - now());
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let abortListener: (() => void) | undefined;
     try {
       if (now() >= deadline) throw new Error('phase budget exhausted');
+      if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+      const aborted = options.signal
+        ? new Promise<never>((_, reject) => {
+            abortListener = () => {
+              controller.abort();
+              reject(new DOMException('The dev server startup was aborted', 'AbortError'));
+            };
+            options.signal!.addEventListener('abort', abortListener, { once: true });
+          })
+        : undefined;
       return await Promise.race([
         operation(remaining, controller.signal),
         exitFailure,
+        ...(aborted ? [aborted] : []),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
             controller.abort();
@@ -167,6 +192,7 @@ export async function startDevServer(
       ]);
     } finally {
       clearTimeout(timer);
+      if (abortListener) options.signal?.removeEventListener('abort', abortListener);
       controller.abort();
     }
   }
@@ -230,7 +256,9 @@ export async function startDevServer(
       await browser?.close();
       browser = undefined;
     }
-    return { origin, stop };
+    if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+    options.signal?.addEventListener('abort', abortServer, { once: true });
+    return { origin, stop, diagnostics: () => output };
   } catch (error) {
     const elapsed = now() - phaseStart;
     let cleanup = '';

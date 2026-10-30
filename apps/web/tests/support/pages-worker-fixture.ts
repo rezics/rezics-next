@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import page from '../../src/kernel/recorded/subject-page.json';
@@ -38,9 +39,7 @@ export async function startPagesWorker() {
   const calls: Call[] = [];
   // This upstream-only canary is deliberately never included in a public response.
   const privateSentinel = 'upstream-only-private-pages-canary';
-  const temporary = join(import.meta.dir, '../../../../.temp');
-  await mkdir(temporary, { recursive: true });
-  const state = await mkdtemp(join(temporary, 'pages-worker-'));
+  const state = await mkdtemp(join(tmpdir(), 'rezics-pages-worker-'));
   let output = '';
   const keep = (chunk: Buffer) => {
     output = (output + chunk.toString()).slice(-12_000);
@@ -156,7 +155,9 @@ export async function startPagesWorker() {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       KERNEL_ORIGIN: network.url.origin,
+      REZICS_TEST_RUNTIME: '1',
       WEB_TEST_STATE_DIR: state,
+      WEB_TEST_STATE_INSTANCE_DIR: state,
       PUBLIC_ORIGIN: 'https://rezics.com',
     };
     // Auth text bindings come from process.env in cloudflare.config.ts, not .dev.vars.

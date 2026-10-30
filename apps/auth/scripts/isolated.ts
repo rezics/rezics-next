@@ -60,6 +60,7 @@ if (command.length === 0) {
         env: {
           ...process.env,
           ...env,
+          REZICS_TEST_RUNTIME: '1',
         },
         stdin: 'inherit',
         stdout: 'inherit',

@@ -77,15 +77,17 @@ async function startWeb(
   kernelOrigin: string,
   publicOrigin: string,
   authEnvironment: NodeJS.ProcessEnv,
+  stateDirectory: string,
   onOwnedGroup: (child: ChildProcess, stateDirectory: string) => void,
 ): Promise<WebProcess> {
-  const stateDirectory = await mkdtemp(join(tmpdir(), 'native-web-state-'));
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...authEnvironment,
     KERNEL_ORIGIN: kernelOrigin,
     PUBLIC_ORIGIN: publicOrigin,
+    REZICS_TEST_RUNTIME: '1',
     WEB_TEST_STATE_DIR: stateDirectory,
+    WEB_TEST_STATE_INSTANCE_DIR: stateDirectory,
     WEB_DEV_ALLOW_ANY_HOST: '1',
     WRANGLER_SEND_METRICS: 'false',
   };
@@ -149,7 +151,7 @@ async function startWeb(
 
 async function stopWeb(web: WebProcess | undefined): Promise<void> {
   if (!web) return;
-  const { child, identity, stateDirectory, exited } = web;
+  const { child, identity, exited } = web;
   const processGroup = child.pid;
   const groupExists = () => {
     if (!processGroup) return false;
@@ -194,8 +196,6 @@ async function stopWeb(web: WebProcess | undefined): Promise<void> {
         throw new Error('web Worker did not stop gracefully');
       }
     }
-  } finally {
-    await rm(stateDirectory, { recursive: true, force: true });
   }
 }
 
@@ -581,6 +581,7 @@ async function startStack(): Promise<
       WEBSITE_SCOPES: scopes.join(' '),
     };
     const webCookies = new Map<string, Promise<string | undefined>>();
+    let webStateDirectory: string | undefined;
     const responseCookie = (response: Response, name: string) => {
       const value = response.headers
         .getSetCookie()
@@ -611,8 +612,9 @@ async function startStack(): Promise<
     };
     let publicOrigin = 'https://rezics.example.test';
     let authPageOrigin: string | undefined;
-    const launch = async () =>
-      startWeb(
+    const launch = async () => {
+      webStateDirectory ??= await mkdtemp(join(tmpdir(), 'native-web-state-'));
+      return startWeb(
         webOrigin,
         kernelOrigin,
         publicOrigin,
@@ -621,8 +623,10 @@ async function startStack(): Promise<
           SITE_ORIGINS: [...new Set([webOrigin, publicOrigin])].join(','),
           ...(authPageOrigin ? { AUTH_ISSUER: authPageOrigin } : {}),
         },
+        webStateDirectory,
         (child, stateDirectory) => reportOwnedProcessGroup('web Worker', child, stateDirectory),
       );
+    };
     reportStackProgress('Native web stack startup: starting production web Worker');
     webProcess = await launch();
     reportStackProgress('Native web stack startup: production web Worker ready');

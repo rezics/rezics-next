@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-export function ensureMessagesReady(appDirectory: string): number {
+export function ensureMessagesReady(appDirectory: string, env: NodeJS.ProcessEnv = process.env): number {
   const messagesDirectory = join(appDirectory, 'messages');
   const output = join(appDirectory, 'src/paraglide/messages.js');
   if (existsSync(output)) {
@@ -16,6 +16,7 @@ export function ensureMessagesReady(appDirectory: string): number {
 
   return Bun.spawnSync(['bun', 'run', 'generate'], {
     cwd: appDirectory,
+    env,
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',

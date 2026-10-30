@@ -12,6 +12,7 @@ import {
   type FileTiming,
 } from '../../../scripts/test-lanes.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stackRun, type StackRun } from '../../../scripts/stack-run.ts';
@@ -97,16 +98,16 @@ function recordRunMarker(directory: string | undefined, phase: 'start' | 'end', 
 export async function runWebTestLanes(options: WebTestLanesOptions): Promise<WebTestLanesResult> {
   const directory = resolve(options.directory ?? app);
   const timingsFile = resolve(options.timingsFile ?? defaultTimingsFile);
-  const env = options.env ?? process.env;
+  const sourceEnvironment = options.env ?? process.env;
   const testScript = options.testScript ?? 'bun run test';
   const testInvocation = testScript.trim().split(/\s+/);
   if (testInvocation.length < 2 || testInvocation[0] !== 'bun' || testInvocation[1] !== 'run') {
     throw new Error(`The per-file test command must start with "bun run": ${testScript}`);
   }
 
-  const browserConcurrency = concurrency('WEB_BROWSER_CHECK_CONCURRENCY', 6, env);
-  const unitConcurrency = concurrency('WEB_UNIT_CHECK_CONCURRENCY', 10, env);
-  const stackConcurrency = env.REZICS_STACK_SLOT === undefined ? browserConcurrency : 1;
+  const browserConcurrency = concurrency('WEB_BROWSER_CHECK_CONCURRENCY', 6, sourceEnvironment);
+  const unitConcurrency = concurrency('WEB_UNIT_CHECK_CONCURRENCY', 10, sourceEnvironment);
+  const stackConcurrency = sourceEnvironment.REZICS_STACK_SLOT === undefined ? browserConcurrency : 1;
   const browserFiles = options.files.filter((file) => isBrowserTest(file, directory));
   const unitFiles = options.files.filter((file) => !browserFiles.includes(file));
   const previous =
@@ -155,6 +156,13 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
       return parseJunit(readFileSync(report, 'utf8'));
     },
   );
+  const inheritedStateRoot = sourceEnvironment.WEB_TEST_STATE_DIR || undefined;
+  const ownedStateRoot = inheritedStateRoot ? undefined : mkdtempSync(join(tmpdir(), 'rezics-web-check-root-'));
+  const env: NodeJS.ProcessEnv = {
+    ...sourceEnvironment,
+    REZICS_TEST_RUNTIME: '1',
+    WEB_TEST_STATE_DIR: inheritedStateRoot ?? ownedStateRoot,
+  };
 
   try {
     const [browserOutcomes, unitOutcomes] = await Promise.all([
@@ -198,7 +206,11 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
       timings,
     };
   } finally {
-    if (!options.retainReport) rmSync(reportDirectory, { recursive: true, force: true });
+    try {
+      if (!options.retainReport) rmSync(reportDirectory, { recursive: true, force: true });
+    } finally {
+      if (ownedStateRoot) rmSync(ownedStateRoot, { recursive: true, force: true });
+    }
   }
 }
 
@@ -348,7 +360,11 @@ export async function runHostTests(
   const code = await place(
     run,
     async (slotEnv) => {
-      await execute('host tests', 'bun', ['run', 'test:host'], { ...env, ...slotEnv });
+      await execute('host tests', 'bun', ['run', 'test:host'], {
+        ...env,
+        ...slotEnv,
+        REZICS_TEST_RUNTIME: '1',
+      });
       return 0;
     },
     env,

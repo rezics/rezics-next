@@ -3,6 +3,20 @@ Local Worker values are opt-in: `bun run check --prepare-only` creates ignored `
 Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load.
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
+
+## Testing
+
+For a focused fake, component, route-loader or story-render test that does not need native services, run it locally:
+
+```sh
+bun scripts/focused.ts -- bun test tests/<focused-file>.test.ts
+```
+
+The focused runner prepares generated messages and routes, gives the command an owned temporary Worker state root, and
+removes that root after its process tree stops. It runs directly on the worker and does not request stack placement,
+database leases, Docker, a database or remote dispatch. Add `--private-network` before `--` when a focused browser test
+needs the normal loopback-only browser namespace.
+
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.
 Subject page reads and public collections work without JavaScript; Library writes use JavaScript and stay disabled until the page hydrates.
@@ -25,6 +39,10 @@ without the isolated wrapper or a slot, in a wider ten-lane pool configurable wi
 pools schedule files by their latest recorded wall time, longest first, and update
 [`check-timings.json`](check-timings.json) after the run. Each isolated test also gets private temporary Cloudflare
 Durable Object state, so parallel servers do not share SQLite data.
+Test Vite processes allocate that state separately under the operating system's temporary directory. `WEB_TEST_STATE_DIR`
+marks an inherited test root; it is not passed to Cloudflare as the instance's database path. A caller that needs one
+instance's state to survive a sequential restart can pass `WEB_TEST_STATE_INSTANCE_DIR`; that caller-owned path is kept
+after the server stops. Outside test mode, local development keeps the Cloudflare plugin's default `.cloudflare/state`.
 The wrapper generates Paraglide messages when they are missing or older than the message files; branches do not change
 `scripts/isolated.ts` to add their own generation step.
 Generation retries a Lix timeout twice in a new process.

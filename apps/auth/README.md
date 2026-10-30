@@ -4,6 +4,10 @@ Auth is a TanStack Start app on Cloudflare Workers. Its page frame is served at 
 /consent, /recovery, /security and /step-up. Each page contains the REZICS brand header and a localized heading.
 Paraglide supplies the eight launch locales.
 
+Local development uses the Cloudflare Vite plugin's default `.cloudflare/state`. Test launches receive an independent
+temporary persistence directory per Auth Vite process. `AUTH_TEST_STATE_INSTANCE_DIR` supplies a caller-owned path for
+one instance whose state must survive a sequential restart; Auth leaves that directory in place after shutdown.
+
 Set `PRIVACY_CONTACT_URL` to the deployment's `https:` or `mailto:` privacy contact URL; missing or invalid values disable account deletion at request time.
 
 Pages compose the shared shadcn card, field, input, input-group, button and alert components. Security

@@ -9,9 +9,9 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
-const testStateDirectory = process.env.WEB_TEST_STATE_DIR;
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(appRoot, '../..');
 const dependencyRoot = realpathSync(join(workspaceRoot, 'node_modules'));
@@ -31,52 +31,56 @@ if (configuredInspectorPort !== undefined) {
   inspectorPort = parsedInspectorPort;
 }
 
-export default defineConfig({
-  server: {
-    // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
-    allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
-    // Shared dependency stores can resolve package files outside the checkout's lexical node_modules path.
-    fs: { allow: [workspaceRoot, dependencyRoot] },
-  },
-  html: { cspNonce: viteNonceMarker },
-  // Fonts must stay on the site origin; the page policy does not allow data: fonts.
-  build: { assetsInlineLimit: 0 },
-  optimizeDeps: {
-    // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
-    // after the first page has loaded.
-    entries: ['src/routes/**/*.tsx'],
-    holdUntilCrawlEnd: true,
-  },
-  ssr: {
-    optimizeDeps: {
-      include: ['@inlang/paraglide-js/urlpattern-polyfill'],
+export default defineConfig((context) => {
+  const persistence = createWorkerPersistence('web', context, appRoot);
+  return {
+    server: {
+      // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
+      allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
+      // Shared dependency stores can resolve package files outside the checkout's lexical node_modules path.
+      fs: { allow: [workspaceRoot, dependencyRoot] },
     },
-  },
-  plugins: [
-    {
-      name: 'generate-localization',
-      async config(_config, { command }) {
-        // Create generated localization modules before Vite scans the browser routes.
-        if (command === 'serve') {
-          await new Promise<void>((resolve, reject) => {
-            const child = spawn('bun', ['scripts/generate.ts'], { stdio: 'inherit' });
-            child.once('error', reject);
-            child.once('exit', (code, signal) => {
-              if (code === 0) resolve();
-              else reject(new Error(`Paraglide generation exited with ${signal ?? code}`));
-            });
-          });
-        }
+    html: { cspNonce: viteNonceMarker },
+    // Fonts must stay on the site origin; the page policy does not allow data: fonts.
+    build: { assetsInlineLimit: 0 },
+    optimizeDeps: {
+      // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
+      // after the first page has loaded.
+      entries: ['src/routes/**/*.tsx'],
+      holdUntilCrawlEnd: true,
+    },
+    ssr: {
+      optimizeDeps: {
+        include: ['@inlang/paraglide-js/urlpattern-polyfill'],
       },
     },
-    paraglideVitePlugin({ project: './project.inlang' }),
-    tanstackStart(),
-    react(),
-    tailwindcss(),
-    ...cloudflare({
-      viteEnvironment: { name: 'ssr' },
-      inspectorPort,
-      ...(testStateDirectory ? { persistState: { path: testStateDirectory } } : {}),
-    }),
-  ],
+    plugins: [
+      {
+        name: 'generate-localization',
+        async config(_config, { command }) {
+          // Create generated localization modules before Vite scans the browser routes.
+          if (command === 'serve') {
+            await new Promise<void>((resolve, reject) => {
+              const child = spawn('bun', ['scripts/generate.ts'], { stdio: 'inherit' });
+              child.once('error', reject);
+              child.once('exit', (code, signal) => {
+                if (code === 0) resolve();
+                else reject(new Error(`Paraglide generation exited with ${signal ?? code}`));
+              });
+            });
+          }
+        },
+      },
+      paraglideVitePlugin({ project: './project.inlang' }),
+      tanstackStart(),
+      react(),
+      tailwindcss(),
+      ...cloudflare({
+        viteEnvironment: { name: 'ssr' },
+        inspectorPort,
+        ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
+      }),
+      ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
+    ],
+  };
 });

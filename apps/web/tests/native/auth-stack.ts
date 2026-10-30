@@ -1,4 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, relative, resolve, sep } from 'node:path';
 import {
   chromium,
   type Browser,
@@ -6,7 +9,6 @@ import {
   type Page,
   type Response as PlaywrightResponse,
 } from 'playwright';
-import { resolve } from 'node:path';
 import type { NativeWebStack } from './stack.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
 import {
@@ -111,12 +113,15 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     force: () => turnstile.stop(true),
   });
   let output = '';
+  let persistenceDirectory: string | undefined;
   const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
     cwd: authRoot,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
+      REZICS_TEST_RUNTIME: '1',
+      REZICS_TEST_PERSISTENCE_DIAGNOSTICS: '1',
       AUTH_ORIGIN: stack.issuerOrigin,
       TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
       TURNSTILE_SCRIPT_URL: `${turnstile.url.origin}/api.js`,
@@ -136,6 +141,22 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
   let sampleMemory = async () => {};
   try {
     await waitForPage(appOrigin, child, () => output, lifecycle);
+    const effectivePersistence = output.match(/\[worker-persistence\]\s+app=auth\s+effective=(\S+)/u)?.[1];
+    if (!effectivePersistence)
+      throw new Error(`Native Auth app did not report its effective Worker persistence path: ${output}`);
+    persistenceDirectory = dirname(effectivePersistence);
+    const tmpRoot = realpathSync(tmpdir());
+    const ownedRoot = realpathSync(persistenceDirectory);
+    const relativePersistence = relative(tmpRoot, ownedRoot);
+    if (
+      relativePersistence === '' ||
+      relativePersistence === '..' ||
+      relativePersistence.startsWith(`..${sep}`) ||
+      dirname(ownedRoot) !== tmpRoot ||
+      !basename(ownedRoot).startsWith('rezics-auth-worker-') ||
+      !existsSync(effectivePersistence)
+    )
+      throw new Error(`Native Auth app reported an invalid Worker persistence path: ${effectivePersistence}`);
     lifecycle.assertOpen('route Auth pages');
     origin = await stack.routeAuthPages((request) => {
       const source = new URL(request.url);
@@ -398,7 +419,13 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
           }
           const operations: Promise<unknown>[] = [];
           if (privateBrowser) operations.push(privateBrowser.close());
-          operations.push(stack.routeAuthPages(), stopChild(childOwner));
+          operations.push(stack.routeAuthPages());
+          operations.push(
+            stopChild(childOwner).then(() => {
+              if (persistenceDirectory && existsSync(persistenceDirectory))
+                throw new Error(`Auth Worker left its owned persistence after shutdown: ${persistenceDirectory}`);
+            }),
+          );
           const closed = await Promise.allSettled(operations);
           for (const result of closed) if (result.status === 'rejected') errors.push(result.reason);
           turnstile.stop(true);
@@ -436,14 +463,18 @@ export async function startAuthStack(stack: NativeWebStack): Promise<NativeAuthS
     };
   } catch (error) {
     clearInterval(memorySampler);
+    const cleanupErrors: unknown[] = [];
     if (origin)
       await settledWithin(
         stack.routeAuthPages().then(() => true),
         2_000,
-      ).catch(() => {});
-    await privateBrowser?.force().catch(() => {});
-    await stopChild(childOwner).catch(() => {});
+      ).catch((cleanup) => cleanupErrors.push(cleanup));
+    await privateBrowser?.force().catch((cleanup) => cleanupErrors.push(cleanup));
+    await stopChild(childOwner).catch((cleanup) => cleanupErrors.push(cleanup));
+    if (persistenceDirectory && existsSync(persistenceDirectory))
+      cleanupErrors.push(new Error(`Auth Worker left its owned persistence after startup failure: ${persistenceDirectory}`));
     turnstile.stop(true);
+    if (cleanupErrors.length) throw new AggregateError([error, ...cleanupErrors], 'Native Auth startup and cleanup failed');
     throw error;
   }
 }

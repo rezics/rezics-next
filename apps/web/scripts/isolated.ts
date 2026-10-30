@@ -112,6 +112,7 @@ async function main(): Promise<void> {
       const childEnvironment = {
         ...process.env,
         PUBLIC_ORIGIN: 'http://127.0.0.1:3000',
+        REZICS_TEST_RUNTIME: '1',
         WEB_TEST_STATE_DIR: stateRoot ?? join(temporary!, 'cloudflare-state'),
       };
       try {
@@ -139,6 +140,7 @@ async function main(): Promise<void> {
           }
           const testEnvironment: NodeJS.ProcessEnv = { ...childEnvironment, ...slotEnvironment };
           testEnvironment.PUBLIC_ORIGIN = 'http://127.0.0.1:3000';
+          testEnvironment.REZICS_TEST_RUNTIME = '1';
           for (const name of [
             'AUTH_ISSUER',
             'WEBSITE_CLIENT_ID',
