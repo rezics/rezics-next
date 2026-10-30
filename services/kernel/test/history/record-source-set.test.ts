@@ -137,12 +137,13 @@ import {
   validateNativeRecordSourceSetSnapshot,
 } from '../../src/history/record-source-set.ts';
 
-type SameType<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type SameType<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 const originalType: SameType<SemanticRecordSourceSet, OwnerSourceSet> = true;
 
 function actualProducer() {
-  try { return nativeRecordSourceSetProducer(); }
-  catch (error) {
+  try {
+    return nativeRecordSourceSetProducer();
+  } catch (error) {
     // This base can contain only the agreed declaration. Missing native code remains explicit;
     // the positive branch below becomes active when the owner's original module is integrated.
     expect(error).toBeInstanceOf(RecordSourceSetUnavailableError);
@@ -152,7 +153,11 @@ function actualProducer() {
 
 test('History preserves the original opaque type and structured native snapshot without a member vector', () => {
   expect(originalType).toBe(true);
-  const snapshot = { locator: { partition: 0, transactionId: randomUUID(), revision: 1 }, digest: 'native-digest', members: 512 };
+  const snapshot = {
+    locator: { partition: 0, transactionId: randomUUID(), revision: 1 },
+    digest: 'native-digest',
+    members: 512,
+  };
   expect(() => validateNativeRecordSourceSetSnapshot(snapshot)).not.toThrow();
   expect(() => validateNativeRecordSourceSetSnapshot({ ...snapshot, members: 513 })).toThrow();
   expect(() => validateNativeRecordSourceSetSnapshot({ ...snapshot, members: [source] } as never)).toThrow();
@@ -178,26 +183,40 @@ test('History consumes the actual Semantic one-set building seal locator revisio
     await declareCommandHistory(tx, kind, scope(person));
     await stageHistoryWork(tx, {
       owner: 'record-purge-fixture',
-      intent: { queue: 'maintenance', workflowName: 'record-purge-fixture', workflowId: workId, input: { accounts: [person.accountId], source: 'native' } },
+      intent: {
+        queue: 'maintenance',
+        workflowName: 'record-purge-fixture',
+        workflowId: workId,
+        input: { accounts: [person.accountId], source: 'native' },
+      },
       scope: { artifactType: 'durable-work/v1', accounts: scope(person).response.accounts },
     });
     const building = await tx.query(
       `SELECT metadata_state,member_count,snapshot_digest,native_revision FROM core.record_history_source_set
-       WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3`, recordSourceSetStorageKey(locator),
+       WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3`,
+      recordSourceSetStorageKey(locator),
     );
-    expect(building.rows[0]).toEqual({ metadata_state: 'building', member_count: null, snapshot_digest: null, native_revision: locator.revision });
+    expect(building.rows[0]).toEqual({
+      metadata_state: 'building',
+      member_count: null,
+      snapshot_digest: null,
+      native_revision: locator.revision,
+    });
     // Real membership becomes known after nested work serialization, before native commit.
     await producer.appendSemanticRecordSourceSet(tx, set, { sources: [source], terms: [] });
     await producer.sealSemanticRecordSourceSet(tx, set);
     return noEffect({ payload: 'native set' });
   });
   if (!locator) throw new Error('Missing native locator');
-  const snapshot = await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, { deadline: Date.now() + 30_000 });
+  const snapshot = await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, {
+    deadline: Date.now() + 30_000,
+  });
   expect(snapshot?.locator).toEqual(locator);
   expect(snapshot?.members).toBeGreaterThan(0);
   const copies = await f.db.admin.query(
     `SELECT artifact_type,locator,original_transaction,original_position FROM core.record_history_source_set_copy
-     WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3`, recordSourceSetStorageKey(locator),
+     WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3`,
+    recordSourceSetStorageKey(locator),
   );
   expect(copies.rows.map((row) => row.artifact_type).sort()).toEqual(['command-receipt/v1', 'durable-work/v1']);
   for (const copy of copies.rows) {
@@ -211,7 +230,9 @@ test('History consumes the actual Semantic one-set building seal locator revisio
   let found = false;
   for (let step = 0; step < 16; step++) {
     const page = await producer.pageSemanticRecordSourceSets({ pool: f.db.pool }, source, {
-      frontier, limit: 1, deadline: Date.now() + 30_000,
+      frontier,
+      limit: 1,
+      deadline: Date.now() + 30_000,
     });
     expect(['progress', 'complete']).toContain(page.state);
     expect(page.sets.length).toBeLessThanOrEqual(1);
@@ -235,28 +256,46 @@ test('the native seal guard rolls back building source and generated work togeth
   let handle: OwnerSourceSet | undefined;
   let locator: import('../../src/semantic/record-source-set.ts').SemanticRecordSourceSetLocator | undefined;
   const workId = randomUUID();
-  await expect(command(async (tx) => {
-    handle = await producer.beginSemanticRecordSourceSet(tx);
-    locator = producer.semanticRecordSourceSetLocator(tx, handle);
-    declareCommandRecordSourceSet(tx, handle);
-    await declareCommandHistory(tx, kind, scope(person));
-    await stageHistoryWork(tx, {
-      owner: 'record-purge-fixture',
-      intent: { queue: 'maintenance', workflowName: 'record-purge-fixture', workflowId: workId, input: { accounts: [person.accountId] } },
-      scope: { artifactType: 'durable-work/v1', accounts: scope(person).response.accounts },
-    });
-    await producer.appendSemanticRecordSourceSet(tx, handle, { sources: [source], terms: [] });
-    return noEffect({ payload: 'unsealed' });
-  })).rejects.toThrow();
+  await expect(
+    command(async (tx) => {
+      handle = await producer.beginSemanticRecordSourceSet(tx);
+      locator = producer.semanticRecordSourceSetLocator(tx, handle);
+      declareCommandRecordSourceSet(tx, handle);
+      await declareCommandHistory(tx, kind, scope(person));
+      await stageHistoryWork(tx, {
+        owner: 'record-purge-fixture',
+        intent: {
+          queue: 'maintenance',
+          workflowName: 'record-purge-fixture',
+          workflowId: workId,
+          input: { accounts: [person.accountId] },
+        },
+        scope: { artifactType: 'durable-work/v1', accounts: scope(person).response.accounts },
+      });
+      await producer.appendSemanticRecordSourceSet(tx, handle, { sources: [source], terms: [] });
+      return noEffect({ payload: 'unsealed' });
+    }),
+  ).rejects.toThrow();
   if (!locator || !handle) throw new Error('Missing attempted native set');
-  expect(await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, { deadline: Date.now() + 30_000 })).toBeNull();
-  expect((await f.db.admin.query(
-    'SELECT work_id FROM core.history_work WHERE partition_no=$1 AND work_id=$2', [partition, workId],
-  )).rows).toHaveLength(0);
-  expect((await f.db.admin.query(
-    'SELECT locator FROM core.record_history_source_set_copy WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3',
-    recordSourceSetStorageKey(locator),
-  )).rows).toHaveLength(0);
+  expect(
+    await producer.readSemanticRecordSourceSet({ pool: f.db.pool }, locator, { deadline: Date.now() + 30_000 }),
+  ).toBeNull();
+  expect(
+    (
+      await f.db.admin.query('SELECT work_id FROM core.history_work WHERE partition_no=$1 AND work_id=$2', [
+        partition,
+        workId,
+      ])
+    ).rows,
+  ).toHaveLength(0);
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT locator FROM core.record_history_source_set_copy WHERE source_partition=$1 AND set_locator=$2 AND set_revision=$3',
+        recordSourceSetStorageKey(locator),
+      )
+    ).rows,
+  ).toHaveLength(0);
   await command(async (tx) => {
     expect(() => declareCommandRecordSourceSet(tx, handle!)).toThrow();
     await declareCommandHistory(tx, kind, scope(person));
