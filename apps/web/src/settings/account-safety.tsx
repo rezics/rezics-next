@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Separator } from '@rezics/ui/shadcn/separator';
@@ -16,8 +16,51 @@ export type AccountSafetyProps =
       csrfToken: string | null;
       onReload: () => void;
       renameAccount?: AccountRenameNavigation | null;
+      renameRead?: { loading: boolean; reload: () => void };
     }
   | { state: 'signed-out'; returnTo: string };
+
+/** This mounted region never seeds capability from a historical settings response. */
+export function AccountSafetySection(props: AccountSafetyProps) {
+  return props.state === 'signed-in' ? (
+    <CurrentAccountSafety key={props.csrfToken} {...props} />
+  ) : (
+    <AccountSafetyCard {...props} />
+  );
+}
+
+function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signed-in' }>) {
+  const [attempt, setAttempt] = useState(0);
+  const [result, setResult] = useState<{ loading: boolean; context: AccountRenameNavigation | null }>({
+    loading: true,
+    context: null,
+  });
+  const pending = useRef<Promise<AccountRenameNavigation | null> | null>(null);
+  useEffect(() => {
+    let current = true;
+    // Reuse the pending read during effect replay, but never across mounts or explicit reloads.
+    pending.current ??= props.csrfToken
+      ? import('./account-rename-actions')
+          .then(({ readAccountRename }) => readAccountRename({ headers: { 'X-CSRF-Token': props.csrfToken! } }))
+          .catch(() => null)
+      : Promise.resolve(null);
+    void pending.current.then((context) => {
+      if (current) setResult({ loading: false, context });
+    });
+    return () => {
+      current = false;
+    };
+  }, [attempt, props.csrfToken]);
+  const reload = () => {
+    if (result.loading) return;
+    pending.current = null;
+    setResult({ loading: true, context: null });
+    setAttempt((value) => value + 1);
+  };
+  return (
+    <AccountSafetyCard {...props} renameAccount={result.context} renameRead={{ loading: result.loading, reload }} />
+  );
+}
 
 export function AccountSafetyCard(props: AccountSafetyProps) {
   const id = useId();
@@ -39,7 +82,20 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           </div>
         ) : (
           <>
-            <AccountRenameLink context={props.renameAccount ?? null} />
+            <AccountRenameLink context={props.renameAccount ?? null} loading={props.renameRead?.loading ?? false} />
+            {props.renameRead ? (
+              <div aria-busy={props.renameRead.loading} className="space-y-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={props.renameRead.loading}
+                  onClick={props.renameRead.reload}
+                  aria-label={`${m.settings_reload()}: ${m.settings_account_rename_heading()}`}
+                >
+                  {m.settings_reload()}
+                </Button>
+              </div>
+            ) : null}
             {links ? (
               <a href={links.security} className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), linkClass)}>
                 {m.account_security_settings()}

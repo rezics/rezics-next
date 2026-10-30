@@ -1,5 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
+import type { SessionEnv } from '../session/client';
+import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { createEditableProfileSource } from './editable-profile-source';
 
 export type AccountRenameContext = {
@@ -17,6 +19,18 @@ const actionsResponse = v.strictObject({
     }),
   ]),
 });
+
+/** One current session read plus the two exact-key reads, independently of preferences. */
+export async function loadAccountRenameRegion(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+): Promise<AccountRenameContext | null> {
+  await prepareSession(request, sessionEnv);
+  const authorization = viewerCredential(request);
+  const accountId = sessionSubject(request);
+  return authorization && accountId ? readAccountRenameContext(client, authorization, accountId) : null;
+}
 
 /** Two bounded private reads for the session's exact self key; no public handle lookup. */
 export async function readAccountRenameContext(

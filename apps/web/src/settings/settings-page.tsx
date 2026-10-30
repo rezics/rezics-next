@@ -17,7 +17,7 @@ import { usePreferenceRetry } from './preference-failure-retry';
 import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { useOperation } from '../kernel/exposure';
-import { AccountSafetyCard } from './account-safety';
+import { AccountSafetyCard, AccountSafetySection } from './account-safety';
 import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
 import { SectionsNavigation, settingsSections } from './sections-navigation';
@@ -186,7 +186,7 @@ function SettingsSections({
             <ManagedAccountDetail accountId={managedTarget} backHref={managedAccountsBackHref(location.publicHref)} />
           ) : (
             <>
-              <AccountSafetyCard
+              <AccountSafetySection
                 state="signed-in"
                 securityHref={page.securityHref}
                 renameAccount={page.renameAccount ?? null}

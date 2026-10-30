@@ -3,8 +3,14 @@ import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
 import type { AccountRenameNavigation } from './account-rename-actions';
 
-export function AccountRenameLink({ context }: { context?: AccountRenameNavigation | null }) {
-  const href = context?.available ? (context.href ?? null) : null;
+export function AccountRenameLink({
+  context,
+  loading = false,
+}: {
+  context?: AccountRenameNavigation | null;
+  loading?: boolean;
+}) {
+  const href = !loading && context?.available ? (context.href ?? null) : null;
   return (
     <div className="space-y-3">
       <h3 className="font-medium">{m.settings_account_rename_heading()}</h3>
@@ -17,7 +23,11 @@ export function AccountRenameLink({ context }: { context?: AccountRenameNavigati
       ) : null}
       <p className="text-sm text-muted-foreground">{m.settings_account_rename_policy()}</p>
       <p className="text-sm text-muted-foreground">{m.settings_account_rename_confirmation()}</p>
-      {href ? (
+      {loading ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.settings_profile_loading()}
+        </p>
+      ) : href ? (
         <a
           href={href}
           referrerPolicy="no-referrer"
