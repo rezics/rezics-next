@@ -583,7 +583,7 @@ test(
       await deleteFromMenu(page, openingId);
       expect(await page.locator(`#post-${openingId} [data-slot="tombstone"]`).count()).toBe(1);
       expect(await page.locator(`#post-${replyId}`).innerText()).toContain('A reply by Mira');
-      expect(await page.getByRole('heading', { level: 1, name: 'A close reading' }).count()).toBe(0);
+      expect(await page.getByRole('heading', { level: 1 }).count()).toBe(0);
     } finally {
       await page.context().close();
     }
