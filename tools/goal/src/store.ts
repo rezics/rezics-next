@@ -10,6 +10,8 @@ import type {
   Attempt,
   AttemptRecord,
   Brief,
+  DevVerifierFinding,
+  DevVerifierRun,
   IntegrationPlan,
   PoolReading,
   PromotionRun,
@@ -64,6 +66,26 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
     sql: `CREATE INDEX worker_tasks_state ON worker_tasks(json_extract(body, '$.state'));`,
   },
   checkResultsMigration(),
+  {
+    module: 'dev-verifier',
+    version: 1,
+    sql: `
+CREATE TABLE dev_verifier_runs (cache_key TEXT PRIMARY KEY, created_at TEXT NOT NULL, body TEXT NOT NULL);
+CREATE INDEX dev_verifier_runs_created ON dev_verifier_runs(created_at);
+CREATE TABLE dev_verifier_findings (
+  range_key TEXT PRIMARY KEY,
+  identity TEXT NOT NULL,
+  signature TEXT NOT NULL,
+  base_commit TEXT NOT NULL,
+  head_commit TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('existing','new','unknown')),
+  created_at TEXT NOT NULL,
+  body TEXT NOT NULL
+);
+CREATE INDEX dev_verifier_findings_identity ON dev_verifier_findings(signature, status, created_at);
+CREATE INDEX dev_verifier_findings_created ON dev_verifier_findings(created_at);
+`,
+  },
 ] as const;
 type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
@@ -409,6 +431,53 @@ export class WorkerStore implements AttemptFence {
   }
   promotion(): PromotionRun | undefined {
     return decode<PromotionRun>(this.db.query('SELECT body FROM worker_promotions WHERE id=1').get());
+  }
+  devVerifierRun(key: string): DevVerifierRun | undefined {
+    return decode<DevVerifierRun>(this.db.query('SELECT body FROM dev_verifier_runs WHERE cache_key=?').get(key));
+  }
+  saveDevVerifierRun(run: DevVerifierRun): void {
+    this.db
+      .transaction(() => {
+        this.db.query('INSERT OR REPLACE INTO dev_verifier_runs VALUES (?,?,?)').run(run.key, run.createdAt, JSON.stringify(run));
+        this.db
+          .query('DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET 5000)')
+          .run();
+      })
+      .immediate();
+  }
+  devVerifierFindings(limit = 2000): DevVerifierFinding[] {
+    return this.db
+      .query('SELECT body FROM dev_verifier_findings ORDER BY rowid DESC LIMIT ?')
+      .all(Math.max(0, Math.min(2000, limit)))
+      .map((row) => decode<DevVerifierFinding>(row)!);
+  }
+  devVerifierHasKnownExisting(signature: string): boolean {
+    return Boolean(
+      this.db
+        .query("SELECT 1 FROM dev_verifier_findings WHERE signature=? AND status='existing' LIMIT 1")
+        .get(signature),
+    );
+  }
+  saveDevVerifierFinding(finding: DevVerifierFinding): void {
+    this.db
+      .transaction(() => {
+        this.db
+          .query('INSERT OR REPLACE INTO dev_verifier_findings VALUES (?,?,?,?,?,?,?,?)')
+          .run(
+            finding.rangeKey,
+            finding.identity,
+            finding.signature,
+            finding.baseCommit,
+            finding.headCommit,
+            finding.status,
+            finding.createdAt,
+            JSON.stringify(finding),
+          );
+        this.db
+          .query('DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET 2000)')
+          .run();
+      })
+      .immediate();
   }
   savePromotion(run: PromotionRun): void {
     this.db

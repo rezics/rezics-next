@@ -257,8 +257,8 @@ export class WorkerTasks {
     }
   }
   private taskBaseBranch(brief: { goal?: string; target?: 'stabilize'; after?: readonly string[] }): string {
-    // Dev tasks start from the dev head, as trunk-based work does; dev-verified gates promotion only. Starting from
-    // dev-verified while the verifier lagged by hundreds of commits made landings conflict (11 an hour on 10-29).
+    // Dev tasks start from the integration head, as trunk-based work does. The verifier tracks progress and known
+    // findings; promotion freezes the integration head and applies its independent full candidate gate.
     return brief.goal === 'control-plane'
       ? this.settings.mainBranch
       : brief.target === 'stabilize'

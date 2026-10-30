@@ -184,6 +184,34 @@ export type PriorityGrant = {
   revokedBy?: string;
 };
 export type IntegrationPlan = { taskId: string; attempt: number; base: string; commit: string; commits: string[] };
+export type DevVerifierEvidence = {
+  commit: string;
+  command: string[];
+  passed: boolean;
+  timedOut: boolean;
+  output: string;
+  logPath: string;
+};
+export type DevVerifierRun = {
+  key: string;
+  createdAt: string;
+  evidence: DevVerifierEvidence;
+};
+export type DevVerifierFinding = {
+  rangeKey: string;
+  identity: string;
+  signature: string;
+  baseCommit: string;
+  headCommit: string;
+  status: 'existing' | 'new' | 'unknown';
+  check: { command: string[]; closure: string[]; taskId?: string };
+  assertion: string;
+  baseline: DevVerifierEvidence | null;
+  head: DevVerifierEvidence | null;
+  reason: string;
+  taskId?: string;
+  createdAt: string;
+};
 export type RetryIntent = AttemptRef & {
   options: {
     evidence?: string;
