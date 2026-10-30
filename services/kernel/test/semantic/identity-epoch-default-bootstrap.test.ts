@@ -121,6 +121,23 @@ test('committed native absence and birth custody survive default worker restart 
   `);
   expect(retained).toHaveLength(1);
   expect(retained[0]!.transaction_id).toBe(installed.native.transactionId);
+  const storage = await queryCommunityDatabase(`
+    SELECT c.relname,pg_relation_size(c.oid)::text heap_bytes,pg_indexes_size(c.oid)::text index_bytes,
+      (SELECT count(*)::integer FROM pg_index i WHERE i.indrelid=c.oid) indexes
+    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='semantic' AND c.relname IN ('identity_epoch_installation_cut','identity_epoch_installation')
+    ORDER BY c.relname
+  `);
+  expect(storage).toHaveLength(2);
+  expect(storage.map((row) => row.indexes)).toEqual([1, 1]);
+  console.info(
+    'native identity installation custody',
+    JSON.stringify({
+      proof: { ...installed, native: { ...installed.native, position: installed.native.position.toString() } },
+      retained,
+      storage,
+    }),
+  );
   const before = await queryCommunityDatabase(`
     SELECT (SELECT count(*)::integer FROM semantic.identity_epoch_bootstrap_home) homes,
       (SELECT count(*)::integer FROM semantic.identity_epoch_topology_custody) custody
@@ -281,6 +298,26 @@ test('a transaction predating the absence cut cannot commit a late historical bi
   } finally {
     await writer.query('ROLLBACK');
     writer.release();
+    await db.close();
+  }
+}, 30_000);
+
+test('concurrent native installers retain one cut and one closure receipt', async () => {
+  const db = await identityEpochDatabase();
+  try {
+    const proofs = await Promise.all(Array.from({ length: 3 }, () => installIdentityEpochBootstrap(db.pool)));
+    expect(proofs).toEqual([proofs[0]!, proofs[0]!, proofs[0]!]);
+    expect(
+      (await db.admin.query('SELECT count(*)::integer count FROM semantic.identity_epoch_installation_cut')).rows,
+    ).toEqual([{ count: 1 }]);
+    expect(
+      (await db.admin.query('SELECT count(*)::integer count FROM semantic.identity_epoch_installation')).rows,
+    ).toEqual([{ count: 1 }]);
+    expect(
+      (await db.admin.query('SELECT count(*)::integer count FROM semantic.identity_epoch_native_commit')).rows,
+    ).toEqual([{ count: 1 }]);
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'ready' });
+  } finally {
     await db.close();
   }
 }, 30_000);
