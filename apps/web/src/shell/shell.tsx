@@ -1,6 +1,7 @@
 import { useOperation } from '../kernel/exposure';
 import { cn } from '@rezics/ui/utils';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Toaster } from '@rezics/ui/shadcn/toast';
 import { Menu } from '@rezics/ui/menu';
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@rezics/ui/shadcn/dialog';
 import {
@@ -619,6 +620,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto w-full max-w-5xl">{children}</div>
         </SidebarInset>
       </div>
+      <Toaster />
     </SidebarProvider>
   );
 }
