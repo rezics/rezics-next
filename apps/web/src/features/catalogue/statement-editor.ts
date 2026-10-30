@@ -132,16 +132,22 @@ export async function proposeStatement(
   client: KernelClient,
   authorization: string,
   command: ProposalCommand,
+  continuity?: { session?: string | undefined; uncertain?: () => void },
 ): Promise<ProposalResult> {
   try {
     // The native endpoint revalidates current authority and replays its original receipt on uncertain retries.
-    const result = await client
-      .subjects({ id: command.id })
-      .candidates.post(
-        { statement: command.statement },
-        { headers: { authorization, 'idempotency-key': command.key } as { 'idempotency-key': string } },
-      );
+    const result = await client.subjects({ id: command.id }).candidates.post(
+      { statement: command.statement },
+      {
+        headers: {
+          authorization,
+          'idempotency-key': command.key,
+          ...(continuity?.session ? { 'rezics-session-token': continuity.session } : {}),
+        } as { 'idempotency-key': string },
+      },
+    );
     if (result.status !== 201 || !result.data) {
+      if (result.status === 201 || (result.status >= 500 && result.status !== 503)) continuity?.uncertain?.();
       const errors = violations(result.error?.value);
       return { ...candidateFailure(result.status), ...(errors ? { errors } : {}) };
     }
@@ -154,6 +160,7 @@ export async function proposeStatement(
       ...(session ? { session } : {}),
     };
   } catch {
+    continuity?.uncertain?.();
     return { ok: false, reason: 'unavailable' };
   }
 }

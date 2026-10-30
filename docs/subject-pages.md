@@ -251,6 +251,43 @@ current-withdrawal and screenshot review remain integration proof across no-JS, 
 themes. The reusable [public reading pattern](../apps/web/src/subject/reading-state/index.tsx) has one story identity
 across those globals and is the same component used by About.
 
+## Edit a released profile
+
+The subject header and compact view frame offer **Edit facts** at
+`/{locale}/subjects/{id}/{slug}/edit`. Without a selected `property`, this is the multi-field catalogue workspace.
+A property/statement address still opens the existing single-field correction form. Both keep the canonical subject
+identity and its current released Type. This workspace is catalogue data, separate from Puck presentation editing.
+
+The private session BFF starts the ordinary public subject and active-definition reads together, then resolves the
+immutable release. Effective emitted Type properties determine the field inventory and order; scalar datatypes
+group text/identifiers, dates and quantities. Labels/descriptions use definition-language fallback, independently
+of authored value languages. Every selected public assertion, qualifier and citation remains visible separately.
+Opening an editor creates a clearly labelled private draft, never a selected public value. Multiple selected values
+require an explicit choice of assertion; a multivalued field may instead propose an additional value. Cardinality
+still governs the later whole-slot selection, not a client-side collapse of existing assertions.
+
+The workspace reuses the scalar editor's native value, qualifier and grouped-citation controls and validators.
+Existing unsupported parts stay intact. Names and descriptions use the separate actual terms PATCH editor;
+relations/credits use their exact-slot editor. Document fields require the authored composer; its browser binding
+is currently unavailable here, which is stated explicitly rather than routing to a presentation editor.
+
+A contributor explicitly includes changed fields and submits at most twelve fields per workspace. Unchanged or
+excluded fields issue no request. Blank or incomplete values produce invalid drafts, never deletion or clearing.
+Each admitted change seals its own immutable statement body and native idempotency key before any request begins.
+The existing generated per-subject candidate POST runs once per included field through the session BFF and CSRF
+boundary; no bulk endpoint or grant exists. Individual results distinguish proposed, stale, denied, invalid,
+unavailable and uncertain delivery. Failed drafts remain available; uncertain/unavailable requests freeze editing
+and retain their exact body/key for retry. Definite failures can be edited into a new explicit intent. Later submits
+retry only unresolved included fields and never replay a confirmed success. Refresh preserves drafts and keys;
+current concealment or failure hides the workspace until a readable response is available again.
+
+A successful field offers its exact returned candidate at
+`/edit?reviewProperty={property}&candidate={candidate}` and an in-place comparison using the existing candidate
+review controls. In-place review carries the returned native session token; reopening the address performs a fresh
+current read. Acceptance/rejection, cardinality-aware whole-slot adoption and ordinary public reading remain
+separate explicit steps. The workspace never claims publication or an atomic save. Current private candidate
+visibility and current native command authority remain with the existing review/session APIs.
+
 ## Propose a cited correction
 
 A signed-in reader can choose **Propose correction** beside an existing scalar fact in Details (also available

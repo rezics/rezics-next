@@ -1,3 +1,4 @@
+import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
 import { SubjectChangesLink } from '../catalogue/subject-changes-link';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
@@ -253,6 +254,7 @@ export function SubjectFrame({
           {view === 'editions' && <PublicationEditorEntry work={frame.id} locale={locale} />}
           <CreateSubjectEntry locale={locale} />
           <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
+          <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
           <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
           <SubjectChangesLink id={frame.id} title={title} locale={locale} />
         </div>

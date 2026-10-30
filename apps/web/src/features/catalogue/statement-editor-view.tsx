@@ -46,7 +46,7 @@ export function EditorFailure({ reason, locale }: { reason: string; locale: stri
 }
 
 /** A read-only part still participates in the submitted statement. It is never filtered away. */
-function PartValue({ part, read, locale }: { part: SnakInput; read: Current; locale: string }) {
+export function PartValue({ part, read, locale }: { part: SnakInput; read: Current; locale: string }) {
   const definition = read.release.properties[part.property.id];
   if (!definition) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
   const content = part.value.type === 'value' && isRecord(part.value.content) ? part.value.content : undefined;
@@ -341,6 +341,138 @@ function AddPart({
   );
 }
 
+/** Shared native scalar, qualifier and citation controls for single and multi-field proposals. */
+export function StatementFields({
+  draft,
+  current,
+  locale,
+  change,
+  guideReturn,
+  heading: Heading = 'h2',
+}: {
+  draft: StatementInput;
+  current: Current;
+  locale: string;
+  change: (next: StatementInput) => void;
+  guideReturn?: string | undefined;
+  heading?: 'h2' | 'h4';
+}) {
+  const o = { locale: locale as never };
+  const definition = current.release.properties[draft.property.id];
+  return (
+    <>
+      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+        <Heading className="font-semibold">{m.correction_replacement({}, o)}</Heading>
+        <DefinitionGuideLink
+          locale={locale}
+          field
+          address={{
+            type: current.public.subject.type,
+            property: draft.property.id,
+            release: current.source?.rezics.release,
+            returnTo: guideReturn,
+          }}
+        />
+        {definition?.descriptions && (
+          <p className="text-sm text-muted-foreground">{pageText(definition.descriptions, locale).text}</p>
+        )}
+        <ScalarControl
+          part={draft}
+          definition={definition}
+          read={current}
+          locale={locale}
+          onChange={(value) => change({ ...draft, value })}
+        />
+        <p className="text-sm text-muted-foreground">
+          {definition?.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
+        </p>
+      </section>
+      <section className="space-y-3">
+        <Heading className="font-semibold">{m.correction_qualifiers({}, o)}</Heading>
+        {(draft.qualifiers ?? []).map((part, index) => (
+          <PartEditor
+            key={index}
+            part={part}
+            read={current}
+            locale={locale}
+            onChange={(value) =>
+              change({
+                ...draft,
+                qualifiers: draft.qualifiers!.map((item, i) => (i === index ? { ...item, value } : item)),
+              })
+            }
+          />
+        ))}
+        <AddPart
+          ids={definition?.qualifiers ?? []}
+          read={current}
+          locale={locale}
+          label={m.correction_add_qualifier({}, o)}
+          onAdd={(id) =>
+            change({
+              ...draft,
+              qualifiers: [...(draft.qualifiers ?? []), { property: { id }, value: { type: 'value', content: '' } }],
+            })
+          }
+        />
+      </section>
+      <section className="space-y-4">
+        <Heading className="font-semibold">{m.correction_references({}, o)}</Heading>
+        <p className="text-sm text-muted-foreground">{m.correction_citation_hint({}, o)}</p>
+        {draft.references.map((reference, index) => (
+          <fieldset key={index} className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <legend className="px-1 text-sm font-medium">
+              {m.correction_references({}, o)} {index + 1}
+            </legend>
+            {reference.parts.map((part, partIndex) => (
+              <PartEditor
+                key={partIndex}
+                part={part}
+                read={current}
+                locale={locale}
+                onChange={(value) =>
+                  change({
+                    ...draft,
+                    references: draft.references.map((item, i) =>
+                      i !== index
+                        ? item
+                        : { parts: item.parts.map((snak, n) => (n === partIndex ? { ...snak, value } : snak)) },
+                    ),
+                  })
+                }
+              />
+            ))}
+            <AddPart
+              ids={Object.keys(current.release.properties)}
+              read={current}
+              locale={locale}
+              label={m.correction_add_part({}, o)}
+              onAdd={(id) =>
+                change({
+                  ...draft,
+                  references: draft.references.map((item, i) =>
+                    i !== index
+                      ? item
+                      : { parts: [...item.parts, { property: { id }, value: { type: 'value', content: '' } }] },
+                  ),
+                })
+              }
+            />
+          </fieldset>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={draft.references.length >= 16}
+          onClick={() => change({ ...draft, references: [...draft.references, { parts: [] }] })}
+        >
+          {m.correction_add_reference({}, o)}
+        </Button>
+      </section>
+    </>
+  );
+}
+
 export function StatementEditor({
   initial,
   locale,
@@ -555,117 +687,13 @@ export function StatementEditor({
             </section>
           )}
           <fieldset disabled={busy || !!pending.current} className="space-y-6">
-            <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-              <h2 className="font-semibold">{m.correction_replacement({}, o)}</h2>
-              <DefinitionGuideLink
-                locale={locale}
-                field
-                address={{
-                  type: current.public.subject.type,
-                  property: draft.property.id,
-                  release: current.source?.rezics.release,
-                  returnTo: guideReturn,
-                }}
-              />
-              {definition?.descriptions && (
-                <p className="text-sm text-muted-foreground">{pageText(definition.descriptions, locale).text}</p>
-              )}
-              <ScalarControl
-                part={draft}
-                definition={definition}
-                read={current}
-                locale={locale}
-                onChange={(value) => change({ ...draft, value })}
-              />
-              <p className="text-sm text-muted-foreground">
-                {definition?.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
-              </p>
-            </section>
-            <section className="space-y-3">
-              <h2 className="font-semibold">{m.correction_qualifiers({}, o)}</h2>
-              {(draft.qualifiers ?? []).map((part, index) => (
-                <PartEditor
-                  key={index}
-                  part={part}
-                  read={current}
-                  locale={locale}
-                  onChange={(value) =>
-                    change({
-                      ...draft,
-                      qualifiers: draft.qualifiers!.map((item, i) => (i === index ? { ...item, value } : item)),
-                    })
-                  }
-                />
-              ))}
-              <AddPart
-                ids={definition?.qualifiers ?? []}
-                read={current}
-                locale={locale}
-                label={m.correction_add_qualifier({}, o)}
-                onAdd={(id) =>
-                  change({
-                    ...draft,
-                    qualifiers: [
-                      ...(draft.qualifiers ?? []),
-                      { property: { id }, value: { type: 'value', content: '' } },
-                    ],
-                  })
-                }
-              />
-            </section>
-            <section className="space-y-4">
-              <h2 className="font-semibold">{m.correction_references({}, o)}</h2>
-              <p className="text-sm text-muted-foreground">{m.correction_citation_hint({}, o)}</p>
-              {draft.references.map((reference, index) => (
-                <fieldset key={index} className="space-y-3 rounded-xl border border-border bg-card p-4">
-                  <legend className="px-1 text-sm font-medium">
-                    {m.correction_references({}, o)} {index + 1}
-                  </legend>
-                  {reference.parts.map((part, partIndex) => (
-                    <PartEditor
-                      key={partIndex}
-                      part={part}
-                      read={current}
-                      locale={locale}
-                      onChange={(value) =>
-                        change({
-                          ...draft,
-                          references: draft.references.map((item, i) =>
-                            i !== index
-                              ? item
-                              : { parts: item.parts.map((snak, n) => (n === partIndex ? { ...snak, value } : snak)) },
-                          ),
-                        })
-                      }
-                    />
-                  ))}
-                  <AddPart
-                    ids={Object.keys(current.release.properties)}
-                    read={current}
-                    locale={locale}
-                    label={m.correction_add_part({}, o)}
-                    onAdd={(id) =>
-                      change({
-                        ...draft,
-                        references: draft.references.map((item, i) =>
-                          i !== index
-                            ? item
-                            : { parts: [...item.parts, { property: { id }, value: { type: 'value', content: '' } }] },
-                        ),
-                      })
-                    }
-                  />
-                </fieldset>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={draft.references.length >= 16}
-                onClick={() => change({ ...draft, references: [...draft.references, { parts: [] }] })}
-              >
-                {m.correction_add_reference({}, o)}
-              </Button>
-            </section>
+            <StatementFields
+              draft={draft}
+              current={current}
+              locale={locale}
+              change={change}
+              guideReturn={guideReturn}
+            />
           </fieldset>
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={busy}>

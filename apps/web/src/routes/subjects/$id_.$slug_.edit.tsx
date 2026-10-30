@@ -1,3 +1,4 @@
+import { readSubjectCandidates, confirmSubjectCandidate } from '../../features/pages/curate-actions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
@@ -9,6 +10,8 @@ import {
   readCorrectionReview,
   confirmCorrection,
 } from '../../features/catalogue/statement-editor-actions';
+import { SubjectFacts } from '../../features/catalogue/subject-facts-view';
+import { submitFactCorrection } from '../../features/catalogue/subject-facts-actions';
 import { csrfHeaders } from '../../threads/composer';
 import { useSession } from '../../session/query';
 import { getLocale } from '../../paraglide/runtime';
@@ -57,19 +60,23 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
   validateSearch: (input: Record<string, unknown>) => ({
     property: typeof input.property === 'string' && input.property.length <= 256 ? input.property : undefined,
     statement: typeof input.statement === 'string' && input.statement.length <= 128 ? input.statement : undefined,
+    reviewProperty:
+      typeof input.reviewProperty === 'string' && input.reviewProperty.length <= 256 ? input.reviewProperty : undefined,
+    candidate:
+      typeof input.candidate === 'string' && /^[0-9a-f-]{36}$/i.test(input.candidate) ? input.candidate : undefined,
   }),
   loader: ({ params, location }) =>
     canonicalEditor({
       data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
     }),
-  head: () => ({ meta: [{ title: m.correction_title() }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: m.facts_title() }, { name: 'robots', content: 'noindex' }] }),
   component: CorrectionRoute,
 });
 
 function CorrectionRoute() {
   const queryClient = useQueryClient();
   const { id } = Route.useLoaderData();
-  const { property, statement } = Route.useSearch();
+  const { property, statement, reviewProperty, candidate } = Route.useSearch();
   const locale = getLocale();
   const { state } = useSession();
   const read = () => readCorrection({ data: { id, property, statement }, headers: csrfHeaders() });
@@ -103,6 +110,34 @@ function CorrectionRoute() {
       <p role="status" className="p-6">
         {m.candidate_loading()}
       </p>
+    );
+  if (!property)
+    return (
+      <SubjectFacts
+        key={`${id}:${locale}`}
+        initial={query.data}
+        locale={locale}
+        transport={{ read, propose: (data) => submitFactCorrection({ data, headers: csrfHeaders() }) }}
+        initialReview={reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined}
+        review={(_property, initialSession) => {
+          let session = initialSession;
+          return {
+            read: async (field, cursor) => {
+              const result = await readSubjectCandidates({
+                data: { id, property: field, cursor, session },
+                headers: csrfHeaders(),
+              });
+              if (result.ok && result.session) session = result.session;
+              return result;
+            },
+            confirm: async (command) => {
+              const result = await confirmSubjectCandidate({ data: { ...command, session }, headers: csrfHeaders() });
+              if (result.ok && result.session) session = result.session;
+              return result;
+            },
+          };
+        }}
+      />
     );
   return (
     <StatementEditor

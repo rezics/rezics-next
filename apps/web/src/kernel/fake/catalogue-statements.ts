@@ -16,13 +16,13 @@ import type { FakeRoute } from '../fake-modules';
 export type StatementScenario = 'ready' | 'denied' | 'invalid' | 'stale' | 'unavailable' | 'lost-response';
 
 /** Extend the existing review fake, retaining its native acceptance/adoption and public reader. */
-export function statementFixture(scenario: StatementScenario = 'ready', locale = 'en') {
-  const base = candidateFixture('ready', locale);
+export function statementFixture(scenario: StatementScenario = 'ready', locale = 'en', property = candidateProperty) {
+  const base = candidateFixture(property === 'schema:inLanguage' ? 'multiple' : 'ready', locale);
   const release = definitions.release as Release;
-  const source = base.publicRead.subject.statements[candidateProperty]![0]!;
+  const source = base.publicRead.subject.statements[property]![0]!;
   // The proposal stories start with a cited selection, reusing the review fixture's native citation.
   source.references = structuredClone(base.candidate.statement.references);
-  const address = { id: base.id, property: candidateProperty, statement: source.id };
+  const address = { id: base.id, property, statement: source.id };
   const calls: {
     path: string;
     method: string;
@@ -100,13 +100,17 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
     propose: (command: Parameters<typeof proposeStatement>[2]) => proposeStatement(client, 'Bearer fixture', command),
   };
   const review: CandidateTransport = {
-    read: async (property, cursor): Promise<CandidateRead> => {
+    read: async (property = address.property, cursor): Promise<CandidateRead> => {
       const result = await readCandidates(client, 'Bearer fixture', base.id, property, cursor);
       return result.ok
         ? {
             ...result,
             fields: [
-              { id: candidateProperty, label: pickText(release.properties[candidateProperty]!.labels, locale).text },
+              {
+                id: property,
+                label: pickText(release.properties[property]!.labels, locale).text,
+                multivalued: release.properties[property]!.multivalued,
+              },
             ],
             names: Object.fromEntries(
               Object.entries(release.properties).map(([id, definition]) => [id, definition.labels]),
