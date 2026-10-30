@@ -660,6 +660,8 @@
   "thread_media_status": "État de l’image",
   "thread_media_processing": "Cette image est encore en cours de traitement.",
   "thread_media_unusable": "Cette image ne peut plus être utilisée.",
+  "thread_media_upload_again": "Téléverser à nouveau",
+  "thread_media_used": "Cette image a déjà été utilisée dans une autre publication.",
   "thread_media_remove": "Supprimer l’image",
   "settings_sections_label": "Sections des paramètres",
   "settings_privacy_heading": "Confidentialité",

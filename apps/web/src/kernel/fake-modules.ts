@@ -1,6 +1,7 @@
 import type { Fixtures, KernelRecording } from './fake.ts';
 import * as libraryContinue from './fake/library-continue.ts';
 import * as reviewConflicts from './fake/review-conflicts.ts';
+import * as threadMediaReuse from './fake/thread-media-reuse.ts';
 import { storySubjects } from './story-subjects';
 
 type RouteContext = {
@@ -63,11 +64,18 @@ function discover(): Discovered {
   }
   // Includes fake/view-continuation.ts: subject view owner pages and their refusal fixture.
   discovered = {
-    routes: ordered({
-      ...Object.fromEntries(Object.entries(modules).filter(([file]) => !file.endsWith('/library-continue.ts'))),
-      './fake/library-continue.ts': libraryContinue,
-      './fake/review-conflicts.ts': reviewConflicts,
-    }).flatMap(([, module]) => module.routes),
+    routes: [
+      ...threadMediaReuse.routes,
+      ...ordered({
+        ...Object.fromEntries(
+          Object.entries(modules).filter(
+            ([file]) => !file.endsWith('/library-continue.ts') && !file.endsWith('/thread-media-reuse.ts'),
+          ),
+        ),
+        './fake/library-continue.ts': libraryContinue,
+        './fake/review-conflicts.ts': reviewConflicts,
+      }).flatMap(([, module]) => module.routes),
+    ],
     recordings: Object.fromEntries(
       ordered(recordings).map(([file, recording]) => [file.split('/').at(-1)!.slice(0, -5), recording]),
     ),

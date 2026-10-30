@@ -661,6 +661,8 @@
   "thread_media_status": "Image status",
   "thread_media_processing": "This image is still processing.",
   "thread_media_unusable": "This image can no longer be used.",
+  "thread_media_upload_again": "Upload again",
+  "thread_media_used": "This image was already used in another post.",
   "thread_media_remove": "Remove image",
   "settings_sections_label": "Settings sections",
   "settings_privacy_heading": "Privacy",

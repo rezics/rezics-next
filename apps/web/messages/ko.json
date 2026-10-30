@@ -660,6 +660,8 @@
   "thread_media_status": "이미지 상태",
   "thread_media_processing": "이 이미지는 아직 처리 중입니다.",
   "thread_media_unusable": "이 이미지는 더 이상 사용할 수 없습니다.",
+  "thread_media_upload_again": "다시 업로드",
+  "thread_media_used": "이 이미지는 다른 게시물에서 이미 사용되었습니다.",
   "thread_media_remove": "이미지 삭제",
   "settings_sections_label": "설정 섹션",
   "settings_privacy_heading": "개인정보 보호",

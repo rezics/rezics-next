@@ -58,7 +58,12 @@ export function refusalText(failure: WriteFailure): string {
 function imageAlt(snapshot: DocumentSnapshot, id: string): string {
   let alt = '';
   const visit = (node: DocumentNode) => {
-    if (node.type === 'image' && node.attrs?.src === id && typeof node.attrs.alt === 'string') alt = node.attrs.alt;
+    if (
+      node.type === 'image' &&
+      (node.attrs?.src === id || (typeof node.attrs?.src === 'string' && siteMediaId(node.attrs.src) === id)) &&
+      typeof node.attrs.alt === 'string'
+    )
+      alt = node.attrs.alt;
     for (const child of node.content ?? []) visit(child);
   };
   visit(snapshot.doc);
@@ -67,7 +72,11 @@ function imageAlt(snapshot: DocumentSnapshot, id: string): string {
 
 function withoutImage(snapshot: DocumentSnapshot, id: string): DocumentSnapshot {
   const visit = (node: DocumentNode): DocumentNode | null => {
-    if (node.type === 'image' && node.attrs?.src === id) return null;
+    if (
+      node.type === 'image' &&
+      (node.attrs?.src === id || (typeof node.attrs?.src === 'string' && siteMediaId(node.attrs.src) === id))
+    )
+      return null;
     return {
       ...node,
       ...(node.content
@@ -78,10 +87,61 @@ function withoutImage(snapshot: DocumentSnapshot, id: string): DocumentSnapshot 
   return { ...snapshot, doc: visit(snapshot.doc)! };
 }
 
+function siteMediaId(src: string): string | undefined {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(src)) return src;
+  const localPath = /^\/media\/([0-9a-f-]{36})(?:\/[^/]+)?\/?$/i.exec(src);
+  if (localPath) return localPath[1];
+  try {
+    const url = new URL(src);
+    if (typeof window === 'undefined') return undefined;
+    if (url.origin !== window.location.origin) return undefined;
+    return /^\/media\/([0-9a-f-]{36})(?:\/[^/]+)?\/?$/i.exec(url.pathname)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function mediaIdsFromSources(sources: string[]): string[] {
+  return [...new Set(sources.map((source) => siteMediaId(source) ?? source))];
+}
+
+async function uploadExistingSiteImage(
+  id: string,
+  target: string | { containerId: string } | { newThread: { boardId: string; idempotencyKey: string } },
+  signal: AbortSignal,
+) {
+  const response = await fetch(`/media/${encodeURIComponent(id)}/original`, { signal, credentials: 'same-origin' });
+  if (!response.ok) throw new UploadRefusal('unavailable');
+  const blob = await response.blob();
+  const type = blob.type.split(';')[0] || 'image/png';
+  const file = new File([blob], 'pasted-image', { type });
+  return uploadReplyImage(target, file, signal);
+}
+
+function replaceImageSource(snapshot: DocumentSnapshot, from: string, to: string): DocumentSnapshot {
+  const visit = (node: DocumentNode): DocumentNode => ({
+    ...node,
+    ...(node.type === 'image' && node.attrs?.src === from ? { attrs: { ...node.attrs, src: to } } : {}),
+    ...(node.content ? { content: node.content.map(visit) } : {}),
+  });
+  return { ...snapshot, doc: visit(snapshot.doc) };
+}
+
+function mediaAfterRefusal(media: DraftMediaState[], snapshot: DocumentSnapshot, owned: Set<string>) {
+  const sources = imageSources(snapshot);
+  return media.map((item) => {
+    if (item.state !== 'available' || owned.has(item.id)) return item;
+    owned.delete(item.id);
+    for (const source of sources) if (source === item.id || siteMediaId(source) === item.id) owned.delete(source);
+    return { ...item, state: 'used' as const };
+  });
+}
+
 function mediaIssueList(
   media: DraftMediaState[] | undefined,
   snapshot: DocumentSnapshot,
   retry: () => void,
+  uploadAgain: (id: string) => void,
   remove: (id: string) => void,
 ) {
   if (!media?.length) return null;
@@ -91,7 +151,8 @@ function mediaIssueList(
       item.state === 'uploaded' ||
       item.state === 'rejected' ||
       item.state === 'erased' ||
-      item.state === 'missing',
+      item.state === 'missing' ||
+      item.state === 'used',
   );
   if (issues.length === 0) return null;
   return (
@@ -99,13 +160,20 @@ function mediaIssueList(
       {issues.map((item) => {
         const processing = item.state === 'reserved' || item.state === 'uploaded';
         const alt = imageAlt(snapshot, item.id);
+        const used = item.state === 'used';
         return (
           <li key={item.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 p-3">
             <span className="font-medium">{alt || m.editor_image()}</span>
-            <span>{processing ? m.thread_media_processing() : m.thread_media_unusable()}</span>
+            <span>
+              {processing ? m.thread_media_processing() : used ? m.thread_media_used() : m.thread_media_unusable()}
+            </span>
             {processing ? (
               <Button type="button" variant="outline" onClick={retry}>
                 {m.thread_write_retry()}
+              </Button>
+            ) : used ? (
+              <Button type="button" variant="outline" onClick={() => uploadAgain(item.id)}>
+                {m.thread_media_upload_again()}
               </Button>
             ) : (
               <Button type="button" variant="outline" onClick={() => remove(item.id)}>
@@ -219,6 +287,7 @@ export function SignInPrompt({
 
 export function PostComposer<T>({
   initialKey,
+  initialBody,
   titleRequired = false,
   canSubmit = true,
   containerId,
@@ -227,6 +296,7 @@ export function PostComposer<T>({
   onSuccess,
 }: {
   initialKey: string;
+  initialBody?: DocumentSnapshot;
   titleRequired?: boolean;
   canSubmit?: boolean;
   containerId?: string;
@@ -242,8 +312,17 @@ export function PostComposer<T>({
   const formId = useId();
   const locale = getLocale();
   const labels = useMemo(() => editorLabels(), [locale]);
+  const initialForeignSources = useMemo(
+    () =>
+      initialBody
+        ? imageSources(initialBody)
+            .filter((source) => siteMediaId(source))
+            .slice(0, replyImageLimit)
+        : [],
+    [initialBody],
+  );
   const [title, setTitle] = useState('');
-  const [body, setBody] = useState(() => fromPlainText('', 'blocks'));
+  const [body, setBody] = useState(() => initialBody ?? fromPlainText('', 'blocks'));
   const bodyRef = useRef(body);
   const [bodyCanSend, setBodyCanSend] = useState(() => hasDocumentContent(body));
   const editorHost = useRef<HTMLDivElement>(null);
@@ -252,9 +331,16 @@ export function PostComposer<T>({
   const idempotencyRef = useRef(initialKey);
   idempotencyRef.current = idempotencyKey;
   const [failure, setFailure] = useState<WriteFailure | null>(null);
-  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
-  const [pendingUploads, setPendingUploads] = useState(0);
-  const pendingRef = useRef(0);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(() =>
+    initialBody && imageSources(initialBody).length > replyImageLimit ? m.thread_image_limit() : null,
+  );
+  const [pendingUploads, setPendingUploads] = useState(initialForeignSources.length);
+  const pendingRef = useRef(initialForeignSources.length);
+  const editorPendingRef = useRef(0);
+  const foreignPendingRef = useRef(initialForeignSources.length);
+  const ownedMediaIds = useRef(new Set<string>());
+  const reuploading = useRef(new Set(initialForeignSources));
+  const initialUploadsStarted = useRef(false);
   const refusalRef = useRef<UploadRefusal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const ready = canSubmit && bodyCanSend && (!titleRequired || Boolean(title.trim()));
@@ -263,11 +349,13 @@ export function PostComposer<T>({
       ? async (file: File, signal: AbortSignal) => {
           refusalRef.current = null;
           try {
-            return await uploadReplyImage(
+            const uploaded = await uploadReplyImage(
               containerId ?? { newThread: { boardId: boardId!, idempotencyKey: idempotencyRef.current } },
               file,
               signal,
             );
+            ownedMediaIds.current.add(uploaded.src);
+            return uploaded;
           } catch (error) {
             if (error instanceof UploadRefusal) refusalRef.current = error;
             throw error;
@@ -279,6 +367,14 @@ export function PostComposer<T>({
     if (!containerId) return;
     document.cookie = 'rezics_draft_key=; Path=/; Max-Age=0; SameSite=Lax';
   }, [containerId]);
+  useEffect(() => {
+    if (initialUploadsStarted.current) return;
+    initialUploadsStarted.current = true;
+    for (const source of initialForeignSources) {
+      const id = siteMediaId(source);
+      if (id) startForeignImageUpload(source, id);
+    }
+  }, [initialForeignSources]);
   useEffect(() => {
     const host = editorHost.current;
     if (!host) return;
@@ -296,6 +392,69 @@ export function PostComposer<T>({
     bodyRef.current = next;
     setBody(next);
     setBodyCanSend(hasDocumentContent(next));
+    queueForeignImages(next);
+  }
+
+  function updatePending() {
+    const count = editorPendingRef.current + foreignPendingRef.current;
+    pendingRef.current = count;
+    setPendingUploads(count);
+  }
+
+  function queueForeignImages(snapshot: DocumentSnapshot) {
+    const sources = imageSources(snapshot);
+    if (sources.length > replyImageLimit) setUploadNotice(m.thread_image_limit());
+    for (const source of sources.slice(0, replyImageLimit)) {
+      const id = siteMediaId(source);
+      if (!id || ownedMediaIds.current.has(source) || ownedMediaIds.current.has(id) || reuploading.current.has(source))
+        continue;
+      reuploading.current.add(source);
+      foreignPendingRef.current++;
+      updatePending();
+      startForeignImageUpload(source, id);
+    }
+  }
+
+  function startForeignImageUpload(source: string, id: string) {
+    void (async () => {
+      try {
+        const uploaded = await uploadExistingSiteImage(
+          id,
+          containerId ?? { newThread: { boardId: boardId!, idempotencyKey: idempotencyRef.current } },
+          new AbortController().signal,
+        );
+        ownedMediaIds.current.add(uploaded.src);
+        const next = replaceImageSource(bodyRef.current, source, uploaded.src);
+        bodyRef.current = next;
+        setBody(next);
+        setBodyCanSend(hasDocumentContent(next));
+        setFailure((current) =>
+          current && 'media' in current
+            ? { ...current, media: current.media?.filter((item) => item.id !== source && item.id !== id) }
+            : current,
+        );
+      } catch {
+        setFailure((current) => ({
+          ok: false,
+          reason: 'media-unavailable',
+          media: [
+            ...(current && 'media' in current
+              ? (current.media ?? []).filter((item) => item.id !== source && item.id !== id)
+              : []),
+            { id: source, state: 'rejected' },
+          ],
+        }));
+      } finally {
+        reuploading.current.delete(source);
+        foreignPendingRef.current--;
+        updatePending();
+      }
+    })();
+  }
+
+  function uploadAgain(id: string) {
+    const source = imageSources(bodyRef.current).find((item) => item === id || siteMediaId(item) === id);
+    if (source) queueForeignImages(replaceImageSource(bodyRef.current, source, source));
   }
 
   function removeIssueImage(id: string) {
@@ -321,8 +480,8 @@ export function PostComposer<T>({
   }
 
   function handleUploadState(state: UploadState, count: number) {
-    pendingRef.current = count;
-    setPendingUploads(count);
+    editorPendingRef.current = count;
+    updatePending();
     if (state === 'pending') setUploadNotice(null);
     if (state === 'failed') setUploadNotice(uploadRefusalText(refusalRef.current ?? new UploadRefusal('unavailable')));
   }
@@ -336,12 +495,18 @@ export function PostComposer<T>({
       setUploadNotice(m.thread_image_limit());
       return;
     }
+    const mediaIds = mediaIdsFromSources(sources);
     setSubmitting(true);
     setFailure(null);
     try {
-      const result = await onSubmit({ title, body: bodyRef.current, idempotencyKey, mediaIds: sources });
+      const result = await onSubmit({ title, body: bodyRef.current, idempotencyKey, mediaIds });
       if (!result.ok) {
-        setFailure(result);
+        setFailure({
+          ...result,
+          ...('media' in result && result.media
+            ? { media: mediaAfterRefusal(result.media, bodyRef.current, ownedMediaIds.current) }
+            : {}),
+        });
         return;
       }
       setTitle('');
@@ -421,6 +586,11 @@ export function PostComposer<T>({
           />
         </div>
       </div>
+      {foreignPendingRef.current > 0 ? (
+        <p className="text-sm text-muted-foreground" role="status" aria-label={m.editor_uploading()}>
+          {m.editor_uploading()}
+        </p>
+      ) : null}
       {failure ? (
         <div className="mt-5 space-y-3" role="alert">
           {failure.existingReviewId ? (
@@ -439,7 +609,7 @@ export function PostComposer<T>({
               <Button type="button" variant="outline" disabled={submitting} onClick={() => void submit()}>
                 {m.thread_write_retry()}
               </Button>
-              {mediaIssueList(failure.media, bodyRef.current, () => void submit(), removeIssueImage)}
+              {mediaIssueList(failure.media, bodyRef.current, () => void submit(), uploadAgain, removeIssueImage)}
             </>
           )}
         </div>
@@ -478,6 +648,7 @@ export function postEditFailureText(failure: EditFailure): string {
 
 export function InlinePostEditor({
   initialBody,
+  initialMediaIds = [],
   revisionId: initialRevisionId,
   idempotencyKey,
   containerId,
@@ -486,6 +657,7 @@ export function InlinePostEditor({
   onSuccess,
 }: {
   initialBody: DocumentSnapshot;
+  initialMediaIds?: readonly string[];
   revisionId: string;
   idempotencyKey: string;
   containerId: string;
@@ -508,12 +680,70 @@ export function InlinePostEditor({
   const [submitting, setSubmitting] = useState(false);
   const [pendingUploads, setPendingUploads] = useState(0);
   const pendingRef = useRef(0);
+  const editorPendingRef = useRef(0);
+  const foreignPendingRef = useRef(0);
+  const ownedMediaIds = useRef(new Set(initialMediaIds));
+  const reuploading = useRef(new Set<string>());
   const refusalRef = useRef<UploadRefusal | null>(null);
   const ready = hasDocumentContent(body);
 
   function updateBody(next: DocumentSnapshot) {
     bodyRef.current = next;
     setBody(next);
+    queueForeignImages(next);
+  }
+
+  function updatePending() {
+    const count = editorPendingRef.current + foreignPendingRef.current;
+    pendingRef.current = count;
+    setPendingUploads(count);
+  }
+
+  function queueForeignImages(snapshot: DocumentSnapshot) {
+    const sources = imageSources(snapshot);
+    if (sources.length > replyImageLimit) setUploadNotice(m.editor_image_limit());
+    for (const source of sources.slice(0, replyImageLimit)) {
+      const id = siteMediaId(source);
+      if (!id || ownedMediaIds.current.has(source) || ownedMediaIds.current.has(id) || reuploading.current.has(source))
+        continue;
+      reuploading.current.add(source);
+      foreignPendingRef.current++;
+      updatePending();
+      void (async () => {
+        try {
+          const uploaded = await uploadExistingSiteImage(id, containerId, new AbortController().signal);
+          ownedMediaIds.current.add(uploaded.src);
+          const next = replaceImageSource(bodyRef.current, source, uploaded.src);
+          bodyRef.current = next;
+          setBody(next);
+          setFailure((current) =>
+            current && 'media' in current
+              ? { ...current, media: current.media?.filter((item) => item.id !== source && item.id !== id) }
+              : current,
+          );
+        } catch {
+          setFailure((current) => ({
+            ok: false,
+            reason: 'media-unavailable',
+            media: [
+              ...(current && 'media' in current
+                ? (current.media ?? []).filter((item) => item.id !== source && item.id !== id)
+                : []),
+              { id: source, state: 'rejected' },
+            ],
+          }));
+        } finally {
+          reuploading.current.delete(source);
+          foreignPendingRef.current--;
+          updatePending();
+        }
+      })();
+    }
+  }
+
+  function uploadAgain(id: string) {
+    const source = imageSources(bodyRef.current).find((item) => item === id || siteMediaId(item) === id);
+    if (source) queueForeignImages(replaceImageSource(bodyRef.current, source, source));
   }
 
   function removeIssueImage(id: string) {
@@ -538,17 +768,23 @@ export function InlinePostEditor({
   async function submit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (pendingRef.current > 0 || !hasDocumentContent(bodyRef.current) || submitting) return;
-    const mediaIds = imageSources(bodyRef.current);
-    if (mediaIds.length > replyImageLimit) {
+    const sources = imageSources(bodyRef.current);
+    if (sources.length > replyImageLimit) {
       setUploadNotice(m.editor_image_limit());
       return;
     }
+    const mediaIds = mediaIdsFromSources(sources);
     setSubmitting(true);
     setFailure(null);
     try {
       const result = await onSubmit({ body: bodyRef.current, revisionId, idempotencyKey, mediaIds });
       if (!result.ok) {
-        setFailure(result);
+        setFailure({
+          ...result,
+          ...('media' in result && result.media
+            ? { media: mediaAfterRefusal(result.media, bodyRef.current, ownedMediaIds.current) }
+            : {}),
+        });
         return;
       }
       onSuccess(result.post);
@@ -568,6 +804,7 @@ export function InlinePostEditor({
     }
     bodyRef.current = current.body;
     setBody(current.body);
+    ownedMediaIds.current = new Set(current.mediaIds);
     setRevisionId(current.revisionId);
     setFailure(null);
   }
@@ -575,7 +812,9 @@ export function InlinePostEditor({
   const upload = async (file: File, signal: AbortSignal) => {
     refusalRef.current = null;
     try {
-      return await uploadReplyImage(containerId, file, signal);
+      const uploaded = await uploadReplyImage(containerId, file, signal);
+      ownedMediaIds.current.add(uploaded.src);
+      return uploaded;
     } catch (error) {
       if (error instanceof UploadRefusal) refusalRef.current = error;
       throw error;
@@ -583,8 +822,8 @@ export function InlinePostEditor({
   };
 
   function handleUploadState(state: UploadState, count: number) {
-    pendingRef.current = count;
-    setPendingUploads(count);
+    editorPendingRef.current = count;
+    updatePending();
     if (state === 'pending') setUploadNotice(null);
     if (state === 'failed') setUploadNotice(uploadRefusalText(refusalRef.current ?? new UploadRefusal('unavailable')));
   }
@@ -606,6 +845,11 @@ export function InlinePostEditor({
         }
       }}
     >
+      {foreignPendingRef.current > 0 ? (
+        <p className="text-sm text-muted-foreground" role="status" aria-label={m.editor_uploading()}>
+          {m.editor_uploading()}
+        </p>
+      ) : null}
       <form className="space-y-4" onSubmit={submit}>
         <p className="text-sm font-medium">{m.thread_reply_body_label()}</p>
         {submitting ? (
@@ -634,6 +878,7 @@ export function InlinePostEditor({
               'media' in failure ? failure.media : undefined,
               bodyRef.current,
               () => void submit(),
+              uploadAgain,
               removeIssueImage,
             )}
             {failure.reason === 'stale' && failure.currentPost ? (

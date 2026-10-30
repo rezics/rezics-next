@@ -2,7 +2,7 @@ import type { KernelClient } from '@rezics/client';
 
 export type DraftMediaState = {
   id: string;
-  state: 'reserved' | 'uploaded' | 'available' | 'rejected' | 'erased' | 'missing' | 'unavailable';
+  state: 'reserved' | 'uploaded' | 'available' | 'rejected' | 'erased' | 'missing' | 'unavailable' | 'used';
 };
 
 /** Read each attached image once, server-side, after a media claim refusal. */

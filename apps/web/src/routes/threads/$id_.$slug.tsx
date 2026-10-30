@@ -453,6 +453,7 @@ function PostSlot({
       {editing ? (
         <InlinePostEditor
           initialBody={post.body}
+          initialMediaIds={post.mediaIds}
           revisionId={post.revisionId}
           idempotencyKey={editKey}
           containerId={post.threadId}

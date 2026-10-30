@@ -660,6 +660,8 @@
   "thread_media_status": "画像の状態",
   "thread_media_processing": "この画像は処理中です。",
   "thread_media_unusable": "この画像はもう使用できません。",
+  "thread_media_upload_again": "もう一度アップロード",
+  "thread_media_used": "この画像は別の投稿ですでに使用されています。",
   "thread_media_remove": "画像を削除",
   "settings_sections_label": "設定のセクション",
   "settings_privacy_heading": "プライバシー",

@@ -661,6 +661,8 @@
   "thread_media_status": "图片状态",
   "thread_media_processing": "这张图片仍在处理中。",
   "thread_media_unusable": "这张图片已无法使用。",
+  "thread_media_upload_again": "重新上传",
+  "thread_media_used": "这张图片已在另一篇帖子中使用。",
   "thread_media_remove": "移除图片",
   "settings_sections_label": "设置分区",
   "settings_privacy_heading": "隐私",
