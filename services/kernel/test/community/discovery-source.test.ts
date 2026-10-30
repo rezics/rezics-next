@@ -7,7 +7,7 @@ import { principalCommandIdentity, runCommand } from '../../src/command/command.
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { softDeletePost } from '../../src/content/erase-post.ts';
 import { resolveAppeal } from '../../src/content/appeals.ts';
-import { readRealmDiscoveryGate } from '../../src/community/discovery-source.ts';
+import { projectDiscoveryStart, readRealmDiscoveryGate } from '../../src/community/discovery-source.ts';
 import {
   prepareDiscoveryMutation,
   abortDiscoveryMutation,
@@ -214,6 +214,12 @@ test('a terminal source CAS excludes late application, retries retain their own 
   expect((await source(target.threadId))!.contributing).toBe(false);
   await f.command('POST', `/v1/posts/${target.postId}:restore`, undefined, { expectedStatus: 204 });
   expect(await source(target.threadId)).toEqual({ ...original, sourceVersion: '3' });
+  // A delayed original delta assigns the actual current source, then becomes a
+  // true no-op on replay instead of advancing the Realm generation again.
+  await projectDiscoveryStart(deps.pool, { ...original, change: 1 });
+  const projected = await readRealmDiscoveryGate(deps.pool, target.realmId);
+  await projectDiscoveryStart(deps.pool, { ...original, change: 1 });
+  expect(await readRealmDiscoveryGate(deps.pool, target.realmId)).toEqual(projected);
 }, 120_000);
 
 test('appeal reversal prepares its Realm fence outside the target transaction and preserves independent review before receipts', async () => {
