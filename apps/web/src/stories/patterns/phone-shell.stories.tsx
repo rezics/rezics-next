@@ -51,13 +51,15 @@ const readyRealms = fn<SearchRealmDiscoveryLoader>(async ({ cursor }) => ({
   kind: 'ready',
   realms:
     cursor === undefined
-      ? [{
-          realmId: realmRecording.realm.realmId,
-          spaceId: realmRecording.realm.spaceId,
-          name: realmRecording.realm.title,
-          description: realmRecording.realm.summary ?? '',
-          avatar: null,
-        }]
+      ? [
+          {
+            realmId: realmRecording.realm.realmId,
+            spaceId: realmRecording.realm.spaceId,
+            name: realmRecording.realm.title,
+            description: realmRecording.realm.summary ?? '',
+            avatar: null,
+          },
+        ]
       : [],
   next: cursor === undefined ? nextRealmPage : cursor === nextRealmPage ? sparseRealmPage : null,
 }));
@@ -249,14 +251,20 @@ export const SearchTrending: Story = {
     await userEvent.click(within(region).getByRole('button'));
     await waitFor(() => expect(readyRealms).toHaveBeenCalledTimes(2));
     await expect(readyRealms).toHaveBeenLastCalledWith({
-      locale: getLocale(), sort: 'trending', cursor: nextRealmPage, limit: 20,
+      locale: getLocale(),
+      sort: 'trending',
+      cursor: nextRealmPage,
+      limit: 20,
     });
     await realmState(context, 'ready');
     await expect(within(region).queryByRole('link')).toBeNull();
     await userEvent.click(within(region).getByRole('button'));
     await waitFor(() => expect(readyRealms).toHaveBeenCalledTimes(3));
     await expect(readyRealms).toHaveBeenLastCalledWith({
-      locale: getLocale(), sort: 'trending', cursor: sparseRealmPage, limit: 20,
+      locale: getLocale(),
+      sort: 'trending',
+      cursor: sparseRealmPage,
+      limit: 20,
     });
     await realmState(context, 'ready');
     await expect(within(region).queryByRole('button')).toBeNull();

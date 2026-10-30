@@ -369,7 +369,9 @@ test('the existing global empty-query phone search surface composes the sole nat
   const page = createSearchRealmDiscoveryPage(load, 'zh-Hans', (state) => states.push(state));
   // Constructing the controller or rendering the rest shell does not read discovery.
   expect(requests).toEqual([]);
-  expect(present(initialHeaderSearchState(), { loadRealmDiscovery: load })).not.toContain('data-search-realm-discovery');
+  expect(present(initialHeaderSearchState(), { loadRealmDiscovery: load })).not.toContain(
+    'data-search-realm-discovery',
+  );
   const expanded = reduceHeaderSearchState(initialHeaderSearchState(), { type: 'open-phone' });
   const markup = present(expanded, {
     loadRealmDiscovery: load,
@@ -377,7 +379,7 @@ test('the existing global empty-query phone search surface composes the sole nat
     discovery: { popularRealms: [{ id: 'legacy', name: 'Legacy card', description: '', href: '/invented' }] },
   });
   expect(inputCount(markup)).toBe(1);
-  expect((markup.match(/data-search-realm-discovery/g) ?? [])).toHaveLength(1);
+  expect(markup.match(/data-search-realm-discovery/g) ?? []).toHaveLength(1);
   expect(markup).toContain(m.header_search_recent());
   expect(markup).toContain(m.header_search_history());
   expect(markup).toContain(m.header_search_trending_searches());
@@ -390,7 +392,8 @@ test('the existing global empty-query phone search surface composes the sole nat
     reduceHeaderSearchState(expanded, { type: 'escape' }),
     reduceHeaderSearchState(expanded, { type: 'query', query: 'Prince' }),
     reduceHeaderSearchState(expanded, { type: 'sync-scope', scope }),
-  ]) expect(present(hidden, { loadRealmDiscovery: load })).not.toContain('data-search-realm-discovery');
+  ])
+    expect(present(hidden, { loadRealmDiscovery: load })).not.toContain('data-search-realm-discovery');
   expect(present(expanded)).toContain('method="get" action="/en/search"');
 
   const first = page.start();
@@ -461,7 +464,11 @@ test('Realm discovery disposal fences late success and failure across dismissal,
     }
   }
   const closed: State[] = [];
-  const page = createSearchRealmDiscoveryPage(async () => ({ kind: 'closed' }), 'en', (state) => closed.push(state));
+  const page = createSearchRealmDiscoveryPage(
+    async () => ({ kind: 'closed' }),
+    'en',
+    (state) => closed.push(state),
+  );
   await page.start();
   void page.retry();
   expect(closed).toEqual([{ kind: 'loading' }, { kind: 'closed' }]);
