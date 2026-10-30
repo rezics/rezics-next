@@ -534,9 +534,16 @@ CREATE TABLE library.collection_member (
     ordinal_key text NOT NULL COLLATE pg_catalog."C",
     added_at timestamp with time zone NOT NULL,
     transaction_id uuid NOT NULL,
+    member_revision bigint DEFAULT 1 NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    deletion_id uuid,
+    deletion_revision bigint,
+    deleted_at timestamp with time zone,
+    purge_after timestamp with time zone,
     CONSTRAINT collection_member_check CHECK ((route = ((get_byte(uuid_send(collection_id), 10) * 256) + get_byte(uuid_send(collection_id), 11)))),
     CONSTRAINT collection_member_check1 CHECK ((route = ((get_byte(uuid_send(member_id), 10) * 256) + get_byte(uuid_send(member_id), 11)))),
     CONSTRAINT collection_member_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
+    CONSTRAINT collection_member_retention_check CHECK ((((deletion_id IS NULL) AND (deletion_revision IS NULL) AND (deleted_at IS NULL) AND (purge_after IS NULL)) OR ((deletion_id IS NOT NULL) AND (deletion_revision IS NOT NULL) AND (deleted_at IS NOT NULL) AND (purge_after IS NOT NULL)))),
     CONSTRAINT collection_member_ordinal_key_check CHECK (((char_length(ordinal_key) >= 1) AND (char_length(ordinal_key) <= 48))),
     CONSTRAINT collection_member_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
@@ -1397,11 +1404,10 @@ ALTER TABLE ONLY library.collection_listing_history
 
 
 --
--- Name: collection_member collection_member_ordinal_key; Type: CONSTRAINT; Schema: library; Owner: -
+-- Name: collection_member_live_ordinal; Type: INDEX; Schema: library; Owner: -
 --
 
-ALTER TABLE ONLY library.collection_member
-    ADD CONSTRAINT collection_member_ordinal_key UNIQUE (route, collection_id, ordinal_key) DEFERRABLE;
+CREATE UNIQUE INDEX collection_member_live_ordinal ON library.collection_member USING btree (route, collection_id, ordinal_key) WHERE (deletion_id IS NULL);
 
 
 --
@@ -1828,6 +1834,16 @@ CREATE INDEX collection_deletion_pending_legacy ON library.collection USING btre
 --
 
 CREATE INDEX collection_member_subject ON library.collection_member USING btree (route, collection_id, subject_id, member_id);
+
+-- Name: collection_member_live_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_live_subject ON library.collection_member USING btree (route, collection_id, subject_id, member_id) WHERE (deletion_id IS NULL);
+
+-- Name: collection_member_retention_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_retention_due ON library.collection_member USING btree (partition_no, purge_after, route, collection_id, member_id) WHERE ((deletion_id IS NOT NULL) AND (purge_after IS NOT NULL));
 
 
 --

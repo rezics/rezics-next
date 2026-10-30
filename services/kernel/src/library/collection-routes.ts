@@ -366,17 +366,39 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       {
         params: memberParams,
         headers,
+        query: t.Object({ revision }, closed),
         response: { 204: t.Void(), ...failures },
         detail: detail('collection_member.delete', 'collection:update'),
       },
-      async ({ params, headers, actor, admission, job, session, set }) => {
+      async ({ params, query, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          mapped(() => write().removeMember(actor, params.collectionId, params.memberId, key)),
+          mapped(() => write().removeMember(actor, params.collectionId, params.memberId, query.revision, key)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        set.headers['Library-Collection-Member-Deletion-Id'] = result.value.deletionId;
+        set.headers['Library-Collection-Member-Deletion-Revision'] = String(result.value.revision);
         set.status = 204;
+      },
+    )
+    .post(
+      '/v1/collections/:collectionId/members/:memberId:restore',
+      {
+        params: memberParams,
+        headers,
+        body: strict(t.Object({ deletionId: id, revision }, closed)),
+        response: { 200: memberResponse, ...failures },
+        detail: detail('collection_member.restore', 'collection:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().restoreMember(actor, params.collectionId, params.memberId, body, key)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { member: memberView(result.value) };
       },
     )
     .post(

@@ -36,6 +36,9 @@ export const PROBLEMS = {
   published_log_restore_occupied: { status: 409, title: 'Published Log Restore Occupied', retryable: false },
   published_log_restore_expired: { status: 409, title: 'Published Log Restore Expired', retryable: false },
   collection_full: { status: 409, title: 'Collection Full', retryable: false },
+  member_restore_stale: { status: 409, title: 'Collection Member Restore Stale', retryable: false },
+  member_restore_occupied: { status: 409, title: 'Collection Member Placement Occupied', retryable: false },
+  member_restore_expired: { status: 409, title: 'Collection Member Restore Expired', retryable: false },
   library_entry_restore_occupied: {
     status: 409,
     title: 'Library Entry Restore Occupied',

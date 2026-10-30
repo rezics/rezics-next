@@ -13,7 +13,7 @@ WITH input AS NOT MATERIALIZED (
 SELECT CASE WHEN currently_public THEN
          (SELECT count(*)::integer FROM library.collection_member AS member
           WHERE member.route = truth.route AND member.collection_id = truth.collection_id
-            AND member.subject_id = truth.subject_id)
+            AND member.subject_id = truth.subject_id AND member.deletion_id IS NULL)
        ELSE 0 END AS multiplicity,
        currently_public AS "currentlyPublic",
        coalesce(ever_public OR currently_public, false) AS "everPublic"

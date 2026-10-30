@@ -41,6 +41,8 @@ import {
   memberNeighbors,
   moveMember as moveMemberRow,
   readCollection,
+  readMemberDeletion,
+  restoreMember as restoreMemberRow,
   respaceMembers,
   tombstoneCollection,
   updateCollection as updateCollectionRow,
@@ -260,6 +262,7 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
     moveMember,
     updateMemberNote,
     removeMember,
+    restoreMember,
   };
 
   async function createCollection(
@@ -588,21 +591,83 @@ export function createCollectionCommands(config: { pool: Pool; access: Access; c
     actor: Actor,
     collectionId: string,
     memberId: string,
-    requestKey: string,
-  ): Promise<CommandOutcome<CollectionMember>> {
+    revisionOrKey: number | string,
+    maybeRequestKey?: string,
+  ): Promise<CommandOutcome<CollectionMember & { deletionId: string; revision: number }>> {
     collectionRoute(memberId);
     const route = collectionRoute(collectionId);
+    const requestKey = typeof revisionOrKey === 'string' ? revisionOrKey : maybeRequestKey;
+    if (!requestKey) throw invalid();
+    const expectedRevision = typeof revisionOrKey === 'number'
+      ? revisionOf(revisionOrKey)
+      : (await readCollection(pool, route, collectionId))?.revision;
+    if (!expectedRevision) throw notFound();
+    const deletionId = newId(route);
     return mutate(
       actor,
       collectionId,
       'collection:update',
       'library.collection.member.remove',
       requestKey,
-      { collectionId, memberId },
+      { collectionId, memberId, revision: expectedRevision },
+      async (tx, command) => {
+        const current = await activeCollection(tx, route, collectionId);
+        if (current.revision !== expectedRevision) throw new ProblemError('conflict');
+        const value = await deleteMemberRow(tx, route, collectionId, memberId, expectedRevision, deletionId, command);
+        if (!value) throw new ProblemError('conflict');
+        return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
+      },
+    );
+  }
+
+  async function restoreMember(
+    actor: Actor,
+    collectionId: string,
+    memberId: string,
+    deletion: { deletionId: string; revision: number },
+    requestKey: string,
+  ): Promise<CommandOutcome<CollectionMember>> {
+    collectionRoute(memberId);
+    const route = collectionRoute(collectionId);
+    if (typeof deletion?.deletionId !== 'string') throw invalid();
+    const expectedRevision = revisionOf(deletion.revision);
+    return mutate(
+      actor,
+      collectionId,
+      'collection:update',
+      'library.collection.member.restore',
+      requestKey,
+      { collectionId, memberId, deletionId: deletion.deletionId, revision: expectedRevision },
       async (tx, command) => {
         await activeCollection(tx, route, collectionId);
-        const value = await deleteMemberRow(tx, route, collectionId, memberId, command);
-        if (!value) throw notFound();
+        const saved = await readMemberDeletion(tx, route, collectionId, memberId);
+        if (!saved || saved.deletionId !== deletion.deletionId) throw notFound();
+        if (saved.deletionRevision !== expectedRevision) throw new ProblemError('member_restore_stale');
+        if (!saved.purgeAfter || Date.parse(saved.purgeAfter) <= Date.parse(command.time))
+          throw new ProblemError('member_restore_expired');
+        const collision = await tx.query(
+          `SELECT 1 FROM library.collection_member
+            WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND ordinal_key=$3 AND member_id<>$4 LIMIT 1`,
+          [route, collectionId, saved.ordinalKey, memberId],
+        );
+        if (collision.rows.length) throw new ProblemError('member_restore_occupied');
+        const subject = await resolveSubject(
+          { pool, access, ...(clock ? { clock } : {}) },
+          accountActor(actor),
+          saved.subjectId,
+        );
+        if (!subject || (subject.subjectId !== saved.subjectId && subject.requestedSubjectId !== saved.subjectId))
+          throw notFound();
+        const value = await restoreMemberRow(
+          tx,
+          route,
+          collectionId,
+          memberId,
+          deletion.deletionId,
+          expectedRevision,
+          command,
+        );
+        if (!value) throw new ProblemError('member_restore_stale');
         return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
       },
     );

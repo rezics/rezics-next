@@ -24,6 +24,8 @@ import memberNeighborsSql from './collection-store-collection-member-neighbors.s
 import memberNote from './collection-store-collection-member-note.sql';
 import memberMove from './collection-store-collection-member-move.sql';
 import memberDelete from './collection-store-collection-member-delete.sql';
+import memberRestore from './collection-store-collection-member-restore.sql';
+import memberRetentionRead from './collection-store-collection-member-retention-read.sql';
 import membersList from './collection-store-collection-members-list.sql';
 import membersRespace from './collection-store-collection-members-respace.sql';
 
@@ -268,15 +270,48 @@ export async function deleteMember(
   route: number,
   collectionId: string,
   memberId: string,
+  expectedRevision: number,
+  deletionId: string,
   context: WriteContext,
-): Promise<CollectionMember | null> {
+): Promise<(CollectionMember & { deletionId: string; revision: number }) | null> {
   const rows = await memberDelete.run(queryClient(client), {
     route,
     collection_id: collectionId,
     member_id: memberId,
+    expected_revision: expectedRevision,
+    deletion_id: deletionId,
     ...write(context),
   });
   const row = rows[0];
+  return row ? { ...asMember(row), deletionId: row.deletionId, revision: row.revision } : null;
+}
+
+export async function readMemberDeletion(
+  client: Client,
+  route: number,
+  collectionId: string,
+  memberId: string,
+) {
+  return memberRetentionRead.run(queryClient(client), { route, collection_id: collectionId, member_id: memberId });
+}
+
+export async function restoreMember(
+  client: Client,
+  route: number,
+  collectionId: string,
+  memberId: string,
+  deletionId: string,
+  expectedRevision: number,
+  context: WriteContext,
+): Promise<CollectionMember | null> {
+  const [row] = await memberRestore.run(queryClient(client), {
+    route,
+    collection_id: collectionId,
+    member_id: memberId,
+    deletion_id: deletionId,
+    expected_revision: expectedRevision,
+    ...write(context),
+  });
   return row ? asMember(row) : null;
 }
 
