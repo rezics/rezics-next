@@ -225,6 +225,8 @@ function viewOf(collection: Collection): CollectionView {
     visibility: collection.visibility,
     revision: collection.revision,
     memberCount: collection.memberCount,
+    membershipKind: 'curated',
+    orderEpoch: collection.orderEpoch,
     createdAt: collection.createdAt,
     updatedAt: collection.updatedAt,
   };
@@ -369,7 +371,7 @@ test('a curator lists every active Collection and everyone else lists only publi
       expect(page.collections).toHaveLength(Math.min(1, expected.length - seen.length));
       for (const collection of page.collections) {
         expect(collection).toEqual(viewOf(expected[seen.length]!));
-        expect(Object.keys(collection)).not.toContain('orderEpoch');
+        expect(collection).toMatchObject({ membershipKind: 'curated', orderEpoch: expected[seen.length]!.orderEpoch });
         expect(Object.keys(collection)).not.toContain('state');
         seen.push(collection.id);
       }

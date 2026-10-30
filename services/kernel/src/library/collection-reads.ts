@@ -54,13 +54,15 @@ export type CollectionView = CollectionPresentation & {
 
 export type CuratedCollectionView = CollectionView & { membershipKind: 'curated'; orderEpoch: number };
 
-export type SavedDynamicCollectionView = Omit<CollectionView, 'membershipKind' | 'memberCount' | 'createdAt' | 'updatedAt'> & {
+export type SavedDynamicCollectionView = Omit<CollectionView, 'membershipKind' | 'memberCount' | 'orderEpoch' | 'createdAt' | 'updatedAt'> & {
   membershipKind: 'dynamic';
 };
-export type CollectionResourceView = CuratedCollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
+export type CollectionResourceView = CollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
 
 /** Check the required wire fields without expanding the older curated caller guarantee. */
-export function collectionReadView(value: CollectionView | SavedDynamicCollectionView | BuiltinCollectionView): CollectionResourceView {
+export function collectionReadView(
+  value: CollectionResourceView,
+): CuratedCollectionView | SavedDynamicCollectionView | BuiltinCollectionView {
   if ('membershipKind' in value && value.membershipKind === 'dynamic') return value;
   if (
     value.membershipKind !== 'curated' || typeof value.orderEpoch !== 'number' ||

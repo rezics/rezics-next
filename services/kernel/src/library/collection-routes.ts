@@ -86,6 +86,7 @@ const memberIds = t.Array(t.String(), { minItems: 1, maxItems: 100, uniqueItems:
 const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
 const {
   memberCount: _count,
+  orderEpoch: _order,
   createdAt: _created,
   updatedAt: _updated,
   ...dynamicMetadata

@@ -286,6 +286,8 @@ test('curator creates replays updates conflicts and deletes with only the contra
     visibility: 'private',
     revision: 1,
     memberCount: 0,
+    membershipKind: 'curated',
+    orderEpoch: 0,
     createdAt: expect.any(String),
     updatedAt: expect.any(String),
   });
