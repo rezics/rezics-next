@@ -6,7 +6,7 @@ import governance from './platform-governance.json';
 
 /** Trusted composition-root data, never request JSON. Organization owner/member
  * membership roles are unrelated to these resource-local grant role identifiers.
- * Arbitrary definitions must resolve entirely against mounted action metadata.
+ * Arbitrary definitions must resolve entirely against supported action metadata.
  * The reserved governance role is composed from explicit platform action data.
  */
 export type ResourceRoleCatalogue = Readonly<{
@@ -161,8 +161,8 @@ export function explainUnresolvedResourceType(
 export function assertDeclaredResourceTypes(
   app: Parameters<typeof actionCatalogue>[0],
   extension?: ResourceRoleCatalogue,
+  actions: ActionCatalogue = actionCatalogue(app),
 ): void {
-  const actions = actionCatalogue(app);
   const declared = new Set<string>();
   for (const metadata of actions.values()) {
     for (const type of metadata['x-resource-types'] ?? []) declared.add(type);

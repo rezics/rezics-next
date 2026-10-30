@@ -135,11 +135,11 @@ function declaration(route: MountedRoute): RouteDeclaration {
 
 const actionCatalogues = new WeakMap<object, ActionCatalogue>();
 
-/** Derives the configured action set from the routes mounted on an application. */
-export function actionCatalogue(app: RouteApp): ActionCatalogue {
+/** Composes mounted routes with trusted native declarations, checking their agreement. */
+export function actionCatalogue(app: RouteApp, nativeActions?: ActionCatalogue): ActionCatalogue {
   const mounted = mountedCatalogues.get(app);
-  if (mounted) return actionCatalogue(mounted);
-  const cached = actionCatalogues.get(app);
+  if (mounted) return actionCatalogue(mounted, nativeActions);
+  const cached = nativeActions === undefined ? actionCatalogues.get(app) : undefined;
   if (cached) return cached;
   const catalogue = new Map<
     string,
@@ -149,7 +149,7 @@ export function actionCatalogue(app: RouteApp): ActionCatalogue {
       authority?: 'own-account';
       'x-resource-types'?: readonly string[];
     }
-  >();
+  >(nativeActions);
   for (const route of app.routes) {
     const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : {};
     if (detail.hide === true) continue;
@@ -171,7 +171,7 @@ export function actionCatalogue(app: RouteApp): ActionCatalogue {
     });
   }
   // Unsealed applications may still mount routes. Cache only the final snapshot.
-  if (app instanceof MountedRouteCatalogue) actionCatalogues.set(app, catalogue);
+  if (app instanceof MountedRouteCatalogue && nativeActions === undefined) actionCatalogues.set(app, catalogue);
   return catalogue;
 }
 

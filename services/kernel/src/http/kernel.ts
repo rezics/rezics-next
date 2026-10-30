@@ -1,4 +1,5 @@
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
+import { NATIVE_CONTAINER_ACTIONS } from '../community/actions.ts';
 import { assertReceiptKeyRing, configureReceiptKeys, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
 import { zoneRoutes } from '../zones/http.ts';
@@ -275,13 +276,13 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const receiptKeys = readReceiptKeyRing(process.env, dependencies.receiptKeys);
   assertReceiptKeyRing(receiptKeys, tokens);
   configureReceiptKeys(dependencies.pool, receiptKeys);
-  let compositionFinished = false;
+  let composedActions: AccessConfig['actions'] | undefined;
   const accessFactory = typeof dependencies.access === 'function' ? dependencies.access : createAccess;
   const { resolveAccess, realmRoleReader } = createKernelAccessResolver({
     pool: dependencies.pool,
     tokens,
     clock,
-    composedActions: () => (compositionFinished ? actionCatalogue(zones) : undefined),
+    composedActions: () => composedActions,
     access:
       typeof dependencies.access === 'object'
         ? dependencies.access
@@ -544,14 +545,15 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  const consentedScopeCount = accessActionCatalogue(actionCatalogue(zones)).size;
+  const actions = actionCatalogue(zones, NATIVE_CONTAINER_ACTIONS);
+  const consentedScopeCount = accessActionCatalogue(actions).size;
   if (consentedScopeCount > MAX_CONSENTED_SCOPES)
     throw new Error(
       `Kernel action catalogue has ${consentedScopeCount} actions; consented scope bound is ${MAX_CONSENTED_SCOPES}`,
     );
-  compositionFinished = true;
-  assertInternalActionDeclarations(actionCatalogue(zones));
-  assertDeclaredResourceTypes(zones, dependencies.resourceRoles);
+  composedActions = actions;
+  assertInternalActionDeclarations(actions);
+  assertDeclaredResourceTypes(zones, dependencies.resourceRoles, actions);
   return zones as Kernel;
 }
 

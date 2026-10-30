@@ -126,7 +126,10 @@ or Content's full delivery/sale proof; those remain producer acceptance obligati
 neither restore action. No Space moderator, administrator, management reach or generic restore authority is added.
 One restore action cannot authorize restoration of the other resource type.
 
-Content owns mounting the restore action metadata and protected native operations. Its local restore decision
+`community/actions.ts` exports the exact nonanonymous `NATIVE_CONTAINER_ACTIONS` restoration declarations.
+Kernel composes them with mounted metadata once, sharing that catalogue between Access and resource-type
+validation. Mounted declarations must agree on security and replay policy; unresolved role actions still fail
+construction. Content owns the protected native operations. Its local restore decision
 requires the current role/action and the exact native removal record: the original remover must still be authorized,
 or the caller must currently hold a higher installed role. Realm ordering is owner > moderator > member/standing;
 Space ordering is owner > standing. Equal rank is not higher. An exact Global restore grant permits platform
