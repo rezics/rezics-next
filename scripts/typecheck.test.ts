@@ -331,7 +331,9 @@ test('an explicit root DATABASE_URL reaches the selected compiler without provis
   const directory = mkdtempSync(join(repository, '.temp/compiler-explicit-url-'));
   try {
     const fixture = join(directory, 'run.ts');
-    writeFileSync(fixture, `
+    writeFileSync(
+      fixture,
+      `
 import assert from 'node:assert/strict';
 import { typecheck } from ${JSON.stringify(join(repository, 'scripts/typecheck.ts'))};
 let consumers = 0;
@@ -347,7 +349,8 @@ assert.equal(await typecheck({
   startDatabase: async () => { throw new Error('must not replace a developer database'); },
 }), 0);
 assert.ok(consumers > 0);
-`);
+`,
+    );
     const result = spawnSync(process.execPath, [fixture], {
       cwd: repository,
       encoding: 'utf8',

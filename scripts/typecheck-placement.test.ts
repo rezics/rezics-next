@@ -306,7 +306,9 @@ test('A compiler database remains reachable from the actual selected typecheck p
   const alive = join(directory, 'database-alive');
   const record = join(directory, 'consumers');
   const consumer = join(directory, 'consumer.ts');
-  writeFileSync(consumer, `
+  writeFileSync(
+    consumer,
+    `
 import { appendFileSync, existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
 assert.equal(existsSync(${JSON.stringify(alive)}), true);
@@ -314,14 +316,17 @@ assert.equal(process.env.DATABASE_URL, 'postgres://rezics:rezics@127.0.0.1:34646
 await Bun.sleep(20);
 assert.equal(existsSync(${JSON.stringify(alive)}), true);
 appendFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)) + '\\n');
-`);
+`,
+  );
   for (const executable of ['tsc', 'bun']) {
     const path = join(directory, executable);
     writeFileSync(path, `#!/bin/sh\nexec '${process.execPath}' '${consumer}' "$@"\n`);
     chmodSync(path, 0o755);
   }
   const fixture = join(directory, 'run.ts');
-  writeFileSync(fixture, `
+  writeFileSync(
+    fixture,
+    `
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
@@ -374,7 +379,8 @@ for (const args of starts) {
   assert.equal(args.includes('--tmpfs'), true);
   for (const flag of ['-v', '--volume', '--mount', '--user']) assert.equal(args.includes(flag), false);
 }
-`);
+`,
+  );
   for (const inherited of [false, true]) {
     const env = { ...process.env, PATH: `${directory}:${process.env.PATH}` };
     delete env.DATABASE_URL;
@@ -387,9 +393,16 @@ for (const args of starts) {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
   }
-  expect(readFileSync(record, 'utf8').trim().split('\n').map((line) => JSON.parse(line))).toEqual([
-    ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], ['run', 'construct'],
-    ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], ['run', 'construct'],
+  expect(
+    readFileSync(record, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line)),
+  ).toEqual([
+    ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+    ['run', 'construct'],
+    ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'],
+    ['run', 'construct'],
   ]);
 });
 
@@ -398,12 +411,15 @@ test('Compiler connection and SQL analysis failures keep their real diagnostics 
   const directory = mkdtempSync(join(repository, '.temp/compiler-diagnostics-'));
   temporaryDirectories.push(directory);
   const tsc = join(directory, 'tsc');
-  writeFileSync(tsc, `#!/bin/sh
+  writeFileSync(
+    tsc,
+    `#!/bin/sh
 test "$*" = '--noEmit --runExternalCode -p tsconfig.json' || exit 99
 printf '%s\\n' "$COMPILER_DIAGNOSTIC"
 printf '%s\\n' 'compiler stderr' >&2
 exit 23
-`);
+`,
+  );
   chmodSync(tsc, 0o755);
   const construct = join(directory, 'bun');
   writeFileSync(construct, '#!/bin/sh\nprintf "%s\\n" "unexpected construct" >&2\nexit 99\n');
@@ -429,4 +445,48 @@ exit 23
       expect(result.stderr).toBe('compiler stderr\n');
     }
   }
+});
+
+test('A worktree-writing compiler helper container preserves invoking user ownership or uses a disposable volume without writing root-owned files into the checkout', () => {
+  mkdirSync(join(repository, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(repository, '.temp/compiler-storage-'));
+  temporaryDirectories.push(directory);
+  const fixture = join(directory, 'run.ts');
+  writeFileSync(
+    fixture,
+    `
+import { mock } from 'bun:test';
+import assert from 'node:assert/strict';
+const commands = [];
+const migrations = [];
+mock.module('node:child_process', () => ({ spawnSync(program, args, options) {
+  assert.equal(program, 'docker');
+  assert.equal(options.timeout, 10_000);
+  commands.push(args);
+  return { status: 0, stdout: args[0] === 'run' ? 'owned-container' : '127.0.0.1:34646', stderr: '' };
+} }));
+mock.module(${JSON.stringify(join(repository, 'services/kernel/scripts/database.ts'))}, () => ({
+  POSTGRES_IMAGE: 'postgres:fixture', migrate(url) { migrations.push(['kernel', url]); },
+}));
+mock.module(${JSON.stringify(join(repository, 'services/auth/scripts/database.ts'))}, () => ({
+  migrate(url) { migrations.push(['auth', url]); },
+}));
+const { prepareCompilerDatabase } = await import(${JSON.stringify(join(repository, 'scripts/compiler-database.ts'))});
+const database = await prepareCompilerDatabase();
+const start = commands[0];
+// The server's writes are disposable and never reach a host-mounted checkout.
+assert.equal(start[start.indexOf('--tmpfs') + 1], '/var/lib/postgresql:rw,size=1g');
+for (const flag of ['-v', '--volume', '--mount', '--user']) assert.equal(start.includes(flag), false);
+assert.equal(start.includes('--rm'), true);
+assert.deepEqual(migrations, [['kernel', database.url], ['auth', database.url]]);
+await Promise.resolve();
+assert.equal(commands.length, 2);
+await database.remove();
+await database.remove();
+assert.deepEqual(commands.slice(2), [['rm', '-f', '-v', 'owned-container']]);
+`,
+  );
+  const result = spawnSync(process.execPath, [fixture], { cwd: repository, encoding: 'utf8', timeout: 10_000 });
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe('');
 });
