@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { readingFixture, type ReadingScenario } from '../../kernel/fake/settings-preferences-reading';
 import { ReadingCard } from '../../settings/reading-card';
 import { DisplayPreferences } from '../../settings/display-preferences';
@@ -144,16 +144,41 @@ export const Denied: Story = {
   },
 };
 export const ShellDisplayChoices: Story = {
-  render: () => <DisplayPreferences reload={() => {}} />,
-  play: async ({ canvasElement }) => {
-    const view = within(canvasElement);
-    const language = await view.findByRole('combobox', { name: m.shell_language() });
-    await expect(language).toHaveValue(getLocale());
-    await expect(within(language).getAllByRole('option')).toHaveLength(locales.length);
-    const theme = view.getByRole('combobox', { name: m.shell_theme() });
-    for (const value of ['system', 'dark', 'light']) {
-      await userEvent.selectOptions(theme, value);
+  render: () => <DisplayPreferences />,
+  play: async ({ canvasElement, globals }) => {
+    const view = within(await within(canvasElement).findByRole('region', { name: m.shell_appearance() }));
+    const menu = within(document.body);
+    const choiceRole =
+      window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
+        ? 'radio'
+        : 'menuitemradio';
+    const language = view.getByRole('button', { name: (name) => name.startsWith(m.shell_language()) });
+    const locale = getLocale();
+    const localeCookie = document.cookie.match(/(?:^|;\s*)rezics_locale=([^;]+)/)?.[1];
+    await userEvent.click(language);
+    await expect(await menu.findAllByRole(choiceRole)).toHaveLength(locales.length);
+    const currentLanguage = menu.getByRole(choiceRole, { checked: true });
+    await expect(language).toHaveTextContent(currentLanguage.textContent!.trim());
+    await userEvent.click(currentLanguage);
+    await waitFor(() => expect(language).toHaveFocus());
+    await expect(getLocale()).toBe(locale);
+    await expect(document.cookie.match(/(?:^|;\s*)rezics_locale=([^;]+)/)?.[1]).toBe(localeCookie);
+
+    const theme = view.getByRole('button', { name: m.shell_theme(), exact: true });
+    const labels = { system: m.shell_theme_system(), dark: m.shell_theme_dark(), light: m.shell_theme_light() };
+    const initialTheme = globals.theme === 'dark' ? 'dark' : 'light';
+    let currentTheme: keyof typeof labels = initialTheme;
+    for (const value of ['system', 'dark', 'light', initialTheme] as const) {
+      await userEvent.click(theme);
+      await expect(await menu.findAllByRole(choiceRole)).toHaveLength(3);
+      await expect(menu.getByRole(choiceRole, { name: labels[currentTheme], exact: true })).toBeChecked();
+      await userEvent.click(menu.getByRole(choiceRole, { name: labels[value], exact: true }));
+      await waitFor(() => expect(theme).toHaveFocus());
       await expect(document.cookie).toContain(`rezics_theme=${value}`);
+      const dark =
+        value === 'dark' || (value === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      await waitFor(() => expect(document.documentElement).toHaveClass(dark ? 'dark' : 'light'));
+      currentTheme = value;
     }
   },
 };

@@ -4,8 +4,10 @@ Audit date: 2026-10-30. Source baseline: `5827ec24a05f57299ea50343b540eb81bd849c
 This is a backend design audit, not native acceptance or an adopted replacement contract.
 [Scope](../scope.md) gives Performance no standalone product In row: the
 [Performance Goal](../goals/performance.md) supports every In owner. Search owns discovery,
-Commerce owns Library, Accounts owns authentication/Access, Semantic owns catalogue/Zone sources,
-and Web owns interfaces. The three pages below are cross-cutting capability audits.
+Commerce owns Library, Accounts owns APIs, Auth-app and authentication/Access authority, Semantic
+owns catalogue/Zone sources, and Content retains notice delivery. Performance owns the website
+account-settings, notices and preferences journeys; Web owns shell, shared patterns, Storybook
+organization and visual review. The three pages below remain cross-cutting capability audits.
 
 [The capability manifest](../goals/performance.capabilities.md) owns stage, fixture and scenario
 obligations; [verification](../development/verification.md) owns proof requirements. Designed,
@@ -13,7 +15,20 @@ implemented, exposed, accepted on dev and promoted are separate claims. Existing
 remain trusted evidence for their stated revision and boundary; this audit neither revalidates
 their receipts nor upgrades them to complete capability acceptance. Promotion is unknown here.
 The optional private controlling request was unavailable in this checkout; the supplied contract
-and tracked authorities define this audit. No product, fixture, test or owner contract is changed.
+and tracked authorities define this audit. The journey status below reflects the subsequent interface
+handoff; the original Performance Done scope, research and native/promotion debt remain unchanged.
+
+The [Performance ownership](../goals/performance.md#ownership) handoff covers the existing
+`/settings` sections `#reading`, `#display`, `#notifications`, `#privacy`, `#verification`, `#profile`,
+`#public-activity` and `#account`, including admission-dependent sections and Auth security entry.
+Settings consumes the existing typed profile `GET /v1/accounts/{id}/profile` and
+`PATCH /v1/accounts/{id}`, and preference `GET/PATCH /v1/accounts/{id}/preferences` boundaries;
+Display now composes Web's delivered `AppearanceControls` and its browser cookies. `/inbox`
+consumes Content's account-notification list/count/mark-seen APIs and current target reads;
+Accounts retains preference storage and API authority. Patterns and Pages share the real Display
+component. Web's 390/1280 review with shared locale/theme globals, actual typed-source journey
+acceptance, native physical-work evidence and promoted proof remain pending; local typing does
+not establish them. No new audit or backend ownership is implied.
 
 | Capability              | Design and implementation status                                                                                                                  | Acceptance and promotion status                                                                                                                      |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -201,7 +216,7 @@ admission. Slot wait is queue time, not a stalled test. Phase timings, check-hou
 GiB-hours support contributor operations; they are not a public product system or asymptotic
 proof. Matched cold/warm comparisons precede savings claims. No host or benchmark was run here.
 Minimal mode leaves native HTTP/default-worker, database and UI recording checks to integration;
-no changed workspace needs a typecheck for this report-only delivery. Existing accepted-on-dev
+the Display integration receives only a local Web typecheck. Existing accepted-on-dev
 evidence stays trusted; current full acceptance and promoted-revision proof remain debt.
 
 The companion destinations `performance-growth-harness-design.md`,

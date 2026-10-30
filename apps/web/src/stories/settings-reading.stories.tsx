@@ -14,8 +14,9 @@ export const ReadingAndDisplay: Story = {
     await view.findByRole('heading', { name: m.settings_display_heading() });
     await userEvent.click(await view.findByRole('radio', { name: m.settings_spoiler_1_title() }));
     await view.findByText(m.settings_saved());
-    await view.findByRole('combobox', { name: m.shell_language() });
-    await view.findByRole('combobox', { name: m.shell_theme() });
+    const display = within(await view.findByRole('region', { name: m.shell_appearance() }));
+    await expect(display.getByRole('button', { name: (name) => name.startsWith(m.shell_language()) })).toBeEnabled();
+    await expect(display.getByRole('button', { name: m.shell_theme(), exact: true })).toBeEnabled();
   },
 };
 export const LostResponse: Story = {

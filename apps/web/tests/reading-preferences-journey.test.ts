@@ -4,7 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
 import { readingMutation, readReading, sendReading, type ReadingValues } from '../src/settings/reading-preferences';
 import { DisplayPreferences } from '../src/settings/display-preferences';
+import { AppearanceControls } from '../src/shell/appearance-controls';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
+import { m } from '../src/paraglide/messages.js';
 
 const latest = () => 0;
 
@@ -94,11 +96,23 @@ test('a shared notification version arriving during a save requires current read
   expect(fixture.reads()).toBe(1);
 });
 
+test('Settings display choices consume the actual shared AppearanceControls instead of maintaining a second locale/theme cookie implementation', () => {
+  const content = DisplayPreferences().props.children[1];
+  expect(content.props.children.type).toBe(AppearanceControls);
+});
+
 test('Current locale and theme settings reuse the shell preferences without inventing server storage', () => {
   setLocale('en', { reload: false });
   const html = renderToStaticMarkup(createElement(DisplayPreferences));
-  const options = [...html.matchAll(/<option[^>]*value="([^"]+)"/g)].map((match) => match[1]);
-  expect(options).toEqual([...locales, 'system', 'light', 'dark']);
+  const languages = [...html.matchAll(/<a[^>]*lang="([^"]+)"[^>]*href="([^"]+)"/g)].map((match) => [
+    match[1],
+    match[2],
+  ]);
+  expect(languages).toEqual(locales.map((locale) => [locale, `/${locale}`]));
+  expect(html.match(/<button[^>]*disabled=""/g)).toHaveLength(2);
+  expect(html).toContain(`aria-label="${m.shell_theme()}"`);
+  expect(html).toContain(`aria-label="${m.shell_appearance()}"`);
+  expect(html).toContain('id="settings-display-heading"');
   for (const language of ['English', '繁體中文', '简体中文', '日本語', '한국어', 'Deutsch', 'Français', 'Español'])
     expect(html).toContain(language);
   expect(html).toContain('apply in this browser');
