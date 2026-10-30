@@ -1,9 +1,10 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import pg, { type Pool } from 'pg';
+import pg, { type Pool, type PoolClient } from 'pg';
 import { DBOS_SCHEMA, WORK_APPLICATION } from '../work/client.ts';
 import { createWorkClient } from '../work/client.ts';
 import { ERASURE_LOCATOR_EFFECTS } from '../access/erasure.ts';
 import { LOCATOR_EFFECTS_QUEUE, WORK_QUEUES } from '../work/queues.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Relay } from './relays.ts';
 import { lookupEventType } from './catalogue.ts';
 import { projectBatch, type CloudEvent, type Envelope } from './log.ts';
@@ -16,6 +17,12 @@ export type Effect = {
   name: string;
   types: string[];
   run(event: CloudEvent): Promise<void>;
+  admit?: (client: PoolClient, event: CloudEvent) => Promise<void>;
+};
+
+type RegisteredEffects = {
+  enqueue(envelopes: readonly Envelope[]): Promise<void>;
+  admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
 };
 
 type WorkOptions = { databaseUrl: string; executorId?: string; systemDatabasePool?: Pool };
@@ -29,7 +36,7 @@ let compatibilityPool: Pool | undefined;
 export function registerEffects(
   effects: Effect[],
   pool?: Pool,
-): { enqueue(envelopes: readonly Envelope[]): Promise<void> } {
+): RegisteredEffects {
   const names = new Set<string>();
   for (const effect of effects) {
     if (!/^[a-z][a-z0-9_]{0,62}$/.test(effect.name)) throw new RangeError(`Invalid effect name: ${effect.name}`);
@@ -71,7 +78,27 @@ export function registerEffects(
     { name: 'effect' },
   );
 
+  const admit = effects.some((effect) => effect.admit)
+    ? async (client: PoolClient, envelopes: readonly Envelope[]) => {
+        const orderedEnvelopes = envelopes
+          .map((envelope, index) => ({ envelope, index }))
+          .sort((left, right) => {
+            if (left.envelope.position < right.envelope.position) return -1;
+            if (left.envelope.position > right.envelope.position) return 1;
+            return left.index - right.index;
+          });
+        for (const { envelope } of orderedEnvelopes) {
+          for (const [eventSeq, event] of envelope.events.entries()) {
+            for (const effect of effects) {
+              if (effect.admit && effect.types.includes(event.type)) await effect.admit(client, event);
+            }
+          }
+        }
+      }
+    : undefined;
+
   return {
+    ...(admit === undefined ? {} : { admit }),
     async enqueue(envelopes) {
       const partitions = new Map<
         number,
@@ -177,7 +204,32 @@ export async function shutdownWork(): Promise<void> {
 
 /** A batch failing after enqueuing is read again and finds the workflows it started. */
 export function relayEffects(pool: Pool, effects: ReturnType<typeof registerEffects>, partition: number) {
-  return projectBatch(pool, { consumer: EFFECTS_CONSUMER, partition, apply: effects.enqueue });
+  return projectBatch(pool, {
+    consumer: EFFECTS_CONSUMER,
+    partition,
+    apply: async (envelopes) => {
+      if (effects.admit) {
+        await withConnection(pool, async (client) => {
+          await client.query('BEGIN');
+          try {
+            await effects.admit!(client, envelopes);
+            await client.query('COMMIT');
+          } catch (error) {
+            try {
+              await client.query('ROLLBACK');
+            } catch (rollbackError) {
+              discardConnection(
+                client,
+                rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)),
+              );
+            }
+            throw error;
+          }
+        });
+      }
+      await effects.enqueue(envelopes);
+    },
+  });
 }
 
 export function effectsRelay(pool: Pool, effects: ReturnType<typeof registerEffects>): Relay {

@@ -32,6 +32,7 @@ export type WorkOptions = {
 export declare function composeWork(modules: readonly WorkModule[], options: WorkOptions): Promise<{
     effects: {
         enqueue(envelopes: readonly import("../events/log.ts").Envelope[]): Promise<void>;
+        admit?: (client: import("pg").PoolClient, envelopes: readonly import("../events/log.ts").Envelope[]) => Promise<void>;
     };
     launch(): Promise<void>;
     shutdown(): Promise<void>;

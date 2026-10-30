@@ -1,4 +1,4 @@
-import { type Pool } from 'pg';
+import { type Pool, type PoolClient } from 'pg';
 import type { Relay } from './relays.ts';
 import { type CloudEvent, type Envelope } from './log.ts';
 export { DBOS_SCHEMA } from '../work/client.ts';
@@ -8,6 +8,11 @@ export type Effect = {
     name: string;
     types: string[];
     run(event: CloudEvent): Promise<void>;
+    admit?: (client: PoolClient, event: CloudEvent) => Promise<void>;
+};
+type RegisteredEffects = {
+    enqueue(envelopes: readonly Envelope[]): Promise<void>;
+    admit?: (client: PoolClient, envelopes: readonly Envelope[]) => Promise<void>;
 };
 type WorkOptions = {
     databaseUrl: string;
@@ -15,9 +20,7 @@ type WorkOptions = {
     systemDatabasePool?: Pool;
 };
 export declare function effectWorkflowId(envelope: Envelope, eventSeq: number, name: string): string;
-export declare function registerEffects(effects: Effect[], pool?: Pool): {
-    enqueue(envelopes: readonly Envelope[]): Promise<void>;
-};
+export declare function registerEffects(effects: Effect[], pool?: Pool): RegisteredEffects;
 /** Compatibility for tests that register effects before launching the shared executor. */
 export declare function launchWork(options: WorkOptions): Promise<void>;
 export declare function shutdownWork(): Promise<void>;
