@@ -59,9 +59,8 @@ export async function createSubjectRecord(
     const stale = await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'signed-out' };
-    const response = await client.subjects.post(command.item, {
-      headers: { authorization, 'idempotency-key': command.key },
-    });
+    const headers = { authorization, 'idempotency-key': command.key };
+    const response = await client.subjects.post(command.item, { headers });
     if (response.status !== 201 || !response.data) return refusal(response.status, response.error?.value);
     const id = response.data.subject.id;
     if (!uuid.test(id)) return { ok: false, reason: 'unavailable' };

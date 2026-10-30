@@ -3,7 +3,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
-import { readRelease } from '../../subject/definitions';
+import { readRelease, refreshRelease } from '../../subject/definitions';
 import {
   createTypes,
   type CreateDefinitions,
@@ -18,7 +18,7 @@ export const readCreateDefinitions = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<CreateDefinitions> => {
     setResponseHeader('cache-control', 'private, no-store');
     try {
-      return { ok: true, types: createTypes(await readRelease({ refresh: data }), requestLocale() ?? 'en') };
+      return { ok: true, types: createTypes(await (data ? refreshRelease() : readRelease()), requestLocale() ?? 'en') };
     } catch {
       return { ok: false };
     }
@@ -34,8 +34,8 @@ export const createCatalogueSubject = createServerFn({ method: 'POST', strict: f
       item: {
         type: input.item.type,
         labels: input.item.labels,
-        descriptions: input.item.descriptions,
-        aliases: input.item.aliases,
+        ...(input.item.descriptions === undefined ? {} : { descriptions: input.item.descriptions }),
+        ...(input.item.aliases === undefined ? {} : { aliases: input.item.aliases }),
       },
     };
   })

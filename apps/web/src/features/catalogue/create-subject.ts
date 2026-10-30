@@ -1,7 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
-import type { Release } from '../../subject/definitions';
 
 /** The generated POST body is the public ItemInputSchema, not an editor-specific wire format. */
 export type InitialSubject = Pick<
@@ -27,7 +26,10 @@ export type CreateTransport = {
 export type TermDraft = { language: string; label: string; description: string; aliases: string };
 
 /** Labels/help come from emitted metadata. Data-language choices never relabel the definitions. */
-export function createTypes(release: Pick<Release, 'types'>, locale: string): CreateType[] {
+export function createTypes(
+  release: { types: Record<string, { labels?: Record<string, string>; descriptions?: Record<string, string> }> },
+  locale: string,
+): CreateType[] {
   return Object.entries(release.types)
     .flatMap(([id, definition]) => {
       const label = pickText(definition.labels ?? {}, locale).text;

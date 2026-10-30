@@ -49,13 +49,13 @@ export function displayTypeLabel(label: string, locale: string): string {
 const definitionMemory = new Map<string, { storedAt: number; value: unknown }>();
 const displayReleaseMemory = new Map<string, Promise<Release>>();
 
-async function cachedDefinition<T>(url: string, ttl?: number, refresh = false): Promise<T> {
+async function cachedDefinition<T>(url: string, ttl?: number): Promise<T> {
   const now = Date.now();
   const remembered = definitionMemory.get(url);
   const cache = typeof caches === 'undefined' ? undefined : (caches as unknown as { default?: Cache }).default;
   const request = new Request(url, { method: 'GET' });
 
-  if (cache && !refresh) {
+  if (cache) {
     try {
       const cached = await cache.match(request);
       if (cached) {
@@ -72,7 +72,7 @@ async function cachedDefinition<T>(url: string, ttl?: number, refresh = false): 
     }
   }
 
-  if (!refresh && remembered && (ttl === undefined || now - remembered.storedAt < ttl)) return remembered.value as T;
+  if (remembered && (ttl === undefined || now - remembered.storedAt < ttl)) return remembered.value as T;
 
   const response = await fetch(request);
   if (!response.ok) throw new Error('Definitions read failed');
@@ -101,10 +101,10 @@ function kernelOrigin(): string {
   throw new Error('KERNEL_ORIGIN is required to read definitions');
 }
 
-export async function readRelease(options: { refresh?: boolean } = {}): Promise<Release> {
+export async function readRelease(): Promise<Release> {
   const origin = kernelOrigin();
   const activeUrl = new URL('/v1/definitions/active', origin).href;
-  const active = await cachedDefinition<{ digest?: unknown }>(activeUrl, 60_000, options.refresh);
+  const active = await cachedDefinition<{ digest?: unknown }>(activeUrl, 60_000);
   if (typeof active.digest !== 'string' || active.digest.length === 0 || active.digest.length > 256)
     throw new Error('Active definitions release is invalid');
   let pending = displayReleaseMemory.get(active.digest);
@@ -142,6 +142,15 @@ export async function readRelease(options: { refresh?: boolean } = {}): Promise<
     if (displayReleaseMemory.get(active.digest) === pending) displayReleaseMemory.delete(active.digest);
     throw error;
   }
+}
+
+/** Revalidate the active pointer after a command rejects values; immutable releases retain their normal cache. */
+export async function refreshRelease(): Promise<Release> {
+  const url = new URL('/v1/definitions/active', kernelOrigin()).href;
+  definitionMemory.delete(url);
+  const cache = typeof caches === 'undefined' ? undefined : (caches as unknown as { default?: Cache }).default;
+  if (cache) await cache.delete(new Request(url, { method: 'GET' }));
+  return readRelease();
 }
 
 /** The definition release's name for each of these types in the reader's language chain; a type it has no name for is absent. */
