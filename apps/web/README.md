@@ -72,9 +72,7 @@ When session configuration is missing, the hydrated account slot remains empty.
 Login transactions expire after 10 minutes; sessions expire 30 days after sign-in. The `SESSIONS` Durable Object binding
 stores both in SQLite, with one instance per login transaction or session. Development simulates the objects locally.
 Reads use two Worker rate-limit bindings: `READS_10S` has namespace `1001`, limit `100`, and period `10` seconds;
-`READS_60S` has namespace `1002`, limit `300`, and period `60` seconds. GET and HEAD requests consume both. Public documents use `ip:<CF-Connecting-IP>` without reading session cookies. Credential reads share
-`account:<sub>` across active sessions; other non-document reads with a well-formed session or login cookie use
-`session:<id>`, and other requests use the IP key.
+`READS_60S` has namespace `1002`, limit `300`, and period `60` seconds. Admitted GET and HEAD site reads consume both. Public documents use `ip:<CF-Connecting-IP>` without reading session cookies. Credential reads, server functions and suggestions use `account:<sub>` for a signed-in reader, shared across active sessions. Other non-document reads with a well-formed session or login cookie use `session:<id>`, and other requests use the IP key.
 
 Configure these variables in the environment of `bun run dev`:
 
@@ -450,10 +448,12 @@ Each server render and browser session has its own query cache. Public reads sta
 
 ### Read rate limits (GET/HEAD)
 
-- **Touches:** Two local Cloudflare rate-limit bindings before route handling, keyed by active account, valid
-  session/login cookie, or client IP
-- **Bound:** 2 `limit()` calls; 0 added K/D/R/A; the request's existing session read supplies the signed-in key;
-  refusals stop before K
+- **Touches:** Two Cloudflare rate-limit bindings for admitted reads before route handling. Public documents use the client IP without
+  reading cookies. Credential reads use the account resolved by their existing session read; server functions and
+  suggestions read session identity before admission so signed-in sessions share an account key. Other reads use a
+  valid session or login cookie, then the client IP.
+- **Bound:** 2 `limit()` calls; at most one `SESSIONS.signedIn()` read for a server function or suggestion with a
+  session cookie, reused by its session query; 0 K/R/A; refusals stop before K
 - **Growth check:** `tests/checkout-cost.test.ts`: `read rate limits stay within their bound as s grows`
 
 ### Sitemaps and robots.txt (serving)

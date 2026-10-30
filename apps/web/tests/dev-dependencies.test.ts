@@ -118,11 +118,16 @@ test('Storybook builds and serves a page story with the development optimizer co
   const index = (await response.json()) as {
     entries: Record<string, { id: string; importPath: string; name: string; type: string }>;
   };
-  const home = Object.values(index.entries).find(
-    (entry) =>
-      entry.type === 'story' && basename(entry.importPath) === 'home.stories.tsx' && entry.name === 'Signed Out',
+  const homeStories = Object.values(index.entries).filter(
+    (entry) => entry.type === 'story' && basename(entry.importPath) === 'home.stories.tsx',
   );
-  expect(home, 'the home page story is included in the built Storybook').toBeDefined();
+  const home = homeStories.find((entry) => entry.name === 'Signed Out · 0 Continue · 1280 desktop');
+  expect(
+    home,
+    `the built Storybook includes the signed-out desktop Home story; indexed Home stories: ${homeStories
+      .map(({ id, name }) => `${id} (${name})`)
+      .join(', ')}`,
+  ).toBeDefined();
 
   const storyBrowser = browser ?? (browser = await chromium.launch());
   const context = await storyBrowser.newContext();

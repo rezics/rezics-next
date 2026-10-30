@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect } from 'bun:test';
 import { startNativeWebStack } from './stack.ts';
+import { currentNativeLifecycle, nativeTest } from './lifecycle.ts';
 
 const stacks: Awaited<ReturnType<typeof startNativeWebStack>>[] = [];
 afterEach(async () => {
@@ -20,7 +21,7 @@ async function semanticDatabases(databaseUrl: string): Promise<string[]> {
 }
 
 describe('native web stack', () => {
-  test('isolates lifecycle and serves native kernel reads through the production Worker', async () => {
+  nativeTest('isolates lifecycle and serves native kernel reads through the production Worker', 300_000, async () => {
     const databaseUrlBefore = process.env.DATABASE_URL;
     const databasesBefore = databaseUrlBefore ? await semanticDatabases(databaseUrlBefore) : undefined;
     const start = performance.now();
@@ -130,71 +131,106 @@ describe('native web stack', () => {
       `native-web-growth: start=${startedInMs}ms stop=${stoppedInMs}ms peak-memory=${stack.peakMemoryBytes()}bytes subject-page-kernel-requests=${subjectPageRequests.length} owned-databases-after-stop=0`,
       subjectPageRequests.map(({ method, url }) => ({ method, url })),
     );
-  }, 300_000);
+  });
 
-  test('cleans up the database and listeners when the production web Worker fails to start', async () => {
-    const databaseUrlBefore = process.env.DATABASE_URL;
-    const databasesBefore = databaseUrlBefore ? await semanticDatabases(databaseUrlBefore) : undefined;
-    const priorInspectorPort = process.env.WORKER_INSPECTOR_PORT;
-    process.env.WORKER_INSPECTOR_PORT = 'not-a-port';
-    try {
-      await expect(startNativeWebStack()).rejects.toThrow(/WORKER_INSPECTOR_PORT/);
-    } finally {
-      if (priorInspectorPort === undefined) delete process.env.WORKER_INSPECTOR_PORT;
-      else process.env.WORKER_INSPECTOR_PORT = priorInspectorPort;
-    }
-    expect(process.env.DATABASE_URL).toBe(databaseUrlBefore);
-    if (databaseUrlBefore) expect(await semanticDatabases(databaseUrlBefore)).toEqual(databasesBefore);
-  }, 300_000);
+  nativeTest(
+    'cleans up the database and listeners when the production web Worker fails to start',
+    300_000,
+    async () => {
+      const databaseUrlBefore = process.env.DATABASE_URL;
+      const databasesBefore = databaseUrlBefore ? await semanticDatabases(databaseUrlBefore) : undefined;
+      const priorInspectorPort = process.env.WORKER_INSPECTOR_PORT;
+      process.env.WORKER_INSPECTOR_PORT = 'not-a-port';
+      const lifecycle = currentNativeLifecycle()!;
+      const restoreInspector = () => {
+        if (priorInspectorPort === undefined) delete process.env.WORKER_INSPECTOR_PORT;
+        else process.env.WORKER_INSPECTOR_PORT = priorInspectorPort;
+      };
+      const releaseInspector = lifecycle.register({
+        label: 'native test inspector environment',
+        close: restoreInspector,
+        force: restoreInspector,
+      });
+      try {
+        await expect(startNativeWebStack()).rejects.toThrow(/WORKER_INSPECTOR_PORT/);
+      } finally {
+        restoreInspector();
+        releaseInspector();
+      }
+      expect(process.env.DATABASE_URL).toBe(databaseUrlBefore);
+      if (databaseUrlBefore) expect(await semanticDatabases(databaseUrlBefore)).toEqual(databasesBefore);
+    },
+  );
 });
 
 // Observe the transport boundary while still using native fetch and the served Worker.
 // The returned object must be that exact HTTP Response, with its body still unread.
-test('returns the original HTTP response and confines absolute URLs, credentials and redirects to the stack', async () => {
-  const stack = await startNativeWebStack();
-  stacks.push(stack);
-  let escaped = 0;
-  const canary = Bun.serve({
-    hostname: '127.0.0.1',
-    port: 0,
-    fetch() {
-      escaped++;
-      return new Response('escaped');
-    },
-  });
-  const nativeFetch = globalThis.fetch;
-  const calls: { url: string; init?: RequestInit; response: Response }[] = [];
-  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    const response = await nativeFetch(input, init);
-    calls.push({ url: String(input), init, response });
-    return response;
-  }) as typeof fetch;
-  try {
-    const path = '/en/subjects/00000000-0000-4000-8000-000000000000?transport=kept';
-    const response = await stack.request(`${canary.url.origin}${path}`, 'anonymous', { 'accept-language': 'zh-Hans' });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe(`${stack.web}${path}`);
-    expect(calls[0]!.init?.redirect).toBe('manual');
-    const sent = new Headers(calls[0]!.init?.headers);
-    expect(sent.get('accept-language')).toBe('zh-Hans');
-    expect(sent.has('authorization')).toBe(false);
-    expect(response).toBe(calls[0]!.response);
-    expect(response.status).toBe(404);
-    expect(response.bodyUsed).toBe(false);
-    expect(response.redirected).toBe(false);
-    expect(response.headers.get('content-type')).toContain('text/html');
-    expect(await response.text()).toContain('<html');
-    await expect(stack.kernel(canary.url.href)).rejects.toThrow('owned listener');
-    await expect(stack.kernel(`${stack.kernelOrigin}@127.0.0.1:${canary.port}/`)).rejects.toThrow();
-    expect(calls).toHaveLength(1);
-    expect(escaped).toBe(0);
-  } finally {
-    globalThis.fetch = nativeFetch;
-    await canary.stop(true);
-  }
-}, 300_000);
+nativeTest(
+  'returns the original HTTP response and confines absolute URLs, credentials and redirects to the stack',
+  300_000,
+  async () => {
+    const stack = await startNativeWebStack();
+    stacks.push(stack);
+    let escaped = 0;
+    const canary = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch() {
+        escaped++;
+        return new Response('escaped');
+      },
+    });
+    const lifecycle = currentNativeLifecycle()!;
+    lifecycle.register({
+      label: 'native response canary listener',
+      close: () => canary.stop(true),
+      force: () => canary.stop(true),
+    });
+    const nativeFetch = globalThis.fetch;
+    const restoreFetch = () => {
+      globalThis.fetch = nativeFetch;
+    };
+    const releaseFetch = lifecycle.register({
+      label: 'native test fetch observation',
+      close: restoreFetch,
+      force: restoreFetch,
+    });
+    const calls: { url: string; init?: RequestInit; response: Response }[] = [];
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const response = await nativeFetch(input, init);
+      calls.push({ url: String(input), init, response });
+      return response;
+    }) as typeof fetch;
+    try {
+      const path = '/en/subjects/00000000-0000-4000-8000-000000000000?transport=kept';
+      const response = await stack.request(`${canary.url.origin}${path}`, 'anonymous', {
+        'accept-language': 'zh-Hans',
+      });
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.url).toBe(`${stack.web}${path}`);
+      expect(calls[0]!.init?.redirect).toBe('manual');
+      const sent = new Headers(calls[0]!.init?.headers);
+      expect(sent.get('accept-language')).toBe('zh-Hans');
+      expect(sent.has('authorization')).toBe(false);
+      expect(response).toBe(calls[0]!.response);
+      expect(response.status).toBe(404);
+      expect(response.bodyUsed).toBe(false);
+      expect(response.redirected).toBe(false);
+      expect(response.headers.get('content-type')).toContain('text/html');
+      expect(await response.text()).toContain('<html');
+      await expect(stack.kernel(canary.url.href)).rejects.toThrow('owned listener');
+      await expect(stack.kernel(`${stack.kernelOrigin}@127.0.0.1:${canary.port}/`)).rejects.toThrow();
+      expect(calls).toHaveLength(1);
+      expect(escaped).toBe(0);
+    } finally {
+      restoreFetch();
+      releaseFetch();
+      await canary.stop(true);
+    }
+  },
+);
 
-test('keeps leading double slashes in a document path on the owned web listener', async () => {
+nativeTest('keeps leading double slashes in a document path on the owned web listener', 300_000, async () => {
   const stack = await startNativeWebStack();
   stacks.push(stack);
   let escaped = 0;
@@ -206,7 +242,21 @@ test('keeps leading double slashes in a document path on the owned web listener'
       return new Response('escaped');
     },
   });
+  const lifecycle = currentNativeLifecycle()!;
+  lifecycle.register({
+    label: 'native path canary listener',
+    close: () => canary.stop(true),
+    force: () => canary.stop(true),
+  });
   const nativeFetch = globalThis.fetch;
+  const restoreFetch = () => {
+    globalThis.fetch = nativeFetch;
+  };
+  const releaseFetch = lifecycle.register({
+    label: 'native path fetch observation',
+    close: restoreFetch,
+    force: restoreFetch,
+  });
   const calls: { url: string; response: Response }[] = [];
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const response = await nativeFetch(input, init);
@@ -224,7 +274,8 @@ test('keeps leading double slashes in a document path on the owned web listener'
     expect(escaped).toBe(0);
     await response.arrayBuffer();
   } finally {
-    globalThis.fetch = nativeFetch;
+    restoreFetch();
+    releaseFetch();
     await canary.stop(true);
   }
-}, 300_000);
+});

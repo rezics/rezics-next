@@ -2,6 +2,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { slug } from '@rezics/definitions/slug';
 import { readFile } from 'node:fs/promises';
 import { startNativeWebStack } from './stack';
+import { currentNativeLifecycle, NativeTestLifecycle, nativeProcessIsSame, inspectNativeProcess } from './lifecycle.ts';
 import type { WebPublicationDriver, PublicationFixture, Persona } from '../../../../specs/web-publication-driver';
 
 const defaultPublicOrigin = 'https://rezics.example.test';
@@ -43,7 +44,12 @@ const globalContext = '00000000-0000-8000-8000-000000000000';
 // two-second request deadline. Give each creation its own native request budget.
 const fixtureBatchSize = 1;
 
-type ProcessInfo = { pid: number; command: string; environment: string[] };
+type ProcessInfo = {
+  pid: number;
+  command: string;
+  environment: string[];
+  identity: NonNullable<ReturnType<typeof inspectNativeProcess>>;
+};
 
 async function processInfo(pid: number): Promise<ProcessInfo | undefined> {
   try {
@@ -51,7 +57,10 @@ async function processInfo(pid: number): Promise<ProcessInfo | undefined> {
       readFile(`/proc/${pid}/cmdline`, 'utf8'),
       readFile(`/proc/${pid}/environ`, 'utf8'),
     ]);
-    return { pid, command: command.replaceAll('\0', ' '), environment: environment.split('\0') };
+    const identity = inspectNativeProcess(pid);
+    return identity
+      ? { pid, command: command.replaceAll('\0', ' '), environment: environment.split('\0'), identity }
+      : undefined;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ESRCH')
       return undefined;
@@ -92,9 +101,17 @@ async function durableWorker(hostPid: number): Promise<ProcessInfo> {
   throw new Error("Could not find this publication driver's durable-work worker process");
 }
 
-async function waitForProcessState(pid: number, stopped: boolean): Promise<void> {
+async function waitForProcessState(
+  identity: NonNullable<ReturnType<typeof inspectNativeProcess>>,
+  stopped: boolean,
+): Promise<void> {
+  const { pid } = identity;
   const deadline = Date.now() + 2_000;
   while (Date.now() < deadline) {
+    if (!nativeProcessIsSame(identity)) {
+      if (stopped) throw new Error(`Owned process ${pid} exited before interruption took effect`);
+      return;
+    }
     const status = await readFile(`/proc/${pid}/status`, 'utf8').catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT' || (error as NodeJS.ErrnoException).code === 'ESRCH')
         return '';
@@ -148,11 +165,23 @@ function assertReleasedDefinitions(data: typeof import('../../../../specs/fixtur
   }
 }
 
-export async function createWebPublicationDriver(): Promise<WebPublicationDriver> {
+export async function createWebPublicationDriver(startupTimeoutMs = 180_000): Promise<WebPublicationDriver> {
   const factoryStarted = performance.now();
   const existingChildren = new Set(await childPids(process.pid));
-  const stack = await startNativeWebStack();
-  const host = await ownedStackHost(existingChildren);
+  const lifecycle = new NativeTestLifecycle('native web publication driver', currentNativeLifecycle());
+  const stack = await lifecycle.run(
+    'start native web publication driver',
+    startupTimeoutMs,
+    () => startNativeWebStack(),
+    false,
+  );
+  let host: ProcessInfo;
+  try {
+    host = await ownedStackHost(existingChildren);
+  } catch (error) {
+    await lifecycle.close();
+    throw error;
+  }
   let publicOrigin = defaultPublicOrigin;
   let closed: Promise<void> | undefined;
   const interruptionRestores = new Set<() => Promise<void>>();
@@ -601,11 +630,13 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
           directCredentials.set(persona, { authorization: (await stack.authPersona(persona)).authorization });
       }
       try {
+        if (!nativeProcessIsSame(target.identity))
+          throw new Error(`Owned ${kind} process ${target.pid} changed identity before interruption`);
         process.kill(target.pid, 'SIGSTOP');
       } catch (error) {
         throw new Error(`Could not stop owned ${kind} process ${target.pid}: ${String(error)}`, { cause: error });
       }
-      await waitForProcessState(target.pid, true);
+      await waitForProcessState(target.identity, true);
       if (kind === 'owner-read') ownerReadInterrupted = true;
 
       let restored = false;
@@ -615,11 +646,11 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
         interruptionRestores.delete(restore);
         if (kind === 'owner-read') ownerReadInterrupted = false;
         try {
-          process.kill(target.pid, 'SIGCONT');
+          if (nativeProcessIsSame(target.identity)) process.kill(target.pid, 'SIGCONT');
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
         }
-        await waitForProcessState(target.pid, false);
+        await waitForProcessState(target.identity, false);
       };
       interruptionRestores.add(restore);
       return restore;
@@ -630,7 +661,7 @@ export async function createWebPublicationDriver(): Promise<WebPublicationDriver
     close() {
       return (closed ??= (async () => {
         for (const restore of [...interruptionRestores]) await restore();
-        await stack.stop();
+        await lifecycle.close();
       })());
     },
   };

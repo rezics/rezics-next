@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { planTestCommandLanes } from '../scripts/isolated.ts';
 
 // Containers starting and stopping on the host add and remove network interfaces while tests run. Chromium aborts
 // in-flight requests, even to 127.0.0.1, with net::ERR_NETWORK_CHANGED whenever an interface changes, so a page whose
@@ -31,6 +32,42 @@ function run(pkg: string, command: string[], env: Record<string, string | undefi
   });
   return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
 }
+
+test('UI-only selections stay in the private lane with every CLI argument preserved', () => {
+  const command = ['bun', 'test', '--timeout', '4000', 'tests/shell.test.ts'];
+  expect(planTestCommandLanes(command, join(root, 'apps/web'))).toEqual([{ args: command, isolate: true }]);
+});
+
+test('native-only selections run in the host lane', () => {
+  const command = ['bun', 'test', '--timeout', '4000', 'tests/native/stack.host.test.ts'];
+  expect(planTestCommandLanes(command, join(root, 'apps/web'))).toEqual([{ args: command, isolate: false }]);
+});
+
+test('mixed UI and native selections preserve the original arguments in separate lanes', () => {
+  const command = ['bun', 'test', '--timeout', '4000', 'tests/shell.test.ts', 'tests/native/stack.host.test.ts'];
+  expect(planTestCommandLanes(command, join(root, 'apps/web'))).toEqual([
+    { args: ['bun', 'test', '--timeout', '4000', 'tests/shell.test.ts'], isolate: true },
+    { args: ['bun', 'test', '--timeout', '4000', 'tests/native/stack.host.test.ts'], isolate: false },
+  ]);
+});
+
+test('the recorder remains a host-lane exception in a mixed selection', () => {
+  const command = ['bun', 'test', 'tests/search.test.ts', 'tests/record-script.test.ts'];
+  expect(planTestCommandLanes(command, join(root, 'apps/web'))).toEqual([
+    { args: ['bun', 'test', 'tests/search.test.ts'], isolate: true },
+    { args: ['bun', 'test', 'tests/record-script.test.ts'], isolate: false },
+  ]);
+});
+
+test('a default package selection routes all native receipts and the recorder to the host lane', () => {
+  const lanes = planTestCommandLanes(['bun', 'test'], join(root, 'apps/web'));
+  expect(lanes).toHaveLength(2);
+  expect(lanes[0]!.isolate).toBe(true);
+  expect(lanes[0]!.args.every((argument) => !argument.endsWith('.host.test.ts'))).toBe(true);
+  expect(lanes[1]!.isolate).toBe(false);
+  expect(lanes[1]!.args.some((argument) => argument.endsWith('native-site-foundation.host.test.ts'))).toBe(true);
+  expect(lanes[1]!.args.some((argument) => argument.endsWith('record-script.test.ts'))).toBe(true);
+});
 
 for (const pkg of packages) {
   test.if(isolatable)(
@@ -71,3 +108,20 @@ for (const pkg of packages) {
     expect(` ${scripts.check} `).not.toMatch(/[\s&;]bun test[\s&;]/);
   });
 }
+
+test('apps/web removes its owned state directory after the child exits', () => {
+  const environment = { ...process.env };
+  delete environment.WEB_TEST_STATE_DIR;
+  const result = run(
+    'apps/web',
+    [bun, '-e', 'console.log(process.env.WEB_TEST_STATE_DIR); process.exit(7)'],
+    environment,
+  );
+  expect(result.exitCode).toBe(7);
+  const stateDirectory = result.stdout
+    .trim()
+    .split('\n')
+    .find((line) => line.startsWith(join(tmpdir(), 'rezics-web-test-')));
+  expect(stateDirectory).toBeDefined();
+  expect(existsSync(join(stateDirectory!, '..'))).toBe(false);
+});

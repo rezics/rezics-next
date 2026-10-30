@@ -5,6 +5,7 @@ import { prepareSession } from './session/request.ts';
 import { cookie, clearCookie, SESSION_COOKIE, validId } from './session/cookies.ts';
 import type { SessionEnv } from './session/client.ts';
 import { sessionSubject } from './session/request.ts';
+import { readSessionState } from './session/state.ts';
 import {
   carriesSession,
   csrfTokenFromRequest,
@@ -315,6 +316,9 @@ async function fetchRequest(request: Request): Promise<Response> {
         mediaSessionError = error;
       }
       subject = sessionSubject(request);
+    } else if (isServerFn || url.pathname === '/api/search/suggestions') {
+      const identity = await readSessionState(request, sessionEnv);
+      if (identity.state === 'signed-in') subject = identity.subject;
     }
 
     // Public document admission must not resolve or inspect a reader's session.

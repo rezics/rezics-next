@@ -1,11 +1,20 @@
 import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { resolveBunCommand } from '../../../../scripts/gate.ts';
 import type { SemanticOutcomeDriver } from '../../../../services/kernel/test/semantic/outcome-driver.ts';
+import {
+  currentNativeLifecycle,
+  inspectNativeProcess,
+  nativeProcessIsSame,
+  settledWithin,
+  type NativeProcessIdentity,
+  type NativeProcessOwnership,
+} from './lifecycle.ts';
 
 export type NativeCredentials = { authorization: string; cookie?: string };
 export type NativeKernelRequest = {
@@ -33,7 +42,12 @@ export type NativeWebStack = {
   stop(): Promise<void>;
 };
 
-type WebProcess = { child: ChildProcess; stateDirectory: string; exited: Promise<void> };
+type WebProcess = {
+  child: ChildProcess;
+  identity: NativeProcessIdentity;
+  stateDirectory: string;
+  exited: Promise<void>;
+};
 
 const webRoot = resolve(import.meta.dir, '../..');
 const repositoryRoot = resolve(webRoot, '../..');
@@ -50,9 +64,9 @@ async function startWeb(
   kernelOrigin: string,
   publicOrigin: string,
   authEnvironment: NodeJS.ProcessEnv,
+  onOwnedGroup: (child: ChildProcess, stateDirectory: string) => void,
 ): Promise<WebProcess> {
-  await mkdir(join(repositoryRoot, '.temp'), { recursive: true });
-  const stateDirectory = await mkdtemp(join(repositoryRoot, '.temp', 'native-web-state-'));
+  const stateDirectory = await mkdtemp(join(tmpdir(), 'native-web-state-'));
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...authEnvironment,
@@ -72,6 +86,10 @@ async function startWeb(
       env,
     },
   );
+  onOwnedGroup(child, stateDirectory);
+  const identity = child.pid ? inspectNativeProcess(child.pid) : undefined;
+  if (!identity || identity.pgid !== identity.pid)
+    throw new Error('Native web Worker did not start in an owned process group');
   let output = '';
   for (const stream of [child.stdout, child.stderr])
     stream?.on('data', (chunk: Buffer) => {
@@ -82,7 +100,7 @@ async function startWeb(
     spawnError = error;
   });
   let ended = false;
-  const exited = new Promise<void>((resolve) => child.once('close', resolve).once('error', () => resolve()));
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()).once('error', () => resolve()));
   const failIfExited = () => {
     if (spawnError)
       throw new Error(`web Worker could not start: ${spawnError.message}\n${output}`, { cause: spawnError });
@@ -103,7 +121,7 @@ async function startWeb(
         });
         await response.arrayBuffer();
         failIfExited();
-        if (response.status === 404) return { child, stateDirectory, exited };
+        if (response.status === 404) return { child, identity, stateDirectory, exited };
       } catch {
         if (spawnError || ended || child.exitCode !== null || child.signalCode !== null) failIfExited();
       }
@@ -111,16 +129,16 @@ async function startWeb(
     }
     throw new Error(`web Worker startup timed out: ${output}`);
   } catch (error) {
-    await stopWeb({ child, stateDirectory, exited }).catch(() => {});
+    await stopWeb({ child, identity, stateDirectory, exited }).catch(() => {});
     throw error;
   }
 }
 
 async function stopWeb(web: WebProcess | undefined): Promise<void> {
   if (!web) return;
-  const { child, stateDirectory, exited } = web;
+  const { child, identity, stateDirectory, exited } = web;
   const processGroup = child.pid;
-  const groupAlive = () => {
+  const groupExists = () => {
     if (!processGroup) return false;
     try {
       process.kill(-processGroup, 0);
@@ -130,27 +148,36 @@ async function stopWeb(web: WebProcess | undefined): Promise<void> {
       throw error;
     }
   };
+  const leaderAlive = () => nativeProcessIsSame(identity);
   const waitForGroup = async (milliseconds: number) => {
     const deadline = Date.now() + milliseconds;
-    while (groupAlive()) {
+    while (groupExists()) {
       if (Date.now() >= deadline) return false;
       await Bun.sleep(50);
     }
-    await exited;
-    return true;
+    return (
+      (await settledWithin(
+        exited.then(() => true),
+        1_000,
+      )) === true
+    );
   };
   try {
-    if (groupAlive()) {
+    if (groupExists() && leaderAlive()) {
       try {
         process.kill(-processGroup!, 'SIGTERM');
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
       }
       if (!(await waitForGroup(10_000))) {
-        try {
-          process.kill(-processGroup!, 'SIGKILL');
-        } catch {}
-        await waitForGroup(10_000);
+        if (leaderAlive()) {
+          try {
+            process.kill(-processGroup!, 'SIGKILL');
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+          }
+          await waitForGroup(2_000);
+        }
         throw new Error('web Worker did not stop gracefully');
       }
     }
@@ -184,7 +211,7 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{ pid
     started = resolve;
     failed = reject;
   });
-  const exited = new Promise<void>((resolve) => child.once('close', () => resolve()));
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
   for (const stream of [child.stdout, child.stderr])
     stream?.on('data', (chunk: Buffer) => {
       output = (output + chunk).slice(-12_000);
@@ -200,11 +227,21 @@ async function startDurableWorker(environment: NodeJS.ProcessEnv): Promise<{ pid
       // Durable workflows can remain asleep beyond the lifetime of a fixture.
       // Give production shutdown a grace period, then terminate only our worker
       // before dropping its database; never wait for scheduled work to wake up.
-      const force = setTimeout(() => child.kill('SIGKILL'), 10_000);
       try {
-        await exited;
+        const graceful = await settledWithin(
+          exited.then(() => true),
+          10_000,
+        );
+        if (graceful) return;
+        child.kill('SIGKILL');
+        const killed = await settledWithin(
+          exited.then(() => true),
+          2_000,
+        );
+        if (!killed) throw new Error('Native durable Worker did not exit after SIGKILL');
       } finally {
-        clearTimeout(force);
+        // The exit event is the ownership boundary; inherited diagnostic pipes
+        // may close later if a child forgot to release them.
       }
     })());
   try {
@@ -309,14 +346,16 @@ async function startStack(): Promise<
       console.info('Native web stack cleanup: complete');
     })());
   try {
-    console.info('Native web stack startup: registering kernel SQL modules');
+    reportStackProgress('Native web stack startup: registering kernel SQL modules');
     // Match the kernel test preload before evaluating anything that imports SQL.
     await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
+    reportStackProgress('Native web stack startup: kernel SQL modules registered');
     if (!process.env.DATABASE_URL) {
-      console.info('Native web stack startup: starting PostgreSQL');
+      reportStackProgress('Native web stack startup: starting PostgreSQL');
       const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
       const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
       postgresContainer = startPostgresContainer();
+      if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
       const portResult = Bun.spawnSync(['docker', 'port', postgresContainer, '5432/tcp']);
       if (portResult.exitCode !== 0)
         throw new Error(`Could not get owned PostgreSQL port: ${portResult.stderr.toString()}`);
@@ -338,13 +377,13 @@ async function startStack(): Promise<
         }
       }
       process.env.DATABASE_URL = databaseUrl;
-      console.info('Native web stack startup: migrating PostgreSQL');
+      reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
       migrate(databaseUrl);
+      reportStackProgress('Native web stack startup: PostgreSQL migration complete');
     }
-    console.info('Native web stack startup: preparing SQL analysis');
+    reportStackProgress('Native web stack startup: preparing SQL analysis');
     // Give Reylo an owned cache and the migrated template for SQL analysis.
-    await mkdir(join(repositoryRoot, '.temp'), { recursive: true });
-    runtimeDirectory = await mkdtemp(join(repositoryRoot, '.temp', 'native-kernel-runtime-'));
+    runtimeDirectory = await mkdtemp(join(tmpdir(), 'native-kernel-runtime-'));
     const { writeReyloProject } = await import('../../../../services/kernel/scripts/check.ts');
     // PostgreSQL cannot clone a template while Reylo is connected to it. The
     // kernel runner also gives SQL analysis its own copy, separate from fixtures.
@@ -361,6 +400,7 @@ async function startStack(): Promise<
     } finally {
       await admin.end();
     }
+    reportStackProgress('Native web stack startup: SQL analysis database cloned');
     source.pathname = `/${analysisDatabase}`;
     process.env.REYLO_CONFIG = writeReyloProject(runtimeDirectory, source.href);
     process.env.KERNEL_POOL_ACQUIRE_TIMEOUT_MS ??= '2000';
@@ -370,6 +410,7 @@ async function startStack(): Promise<
       await import('../../../../services/kernel/test/semantic/outcome-auth.ts');
     closeAuth = closeOwnedSemanticAuth;
     const auth = await sharedAuth(new URL(process.env.DATABASE_URL!), undefined, true);
+    reportStackProgress('Native web stack startup: semantic Auth initialized');
     // Observe the harness's actual issuance, retaining its Auth cookie for the
     // website code flow. Never copy fixture passwords or manufacture sessions.
     const authCookies = new Map<string, string>();
@@ -417,7 +458,7 @@ async function startStack(): Promise<
     const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
     const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
     let kernel: ReturnType<typeof createKernel> | undefined;
-    console.info('Native web stack startup: creating native kernel and Auth fixtures');
+    reportStackProgress('Native web stack startup: creating native kernel and Auth fixtures');
     driver = await createSemanticDriver(
       (dependencies) => {
         kernel = createKernel(dependencies);
@@ -428,6 +469,7 @@ async function startStack(): Promise<
         strictCleanup: true,
       },
     );
+    reportStackProgress('Native web stack startup: native kernel and Auth fixtures ready');
 
     authServer = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => auth.service.handler(request) });
 
@@ -442,8 +484,9 @@ async function startStack(): Promise<
       DATABASE_URL: driver.fixtures.runtime.databaseUrl,
       KERNEL_EXECUTOR_ID: `native-web-${randomBytes(8).toString('hex')}`,
     };
-    console.info('Native web stack startup: starting durable-work worker');
+    reportStackProgress('Native web stack startup: starting durable-work worker');
     durableWorker = await startDurableWorker(workerEnv);
+    reportStackProgress('Native web stack startup: durable-work worker ready');
 
     const sourceApp = kernel!;
     const server = Bun.serve({
@@ -524,12 +567,19 @@ async function startStack(): Promise<
     let publicOrigin = 'https://rezics.example.test';
     let authPageOrigin: string | undefined;
     const launch = async () =>
-      startWeb(webOrigin, kernelOrigin, publicOrigin, {
-        ...authEnvironment,
-        ...(authPageOrigin ? { AUTH_ISSUER: authPageOrigin } : {}),
-      });
-    console.info('Native web stack startup: starting production web Worker');
+      startWeb(
+        webOrigin,
+        kernelOrigin,
+        publicOrigin,
+        {
+          ...authEnvironment,
+          ...(authPageOrigin ? { AUTH_ISSUER: authPageOrigin } : {}),
+        },
+        (child, stateDirectory) => reportOwnedProcessGroup('web Worker', child, stateDirectory),
+      );
+    reportStackProgress('Native web stack startup: starting production web Worker');
     webProcess = await launch();
+    reportStackProgress('Native web stack startup: production web Worker ready');
 
     return {
       kernelOrigin,
@@ -649,6 +699,9 @@ type HostReply =
     }
   | { id: number; value?: unknown; error?: string; observation: Observation }
   | { startupError: string }
+  | { progress: string }
+  | { ownedGroup: { label: string; pid: number; stateDirectory?: string } }
+  | { postgresContainer: string }
   | { analysisDatabase: string };
 type HostCall = {
   id: number;
@@ -657,15 +710,35 @@ type HostCall = {
   options?: { publicOrigin: string; authIssuer?: string };
 };
 
+function reportStackProgress(message: string): void {
+  console.info(message);
+  if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ progress: message } satisfies HostReply);
+}
+
+function reportOwnedProcessGroup(label: string, child: ChildProcess, stateDirectory?: string): void {
+  if (process.env.NATIVE_WEB_STACK_HOST !== '1' || !child.pid) return;
+  process.send?.({
+    ownedGroup: { label, pid: child.pid, ...(stateDirectory ? { stateDirectory } : {}) },
+  } satisfies HostReply);
+}
+
 export async function startNativeWebStack(): Promise<NativeWebStack> {
+  const lifecycle = currentNativeLifecycle();
+  if (!lifecycle) throw new Error('Native web stack startup requires an active native test lifecycle');
+  lifecycle.assertOpen('start native web stack');
   const originalDatabaseUrl = process.env.DATABASE_URL;
   let analysisDatabase: string | undefined;
+  let postgresContainer: string | undefined;
+  const stateDirectories = new Set<string>();
+  let nativeStack: NativeWebStack | undefined;
+  const ownedGroups = new Map<number, NativeProcessOwnership>();
   const host = fork(import.meta.filename, [], {
     execPath: resolveBunCommand(['bun'], repositoryRoot)[0]!,
     execArgv: [],
     cwd: repositoryRoot,
     env: { ...process.env, NATIVE_WEB_STACK_HOST: '1' },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    detached: true,
   });
   let pageBridge: ReturnType<typeof Bun.serve> | undefined;
   let output = '';
@@ -676,26 +749,99 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   // Process exit is the ownership boundary. The stdio `close` event can wait
   // for inherited pipes even after the host itself has ended.
   const exited = new Promise<void>((resolve) => host.once('exit', () => resolve()).once('error', () => resolve()));
-  const terminate = async () => {
-    if (host.exitCode === null && host.signalCode === null) host.kill('SIGTERM');
-    await exited;
-    // Reylo's connection lives until its host exits. A borrowed cluster must
-    // retain all of its other databases; an owned container was already removed.
+  const hostOwnership = lifecycle.ownProcessGroup('native web stack host', host);
+  let terminating: Promise<void> | undefined;
+  const cleanupExternalState = async () => {
+    const errors: unknown[] = [];
     if (analysisDatabase && originalDatabaseUrl) {
       const adminUrl = new URL(originalDatabaseUrl);
       adminUrl.pathname = '/postgres';
-      const admin = new Pool({ connectionString: adminUrl.href, max: 1 });
+      const admin = new Pool({
+        connectionString: adminUrl.href,
+        max: 1,
+        connectionTimeoutMillis: 1500,
+        statement_timeout: 5000,
+      });
+      let dropped = false;
       try {
-        await admin.query(`DROP DATABASE IF EXISTS "${analysisDatabase}" WITH (FORCE)`);
-      } finally {
-        await admin.end();
+        const result = await settledWithin(
+          admin.query(`DROP DATABASE IF EXISTS "${analysisDatabase}" WITH (FORCE)`).then(() => true),
+          7_000,
+        );
+        if (!result) throw new Error('Owned native analysis database cleanup exceeded 7000ms');
+        dropped = true;
+      } catch (error) {
+        errors.push(error);
       }
-      analysisDatabase = undefined;
+      try {
+        const ended = await settledWithin(
+          admin.end().then(() => true),
+          1_000,
+        );
+        if (!ended) throw new Error('Owned native analysis connection cleanup exceeded 1000ms');
+      } catch (error) {
+        errors.push(error);
+      }
+      if (dropped) analysisDatabase = undefined;
     }
+    if (postgresContainer) {
+      const child = Bun.spawn(['docker', 'rm', '-fv', postgresContainer], {
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const done = await Promise.race([
+        child.exited.then(async (code) => ({ code, stderr: await new Response(child.stderr).text() })),
+        Bun.sleep(8_000).then(() => undefined),
+      ]);
+      if (!done) {
+        child.kill('SIGKILL');
+        const killed = await Promise.race([child.exited.then(() => true), Bun.sleep(1_000).then(() => false)]);
+        if (!killed) errors.push(new Error('Owned PostgreSQL container cleanup process survived SIGKILL'));
+        else errors.push(new Error('Owned PostgreSQL container cleanup timed out'));
+      }
+      if (done && done.code !== 0 && !/No such container|is not running/iu.test(done.stderr))
+        errors.push(new Error(`Could not remove owned PostgreSQL container: ${done.stderr}`));
+      if (done?.code === 0 || (done && /No such container|is not running/iu.test(done.stderr)))
+        postgresContainer = undefined;
+    }
+    for (const directory of stateDirectories) {
+      try {
+        await rm(directory, { recursive: true, force: true });
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    stateDirectories.clear();
+    if (errors.length) throw new AggregateError(errors, 'Native external state cleanup failed');
   };
+  const terminate = () =>
+    (terminating ??= (async () => {
+      const owners = [hostOwnership, ...ownedGroups.values()];
+      const graceful = await Promise.allSettled(owners.map((owner) => owner.close()));
+      if (graceful.some((result) => result.status === 'rejected'))
+        await Promise.allSettled(owners.map((owner) => owner.force()));
+      const stopped = await Promise.race([exited.then(() => true), Bun.sleep(4_000).then(() => false)]);
+      if (!stopped) {
+        await Promise.allSettled(owners.map((owner) => owner.force()));
+        const killed = await Promise.race([exited.then(() => true), Bun.sleep(4_000).then(() => false)]);
+        if (!killed) throw new Error('Owned native web stack host survived bounded shutdown');
+      }
+      await cleanupExternalState();
+    })());
+
+  let releaseStackResource = lifecycle.register({
+    label: 'native web stack fixture',
+    close: async () => {
+      if (nativeStack) await nativeStack.stop();
+      else await terminate();
+    },
+    force: terminate,
+  });
   let serial = 0;
   let observation: Observation = { requests: [], peakMemory: 0 };
   let closed: Promise<void> | undefined;
+  let pageBridgeRelease: (() => void) | undefined;
   let dead: Error | undefined;
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
   let ready!: (value: {
@@ -723,6 +869,33 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
     pending.clear();
   };
   host.on('message', (reply: HostReply) => {
+    if ('ownedGroup' in reply) {
+      const { label, pid } = reply.ownedGroup;
+      const stateDirectory = reply.ownedGroup.stateDirectory;
+      if (stateDirectory) stateDirectories.add(stateDirectory);
+      if (!ownedGroups.has(pid)) {
+        try {
+          ownedGroups.set(pid, lifecycle.ownProcessId(label, pid));
+        } catch (error) {
+          try {
+            process.kill(pid, 0);
+            fail(error instanceof Error ? error : new Error(String(error)));
+          } catch (probeError) {
+            if ((probeError as NodeJS.ErrnoException).code !== 'ESRCH')
+              fail(error instanceof Error ? error : new Error(String(error)));
+          }
+        }
+      }
+      return;
+    }
+    if ('postgresContainer' in reply) {
+      postgresContainer = reply.postgresContainer;
+      return;
+    }
+    if ('progress' in reply) {
+      console.info(reply.progress);
+      return;
+    }
     if ('analysisDatabase' in reply) {
       analysisDatabase = reply.analysisDatabase;
       return;
@@ -739,6 +912,8 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   host.on('error', fail);
   host.on('exit', (code) => fail(new Error(`Native stack host exited ${code}\n${output}`)));
   const call = (method: HostCall['method'], argument?: string): Promise<unknown> => {
+    if (method !== 'stop' && !(method === 'routeAuthPages' && argument === undefined && lifecycle.signal.aborted))
+      lifecycle.assertOpen(`call native web stack ${method}`);
     if (dead) return Promise.reject(dead);
     const id = ++serial;
     return new Promise((resolve, reject) => {
@@ -748,9 +923,22 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
   };
   try {
     const { kernelOrigin, authIssuer, issuerOrigin, web, databaseUrl } = await startup;
+    lifecycle.assertOpen('finish native web stack startup');
     // Retain the existing fixture's observable setup environment. The host has
     // its own environment, including Reylo config and pool timeout overrides.
-    if (originalDatabaseUrl === undefined) process.env.DATABASE_URL = databaseUrl;
+    let releaseEnvironment = () => {};
+    if (originalDatabaseUrl === undefined) {
+      process.env.DATABASE_URL = databaseUrl;
+      const restoreEnvironment = () => {
+        if (process.env.DATABASE_URL === databaseUrl) delete process.env.DATABASE_URL;
+        releaseEnvironment();
+      };
+      releaseEnvironment = lifecycle.register({
+        label: 'native web stack parent environment',
+        close: restoreEnvironment,
+        force: restoreEnvironment,
+      });
+    }
     const credentials = (persona: string) => call('credentials', persona) as Promise<NativeCredentials>;
     const authenticatedHeaders = async (input: HeadersInit | undefined, persona?: string) => {
       const headers = new Headers(input);
@@ -765,15 +953,23 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
       await call('observe');
       return response;
     };
-    return {
+    const api: NativeWebStack = {
       kernelOrigin,
       authIssuer,
       issuerOrigin,
       web,
-      credentials,
-      authPersona: (persona) =>
-        call('authPersona', persona) as Promise<{ accountId: string; email: string; authorization: string }>,
+      async credentials(persona) {
+        lifecycle.assertOpen('read native account credentials');
+        return credentials(persona);
+      },
+      async authPersona(persona) {
+        lifecycle.assertOpen('read native account identity');
+        return (await call('authPersona', persona)) as { accountId: string; email: string; authorization: string };
+      },
       async routeAuthPages(handler) {
+        if (handler !== undefined) lifecycle.assertOpen('route native Auth pages');
+        pageBridgeRelease?.();
+        pageBridgeRelease = undefined;
         await pageBridge?.stop(true);
         pageBridge = handler
           ? Bun.serve({
@@ -788,17 +984,27 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
               },
             })
           : undefined;
+        if (pageBridge) {
+          const bridge = pageBridge;
+          pageBridgeRelease = lifecycle.register({
+            label: 'native Auth page bridge',
+            close: () => bridge.stop(true),
+            force: () => bridge.stop(true),
+          });
+        }
         return (await call('routeAuthPages', pageBridge?.url.origin)) as string;
       },
       kernelRequests: () => observation.requests.slice(),
       peakMemoryBytes: () => observation.peakMemory,
       async kernel(path, init = {}, persona) {
+        lifecycle.assertOpen('send native kernel request');
         const url = new URL(path, kernelOrigin);
         if (url.origin !== kernelOrigin) throw new Error('Kernel request must use the owned listener');
         const headers = await authenticatedHeaders(init.headers, persona);
         return observe(await fetch(url, { ...init, headers, redirect: 'manual' }));
       },
       async request(url, persona, suppliedHeaders) {
+        lifecycle.assertOpen('send native Worker request');
         const requested = new URL(url, web);
         const target = new URL(web);
         // Assign the path rather than resolving it: a leading // is still a
@@ -811,6 +1017,7 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
         return observe(await fetch(target, { headers, redirect: 'manual' }));
       },
       async restartWeb(options) {
+        lifecycle.assertOpen('restart native web Worker');
         const id = ++serial;
         await new Promise<void>((resolve, reject) => {
           pending.set(id, { resolve: () => resolve(), reject });
@@ -819,28 +1026,57 @@ export async function startNativeWebStack(): Promise<NativeWebStack> {
       },
       stop() {
         return (closed ??= (async () => {
-          const diagnostic = setTimeout(
-            () =>
-              console.error(
-                `Native stack is still stopping (exit=${host.exitCode}, signal=${host.signalCode}):\n${output}`,
-              ),
-            60_000,
-          );
-          try {
-            await call('stop');
-          } finally {
+          for (const owner of [hostOwnership, ...ownedGroups.values()]) owner.capture();
+          const shutdown = (async () => {
             try {
+              await call('stop');
+            } finally {
+              pageBridgeRelease?.();
+              pageBridgeRelease = undefined;
               await pageBridge?.stop(true);
               await terminate();
-              if (originalDatabaseUrl === undefined && process.env.DATABASE_URL === databaseUrl)
-                delete process.env.DATABASE_URL;
-            } finally {
-              clearTimeout(diagnostic);
+            }
+          })();
+          try {
+            const finished = await settledWithin(
+              shutdown.then(() => true),
+              25_000,
+            );
+            if (!finished) {
+              pageBridge?.stop(true);
+              await terminate();
+              throw new Error('Native web stack shutdown exceeded 25000ms');
+            }
+          } catch (error) {
+            try {
+              pageBridgeRelease?.();
+              pageBridgeRelease = undefined;
+              pageBridge?.stop(true);
+              await terminate();
+            } catch (cleanup) {
+              throw new AggregateError([error, cleanup], 'Native web stack shutdown and cleanup failed');
+            }
+            throw new Error(
+              `Native web stack cleanup failed (exit=${host.exitCode}, signal=${host.signalCode}): ${output}`,
+              { cause: error },
+            );
+          } finally {
+            if (originalDatabaseUrl === undefined) {
+              if (process.env.DATABASE_URL === databaseUrl) delete process.env.DATABASE_URL;
+              releaseEnvironment();
             }
           }
         })());
       },
     };
+    nativeStack = api;
+    releaseStackResource();
+    releaseStackResource = lifecycle.register({
+      label: 'native web stack fixture',
+      close: () => api.stop(),
+      force: terminate,
+    });
+    return api;
   } catch (error) {
     await terminate();
     throw error;

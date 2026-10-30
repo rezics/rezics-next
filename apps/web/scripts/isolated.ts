@@ -1,19 +1,69 @@
-import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
 
-const rawCommand = process.argv.slice(2);
-const testCommand = rawCommand.indexOf('test');
-const command =
-  testCommand < 0
-    ? rawCommand
-    : rawCommand.map((argument, index) => (index > testCommand ? argument.replace(/^apps\/web\//u, '') : argument));
+export type TestCommandLane = { args: string[]; isolate: boolean };
 
-if (command.length === 0) {
-  process.stderr.write('Usage: bun scripts/isolated.ts <command> [arguments...]\n');
-  process.exitCode = 2;
-} else {
+const testFilePattern = /\.test\.[cm]?[jt]sx?$/u;
+const nativeHostPattern = /\.host\.test\.[cm]?[jt]sx?$/u;
+const recorderPattern = /(?:^|\/)record-script\.test\.[cm]?[jt]sx?$/u;
+
+export function planTestCommandLanes(appCommand: string[], appDirectory?: string): TestCommandLane[] {
+  if (appCommand[0] !== 'bun' || appCommand[1] !== 'test') return [{ args: appCommand.slice(), isolate: true }];
+
+  const selected = appCommand.filter((argument) => testFilePattern.test(argument));
+  if (selected.length === 0) {
+    if (!appDirectory) return [{ args: appCommand.slice(), isolate: true }];
+    const allFiles = listTestFiles(appDirectory);
+    const hostFiles = allFiles.filter(isHostLaneTest);
+    const isolatedFiles = allFiles.filter((file) => !isHostLaneTest(file));
+    const lanes: TestCommandLane[] = [];
+    if (isolatedFiles.length) lanes.push({ args: [...appCommand, ...isolatedFiles], isolate: true });
+    if (hostFiles.length) lanes.push({ args: [...appCommand, ...hostFiles], isolate: false });
+    return lanes.length ? lanes : [{ args: appCommand.slice(), isolate: true }];
+  }
+
+  const hostFiles = selected.filter(isHostLaneTest);
+  if (hostFiles.length === 0) return [{ args: appCommand.slice(), isolate: true }];
+  if (hostFiles.length === selected.length) return [{ args: appCommand.slice(), isolate: false }];
+  const hostSet = new Set(hostFiles);
+  return [
+    { args: appCommand.filter((argument) => !testFilePattern.test(argument) || !hostSet.has(argument)), isolate: true },
+    { args: appCommand.filter((argument) => !testFilePattern.test(argument) || hostSet.has(argument)), isolate: false },
+  ];
+}
+
+function isHostLaneTest(file: string): boolean {
+  return nativeHostPattern.test(file) || recorderPattern.test(file);
+}
+
+function listTestFiles(directory: string, parent = ''): string[] {
+  return readdirSync(join(directory, parent), { withFileTypes: true }).flatMap((entry) => {
+    if (entry.isDirectory()) {
+      if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') return [];
+      return listTestFiles(directory, join(parent, entry.name));
+    }
+    if (entry.isFile() && testFilePattern.test(entry.name)) return [join(parent, entry.name)];
+    return [];
+  });
+}
+
+async function main(): Promise<void> {
+  const rawCommand = process.argv.slice(2);
+  const testCommand = rawCommand.indexOf('test');
+  const command =
+    testCommand < 0
+      ? rawCommand
+      : rawCommand.map((argument, index) => (index > testCommand ? argument.replace(/^apps\/web\//u, '') : argument));
+
+  if (command.length === 0) {
+    process.stderr.write('Usage: bun scripts/isolated.ts <command> [arguments...]\n');
+    process.exitCode = 2;
+    return;
+  }
+
   const app = resolve(import.meta.dir, '..');
   const root = resolve(app, '../..');
   const appCommand =
@@ -41,31 +91,8 @@ if (command.length === 0) {
       const linux = process.platform === 'linux';
       let isolated = false;
 
-      // Only the recorder needs Docker's host-published ports. Keep browser tests in their own namespace even when
-      // the same Bun invocation names both kinds of test.
-      const recorder = (argument: string) => argument.endsWith('record-script.test.ts');
-      const testFiles = appCommand.filter((argument) => /\.test\.[cm]?[jt]sx?$/.test(argument));
-      const mixed = appCommand[1] === 'test' && testFiles.some(recorder) && testFiles.some((file) => !recorder(file));
-      const defaultRecorder =
-        appCommand[1] === 'test' && appCommand.length === 2
-          ? ['tests/record-script.test.ts', 'apps/web/tests/record-script.test.ts', 'record-script.test.ts'].find(
-              existsSync,
-            )
-          : undefined;
-      const commands = mixed
-        ? [
-            { args: appCommand.filter((argument) => !recorder(argument)), isolate: true },
-            {
-              args: appCommand.filter((argument) => !testFiles.includes(argument) || recorder(argument)),
-              isolate: false,
-            },
-          ]
-        : defaultRecorder
-          ? [
-              { args: [...appCommand, '--path-ignore-patterns=**/record-script.test.ts'], isolate: true },
-              { args: [appCommand[0]!, 'test', `./${defaultRecorder}`], isolate: false },
-            ]
-          : [{ args: appCommand, isolate: !appCommand.some(recorder) }];
+      // Docker-backed native receipts and the recorder use the host lane; native Chromium still isolates itself.
+      const commands = planTestCommandLanes(appCommand, app);
 
       if (linux) {
         try {
@@ -81,10 +108,7 @@ if (command.length === 0) {
       }
 
       let temporary: string | undefined;
-      if (!stateRoot) {
-        mkdirSync(join(root, '.temp'), { recursive: true });
-        temporary = mkdtempSync(join(root, '.temp/web-test-'));
-      }
+      if (!stateRoot) temporary = mkdtempSync(join(tmpdir(), 'rezics-web-test-'));
       const childEnvironment = {
         ...process.env,
         PUBLIC_ORIGIN: 'http://127.0.0.1:3000',
@@ -108,7 +132,7 @@ if (command.length === 0) {
                 ...run.args,
               ]
             : run.args;
-          if (linux && !privateNetwork) {
+          if (linux && run.isolate && !privateNetwork) {
             process.stderr.write(
               'the tests are running on the host network, so host network changes can break browser tests.\n',
             );
@@ -158,5 +182,7 @@ if (command.length === 0) {
     },
   );
 }
+
+if (import.meta.main) await main();
 
 export {};
