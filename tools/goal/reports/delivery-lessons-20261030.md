@@ -7,7 +7,7 @@ Line counts exclude generated files, recorded responses and fixture JSON.
 The hourly landing rate is the measure of the delivery system: lines integrated on dev in the hour, against a
 target of at least 15,000, never padded. In the hour to 10:14 UTC dev took 36,679 lines in 34 landings, after
 hours of 1,000 to 15,000. Nothing in the product changed between those hours; only the rules below did. Each lesson
-names the cause, the evidence and the rule that follows.
+names the cause, the evidence and the rule that follows; new findings are added as they are measured.
 
 ## 1. Tests bound throughput before workers do
 
@@ -72,6 +72,16 @@ Installs use the shared dependency store, not per-run downloads.
   every command and host sweep, every command failed for 20 minutes. One task's error must never stop a sweep.
 - One malformed local configuration note made every command fail for a minute. Local configuration is validated
   before it is saved, not when it is next read.
+
+## 8. Verification after integration must not outrank the work it verifies
+
+The dev verifier ran with landing priority and started every check at once. After 34 landings one run started about
+48 kernel checks; landing waiters set ordinary admission to zero on every host, so workers' checks waited about an
+hour while the hosts ran at load 1 to 12. A kernel check took a median of 31 to 37 minutes, almost all of it waiting.
+
+Rule: verification after integration runs at ordinary priority with a small fixed concurrency (three checks), so it
+takes a share of the hosts, never all of them. Any class that outranks workers' checks needs a bound on how many
+checks it may hold at once.
 
 ## 7. Measure what the hour produced
 
