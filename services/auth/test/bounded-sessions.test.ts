@@ -5,6 +5,7 @@ import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, decodeJwt, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
+import { runPlacedTests } from '../scripts/placed-tests.ts';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { withAuthTransport } from '../src/rate-limit.ts';
 let peerSequence = 0;
@@ -21,13 +22,12 @@ import {
 // Exercise native production defaults in a fresh module graph.
 if (process.env.NODE_ENV !== 'production') {
   test('bounded production behavior preserves security outcomes', async () => {
-    const child = Bun.spawn(['bun', 'test', 'test/bounded-sessions.test.ts'], {
+    const child = await runPlacedTests(['bun', 'test', 'test/bounded-sessions.test.ts'], {
       cwd: import.meta.dir + '/..',
       env: { ...process.env, NODE_ENV: 'production' },
-      stdout: 'inherit',
-      stderr: 'inherit',
     });
-    expect(await child.exited).toBe(0);
+    if (child.output) console.info(child.output);
+    expect(child.code).toBe(0);
   }, 120000);
 } else {
   let db: ReturnType<typeof testDatabase>;

@@ -7,6 +7,7 @@ import { betterAuth } from 'better-auth';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { nativeAttemptRequest, pruneAuthAttempts, withAuthTransport } from '../src/rate-limit.ts';
 import { testDatabase } from '../scripts/database.ts';
+import { runPlacedTests } from '../scripts/placed-tests.ts';
 import {
   createAuthService,
   createRecoveryEstablishmentVerifier,
@@ -19,13 +20,12 @@ import {
 // keeps Better Auth's native test-mode defaults.
 if (process.env.AUTH_ATTEMPT_TEST_CHILD !== '1') {
   test('production native attempt limits and cost on a real Auth database', async () => {
-    const child = Bun.spawn(['bun', 'test', 'test/rate-limit.test.ts', 'test/rate-limit-cost.test.ts'], {
+    const child = await runPlacedTests(['bun', 'test', 'test/rate-limit.test.ts', 'test/rate-limit-cost.test.ts'], {
       cwd: import.meta.dir + '/..',
       env: { ...process.env, NODE_ENV: 'production', AUTH_ATTEMPT_TEST_CHILD: '1' },
-      stdout: 'inherit',
-      stderr: 'inherit',
     });
-    expect(await child.exited).toBe(0);
+    if (child.output) console.info(child.output);
+    expect(child.code).toBe(0);
   }, 120000);
 } else {
   let fixture: Awaited<ReturnType<typeof attemptFixture>>;
