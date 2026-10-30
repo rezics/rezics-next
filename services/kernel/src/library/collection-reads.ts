@@ -343,9 +343,10 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     publicOnly: boolean,
   ): Promise<{ collections: CollectionView[]; next: string | null }> {
     const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit']);
-    if (typeof options.curatorAccountId !== 'string')
+    const curatorAccountId = options.curatorAccountId;
+    if (typeof curatorAccountId !== 'string')
       throw new TypeError('Collection list options need a curator account id');
-    const route = routeOf(options.curatorAccountId);
+    const route = routeOf(curatorAccountId);
     if (route === null) throw notFound();
     // Presentation visibility is read before opening the page transaction. A visible account path
     // needs no private account read; only a hidden view needs the existing curator exception.
@@ -355,7 +356,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
     const fullView = !publicOnly && curator;
     const binding: CursorBinding = {
       operation: publicOnly ? 'library.account.collections' : 'library.collection.list',
-      parameters: { curatorAccountId: options.curatorAccountId, fullView },
+      parameters: { curatorAccountId, fullView },
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = listPosition(cursor, route);
@@ -369,7 +370,7 @@ export function createCollectionReads(dependencies: PresentationDependencies & {
       const statement = fullView ? curatorPage : curatorPublicPage;
       const rows = await statement.run(queryOf(client), {
         route,
-        curator_account_id: options.curatorAccountId,
+        curator_account_id: curatorAccountId,
         after_updated_at: after?.updatedAt ?? ABSENT_UPDATED_AT,
         after_id: after?.id ?? ABSENT_ID,
         has_cursor: after !== null,

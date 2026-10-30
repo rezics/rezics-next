@@ -42,11 +42,10 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
   if (!Number.isSafeInteger(ordinal) || ordinal < 0 || !Number.isSafeInteger(segment) || segment < 0)
     throw new TypeError('Invalid graph checkpoint');
   const digest = createHash('sha256').update(JSON.stringify(input)).digest();
-  const result = await runCommand(pool, {
+  const result = await runCommand<OwnedGraphPage>(pool, {
     partition: partitionOf(route), deadline: workStepDeadline(),
-    principal: { kind: 'account', id: accountId },
     receipt: {
-      principal: { kind: 'account', id: accountId }, kind: 'library.account-graph.purge',
+      actorAccountId: accountId, kind: 'library.account-graph.purge',
       key: normalizeCommandKey({ kind: 'account', id: accountId }, `graph:${segment}:${ordinal}`), digest,
     },
     authorization: {
