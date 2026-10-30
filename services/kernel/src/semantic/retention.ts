@@ -113,7 +113,7 @@ async function prepare(
       ? { kind: 'context', contextId: work.record_id, deletionGeneration: metadata.deletion_generation! }
       : { kind: 'zone', zoneId: work.record_id, deletionGeneration: metadata.deletion_generation! };
     // Rows predating committed native provenance remain pending; they are never fabricated.
-    const deps = { pool, clock };
+    const deps = { pool, ...(clock ? { clock } : {}) };
     const authority = metadata.deletion_generation ? await prepareRecordPurgeAuthority(deps, ref, { deadline }) : null;
     const historyPreparation =
       authority && work.phase === 'shared' ? await prepareRecordHistoryPurge(deps, authority, { deadline }) : null;

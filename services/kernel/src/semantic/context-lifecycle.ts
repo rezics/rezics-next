@@ -73,8 +73,11 @@ export async function changeContextLifecycle(
       if (!row) throw new ContextNotFoundError();
       if (row.kind !== 'community') throw new GrantDeniedError();
       const value = { id: context, state };
+      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: context }], {
+        kind: action,
+        events: row.state === state ? 0 : 1,
+      });
       if (row.state === state) return noEffect(value);
-      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: context }]);
       const [changed] = await writeContext.run(tx, {
         route,
         context_id: context,

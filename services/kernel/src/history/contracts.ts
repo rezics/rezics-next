@@ -288,6 +288,8 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   // Command identities and source/actor owner evidence remain independent associations.
   'com.rezics.search.identity_writer.changed.v1': nonPersonal,
   'com.rezics.semantic.context.created.v1': nonPersonal,
+  'com.rezics.semantic.record.deleted.v1': nonPersonal,
+  'com.rezics.semantic.record.restored.v1': nonPersonal,
   'com.rezics.semantic.composite.registered.v1': nonPersonal,
   'com.rezics.semantic.erasure.scheduled.v1': personal('subject'),
   'com.rezics.semantic.erasure.locator-scheduled.v1': nonPersonal,

@@ -21,7 +21,7 @@ const commandKinds = new Map<string, number>(Object.entries(COMMAND_HISTORY_KIND
 /** Startup-only receiving port. IDs are permanent owner-assigned values, never registration ordinals. */
 export function registerCommandHistoryKind(kind: string, id: number): void {
   if (
-    !/^[a-z][a-z0-9_.-]{0,95}$/.test(kind) ||
+    !/^[a-z][a-z0-9_:.-]{0,95}$/.test(kind) ||
     !Number.isInteger(id) ||
     id < 1000 ||
     id > 0xffffffff ||

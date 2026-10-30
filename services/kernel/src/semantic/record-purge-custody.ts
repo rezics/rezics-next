@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
 import type { RecordPurgeAuthority, RecordPurgeSource, NativeRecordPurgeReference } from './record-purge-authority.ts';
@@ -10,7 +11,6 @@ declare const recordInventoryCut: unique symbol;
 export type RecordPurgeReceivingHold = Readonly<{ [recordReceivingHold]: true }>;
 export type RecordPurgeInventoryCut = Readonly<{ [recordInventoryCut]: true }>;
 
-import { randomUUID } from 'node:crypto';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,
@@ -20,6 +20,9 @@ import {
   runCommand,
 } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import type { AccountReference } from '../history/locator.ts';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
 import {
   declareCommandRecordSources,
   recordHistorySourceKey,
@@ -30,6 +33,21 @@ import {
   prepareRecordPurgeAuthority,
   readRecordPurgeAuthoritySource,
 } from './record-purge-authority.ts';
+
+// Permanent owner-assigned codec IDs; existing receipt command strings remain unchanged.
+const resourceHistoryCommands = {
+  'context.create': 3000,
+  'context:delete': 3001,
+  'context:restore': 3002,
+  'definitions.extension.publish': 3003,
+  'definitions.extension.activate': 3004,
+  'zone.create': 3010,
+  'zone.configure': 3011,
+  'zone.publish': 3012,
+  'zone.delete': 3013,
+  'zone.restore': 3014,
+} as const;
+for (const [kind, id] of Object.entries(resourceHistoryCommands)) registerCommandHistoryKind(kind, id);
 
 type Locator = Readonly<{
   reference: NativeRecordPurgeReference;
@@ -247,7 +265,9 @@ async function acceptCommittedHold(
       return noEffect(true);
     },
   );
-  return accepted.value ? handle({ reference: ref, key: id.key, holdId: hold.hold_id, target }) : null;
+  return accepted.value
+    ? handle({ reference: Object.freeze({ ...hold.source.reference }), key: id.key, holdId: hold.hold_id, target })
+    : null;
 }
 export async function readRecordPurgeReceivingHold(
   deps: RecordPurgeCustodyDependencies,
@@ -408,13 +428,23 @@ async function lockNativeResource(tx: CommandTransaction, ref: RecordHistorySour
 export async function enrollResourceRecordSources(
   tx: CommandTransaction,
   sources: readonly Exclude<RecordHistorySourceReference, { kind: 'contribution' }>[],
-  birth = false,
+  options: Readonly<{ kind: keyof typeof resourceHistoryCommands; birth?: boolean; events?: 0 | 1 }>,
 ): Promise<void> {
   declareCommandRecordSources(tx, sources);
+  const accounts: AccountReference[] = [];
   for (const ref of sources) {
     await lockNativeResource(tx, ref);
     const id = ref.kind === 'context' ? ref.contextId : ref.zoneId,
       route = routeOf(id)!;
+    if (ref.kind === 'zone') {
+      const owner = (
+        await tx.query<{ owner_id: string | null }>('SELECT owner_id FROM zones.zone WHERE route=$1 AND zone_id=$2', [
+          route,
+          id,
+        ])
+      ).rows[0]?.owner_id;
+      if (owner) accounts.push({ accountRoute: routeOf(owner)!, accountId: owner, roles: ACCOUNT_ROLE_BITS.owner });
+    }
     const command = currentCommand(tx),
       key = recordHistorySourceKey(ref);
     const table = ref.kind === 'context' ? 'semantic.context' : 'zones.zone';
@@ -425,7 +455,7 @@ export async function enrollResourceRecordSources(
       `INSERT INTO semantic.record_purge_writer(partition_no,source_key,route,kind,resource_id,enrolled,birth_transaction)
        SELECT $1,$2,$3,$4,$5,$7 AND ${field}=$6::uuid,$6::uuid FROM ${table} WHERE route=$3 AND ${idField}=$5
        ON CONFLICT DO NOTHING`,
-      [command.partition, key, route, ref.kind, id, command.transactionId, birth],
+      [command.partition, key, route, ref.kind, id, command.transactionId, options.birth ?? false],
     );
     const root = (
       await tx.query<{ sealed_cut: string | null }>(
@@ -440,6 +470,14 @@ export async function enrollResourceRecordSources(
       [command.partition, key, command.transactionId],
     );
   }
+  // Identity roles come only from the actual Access admission, separately from resource ownership.
+  await declareCommandHistory(tx, options.kind, {
+    response: { artifactType: 'command-receipt/v1', accounts },
+    events: Array.from({ length: options.events ?? 1 }, () => ({
+      artifactType: 'outbox-event/v1' as const,
+      accounts: [],
+    })),
+  });
 }
 export async function sealRecordPurgeSourceInventory(
   deps: RecordPurgeCustodyDependencies,
@@ -452,7 +490,7 @@ export async function sealRecordPurgeSourceInventory(
   const source = await readRecordPurgeAuthoritySource(deps, authority, context);
   if (!source) return { state: 'pending', frontier: null, examined: 0 };
   const id = identity(source.reference);
-  const result = await runCommand(
+  const result = await runCommand<{ id: string | null; frontier: string | null; examined: number }>(
     deps.pool,
     { partition: id.partition, deadline: context.deadline, clock: deps.clock },
     async (tx) => {

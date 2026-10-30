@@ -73,7 +73,12 @@ BEGIN
  UPDATE semantic.record_purge_command c SET epoch=b.epoch,position=b.position FROM editorial.write_basis b
  WHERE c.partition_no=NEW.partition_no AND c.source_key=NEW.source_key AND c.key=NEW.key
  AND b.partition_no=c.partition_no AND b.transaction_id=c.transaction_id AND b.xmin=pg_current_xact_id()::xid;
- IF NOT FOUND THEN RAISE EXCEPTION 'record_source_requires_same_native_commit'; END IF;
+ IF NOT FOUND THEN
+  UPDATE semantic.record_purge_command c SET epoch=r.epoch,position=r.position FROM core.receipt r
+  WHERE c.partition_no=NEW.partition_no AND c.source_key=NEW.source_key AND c.key=NEW.key
+  AND r.partition_no=c.partition_no AND r.transaction_id=c.transaction_id AND r.xmin=pg_current_xact_id()::xid;
+  IF NOT FOUND THEN RAISE EXCEPTION 'record_source_requires_same_native_commit'; END IF;
+ END IF;
  RETURN NEW;
 END; $$;
 CREATE CONSTRAINT TRIGGER record_purge_command_commit AFTER INSERT ON semantic.record_purge_command

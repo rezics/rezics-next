@@ -207,7 +207,10 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
             at,
             transactionId: command.transactionId,
           });
-          await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: row.id }], true);
+          await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: row.id }], {
+            kind: 'zone.create',
+            birth: true,
+          });
           await initializeResourceGrants(tx, { resource, type: 'semantic.zone', creator: actor.accountId });
           return {
             value: { zone: zoneOwned(row) },
@@ -314,7 +317,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
               next.releaseDigest = configuration!.releaseDigest;
             }
           }
-          await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: id }]);
+          await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: id }], { kind: `zone.${operation}` });
           const updated = await compareAndSetZone(tx, row, next, { at, transactionId: command.transactionId });
           if (!updated) throw new ProblemError('precondition_failed');
           const event = { configure: 'configured', publish: 'published', delete: 'deleted', restore: 'restored' }[

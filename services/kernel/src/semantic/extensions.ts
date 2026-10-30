@@ -273,8 +273,9 @@ export async function publishExtension(pool: Pool, options: WriteOptions & { con
     commandOptions(options, 'definitions.extension.publish', 'definitions:publish', where),
     async (tx, { transactionId }) => {
       await requireContext(tx, options.context, where.route);
-      if (options.context !== GLOBAL_CONTEXT)
-        await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: options.context }]);
+      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: options.context }], {
+        kind: 'definitions.extension.publish',
+      });
       const rows = await publish.run(tx, {
         route: where.route,
         context_id: options.context,
@@ -322,8 +323,9 @@ export async function activateExtension(
       // This runs after command authorization and receipt lookup, even for a malformed digest.
       if (!DIGEST.test(digest)) throw new DefinitionNotFoundError();
       await requireContext(tx, options.context, where.route);
-      if (options.context !== GLOBAL_CONTEXT)
-        await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: options.context }]);
+      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: options.context }], {
+        kind: 'definitions.extension.activate',
+      });
       const row = await read.run(tx, {
         route: where.route,
         context_id: options.context,

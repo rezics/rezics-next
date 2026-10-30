@@ -133,7 +133,10 @@ export async function createContext(
         defaults,
         transaction_id: transactionId,
       });
-      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: id }], true);
+      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: id }], {
+        kind: CREATE_CONTEXT,
+        birth: true,
+      });
       if (options.authorization)
         await initializeResourceGrants(tx, {
           resource: options.target,
