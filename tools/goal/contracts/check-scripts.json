@@ -37,8 +37,29 @@
       "lookup": "node_modules/.bin/bun",
       "versionArgv": ["--version"],
       "revisionArgv": ["--eval", "console.log(Bun.revision)"],
-      "versionMustMatchManifest": true
-    }
+      "versionMustMatchManifest": true,
+      "identityPolicy": "Require exact manifest/dependency/lockfile package pin, known lockfile integrity, installed package metadata, resolved executable SHA-256, runtime version and runtime revision. Unknown pins or platform artifacts fail closed. The canary package label is not Bun.version.",
+      "artifacts": {
+        "bun@1.4.4-canary.20261027.1": {
+          "packageVersion": "1.4.4-canary.20261027.1+9b8347a",
+          "runtimeVersion": "1.4.4",
+          "runtimeRevision": "a0cc096ce8ceed48cfefbdd2d97aa3f905b8be6b",
+          "packageIntegrity": "sha512-yAKBNhBZomCqRV8a/icJPhQq47sjGRDZBDqrzJT8XSOkjzIipVZS462aHr9qTVh2QesoOnQsPpYFkQSocOiJ0A==",
+          "packageTarball": "https://registry.npmjs.org/bun/-/bun-1.4.4-canary.20261027.1.tgz",
+          "provenance": "npm tarballs verified against dev bun.lock SHA-512 integrity; installed platform executable hashed and probed for --version and Bun.revision. Package build metadata differs from the embedded runtime revision.",
+          "platforms": {
+            "linux-x64": {
+              "package": "@oven/bun-linux-x64",
+              "integrity": "sha512-GTKkejc85y2PEelaq9DJnbwJaVfDjJYR8bFKCeUnnbq4s/dWJFv602rp8FW/CnkxNQ/3RKUjB+lk4DTJ87cU5g==",
+              "tarball": "https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-1.4.4-canary.20261027.1.tgz",
+              "executable": "bin/bun",
+              "executableSha256": "bc54c90edf4f07206a316514ae9a09ca9cbfbeeb50654bf0f1928d2b38c87c68"
+            }
+          }
+        }
+      }
+    },
+    "execution": "Start returns a detached check UUID; foregroundArgv waits for that existing check and returns its recorded exit status. It does not start a new foreground check."
   },
   "remoteCheck": {
     "script": "scripts/remote-check.ts",
