@@ -11,13 +11,8 @@ export type Settlement = 'pending' | 'paid' | 'failed' | 'unknown';
 export type RevokeReason = 'refund' | 'dispute';
 
 /** Closed native Content identity; a subject is never a substitute for this binding. */
-export type ContentEditionBenefit = Readonly<{
-  kind: 'content-edition';
-  resourceType: 'content.edition';
-  resource: Readonly<{ route: number; id: string }>;
-  version: Readonly<{ revisionId: string; sha256: string }>;
-  action: 'edition:read';
-}>;
+import type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';
+export type { ContentEditionBenefit } from '../access/authenticated-benefit.ts';
 
 /** Commerce's bounded immutable delivery terms. Content supplies every source fact.
  * This DTO describes storage, not Content's pending sale-port callable declaration.

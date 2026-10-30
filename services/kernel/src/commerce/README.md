@@ -85,7 +85,7 @@ account, creator-readable current ancestry, and available published or explicitl
 publisher, moderator, imported author field or ordinary grant cannot establish authorship or copyright. This
 metadata is a declared licence, not an exclusive rights claim. Commerce does not implement that verifier.
 
-The closed benefit type is `ContentEditionBenefit` in [model](model.ts). Commerce's captured DTO is:
+The closed benefit type is Access's canonical `ContentEditionBenefit`, re-exported by [model](model.ts). Commerce's captured DTO is:
 
 ```ts
 type CapturedContentEdition = Readonly<{
@@ -124,18 +124,41 @@ authority. A last-verified active entitlement is preserved through transient tar
 mapping does not fabricate payment failure/refund or erase history. Full-refund/dispute revoke the same row with
 its original binding; partial-refund and terminal account/receipt/admission rules remain unchanged.
 
-The native Accounts consumer reader is
-`store.readContentEditionEntitlement(client, buyerAccountId, entitlementId): Promise<Entitlement | null>`.
-It uses one exact `(buyer route, entitlement id)` query, owner equality, mapped capture and no revocation. This is
-Commerce data, not an authenticated opaque Access fact. Accounts separately issues its own current exact
-buyer+edition+version+action fact through existing `preparePermission/checkPreparedPermission`; Commerce does not
-invent that ABI or imply an active row authorizes bytes. Content independently checks edition version, exact
-source/licence/digest/lifecycle/security fences, ancestry and Realm/Space before preparation and final disclosure.
-Unpublish/erasure makes delivery unavailable without inventing a refund; no alternate revision is substituted and
-no Library record is created. Subject discovery, real native sale/use proof, reviewed UI and promoted-main journey
-remain pending. The local kernel compiler typecheck passes for this source delivery. No acceptance, unit, native, database,
-browser or remote check was run; the temporary compiler database was used only by that typecheck. This is not
-whole-journey acceptance. Generated OpenAPI/client artifacts and native/interface gates remain controller work.
+### Native fixed-edition buyer fact
+
+The selected benefit is Content's immutable `content.edition`, action `edition:read`, bound to its native
+`resource {route,id}` and `version {revisionId,sha256}`. Commerce imports the canonical
+`ContentEditionBenefit` and `ContentEditionBuyerFactReader` from Access's `authenticated-benefit.ts`.
+The capture producer's `content_edition` JSONB is immutable across offer, order and entitlement; SQL NULL
+means UNKNOWN historical mapping and never supplies an edition fact. Current sale authority and final source
+availability remain Content's independent responsibility; their actual native producer and full paid-use proof
+are pending. Subject discovery remains a separate pending producer. Public/free authority is unchanged.
+
+`createContentEditionBuyerFactReader({pool,clock?})` in `content-edition-buyer-fact.ts` is the sole native current
+Commerce reader. The kernel resolver constructs it once with its existing pool/clock and supplies it to the same
+Access instance alongside the full mounted catalogue and Realm role reader. Its only input is the exact canonical
+benefit, buyer account, caller's live Core `AuthoritativeTime` and unchanged finite request deadline. It neither
+mints a replacement T nor calls Content, Access, provider services or a source checkout.
+
+One released read-only repeatable-read transaction checks the buyer-home partition, current active account and
+native authentication fence, then seeks the exact route/account/benefit composite index. All these reads address
+that same buyer home. `entitlement_edition_buyer_lookup` excludes revoked and UNKNOWN rows, indexes every benefit
+operand and orders by entitlement ID. A limit of two detects ambiguous active purchases without examining history
+or performing per-order reads; ambiguity is unavailable, rather than choosing one purchase arbitrarily. A verified
+empty range returns null. Missing/fenced/moved dependencies, malformed current tuples, future grants and ambiguous
+matches throw existing typed 503 errors. The reader validates native account/entitlement/order routes, immutable
+source/version/hash binding and actual positive safe-integer entitlement revision. It calls only Accounts'
+opaque issuer, after commit and connection release, with the original live T and fixed deadline.
+
+Access reads each distinct applicable actor/principal once; a fact supplies only its exact buyer grant operand.
+Scopes, principal authority, denials, assignments, account eligibility and deadlines remain mandatory. Content must
+independently enforce current edition/source/licence and complete parent/Realm/Space authority immediately before
+byte disclosure. The fact cannot change scope, public floor, history, Library facts or source availability.
+No cache, mirror, grant SQL or client fact/selector endpoint is introduced.
+
+Source composition is present. The focused native acceptance is retained in
+`test/commerce/content-edition-buyer-fact.test.ts`; execution, current Content use, full journey/native evidence and
+promotion on main are deferred to controller integration. No supplied fact alone establishes delivered paid use.
 
 ### Private buyer history
 
