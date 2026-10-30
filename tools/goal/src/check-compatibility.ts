@@ -325,7 +325,7 @@ function startWorkerCheck(
   exitCode: number,
   contract: CheckCompatibilityContract,
   waitForRelease: boolean,
-): { id?: string; childArgv: string[]; gatePath?: string } {
+): { id?: string; childArgv: string[]; recordArgv: string[]; gatePath?: string } {
   const gatePath = waitForRelease ? join(scratchRoot, 'release-child') : undefined;
   if (gatePath) rmSync(gatePath, { force: true });
   const code = writeChildCode(gatePath, exitCode);
@@ -361,7 +361,7 @@ function startWorkerCheck(
       : `Expected a successful start command to print a UUID; received exit ${String(result.status)}.`,
     { id: id ?? null, idIsUuid: validId },
   );
-  return { ...(validId ? { id } : {}), childArgv, ...(gatePath ? { gatePath } : {}) };
+  return { ...(validId ? { id } : {}), childArgv, recordArgv: ['--local', ...childArgv], ...(gatePath ? { gatePath } : {}) };
 }
 
 function checkWorkerCheckLifecycle(
@@ -390,7 +390,7 @@ function checkWorkerCheckLifecycle(
     '--local',
     ...pending.childArgv,
   ];
-  addRecordChecks(checks, pending.id, scratchRoot, pending.childArgv, 'running', undefined, startCommand, running, contract, true);
+  addRecordChecks(checks, pending.id, scratchRoot, pending.recordArgv, 'running', undefined, startCommand, running, contract, true);
   const gatePath = pending.gatePath!;
   writeFileSync(gatePath, 'continue\n');
   const waitArgs = contract.workerCheck.foregroundArgv.map((part) => part === '<id>' ? pending.id! : part);
@@ -414,7 +414,7 @@ function checkWorkerCheckLifecycle(
     pendingWaitOk ? 'The foreground wait form completed the still-running check successfully.' : 'The foreground wait form did not report the successful result and log path.',
     { id: pending.id },
   );
-  addRecordChecks(checks, pending.id, scratchRoot, pending.childArgv, 'finished', 0, waitCommand, pendingRecord, contract, false);
+  addRecordChecks(checks, pending.id, scratchRoot, pending.recordArgv, 'finished', 0, waitCommand, pendingRecord, contract, false);
 
   const failure = startWorkerCheck(checks, workerScript, scratchRoot, 7, contract, false);
   if (!failure.id) return;
@@ -439,7 +439,7 @@ function checkWorkerCheckLifecycle(
     failureWaitOk ? 'The foreground wait form preserved a failing child exit status.' : 'The foreground wait form did not report the failing result and log path.',
     { id: failure.id },
   );
-  addRecordChecks(checks, failure.id, scratchRoot, failure.childArgv, 'finished', 7, failureWaitCommand, failureRecord, contract, false);
+  addRecordChecks(checks, failure.id, scratchRoot, failure.recordArgv, 'finished', 7, failureWaitCommand, failureRecord, contract, false);
 }
 
 function parsePackageManager(scriptsRoot: string, checks: CompatibilityCheck[], contract: CheckCompatibilityContract): string | undefined {
