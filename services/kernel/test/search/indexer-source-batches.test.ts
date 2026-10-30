@@ -308,3 +308,248 @@ for (const failLaterBulk of [false, true]) {
     expect({ reads: source.reads.length, writes: writes.length, listings: listingReads.length }).toEqual(calls);
   });
 }
+
+function boundarySubject(id: string): IndexedSubject {
+  return {
+    id,
+    type: 'schema:Book',
+    visibility: 'visible',
+    redirect: null,
+    securityRevision: 0,
+    labels: [{ language: 'en', value: 'Custody target' }],
+    aliases: [],
+    descriptions: [],
+    statements: [],
+  };
+}
+
+// These are deliberately invalid observations at the adapter boundary, never substitute Source authority.
+for (const history of [0, 8, 96])
+  test(`source custody rejects invalid observations before all projection I/O with ${history} unrelated envelopes`, async () => {
+    const partition = 321 + [0, 8, 96].indexOf(history);
+    const prefix = `custody-${crypto.randomUUID().slice(0, 8)}-`;
+    const index = subjectIndexName(prefix, 1);
+    indices.push(index);
+    await createSubjectIndex(search, prefix, 1);
+    const consumer = `custody_${crypto.randomUUID().replaceAll('-', '')}`;
+    consumers.push({ consumer, partition });
+    const subject = boundarySubject(newId(partition * 16));
+    const missing = boundarySubject(newId(partition * 16));
+    const ids = [subject.id, missing.id];
+    const reads: string[][] = [];
+    let observation: unknown;
+    let sourceCounts = 0;
+    let listings = 0;
+    let requests = 0;
+    const writes: { lines: readonly unknown[]; result: BulkResult }[] = [];
+    const source: SubjectSource = {
+      async read(home, selected) {
+        expect(home).toBe(partition);
+        expect(selected).toEqual(ids);
+        expect(selected.length).toBeLessThanOrEqual(256);
+        reads.push([...selected]);
+        return observation as SubjectSnapshot;
+      },
+      async count() {
+        sourceCounts++;
+        throw new Error('Custody validation must not count or enumerate');
+      },
+    };
+    const engine: OpenSearch = {
+      request: (async (...args: Parameters<OpenSearch['request']>) => {
+        requests++;
+        return search.request(...args);
+      }) as OpenSearch['request'],
+      bulk: (async (lines, options) => {
+        expect(await checkpoint(consumer, partition)).toBe(before);
+        const result = await search.bulk<BulkResult>(lines, options);
+        writes.push({ lines: structuredClone(lines), result });
+        return result;
+      }) as OpenSearch['bulk'],
+    };
+    const relay = createSubjectIndexer({
+      pool, search: engine, source, index, consumer,
+      listing: { async read(home, selected) {
+        expect(home).toBe(partition);
+        expect(selected).toEqual([subject.id]);
+        listings++;
+        return new Map([[subject.id, 3]]);
+      } },
+    });
+    for (let n = 0; n < history; n++)
+      await append(partition, [{ type: 'com.rezics.fixture.created.v1', data: {} }]);
+    // A normal relay drains all unrelated history using its unchanged 64-envelope limit.
+    let drained = 0;
+    for (;;) {
+      const result = await relay.run(partition);
+      expect(result.status).toBe('read');
+      if (result.status !== 'read') throw new Error('Expected a native batch');
+      expect(result.envelopes).toBeLessThanOrEqual(64);
+      drained += result.envelopes;
+      if (result.envelopes === 0) break;
+    }
+    expect(drained).toBe(history);
+    expect(reads).toHaveLength(0);
+    expect([requests, writes.length, listings, sourceCounts]).toEqual([0, 0, 0, 0]);
+    const before = (await checkpoint(consumer, partition))!;
+    const relevant = await append(partition, ids.map((id) => ({
+      type: 'com.rezics.subject.created.v1', subject: id, data: { id },
+    })));
+    // The later captured envelope is part of the obligation even without a subject invalidation.
+    const obligation = await append(partition, [{ type: 'com.rezics.fixture.created.v1', data: {} }]);
+    expect(obligation).toBeGreaterThan(relevant);
+    const current: SubjectSnapshot = { partition, position: obligation, subjects: [subject] };
+    const seed = { partition, position: 1n, subjects: [subject, missing] };
+    const seeded = await search.bulk<BulkResult>(bulkLines(index, documentActions(seed, ids)), {
+      query: { refresh: 'wait_for' },
+    });
+    expect(seeded.items.every((item) => Object.values(item)[0]!.status === 201)).toBe(true);
+    const original = await visible(index);
+    const faults: [string, unknown][] = [
+      ['missing observation', undefined],
+      ['null observation', null],
+      ['wrong home empty', { ...current, partition: partition + 1, subjects: [] }],
+      ['missing home', { position: obligation, subjects: [] }],
+      ['string home', { ...current, partition: String(partition) }],
+      ['missing records', { partition, position: obligation }],
+      ['null records', { ...current, subjects: null }],
+      ['non-array records', { ...current, subjects: {} }],
+      ['null record', { ...current, subjects: [null] }],
+      ['duplicate requested record', { ...current, subjects: [subject, subject] }],
+      ['extra same-home record', { ...current, subjects: [subject, boundarySubject(newId(partition * 16))] }],
+      ['foreign record', { ...current, subjects: [boundarySubject(newId((partition + 1) * 16))] }],
+      ['missing record key', { ...current, subjects: [{ ...subject, id: undefined }] }],
+      ['invalid record key', { ...current, subjects: [{ ...subject, id: 'invalid' }] }],
+      ['relevant but predating captured tail', { ...current, position: relevant }],
+    ];
+    for (const position of [undefined, null, String(obligation), Number(obligation), NaN, -1n, 0n, BigInt(Number.MAX_SAFE_INTEGER) + 1n])
+      faults.push(['invalid position', { ...current, position }]);
+    for (const change of [
+      { type: undefined },
+      { visibility: undefined }, { visibility: 'uncertain' },
+      { redirect: undefined }, { redirect: '' }, { redirect: 'invalid' },
+      { securityRevision: undefined }, { securityRevision: '0' }, { securityRevision: -1 },
+      { securityRevision: NaN }, { securityRevision: 0.5 }, { securityRevision: Number.MAX_SAFE_INTEGER + 1 },
+      { labels: undefined }, { labels: [{ language: 'en', value: null }] },
+      { aliases: null }, { descriptions: {} }, { statements: undefined },
+      { statements: [{ property: 'schema:date', value: 'x', facet: { kind: 'time', year: NaN } }] },
+      { statements: [{ property: 'schema:amount', value: 'x', facet: { kind: 'quantity', amount: Infinity, unit: 'x' } }] },
+      { statements: [{ property: 'schema:x', value: 'x', qualifiers: [null] }] },
+      { statements: [{ property: 'schema:x', value: 'x', facet: { kind: 'unknown' } }] },
+      { relationFacetOverflow: [null] }, { publicRating: {} },
+    ]) faults.push(['invalid record state', { ...current, subjects: [{ ...subject, ...change }] }]);
+    // Hidden/redirected records also require valid metadata; uncertainty is never a delete instruction.
+    faults.push(['invalid hidden state', { ...current, subjects: [{ ...subject, visibility: 'hidden', securityRevision: -1 }] }]);
+    for (const [name, invalid] of faults) {
+      observation = invalid;
+      const count = reads.length;
+      await expect(relay.run(partition), name).rejects.toBeInstanceOf(Error);
+      expect(reads.length, name).toBe(count + 1);
+      expect([requests, writes.length, listings, sourceCounts], name).toEqual([0, 0, 0, 0]);
+      expect(await checkpoint(consumer, partition), name).toBe(before);
+      expect((await visible(index)).sort((a, b) => a._id.localeCompare(b._id)), name).toEqual(
+        [...original].sort((a, b) => a._id.localeCompare(b._id)),
+      );
+    }
+    // Same consumer, real engine: a missing requested key is legitimate absence only in a valid observation.
+    observation = current;
+    expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 2, position: obligation });
+    expect(await checkpoint(consumer, partition)).toBe(String(obligation));
+    expect([writes.length, listings, sourceCounts]).toEqual([1, 1, 0]);
+    expect(actions(writes[0]!.lines).map(({ op, metadata }) => [op, metadata._id, metadata.version])).toEqual([
+      ['index', subject.id, Number(obligation)], ['delete', missing.id, Number(obligation)],
+    ]);
+    expect(writes[0]!.result.items.map((item) => Object.values(item)[0]!.status)).toEqual([200, 200]);
+    const hits = await visible(index);
+    expect(hits.map((hit) => hit._id)).toEqual([subject.id]);
+    expect(hits[0]!._version).toBe(Number(obligation));
+    const calls = [reads.length, listings, requests, writes.length];
+    await relay.run(partition);
+    expect([reads.length, listings, requests, writes.length]).toEqual(calls);
+  }, 120_000);
+
+test('later invalid source custody leaves visible prefix unacknowledged and same-consumer replay retains per-chunk advances', async () => {
+  const partition = 324;
+  const prefix = `custody-tail-${crypto.randomUUID().slice(0, 8)}-`;
+  const index = subjectIndexName(prefix, 1);
+  indices.push(index);
+  await createSubjectIndex(search, prefix, 1);
+  const consumer = `custody_tail_${crypto.randomUUID().replaceAll('-', '')}`;
+  consumers.push({ consumer, partition });
+  const subjects = Array.from({ length: 257 }, () => boundarySubject(newId(partition * 16)));
+  const ids = subjects.map((subject) => subject.id);
+  const end = await append(partition, ids.map((id) => ({ type: 'com.rezics.subject.created.v1', subject: id, data: { id } })));
+  const reads: { ids: string[]; snapshot: SubjectSnapshot }[] = [];
+  let recovering = false;
+  let advanced: bigint | undefined;
+  let listings = 0;
+  let requests = 0;
+  const writes: { lines: readonly unknown[]; result: BulkResult }[] = [];
+  const source: SubjectSource = {
+    async read(home, selected) {
+      expect(home).toBe(partition);
+      expect(selected.length).toBeLessThanOrEqual(256);
+      const { rows } = await admin.query<{ position: string }>('SELECT position::text FROM core.partition WHERE partition_no=$1', [partition]);
+      const snapshot = {
+        partition: !recovering && reads.length === 1 ? partition + 1 : home,
+        position: BigInt(rows[0]!.position),
+        subjects: !recovering && reads.length === 1 ? [] : subjects.filter((subject) => selected.includes(subject.id)),
+      };
+      reads.push({ ids: [...selected], snapshot });
+      if (recovering && reads.length === 3)
+        advanced = await append(partition, [{ type: 'com.rezics.fixture.created.v1', data: {} }]);
+      return snapshot;
+    },
+    async count() { throw new Error('Custody validation must not count or enumerate'); },
+  };
+  const engine: OpenSearch = {
+    request: (async (...args: Parameters<OpenSearch['request']>) => {
+      requests++;
+      return search.request(...args);
+    }) as OpenSearch['request'],
+    bulk: (async (lines, options) => {
+      expect(await checkpoint(consumer, partition)).toBe('0');
+      const result = await search.bulk<BulkResult>(lines, options);
+      writes.push({ lines: structuredClone(lines), result });
+      const hits = new Map((await visible(index)).map((hit) => [hit._id, hit]));
+      for (const action of actions(lines))
+        expect(hits.get(action.metadata._id)!._version).toBe(action.metadata.version);
+      expect(await checkpoint(consumer, partition)).toBe('0');
+      return result;
+    }) as OpenSearch['bulk'],
+  };
+  const relay = createSubjectIndexer({ pool, source, search: engine, index, consumer,
+    listing: { async read(home, selected) {
+      expect(home).toBe(partition);
+      expect(selected.length).toBeLessThanOrEqual(256);
+      listings++;
+      return new Map();
+    } },
+  });
+  await expect(relay.run(partition)).rejects.toBeInstanceOf(Error);
+  expect(reads.map((read) => read.ids.length)).toEqual([256, 1]);
+  expect([listings, requests, writes.length]).toEqual([1, 1, 1]);
+  expect(await checkpoint(consumer, partition)).toBe('0');
+  expect((await visible(index)).map((hit) => hit._id).sort()).toEqual(ids.slice(0, 256).sort());
+  recovering = true;
+  expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: end });
+  expect(await checkpoint(consumer, partition)).toBe(String(end));
+  expect(advanced!).toBeGreaterThan(end);
+  expect(reads.slice(2).map((read) => read.ids)).toEqual([ids.slice(0, 256), ids.slice(256)]);
+  expect(reads.slice(2).map((read) => read.snapshot.position)).toEqual([end, advanced!]);
+  expect(writes).toHaveLength(3);
+  expect(writes[1]!.result.items.every((item) => Object.values(item)[0]!.status === 409)).toBe(true);
+  expect(writes[2]!.result.items.every((item) => Object.values(item)[0]!.status === 201)).toBe(true);
+  for (const [i, write] of writes.entries())
+    expect(actions(write.lines).map((action) => action.metadata.version)).toEqual(
+      Array.from({ length: i === 2 ? 1 : 256 }, () => Number(i === 2 ? advanced! : end)),
+    );
+  const hits = new Map((await visible(index)).map((hit) => [hit._id, hit]));
+  expect(hits.size).toBe(257);
+  for (const [i, id] of ids.entries()) expect(hits.get(id)!._version).toBe(Number(i === 256 ? advanced! : end));
+  const calls = [reads.length, listings, requests, writes.length];
+  expect(await relay.run(partition)).toMatchObject({ status: 'read', envelopes: 1, position: advanced! });
+  expect(await checkpoint(consumer, partition)).toBe(String(advanced));
+  await relay.run(partition);
+  expect([reads.length, listings, requests, writes.length]).toEqual(calls);
+});

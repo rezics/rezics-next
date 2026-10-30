@@ -376,6 +376,19 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Source snapshot
 
+- Before listing, normalization or engine writes for a chunk, `indexer.ts` validates the returned observation
+  against that exact request: its home must equal the requested/envelope partition, its position must be a bigint
+  within the existing external-version safe integer range and at least the captured batch's final envelope position,
+  and every returned record must have a unique requested key in that home. Subject state, visibility, redirect,
+  security revision and projection payload must satisfy the existing Source contract, including records that would
+  produce deletes. A missing requested key in a valid observation is absence; missing or malformed evidence and
+  observations predating captured work reject and leave the checkpoint unchanged. The adapter never guesses a
+  position, drops extra records or turns an unavailable read into an empty snapshot. Source advancement between
+  chunks is valid: each chunk retains its own observed version, while the checkpoint acknowledges only captured
+  envelopes. A later invalid chunk may leave an already visible prefix; the same consumer retries normally.
+  This is request/observation custody, not permission by UUID, foreign Source provenance, complete query privacy,
+  physical index incarnation safety, erasure or identity proof. The native Semantic Source and current-disclosure
+  producers retain their own obligations; sink response validation remains in the shared receipt writer.
 - Touches: Indexing calls `SubjectSource.read(partition, ids)` in chunks of at most 256 deduplicated IDs in one
   partition. For `u` requested anchors, `c = ceil(u/256)` calls are made, with zero calls for `u = 0`; the ordinary
   64-envelope/1,000-event command bounds give at most 64,000 event anchors and 250 source calls per batch. Every
@@ -400,6 +413,18 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   snapshot is also not evidence of complete absence. Treating nonoverflow snapshot absence as complete requires the
   integration proof described above. Semantic source and durable rebuild work still require their real-source
   verification; this README does not claim that composition or its measurements are complete.
+- Custody cost: one temporary requested-key set and returned-record map for this chunk, `O(k + records)` key work
+  for `k <= 256`, plus linear validation of the existing record payload. Invalid observations perform no listing,
+  normalizer or engine work for that chunk. Validation adds no SQL, Source or engine calls, count, enumeration,
+  partition scan, proof store or queue. The original 64-envelope batch limit and each native chunk's version remain.
+  [Native adapter custody tests](../../test/search/indexer-source-batches.test.ts) hold the two requested keys fixed
+  at 0, 8 and 96 unrelated command envelopes, drain history through ordinary 64-envelope relays, and assert exact
+  requests, zero invalid-observation projection calls, unchanged checkpoints, real visible documents and successful
+  same-consumer retry. A 257-key case retains the visible prefix after a later wrong-home empty read, then proves
+  real 409 replay and a source advance between retry chunks. The frozen
+  [wrong-home test](../../test/search/source-snapshot-custody.test.ts) independently covers the empty-read defect.
+  These boundary fault injections do not manufacture Source authority; the unchanged real-source batching suite
+  below supplies actual Source operations, Access, per-chunk statements and count oracles.
 - Growth check: Search projection coverage: [test/search/relation-overflow-mapping.test.ts](../../test/search/relation-overflow-mapping.test.ts),
   “the document keeps all 128 sampled relation values and omits empty overflow markers”. Semantic verification
   requirements (not completed measurements): [test/semantic/relation-facet-source.test.ts](../../test/semantic/relation-facet-source.test.ts),

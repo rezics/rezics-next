@@ -7,7 +7,14 @@ import type { Relay } from '../events/relays.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { documentActions } from './document.ts';
 import type { OpenSearch } from './opensearch.ts';
-import { subjectPartition, type SubjectListingSource, type SubjectSource } from './source.ts';
+import { normalizePublicRatingFigure } from './rating-source.ts';
+import {
+  subjectPartition,
+  type IndexedSubject,
+  type SubjectListingSource,
+  type SubjectSnapshot,
+  type SubjectSource,
+} from './source.ts';
 import { writeIndexActions } from './write-actions.ts';
 
 export { IndexWriteError } from './write-actions.ts';
@@ -18,6 +25,95 @@ export type SubjectApplyGuard = (
   envelopes: readonly Envelope[],
   apply: () => Promise<void>,
 ) => Promise<void>;
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function languageValues(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => record(item) && typeof item.language === 'string' && typeof item.value === 'string')
+  );
+}
+
+/** Validate all returned evidence, including records that will produce deletes, before any projection I/O. */
+function validateObservation(
+  snapshot: SubjectSnapshot,
+  partition: number,
+  ids: readonly string[],
+  obligation: bigint,
+): Map<string, IndexedSubject> {
+  if (!record(snapshot) || snapshot.partition !== partition)
+    throw new TypeError('Source snapshot does not observe the requested partition');
+  if (
+    typeof snapshot.position !== 'bigint' ||
+    snapshot.position < obligation ||
+    snapshot.position < 0n ||
+    snapshot.position > BigInt(Number.MAX_SAFE_INTEGER)
+  )
+    throw new TypeError('Source snapshot position must be a valid bigint version covering the captured batch');
+  if (!Array.isArray(snapshot.subjects) || snapshot.subjects.length > ids.length)
+    throw new TypeError('Source snapshot must contain unique requested records');
+  const requested = new Set(ids);
+  const subjects = new Map<string, IndexedSubject>();
+  for (const subject of snapshot.subjects) {
+    if (
+      !record(subject) ||
+      typeof subject.id !== 'string' ||
+      subjectPartition(subject.id) !== partition ||
+      !requested.has(subject.id) ||
+      subjects.has(subject.id)
+    )
+      throw new TypeError('Source snapshot contains a duplicate or unrequested subject');
+    if (
+      typeof subject.type !== 'string' ||
+      !['visible', 'hidden', 'taken_down'].includes(subject.visibility) ||
+      (subject.redirect !== null && (typeof subject.redirect !== 'string' || !subject.redirect)) ||
+      !Number.isSafeInteger(subject.securityRevision) ||
+      subject.securityRevision < 0 ||
+      !languageValues(subject.labels) ||
+      !languageValues(subject.aliases) ||
+      !languageValues(subject.descriptions) ||
+      !Array.isArray(subject.statements) ||
+      (subject.relationFacetOverflow !== undefined &&
+        (!Array.isArray(subject.relationFacetOverflow) ||
+          !subject.relationFacetOverflow.every((property) => typeof property === 'string')))
+    )
+      throw new TypeError('Source snapshot contains invalid subject state');
+    if (subject.redirect !== null) subjectPartition(subject.redirect);
+    for (const statement of subject.statements) {
+      if (
+        !record(statement) ||
+        typeof statement.property !== 'string' ||
+        typeof statement.value !== 'string' ||
+        (statement.qualifiers !== undefined &&
+          (!Array.isArray(statement.qualifiers) ||
+            !statement.qualifiers.every(
+              (item) => record(item) && typeof item.property === 'string' && typeof item.value === 'string',
+            )))
+      )
+        throw new TypeError('Source snapshot contains invalid statement state');
+      const facet = statement.facet;
+      if (facet === undefined) continue;
+      if (
+        !record(facet) ||
+        !['item', 'code', 'time', 'quantity'].includes(facet.kind) ||
+        (facet.kind === 'time' && !Number.isSafeInteger(facet.year)) ||
+        (facet.kind === 'quantity' && (!Number.isFinite(facet.amount) || typeof facet.unit !== 'string'))
+      )
+        throw new TypeError('Source snapshot contains invalid facet state');
+    }
+    if (subject.publicRating !== undefined)
+      normalizePublicRatingFigure(subject.publicRating, {
+        questionId: subject.publicRating.questionId,
+        populationId: GLOBAL_CONTEXT.id,
+        subjectId: subject.id,
+      });
+    subjects.set(subject.id, subject);
+  }
+  return subjects;
+}
 
 export function createSubjectIndexer(options: {
   pool: Pool;
@@ -75,15 +171,12 @@ export function createSubjectIndexer(options: {
             }
             if (ids.length === 0) return;
 
+            // Every chunk must cover the entire captured batch that this apply will acknowledge.
+            const obligation = envelopes.at(-1)!.position;
             for (let offset = 0; offset < ids.length; offset += 256) {
               const chunk = ids.slice(offset, offset + 256);
               const snapshot = await options.source.read(partition, chunk);
-              const subjects = new Map<string, (typeof snapshot.subjects)[number]>();
-              for (const subject of snapshot.subjects) {
-                if (subjectPartition(subject.id) !== snapshot.partition)
-                  throw new RangeError('Snapshot contains a subject outside its partition');
-                subjects.set(subject.id, subject);
-              }
+              const subjects = validateObservation(snapshot, partition, chunk, obligation);
               const indexIds = chunk.filter((id) => {
                 const subject = subjects.get(id);
                 return subject?.visibility === 'visible' && subject.redirect === null;
