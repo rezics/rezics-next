@@ -462,7 +462,6 @@ test('The distinct joined native outcomes and three-scale bounded growth retain 
   ]);
 
   for (const run of evidence) {
-    const priorKind = run.kind === 'like' ? 'love' : 'like';
     expect(run.sourcePartition).not.toBe(run.targetPartition);
     expect(BigInt(run.capturePosition)).toBe(BigInt(run.sourcePosition));
     const sourceSlot = await growth.admin.query<{ kind: string }>(
